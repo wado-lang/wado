@@ -4,11 +4,12 @@
 //
 // Parses a Twitter API search response with 100 statuses.
 
-use { println, Stdout } from "core:cli";
+use { Stdout } from "core:cli";
 use { Serialize, Deserialize } from "core:serde";
 use { from_string } from "core:json";
 use { MonotonicClock } from "wasi:clocks";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { Benchmark } from "core:benchmark";
 
 struct SearchMetadata {
     #[serde(rename = "completed_in")]
@@ -164,34 +165,26 @@ fn read_file(path: String) -> String with Preopens {
     return buf;
 }
 
-test "benchmark" {
-    run();
+test "smoke" {
+    // Tiny in-memory input; no Preopens needed.
+    let count = parse_statuses("{\"statuses\":[],\"search_metadata\":{\"completed_in\":0.0,\"count\":0,\"max_id\":0,\"max_id_str\":\"0\",\"query\":\"\",\"since_id\":0,\"since_id_str\":\"0\"}}");
+    assert count == 0;
+}
+
+fn parse_statuses(json_data: String) -> i32 {
+    let resp = match from_string::<TwitterResponse>(json_data) {
+        Ok(r) => r,
+        Err(e) => panic(`Parse error: {e.message}`),
+    };
+    return resp.statuses.len();
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file("json_twitter/twitter.json");
-    let iterations = 1;
-    println(`json-twitter: {json_data.len()} bytes, {iterations} iterations`);
+    let mut b = Benchmark::new("json-twitter");
+    b.input_size = Option::Some(json_data.len());
 
-    let start = MonotonicClock::now();
-    let mut count = 0;
-    for let mut i = 0; i < iterations; i += 1 {
-        let result = from_string::<TwitterResponse>(json_data);
-        if let Ok(resp) = result {
-            count = count + resp.statuses.len();
-        } else {
-            if let Err(e) = result {
-                println(`Parse error: {e.message}`);
-            }
-            break;
-        }
-    }
-    let end = MonotonicClock::now();
-    let elapsed_ns = (end - start) as u64;
-    let elapsed_ms = elapsed_ns / 1000000;
-    let elapsed_us = elapsed_ns / 1000;
-
-    assert count == 100 * iterations;
-    println(`Parsed {count} total statuses`);
-    println(`Elapsed: {elapsed_ms}.{elapsed_us % 1000} ms`);
+    let count = b.run("", || parse_statuses(json_data));
+    assert count == 100;
+    b.println(`parsed {count} total statuses`);
 }

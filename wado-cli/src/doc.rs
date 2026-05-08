@@ -652,8 +652,45 @@ fn render_md_doc(out: &mut String, doc: &str) {
     let mut in_list = false;
     let mut in_blockquote = false;
     let mut prev_heading = false;
+    let mut fence: Option<FenceMarker> = None;
 
     for line in doc.lines() {
+        // Inside a fenced code block: detect the closing fence and emit
+        // every other line verbatim. CommonMark heading / list / emphasis
+        // rules do not apply inside the block.
+        if let Some(open) = fence {
+            let trimmed_start = line.trim_start();
+            if matches_fence_close(trimmed_start, &open) {
+                out.push_str(trimmed_start);
+                out.push('\n');
+                fence = None;
+                prev_blank = false;
+                prev_heading = false;
+                in_list = false;
+                in_blockquote = false;
+                continue;
+            }
+            out.push_str(line);
+            out.push('\n');
+            prev_blank = false;
+            continue;
+        }
+
+        // Detect an opening fence before any other markdown processing.
+        if let Some(open) = fence_open(line.trim_start()) {
+            if !prev_blank {
+                out.push('\n');
+            }
+            out.push_str(line.trim_start());
+            out.push('\n');
+            fence = Some(open);
+            prev_blank = false;
+            prev_heading = false;
+            in_list = false;
+            in_blockquote = false;
+            continue;
+        }
+
         let normalized = normalize_md_line(line);
         let trimmed = normalized.trim();
 
@@ -704,6 +741,40 @@ fn render_md_doc(out: &mut String, doc: &str) {
             in_blockquote = false;
         }
     }
+}
+
+/// `CommonMark` fenced code block delimiter — three or more `` ` `` or `~`.
+#[derive(Clone, Copy)]
+struct FenceMarker {
+    /// Fence character (`` ` `` or `~`).
+    ch: char,
+    /// Number of fence characters in the opening run.
+    len: usize,
+}
+
+fn fence_open(s: &str) -> Option<FenceMarker> {
+    let ch = s.chars().next()?;
+    if ch != '`' && ch != '~' {
+        return None;
+    }
+    let len = s.chars().take_while(|&c| c == ch).count();
+    if len < 3 {
+        return None;
+    }
+    // Backtick fences forbid backticks in the info string per CommonMark; the
+    // remaining content after a tilde fence has no such restriction.
+    if ch == '`' && s[len..].contains('`') {
+        return None;
+    }
+    Some(FenceMarker { ch, len })
+}
+
+fn matches_fence_close(s: &str, open: &FenceMarker) -> bool {
+    let count = s.chars().take_while(|&c| c == open.ch).count();
+    if count < open.len {
+        return false;
+    }
+    s[count..].chars().all(|c| c == ' ' || c == '\t')
 }
 
 fn normalize_md_line(line: &str) -> String {
@@ -1012,5 +1083,102 @@ fn render_simple_struct(out: &mut String, s: &DocStruct) {
             out.push_str("    ..\n");
         }
         out.push_str("}\n");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn render(input: &str) -> String {
+        let mut out = String::new();
+        render_md_doc(&mut out, input);
+        out
+    }
+
+    #[test]
+    fn fenced_block_preserves_attribute_lines_as_content() {
+        // Lines starting with `#` inside a fenced block are content, not headings.
+        let input =
+            "Example:\n\n```wado\nstruct S {\n    #[serde(default)]\n    port: i32,\n}\n```";
+        let out = render(input);
+        assert!(
+            out.contains("    #[serde(default)]\n    port: i32,"),
+            "expected attribute and field on consecutive lines, got:\n{out}"
+        );
+        // No spurious blank line between the attribute and the next field.
+        assert!(
+            !out.contains("#[serde(default)]\n\n"),
+            "unexpected blank after attribute:\n{out}"
+        );
+    }
+
+    #[test]
+    fn fenced_block_preserves_indentation_and_alignment() {
+        let input = "```wado\nlet a = 1;          // one\nlet bb = 22;        // two\n```";
+        let out = render(input);
+        assert!(
+            out.contains("let a = 1;          // one\n"),
+            "alignment whitespace should survive inside fenced block:\n{out}"
+        );
+        assert!(
+            out.contains("let bb = 22;        // two\n"),
+            "alignment whitespace should survive inside fenced block:\n{out}"
+        );
+    }
+
+    #[test]
+    fn tilde_fenced_block_is_recognized() {
+        let input = "~~~wado\n#[serde(default)]\nport: i32 = 0,\n~~~";
+        let out = render(input);
+        assert!(
+            out.contains("~~~wado\n#[serde(default)]\nport: i32 = 0,\n~~~\n"),
+            "tilde fence should pass through content verbatim:\n{out}"
+        );
+    }
+
+    #[test]
+    fn longer_closing_fence_is_accepted() {
+        // Opening of length 4 must be matched by 4+ closing chars.
+        let input = "````wado\nlet x = 1;\n`````";
+        let out = render(input);
+        assert!(out.contains("````wado\nlet x = 1;\n`````\n"), "got:\n{out}");
+    }
+
+    #[test]
+    fn shorter_closing_fence_does_not_close() {
+        // Opening of length 4, run of 3 backticks inside is not a close.
+        let input = "````wado\n```\nstill code\n````";
+        let out = render(input);
+        assert!(
+            out.contains("```\nstill code\n````\n"),
+            "inner ``` should remain content:\n{out}"
+        );
+    }
+
+    #[test]
+    fn outside_fence_heading_still_inserts_blank() {
+        // Sanity check: existing heading behaviour outside fenced blocks is unchanged.
+        let input = "# Title\nfollow-up";
+        let out = render(input);
+        assert_eq!(out, "# Title\n\nfollow-up\n");
+    }
+
+    #[test]
+    fn fence_close_with_info_string_is_not_a_close() {
+        // Closing fences disallow info strings per CommonMark — `````wado` is content.
+        let input = "```wado\n```rust\nstill code\n```";
+        let out = render(input);
+        assert!(out.contains("```rust\nstill code\n```\n"), "got:\n{out}");
+    }
+
+    #[test]
+    fn fence_blank_line_is_preserved() {
+        let input = "```wado\nlet a = 1;\n\nlet b = 2;\n```";
+        let out = render(input);
+        assert!(
+            out.contains("let a = 1;\n\nlet b = 2;\n"),
+            "blank lines inside fenced block must be preserved:\n{out}"
+        );
     }
 }

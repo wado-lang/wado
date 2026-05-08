@@ -31,25 +31,23 @@ type "functype//wado-compiler/tests/fixtures/trait_unit_return.wado/__cm_export_
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(12)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(13)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(13)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(14)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(14)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(15)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(16)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(16)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(17)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(17)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(18)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(18)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(19)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -60,25 +58,36 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "wado-compiler/tests/fixtures/trait_unit_return.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
 fn "wado-compiler/tests/fixtures/trait_unit_return.wado/__cm_export__run"() {
-    let __local_4: ref "core:prelude/string.wado//String";
+    let __local_1: ref "core:prelude/string.wado//String";
+    let message: ref "core:prelude/string.wado//String";
+    let rx: i32;
+    let tx: i32;
+    let handle: i32;
     let __sroa_m_text: ref "core:prelude/string.wado//String";
     __sroa_m_text = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello, World!"), used: 13 };
-    "core:cli/println"(__inline_Message_Printable__print_5____tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
-        "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Message: "), used: 9 });
-        "core:prelude/string.wado/String::push_str"(__local_4, __sroa_m_text);
-        break __inline_Message_Printable__print_5____tmpl: __local_4;
+    message = __inline_Message_Printable__print_5____tmpl: block -> ref "core:prelude/string.wado//String" {
+        __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
+        "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Message: "), used: 9 });
+        "core:prelude/string.wado/String::push_str"(__local_1, __sroa_m_text);
+        break __inline_Message_Printable__print_5____tmpl: __local_1;
         unreachable;
-    });
+    };
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    rx = builtin::i32_wrap_i64(__pair_temp_1);
+    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    handle = "wado-compiler/tests/fixtures/trait_unit_return.wado/__cm_binding__Stdout_write_via_stream"(rx);
+    "core:cli/write_to_stream"(tx, message, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle);
     "wasi/task-return"(0);
 }
 
@@ -97,19 +106,6 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
     }
     "wasi/stream-drop-writable"(tx);
-}
-
-fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
-    let handle: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    handle = "wado-compiler/tests/fixtures/trait_unit_return.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
@@ -169,19 +165,19 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<u8>;
-    let __local_5: i32;
-    let __local_7: i32;
+    let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_5 = __inline_i32_max_1: block -> i32 {
-            __local_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+        a_5 = __inline_i32_max_1: block -> i32 {
+            a_7 = capacity * 2;
+            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
             unreachable;
         };
-        break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
         unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);

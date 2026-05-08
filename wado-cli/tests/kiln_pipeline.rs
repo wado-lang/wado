@@ -9,13 +9,16 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use indexmap::IndexMap;
-use wado_cli::kiln_driver::{GeneratorProvider, PipelineOutcome, ProviderError, run_pipeline};
+use wado_cli::kiln_driver::{
+    GeneratorComponent, GeneratorProvider, PipelineOutcome, ProviderError, run_pipeline,
+};
+use wado_cli::kiln_metadata;
 use wado_compiler::compiler_host::{
     CompilerHost, Diagnostic, GeneratorOutputFile, GeneratorReadRecord, GeneratorRequest,
     GeneratorResponse, GeneratorRunnerError, SourceError,
 };
 use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
-use wado_manifest::{LockFile, Manifest};
+use wado_manifest::Manifest;
 
 struct StubProvider {
     bytes: Vec<u8>,
@@ -32,9 +35,18 @@ impl StubProvider {
 }
 
 impl GeneratorProvider for StubProvider {
-    async fn get_component(&self, _: &GeneratorModule) -> Result<Vec<u8>, ProviderError> {
+    async fn get_component(
+        &self,
+        _: &GeneratorModule,
+    ) -> Result<GeneratorComponent, ProviderError> {
         *self.calls.lock().unwrap() += 1;
-        Ok(self.bytes.clone())
+        Ok(GeneratorComponent {
+            bytes: self.bytes.clone(),
+            // Tests share a single fixed byte stream across calls; an
+            // empty source hash matches the legacy behaviour where the
+            // metadata's `generator_source_hash` was likewise empty.
+            source_hash: String::new(),
+        })
     }
 }
 
@@ -199,15 +211,23 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
     assert!(tmp.path().join("build/kiln/kiln-alpha/alpha.wado").exists());
     assert!(tmp.path().join("build/kiln/kiln-beta/beta.wado").exists());
 
-    let lock_text = std::fs::read_to_string(tmp.path().join("wado.lock")).unwrap();
-    let lock: LockFile = lock_text.parse().unwrap();
-    assert_eq!(lock.generator_cache.len(), 2);
-    let names: Vec<&str> = lock
-        .generator_cache
-        .iter()
-        .map(|e| e.invocation.as_str())
-        .collect();
-    assert_eq!(names, vec!["kiln-alpha", "kiln-beta"]);
+    let alpha = alpha_inv();
+    let beta = beta_inv();
+    let alpha_meta =
+        kiln_metadata::load(tmp.path(), alpha.output_dir.as_str(), alpha.from.as_str())
+            .unwrap()
+            .expect("kiln-alpha metadata should be written after run");
+    let beta_meta = kiln_metadata::load(tmp.path(), beta.output_dir.as_str(), beta.from.as_str())
+        .unwrap()
+        .expect("kiln-beta metadata should be written after run");
+    assert_eq!(alpha_meta.invocation, "kiln-alpha");
+    assert_eq!(beta_meta.invocation, "kiln-beta");
+
+    // wado.lock must NOT be written by the kiln pipeline anymore (M9).
+    assert!(
+        !tmp.path().join("wado.lock").exists(),
+        "kiln pipeline must no longer touch wado.lock"
+    );
 
     let host2 = StubHost::new(
         &[
@@ -221,11 +241,18 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
     let outcome2 = run(&m, tmp.path(), &host2, &provider2, invs);
     assert_eq!(outcome2.cached.len(), 2);
     assert!(outcome2.executed.is_empty());
-    assert_eq!(*provider2.calls.lock().unwrap(), 0);
+    // alpha and beta declare distinct `GeneratorModule` values, so each
+    // is fetched once through the driver's per-pipeline module cache.
+    // The pre-fetch is what feeds `cache_matches` the current
+    // `source_hash`; the cache itself never had to recompile, hence no
+    // entry in `executed`. (See
+    // `shared_module_across_invocations_calls_provider_once` for the
+    // case where a single module covers both invocations.)
+    assert_eq!(*provider2.calls.lock().unwrap(), 2);
 }
 
 #[test]
-fn lockfile_entries_follow_invocation_declaration_order() {
+fn each_invocation_writes_its_own_metadata_file() {
     let tmp = tempfile::tempdir().unwrap();
     let m = empty_manifest();
 
@@ -264,24 +291,20 @@ fn lockfile_entries_follow_invocation_declaration_order() {
         ],
     );
     let provider = StubProvider::new(b"component-bytes".to_vec());
-    run(&m, tmp.path(), &host, &provider, vec![z_inv, a_inv, m_inv]);
+    let invs = vec![z_inv, a_inv, m_inv];
+    run(&m, tmp.path(), &host, &provider, invs.clone());
 
-    let lock_text = std::fs::read_to_string(tmp.path().join("wado.lock")).unwrap();
-    let lock: LockFile = lock_text.parse().unwrap();
-    let names: Vec<&str> = lock
-        .generator_cache
-        .iter()
-        .map(|e| e.invocation.as_str())
-        .collect();
-    assert_eq!(
-        names,
-        vec!["kiln-zebra", "kiln-alpha", "kiln-mango"],
-        "lockfile must follow invocation declaration order, not alphabetical"
+    for inv in &invs {
+        let id = inv.decl_site.synthetic_id.as_str();
+        let meta = kiln_metadata::load(tmp.path(), inv.output_dir.as_str(), inv.from.as_str())
+            .unwrap()
+            .unwrap_or_else(|| panic!("missing metadata for {id}"));
+        assert_eq!(meta.invocation, id);
+    }
+    assert!(
+        !tmp.path().join("wado.lock").exists(),
+        "kiln pipeline must no longer touch wado.lock"
     );
-    let z_pos = lock_text.find("invocation = \"kiln-zebra\"").unwrap();
-    let a_pos = lock_text.find("invocation = \"kiln-alpha\"").unwrap();
-    let m_pos = lock_text.find("invocation = \"kiln-mango\"").unwrap();
-    assert!(z_pos < a_pos && a_pos < m_pos);
 }
 
 #[test]
@@ -315,7 +338,9 @@ fn end_to_end_input_change_invalidates_exactly_that_invocation() {
     let outcome = run(&m, tmp.path(), &host2, &provider2, invs);
     assert_eq!(outcome.executed, vec!["kiln-alpha".to_string()]);
     assert_eq!(outcome.cached, vec!["kiln-beta".to_string()]);
-    assert_eq!(*provider2.calls.lock().unwrap(), 1);
+    // 2 = one provider call per invocation (alpha + beta) for source-hash
+    // pre-fetch; only alpha actually executes the generator.
+    assert_eq!(*provider2.calls.lock().unwrap(), 2);
 }
 
 #[test]
@@ -468,5 +493,51 @@ fn inline_invocation_populates_invocation_index_for_redirect() {
     assert!(
         redirect.ends_with("/build/kiln/kiln-deadbeef/sample.wado"),
         "redirect URI must point at the generated entry path, got `{redirect}`"
+    );
+}
+
+#[test]
+fn shared_module_across_invocations_calls_provider_once() {
+    // The pipeline caches the provider's `get_component` result by
+    // `GeneratorModule`. Two invocations targeting the same module
+    // should resolve to a single provider call — the second invocation
+    // reuses the already-fetched component (and its source hash).
+    let tmp = tempfile::tempdir().unwrap();
+    let m = empty_manifest();
+
+    // Two invocations sharing the same `Spec` module. (Spec doesn't
+    // resolve through `CliGeneratorProvider` in v1, but the driver-level
+    // cache is module-keyed and target-agnostic, so the test is valid.)
+    let shared_module = GeneratorModule::Spec("ns:proto@1.0.0".to_string());
+    let inv_a = invocation(
+        "entry.wado",
+        "kiln-a",
+        shared_module.clone(),
+        "./a.proto",
+        "build/kiln/kiln-a",
+    );
+    let inv_b = invocation(
+        "entry.wado",
+        "kiln-b",
+        shared_module,
+        "./b.proto",
+        "build/kiln/kiln-b",
+    );
+
+    let host = StubHost::new(
+        &[("a.proto", b"a-schema"), ("b.proto", b"b-schema")],
+        vec![
+            ("a.proto", simple_response("a.wado")),
+            ("b.proto", simple_response("b.wado")),
+        ],
+    );
+    let provider = StubProvider::new(b"component-bytes".to_vec());
+
+    let outcome = run(&m, tmp.path(), &host, &provider, vec![inv_a, inv_b]);
+    assert_eq!(outcome.executed.len(), 2);
+    assert_eq!(
+        *provider.calls.lock().unwrap(),
+        1,
+        "shared module across invocations must trigger exactly one provider call"
     );
 }

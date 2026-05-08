@@ -491,6 +491,16 @@ fn fold_branchless_increment_in(instr: &mut WirInstr) {
     if !is_boolean_valued(condition.as_ref()) {
         return;
     }
+    // The fold turns `if cond { x = x + 1 }` into `x = x + cond`, which is
+    // only sound when evaluating `cond` does not itself write to `x` —
+    // Wasm reads `x` for the LHS of the add before evaluating `cond`,
+    // so any in-cond `local.set x` would be clobbered by the post-fold
+    // store. This pattern arises from HFS's call-site sync wrapper,
+    // whose re-read inserts `local.set _hfs_v` inside an expression
+    // when the HFS scalar is being incremented in the if's then-branch.
+    if writes_local(condition.as_ref(), name) {
+        return;
+    }
     // Transform: x = x + condition
     let cond = std::mem::replace(condition, Box::new(WirInstr::Nop));
     let get = Box::new(WirInstr::LocalGet {
@@ -598,6 +608,26 @@ fn power_of_two_minus_one_width(v: i32) -> Option<u32> {
     } else {
         None
     }
+}
+
+/// Returns true if evaluating `instr` (or any of its sub-instructions)
+/// performs `local.set` / `local.tee` against the local named
+/// `target_name`. Used by `fold_branchless_increment` to refuse the
+/// fold when the condition mutates the very local being incremented —
+/// the fold relies on `cond` being a pure rvalue.
+fn writes_local(instr: &WirInstr, target_name: &str) -> bool {
+    if let WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } = instr
+        && name == target_name
+    {
+        return true;
+    }
+    let mut found = false;
+    instr.for_each_child(&mut |child| {
+        if !found && writes_local(child, target_name) {
+            found = true;
+        }
+    });
+    found
 }
 
 /// Returns true if the instruction is guaranteed to produce 0 or 1.

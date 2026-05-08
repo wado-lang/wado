@@ -4,6 +4,7 @@
 //! or variants to use Wasm multi-value returns, eliminating GC struct allocation
 //! at function boundaries.
 
+use crate::compiler_trace;
 use crate::hashmap::IndexSet;
 use crate::wir::{
     WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId, WirVariantType,
@@ -32,12 +33,14 @@ pub(super) fn sroa_multi_value_returns(module: &mut WirPackage) {
 
     // Phase 1: identify candidate functions.
     let candidates = find_sroa_candidates(module, &pinned);
+    compiler_trace!("sroa_return", "candidates = {}", candidates.len());
     if candidates.is_empty() {
         return;
     }
 
     // Phase 2: validate call sites across all function bodies.
     let confirmed = validate_call_sites(module, &candidates);
+    compiler_trace!("sroa_return", "confirmed = {}", confirmed.len());
     if confirmed.is_empty() {
         return;
     }
@@ -472,7 +475,38 @@ fn check_return_struct_new(instr: &WirInstr, expected_type_idx: u32) -> bool {
         }
         WirInstr::Seq(body) => all_returns_are_struct_new(body, expected_type_idx),
         WirInstr::Drop(inner) => check_return_struct_new(inner, expected_type_idx),
-        _ => true,
+        // Non-tail subtrees (LocalSet value, arithmetic operands, …) use
+        // `nested_returns_match` so the typed-block Br-exit check only
+        // fires at function-tail position.
+        other => {
+            let mut all_ok = true;
+            other.for_each_child(&mut |child| {
+                if !nested_returns_match(child, expected_type_idx) {
+                    all_ok = false;
+                }
+            });
+            all_ok
+        }
+    }
+}
+
+/// Walk a non-tail subtree, asserting every explicit `Return` it contains
+/// returns a `StructNew` of `expected_type_idx`. Skips the typed-block
+/// Br-exit check that [`check_return_struct_new`] applies — that
+/// invariant is tail-position-only.
+fn nested_returns_match(instr: &WirInstr, expected_type_idx: u32) -> bool {
+    match instr {
+        WirInstr::Return { value: Some(v) } => value_expr_is_struct_new(v, expected_type_idx),
+        WirInstr::Return { value: None } => true,
+        _ => {
+            let mut all_ok = true;
+            instr.for_each_child(&mut |child| {
+                if !nested_returns_match(child, expected_type_idx) {
+                    all_ok = false;
+                }
+            });
+            all_ok
+        }
     }
 }
 
@@ -1304,6 +1338,12 @@ fn apply_sroa(module: &mut WirPackage, confirmed: &[(u32, SroaCandidate)]) {
 
         // Rewrite returns in the body: StructNew → Seq of field values
         if let Some(body) = &mut func.body {
+            compiler_trace!(
+                "sroa_return",
+                "applying SROA to function {} (variant = {})",
+                func.name,
+                candidate.variant_info.is_some()
+            );
             if let Some(vi) = &candidate.variant_info {
                 rewrite_variant_returns_to_multi_value(body, vi, &candidate.field_types);
             } else {
@@ -1330,6 +1370,11 @@ fn rewrite_returns_to_multi_value(instrs: &mut [WirInstr]) {
     for instr in instrs.iter_mut() {
         match instr {
             WirInstr::Return { value: Some(v) } => {
+                compiler_trace!(
+                    "sroa_return",
+                    "rewrite return-with-value (inner = {:?})",
+                    std::mem::discriminant(v.as_ref())
+                );
                 match v.as_ref() {
                     WirInstr::StructNew { .. } => {
                         // Direct StructNew → Seq of fields
@@ -1377,7 +1422,14 @@ fn rewrite_returns_to_multi_value(instrs: &mut [WirInstr]) {
                     rewrite_returns_to_multi_value(std::slice::from_mut(inner.as_mut()));
                 }
             }
-            _ => {}
+            // Recurse into boxed children so Returns hidden inside non-tail
+            // value positions (LocalSet value, arithmetic operands, …) are
+            // rewritten alongside top-level Returns.
+            other => {
+                other.for_each_boxed_child_mut(&mut |child| {
+                    rewrite_returns_to_multi_value(std::slice::from_mut(child));
+                });
+            }
         }
     }
 }

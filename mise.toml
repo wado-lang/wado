@@ -5,8 +5,9 @@
 [tools]
 # Rust toolchain - mise respects rust-toolchain.toml automatically
 
-# dprint - fast code formatter
-dprint = "latest"
+# Markdown formatting is provided by `wado-dev-tools format-md`, which
+# embeds the dprint markdown plugin as a Cargo dependency. No external
+# dprint CLI is required.
 
 # WebAssembly runtime with WASI P3 support (synced by sync-vendor.sh)
 wasmtime = "44"
@@ -115,11 +116,10 @@ set -xe -o pipefail
 touch wado-compiler/tests/e2e.rs
 # Cap the harness thread count. Each e2e test compiles a Wado program and
 # runs it under wasmtime; at full nproc on constrained sandboxes we have
-# seen SIGSEGV from resource exhaustion. Use nproc/3 (min 1) which matches
-# the wado-dev-tools default.
-test_threads=$(( $(nproc) / 3 ))
-[ "$test_threads" -lt 1 ] && test_threads=1
-cargo test -- --test-threads="$test_threads"
+# seen SIGSEGV from resource exhaustion. A fixed cap of 2 keeps memory
+# pressure low while still parallelising on single-thread sandboxes
+# (where nproc/3 collapsed to 1).
+cargo test -- --test-threads=2
 """
 
 [tasks.test-wado]
@@ -127,15 +127,20 @@ description = "Run Wado module tests"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-# In CI, package-gale runs in its own per-optlevel jobs (test-gale-o1/o2/o3)
-# so it is excluded here to keep this job fast. Locally, we include it so
-# a single `mise run test-wado` covers everything.
-targets=(example/*.wado wado-compiler/lib/core wasm-size/*/*.wado)
-if [ -z "${CI:-}" ]; then
-    targets+=(package-gale)
+# `wado test` walks the repo-root wado.toml and recurses into every
+# nested package. In CI, package-gale runs in its own per-optlevel jobs
+# (test-gale-o1/o2/o3), so we exclude it here to keep this job fast.
+# Locally we include everything so a single `mise run test-wado` covers
+# it all.
+#
+# benchmark/* test blocks use only inline data — the `Preopens`-driven
+# file reads sit in `export fn run()`, which the test world does not
+# invoke — so they need no `--dir` setup of their own.
+excludes=()
+if [ -n "${CI:-}" ]; then
+    excludes+=(--exclude 'package-gale/**')
 fi
-cargo run -p wado-cli -- test "${targets[@]}"
-cargo run -p wado-cli -- test --dir benchmark::. benchmark/*/*.wado
+cargo run -p wado-cli -- test "${excludes[@]}"
 """
 
 [tasks.test-gale-o1]
@@ -176,7 +181,7 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 cargo fmt --all
-dprint fmt
+cargo run -p wado-dev-tools --quiet -- format-md
 """
 
 [tasks.format-wado]
@@ -264,8 +269,8 @@ run = "rm -f ~/.vscode/extensions/wado-lang.wado-0.0.1"
 description = "Run wado-vscode tests"
 run = "cd wado-vscode && npm install && npm run test:unit && npm run test"
 
-[tasks.build-wado-lsp-wasm]
-description = "Build wado-lsp for wasm32-wasip1 and copy into wado-vscode/out/"
+[tasks.build-wado-lsp-wasm-rust]
+description = "Build the wado-lsp wasm32-wasip1 binary into wado-vscode/out/ (Rust only)"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
@@ -277,16 +282,46 @@ mkdir -p wado-vscode/out
 cp target/wasm32-wasip1/release/wado-lsp.wasm wado-vscode/out/wado_lsp.wasm
 """
 
-[tasks.watch-wado-lsp-wasm]
-description = "Watch wado-lsp and rebuild the wasm32-wasip1 artifact on change"
+[tasks.build-wado-lsp-wasm]
+description = "Build wado-lsp wasm + wado-vscode TS into wado-vscode/out/"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cargo watch \
-    -w wado-lsp \
-    -w wado-compiler \
-    -w wado-manifest \
-    -s 'mise run build-wado-lsp-wasm'
+mise run build-wado-lsp-wasm-rust
+
+# Compile the extension TS so wado-vscode/out/extension.js stays in sync —
+# otherwise a Reload Window picks up stale JS that doesn't match the wasm.
+( cd wado-vscode && [ -d node_modules ] || npm install )
+( cd wado-vscode && npm run compile )
+"""
+
+[tasks.watch-wado-lsp-wasm]
+description = "Watch wado-lsp + wado-vscode TS; keep wado-vscode/out/ continuously fresh"
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+
+# Make sure node_modules exists before launching tsc -watch.
+( cd wado-vscode && [ -d node_modules ] || npm install )
+
+# tsc -watch rebuilds wado-vscode/out/extension.js on every TS edit. VS Code
+# does not auto-reload extension code, so you still need
+# "Developer: Reload Window" after a TS change — but extension.js is always
+# in sync once tsc has rebuilt it.
+( cd wado-vscode && exec npm run watch ) &
+TSC_PID=$!
+trap 'kill -TERM $TSC_PID 2>/dev/null || true; wait $TSC_PID 2>/dev/null || true' EXIT INT TERM
+
+# cargo watch rebuilds the wasm on every Rust change. The extension's
+# FileSystemWatcher picks the new wasm up and restarts the LSP server,
+# so Rust-only changes do not require a Reload Window. Use the rust-only
+# build task so we don't kick off a redundant `npm run compile` on every
+# Rust edit (the tsc watcher above already keeps extension.js fresh).
+cargo watch \\
+    -w wado-lsp \\
+    -w wado-compiler \\
+    -w wado-manifest \\
+    -s 'mise run build-wado-lsp-wasm-rust'
 """
 
 [tasks.update-wado-vscode-grammar]
@@ -315,10 +350,6 @@ curl -sL "https://raw.githubusercontent.com/SchemaStore/schemastore/master/src/s
 description = "Sync vendor submodules (wasmtime pinned to Cargo.lock, others to latest)"
 run = "scripts/sync-vendor.sh"
 
-[tasks.update-vendor]
-description = "Update all vendor submodules to latest remote"
-run = "git submodule update --remote vendor/wasm vendor/wasi vendor/wasmtime vendor/wasm-tools"
-
 [tasks.update-stdlib-wasi]
 description = "Regenerate wasi stdlib from WIT files"
 run = """
@@ -335,6 +366,7 @@ cargo run -p wado-from-idl -- \
 cargo run -p wado-from-idl -- \
     --wit-dir vendor/wasmtime/crates/wasi-tls/src/p3/wit \
     --output-dir wado-compiler/lib/wasi
+find wado-compiler/lib/wasi -type f -name '*.wado' -exec cargo run -p wado-cli -- format -w {} +
 """
 
 [tasks.update-stdlib-kiln]

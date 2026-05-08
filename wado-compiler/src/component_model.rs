@@ -31,17 +31,17 @@ pub struct CmVariantCase {
 /// - Case-level: `#[cm("cm-name")]` → uses the whole arg directly
 ///
 /// Strip a `AsyncCall<T>` wrapper from the declared return type of an `async`
-/// effect method, recovering the CM-level result type `T`.
+/// interface method, recovering the CM-level result type `T`.
 ///
 /// In WIT, `async func foo(...) -> T` lowers the CM-level result as `T`, but
-/// the Wado-facing effect declaration exposes `AsyncCall<T>` so user code can
+/// the Wado-facing interface declaration exposes `AsyncCall<T>` so user code can
 /// defer `wait()`-ing until after any stream parameter rendezvous
 /// completes. The CM binding synthesiser needs the raw `T` when computing
 /// outptr layout.
 ///
 /// For non-async methods this is a no-op. For async methods whose return
 /// type is missing or not `AsyncCall<_>` we return the original type —
-/// defensive in case hand-written effect declarations predate the
+/// defensive in case hand-written interface declarations predate the
 /// `AsyncCall<T>` convention (in which case the compiler's earlier
 /// expectations still apply).
 pub fn unwrap_async_call_if_async(is_async: bool, declared: &Option<Type>) -> Option<Type> {
@@ -63,7 +63,7 @@ pub fn unwrap_async_call_if_async(is_async: bool, declared: &Option<Type>) -> Op
 /// Returns true if `ty` is the Wado unit type. Recognises both surface
 /// syntaxes that the parser may emit: the empty tuple `[]` and the
 /// named form `()`.
-fn is_unit_type(ty: &Type) -> bool {
+pub fn is_unit_type(ty: &Type) -> bool {
     match ty {
         Type::Tuple(elems) => elems.is_empty(),
         Type::Named(named) => matches!(named.name.as_str(), "()" | "Unit" | "unit"),
@@ -99,11 +99,11 @@ fn extract_cm_params_attr(attrs: &[crate::ast::Attribute]) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Information about a WASI function from an effect method
+/// Information about a WASI function from an interface method
 #[derive(Debug, Clone)]
 pub struct WasiFunctionInfo {
     /// Effect name (e.g., "Stdout")
-    pub effect_name: String,
+    pub interface_name: String,
     /// Method name in Wado (e.g., "`write_via_stream`")
     pub method_name: String,
     /// WASI function name (e.g., "write-via-stream")
@@ -123,10 +123,10 @@ pub struct WasiFunctionInfo {
 impl WasiFunctionInfo {
     /// Build the local alias name for Component Model imports.
     ///
-    /// Format: `wasi:{package}/{effect_name}::{method_name}`
+    /// Format: `wasi:{package}/{interface_name}::{method_name}`
     /// Example: `wasi:cli/Stdout::write_via_stream`
     pub fn local_alias_name(&self) -> String {
-        build_local_alias_name(&self.package, &self.effect_name, &self.method_name)
+        build_local_alias_name(&self.package, &self.interface_name, &self.method_name)
     }
 
     /// Whether `canon lower` requires the Memory canonical option.
@@ -260,7 +260,7 @@ impl WasiFunctionInfo {
 
 /// Build a local alias name for a WASI function.
 ///
-/// Format: `wasi:{package}/{effect_name}::{method_name}`
+/// Format: `wasi:{package}/{interface_name}::{method_name}`
 /// Example: `wasi:cli/Stdout::write_via_stream`
 ///
 /// This naming scheme:
@@ -268,8 +268,8 @@ impl WasiFunctionInfo {
 /// - Includes package for uniqueness across packages
 /// - Uses Wado effect/method names (not WIT interface/function names)
 /// - Uses `::` as method separator (Wado convention)
-pub fn build_local_alias_name(package: &str, effect_name: &str, method_name: &str) -> String {
-    format!("wasi:{package}/{effect_name}::{method_name}")
+pub fn build_local_alias_name(package: &str, interface_name: &str, method_name: &str) -> String {
+    format!("wasi:{package}/{interface_name}::{method_name}")
 }
 
 /// Information about a WASI interface (grouping functions by interface)
@@ -308,7 +308,7 @@ pub struct WasiRegistry {
     interfaces: BTreeMap<String, Vec<WasiFunctionInfo>>,
 
     /// Local alias -> (`interface_path`, `wasi_func_name`)
-    /// Key format: `wasi:{package}/{effect_name}::{method_name`}
+    /// Key format: `wasi:{package}/{interface_name}::{method_name`}
     /// e.g., "`wasi:cli/Stdout::write_via_stream`"
     local_aliases: IndexMap<String, (String, String)>,
 
@@ -462,6 +462,150 @@ fn find_unique_source_in<'a, V>(
 /// Walk a parsed stdlib module and return `name -> source_interface` for
 /// every top-level declaration that carries a `#[cm("...")]` attribute.
 ///
+/// Resolve a `Type::Named` reference through the newtype-alias map, scanning
+/// by name. When the name is ambiguous (multiple interfaces define a type
+/// with the same name), the original type is returned unchanged so the
+/// caller can fall back to source-aware resolution. Other type shapes are
+/// returned as-is.
+fn resolve_type(ty: &Type, aliases: &IndexMap<(String, String), Type>) -> Type {
+    match ty {
+        Type::Named(named) => {
+            if let Some(resolved) = find_unique_in(aliases, &named.name) {
+                resolved.clone()
+            } else {
+                ty.clone()
+            }
+        }
+        _ => ty.clone(),
+    }
+}
+
+/// Captured `pub interface Foo { ... }` declarations across all parsed
+/// modules. Used by `WorldRegistry::register` (via lookup callbacks) to
+/// expand `export Foo;` into per-method exports and to resolve `import Foo;`
+/// to its CM FQ.
+#[derive(Default)]
+struct InterfaceDeclTable {
+    by_name: IndexMap<String, InterfaceDeclEntry>,
+}
+
+struct InterfaceDeclEntry {
+    cm_interface_fq: String,
+    methods: Vec<InterfaceDeclMethod>,
+}
+
+struct InterfaceDeclMethod {
+    name: String,
+    is_async: bool,
+    params: Vec<(String, Type)>,
+    return_type: Option<Type>,
+}
+
+impl InterfaceDeclTable {
+    fn import_cm_fq(&self, name: &str) -> Option<String> {
+        self.by_name.get(name).map(|e| e.cm_interface_fq.clone())
+    }
+
+    fn export_lookup(
+        &self,
+        name: &str,
+        newtypes: &IndexMap<(String, String), Type>,
+    ) -> Option<crate::world_registry::InterfaceExportLookup> {
+        let entry = self.by_name.get(name)?;
+        let methods = entry
+            .methods
+            .iter()
+            .map(|m| crate::world_registry::InterfaceExportMethod {
+                name: m.name.clone(),
+                is_async: m.is_async,
+                params: m
+                    .params
+                    .iter()
+                    .map(|(n, ty)| (n.clone(), resolve_type(ty, newtypes)))
+                    .collect(),
+                return_type: m
+                    .return_type
+                    .as_ref()
+                    .map(|ty| unwrap_async_call_if_async(m.is_async, &Some(ty.clone())))
+                    .unwrap_or(None)
+                    .or_else(|| m.return_type.clone()),
+            })
+            .collect();
+        Some(crate::world_registry::InterfaceExportLookup {
+            cm_interface_fq: entry.cm_interface_fq.clone(),
+            methods,
+        })
+    }
+}
+
+fn collect_interface_decls(modules: &[(&'static str, crate::ast::Module)]) -> InterfaceDeclTable {
+    use crate::ast::Item;
+
+    let mut table = InterfaceDeclTable::default();
+    for (_, module) in modules {
+        for item in &module.items {
+            let Item::Interface(iface) = item else {
+                continue;
+            };
+            // The interface's CM FQ is the full `#[cm("...")]` argument on the
+            // interface declaration itself (e.g.
+            // `"wasi:http/handler@0.3.0-rc-2026-03-15"`). Skip anonymous
+            // interfaces without a CM attribute — they are not boundary-
+            // visible and cannot back a world export.
+            let Some(cm_fq) = iface
+                .attrs
+                .iter()
+                .find(|a| a.name == "cm")
+                .and_then(|a| a.args.first())
+                .map(|arg| arg.as_str().to_string())
+            else {
+                continue;
+            };
+
+            let methods: Vec<InterfaceDeclMethod> = iface
+                .methods
+                .iter()
+                .map(|m| InterfaceDeclMethod {
+                    name: m.name.clone(),
+                    is_async: m.is_async,
+                    params: m
+                        .params
+                        .iter()
+                        .map(|p| (p.name.clone(), p.ty.clone()))
+                        .collect(),
+                    return_type: m.return_type.clone(),
+                })
+                .collect();
+
+            // Same-name interfaces declared in multiple modules cannot be
+            // distinguished at world-registration time (`export Foo;` /
+            // `import Foo;` both look up by local name). Mirror
+            // `WorldRegistry::register`'s policy: keep the first registrant,
+            // log a warning, and ignore the rest. A duplicate here is a
+            // stdlib bug or a user-input collision; silent overwriting would
+            // make the earlier interface invisible to any world that
+            // references it.
+            if table.by_name.contains_key(&iface.name) {
+                eprintln!(
+                    "InterfaceDeclTable: duplicate interface `{}` (also at {cm_fq:?}). \
+                     Keeping the first registrant.",
+                    iface.name,
+                );
+                continue;
+            }
+
+            table.by_name.insert(
+                iface.name.clone(),
+                InterfaceDeclEntry {
+                    cm_interface_fq: cm_fq,
+                    methods,
+                },
+            );
+        }
+    }
+    table
+}
+
 /// The returned map is keyed by the Wado-side identifier (e.g. `Response`)
 /// and points at the interface prefix before the `#` fragment (e.g.
 /// `"wasi:http/types@0.3.0-rc-2026-03-15"`). Effects, structs, variants,
@@ -477,7 +621,7 @@ fn collect_cm_definitions(module: &crate::ast::Module) -> IndexMap<String, Strin
             Item::Flags(f) => (f.name.clone(), f.attributes.as_deref().unwrap_or(&[])),
             Item::Enum(e) => (e.name.clone(), e.attrs.as_slice()),
             Item::Variant(v) => (v.name.clone(), v.attrs.as_slice()),
-            Item::Effect(e) => (e.name.clone(), e.attrs.as_slice()),
+            Item::Interface(e) => (e.name.clone(), e.attrs.as_slice()),
             _ => continue,
         };
         let source = WasiRegistry::cm_source_interface(attrs);
@@ -527,12 +671,12 @@ fn build_local_name_resolver(
                         let bind = alias.clone().unwrap_or_else(|| name.clone());
                         local.insert(bind, source.clone());
                     }
-                    UseItem::EffectFunctions {
-                        effect_name,
+                    UseItem::InterfaceFunctions {
+                        interface_name,
                         functions: _,
                     } => {
-                        if let Some(source) = other_defs.get(effect_name) {
-                            local.insert(effect_name.clone(), source.clone());
+                        if let Some(source) = other_defs.get(interface_name) {
+                            local.insert(interface_name.clone(), source.clone());
                         }
                     }
                     UseItem::Namespace { .. } | UseItem::Wildcard => {}
@@ -604,7 +748,7 @@ fn populate_named_type_sources(
                 }
             }
             Item::Newtype(a) => walk_type(&mut a.ty, local_names),
-            Item::Effect(effect) => {
+            Item::Interface(effect) => {
                 for method in &mut effect.methods {
                     for param in &mut method.params {
                         walk_type(&mut param.ty, local_names);
@@ -743,7 +887,7 @@ impl WasiRegistry {
 
     /// Build the registry from the embedded stdlib
     ///
-    /// Parses the embedded wasi:* modules and registers their effect methods.
+    /// Parses the embedded wasi:* modules and registers their interface methods.
     /// Also collects newtypes and world definitions.
     pub fn build_from_stdlib() -> &'static (Self, crate::world_registry::WorldRegistry) {
         use std::sync::OnceLock;
@@ -801,21 +945,38 @@ impl WasiRegistry {
         let mut registry = Self::new();
         let mut world_registry = WorldRegistry::new();
 
+        // Pass 1: resolve named-type sources and register types/interfaces/
+        // resources for every module. World declarations are deferred to
+        // pass 2 so that `export Foo;` in a world can be expanded against the
+        // already-registered interface signatures, even when the interface
+        // is declared in a different module than the world.
+        let mut resolved_modules: Vec<(&'static str, crate::ast::Module)> =
+            Vec::with_capacity(modules.len());
         for (path, mut module) in modules {
             let local_names = build_local_name_resolver(path, &module, &defs_by_module);
             populate_named_type_sources(&mut module, &local_names);
-            registry.register_module(&module, &mut world_registry);
+            registry.register_module_decls(&module);
+            resolved_modules.push((path, module));
+        }
+
+        // Build interface lookup from accumulated `pub interface Foo`
+        // declarations across every module. The world registrar uses this to
+        // expand `export Foo;` interface refs into per-method exports.
+        let interface_decls = collect_interface_decls(&resolved_modules);
+
+        // Pass 2: register worlds.
+        for (_, module) in &resolved_modules {
+            registry.register_module_worlds(module, &mut world_registry, &interface_decls);
         }
 
         (registry, world_registry)
     }
 
-    /// Register effects and types from a WASI module
-    fn register_module(
-        &mut self,
-        module: &crate::ast::Module,
-        world_registry: &mut crate::world_registry::WorldRegistry,
-    ) {
+    /// Register types, interfaces, and resources from a WASI module. World
+    /// declarations are handled separately by [`Self::register_module_worlds`]
+    /// so that interface exports can be expanded against the full set of
+    /// interface declarations across modules.
+    fn register_module_decls(&mut self, module: &crate::ast::Module) {
         use crate::ast::Item;
 
         // First, collect newtypes from this module
@@ -957,26 +1118,10 @@ impl WasiRegistry {
             }
         }
 
-        // Helper closure to resolve types through aliases (scan the
-        // `(source_interface, name)`-keyed newtypes map by name; skip
-        // resolution when the name is ambiguous across interfaces).
-        let resolve_type = |ty: &Type, aliases: &IndexMap<(String, String), Type>| -> Type {
-            match ty {
-                Type::Named(named) => {
-                    if let Some(resolved) = find_unique_in(aliases, &named.name) {
-                        resolved.clone()
-                    } else {
-                        ty.clone()
-                    }
-                }
-                _ => ty.clone(),
-            }
-        };
-
-        // Register effect methods with resolved types for params but NOT for return type
+        // Register interface methods with resolved types for params but NOT for return type
         // Return type must keep original names (e.g., Mark not u64) for newtype semantics
         for item in &module.items {
-            if let Item::Effect(effect) = item {
+            if let Item::Interface(effect) = item {
                 for method in &effect.methods {
                     if let Some(wasi) = method.attrs.first().and_then(|a| a.cm_import.as_ref()) {
                         // Extract CM param names from #[cm_params] attribute
@@ -1069,11 +1214,28 @@ impl WasiRegistry {
                 }
             }
         }
+    }
 
-        // Register world definitions
+    /// Register world declarations from a WASI module. `interface_decls`
+    /// must already contain every `pub interface Foo` known to the
+    /// compilation, so that interface exports (`export Foo;`) and interface
+    /// imports (`import Foo;`) can be resolved to their CM FQ and method
+    /// signatures.
+    fn register_module_worlds(
+        &self,
+        module: &crate::ast::Module,
+        world_registry: &mut crate::world_registry::WorldRegistry,
+        interface_decls: &InterfaceDeclTable,
+    ) {
+        use crate::ast::Item;
+
         for item in &module.items {
             if let Item::World(world) = item {
-                world_registry.register(world);
+                world_registry.register(
+                    world,
+                    |name| interface_decls.export_lookup(name, &self.newtypes),
+                    |name| interface_decls.import_cm_fq(name),
+                );
             }
         }
     }
@@ -1625,10 +1787,10 @@ impl WasiRegistry {
         true
     }
 
-    /// Register a WASI function from an effect method
+    /// Register a WASI function from an interface method
     ///
     /// # Arguments
-    /// * `effect_name` - The effect name (e.g., "Stdout")
+    /// * `interface_name` - The interface name (e.g., "Stdout")
     /// * `method_name` - The method name (e.g., "`write_via_stream`")
     /// * `wasi` - The parsed WASI import metadata
     /// * `is_async` - Whether this is an async function
@@ -1636,7 +1798,7 @@ impl WasiRegistry {
     /// * `return_type` - Return type (if any)
     pub fn register(
         &mut self,
-        effect_name: &str,
+        interface_name: &str,
         method_name: &str,
         wasi: &CmImport,
         is_async: bool,
@@ -1658,7 +1820,7 @@ impl WasiRegistry {
             .map(|(name, cm_name, ty)| (name, cm_name, self.resolve_type(&ty)))
             .collect();
         let func_info = WasiFunctionInfo {
-            effect_name: effect_name.to_string(),
+            interface_name: interface_name.to_string(),
             method_name: method_name.to_string(),
             wasi_func_name: wasi_func_name.clone(),
             interface_path: interface_path.clone(),
@@ -1669,13 +1831,13 @@ impl WasiRegistry {
         };
 
         // Generate the local alias name using utility function
-        // Format: wasi:{package}/{effect_name}::{method_name}
+        // Format: wasi:{package}/{interface_name}::{method_name}
         let local_name = func_info.local_alias_name();
 
         self.used_names.insert(local_name.clone());
 
         // Register in effect -> func map
-        let qualified_name = format!("{effect_name}::{method_name}");
+        let qualified_name = format!("{interface_name}::{method_name}");
         self.effect_to_func
             .insert(qualified_name, func_info.clone());
 
@@ -3466,7 +3628,7 @@ mod tests {
     #[test]
     fn test_func_info_local_alias_name() {
         let func_info = WasiFunctionInfo {
-            effect_name: "Stdout".to_string(),
+            interface_name: "Stdout".to_string(),
             method_name: "write_via_stream".to_string(),
             wasi_func_name: "write-via-stream".to_string(),
             interface_path: "wasi:cli/stdout@0.3.0-rc-2025-09-16".to_string(),

@@ -1,6 +1,6 @@
 //! wado-from-idl CLI
 
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexSet;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -8,7 +8,7 @@ use std::process;
 
 use anyhow::{Context, Result};
 use lexopt::Arg::Long;
-use wit_parser::Resolve;
+use wit_parser::{PackageId, PackageSourceMap, Resolve};
 
 use wado_from_idl::{Transformer, WadoCodeGenerator, naming::to_snake_case};
 
@@ -193,12 +193,11 @@ fn run_directory_mode(
         all_features: !skip_unstable,
         ..Default::default()
     };
-    let (_pkg_id, _) = resolve
+    let (_pkg_id, source_map) = resolve
         .push_dir(wit_dir)
         .with_context(|| format!("Failed to parse WIT files from {}", wit_dir.display()))?;
 
-    // Build a map from interface/world name to source WIT file
-    let iface_to_file = build_interface_to_file_map(wit_dir)?;
+    let base_dir = std::env::current_dir()?;
 
     let transformer = Transformer::new(&resolve);
     let mut generator = WadoCodeGenerator::new();
@@ -208,13 +207,15 @@ fn run_directory_mode(
         .with_context(|| format!("Failed to create directory {}", output_dir.display()))?;
 
     // Process each package — generate one file per interface + one worlds file per package
-    for (_current_pkg_id, pkg) in &resolve.packages {
+    for (current_pkg_id, pkg) in &resolve.packages {
         let pkg_name = &pkg.name.name;
 
         // Filter by package if specified
         if package_filter.is_some_and(|filter| pkg_name != filter) {
             continue;
         }
+
+        let sources = package_sources(&source_map, current_pkg_id, &base_dir);
 
         let version = pkg
             .name
@@ -239,15 +240,13 @@ fn run_directory_mode(
             // Skip empty interfaces
             if module.types.is_empty()
                 && module.resources.is_empty()
-                && module.effects.is_empty()
+                && module.interfaces.is_empty()
                 && module.imports.is_empty()
             {
                 continue;
             }
 
-            if let Some(source_file) = iface_to_file.get(iface_name) {
-                module.source_files = vec![source_file.clone()];
-            }
+            module.source_files.clone_from(&sources);
             module.package_name.clone_from(&version);
 
             let names = module.public_names();
@@ -255,12 +254,17 @@ fn run_directory_mode(
                 flat_reexports.push((iface_name.clone(), names));
             }
 
-            let code = generator.generate(&module);
-
             // Write per-interface file. WIT kebab-case interface names
             // are converted to Wado's snake_case filename convention
             // (e.g. `kiln-host` -> `kiln_host.wado`).
             let file_stem = to_snake_case(iface_name);
+            module.stdlib_identity = stdlib_identity_for(
+                &pkg.name.namespace,
+                pkg_name,
+                Some(&format!("{file_stem}.wado")),
+            );
+            let code = generator.generate(&module);
+
             let output_path = pkg_dir.join(format!("{file_stem}.wado"));
             fs::write(&output_path, code)
                 .with_context(|| format!("Failed to write {}", output_path.display()))?;
@@ -268,15 +272,10 @@ fn run_directory_mode(
             eprintln!("Generated: {}", output_path.display());
         }
 
-        // Collect all world source files and emit worlds file
+        // Emit worlds file aggregating every world in this package
         let mut worlds_module = wado_from_idl::WadoModule::new(pkg_name.clone(), version.clone());
-        let mut worlds_source_files: IndexSet<String> = IndexSet::new();
 
         for (world_name, world_id) in &pkg.worlds {
-            if let Some(source_file) = iface_to_file.get(world_name) {
-                worlds_source_files.insert(source_file.clone());
-            }
-
             let world = transformer
                 .transform_world(*world_id)
                 .with_context(|| format!("Failed to transform world {world_name}"))?;
@@ -284,9 +283,9 @@ fn run_directory_mode(
         }
 
         if !worlds_module.worlds.is_empty() {
-            let mut source_files: Vec<_> = worlds_source_files.into_iter().collect();
-            source_files.sort();
-            worlds_module.source_files = source_files;
+            worlds_module.source_files = sources;
+            worlds_module.stdlib_identity =
+                stdlib_identity_for(&pkg.name.namespace, pkg_name, Some("worlds.wado"));
 
             let code = generator.generate(&worlds_module);
 
@@ -319,6 +318,13 @@ fn write_flat_reexport_file(
 
     let mut flat_code = String::new();
     flat_code.push_str("#![generated(by = \"wado-from-idl\")]\n");
+    // The package-level facade (e.g. `wasi/cli.wado`) is reachable as the
+    // bundled module `wasi:cli` (no `.wado` suffix). Pin its identity so the
+    // loader resolves an editor-opened facade to the same `ModuleSource` that
+    // the rest of the compile uses.
+    if let Some(identity) = stdlib_identity_for(namespace, pkg_name, None) {
+        flat_code.push_str(&format!("#![stdlib(\"{identity}\")]\n"));
+    }
     flat_code.push('\n');
 
     let mut exported_names: IndexSet<String> = IndexSet::new();
@@ -353,50 +359,38 @@ fn write_flat_reexport_file(
     Ok(())
 }
 
-/// Build a map from interface/world name to the WIT file that defines it
-fn build_interface_to_file_map(dir: &PathBuf) -> Result<IndexMap<String, String>> {
-    let mut map = IndexMap::new();
-    let base_dir = std::env::current_dir()?;
-    build_interface_map_recursive(dir, &base_dir, &mut map)?;
-    Ok(map)
+/// Build the `#![stdlib("...")]` identity string for a generated file, or
+/// `None` when the file lives outside the bundled stdlib namespaces and
+/// therefore must not declare an identity.
+///
+/// `wado-compiler::loader::parse_stdlib_identity_attribute` panics when an
+/// identity does not match any registered stdlib path; `wasmtime:wasi-http`
+/// and other wrapper packages never get registered, so emitting an identity
+/// for them would turn an LSP "open file" into a panic. The bundled stdlib
+/// is the union of `wasi:*` and `core:*` modules — restrict identity
+/// emission to those namespaces.
+fn stdlib_identity_for(namespace: &str, pkg_name: &str, file: Option<&str>) -> Option<String> {
+    if namespace != "wasi" && namespace != "core" {
+        return None;
+    }
+    Some(match file {
+        Some(file) => format!("{namespace}:{pkg_name}/{file}"),
+        None => format!("{namespace}:{pkg_name}"),
+    })
 }
 
-fn build_interface_map_recursive(
-    dir: &PathBuf,
-    base_dir: &PathBuf,
-    map: &mut IndexMap<String, String>,
-) -> Result<()> {
-    if dir.is_dir() {
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_dir() {
-                build_interface_map_recursive(&path, base_dir, map)?;
-            } else if path.extension().is_some_and(|ext| ext == "wit") {
-                let rel_path = path
-                    .strip_prefix(base_dir)
-                    .unwrap_or(&path)
-                    .display()
-                    .to_string();
-
-                // Parse the file to find interface/world definitions
-                if let Ok(content) = fs::read_to_string(&path) {
-                    for line in content.lines() {
-                        let line = line.trim();
-                        // Match "interface <name> {" or "world <name> {"
-                        if let Some(rest) = line.strip_prefix("interface ") {
-                            if let Some(name) = rest.split_whitespace().next() {
-                                map.insert(name.to_string(), rel_path.clone());
-                            }
-                        } else if let Some(rest) = line.strip_prefix("world ")
-                            && let Some(name) = rest.split_whitespace().next()
-                        {
-                            map.insert(name.to_string(), rel_path.clone());
-                        }
-                    }
-                }
-            }
-        }
-    }
-    Ok(())
+fn package_sources(
+    source_map: &PackageSourceMap,
+    pkg_id: PackageId,
+    base_dir: &Path,
+) -> Vec<String> {
+    let Some(paths) = source_map.package_paths(pkg_id) else {
+        return Vec::new();
+    };
+    let mut out: Vec<String> = paths
+        .map(|p| p.strip_prefix(base_dir).unwrap_or(p).display().to_string())
+        .collect();
+    out.sort();
+    out.dedup();
+    out
 }

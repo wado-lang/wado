@@ -1,0 +1,22 @@
+grammar G;
+
+root
+    : {0==0}? continue+ {<write("$text")>}
+    ;
+
+continue returns [<IntArg("return")>]
+    : for for? {1==1}?              #else
+    | break=BREAK BREAK+ (for | IF) #else
+    | if+=IF  if+=IF*               #int
+    | continue CONTINUE_ {<AssignLocal("$return","0")>}   #class
+    ;
+
+args[int else] locals [<IntArg("return")>]
+    : for
+    ;
+
+for: FOR;
+FOR: 'for ';
+BREAK: 'break ';
+IF: 'if ';
+CONTINUE_: 'continue';

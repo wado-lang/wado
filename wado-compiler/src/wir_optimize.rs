@@ -12,7 +12,6 @@
 //! | `elide_struct`    | Struct local elimination (single + multi)   |
 //! | `array`           | Push collapse / data promotion / splitting  |
 //! | `const_forward`   | Struct field constant forwarding            |
-//! | `string`          | Short string push_str simplification        |
 //! | `peephole`        | Constant folding, copy elision, MV elision  |
 //! | `cleanup`         | Nop/dead-code removal, normalization        |
 //! | `dae`             | Dead argument elimination                   |
@@ -34,14 +33,13 @@ mod nullable_ref;
 mod peephole;
 mod sroa_param;
 mod sroa_return;
-mod string;
 mod util;
 
 use crate::compiler_host::SpanEmitter;
 use crate::optimize::OptLevel;
 use crate::wir::WirPackage;
 
-pub use dce::{dce_unreachable_functions, dce_unreachable_types};
+pub use dce::{compact_dead_items, dce_unreachable_types, mark_unreachable_defined_functions};
 
 use array::{
     collapse_array_push_sequences, promote_constant_arrays_to_data, split_large_array_literals,
@@ -52,32 +50,53 @@ use dae::eliminate_dead_arguments;
 use drve::eliminate_dead_return_values;
 use elide_local::elide_write_only_locals;
 use elide_struct::{
-    elide_multi_field_struct_locals, elide_single_field_struct_locals, flatten_seq_assignments,
+    elide_adjacent_single_use_struct_locals, elide_multi_field_struct_locals,
+    elide_single_field_struct_locals, flatten_seq_assignments,
 };
 use init_guard::remove_trivial_init_globals;
 use nullable_ref::optimize_nullable_refs;
 use peephole::run_peephole;
 use sroa_param::sroa_single_field_parameters;
 use sroa_return::sroa_multi_value_returns;
-use string::simplify_short_string_pushes;
 
 /// Run a single WIR optimization pass with profiling.
+///
+/// Honours `WADO_LIST_PASSES`, `WADO_DUMP_PASS_BEFORE`, and
+/// `WADO_DUMP_PASS_AFTER` — see `crate::optimize::pass_dump`.
 fn wir_pass(
     name: &str,
     module: &mut WirPackage,
     profiler: &dyn SpanEmitter,
     f: impl FnOnce(&mut WirPackage),
 ) {
+    use crate::optimize::pass_dump::{self, Phase};
+    pass_dump::list_pass(name);
+    pass_dump::dump_wir(name, module, Phase::Before);
     profiler.span_start(name);
     f(module);
     profiler.span_end(name);
+    pass_dump::dump_wir(name, module, Phase::After);
 }
 
 /// Run all WIR-level optimizations on the module (in-place).
 ///
 /// Optimization passes are skipped at `-O0`, but dead-item compaction always runs
 /// so the emitter receives a clean module with no dead_*_indices to filter.
+///
+/// `optimize_nullable_refs` is the exception: it runs unconditionally (even at
+/// `-O0`) because it picks a *representation* for eligible variants (e.g.
+/// `Option<&T>` → `(ref null T)`), and that representation has to be
+/// consistent between the storage (the Wasm initializer can only encode
+/// `None` as `ref.null` for these variants) and the consumers (pattern
+/// match emits `ref.test`/`ref.cast` against the chosen repr). Skipping
+/// it at `-O0` produces a module where a `null`-initialised
+/// `Option<&T>` global stores `ref.null` but `if let Some(_) = ...`
+/// expects a `struct.new`-shaped subtype-hierarchy value, trapping in
+/// `ref.as_non_null` on the first read.
 pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn SpanEmitter) {
+    // Always run NullableRef before anything else — see comment above.
+    optimize_nullable_refs(module);
+
     if opt_level == OptLevel::O0 {
         dce::compact_dead_items(module);
         return;
@@ -87,12 +106,17 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     //
     // Rewrite type-level representations before any value-level passes see them.
     profiler.span_start("wir/phase1_type_repr");
-    optimize_nullable_refs(module);
     // Pre-SROA copy propagation: inline trivial copies like `alias = source`
     // so that SROA can see direct variant access patterns (RefTest/RefCast on source).
-    peephole::propagate_trivial_copies(module);
-    sroa_multi_value_returns(module);
-    sroa_single_field_parameters(module);
+    wir_pass("wir/propagate_trivial_copies", module, profiler, |m| {
+        peephole::propagate_trivial_copies(m);
+    });
+    wir_pass("wir/sroa_multi_value_returns", module, profiler, |m| {
+        sroa_multi_value_returns(m);
+    });
+    wir_pass("wir/sroa_single_field_parameters", module, profiler, |m| {
+        sroa_single_field_parameters(m);
+    });
     profiler.span_end("wir/phase1_type_repr");
 
     // Phase 2: Struct local elimination (round 1)
@@ -101,6 +125,14 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     // where every use of `x` is via StructGet. Substitute `inner` directly.
     wir_pass("wir/elide_single_field_struct", module, profiler, |m| {
         elide_single_field_struct_locals(m);
+    });
+    // Adjacent-use elision: handles the common Box<T> pattern produced by
+    // boxing+inlining where the inner field initializer reads heap state and
+    // the only use is the immediately-following sibling instruction's leftmost
+    // descendant. Conservative wrt re-evaluation safety; relies on adjacency
+    // and leftmost-evaluation rather than referential transparency.
+    wir_pass("wir/elide_adjacent_struct", module, profiler, |m| {
+        elide_adjacent_single_use_struct_locals(m);
     });
 
     // Phase 3: Data flow
@@ -125,7 +157,6 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     //
     // Rewrite library call patterns into more efficient instruction sequences.
     profiler.span_start("wir/phase4_lib_rewrites");
-    simplify_short_string_pushes(module);
     promote_constant_arrays_to_data(module);
     split_large_array_literals(module);
     profiler.span_end("wir/phase4_lib_rewrites");
@@ -134,7 +165,8 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     //
     // Run peephole optimizations (constant folding, copy elision, multi-value
     // struct elision), then flatten seq assignments to expose multi-field struct
-    // locals for elimination.
+    // locals for elimination. The Nops/dead locals these passes leave behind
+    // are picked up by phase 7's final `cleanup` before codegen.
     profiler.span_start("wir/phase5_peephole");
     let types = &module.types;
     for func in &mut module.functions {
@@ -142,25 +174,26 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
             run_peephole(body, types);
         }
     }
-    cleanup(module);
     flatten_seq_assignments(module);
     elide_multi_field_struct_locals(module);
-    cleanup(module);
     profiler.span_end("wir/phase5_peephole");
 
     // Phase 6: Dead value elimination
     //
     // Eliminate dead arguments, dead return values, and write-only locals.
+    // No `cleanup` is needed afterwards: phase 7 only touches globals, and
+    // phase 7's final `cleanup` catches any Nops/dead locals left here.
     profiler.span_start("wir/phase6_dead_value_elim");
     eliminate_dead_arguments(module);
     eliminate_dead_return_values(module);
     elide_write_only_locals(module);
-    cleanup(module);
     profiler.span_end("wir/phase6_dead_value_elim");
 
     // Phase 7: Global cleanup
     //
-    // Remove trivial module-init guard globals that serve no purpose after DCE.
+    // Remove trivial module-init guard globals that serve no purpose after DCE,
+    // then run the final body cleanup before codegen sees the module: removes
+    // Nops, dead `DeclareLocal`s, and dead code after `Unreachable`.
     profiler.span_start("wir/phase7_global_cleanup");
     remove_trivial_init_globals(module);
     cleanup(module);
@@ -168,8 +201,13 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
 
     // Phase 8: Final DCE & compaction
     //
-    // Mark unreachable types as dead and compact all dead items out of the module.
+    // Mark functions orphaned by earlier WIR passes as dead (notably
+    // `collapse_array_push_sequences` deleting the only call site of a
+    // single-element array literal's `Array<T>::push` instantiation),
+    // then mark unreachable types as dead and compact all dead items
+    // out of the module.
     profiler.span_start("wir/phase8_dce_compact");
+    dce::mark_unreachable_defined_functions(module);
     dce_unreachable_types(module);
     dce::compact_dead_items(module);
     profiler.span_end("wir/phase8_dce_compact");

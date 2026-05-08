@@ -1,0 +1,61 @@
+// `continue` crossing a `with E => h do { ... }` body must restore the
+// per-effect dispatch global. The `while` loop is declared *outside*
+// the `with`, so `continue` exits the do-block to retry the loop
+// header — without the fix, the inner handler's dispatch struct
+// would leak into the next iteration's `__save_<E>` and ultimately
+// pollute the global after the loop ends.
+//
+// `helper` runs three iterations with an inner `Counter` handler; the
+// middle iteration `continue`s out of the do-block. After the loop,
+// `Counter::next()` is observed: with the fix it dispatches to the
+// outer handler (returns 1), without the fix it would still see the
+// inner handler (returns 2).
+
+use { println, Stdout } from "core:cli";
+
+interface Counter {
+    fn next() -> i32;
+}
+
+struct Outer {}
+struct Inner {}
+
+impl Counter for Outer {
+    fn next(&self) -> i32 {
+        resume 1
+    }
+}
+
+impl Counter for Inner {
+    fn next(&self) -> i32 {
+        resume 2
+    }
+}
+
+fn helper() -> i32 {
+    let inner = Inner {};
+    let mut sum = 0;
+    let mut iters = 0;
+    while iters < 3 {
+        iters += 1;
+        with Counter => &inner do {
+            if iters == 2 {
+                continue;
+            }
+            sum += Counter::next();
+        }
+    }
+    let after = Counter::next();
+    return after * 100 + sum;
+}
+
+export fn run() with Stdout {
+    let outer = Outer {};
+    with Counter => &outer do {
+        let r = helper();
+        println(`r={r}`);
+    }
+}
+
+__DATA__
+{"stdout_contains": ["r=104"]}

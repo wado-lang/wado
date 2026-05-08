@@ -52,6 +52,7 @@ pub fn link(package: Package) -> FlatPackage {
         entry_tests,
         &package.export_binding_names,
         package.world_registry,
+        package.wasi_registry,
     );
 
     // Flatten all per-module TIR into flat lists.
@@ -132,5 +133,7 @@ pub fn link(package: Package) -> FlatPackage {
         builtin_registry: package.builtin_registry,
         task_return_flat_params: package.task_return_flat_params,
         wasm_assets: package.wasm_assets,
+        interner: package.interner,
+        trait_env: package.trait_env,
     }
 }

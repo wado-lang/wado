@@ -180,6 +180,13 @@ struct TestSpec {
     #[serde(default)]
     outgoing_mocks: indexmap::IndexMap<String, common::OutgoingMockResponse>,
 
+    /// Mock responses for `wasi:tls` handshakes (keyed by `server_name`).
+    /// Any `Connector::connect(_, server_name)` is matched against these
+    /// entries. Unmatched server names fail the handshake with a clear error
+    /// so tests cannot silently reach the real network.
+    #[serde(default)]
+    tls_mocks: indexmap::IndexMap<String, common::TlsMockResponse>,
+
     // --- WIR pattern expectations (per optimization level) ---
     /// Patterns that must appear in WIR output at -O0
     #[serde(rename = "wir_expect:O0", default)]
@@ -315,14 +322,21 @@ fn run_http_request(
     wasm: Vec<u8>,
     req_spec: &HttpRequestSpec,
     outgoing_mocks: indexmap::IndexMap<String, common::OutgoingMockResponse>,
+    tls_mocks: indexmap::IndexMap<String, common::TlsMockResponse>,
 ) -> anyhow::Result<HttpTestResult> {
-    http_runtime().block_on(run_http_request_async(wasm, req_spec, outgoing_mocks))
+    http_runtime().block_on(run_http_request_async(
+        wasm,
+        req_spec,
+        outgoing_mocks,
+        tls_mocks,
+    ))
 }
 
 async fn run_http_request_async(
     wasm: Vec<u8>,
     req_spec: &HttpRequestSpec,
     outgoing_mocks: indexmap::IndexMap<String, common::OutgoingMockResponse>,
+    tls_mocks: indexmap::IndexMap<String, common::TlsMockResponse>,
 ) -> anyhow::Result<HttpTestResult> {
     let engine = common::engine();
     let component = Component::new(engine, &wasm)
@@ -337,6 +351,7 @@ async fn run_http_request_async(
         http_hooks: common::TestHttpCtx {
             mocks: outgoing_mocks,
         },
+        tls_ctx: common::build_tls_ctx(tls_mocks),
     };
     let mut store = Store::new(engine, state);
     // Set epoch deadline for timeout enforcement (HTTP tests use 5s default)
@@ -477,6 +492,7 @@ fn run_test_world(
     wasm: &[u8],
     test_id: &str,
     outgoing_mocks: indexmap::IndexMap<String, common::OutgoingMockResponse>,
+    tls_mocks: indexmap::IndexMap<String, common::TlsMockResponse>,
 ) -> anyhow::Result<common::WasmRunResult> {
     use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 
@@ -517,6 +533,7 @@ fn run_test_world(
 
             let mut state = common::WasiState::new_with_pipes(stdout_pipe, stderr_pipe);
             state.http_hooks.mocks = outgoing_mocks.clone();
+            state.tls_ctx = common::build_tls_ctx(tls_mocks.clone());
             let mut store = Store::new(engine, state);
             // Parse per-test timeout from export name (e.g., "test-tm2000-0-slow")
             // and set epoch deadline for timeout enforcement
@@ -736,12 +753,26 @@ fn run_normal_test(
         panic!("[{test_id}] compilation failed: {e}");
     });
 
+    // Optional: dump the compiled wasm (and a wat next to it) so the
+    // bytes the e2e runner produces can be diffed against `wado compile`.
+    // Set `WADO_KEEP_WASM_DIR=/tmp/wado-debug` (directory will be created
+    // if missing). Filenames are `<fixture_name>.<opt>.{wasm,wat}`.
+    if let Ok(dir) = std::env::var("WADO_KEEP_WASM_DIR") {
+        let fixture_name = fixture_path
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "unknown".to_string());
+        let opt_name = common::opt_level_name(opt_level);
+        keep_wasm_artifacts(&dir, &fixture_name, opt_name, &compile_result.wasm, test_id);
+    }
+
     // Dispatch to the appropriate runner based on world
     if let Some(http_spec) = &spec.http_service {
         match run_http_request(
             compile_result.wasm,
             &http_spec.request,
             spec.outgoing_mocks.clone(),
+            spec.tls_mocks.clone(),
         ) {
             Ok(result) => {
                 assert!(
@@ -759,10 +790,15 @@ fn run_normal_test(
             }
         }
     } else if spec.test_world.is_some() {
-        let result = run_test_world(&compile_result.wasm, test_id, spec.outgoing_mocks.clone())
-            .unwrap_or_else(|e| {
-                panic!("[{test_id}] test world error: {e:?}");
-            });
+        let result = run_test_world(
+            &compile_result.wasm,
+            test_id,
+            spec.outgoing_mocks.clone(),
+            spec.tls_mocks.clone(),
+        )
+        .unwrap_or_else(|e| {
+            panic!("[{test_id}] test world error: {e:?}");
+        });
         verify_result(&result, spec, test_id);
     } else {
         // Default: wasi:cli/command
@@ -776,6 +812,7 @@ fn run_normal_test(
             &dirs,
             spec.stdin.as_deref(),
             spec.outgoing_mocks.clone(),
+            spec.tls_mocks.clone(),
         )
         .unwrap_or_else(|e| {
             panic!("[{test_id}] runtime error: {e}");
@@ -859,6 +896,41 @@ fn fixture_test_os(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
     }
     run_fixture_test_with_opt(path, content, OptLevel::Os);
     Ok(())
+}
+
+/// Write the compiled wasm (and a wat decoded from it) under `dir` so it can
+/// be inspected and diffed against `wado compile`. Activated by setting the
+/// `WADO_KEEP_WASM_DIR` environment variable. Failures are reported via
+/// `eprintln!` and never block the test.
+fn keep_wasm_artifacts(dir: &str, fixture_name: &str, opt_name: &str, wasm: &[u8], test_id: &str) {
+    let dir_path = std::path::Path::new(dir);
+    if let Err(e) = std::fs::create_dir_all(dir_path) {
+        eprintln!("[{test_id}] WADO_KEEP_WASM_DIR: cannot create '{dir}': {e}");
+        return;
+    }
+    let stem = fixture_name.strip_suffix(".wado").unwrap_or(fixture_name);
+    let wasm_path = dir_path.join(format!("{stem}.{opt_name}.wasm"));
+    if let Err(e) = std::fs::write(&wasm_path, wasm) {
+        eprintln!(
+            "[{test_id}] WADO_KEEP_WASM_DIR: cannot write {}: {e}",
+            wasm_path.display()
+        );
+        return;
+    }
+    let wat_path = dir_path.join(format!("{stem}.{opt_name}.wat"));
+    match wasmprinter::print_bytes(wasm) {
+        Ok(text) => {
+            if let Err(e) = std::fs::write(&wat_path, text) {
+                eprintln!(
+                    "[{test_id}] WADO_KEEP_WASM_DIR: cannot write {}: {e}",
+                    wat_path.display()
+                );
+            }
+        }
+        Err(e) => {
+            eprintln!("[{test_id}] WADO_KEEP_WASM_DIR: wasmprinter failed: {e}");
+        }
+    }
 }
 
 datatest_mini::harness! {

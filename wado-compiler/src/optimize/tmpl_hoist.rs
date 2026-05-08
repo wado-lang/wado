@@ -37,8 +37,8 @@
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::tir::{
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
-    TypeTable,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt, TirStmtKind, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -58,17 +58,17 @@ fn hoist_in_function(func: &mut TirFunction, type_table: &std::cell::RefCell<Typ
         return false;
     };
     let mut local_count = func.local_count;
-    let mut local_types = func.local_types.clone();
-    let changed = hoist_in_block(body, &mut local_count, &mut local_types, type_table);
+    let mut locals = func.locals.clone();
+    let changed = hoist_in_block(body, &mut local_count, &mut locals, type_table);
     func.local_count = local_count;
-    func.local_types = local_types;
+    func.locals = locals;
     changed
 }
 
 fn hoist_in_block(
     block: &mut TirBlock,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
 ) -> bool {
     let mut changed = false;
@@ -78,10 +78,10 @@ fn hoist_in_block(
         match &mut stmt.kind {
             TirStmtKind::Loop { body } => {
                 // Recurse into loop body first (for nested loops)
-                changed |= hoist_in_block(body, local_count, local_types, type_table);
+                changed |= hoist_in_block(body, local_count, locals, type_table);
 
                 // Try to hoist template buffers out of this loop
-                let hoist_stmts = hoist_tmpl_from_loop(body, local_count, local_types, type_table);
+                let hoist_stmts = hoist_tmpl_from_loop(body, local_count, locals, type_table);
                 if !hoist_stmts.is_empty() {
                     changed = true;
                     new_stmts.extend(hoist_stmts);
@@ -93,14 +93,14 @@ fn hoist_in_block(
                 else_block,
                 ..
             } => {
-                changed |= hoist_in_block(then_block, local_count, local_types, type_table);
+                changed |= hoist_in_block(then_block, local_count, locals, type_table);
                 if let Some(eb) = else_block {
-                    changed |= hoist_in_block(eb, local_count, local_types, type_table);
+                    changed |= hoist_in_block(eb, local_count, locals, type_table);
                 }
                 new_stmts.push(stmt);
             }
             TirStmtKind::LabeledBlock { block: inner, .. } => {
-                changed |= hoist_in_block(inner, local_count, local_types, type_table);
+                changed |= hoist_in_block(inner, local_count, locals, type_table);
                 new_stmts.push(stmt);
             }
             TirStmtKind::IfLet {
@@ -108,9 +108,9 @@ fn hoist_in_block(
                 else_block,
                 ..
             } => {
-                changed |= hoist_in_block(then_block, local_count, local_types, type_table);
+                changed |= hoist_in_block(then_block, local_count, locals, type_table);
                 if let Some(eb) = else_block {
-                    changed |= hoist_in_block(eb, local_count, local_types, type_table);
+                    changed |= hoist_in_block(eb, local_count, locals, type_table);
                 }
                 new_stmts.push(stmt);
             }
@@ -157,7 +157,7 @@ struct FmtCandidate {
 fn hoist_tmpl_from_loop(
     loop_body: &mut TirBlock,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
 ) -> Vec<TirStmt> {
     // Phase 1: Collect all Let bindings whose value is a __tmpl LabeledBlock,
@@ -171,7 +171,7 @@ fn hoist_tmpl_from_loop(
         &escaping_locals,
         &mut hoist_stmts,
         local_count,
-        local_types,
+        locals,
         type_table,
     );
     hoist_stmts
@@ -421,6 +421,11 @@ fn collect_escaping_in_expr(expr: &TirExpr, escaping: &mut IndexSet<u32>) {
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
     }
 }
 
@@ -459,7 +464,7 @@ fn transform_stmts_in_block(
     escaping_locals: &IndexSet<u32>,
     hoist_stmts: &mut Vec<TirStmt>,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
 ) {
     for stmt in &mut block.stmts {
@@ -468,7 +473,7 @@ fn transform_stmts_in_block(
             escaping_locals,
             hoist_stmts,
             local_count,
-            local_types,
+            locals,
             type_table,
         );
     }
@@ -479,7 +484,7 @@ fn transform_stmt(
     escaping_locals: &IndexSet<u32>,
     hoist_stmts: &mut Vec<TirStmt>,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
 ) {
     match &mut stmt.kind {
@@ -500,7 +505,7 @@ fn transform_stmt(
                     &candidate,
                     hoist_stmts,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                 );
                 // The hoisted String is reused; skip deep copy so `s` aliases `__tmpl_buf`.
@@ -513,7 +518,7 @@ fn transform_stmt(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
         }
@@ -523,7 +528,7 @@ fn transform_stmt(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
         }
@@ -537,7 +542,7 @@ fn transform_stmt(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
             transform_stmts_in_block(
@@ -545,7 +550,7 @@ fn transform_stmt(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
             if let Some(eb) = else_block {
@@ -554,7 +559,7 @@ fn transform_stmt(
                     escaping_locals,
                     hoist_stmts,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                 );
             }
@@ -565,7 +570,7 @@ fn transform_stmt(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
         }
@@ -580,7 +585,7 @@ fn transform_stmt(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
             transform_stmts_in_block(
@@ -588,7 +593,7 @@ fn transform_stmt(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
             if let Some(eb) = else_block {
@@ -597,7 +602,7 @@ fn transform_stmt(
                     escaping_locals,
                     hoist_stmts,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                 );
             }
@@ -610,7 +615,7 @@ fn transform_stmt(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
         }
@@ -625,7 +630,7 @@ fn transform_expr(
     escaping_locals: &IndexSet<u32>,
     hoist_stmts: &mut Vec<TirStmt>,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
 ) {
     match &mut expr.kind {
@@ -639,7 +644,7 @@ fn transform_expr(
                     escaping_locals,
                     hoist_stmts,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                 );
             }
@@ -650,7 +655,7 @@ fn transform_expr(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
             for arg in args {
@@ -659,7 +664,7 @@ fn transform_expr(
                     escaping_locals,
                     hoist_stmts,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                 );
             }
@@ -670,7 +675,7 @@ fn transform_expr(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
             transform_expr(
@@ -678,7 +683,7 @@ fn transform_expr(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
         }
@@ -688,7 +693,7 @@ fn transform_expr(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
         }
@@ -698,7 +703,7 @@ fn transform_expr(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
             transform_expr(
@@ -706,7 +711,7 @@ fn transform_expr(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
         }
@@ -720,7 +725,7 @@ fn transform_expr(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
             transform_stmts_in_block(
@@ -728,7 +733,7 @@ fn transform_expr(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
             if let Some(eb) = else_branch {
@@ -737,7 +742,7 @@ fn transform_expr(
                     escaping_locals,
                     hoist_stmts,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                 );
             }
@@ -753,7 +758,7 @@ fn transform_expr(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
         }
@@ -763,7 +768,7 @@ fn transform_expr(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
         }
@@ -773,9 +778,17 @@ fn transform_expr(
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                local_types,
+                locals,
                 type_table,
             );
+        }
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
         _ => {}
     }
@@ -1167,7 +1180,7 @@ fn transform_tmpl_block(
     candidate: &TmplCandidate,
     hoist_stmts: &mut Vec<TirStmt>,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
 ) {
     let span = candidate.span;
@@ -1176,9 +1189,12 @@ fn transform_tmpl_block(
     // Allocate a new local for the hoisted String
     let buf_local_index = *local_count;
     *local_count += 1;
-    local_types.push(string_type);
-
     let buf_local_name = format!("__tmpl_buf_{buf_local_index}");
+    locals.push(TirLocal {
+        name: buf_local_name.clone(),
+        type_id: string_type,
+        is_mut: true,
+    });
 
     // Hoist statement: let mut __tmpl_buf_N = String { repr: array_new(N), used: 0 };
     hoist_stmts.push(TirStmt::new(
@@ -1243,13 +1259,7 @@ fn transform_tmpl_block(
     // Each distinct Formatter is hoisted to its own local before the loop.
     let fmt_candidates = extract_fmt_candidates(block, buf_local_index, type_table);
     if !fmt_candidates.is_empty() {
-        transform_fmts_in_tmpl_block(
-            block,
-            &fmt_candidates,
-            hoist_stmts,
-            local_count,
-            local_types,
-        );
+        transform_fmts_in_tmpl_block(block, &fmt_candidates, hoist_stmts, local_count, locals);
     }
 }
 
@@ -1265,7 +1275,7 @@ fn transform_fmts_in_tmpl_block(
     candidates: &[FmtCandidate],
     hoist_stmts: &mut Vec<TirStmt>,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
 ) {
     // Sort by stmt_index ascending to compute rename ranges
     let mut sorted_candidates: Vec<_> = candidates.iter().collect();
@@ -1294,7 +1304,16 @@ fn transform_fmts_in_tmpl_block(
     for (pos, candidate) in sorted_candidates.iter().enumerate() {
         let fmt_local_index = *local_count;
         *local_count += 1;
-        local_types.push(candidate.formatter_type);
+        // Keep this name aligned with the corresponding `Let` statement
+        // built below. WIR naming is primarily derived from discovered
+        // `Let`s by local index, with `tir_func.locals[idx].name` used as a
+        // fallback when no `Let` is found, so matching names mainly
+        // improves fallback / debug output consistency.
+        locals.push(TirLocal {
+            name: format!("__fmt_buf_{fmt_local_index}"),
+            type_id: candidate.formatter_type,
+            is_mut: true,
+        });
 
         // Find the next candidate that shares the same fmt_local_index
         let rename_end = sorted_candidates[pos + 1..]
@@ -1506,6 +1525,14 @@ fn rename_local_in_expr(expr: &mut TirExpr, old_index: u32, new_index: u32, new_
         }
         TirExprKind::Block(block) => {
             rename_local_in_block(block, old_index, new_index, new_name);
+        }
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
         _ => {}
     }

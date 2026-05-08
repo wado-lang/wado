@@ -1,0 +1,84 @@
+// P0 regression test (reproduces at default -O2): HFS scalarised
+// `b.v` for a loop whose match body has an inlined-method arm
+// (`#[inline(always)] fn inlined_inc` body becomes a labeled block
+// that writes `__hfs_v` directly) AND a method-call arm
+// (`#[inline(never)] fn external_inc` stays a real call).
+//
+// `compute_sync_fields_in_expr` saw the call in the second arm and
+// inserted the standard sync-around-call pair around the *whole*
+// match: write-back `b.v = __hfs_v` before, re-read `__hfs_v = b.v`
+// after. The post-match re-read clobbered the scalar with the
+// stale field value left untouched by the inlined arm — every
+// inlined-arm increment was silently dropped.
+//
+// Trace at -O2:
+//   - i=0 (inlined): __hfs_v = 0+1 = 1 (scalar), b.v stays 0,
+//                    re-read clobbers __hfs_v back to 0
+//   - i=1 (call):    b.v = 0+10 = 10, re-read pulls __hfs_v=10
+//   - i=2 (inlined): __hfs_v = 10+1 = 11, b.v stays 10,
+//                    re-read clobbers __hfs_v back to 10
+//   - i=3 (call):    b.v = 10+10 = 20
+//   Result: 20. Expected: 22 (every inlined-arm increment
+//   dropped).
+//
+// Root cause: HFS's per-match sync logic assumes every arm modifies
+// the field via either (a) the scalar (no sync needed) or (b) a
+// method call (sync handles it). When the same match mixes (a) and
+// (b), the post-match re-read clobbers (a)'s writes.
+//
+// Fix (#1008): HFS now wraps each `&mut local` call individually,
+// turning `f(&mut b)` into a `Block { write_back; ...; re_read; ... }`
+// at the call's expression position. Branching constructs
+// (Match/If/Switch/LabeledBlock) recurse per branch, so each arm is
+// its own sync scope: the inlined scalar-update arm sees no sync, the
+// call arm gets a wrapper local to itself, and no surrounding stmt
+// propagates a clobbering re-read. The same shape without inlining is
+// also covered by `hfs_match_scalar_arm_mixed_with_call_arm.wado` —
+// the bug is structural to call-position sync, not specific to inlined
+// labeled blocks.
+//
+// This fixture exercises the exact mixed-arm shape and covers the
+// bug at every -Ox level (it manifests as wrong stdout, not a trap).
+
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    v: i32,
+    pad: i32,
+}
+
+#[inline(always)]
+fn inlined_inc(b: &mut Buf) {
+    b.v = b.v + 1;
+}
+
+#[inline(never)]
+fn external_inc(b: &mut Buf) {
+    b.v = b.v + 10;
+}
+
+export fn run() with Stdout {
+    let mut b = Buf { v: 0, pad: 0 };
+    let mut i = 0;
+    while i < 4 {
+        b.v = b.v + 0;
+        b.v = b.v + 0;
+        match i % 2 {
+            0 => inlined_inc(&mut b),
+            _ => external_inc(&mut b),
+        }
+        b.v = b.v + 0;
+        i = i + 1;
+    }
+    println(`{b.v}`);
+}
+
+__DATA__
+{
+    "stdout": "22\n",
+    "wir_expect:O2": ["let __hfs_v_"],
+    "wir_not_expect:O2": [
+        "b_0.v = __hfs_v_18;\n            let __match_scrut_0",
+        "__hfs_v_18 = b_0.v;\n            __hfs_v_18 = __hfs_v_18 + 0;"
+    ]
+}

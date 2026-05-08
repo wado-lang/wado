@@ -1,0 +1,41 @@
+// Regression: at -O3 (inline threshold 40) iterating an `Array<[bool, i32, String]>`
+// with a 3-arg template string printed empty fields instead of the tuple
+// values. Threshold ≥ 39 inlined enough of `f64::fmt_fixed` /
+// `String::push_str` for `tmpl_hoist` to lift the template's `String`
+// buffer out of the `for-of` loop, after which HFS scalarised the
+// buffer's `.used`/`.repr` fields. The inlined `push_str` body wrote the
+// new length only to the HFS scalar; the outer
+// `break __tmpl: __tmpl_buf;` then read `__tmpl_buf.used` directly and
+// got the *stale* value the last `push_char` wrote, truncating the
+// produced `String` to the prefix the per-byte pushes had built.
+//
+// Root cause: `count_field_accesses_in_expr` counted only `local.field`
+// accesses but treated a *whole-local* read (`Local { idx }` not as the
+// inner of `FieldAccess` / not in a call-arg / not an assign target) as
+// a leaf no-op, so HFS missed that the scalar's value had to be synced
+// back before the surrounding code read the struct as a whole. Mark
+// such reads aliased so HFS skips the local — the bare value escapes
+// the scalar's reach.
+//
+// (A peer concern, captured in the same fix: `&local` / `&mut local`
+// captured into a struct field that itself escapes — e.g.
+// `Formatter { buf: &mut __tmpl_buf }` hoisted out of the loop — also
+// makes the local aliased; the function-wide alias scan flags it.)
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut arr: Array<[bool, i32, String]> = [];
+    arr.push([true, 1, "one"]);
+    arr.push([false, 2, "two"]);
+    arr.push([true, 3, "three"]);
+
+    for let x of arr {
+        println(`{x.0} {x.1} {x.2}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "true 1 one\nfalse 2 two\ntrue 3 three\n"
+}

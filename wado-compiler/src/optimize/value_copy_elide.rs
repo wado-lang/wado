@@ -280,7 +280,26 @@ fn analyze_expr(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
             }
             analyze_block(default, usage, type_table);
         }
-        _ => {}
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
     }
 }
 
@@ -399,11 +418,23 @@ fn strip_in_stmt(
             is_mut,
             skip_value_copy,
             ..
-        } if !*is_mut
-            && !*skip_value_copy
-            && elision_safe(*local_index, 0, value, value_copy_set, usage) =>
-        {
-            strip_wrapper(value);
+        } => {
+            if !*is_mut
+                && !*skip_value_copy
+                && elision_safe(*local_index, 0, value, value_copy_set, usage)
+            {
+                strip_wrapper(value);
+            } else {
+                // Even when this Let itself isn't a value-copy wrapper,
+                // its value expression may contain nested blocks (an
+                // `if`/`match`/`Block` rvalue) that hold Let stmts whose
+                // wrappers are still candidates. Walk into the value
+                // expression so those nested Lets are reached.
+                strip_in_expr(value, value_copy_set, usage);
+            }
+        }
+        TirStmtKind::LetDestructure { value, .. } => {
+            strip_in_expr(value, value_copy_set, usage);
         }
         // `x = $value_copy$T(arg)` as a top-level statement — the Assign
         // *is* the binding. Allow elision when this is the only
@@ -415,16 +446,24 @@ fn strip_in_stmt(
                 && elision_safe(*index, 1, value, value_copy_set, usage)
             {
                 strip_wrapper(value);
+            } else {
+                strip_in_expr(expr, value_copy_set, usage);
+            }
+        }
+        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                strip_in_expr(v, value_copy_set, usage);
             }
         }
         _ => {}
     }
     match &mut stmt.kind {
         TirStmtKind::If {
+            condition,
             then_block,
             else_block,
-            ..
         } => {
+            strip_in_expr(condition, value_copy_set, usage);
             strip_in_block(then_block, value_copy_set, usage);
             if let Some(eb) = else_block {
                 strip_in_block(eb, value_copy_set, usage);
@@ -434,15 +473,156 @@ fn strip_in_stmt(
             strip_in_block(body, value_copy_set, usage);
         }
         TirStmtKind::IfLet {
+            scrutinee,
             then_block,
             else_block,
             ..
         } => {
+            strip_in_expr(scrutinee, value_copy_set, usage);
             strip_in_block(then_block, value_copy_set, usage);
             if let Some(eb) = else_block {
                 strip_in_block(eb, value_copy_set, usage);
             }
         }
         _ => {}
+    }
+}
+
+/// Walk a `TirExpr` tree looking for nested blocks whose statements may
+/// be Let / Assign / Return / Break / If-stmt forms holding strippable
+/// `$value_copy$T(...)` wrappers. The traversal mirrors `analyze_expr`
+/// — visit every child that can syntactically embed a `TirBlock`. The
+/// rewrite stays purely structural; safety is still gated by the
+/// per-Let `elision_safe` checks inside `strip_in_stmt` /
+/// `strip_in_block`.
+fn strip_in_expr(
+    expr: &mut TirExpr,
+    value_copy_set: &IndexMap<(ModuleSource, String), TypeId>,
+    usage: &IndexMap<u32, LocalUsage>,
+) {
+    match &mut expr.kind {
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            strip_in_block(block, value_copy_set, usage);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            strip_in_expr(condition, value_copy_set, usage);
+            strip_in_block(then_branch, value_copy_set, usage);
+            if let Some(eb) = else_branch {
+                strip_in_block(eb, value_copy_set, usage);
+            }
+        }
+        TirExprKind::Match { expr: scrut, arms } => {
+            strip_in_expr(scrut, value_copy_set, usage);
+            for arm in arms {
+                if let Some(guard) = &mut arm.guard {
+                    strip_in_expr(guard, value_copy_set, usage);
+                }
+                strip_in_expr(&mut arm.body, value_copy_set, usage);
+            }
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            strip_in_expr(scrutinee, value_copy_set, usage);
+            for arm in arms {
+                strip_in_block(arm, value_copy_set, usage);
+            }
+            strip_in_block(default, value_copy_set, usage);
+        }
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                strip_in_expr(&mut arg.expr, value_copy_set, usage);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            strip_in_expr(receiver, value_copy_set, usage);
+            for arg in args {
+                strip_in_expr(&mut arg.expr, value_copy_set, usage);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                strip_in_expr(arg, value_copy_set, usage);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args, .. } => {
+            strip_in_expr(callee, value_copy_set, usage);
+            for arg in args {
+                strip_in_expr(arg, value_copy_set, usage);
+            }
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            strip_in_expr(left, value_copy_set, usage);
+            strip_in_expr(right, value_copy_set, usage);
+        }
+        TirExprKind::Assign { target, value } => {
+            strip_in_expr(target, value_copy_set, usage);
+            strip_in_expr(value, value_copy_set, usage);
+        }
+        TirExprKind::Index { expr: inner, index } => {
+            strip_in_expr(inner, value_copy_set, usage);
+            strip_in_expr(index, value_copy_set, usage);
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::GlobalVarSet { value: inner, .. }
+        | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+            strip_in_expr(inner, value_copy_set, usage);
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                strip_in_expr(&mut field.value, value_copy_set, usage);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                strip_in_expr(elem, value_copy_set, usage);
+            }
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                strip_in_expr(p, value_copy_set, usage);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            strip_in_expr(body, value_copy_set, usage);
+        }
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
     }
 }

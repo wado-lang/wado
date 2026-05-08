@@ -44,6 +44,7 @@ pub const CORE_PRELUDE_RANGE: &str = include_str!("../lib/core/prelude/range.wad
 pub const CORE_COLLECTIONS: &str = include_str!("../lib/core/collections.wado");
 pub const CORE_ZLIB: &str = include_str!("../lib/core/zlib.wado");
 pub const CORE_BASE64: &str = include_str!("../lib/core/base64.wado");
+pub const CORE_BENCHMARK: &str = include_str!("../lib/core/benchmark.wado");
 pub const CORE_SERDE: &str = include_str!("../lib/core/serde.wado");
 pub const CORE_JSON: &str = include_str!("../lib/core/json.wado");
 pub const CORE_JSON_NSD: &str = include_str!("../lib/core/json_nsd.wado");
@@ -54,6 +55,7 @@ pub const CORE_KILN_KILN_HOST: &str = include_str!("../lib/core/kiln/kiln_host.w
 pub const CORE_KILN_TYPES: &str = include_str!("../lib/core/kiln/types.wado");
 pub const CORE_KILN_WORLDS: &str = include_str!("../lib/core/kiln/worlds.wado");
 pub const CORE_URL: &str = include_str!("../lib/core/url.wado");
+pub const CORE_ROUTER: &str = include_str!("../lib/core/router.wado");
 
 // WASI flat package files — re-export from all sub-interfaces (backward compat)
 pub const WASI_CLI: &str = include_str!("../lib/wasi/cli.wado");
@@ -208,12 +210,14 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:builtin" => Some(CORE_BUILTIN),
         "core:zlib" => Some(CORE_ZLIB),
         "core:base64" => Some(CORE_BASE64),
+        "core:benchmark" => Some(CORE_BENCHMARK),
         "core:serde" => Some(CORE_SERDE),
         "core:json" => Some(CORE_JSON),
         "core:json_nsd" => Some(CORE_JSON_NSD),
         "core:json_value" => Some(CORE_JSON_VALUE),
         "core:simd" => Some(CORE_SIMD),
         "core:url" => Some(CORE_URL),
+        "core:router" => Some(CORE_ROUTER),
         "core:kiln" => Some(CORE_KILN),
         "core:kiln/kiln_host.wado" => Some(CORE_KILN_KILN_HOST),
         "core:kiln/types.wado" => Some(CORE_KILN_TYPES),
@@ -329,7 +333,7 @@ mod tests {
         assert!(
             get_stdlib_module("core:kiln/kiln_host.wado")
                 .unwrap()
-                .contains("pub effect KilnHost")
+                .contains("pub interface KilnHost")
         );
         assert!(
             get_stdlib_module("core:kiln/types.wado")

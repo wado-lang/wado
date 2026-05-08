@@ -123,7 +123,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Variants auto-implement Eq when all payload types implement Eq
         if let ResolvedType::Variant { name, .. } = &resolved
             && trait_name == "Eq"
-            && let Some(info) = self.variant_cases.get(name)
+            && let Some(info) = self.lookup_variant_case(name)
         {
             let all_impl = info.cases.iter().all(|c| {
                 c.payload == TypeTable::UNIT || self.type_implements_trait(c.payload, trait_name)
@@ -136,7 +136,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Structs auto-implement Eq/Ord when all fields implement the trait
         if let ResolvedType::Struct { name, .. } = &resolved
             && matches!(trait_name, "Eq" | "Ord")
-            && let Some(info) = self.struct_fields.get(name)
+            && let Some(info) = self.lookup_struct_fields(name)
         {
             let field_types: Vec<TypeId> = info.fields.iter().map(|(_, tid, _)| *tid).collect();
             let all_impl = field_types
@@ -164,7 +164,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             name, type_args, ..
         } = &resolved
             && matches!(trait_name, "Eq" | "Ord")
-            && let Some(info) = self.struct_fields.get(name)
+            && let Some(info) = self.lookup_struct_fields(name)
         {
             // Build type param -> concrete type arg mapping
             let param_map: IndexMap<TypeId, TypeId> = info
@@ -188,7 +188,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             name, type_args, ..
         } = &resolved
             && trait_name == "Eq"
-            && let Some(info) = self.variant_cases.get(name)
+            && let Some(info) = self.lookup_variant_case(name)
         {
             let param_map: IndexMap<TypeId, TypeId> = info
                 .type_param_type_ids

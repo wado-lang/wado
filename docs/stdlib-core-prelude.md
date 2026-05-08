@@ -2951,10 +2951,10 @@ Example (HTTP POST body):
 ```wado
 let [body_rx, body_tx] = Stream::<u8>::new();
 let [req, _tx_future] = Request::new(headers, Option::Some(body_rx), ...);
-let task = Client::send(req); // host subtask starts
-body_tx.write(body_bytes); // rendezvous with host read
+let task = Client::send(req);       // host subtask starts
+body_tx.write(body_bytes);          // rendezvous with host read
 body_tx.drop();
-let resp = task.wait(); // block for response
+let resp = task.wait();             // block for response
 ```
 
 #### `__cm_packed: i32`

@@ -4,14 +4,30 @@ use wasmtime::{Config, Engine, OptLevel, ProfilingStrategy, Store};
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
+use wasmtime_wasi_tls::{WasiTlsCtx, WasiTlsCtxBuilder, WasiTlsCtxView, WasiTlsView};
 
 use crate::http_hooks::WadoHttpHooks;
+
+/// Install the rustls process-level `CryptoProvider` exactly once. The
+/// workspace pulls in multiple rustls feature combinations through wasmtime's
+/// dependency graph, so the auto-detect path used by `WasiTlsCtxBuilder::new`
+/// would otherwise panic with "could not automatically determine the
+/// process-level `CryptoProvider`".
+fn install_rustls_provider() {
+    static INSTALLED: std::sync::Once = std::sync::Once::new();
+    INSTALLED.call_once(|| {
+        // Ignore the result: another caller may have raced us, in which case
+        // a provider is already in place and that is fine.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
 
 pub struct WasiState {
     ctx: WasiCtx,
     table: ResourceTable,
     http: WasiHttpCtx,
     http_hooks: WadoHttpHooks,
+    tls: WasiTlsCtx,
 }
 
 impl WasiState {
@@ -34,11 +50,14 @@ impl WasiState {
         let table = ResourceTable::new();
         let http = WasiHttpCtx::new();
         let http_hooks = WadoHttpHooks::new();
+        install_rustls_provider();
+        let tls = WasiTlsCtxBuilder::new().build();
         Ok(Self {
             ctx,
             table,
             http,
             http_hooks,
+            tls,
         })
     }
 }
@@ -58,6 +77,15 @@ impl WasiHttpView for WasiState {
             ctx: &mut self.http,
             table: &mut self.table,
             hooks: &mut self.http_hooks,
+        }
+    }
+}
+
+impl WasiTlsView for WasiState {
+    fn tls(&mut self) -> WasiTlsCtxView<'_> {
+        WasiTlsCtxView {
+            ctx: &mut self.tls,
+            table: &mut self.table,
         }
     }
 }
@@ -173,5 +201,7 @@ pub fn create_linker(engine: &Engine) -> Result<Linker<WasiState>> {
     let mut linker: Linker<WasiState> = Linker::new(engine);
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+    wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
+    crate::timezone_host::add_to_linker(&mut linker)?;
     Ok(linker)
 }

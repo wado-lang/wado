@@ -279,6 +279,50 @@ pub enum TypeError {
         param: String,
         span: Span,
     },
+
+    /// `resume` expression appeared outside an effect handler method body.
+    /// `resume value` is only valid inside the body of a method belonging
+    /// to an `impl Effect for Type` block (see WEP 2026-04-11).
+    ResumeOutsideHandler { span: Span },
+
+    /// `with E => h do { ... }` clause where the handler value's type
+    /// does not implement effect `E`.
+    HandlerEffectNotImplemented {
+        type_name: String,
+        interface_name: String,
+        span: Span,
+    },
+
+    /// Bundled-handler form `with &mut h do { ... }` where the handler value's
+    /// underlying type does not implement any effect. There is nothing for
+    /// `with h do` to install in this case — the user almost certainly meant
+    /// to write `with E => h do` instead.
+    BundledHandlerImplementsNoEffect { type_name: String, span: Span },
+
+    /// Bundled-handler form `with &mut h do { ... }` where the handler value's
+    /// underlying type cannot be index-keyed by name (type parameters,
+    /// associated-type projections, function types, ...). Bundled
+    /// enumeration walks the impl-index by type name; these kinds have no
+    /// stable name to look up. The explicit `with E => h do` form is the
+    /// supported workaround.
+    BundledHandlerUnsupportedHandlerType {
+        type_name: String,
+        type_kind: String,
+        span: Span,
+    },
+
+    /// `with E => h do` clause where `E` is not a known effect or resource
+    /// declaration (it might be a regular trait, an unrelated type, or an
+    /// unknown name). Both kinds are installable as handlers; see WEP
+    /// 2026-04-11.
+    NotAnEffect { name: String, span: Span },
+
+    /// `with E => h do` where `E` is a generic effect parameter
+    /// (`<effect E>`). Generic effect parameters are propagation-only:
+    /// the compiler does not know `E`'s operation list at effect-check
+    /// time, so it cannot generate dispatch infrastructure. See WEP
+    /// 2026-01-27 § Generic Effect Parameters Are Propagation-Only.
+    GenericEffectParamNotInstallable { name: String, span: Span },
 }
 
 impl std::fmt::Display for TypeError {
@@ -517,6 +561,56 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, param, function
                 )
             }
+            TypeError::ResumeOutsideHandler { span } => {
+                write!(
+                    f,
+                    "{}:{}: `resume` is only valid inside an effect handler method body",
+                    span.line, span.column
+                )
+            }
+            TypeError::HandlerEffectNotImplemented {
+                type_name,
+                interface_name,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: handler value of type '{}' does not implement interface '{}'",
+                    span.line, span.column, type_name, interface_name
+                )
+            }
+            TypeError::BundledHandlerImplementsNoEffect { type_name, span } => {
+                write!(
+                    f,
+                    "{}:{}: handler value of type '{}' does not implement any effect; use `with E => h do` instead",
+                    span.line, span.column, type_name
+                )
+            }
+            TypeError::BundledHandlerUnsupportedHandlerType {
+                type_name,
+                type_kind,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: bundled effect handler `with h do` is not supported for handler type '{}' ({}); use the explicit form `with E => h do` instead",
+                    span.line, span.column, type_name, type_kind
+                )
+            }
+            TypeError::NotAnEffect { name, span } => {
+                write!(
+                    f,
+                    "{}:{}: '{}' is not an effect or resource; only effect and resource names are valid in `with E => h do` clauses",
+                    span.line, span.column, name
+                )
+            }
+            TypeError::GenericEffectParamNotInstallable { name, span } => {
+                write!(
+                    f,
+                    "{}:{}: cannot install a handler for generic effect parameter '{}'; abstract effect parameters are propagation-only — use a concrete effect name in `with`",
+                    span.line, span.column, name
+                )
+            }
         }
     }
 }
@@ -722,6 +816,54 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 ),
                 *span,
             ),
+            TypeError::ResumeOutsideHandler { span } => (
+                Code::UnsupportedFeature,
+                "`resume` is only valid inside an effect handler method body".to_string(),
+                *span,
+            ),
+            TypeError::HandlerEffectNotImplemented {
+                type_name,
+                interface_name,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "handler value of type '{type_name}' does not implement interface '{interface_name}'"
+                ),
+                *span,
+            ),
+            TypeError::BundledHandlerImplementsNoEffect { type_name, span } => (
+                Code::TypeMismatch,
+                format!(
+                    "handler value of type '{type_name}' does not implement any effect; use `with E => h do` instead"
+                ),
+                *span,
+            ),
+            TypeError::BundledHandlerUnsupportedHandlerType {
+                type_name,
+                type_kind,
+                span,
+            } => (
+                Code::UnsupportedFeature,
+                format!(
+                    "bundled effect handler `with h do` is not supported for handler type '{type_name}' ({type_kind}); use the explicit form `with E => h do` instead"
+                ),
+                *span,
+            ),
+            TypeError::NotAnEffect { name, span } => (
+                Code::UnknownType,
+                format!(
+                    "'{name}' is not an effect; only effect names are valid in `with E => h do` clauses"
+                ),
+                *span,
+            ),
+            TypeError::GenericEffectParamNotInstallable { name, span } => (
+                Code::UnsupportedFeature,
+                format!(
+                    "cannot install a handler for generic effect parameter '{name}'; abstract effect parameters are propagation-only — use a concrete effect name in `with`"
+                ),
+                *span,
+            ),
         };
         crate::compiler_host::Diagnostic {
             severity: Severity::Error,
@@ -811,8 +953,13 @@ pub(super) struct FunctionContext {
     /// The type that `task return` must accept (= the declared return type annotation).
     /// `Some(type_id)` only for async functions.
     pub(super) task_return_type: Option<TypeId>,
-    /// Local variable types in order (for Wasm local declarations)
-    pub(super) local_types: Vec<TypeId>,
+    /// Local-variable metadata (name, type, mutability) in declaration
+    /// order. The single source of truth for the function/closure's
+    /// local namespace — `add_local` pushes here, and consumers that
+    /// need a `Vec<TypeId>` (e.g. `TirFunction::local_types`,
+    /// `TirGlobal::local_types`) project `locals.iter().map(|l| l.type_id)`
+    /// at the point of emission.
+    pub(super) locals: Vec<crate::tir::TirLocal>,
     /// Local indices that have their address taken (&x or &mut x)
     pub(super) address_taken_locals: IndexSet<u32>,
     /// Outer context locals for closure capture detection (name -> `LocalVar` snapshot)
@@ -836,6 +983,10 @@ pub(super) struct FunctionContext {
     /// Per-local closure parameter defaults for `let f = |...| ...` bindings.
     /// Keyed by local variable name; stores `(param_name, default_expr)` in declaration order.
     pub(super) closure_defaults: IndexMap<String, Vec<(String, Option<crate::ast::Expr>)>>,
+    /// True when this context represents the body of a method inside an
+    /// `impl Effect for Type` block, i.e. an effect handler operation.
+    /// `resume value` is only valid in such contexts.
+    pub(super) in_handler_method: bool,
 }
 
 impl FunctionContext {
@@ -846,7 +997,7 @@ impl FunctionContext {
             return_type,
             is_async: false,
             task_return_type: None,
-            local_types: Vec::new(),
+            locals: Vec::new(),
             address_taken_locals: IndexSet::default(),
             outer_locals: IndexMap::default(),
             captured_vars: IndexMap::default(),
@@ -856,6 +1007,7 @@ impl FunctionContext {
             deref_overrides: IndexMap::default(),
             outer_box_types: IndexMap::default(),
             closure_defaults: IndexMap::default(),
+            in_handler_method: false,
         }
     }
 
@@ -896,7 +1048,7 @@ impl FunctionContext {
             return_type,
             is_async: false, // Closures are never async
             task_return_type: None,
-            local_types: Vec::new(),
+            locals: Vec::new(),
             address_taken_locals: IndexSet::default(),
             outer_locals,
             captured_vars: IndexMap::default(),
@@ -906,6 +1058,10 @@ impl FunctionContext {
             deref_overrides: IndexMap::default(),
             outer_box_types,
             closure_defaults: IndexMap::default(),
+            // Closures inside a handler method body are NOT themselves
+            // handler methods — `resume` returns from the enclosing
+            // operation, not from the closure.
+            in_handler_method: false,
         }
     }
 
@@ -935,7 +1091,11 @@ impl FunctionContext {
     ) -> u32 {
         let index = self.next_local;
         self.next_local += 1;
-        self.local_types.push(type_id);
+        self.locals.push(crate::tir::TirLocal {
+            name: name.clone(),
+            type_id,
+            is_mut,
+        });
 
         let scope = self.scopes.last_mut().unwrap();
         scope.insert(
@@ -1110,15 +1270,120 @@ pub(super) struct TraitMethodMatch {
     pub(super) is_blanket_ref_impl: bool,
 }
 
-/// Cached per-module type maps for cross-module type resolution.
-/// These are the flat maps that `build_module_map` produces.
-pub(super) struct ModuleTypeMaps {
-    pub(super) struct_fields: IndexMap<String, StructFieldInfo>,
-    pub(super) variant_cases: IndexMap<String, VariantInfo>,
-    pub(super) enum_cases: IndexMap<String, EnumInfo>,
-    pub(super) flags_cases: IndexMap<String, FlagsInfo>,
-    pub(super) newtypes: IndexMap<String, TypeId>,
-    pub(super) resource_types: IndexMap<String, ResourceInfo>,
+/// Read-only view that resolves a type name from a given module's perspective
+/// without cloning per-module flat maps.
+///
+/// Three-layer precedence (highest first):
+///   1. Local additions discovered during resolution (anonymous structs, in-progress
+///      newtypes/enums declared in the current module's body).
+///   2. The current module's own definitions.
+///   3. Imports of the current module (with `use { Foo as Bar }` aliasing).
+///   4. Any module that defines the name (legacy fallback for prelude-style visibility).
+///
+/// Constructed cheaply at each call site from the `Resolver`'s context. All
+/// fields are borrowed; no heap allocation.
+pub(crate) struct TypeLookup<'a> {
+    pub(crate) current_module_source: &'a ModuleSource,
+    pub(crate) imported_type_sources: &'a IndexMap<String, ModuleSource>,
+    pub(crate) import_original_names: &'a IndexMap<String, String>,
+    pub(crate) all_newtypes: &'a IndexMap<ModuleSource, IndexMap<String, TypeId>>,
+    pub(crate) all_struct_fields: &'a IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,
+    pub(crate) all_variant_cases: &'a IndexMap<ModuleSource, IndexMap<String, VariantInfo>>,
+    pub(crate) all_enum_cases: &'a IndexMap<ModuleSource, IndexMap<String, EnumInfo>>,
+    pub(crate) all_flags_cases: &'a IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>,
+    pub(crate) all_resource_types: &'a IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>,
+    pub(crate) all_generic_newtypes:
+        &'a IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>>,
+    pub(crate) local_struct_fields: &'a IndexMap<String, StructFieldInfo>,
+    pub(crate) local_newtypes: &'a IndexMap<String, TypeId>,
+    pub(crate) local_enum_cases: &'a IndexMap<String, EnumInfo>,
+    pub(crate) local_flags_cases: &'a IndexMap<String, FlagsInfo>,
+    pub(crate) local_generic_newtypes: &'a IndexMap<String, GenericNewtypeInfo>,
+    pub(crate) local_variant_cases: &'a IndexMap<String, VariantInfo>,
+}
+
+impl<'a> TypeLookup<'a> {
+    /// Resolve `name` against `all_per_module` using the (local → current →
+    /// imports → any) precedence. Borrows have lifetime `'a`, so the caller
+    /// can keep the returned reference alive across `&self` re-borrows.
+    fn lookup_ref<V>(
+        &self,
+        name: &str,
+        local: Option<&'a IndexMap<String, V>>,
+        all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
+    ) -> Option<&'a V> {
+        if let Some(local) = local
+            && let Some(v) = local.get(name)
+        {
+            return Some(v);
+        }
+        if let Some(v) = all_per_module
+            .get(self.current_module_source)
+            .and_then(|m| m.get(name))
+        {
+            return Some(v);
+        }
+        if let Some(src) = self.imported_type_sources.get(name) {
+            let canonical = self
+                .import_original_names
+                .get(name)
+                .map(String::as_str)
+                .unwrap_or(name);
+            if let Some(v) = all_per_module.get(src).and_then(|m| m.get(canonical)) {
+                return Some(v);
+            }
+            if let ModuleSource::Wasi { interface } = src {
+                let prefix = format!("{interface}/");
+                for (s, m) in all_per_module {
+                    if let ModuleSource::Wasi { interface: sub } = s
+                        && sub.starts_with(&prefix)
+                        && let Some(v) = m.get(canonical)
+                    {
+                        return Some(v);
+                    }
+                }
+            }
+        }
+        for m in all_per_module.values() {
+            if let Some(v) = m.get(name) {
+                return Some(v);
+            }
+        }
+        None
+    }
+
+    pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
+        self.lookup_ref(name, Some(self.local_struct_fields), self.all_struct_fields)
+    }
+
+    pub(super) fn variant_case(&self, name: &str) -> Option<&'a VariantInfo> {
+        self.lookup_ref(name, Some(self.local_variant_cases), self.all_variant_cases)
+    }
+
+    pub(super) fn enum_case(&self, name: &str) -> Option<&'a EnumInfo> {
+        self.lookup_ref(name, Some(self.local_enum_cases), self.all_enum_cases)
+    }
+
+    pub(super) fn flags_case(&self, name: &str) -> Option<&'a FlagsInfo> {
+        self.lookup_ref(name, Some(self.local_flags_cases), self.all_flags_cases)
+    }
+
+    pub(super) fn resource_type(&self, name: &str) -> Option<&'a ResourceInfo> {
+        self.lookup_ref(name, None, self.all_resource_types)
+    }
+
+    pub(super) fn generic_newtype(&self, name: &str) -> Option<&'a GenericNewtypeInfo> {
+        self.lookup_ref(
+            name,
+            Some(self.local_generic_newtypes),
+            self.all_generic_newtypes,
+        )
+    }
+
+    pub(super) fn newtype(&self, name: &str) -> Option<TypeId> {
+        self.lookup_ref(name, Some(self.local_newtypes), self.all_newtypes)
+            .copied()
+    }
 }
 
 /// Info about an Index trait implementation

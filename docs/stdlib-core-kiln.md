@@ -23,8 +23,8 @@ Generator authors call this at the top of their `generate` entry:
 
 ```wado
 export fn generate(raw: RawRequest) -> Result<Response, Error> {
-let req = bind_request::<Options>(raw)?;
-// ... read req.primary.content, honor req.options, emit files ...
+    let req = bind_request::<Options>(raw)?;
+    // ... read req.primary.content, honor req.options, emit files ...
 }
 ```
 
@@ -40,7 +40,7 @@ out-of-band.
 
 ## Effects
 
-### `pub effect KilnHost`
+### `pub interface KilnHost`
 
 Host interface exposed to Kiln generators. Deliberately narrow:
 no clocks, no random, no network, no filesystem beyond `read-file`.

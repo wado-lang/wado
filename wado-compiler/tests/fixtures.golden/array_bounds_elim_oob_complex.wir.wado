@@ -74,11 +74,11 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_complex.wado/run"() with Stdout {
-    let __local_0: ref "core:prelude//Array<i32>";
+    let __b_0: ref "core:prelude//Array<i32>";
     let arr: ref "core:prelude//Array<i32>";
     arr = __seq_lit: block -> ref "core:prelude//Array<i32>" {
-        __local_0 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-        break __seq_lit: __local_0;
+        __b_0 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+        break __seq_lit: __b_0;
         unreachable;
     };
     "core:prelude/array.wado/Array<i32>::push"(arr, 1);
@@ -206,11 +206,11 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     let old_repr: ref builtin::array<i32>;
     let used: i32;
     let i: i32;
-    let __local_7: i32;
+    let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        a = capacity * 2;
+        break __inline_i32_max_0: select i32(a > 4, a, 4);
         unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);

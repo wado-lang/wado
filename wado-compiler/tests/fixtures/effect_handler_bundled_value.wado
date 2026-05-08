@@ -1,0 +1,82 @@
+// Bundled handler in **value form** (`with h do`, no `&mut`): the
+// bundled clause expands to one `TirHandlerBinding` per implemented
+// effect, but every expanded binding must share a single synthesised
+// `__h_<bundle>` local so that:
+//
+// 1. the handler expression is evaluated **once** (not effects-many
+//    times), and
+// 2. mutations from any installed effect's handler method are observed
+//    by every other effect's handler method (otherwise per-effect
+//    copies would diverge).
+//
+// This is the cross-effect mutation contract the WEP intends; without
+// `bundle_group` sharing, the synthesis would emit one `__h_<E>` Let
+// per binding, each holding an independent value-copy of the handler.
+//
+// The fixture exercises both contracts at once:
+// - `make_handler` increments a global side-effect counter, so we can
+//   assert it ran only once.
+// - `MultiMock` is passed by value; both `Greeting` and `Counter` use
+//   `&mut self`. If they were operating on independent copies, the
+//   final `count` after the do-block would not equal the sum of all
+//   handler increments. We assert the cross-effect mutation by
+//   reading the dispatch struct field through the inner handler.
+
+use { println, Stdout } from "core:cli";
+
+global mut handler_built: i32 = 0;
+
+interface Greeting {
+    fn hello() -> String;
+}
+
+interface Counter {
+    fn tick() -> i32;
+}
+
+struct MultiMock {
+    name: String,
+    count: i32,
+}
+
+impl Greeting for MultiMock {
+    fn hello(&mut self) -> String {
+        self.count += 1;
+        resume `hello, {self.name} (count={self.count})`
+    }
+}
+
+impl Counter for MultiMock {
+    fn tick(&mut self) -> i32 {
+        self.count += 1;
+        resume self.count
+    }
+}
+
+fn make_handler() -> MultiMock with Stdout {
+    handler_built += 1;
+    return MultiMock { name: "value", count: 0 };
+}
+
+export fn run() with Stdout {
+    // Value-form bundled: `with make_handler() do`. The bundled
+    // expansion shares one local across the Greeting and Counter
+    // installations, so:
+    // - `make_handler()` runs exactly once (handler_built == 1)
+    // - Greeting::hello() and Counter::tick() mutate the same MultiMock
+    with make_handler() do {
+        let g = Greeting::hello();   // count: 0 -> 1
+        let n1 = Counter::tick();    // count: 1 -> 2
+        let n2 = Counter::tick();    // count: 2 -> 3
+        // hello() must observe count=1 because no copy diverged.
+        // tick() must observe count=2, then count=3 cumulatively.
+        println(`{g}, n1={n1}, n2={n2}, built={handler_built}`);
+    }
+    println(`built={handler_built}`);
+}
+
+__DATA__
+{"stdout_contains": [
+    "hello, value (count=1), n1=2, n2=3, built=1",
+    "built=1"
+]}

@@ -1,0 +1,35 @@
+// Regression test for an `&mut local` aliasing miscompile that the
+// `lower/boxing` pass introduced. When `local` was an address-taken
+// primitive — boxing rewrites `local: i32` to `local: Box<i32>` and
+// reads to `FieldAccess(local, "value")` — taking a reference to that
+// access (`&local.value`) was collapsed back to the Box reference. The
+// shortcut keyed on the bare field name `value`, so any user struct
+// with a `value` field (e.g. `Counter` below) had its field access
+// silently dropped: `&c.value` for `c: Counter` became `&c`. WIR build
+// then tried to pass a Counter ref where an i32 was required.
+//
+// The fix scopes the shortcut to locals whose post-boxing type is an
+// actual `Box<T>` struct (via `box_type_ids`); see `lower/boxing.rs`.
+
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    fn bump(&mut self) -> i32 {
+        self.value += 1;
+        return self.value;
+    }
+}
+
+export fn run() with Stdout {
+    let mut c = Counter { value: 0 };
+    let cref = &mut c;
+    let a = cref.bump();
+    println(`a={a} final={c.value}`);
+}
+
+__DATA__
+{"stdout_contains": ["a=1 final=1"]}

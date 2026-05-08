@@ -209,26 +209,26 @@ HTTP test fixtures are in `wado-compiler/tests/fixtures/http-*.wado`. Each has a
 
 | Fixture                        | Description                                              |
 | ------------------------------ | -------------------------------------------------------- |
-| `http-200.wado`                | 200 OK with empty body and no trailers                   |
-| `http-400.wado`                | 400 Bad Request via `set_status_code`                    |
-| `http-500.wado`                | 500 Internal Server Error via `set_status_code`          |
-| `http-error-code.wado`         | `Err(ErrorCode::InternalError(null))`                    |
-| `http-error-code-payload.wado` | `Err(ErrorCode::InternalError(Some("...")))`             |
-| `http-fields.wado`             | `Fields`: `new`, `has`, `append`, `delete`, `clone`      |
-| `http-future-new.wado`         | `Future::<T>::new()` returns `[rx, tx]` pair             |
-| `http-request-method.wado`     | `request.get_method()` returns injected method           |
-| `http-request-path.wado`       | `request.get_path_with_query()` returns injected path    |
-| `http-response-headers.wado`   | Response headers visible to caller via `headers_contain` |
-| `http-response-ops.wado`       | `Response::new`, `get_status_code`, `set_status_code`    |
+| `http_200.wado`                | 200 OK with empty body and no trailers                   |
+| `http_400.wado`                | 400 Bad Request via `set_status_code`                    |
+| `http_500.wado`                | 500 Internal Server Error via `set_status_code`          |
+| `http_error_code.wado`         | `Err(ErrorCode::InternalError(null))`                    |
+| `http_error_code_payload.wado` | `Err(ErrorCode::InternalError(Some("...")))`             |
+| `http_fields.wado`             | `Fields`: `new`, `has`, `append`, `delete`, `clone`      |
+| `http_future_new.wado`         | `Future::<T>::new()` returns `[rx, tx]` pair             |
+| `http_request_method.wado`     | `request.get_method()` returns injected method           |
+| `http_request_path.wado`       | `request.get_path_with_query()` returns injected path    |
+| `http_response_headers.wado`   | Response headers visible to caller via `headers_contain` |
+| `http_response_ops.wado`       | `Response::new`, `get_status_code`, `set_status_code`    |
 
 Stream body fixtures are in `wado-compiler/tests/fixtures/stream-http-*.wado`:
 
 | Fixture                                | Description                                                        |
 | -------------------------------------- | ------------------------------------------------------------------ |
-| `stream-http-response-body.wado`       | Response body via `Stream<u8>` with `StreamWritable::write()`      |
-| `stream-http-response-body-multi.wado` | Multi-chunk response body                                          |
-| `stream-http-read-request-body.wado`   | Read request body via `Request::consume_body` and `Stream::read()` |
-| `stream-http-echo.wado`                | Echo handler: read request body, write it back as response body    |
+| `stream_http_response_body.wado`       | Response body via `Stream<u8>` with `StreamWritable::write()`      |
+| `stream_http_response_body_multi.wado` | Multi-chunk response body                                          |
+| `stream_http_read_request_body.wado`   | Read request body via `Request::consume_body` and `Stream::read()` |
+| `stream_http_echo.wado`                | Echo handler: read request body, write it back as response body    |
 
 ## Not Yet Implemented
 

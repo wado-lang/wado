@@ -54,8 +54,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
 use crate::tir::{
-    CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt,
-    TirStmtKind, TirStruct, TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
+    TirStmt, TirStmtKind, TirStruct, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -412,8 +412,12 @@ fn scalarize_in_function(
                 let new_index = base + k as u32;
                 let new_name = format!("__csroa_{}_{}", c.local_name, k);
                 field_local_map.insert((c.local_index, k as u32), new_index);
-                field_info_map.insert((c.local_index, k as u32), (new_name, arr_ty));
-                func.local_types.push(arr_ty);
+                field_info_map.insert((c.local_index, k as u32), (new_name.clone(), arr_ty));
+                func.locals.push(TirLocal {
+                    name: new_name,
+                    type_id: arr_ty,
+                    is_mut: false,
+                });
             }
             func.local_count += c.element_types.len() as u32;
             decomposed.insert(c.local_index);
@@ -1862,6 +1866,11 @@ fn walk_expr_mut(expr: &mut TirExpr, ctx: &RewriteCtx) {
                     rewrite_expr_inplace(inner, ctx);
                 }
             }
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }

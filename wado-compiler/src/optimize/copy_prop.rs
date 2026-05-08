@@ -465,6 +465,11 @@ fn analyze_expr(
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
     }
 }
 
@@ -892,6 +897,11 @@ fn apply_in_expr(
         | TirExprKind::EnumConstruct { .. } => {}
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }

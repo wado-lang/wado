@@ -5,17 +5,18 @@ use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
     AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ChainedComparison, ClosureExpr, ClosureParam, CmImport, ComparisonChainExpr,
-    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt, EffectDecl,
-    EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
-    ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
-    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, Item, LabeledBlockStmt,
-    LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr,
-    Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern, RangeExpr,
-    RangeKind, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry,
-    StructDecl, StructField, StructLiteralExpr, StructLiteralField, StructPatternField,
-    TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type,
-    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WhileStmt,
-    WorldDecl, WorldExport, WorldImport,
+    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt, EnumCase,
+    EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt,
+    FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt,
+    ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, InterfaceMethod, Item,
+    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
+    MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
+    RangeExpr, RangeKind, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
+    StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
+    StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr,
+    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
+    VariantDecl, WhileStmt, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface,
+    WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -453,7 +454,9 @@ impl Parser {
             TokenKind::Fn => self
                 .parse_function(is_pub, is_export, is_async, attrs)
                 .map(Item::Function),
-            TokenKind::Effect => self.parse_effect_decl(is_pub, attrs).map(Item::Effect),
+            TokenKind::Interface => self
+                .parse_interface_decl(is_pub, attrs)
+                .map(Item::Interface),
             TokenKind::Struct => self.parse_struct_decl(is_pub, attrs).map(Item::Struct),
             TokenKind::Enum => self.parse_enum_decl(is_pub, attrs).map(Item::Enum),
             TokenKind::Variant => self.parse_variant_decl(is_pub, attrs).map(Item::Variant),
@@ -722,7 +725,7 @@ impl Parser {
             let mut methods = Vec::new();
             while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
                 // Reuse effect method parser for resource methods
-                methods.push(self.parse_effect_method()?);
+                methods.push(self.parse_interface_method()?);
             }
 
             let end = self.expect(&TokenKind::RBrace)?.span;
@@ -828,8 +831,8 @@ impl Parser {
                 let functions = self.parse_use_item_simple_list()?;
                 self.expect(&TokenKind::RBrace)?;
 
-                items.push(UseItem::EffectFunctions {
-                    effect_name: name,
+                items.push(UseItem::InterfaceFunctions {
+                    interface_name: name,
                     functions,
                 });
             } else {
@@ -1260,14 +1263,12 @@ impl Parser {
     }
 
     /// Parse `stores[name1, name2]` — the `stores` keyword has already been peeked.
+    /// Empty lists (`stores[]`) and a trailing comma are allowed for syntactic
+    /// consistency with other comma-separated lists; both are no-ops semantically.
     fn parse_stores_list(&mut self) -> ParseResult<Vec<String>> {
         self.expect(&TokenKind::Stores)?;
         self.expect(&TokenKind::LBracket)?;
-        let mut names = vec![self.consume_ident()?];
-        while self.check(&TokenKind::Comma) {
-            self.advance();
-            names.push(self.consume_ident()?);
-        }
+        let names = self.parse_comma_separated(&TokenKind::RBracket, Self::consume_ident)?;
         self.expect(&TokenKind::RBracket)?;
         Ok(names)
     }
@@ -1314,14 +1315,12 @@ impl Parser {
     }
 
     /// Parse `stores[0, 1]` or `stores[name]` in function type position.
+    /// Empty lists and a trailing comma are allowed for syntactic consistency
+    /// with other comma-separated lists; both are no-ops semantically.
     fn parse_stores_list_for_fn_type(&mut self) -> ParseResult<Vec<StoresEntry>> {
         self.expect(&TokenKind::Stores)?;
         self.expect(&TokenKind::LBracket)?;
-        let mut entries = vec![self.parse_stores_entry()?];
-        while self.check(&TokenKind::Comma) {
-            self.advance();
-            entries.push(self.parse_stores_entry()?);
-        }
+        let entries = self.parse_comma_separated(&TokenKind::RBracket, Self::parse_stores_entry)?;
         self.expect(&TokenKind::RBracket)?;
         Ok(entries)
     }
@@ -1391,6 +1390,7 @@ impl Parser {
             TokenKind::Continue => self.parse_continue_stmt(),
             TokenKind::Assert => self.parse_assert_stmt(),
             TokenKind::Match => self.parse_match_stmt(),
+            TokenKind::With => self.parse_with_handler_stmt(),
             _ => self.parse_expr_stmt_in_block(),
         }
     }
@@ -1406,6 +1406,24 @@ impl Parser {
             unreachable!("parse_match_expr must return Expr::Match");
         };
         Ok(Stmt::Match(m))
+    }
+
+    /// Parse a `with E => h do { ... }` statement.
+    ///
+    /// The trailing `}` of the do-block makes the statement boundary
+    /// unambiguous, so the trailing semicolon is optional — same as
+    /// `if`, `while`, `for`, `loop`, and `match` in statement position.
+    /// The expression is wrapped in a `Stmt::Expr` so the rest of the
+    /// pipeline (effect-check, TIR lowering, dispatch synthesis)
+    /// continues to see a single `Expr::WithHandler`.
+    fn parse_with_handler_stmt(&mut self) -> ParseResult<Stmt> {
+        let expr = self.parse_with_handler_expr()?;
+        if self.check(&TokenKind::Semicolon) {
+            self.advance();
+        }
+        let span = expr.span();
+        let id = self.alloc_ast_id();
+        Ok(Stmt::Expr(crate::ast::ExprStmt { id, expr, span }))
     }
 
     /// Parse an expression statement in a block, with optional trailing semicolon
@@ -2345,44 +2363,54 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_or_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_and_expr()?;
+    /// Consume the current token and produce an `Expr::Literal` with the given
+    /// payload. Used for one-token literals (numbers, strings, booleans, etc.).
+    fn consume_literal(&mut self, value: Literal, span: Span) -> Expr {
+        self.advance();
+        Expr::Literal(LiteralExpr {
+            id: self.alloc_ast_id(),
+            value,
+            span,
+        })
+    }
 
-        while self.check(&TokenKind::Or) {
+    /// Parse a left-associative binary expression: `next (op next)*`.
+    /// `classify` returns `Some(op)` if the current token starts an operator at this
+    /// precedence level (and that single-token operator should be consumed), or `None`.
+    fn parse_left_assoc_binary(
+        &mut self,
+        mut next: impl FnMut(&mut Self) -> ParseResult<Expr>,
+        classify: impl Fn(&TokenKind) -> Option<BinaryOp>,
+    ) -> ParseResult<Expr> {
+        let mut left = next(self)?;
+        while let Some(op) = classify(self.peek_kind()) {
             let left_span = left.span();
             self.advance();
-            let right = self.parse_and_expr()?;
-            let merged_span = left_span.merge(&right.span());
+            let right = next(self)?;
+            let span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
                 id: self.alloc_ast_id(),
                 left,
-                op: BinaryOp::Or,
+                op,
                 right,
-                span: merged_span,
+                span,
             }));
         }
-
         Ok(left)
     }
 
+    fn parse_or_expr(&mut self) -> ParseResult<Expr> {
+        self.parse_left_assoc_binary(Self::parse_and_expr, |k| match k {
+            TokenKind::Or => Some(BinaryOp::Or),
+            _ => None,
+        })
+    }
+
     fn parse_and_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_comparison_expr()?;
-
-        while self.check(&TokenKind::And) {
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_comparison_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
-                left,
-                op: BinaryOp::And,
-                right,
-                span: merged_span,
-            }));
-        }
-
-        Ok(left)
+        self.parse_left_assoc_binary(Self::parse_comparison_expr, |k| match k {
+            TokenKind::And => Some(BinaryOp::And),
+            _ => None,
+        })
     }
 
     /// Parse comparison expressions with chaining support.
@@ -2523,113 +2551,40 @@ impl Parser {
     }
 
     fn parse_bitor_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_bitxor_expr()?;
-
-        while self.check(&TokenKind::Pipe) {
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_bitxor_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
-                left,
-                op: BinaryOp::BitOr,
-                right,
-                span: merged_span,
-            }));
-        }
-
-        Ok(left)
+        self.parse_left_assoc_binary(Self::parse_bitxor_expr, |k| match k {
+            TokenKind::Pipe => Some(BinaryOp::BitOr),
+            _ => None,
+        })
     }
 
     fn parse_bitxor_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_bitand_expr()?;
-
-        while self.check(&TokenKind::Caret) {
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_bitand_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
-                left,
-                op: BinaryOp::BitXor,
-                right,
-                span: merged_span,
-            }));
-        }
-
-        Ok(left)
+        self.parse_left_assoc_binary(Self::parse_bitand_expr, |k| match k {
+            TokenKind::Caret => Some(BinaryOp::BitXor),
+            _ => None,
+        })
     }
 
     fn parse_bitand_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_shift_expr()?;
-
-        while self.check(&TokenKind::Ampersand) {
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_shift_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
-                left,
-                op: BinaryOp::BitAnd,
-                right,
-                span: merged_span,
-            }));
-        }
-
-        Ok(left)
+        self.parse_left_assoc_binary(Self::parse_shift_expr, |k| match k {
+            TokenKind::Ampersand => Some(BinaryOp::BitAnd),
+            _ => None,
+        })
     }
 
     fn parse_shift_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_additive_expr()?;
-
-        loop {
-            let op = match self.peek_kind() {
-                TokenKind::LtLt => BinaryOp::Shl,
-                TokenKind::GtGt => BinaryOp::Shr,
-                _ => break,
-            };
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_additive_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
-                left,
-                op,
-                right,
-                span: merged_span,
-            }));
-        }
-
-        Ok(left)
+        self.parse_left_assoc_binary(Self::parse_additive_expr, |k| match k {
+            TokenKind::LtLt => Some(BinaryOp::Shl),
+            TokenKind::GtGt => Some(BinaryOp::Shr),
+            _ => None,
+        })
     }
 
     fn parse_additive_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_multiplicative_expr()?;
-
-        loop {
-            let op = match self.peek_kind() {
-                TokenKind::Plus => BinaryOp::Add,
-                TokenKind::Minus => BinaryOp::Sub,
-                _ => break,
-            };
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_multiplicative_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
-                left,
-                op,
-                right,
-                span: merged_span,
-            }));
-        }
-
-        Ok(left)
+        self.parse_left_assoc_binary(Self::parse_multiplicative_expr, |k| match k {
+            TokenKind::Plus => Some(BinaryOp::Add),
+            TokenKind::Minus => Some(BinaryOp::Sub),
+            _ => None,
+        })
     }
 
     fn parse_cast_expr(&mut self) -> ParseResult<Expr> {
@@ -2649,29 +2604,12 @@ impl Parser {
     }
 
     fn parse_multiplicative_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_cast_expr()?;
-
-        loop {
-            let op = match self.peek_kind() {
-                TokenKind::Star => BinaryOp::Mul,
-                TokenKind::Slash => BinaryOp::Div,
-                TokenKind::Percent => BinaryOp::Mod,
-                _ => break,
-            };
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_cast_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
-                left,
-                op,
-                right,
-                span: merged_span,
-            }));
-        }
-
-        Ok(left)
+        self.parse_left_assoc_binary(Self::parse_cast_expr, |k| match k {
+            TokenKind::Star => Some(BinaryOp::Mul),
+            TokenKind::Slash => Some(BinaryOp::Div),
+            TokenKind::Percent => Some(BinaryOp::Mod),
+            _ => None,
+        })
     }
 
     fn parse_unary_expr(&mut self) -> ParseResult<Expr> {
@@ -2912,6 +2850,121 @@ impl Parser {
         Ok(expr)
     }
 
+    /// Speculatively parse `Type::<Args>::method(...)` after `name::` was already
+    /// consumed and `<` is the next token. On any speculative failure, restore the
+    /// position to `checkpoint` (just before the `::`) and produce a bare `Ident`.
+    fn parse_generic_static_method_call_or_backtrack(
+        &mut self,
+        start_span: Span,
+        name: String,
+        checkpoint: usize,
+    ) -> ParseResult<Expr> {
+        let saved_pending_gt = self.pending_gt;
+        self.advance(); // consume <
+
+        let mut type_args = Vec::new();
+        let mut spec_ok = true;
+
+        match self.parse_type() {
+            Ok(t) => type_args.push(t),
+            Err(_) => spec_ok = false,
+        }
+        while spec_ok && self.check(&TokenKind::Comma) {
+            self.advance();
+            match self.parse_type() {
+                Ok(t) => type_args.push(t),
+                Err(_) => spec_ok = false,
+            }
+        }
+        if spec_ok {
+            spec_ok = self.expect_gt().is_ok();
+        }
+
+        if spec_ok && self.check(&TokenKind::ColonColon) {
+            self.advance(); // consume ::
+            let (method, method_span) = self.consume_ident_with_span()?;
+
+            // Method-level turbofish: method::<U>(...)
+            let method_type_args =
+                if self.check(&TokenKind::ColonColon) && self.peek_nth(1).kind == TokenKind::Lt {
+                    self.advance(); // consume ::
+                    self.parse_call_type_args()?
+                } else {
+                    Vec::new()
+                };
+
+            self.expect(&TokenKind::LParen)?;
+            let (args, has_trailing_comma) = self.parse_arg_list()?;
+            let end_span = self.expect(&TokenKind::RParen)?.span;
+
+            return Ok(Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
+                id: self.alloc_ast_id(),
+                target_type: Type::Generic(GenericType {
+                    id: self.alloc_ast_id(),
+                    name,
+                    args: type_args,
+                    span: start_span,
+                }),
+                method,
+                method_id: self.alloc_ast_id(),
+                method_span,
+                type_args: method_type_args,
+                args,
+                has_trailing_comma,
+                span: start_span.merge(&end_span),
+            })));
+        }
+
+        self.pos = checkpoint;
+        self.pending_gt = saved_pending_gt;
+        Ok(Expr::Ident(IdentExpr {
+            id: self.alloc_ast_id(),
+            name,
+            span: start_span,
+            segments: Vec::new(),
+        }))
+    }
+
+    /// Parse a `name::seg::seg...` qualified path identifier. The leading `name`
+    /// has already been consumed and `::` has just been consumed by the caller,
+    /// so the parser is positioned at the first segment after that `::`.
+    fn parse_qualified_path(&mut self, start_span: Span, name: String) -> ParseResult<Expr> {
+        let mut segments = vec![PathSegment {
+            id: self.alloc_ast_id(),
+            name: name.clone(),
+            span: start_span,
+        }];
+        let first_seg_span = self.peek().span;
+        let first_seg_name = self.consume_ident()?;
+        segments.push(PathSegment {
+            id: self.alloc_ast_id(),
+            name: first_seg_name.clone(),
+            span: first_seg_span,
+        });
+        let mut qualified_name = format!("{name}::{first_seg_name}");
+        let mut end_span = first_seg_span;
+        while self.check(&TokenKind::ColonColon)
+            && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
+        {
+            self.advance(); // consume ::
+            let seg_span = self.peek().span;
+            let seg_name = self.consume_ident()?;
+            segments.push(PathSegment {
+                id: self.alloc_ast_id(),
+                name: seg_name.clone(),
+                span: seg_span,
+            });
+            qualified_name = format!("{qualified_name}::{seg_name}");
+            end_span = seg_span;
+        }
+        Ok(Expr::Ident(IdentExpr {
+            id: self.alloc_ast_id(),
+            name: qualified_name,
+            span: start_span.merge(&end_span),
+            segments,
+        }))
+    }
+
     fn parse_primary_expr(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
 
@@ -2931,113 +2984,11 @@ impl Parser {
                 self.advance(); // consume ::
 
                 if self.check(&TokenKind::Lt) {
-                    // Speculatively try Type::<Args>::method() - static method
-                    // on generic type. If the parse doesn't match, backtrack.
-                    let saved_pending_gt = self.pending_gt;
-                    self.advance(); // consume <
-
-                    let mut type_args = Vec::new();
-                    let mut spec_ok = true;
-
-                    match self.parse_type() {
-                        Ok(t) => type_args.push(t),
-                        Err(_) => spec_ok = false,
-                    }
-                    while spec_ok && self.check(&TokenKind::Comma) {
-                        self.advance();
-                        match self.parse_type() {
-                            Ok(t) => type_args.push(t),
-                            Err(_) => spec_ok = false,
-                        }
-                    }
-                    if spec_ok {
-                        spec_ok = self.expect_gt().is_ok();
-                    }
-
-                    if spec_ok && self.check(&TokenKind::ColonColon) {
-                        self.advance(); // consume ::
-                        let (method, method_span) = self.consume_ident_with_span()?;
-
-                        // Check for method-level turbofish: method::<U>(...)
-                        let method_type_args = if self.check(&TokenKind::ColonColon)
-                            && self.peek_nth(1).kind == TokenKind::Lt
-                        {
-                            self.advance(); // consume ::
-                            self.parse_call_type_args()?
-                        } else {
-                            Vec::new()
-                        };
-
-                        self.expect(&TokenKind::LParen)?;
-                        let (args, has_trailing_comma) = self.parse_arg_list()?;
-                        let end_span = self.expect(&TokenKind::RParen)?.span;
-
-                        return Ok(Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
-                            id: self.alloc_ast_id(),
-                            target_type: Type::Generic(GenericType {
-                                id: self.alloc_ast_id(),
-                                name,
-                                args: type_args,
-                                span: start_span,
-                            }),
-                            method,
-                            method_id: self.alloc_ast_id(),
-                            method_span,
-                            type_args: method_type_args,
-                            args,
-                            has_trailing_comma,
-                            span: start_span.merge(&end_span),
-                        })));
-                    }
-
-                    // Not a static method call on generic type, backtrack
-                    self.pos = checkpoint;
-                    self.pending_gt = saved_pending_gt;
-                    return Ok(Expr::Ident(IdentExpr {
-                        id: self.alloc_ast_id(),
-                        name,
-                        span: start_span,
-                        segments: Vec::new(),
-                    }));
+                    return self.parse_generic_static_method_call_or_backtrack(
+                        start_span, name, checkpoint,
+                    );
                 }
-                // This is a qualified name like Effect::function or ns::Type::Case
-                // Record the leading segment (already consumed above).
-                let mut segments = vec![PathSegment {
-                    id: self.alloc_ast_id(),
-                    name: name.clone(),
-                    span: start_span,
-                }];
-                // Consume a chain of ::ident segments, capturing each segment's
-                // AstId and span for LSP navigation.
-                let first_seg_span = self.peek().span;
-                let first_seg_name = self.consume_ident()?;
-                segments.push(PathSegment {
-                    id: self.alloc_ast_id(),
-                    name: first_seg_name.clone(),
-                    span: first_seg_span,
-                });
-                let mut qualified_name = format!("{name}::{first_seg_name}");
-                let mut end_span = first_seg_span;
-                while self.check(&TokenKind::ColonColon)
-                    && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
-                {
-                    self.advance(); // consume ::
-                    let seg_span = self.peek().span;
-                    let seg_name = self.consume_ident()?;
-                    segments.push(PathSegment {
-                        id: self.alloc_ast_id(),
-                        name: seg_name.clone(),
-                        span: seg_span,
-                    });
-                    qualified_name = format!("{qualified_name}::{seg_name}");
-                    end_span = seg_span;
-                }
-                return Ok(Expr::Ident(IdentExpr {
-                    id: self.alloc_ast_id(),
-                    name: qualified_name,
-                    span: start_span.merge(&end_span),
-                    segments,
-                }));
+                return self.parse_qualified_path(start_span, name);
             } else if self.check(&TokenKind::Colon) && self.peek_nth(1).kind == TokenKind::LBrace {
                 // Labeled block expression: `label: { ... }`
                 self.advance(); // consume ':'
@@ -3069,77 +3020,18 @@ impl Parser {
 
         match self.peek_kind().clone() {
             TokenKind::NumberLit(repr) => {
-                self.advance();
-                Ok(Expr::Literal(LiteralExpr {
-                    id: self.alloc_ast_id(),
-                    value: Literal::Number(repr),
-                    span: start_span,
-                }))
+                Ok(self.consume_literal(Literal::Number(repr), start_span))
             }
-            TokenKind::StringLit(raw) => {
-                self.advance();
-                Ok(Expr::Literal(LiteralExpr {
-                    id: self.alloc_ast_id(),
-                    value: Literal::String(raw),
-                    span: start_span,
-                }))
-            }
+            TokenKind::StringLit(raw) => Ok(self.consume_literal(Literal::String(raw), start_span)),
             TokenKind::TemplateStringLit(parts) => {
                 self.advance();
                 self.parse_template_string_parts(parts, start_span)
             }
-            TokenKind::True => {
-                self.advance();
-                Ok(Expr::Literal(LiteralExpr {
-                    id: self.alloc_ast_id(),
-                    value: Literal::Bool(true),
-                    span: start_span,
-                }))
-            }
-            TokenKind::False => {
-                self.advance();
-                Ok(Expr::Literal(LiteralExpr {
-                    id: self.alloc_ast_id(),
-                    value: Literal::Bool(false),
-                    span: start_span,
-                }))
-            }
-            TokenKind::Null => {
-                self.advance();
-                Ok(Expr::Literal(LiteralExpr {
-                    id: self.alloc_ast_id(),
-                    value: Literal::Null,
-                    span: start_span,
-                }))
-            }
-            TokenKind::CharLit(raw) => {
-                self.advance();
-                Ok(Expr::Literal(LiteralExpr {
-                    id: self.alloc_ast_id(),
-                    value: Literal::Char(raw),
-                    span: start_span,
-                }))
-            }
-            TokenKind::LParen => {
-                self.advance();
-                // Unit expression: ()
-                if self.check(&TokenKind::RParen) {
-                    self.advance();
-                    return Ok(Expr::Literal(LiteralExpr {
-                        id: self.alloc_ast_id(),
-                        value: Literal::Unit,
-                        span: start_span,
-                    }));
-                }
-                // Inside parentheses, struct literals are always allowed
-                let saved = self.restrict_struct_literals;
-                self.restrict_struct_literals = false;
-                let expr = self.parse_expr()?;
-                self.restrict_struct_literals = saved;
-                let end_span = self.expect(&TokenKind::RParen)?.span;
-                // Update expression span to include the parentheses
-                Ok(expr.with_span(start_span.merge(&end_span)))
-            }
+            TokenKind::True => Ok(self.consume_literal(Literal::Bool(true), start_span)),
+            TokenKind::False => Ok(self.consume_literal(Literal::Bool(false), start_span)),
+            TokenKind::Null => Ok(self.consume_literal(Literal::Null, start_span)),
+            TokenKind::CharLit(raw) => Ok(self.consume_literal(Literal::Char(raw), start_span)),
+            TokenKind::LParen => self.parse_paren_or_unit_expr(start_span),
             TokenKind::LBracket => {
                 self.advance();
                 // Inside brackets, struct literals are always allowed
@@ -3150,145 +3042,166 @@ impl Parser {
                 result
             }
             TokenKind::Pipe => self.parse_closure(),
-            TokenKind::Or => {
-                // `||` in primary expression position is a zero-parameter closure,
-                // not logical OR (which requires a left operand).
-                self.advance(); // consume `||`
-                let body = if self.check(&TokenKind::LBrace) {
-                    let block = self.parse_block()?;
-                    Expr::Block(Box::new(block))
-                } else {
-                    self.parse_expr()?
-                };
-                let body_span = body.span();
-                Ok(Expr::Closure(Box::new(ClosureExpr {
-                    id: self.alloc_ast_id(),
-                    params: vec![],
-                    body,
-                    source_text: None,
-                    span: start_span.merge(&body_span),
-                })))
-            }
-            TokenKind::LBrace => {
-                // Implicit struct literal: `{ field: value, ... }`
-                // Look ahead to check if this is a struct literal (ident followed by : or ,)
-                // vs a future block expression
-                self.advance(); // consume `{`
-
-                // Check if this looks like a struct literal
-                // Pattern: `{ ident :` or `{ ident ,` or `{ ident }` or `{ "string" :`
-                if let TokenKind::Ident(_) = self.peek_kind() {
-                    // Peek at the token after the identifier
-                    let after_ident = self.peek_nth(1);
-                    if matches!(
-                        after_ident.kind,
-                        TokenKind::Colon | TokenKind::Comma | TokenKind::RBrace
-                    ) {
-                        // This is an implicit struct literal
-                        return self.parse_struct_literal(None, start_span);
-                    }
-                }
-
-                // String literal key: `{ "field": value }`
-                if let TokenKind::StringLit(_) = self.peek_kind()
-                    && matches!(self.peek_nth(1).kind, TokenKind::Colon)
-                {
-                    return self.parse_struct_literal(None, start_span);
-                }
-
-                // Literal-value keywords as keys: `{ true: ... }` → route to struct literal for better error
-                if matches!(
-                    self.peek_kind(),
-                    TokenKind::True | TokenKind::False | TokenKind::Null
-                ) && matches!(self.peek_nth(1).kind, TokenKind::Colon)
-                {
-                    return self.parse_struct_literal(None, start_span);
-                }
-
-                // Empty struct literal: `{}`
-                if self.check(&TokenKind::RBrace) {
-                    return self.parse_struct_literal(None, start_span);
-                }
-
-                // Not a valid implicit struct literal
-                Err(ParseError {
-                    message: "implicit struct literal requires field syntax: { field: value }"
-                        .into(),
-                    span: start_span,
-                })
-            }
+            TokenKind::Or => self.parse_zero_arg_closure_expr(start_span),
+            TokenKind::LBrace => self.parse_implicit_struct_literal_expr(start_span),
             TokenKind::If => self.parse_if_expr(),
             TokenKind::Match => self.parse_match_expr(),
             TokenKind::With => self.parse_with_handler_expr(),
-            TokenKind::Hash => {
-                self.advance(); // consume '#'
-                // Parse compile-time location literals: #file, #line, #function
-                match self.peek_kind() {
-                    TokenKind::Ident(name) => {
-                        let name = name.clone();
-                        let end_span = self.advance().span;
-                        let literal = match name.as_str() {
-                            "file" => Literal::LocationFile,
-                            "line" => Literal::LocationLine,
-                            "function" => Literal::LocationFunction,
-                            "data" => Literal::DataSection,
-                            "include_str" | "include_bytes" => {
-                                let is_str = name == "include_str";
-                                self.expect(&TokenKind::LParen)?;
-                                let path = match self.peek_kind() {
-                                    TokenKind::StringLit(s) => {
-                                        let s = s.clone();
-                                        self.advance();
-                                        s
-                                    }
-                                    _ => {
-                                        return Err(ParseError {
-                                            message: format!(
-                                                "expected string literal path argument for `#{name}`"
-                                            ),
-                                            span: self.peek().span,
-                                        });
-                                    }
-                                };
-                                let close_span = self.expect(&TokenKind::RParen)?.span;
-                                self.include_paths.insert(path.clone());
-                                let lit = if is_str {
-                                    Literal::IncludeStr(path)
-                                } else {
-                                    Literal::IncludeBytes(path)
-                                };
-                                return Ok(Expr::Literal(LiteralExpr {
-                                    id: self.alloc_ast_id(),
-                                    value: lit,
-                                    span: start_span.merge(&close_span),
-                                }));
-                            }
-                            _ => {
-                                return Err(ParseError {
-                                    message: format!(
-                                        "unknown compile-time literal `#{name}`, expected `#file`, `#line`, `#function`, `#data`, `#include_str`, or `#include_bytes`"
-                                    ),
-                                    span: start_span.merge(&end_span),
-                                });
-                            }
-                        };
-                        Ok(Expr::Literal(LiteralExpr {
-                            id: self.alloc_ast_id(),
-                            value: literal,
-                            span: start_span.merge(&end_span),
-                        }))
-                    }
-                    _ => Err(ParseError {
-                        message: "expected identifier after `#` for compile-time literal".into(),
-                        span: start_span,
-                    }),
-                }
-            }
+            TokenKind::Hash => self.parse_compile_time_literal_expr(start_span),
             _ => Err(ParseError {
                 message: format!("expected expression, found {:?}", self.peek_kind()),
                 span: start_span,
             }),
         }
+    }
+
+    /// Parse `(expr)` or the unit literal `()`. The leading `(` has not been consumed.
+    fn parse_paren_or_unit_expr(&mut self, start_span: Span) -> ParseResult<Expr> {
+        self.advance(); // consume `(`
+        if self.check(&TokenKind::RParen) {
+            self.advance();
+            return Ok(Expr::Literal(LiteralExpr {
+                id: self.alloc_ast_id(),
+                value: Literal::Unit,
+                span: start_span,
+            }));
+        }
+        // Struct literals are always allowed inside parentheses.
+        let saved = self.restrict_struct_literals;
+        self.restrict_struct_literals = false;
+        let expr = self.parse_expr()?;
+        self.restrict_struct_literals = saved;
+        let end_span = self.expect(&TokenKind::RParen)?.span;
+        Ok(expr.with_span(start_span.merge(&end_span)))
+    }
+
+    /// Parse `|| body` — a zero-parameter closure. `||` (logical-or token) has
+    /// not been consumed; it is only a closure here because primary position has
+    /// no left operand for the binary operator.
+    fn parse_zero_arg_closure_expr(&mut self, start_span: Span) -> ParseResult<Expr> {
+        self.advance(); // consume `||`
+        let body = if self.check(&TokenKind::LBrace) {
+            let block = self.parse_block()?;
+            Expr::Block(Box::new(block))
+        } else {
+            self.parse_expr()?
+        };
+        let body_span = body.span();
+        Ok(Expr::Closure(Box::new(ClosureExpr {
+            id: self.alloc_ast_id(),
+            params: vec![],
+            body,
+            span: start_span.merge(&body_span),
+        })))
+    }
+
+    /// Parse an implicit (untyped) struct literal `{ field: value, ... }`.
+    /// The leading `{` has not been consumed; this method also rejects braces
+    /// that don't look like a struct literal.
+    fn parse_implicit_struct_literal_expr(&mut self, start_span: Span) -> ParseResult<Expr> {
+        self.advance(); // consume `{`
+
+        // `{ ident :` / `{ ident ,` / `{ ident }`
+        if let TokenKind::Ident(_) = self.peek_kind()
+            && matches!(
+                self.peek_nth(1).kind,
+                TokenKind::Colon | TokenKind::Comma | TokenKind::RBrace
+            )
+        {
+            return self.parse_struct_literal(None, start_span);
+        }
+
+        // `{ "field" :` — string literal field name
+        if let TokenKind::StringLit(_) = self.peek_kind()
+            && matches!(self.peek_nth(1).kind, TokenKind::Colon)
+        {
+            return self.parse_struct_literal(None, start_span);
+        }
+
+        // `{ true: ... }` — keyword used as field name; route through struct
+        // literal parser to produce a clearer error.
+        if matches!(
+            self.peek_kind(),
+            TokenKind::True | TokenKind::False | TokenKind::Null
+        ) && matches!(self.peek_nth(1).kind, TokenKind::Colon)
+        {
+            return self.parse_struct_literal(None, start_span);
+        }
+
+        // Empty struct literal `{}`.
+        if self.check(&TokenKind::RBrace) {
+            return self.parse_struct_literal(None, start_span);
+        }
+
+        Err(ParseError {
+            message: "implicit struct literal requires field syntax: { field: value }".into(),
+            span: start_span,
+        })
+    }
+
+    /// Parse a `#name` compile-time literal: `#file`, `#line`, `#function`,
+    /// `#data`, `#include_str("...")`, `#include_bytes("...")`. The leading `#`
+    /// has not been consumed.
+    fn parse_compile_time_literal_expr(&mut self, start_span: Span) -> ParseResult<Expr> {
+        self.advance(); // consume `#`
+        let TokenKind::Ident(raw_name) = self.peek_kind() else {
+            return Err(ParseError {
+                message: "expected identifier after `#` for compile-time literal".into(),
+                span: start_span,
+            });
+        };
+        let name = raw_name.clone();
+        let name_span = self.advance().span;
+
+        if name == "include_str" || name == "include_bytes" {
+            let is_str = name == "include_str";
+            self.expect(&TokenKind::LParen)?;
+            let path = match self.peek_kind() {
+                TokenKind::StringLit(s) => {
+                    let s = s.clone();
+                    self.advance();
+                    s
+                }
+                _ => {
+                    return Err(ParseError {
+                        message: format!("expected string literal path argument for `#{name}`"),
+                        span: self.peek().span,
+                    });
+                }
+            };
+            let close_span = self.expect(&TokenKind::RParen)?.span;
+            self.include_paths.insert(path.clone());
+            let value = if is_str {
+                Literal::IncludeStr(path)
+            } else {
+                Literal::IncludeBytes(path)
+            };
+            return Ok(Expr::Literal(LiteralExpr {
+                id: self.alloc_ast_id(),
+                value,
+                span: start_span.merge(&close_span),
+            }));
+        }
+
+        let value = match name.as_str() {
+            "file" => Literal::LocationFile,
+            "line" => Literal::LocationLine,
+            "function" => Literal::LocationFunction,
+            "data" => Literal::DataSection,
+            _ => {
+                return Err(ParseError {
+                    message: format!(
+                        "unknown compile-time literal `#{name}`, expected `#file`, `#line`, `#function`, `#data`, `#include_str`, or `#include_bytes`"
+                    ),
+                    span: start_span.merge(&name_span),
+                });
+            }
+        };
+        Ok(Expr::Literal(LiteralExpr {
+            id: self.alloc_ast_id(),
+            value,
+            span: start_span.merge(&name_span),
+        }))
     }
 
     /// Parse if expression: `if condition { expr } else { expr }`
@@ -3341,11 +3254,13 @@ impl Parser {
     }
 
     /// Parse an effect handler installation expression:
-    /// `with E1 = h1, E2 = h2 do { body }` or `with &mut h do { body }` (bundled).
+    /// `with E1 => h1, E2 => h2 do { body }` or `with &mut h do { body }` (bundled).
     ///
     /// Each binding is one of:
-    /// - `EffectName = expr` — install `expr` as the handler for `EffectName`.
-    /// - `expr` (no `=`) — bundled handler, used for every effect `expr` implements.
+    /// - `EffectName => expr` — install `expr` as the handler for `EffectName`.
+    ///   The `=>` reads as "case E is dispatched to expr", mirroring match arms;
+    ///   this is not an assignment.
+    /// - `expr` (no `=>`) — bundled handler, used for every effect `expr` implements.
     ///
     /// See `docs/wep-2026-04-11-effect-handler.md`.
     fn parse_with_handler_expr(&mut self) -> ParseResult<Expr> {
@@ -3390,23 +3305,23 @@ impl Parser {
     }
 
     /// Parse one binding inside a `with ... do` clause. Two shapes:
-    /// - `Effect = handler_expr` — explicit effect on the LHS. The effect is
-    ///   any type expression, so `Stdout = ...` and `Stream<u8> = ...` both
+    /// - `Effect => handler_expr` — explicit effect on the LHS. The effect is
+    ///   any type expression, so `Stdout => ...` and `Stream<u8> => ...` both
     ///   parse here. Later compiler phases decide which forms they support.
-    /// - `handler_expr` (no `=`) — bundled handler.
+    /// - `handler_expr` (no `=>`) — bundled handler.
     fn parse_effect_handler_binding(&mut self) -> ParseResult<crate::ast::EffectHandlerBinding> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
 
         // Speculatively try the explicit form. The LHS is a type, so we have
-        // to commit to type parsing only if a `=` follows; otherwise this is
+        // to commit to type parsing only if a `=>` follows; otherwise this is
         // a bundled handler whose expression starts with an identifier.
         if matches!(self.peek_kind(), TokenKind::Ident(_)) {
             let checkpoint = self.pos;
             let saved_pending_gt = self.pending_gt;
             if let Ok(ty) = self.parse_type() {
-                if self.check(&TokenKind::Eq) {
-                    self.advance(); // consume `=`
+                if self.check(&TokenKind::FatArrow) {
+                    self.advance(); // consume `=>`
                     // Handler expressions are parsed as unary expressions so
                     // we don't greedily consume the trailing `,` or `do`.
                     // Trade-off: cast / `if` / `match` expressions can't sit
@@ -3642,7 +3557,6 @@ impl Parser {
             id: self.alloc_ast_id(),
             params,
             body,
-            source_text: None,
             span: start_span.merge(&body_span),
         })))
     }
@@ -3840,25 +3754,25 @@ impl Parser {
 
     // Placeholder implementations for other declarations
 
-    fn parse_effect_decl(
+    fn parse_interface_decl(
         &mut self,
         is_pub: bool,
         attrs: Vec<Attribute>,
-    ) -> ParseResult<EffectDecl> {
+    ) -> ParseResult<InterfaceDecl> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
-        self.expect(&TokenKind::Effect)?;
+        self.expect(&TokenKind::Interface)?;
         let (name, name_span) = self.consume_ident_with_span()?;
         self.expect(&TokenKind::LBrace)?;
 
         let mut methods = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
-            methods.push(self.parse_effect_method()?);
+            methods.push(self.parse_interface_method()?);
         }
 
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 
-        Ok(EffectDecl {
+        Ok(InterfaceDecl {
             id,
             name,
             name_span,
@@ -3869,7 +3783,7 @@ impl Parser {
         })
     }
 
-    fn parse_effect_method(&mut self) -> ParseResult<EffectMethod> {
+    fn parse_interface_method(&mut self) -> ParseResult<InterfaceMethod> {
         // Parse any attributes on the method (e.g., #[cm("...")])
         let attrs = self.parse_attributes()?;
 
@@ -3902,7 +3816,7 @@ impl Parser {
 
         self.expect(&TokenKind::Semicolon)?;
 
-        Ok(EffectMethod {
+        Ok(InterfaceMethod {
             id,
             name,
             name_span,
@@ -4671,55 +4585,46 @@ impl Parser {
         })
     }
 
-    /// Parse a world import group
+    /// Parse a world import declaration (bare WIT-faithful form).
     /// ```wado
-    /// import Stdout {
-    ///     write_via_stream,
-    /// }
+    /// import Stdout;
     /// ```
     fn parse_world_import(&mut self) -> ParseResult<WorldImport> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Import)?;
-        let effect_name = self.consume_ident()?;
-        self.expect(&TokenKind::LBrace)?;
-
-        let functions =
-            self.parse_comma_separated(&TokenKind::RBrace, Self::consume_world_import_name)?;
-
+        let interface_name = self.consume_ident()?;
         let close_span = self.peek().span;
-        self.expect(&TokenKind::RBrace)?;
+        self.expect(&TokenKind::Semicolon)?;
 
         Ok(WorldImport {
-            effect_name,
-            functions,
+            interface_name,
             span: start_span.merge(&close_span),
         })
     }
 
-    /// Consume a world import function name, which can be either:
-    /// - A simple identifier: `write_via_stream`
-    /// - A qualified path: `Fields::new`
-    fn consume_world_import_name(&mut self) -> ParseResult<String> {
-        let name = self.consume_ident()?;
-        if self.check(&TokenKind::ColonColon) {
-            self.advance();
-            let method = self.consume_ident()?;
-            Ok(format!("{name}::{method}"))
-        } else {
-            Ok(name)
-        }
-    }
-
-    /// Parse a world export declaration
+    /// Parse a world export declaration.
     /// ```wado
-    /// export async fn run() -> Result<(), ()>;
+    /// export Run;                                 // interface export
+    /// export async fn run() -> Result<(), ()>;    // freestanding function export
     /// export fn get_version() -> string;
     /// ```
     fn parse_world_export(&mut self) -> ParseResult<WorldExport> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Export)?;
 
-        // Check for async keyword
+        // Distinguish interface export (`export Foo;`) from function export
+        // (`export [async] fn ...;`). `async` and `fn` start function form;
+        // a plain identifier starts interface form.
+        if !self.check(&TokenKind::Async) && !self.check(&TokenKind::Fn) {
+            let interface_name = self.consume_ident()?;
+            let close_span = self.peek().span;
+            self.expect(&TokenKind::Semicolon)?;
+            return Ok(WorldExport::Interface(WorldExportInterface {
+                interface_name,
+                span: start_span.merge(&close_span),
+            }));
+        }
+
         let is_async = if self.check(&TokenKind::Async) {
             self.advance();
             true
@@ -4743,15 +4648,16 @@ impl Parser {
             None
         };
 
+        let close_span = self.peek().span;
         self.expect(&TokenKind::Semicolon)?;
 
-        Ok(WorldExport {
+        Ok(WorldExport::Function(WorldExportFn {
             name,
             is_async,
             params,
             return_type,
-            span: start_span,
-        })
+            span: start_span.merge(&close_span),
+        }))
     }
 
     /// Parse structured template token parts into AST template parts.
@@ -5065,16 +4971,16 @@ mod tests {
         if let Item::Use(use_decl) = &module.items[0] {
             assert_eq!(use_decl.source, "wasi:cli");
             assert_eq!(use_decl.items.len(), 1);
-            if let UseItem::EffectFunctions {
-                effect_name,
+            if let UseItem::InterfaceFunctions {
+                interface_name,
                 functions,
             } = &use_decl.items[0]
             {
-                assert_eq!(effect_name, "Stdout");
+                assert_eq!(interface_name, "Stdout");
                 assert_eq!(functions.len(), 1);
                 assert_eq!(functions[0].name, "write_via_stream");
             } else {
-                panic!("expected EffectFunctions");
+                panic!("expected InterfaceFunctions");
             }
         } else {
             panic!("expected use declaration");
@@ -5221,9 +5127,7 @@ mod tests {
     fn test_world_decl() {
         let source = r"
             world CliCommand {
-                import Stdout {
-                    write_via_stream,
-                }
+                import Stdout;
 
                 export async fn run() -> Result<(), ()>;
             }
@@ -5239,11 +5143,12 @@ mod tests {
 
             // Check import
             let import = &world.imports[0];
-            assert_eq!(import.effect_name, "Stdout");
-            assert_eq!(import.functions, vec!["write_via_stream"]);
+            assert_eq!(import.interface_name, "Stdout");
 
             // Check export
-            let export = &world.exports[0];
+            let WorldExport::Function(export) = &world.exports[0] else {
+                panic!("expected function export");
+            };
             assert_eq!(export.name, "run");
             assert!(export.is_async);
             assert!(export.params.is_empty());
@@ -5254,21 +5159,35 @@ mod tests {
     }
 
     #[test]
+    fn test_world_interface_export() {
+        let source = r"
+            world Service {
+                import Stdout;
+
+                export Handler;
+            }
+        ";
+
+        let module = parse(source).unwrap();
+        if let Item::World(world) = &module.items[0] {
+            assert_eq!(world.name, "Service");
+            assert_eq!(world.exports.len(), 1);
+            let WorldExport::Interface(iface) = &world.exports[0] else {
+                panic!("expected interface export");
+            };
+            assert_eq!(iface.interface_name, "Handler");
+        } else {
+            panic!("expected world declaration");
+        }
+    }
+
+    #[test]
     fn test_world_multiple_imports_exports() {
         let source = r"
             world TestWorld {
-                import Stdout {
-                    write_via_stream,
-                }
-
-                import Stderr {
-                    write_via_stream,
-                }
-
-                import Environment {
-                    get_arguments,
-                    get_environment,
-                }
+                import Stdout;
+                import Stderr;
+                import Environment;
 
                 export async fn run() -> Result<(), ()>;
                 export fn get_version() -> string;
@@ -5282,17 +5201,11 @@ mod tests {
             assert_eq!(world.imports.len(), 3);
             assert_eq!(world.exports.len(), 2);
 
-            // Check Environment import has multiple functions
-            let env_import = &world.imports[2];
-            assert_eq!(env_import.effect_name, "Environment");
-            assert_eq!(env_import.functions.len(), 2);
-            assert_eq!(
-                env_import.functions,
-                vec!["get_arguments", "get_environment"]
-            );
+            assert_eq!(world.imports[2].interface_name, "Environment");
 
-            // Check sync export
-            let sync_export = &world.exports[1];
+            let WorldExport::Function(sync_export) = &world.exports[1] else {
+                panic!("expected function export");
+            };
             assert_eq!(sync_export.name, "get_version");
             assert!(!sync_export.is_async);
         } else {
@@ -5303,7 +5216,7 @@ mod tests {
     #[test]
     fn test_effect_with_async_method() {
         let source = r"
-            effect Http {
+            interface Http {
                 async fn get(url: String) -> Response;
                 fn status() -> i32;
             }
@@ -5311,7 +5224,7 @@ mod tests {
 
         let module = parse(source).unwrap();
 
-        if let Item::Effect(effect) = &module.items[0] {
+        if let Item::Interface(effect) = &module.items[0] {
             assert_eq!(effect.name, "Http");
             assert_eq!(effect.methods.len(), 2);
 
@@ -5323,14 +5236,14 @@ mod tests {
             assert!(!effect.methods[1].is_async);
             assert_eq!(effect.methods[1].name, "status");
         } else {
-            panic!("expected effect declaration");
+            panic!("expected interface declaration");
         }
     }
 
     #[test]
     fn test_effect_with_cm_attribute() {
         let source = r#"
-            pub effect Stdout {
+            pub interface Stdout {
                 #[cm("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream")]
                 async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
             }
@@ -5338,7 +5251,7 @@ mod tests {
 
         let module = parse(source).unwrap();
 
-        if let Item::Effect(effect) = &module.items[0] {
+        if let Item::Interface(effect) = &module.items[0] {
             assert_eq!(effect.name, "Stdout");
             assert!(effect.is_pub);
             assert_eq!(effect.methods.len(), 1);
@@ -5358,7 +5271,7 @@ mod tests {
             assert_eq!(cm.interface, "stdout");
             assert_eq!(cm.function.as_deref(), Some("write-via-stream"));
         } else {
-            panic!("expected effect declaration");
+            panic!("expected interface declaration");
         }
     }
 
@@ -5374,7 +5287,9 @@ mod tests {
 
         if let Item::World(world) = &module.items[0] {
             assert_eq!(world.exports.len(), 1);
-            let export = &world.exports[0];
+            let WorldExport::Function(export) = &world.exports[0] else {
+                panic!("expected function export");
+            };
             assert_eq!(export.name, "process");
             assert!(!export.is_async);
             assert_eq!(export.params.len(), 2);
@@ -5871,12 +5786,12 @@ line 2
         // Ensure effect methods with generic parameters parse correctly
         // (previously used a naive skip that could break on nested <>)
         let source = r"
-            effect Store {
+            interface Store {
                 fn get<K>(key: K) -> String;
             }
         ";
         let module = parse(source).unwrap();
-        if let Item::Effect(effect) = &module.items[0] {
+        if let Item::Interface(effect) = &module.items[0] {
             assert_eq!(effect.methods.len(), 1);
             assert_eq!(effect.methods[0].name, "get");
         }
@@ -6169,7 +6084,7 @@ line 2
 
     #[test]
     fn parse_with_handler_explicit_effect() {
-        let expr = parse_expr_from("with Stdout = &mut mock do { println(\"hi\"); }");
+        let expr = parse_expr_from("with Stdout => &mut mock do { println(\"hi\"); }");
         let Expr::WithHandler(w) = expr else {
             panic!("expected WithHandler, got {expr:?}");
         };
@@ -6184,7 +6099,7 @@ line 2
 
     #[test]
     fn parse_with_handler_multiple_handlers() {
-        let expr = parse_expr_from("with Stdout = &mut s, Stderr = &mut e do { f(); }");
+        let expr = parse_expr_from("with Stdout => &mut s, Stderr => &mut e do { f(); }");
         let Expr::WithHandler(w) = expr else {
             panic!("expected WithHandler");
         };
@@ -6197,7 +6112,7 @@ line 2
     fn parse_with_handler_generic_effect() {
         // Generic effect names (`Stream<u8>`) must parse cleanly; later
         // compiler phases decide whether to support them.
-        let expr = parse_expr_from("with Stream<u8> = &mut cm do { f(); }");
+        let expr = parse_expr_from("with Stream<u8> => &mut cm do { f(); }");
         let Expr::WithHandler(w) = expr else {
             panic!("expected WithHandler");
         };

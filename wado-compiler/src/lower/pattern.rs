@@ -4,8 +4,8 @@ use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::FunctionRef;
 use crate::tir::{
     CallArg, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirField,
-    TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, TypeTable,
+    TirLiteralPattern, TirLocal, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -230,20 +230,16 @@ pub(super) fn lower_patterns(
         if let Some(mut body) = func.body.take() {
             // Take ownership of the values to avoid borrow conflicts
             let local_count = func.local_count;
-            let local_types = std::mem::take(&mut func.local_types);
+            let locals = std::mem::take(&mut func.locals);
 
-            let mut lowerer = PatternLowerer::new(
-                local_count,
-                local_types,
-                &variant_case_map,
-                &struct_fields_map,
-            );
+            let mut lowerer =
+                PatternLowerer::new(local_count, locals, &variant_case_map, &struct_fields_map);
             lowerer.lower_block(&mut body, &type_table);
 
             // Put the values back
-            let (new_count, new_types) = lowerer.into_parts();
+            let (new_count, new_locals) = lowerer.into_parts();
             func.local_count = new_count;
-            func.local_types = new_types;
+            func.locals = new_locals;
             func.body = Some(body);
         }
     }
@@ -252,7 +248,7 @@ pub(super) fn lower_patterns(
 /// Pattern lowering context - tracks local allocation for a function
 struct PatternLowerer<'a> {
     local_count: u32,
-    local_types: Vec<TypeId>,
+    locals: Vec<TirLocal>,
     temp_counter: u32,
     /// Map from variant name to list of (`case_name`, `case_index`) pairs
     variant_case_map: &'a IndexMap<String, Vec<(String, u32)>>,
@@ -263,13 +259,13 @@ struct PatternLowerer<'a> {
 impl<'a> PatternLowerer<'a> {
     fn new(
         local_count: u32,
-        local_types: Vec<TypeId>,
+        locals: Vec<TirLocal>,
         variant_case_map: &'a IndexMap<String, Vec<(String, u32)>>,
         struct_fields_map: &'a IndexMap<(String, ModuleSource), Vec<TirField>>,
     ) -> Self {
         Self {
             local_count,
-            local_types,
+            locals,
             temp_counter: 0,
             variant_case_map,
             struct_fields_map,
@@ -299,16 +295,18 @@ impl<'a> PatternLowerer<'a> {
         }
     }
 
-    /// Consume the lowerer and return the final local count and types
-    fn into_parts(self) -> (u32, Vec<TypeId>) {
-        (self.local_count, self.local_types)
+    /// Consume the lowerer and return the final local count and locals.
+    fn into_parts(self) -> (u32, Vec<TirLocal>) {
+        (self.local_count, self.locals)
     }
 
-    /// Allocate a new local and return its index
+    /// Allocate a new local and return its index. Pattern temps are
+    /// synthesised — they have no source-level name, so the produced slot
+    /// uses the `__local_N` convention.
     fn alloc_local(&mut self, type_id: TypeId) -> u32 {
         let index = self.local_count;
         self.local_count += 1;
-        self.local_types.push(type_id);
+        self.locals.push(TirLocal::synth(index, type_id, false));
         index
     }
 
@@ -1611,7 +1609,7 @@ impl<'a> PatternLowerer<'a> {
 
                 // Get element types
                 let elem_types = type_table
-                    .as_tuple(type_table.get_local_type(tuple_temp_index, &self.local_types))
+                    .as_tuple(type_table.get_local_type(tuple_temp_index, &self.locals))
                     .unwrap_or_else(|| vec![TypeTable::UNKNOWN; sub_patterns.len()]);
 
                 // Create Let for each element
@@ -1625,7 +1623,7 @@ impl<'a> PatternLowerer<'a> {
                                     index: tuple_temp_index,
                                     name: tuple_temp_name.clone(),
                                 },
-                                type_table.get_local_type(tuple_temp_index, &self.local_types),
+                                type_table.get_local_type(tuple_temp_index, &self.locals),
                                 span,
                             )),
                             field_index: i as u32,
@@ -1733,7 +1731,7 @@ impl<'a> PatternLowerer<'a> {
                                     index: variant_temp_index,
                                     name: variant_temp_name,
                                 },
-                                type_table.get_local_type(variant_temp_index, &self.local_types),
+                                type_table.get_local_type(variant_temp_index, &self.locals),
                                 span,
                             )),
                             case_index: 0, // Will be refined when we have more info
@@ -1774,7 +1772,7 @@ impl<'a> PatternLowerer<'a> {
 
                 // Get field type info from struct definition
                 let struct_fields_info = self.get_struct_fields(
-                    type_table.get_local_type(struct_temp_index, &self.local_types),
+                    type_table.get_local_type(struct_temp_index, &self.locals),
                     type_table,
                 );
 
@@ -1795,7 +1793,7 @@ impl<'a> PatternLowerer<'a> {
                                     index: struct_temp_index,
                                     name: struct_temp_name.clone(),
                                 },
-                                type_table.get_local_type(struct_temp_index, &self.local_types),
+                                type_table.get_local_type(struct_temp_index, &self.locals),
                                 span,
                             )),
                             field_index: field.field_index,
@@ -1913,7 +1911,7 @@ impl<'a> PatternLowerer<'a> {
                 out.push(tuple_let);
 
                 let elem_types = type_table
-                    .as_tuple(type_table.get_local_type(tuple_temp_index, &self.local_types))
+                    .as_tuple(type_table.get_local_type(tuple_temp_index, &self.locals))
                     .unwrap_or_else(|| vec![TypeTable::UNKNOWN; sub_patterns.len()]);
 
                 for (i, (sub_pattern, elem_type)) in
@@ -1926,7 +1924,7 @@ impl<'a> PatternLowerer<'a> {
                                     index: tuple_temp_index,
                                     name: tuple_temp_name.clone(),
                                 },
-                                type_table.get_local_type(tuple_temp_index, &self.local_types),
+                                type_table.get_local_type(tuple_temp_index, &self.locals),
                                 span,
                             )),
                             field_index: i as u32,
@@ -1991,7 +1989,7 @@ impl<'a> PatternLowerer<'a> {
                                     index: variant_temp_index,
                                     name: variant_temp_name,
                                 },
-                                type_table.get_local_type(variant_temp_index, &self.local_types),
+                                type_table.get_local_type(variant_temp_index, &self.locals),
                                 span,
                             )),
                             case_index: 0,
@@ -2031,7 +2029,7 @@ impl<'a> PatternLowerer<'a> {
                 out.push(struct_let);
 
                 let struct_fields_info = self.get_struct_fields(
-                    type_table.get_local_type(struct_temp_index, &self.local_types),
+                    type_table.get_local_type(struct_temp_index, &self.locals),
                     type_table,
                 );
 
@@ -2052,7 +2050,7 @@ impl<'a> PatternLowerer<'a> {
                                     index: struct_temp_index,
                                     name: struct_temp_name.clone(),
                                 },
-                                type_table.get_local_type(struct_temp_index, &self.local_types),
+                                type_table.get_local_type(struct_temp_index, &self.locals),
                                 span,
                             )),
                             field_index: field.field_index,
@@ -3038,8 +3036,49 @@ impl<'a> PatternLowerer<'a> {
                     self.lower_expr(arg, type_table);
                 }
             }
-            TirExprKind::Closure { body, .. } => {
+            TirExprKind::Closure {
+                params,
+                body_locals,
+                body,
+                ..
+            } => {
+                // Closures have their own local-index namespace — the
+                // resolver builds each closure's `FunctionContext` with a
+                // fresh `next_local: 0`, so the body's `Local` / `Let`
+                // indices are independent of the outer function's.
+                // Pattern lowering must honour that: any temp it allocates
+                // while descending into the body has to live in the
+                // closure's namespace, otherwise the closure-functor
+                // lowering pass (`lower/closure.rs`) builds a `local_types`
+                // table where the temp's outer-scoped index collides with
+                // a real closure-scoped local, producing a closure body
+                // whose `LocalSet` targets the wrong slot.
+                //
+                // The closure carries its parameter list and the types of
+                // its body-level let-bindings (`body_locals`); the
+                // closure-scope state is their concatenation. Temps
+                // pattern lowering allocates while descending grow the
+                // local maps for the duration of the visit, then the
+                // closure-functor lowering pass re-collects them from the
+                // body's `Let`s via `collect_locals_from_block`, so we
+                // discard the updated state on the way out.
+                let saved_count = self.local_count;
+                let saved_locals = std::mem::take(&mut self.locals);
+                self.local_count = (params.len() + body_locals.len()) as u32;
+                self.locals = params
+                    .iter()
+                    .map(|(name, ty)| TirLocal {
+                        name: name.clone(),
+                        type_id: *ty,
+                        is_mut: false,
+                    })
+                    .chain(body_locals.iter().cloned())
+                    .collect();
+
                 self.lower_expr(body, type_table);
+
+                self.local_count = saved_count;
+                self.locals = saved_locals;
             }
             TirExprKind::ClosureToCanonical { functor, .. } => {
                 self.lower_expr(functor, type_table);
@@ -3081,20 +3120,25 @@ impl<'a> PatternLowerer<'a> {
             TirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should be expanded before this phase")
             }
+            TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+                unreachable!(
+                    "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+                )
+            }
         }
     }
 }
 
 /// Helper trait extension for `TypeTable` to get local type
 trait TypeTableExt {
-    fn get_local_type(&self, index: u32, local_types: &[TypeId]) -> TypeId;
+    fn get_local_type(&self, index: u32, locals: &[TirLocal]) -> TypeId;
 }
 
 impl TypeTableExt for TypeTable {
-    fn get_local_type(&self, index: u32, local_types: &[TypeId]) -> TypeId {
-        local_types
+    fn get_local_type(&self, index: u32, locals: &[TirLocal]) -> TypeId {
+        locals
             .get(index as usize)
-            .copied()
+            .map(|l| l.type_id)
             .unwrap_or(TypeTable::UNKNOWN)
     }
 }

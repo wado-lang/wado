@@ -3660,37 +3660,60 @@ N passed, N failed; N todo (M resolved) (duration)
 The `wado test` command discovers and runs tests:
 
 ```sh
-# Auto-discover and run all **/*_test.wado files recursively
+# Auto-discover every *.wado file under the project root
 wado test
 
 # Run tests in specific file(s)
 wado test path/to/file.wado
-wado test path # find path/**/*_test.wado
+wado test path                 # walk path with the discovery rules
 
-# Filter tests by name pattern
-wado test --filter "addition"
-wado test -f "string"
+# Filter discovered files by path (shell wildcard, not regex)
+wado test --filter '*addition*'
+wado test -f '*string*'
 
 # Show help
 wado test --help
 ```
 
-**Discovery:**
+**Discovery (WEP 2026-05-02):**
 
-When no files are specified, `wado test` searches for `**/*_test.wado` files recursively from the current directory.
+When no files are specified, `wado test` walks the project root for every
+`*.wado` file. The walker honours `.gitignore`, `.gitmodules`, dot-prefixed
+paths, nested `wado.toml` package boundaries, and the root manifest's
+`[test].exclude` glob list. Symbolic links are followed once each, with
+canonical-path cycle detection. Sub-packages (any directory containing its
+own `wado.toml`) are run as separate package contexts and reported with a
+`=== package: <label> ===` banner; an `=== aggregate ===` block sums the
+three axes when more than one package ran.
+
+Files without `test` blocks are still parsed and compiled; only files with
+test blocks register and run tests. Compile failures are tracked on a
+separate axis from test failures and produce a non-zero exit.
+
+**Filtering:**
+
+`--filter <pattern>` matches discovered file paths using shell wildcards
+(`*`, `?`, `[...]`); regex syntax is not supported. Wrap the term in `*`s
+to match anywhere within a path (e.g. `'*foo*'`).
 
 **Output and Exit Codes:**
 
-See Test Outcome Model above for the full output format, TODO summary, and exit code rules.
+See Test Outcome Model above for the full output format, TODO summary, and
+exit code rules. The summary prints three axes — compile, test, todo — and
+the run exits non-zero whenever any of `compile failed`, `test failed`, or
+`todo resolved` is non-zero.
 
 ### Test File Conventions
 
-By convention, test files are named with a `_test.wado` suffix:
+`*_test.wado` is the recommended convention for files that contain only
+tests, but the runner no longer requires the suffix: every `*.wado` file
+discovered under the project root is visited, and any file with `test`
+blocks contributes its tests.
 
 ```
 src/
   math.wado
-  math_test.wado      # Tests for math.wado
+  math_test.wado      # Tests for math.wado (recommended convention)
   string.wado
   string_test.wado    # Tests for string.wado
 ```
@@ -3774,27 +3797,27 @@ Effects can be defined in two ways:
 
 ```wado
 // WASI CLI effects (see wasi:cli for real definitions)
-effect Stdout {
+interface Stdout {
     fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }
 
-effect Stderr {
+interface Stderr {
     fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }
 
-effect Environment {
+interface Environment {
     fn get_environment() -> Array<[String, String]>;
     fn get_arguments() -> Array<String>;
     fn get_initial_cwd() -> Option<String>;
 }
 
 // Custom effect interfaces
-effect Http {
+interface Http {
     fn get(url: String) -> Response;
     fn post(url: String, body: String) -> Response;
 }
 
-effect Dom {
+interface Dom {
     fn query(selector: String) -> Option<Element>;
     fn create_element(tag: String) -> Element;
 }
@@ -4024,7 +4047,15 @@ See `docs/wep-2026-01-12-value-semantics-and-stores.md` for detailed design rati
 
 ### Handlers
 
-See `docs/wep-2026-01-27-effect-system-design.md` for handler syntax, resource-as-effect, and effect propagation design.
+A handler is an `impl Effect for Type` whose methods may use `resume value` to deliver a value to the suspended caller. The `with E => h do { body }` block installs `h` as the handler for effect `E` for the duration of `body`. The `=>` arrow reads as a dispatch binding ("calls to `E` go to `h`"); it is not an assignment, since each `with` pushes onto a per-effect handler chain that is restored on exit.
+
+```wado
+with Stdin => &mut mock do { ... }
+with Stdin => &mut s, Stdout => &mut o do { ... }
+with &mut bundle do { ... }                       // bundled (omits effect name)
+```
+
+See `docs/wep-2026-01-27-effect-system-design.md` for resource-as-effect and effect propagation design, and `docs/wep-2026-04-11-effect-handler.md` for handler syntax, dispatch lowering, and `MockCM`.
 
 ## World System
 
@@ -4291,7 +4322,7 @@ Use `#[cm(...)]` attributes to link Wado definitions to Component Model interfac
 ```wado
 // Link an effect interface to a CM interface
 #[cm("wasi:cli/stdout@0.3.0-rc-2025-09-16")]
-pub effect Stdout {
+pub interface Stdout {
     #[cm("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream")]
     fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }

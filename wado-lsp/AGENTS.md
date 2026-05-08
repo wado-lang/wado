@@ -9,22 +9,22 @@ Language service engine for the Wado compiler toolchain.
 
 ## Architecture
 
-| File                        | Role                                                                                             |
-| --------------------------- | ------------------------------------------------------------------------------------------------ |
-| `src/lib.rs`                | `Engine` struct: document management + query dispatch                                            |
-| `src/host.rs`               | `FilesystemCompilerHost`: default `CompilerHost` for disk-backed source loading                  |
-| `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion                                  |
-| `src/semantic_tokens.rs`    | Semantic token computation (lexer + AST classification)                                          |
-| `src/definition.rs`         | Go-to-definition via `Annotated::{ast_id_at, referenced_symbol, symbol_at}`                      |
-| `src/hover.rs`              | Hover info; locals render from the resolved AST node, items delegate to `wado_compiler::unparse` |
-| `src/references.rs`         | Find-references, walks `Annotated::iter_references` and collects matching use-sites              |
-| `src/document_highlight.rs` | Document highlight; classifies each occurrence as Read or Write via AST walk                     |
-| `src/location.rs`           | Shared cursor→`SymbolKey` resolution and span/URI helpers                                        |
-| `src/server.rs`             | `run_stdio()`: blocking stdin/stdout loop feeding the async dispatcher                           |
-| `src/server/transport.rs`   | Content-Length framing + typed JSON-RPC send/receive helpers                                     |
-| `src/server/dispatch.rs`    | LSP method routing and server-lifecycle enforcement                                              |
-| `src/server/rpc.rs`         | LSP wire types (params, capabilities, notifications)                                             |
-| `src/bin/wado-lsp.rs`       | Binary entrypoint; drives `run_stdio()` via `futures::executor::block_on`                        |
+| File                        | Role                                                                                                                      |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `src/lib.rs`                | `Engine` struct: document management + query dispatch                                                                     |
+| `src/host.rs`               | `FilesystemCompilerHost`: default `CompilerHost` for disk-backed source loading                                           |
+| `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion                                                           |
+| `src/semantic_tokens.rs`    | Semantic token computation (lexer + AST classification)                                                                   |
+| `src/definition.rs`         | Go-to-definition via `Cursor::{def_key, def_span}` and a file-path matcher for `use`/`#include` paths                     |
+| `src/hover.rs`              | Hover info; `Cursor::def_symbol` selects the binding, locals render from the AST node, items via `wado_compiler::unparse` |
+| `src/references.rs`         | Find-references via `Cursor::references_to_def`                                                                           |
+| `src/document_highlight.rs` | Document highlight; Read/Write classification consults `Annotated::is_write_target`                                       |
+| `src/location.rs`           | URI / span helpers for translating compiler positions to LSP types                                                        |
+| `src/server.rs`             | `run_stdio()`: blocking stdin/stdout loop feeding the async dispatcher                                                    |
+| `src/server/transport.rs`   | Content-Length framing + typed JSON-RPC send/receive helpers                                                              |
+| `src/server/dispatch.rs`    | LSP method routing and server-lifecycle enforcement                                                                       |
+| `src/server/rpc.rs`         | LSP wire types (params, capabilities, notifications)                                                                      |
+| `src/bin/wado-lsp.rs`       | Binary entrypoint; drives `run_stdio()` via `futures::executor::block_on`                                                 |
 
 ### Engine
 
@@ -37,6 +37,12 @@ Language service engine for the Wado compiler toolchain.
 ### Stdio server
 
 `server::run_stdio` is the binary's only entrypoint and is also re-used by `wado-cli/src/lsp.rs`. I/O is synchronous (`std::io`) so the crate builds for `wasm32-wasip2`, where tokio's `io-std` is unavailable; the dispatcher still awaits `Engine` futures between messages. Async is driven by `futures::executor::block_on` — the crate does not depend on tokio.
+
+### Bundled stdlib content
+
+Jump-to-definition into bundled stdlib modules emits `core:<name>` / `wasi:<interface>` URIs from `module_uri` (`src/location.rs`). The server advertises a `workspace.textDocumentContent` capability for the `core` and `wasi` schemes; clients call `workspace/textDocumentContent` to retrieve the source. The handler in `src/server/dispatch.rs` resolves it via `Engine::text_document_content` (`src/lib.rs`), which looks the URI up in `wado_compiler::stdlib::get_stdlib_module`. Both `core:cli` and the rfc3986-normalised form `core:/cli` are accepted.
+
+The VS Code extension (`wado-vscode/src/extension.ts`) bridges this with a `TextDocumentContentProvider` registered for both schemes, and forces opened documents to language `wado` because opaque URIs (e.g. `core:cli`) carry no extension for VS Code's language detector.
 
 ## Related Files in wado-cli
 
@@ -119,7 +125,6 @@ Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kin
 - [ ] `workspace/didChangeWatchedFiles`
 - [ ] `workspace/executeCommand`
 - [ ] `workspace/applyEdit`
-- [ ] `workspace/textDocumentContent`
 - [ ] File operations (`willCreateFiles` / `didCreateFiles` / `willRenameFiles` / `didRenameFiles` / `willDeleteFiles` / `didDeleteFiles`)
 
 ### Window Features
@@ -136,13 +141,6 @@ Known gaps and quality debts in `src/definition.rs` / `src/location.rs` not tied
 to a specific LSP request kind. Each item identifies the symptom and the
 concrete code location involved.
 
-- [ ] **Serve bundled stdlib content for `core:` / `wasi:` URIs.** `module_uri`
-      in `src/location.rs` returns `core:<name>` / `wasi:<interface>` URIs for
-      jumps into bundled stdlib modules, but LSP clients cannot open them.
-      Implement `workspace/textDocumentContent` (LSP 3.18) so the server can
-      respond with the bundled source strings from `wado_compiler::stdlib::*`.
-      As a bridge, the VS Code extension can register a
-      `TextDocumentContentProvider` for the `core:` / `wasi:` schemes.
 - [ ] **Jump-to-def for non-`Simple` `UseItem` variants.**
       `Resolver::record_use_specifier_references` (`wado-compiler/src/resolver.rs`)
       skips `UseItem::{EffectFunctions, Namespace}`. Give `UseItemSimple`
@@ -164,18 +162,18 @@ concrete code location involved.
       alias go to the alias line), while clicks on the original `name` still
       go to the source module. Update `record_use_specifier_references` and
       add coverage in `tests/definition.rs`.
-- [ ] **Make `name_span_of` total so `span_of_ast_id` can be deleted.**
-      `find_definition` currently falls through three `.or_else(...)` levels
-      (`name_span_of` → `symbol.span` → `span_of_ast_id`) because
-      `name_span_of` does not cover every addressable `AstId`. The final
-      `span_of_ast_id` fallback in `src/definition.rs` only walks top-level
-      `Item`s, so struct fields, impl methods, and enum/variant cases can
-      silently fall through. Extend `Annotated::name_span_of` to return a
-      `Span` for every `AstId` that can appear as a definition target.
-- [ ] **Split `module_uri` into display-vs-navigation helpers.** The current
-      single helper in `src/location.rs` is used by both CLI output (where
-      `core:<name>` is a readable pointer) and by LSP responses (where the
-      client cannot open it). Introduce `module_display_uri` for CLI /
-      informational use and keep `module_uri` strictly for URIs a client can
-      open (returning `None` for unopenable stdlib modules until
-      `workspace/textDocumentContent` lands).
+- [ ] **Make `name_span_of` total enough to drop the `def_span` fallback chain.**
+      `Cursor::def_span` falls through three levels (`name_span_of` →
+      `symbol.span` → `span_of_key`) because `name_span_of` does not cover
+      every addressable `AstId` (e.g. anonymous `impl` blocks, `Item::Resource`,
+      `Item::Test` have no dedicated `name_span` field). Either give every
+      decl-bearing AST node a `name_span` so `name_span_of` becomes total,
+      or accept the fallback and remove this TODO.
+- [ ] **Serve bundled `.wat` / `.wasm` assets via `workspace/textDocumentContent`.**
+      `core:` / `wasi:` source modules are now openable, but the
+      `ModuleSource::Wasm { path, .. }` arm of `module_uri` in
+      `src/location.rs` still returns the import path verbatim — clients have
+      no way to open `core:libm.wat`. Extend `Engine::text_document_content`
+      to dispatch to `wado_compiler::stdlib::get_stdlib_wasm_asset` for `.wat`
+      assets (text) and either disassemble or skip `.wasm` (binary). Decide
+      whether to advertise additional schemes or reuse `core:` / `wasi:`.

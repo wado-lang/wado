@@ -7,7 +7,7 @@
 //! type, but the call itself remains a generic builtin — it cannot be
 //! lowered to Wasm directly. This module walks the monomorphised TIR,
 //! finds the calls, and replaces each with the equivalent inline lift
-//! code produced by [`synthesize_lift_with_context`], parameterised by
+//! code produced by [`synthesize_lift`], parameterised by
 //! the concrete return type of that call site.
 //!
 //! The pass runs as part of `lower` (after monomorphise, before boxing
@@ -24,17 +24,20 @@ use std::cell::RefCell;
 use crate::ast::{self, Type};
 use crate::component_model::WasiRegistry;
 use crate::name::ModuleSource;
-use crate::synthesis::cm_binding::{LiftContext, synthesize_lift_with_context};
+use crate::synthesis::cm_binding::{LiftContext, synthesize_lift};
 use crate::tir::{
-    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirModule, TirStmt, TirStmtKind,
-    TypeId, TypeTable,
+    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirLocal, TirModule, TirStmt,
+    TirStmtKind, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
 
 /// Expand all occurrences of `builtin::cm_lift_async_result::<T>(outptr)`
 /// in `module` into inline lift code.
-pub fn expand_cm_intrinsics(module: &mut TirModule) {
+pub fn expand_cm_intrinsics(
+    module: &mut TirModule,
+    interner: &RefCell<crate::name::ModuleSourceInterner>,
+) {
     // Acquire a static reference to the WASI registry — lift of WASI
     // variants / records needs it for layout information. Reusing the
     // shared registry avoids the cost of rebuilding from stdlib.
@@ -48,15 +51,16 @@ pub fn expand_cm_intrinsics(module: &mut TirModule) {
             continue;
         }
         let mut next_local = func.local_count;
-        let mut local_types = std::mem::take(&mut func.local_types);
+        let mut locals = std::mem::take(&mut func.locals);
         let mut body = func.body.take().expect("body checked above");
         let fn_name = func.name.clone();
         {
             let mut rewriter = Rewriter {
                 next_local: &mut next_local,
-                local_types: &mut local_types,
+                locals: &mut locals,
                 type_table: &type_table,
                 wasi_registry,
+                interner,
                 rewrite_count: 0,
                 function_name: &fn_name,
             };
@@ -65,15 +69,16 @@ pub fn expand_cm_intrinsics(module: &mut TirModule) {
         }
         func.body = Some(body);
         func.local_count = next_local;
-        func.local_types = local_types;
+        func.locals = locals;
     }
 }
 
 struct Rewriter<'a> {
     next_local: &'a mut u32,
-    local_types: &'a mut Vec<TypeId>,
+    locals: &'a mut Vec<TirLocal>,
     type_table: &'a RefCell<TypeTable>,
     wasi_registry: &'a WasiRegistry,
+    interner: &'a RefCell<crate::name::ModuleSourceInterner>,
     rewrite_count: u32,
     #[allow(dead_code)]
     function_name: &'a str,
@@ -108,16 +113,17 @@ impl TirMutVisitor for Rewriter<'_> {
             }
         };
         let mut stmts: Vec<TirStmt> = Vec::new();
-        let lifted = synthesize_lift_with_context(
+        let lifted = synthesize_lift(
             &ast_type,
             addr_expr,
             self.next_local,
             &mut stmts,
-            self.local_types,
+            self.locals,
             &LiftContext {
                 wasi_registry: self.wasi_registry,
                 type_table: self.type_table,
                 cm_package: &wasi_pkg,
+                interner: self.interner,
             },
         );
 
@@ -257,8 +263,8 @@ fn type_id_to_ast_type_resolved(
 ///
 /// Used to disambiguate WASI types that share a name across packages —
 /// for example `wasi:cli/ErrorCode` vs `wasi:http/ErrorCode`. Without
-/// a package hint, `synthesize_lift_with_context` falls back to
-/// unscoped lookup and picks an arbitrary match.
+/// a package hint, `synthesize_lift` falls back to unscoped lookup
+/// and picks an arbitrary match.
 fn infer_wasi_package(type_id: TypeId, type_table: &TypeTable) -> Option<String> {
     let resolved = type_table.get(type_id).clone();
     match resolved {

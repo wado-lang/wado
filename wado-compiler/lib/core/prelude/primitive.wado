@@ -5,6 +5,8 @@
 //
 // This module intentionally does NOT depend on core:internal to keep the
 // dependency structure simple.
+#![no_prelude]
+#![stdlib("core:prelude/primitive.wado")]
 
 use {
     check_special,
@@ -201,6 +203,12 @@ fn write_u64_base_digits(arr: builtin::array<u8>, offset: i32, val_i64: i64, dig
     }
 }
 
+
+impl () {
+    pub fn to_string(&self) -> String {
+        return "()";
+    }
+}
 
 impl bool {
     fn fmt_into(&self, f: &mut Formatter) {
@@ -1490,6 +1498,18 @@ impl f64 {
     }
 }
 
+impl Display for () {
+    pub fn fmt(&self, f: &mut Formatter) {
+        f.write_str("()");
+    }
+}
+
+impl DisplayAlt for () {
+    pub fn fmt_alt(&self, f: &mut Formatter) {
+        f.write_str("()");
+    }
+}
+
 impl Display for bool {
     pub fn fmt(&self, f: &mut Formatter) {
         self.fmt_into(f);
@@ -1565,6 +1585,12 @@ impl Display for f32 {
 impl Display for f64 {
     pub fn fmt(&self, f: &mut Formatter) {
         self.fmt_into(f);
+    }
+}
+
+impl Inspect for () {
+    pub fn inspect(&self, f: &mut Formatter) {
+        f.write_str("()");
     }
 }
 
@@ -1660,6 +1686,11 @@ impl Inspect for f64 {
     }
 }
 
+impl InspectAlt for () {
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
+}
 impl InspectAlt for bool {
     pub fn inspect_alt(&self, f: &mut Formatter) {
         self.inspect(f);

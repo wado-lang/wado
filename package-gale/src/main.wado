@@ -88,7 +88,7 @@ fn cmd_gen(paths: Array<String>, options: &GenerateOptions) with Stdout, Stderr,
         grammars.push(grammar);
     }
 
-    let merged = merge_grammars(grammars);
+    let mut merged = merge_grammars(grammars);
     // Run ANTLR4-compatible semantic rule-reference validation after the
     // split-grammar halves are combined. This is the same check ANTLR4's
     // `SymbolChecks.checkForUnresolvedRuleRefs` performs; we defer it
@@ -98,7 +98,7 @@ fn cmd_gen(paths: Array<String>, options: &GenerateOptions) with Stdout, Stderr,
         eprintln(`gale: {e.message}`);
         return;
     }
-    print(generate(&merged, options));
+    print(generate(&mut merged, options));
 }
 
 fn cmd_dump(paths: Array<String>, rule_filter: &Option<String>) with Stdout, Stderr, Preopens {

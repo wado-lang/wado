@@ -13,6 +13,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Resolver;
+use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError};
 use super::util;
 
@@ -195,8 +196,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         let struct_type = target_type;
 
                         let struct_field_types: Vec<(String, TypeId)> = self
-                            .struct_fields
-                            .get(&name)
+                            .lookup_struct_fields(&name)
                             .map(|info| {
                                 info.fields
                                     .iter()
@@ -207,7 +207,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                         // Check field visibility for cross-module struct literal
                         if module_source != self.current_module_source
-                            && let Some(struct_info) = self.struct_fields.get(&name)
+                            && let Some(struct_info) = self.lookup_struct_fields(&name)
                         {
                             for (fname, _, is_pub) in &struct_info.fields {
                                 if !is_pub && struct_lit.fields.iter().any(|f| f.name == *fname) {
@@ -307,7 +307,49 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .is_some_and(|inner| inner == TypeTable::UNKNOWN)
                     && type_table.as_option(type_id).is_some()
             };
-            if !is_null_to_option {
+            // Function-type compatibility is structural over params and return,
+            // ignoring effects (see `typecheck::check_assignable` rule 7). This
+            // lets `let c: fn() with Stdout = || { ... }` accept a closure with
+            // a synthesized `fn() with []` type without a spurious mismatch,
+            // while still rejecting genuine signature mismatches such as a
+            // closure with the wrong arity or parameter types. `check_assignable`
+            // returns `Deferred` whenever either side contains a type param
+            // (rule 3), so for generic signatures like `fn(T) -> T` we fall back
+            // to a direct `TypeId` comparison of params and return — that
+            // accepts identical generic shapes that differ only in effects
+            // without admitting any type-param-to-concrete mismatches.
+            let is_compatible_fn_type = {
+                let type_table = self.type_table.borrow();
+                if let (
+                    ResolvedType::Function {
+                        params: actual_params,
+                        return_type: actual_return,
+                        ..
+                    },
+                    ResolvedType::Function {
+                        params: expected_params,
+                        return_type: expected_return,
+                        ..
+                    },
+                ) = (type_table.get(value.type_id), type_table.get(type_id))
+                {
+                    match check_assignable(value.type_id, type_id, &type_table) {
+                        TypeCheckResult::Compatible => true,
+                        TypeCheckResult::Deferred => {
+                            actual_params.len() == expected_params.len()
+                                && actual_params
+                                    .iter()
+                                    .zip(expected_params.iter())
+                                    .all(|(a, e)| a == e)
+                                && actual_return == expected_return
+                        }
+                        TypeCheckResult::Incompatible => false,
+                    }
+                } else {
+                    false
+                }
+            };
+            if !is_null_to_option && !is_compatible_fn_type {
                 let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: self.type_table.borrow().type_name(type_id),
                     found: self.type_table.borrow().type_name(value.type_id),
@@ -398,8 +440,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 )
             }
             ast::Pattern::Wildcard => {
-                // Wildcard pattern: let _ = expr; - evaluate but don't bind
-                TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
+                // `let _ = expr;` — evaluate the value for side effects, then
+                // discard the result. Lower to LetDestructure with a Wildcard
+                // pattern (rather than a bare `TirStmtKind::Expr(value)`) so
+                // that the surrounding block's type inference does not treat
+                // the discarded expression as a trailing block-value
+                // (`Expr::Block` resolver picks up trailing `TirStmtKind::Expr`
+                // as the block's type).
+                TirStmt::new(
+                    TirStmtKind::LetDestructure {
+                        pattern: TirPattern::Wildcard,
+                        is_mut: let_stmt.is_mut,
+                        value,
+                    },
+                    let_stmt.span,
+                )
             }
             _ => {
                 self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span);
@@ -519,16 +574,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let resolved = self.type_table.borrow().get(type_id).clone();
         match &resolved {
             ResolvedType::Enum { name, .. } => self
-                .enum_cases
-                .get(name)
+                .lookup_enum_case(name)
                 .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
             ResolvedType::Variant { name, .. } => self
-                .variant_cases
-                .get(name)
+                .lookup_variant_case(name)
                 .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
             ResolvedType::GenericInstance { name, .. } => self
-                .variant_cases
-                .get(name)
+                .lookup_variant_case(name)
                 .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
             _ => false,
         }
@@ -726,7 +778,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Exhaustiveness check: without `..`, all fields must be listed
                 if !has_rest
                     && let Some(ref sname) = struct_name
-                    && let Some(struct_info) = self.struct_fields.get(sname)
+                    && let Some(struct_info) = self.lookup_struct_fields(sname)
                 {
                     let total_fields = struct_info.fields.len();
                     if fields.len() != total_fields {
@@ -1305,16 +1357,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         });
                     }
                     // Look up the enum case index
-                    if let Some(enum_info) = self.enum_cases.get(name).cloned() {
+                    if let Some(enum_info) = self.lookup_enum_case(name).cloned() {
                         if let Some(case_data) = enum_info.find_case(variant_name).cloned() {
                             // Record pattern's case-name identifier -> enum case decl
                             if let Some(id) = name_id {
-                                self.record_reference_to_key(
+                                self.record_reference_to_decl(
                                     *id,
-                                    crate::symbol::SymbolKey::new(
-                                        enum_info.module_source,
-                                        case_data.ast_id,
-                                    ),
+                                    &enum_info.module_source,
+                                    case_data.ast_id,
                                 );
                             }
                             let _ = name_span;
@@ -1352,28 +1402,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // span so LSP jump-to-def from the pattern lands on the case decl.
                 let variant_type_name: Option<String> = match &resolved_type {
                     ResolvedType::Variant { name, .. } => Some(name.clone()),
-                    ResolvedType::GenericInstance { name, .. }
-                        if self.variant_cases.contains_key(name) =>
-                    {
+                    ResolvedType::GenericInstance { name, .. } if self.contains_variant(name) => {
                         Some(name.clone())
                     }
                     _ => None,
                 };
                 if let Some(id) = name_id
                     && let Some(type_name) = variant_type_name.as_ref()
-                    && let Some(variant_info) = self.variant_cases.get(type_name).cloned()
+                    && let Some(variant_info) = self.lookup_variant_case(type_name).cloned()
                     && let Some(case_data) = variant_info
                         .cases
                         .iter()
                         .find(|c| c.name == *variant_name)
                         .cloned()
                 {
-                    self.record_reference_to_key(
+                    self.record_reference_to_decl(
                         *id,
-                        crate::symbol::SymbolKey::new(
-                            variant_info.module_source.clone(),
-                            case_data.ast_id,
-                        ),
+                        &variant_info.module_source,
+                        case_data.ast_id,
                     );
                 }
                 let _ = name_span;
@@ -1390,7 +1436,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         name, type_args, ..
                     } => {
                         // Check if this is a variant (not a struct)
-                        if self.variant_cases.contains_key(name) {
+                        if self.contains_variant(name) {
                             self.get_variant_case_payload_type(name, variant_name, type_args, *span)
                         } else {
                             let _ = self.logger.error(TypeError::PatternTypeMismatch {
@@ -1497,7 +1543,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         }
                     };
                     if let Some(ref sname) = struct_name
-                        && let Some(struct_info) = self.struct_fields.get(sname)
+                        && let Some(struct_info) = self.lookup_struct_fields(sname)
                     {
                         let total_fields = struct_info.fields.len();
                         if fields.len() != total_fields {
@@ -1637,12 +1683,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let resolved = self.type_table.borrow().get(scrutinee_type).clone();
         let variant_name = match &resolved {
             ResolvedType::Variant { name, .. } => Some(name.clone()),
-            ResolvedType::GenericInstance { name, .. } if self.variant_cases.contains_key(name) => {
+            ResolvedType::GenericInstance { name, .. } if self.contains_variant(name) => {
                 Some(name.clone())
             }
             _ => None,
         }?;
-        let variant_info = self.variant_cases.get(&variant_name)?;
+        let variant_info = self.lookup_variant_case(&variant_name)?;
         if variant_info.cases.iter().any(|c| c.name == "None") {
             Some(TirPattern::Variant {
                 enum_type: scrutinee_type,
@@ -1766,7 +1812,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         span: Span,
     ) -> TypeId {
         // Clone payload first to avoid borrow conflict with substitute_type_params
-        let payload_opt = self.variant_cases.get(variant_name).and_then(|info| {
+        let payload_opt = self.lookup_variant_case(variant_name).and_then(|info| {
             info.cases
                 .iter()
                 .find(|case| case.name == case_name)
@@ -1779,7 +1825,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Check if variant exists but case not found
-        if self.variant_cases.contains_key(variant_name) {
+        if self.contains_variant(variant_name) {
             let _ = self.logger.error(TypeError::PatternTypeMismatch {
                 expected: format!("valid case of variant {variant_name}"),
                 found: case_name.to_string(),

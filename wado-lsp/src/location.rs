@@ -3,7 +3,7 @@
 
 use wado_compiler::annotate::Annotated;
 use wado_compiler::name::ModuleSource;
-use wado_compiler::symbol::{Symbol, SymbolKey};
+use wado_compiler::symbol::Symbol;
 use wado_compiler::token::Span;
 
 use crate::diagnostics::{Position, Range};
@@ -43,16 +43,16 @@ pub(crate) fn module_uri(
         ModuleSource::Local { path } => Some(resolve_local_uri(path, request_uri)),
         ModuleSource::Core { name } => Some(format!("core:{name}")),
         ModuleSource::Wasi { interface } => Some(format!("wasi:{interface}")),
-        ModuleSource::Remote { url } => Some(url.clone()),
+        ModuleSource::Remote { url } => Some(url.to_string()),
         // Kiln-redirected modules already carry a fully-qualified URI;
         // hand it to the LSP client unchanged.
-        ModuleSource::Redirected { uri } => Some(uri.clone()),
+        ModuleSource::Redirected { uri } => Some(uri.to_string()),
         // Wasm assets (`.wat`/`.wasm` imported via `with { type: ... }`)
         // expose their canonical path; opening these in the editor isn't
         // useful (binary `.wasm`) and stdlib `.wat` paths can't be served
         // until `workspace/textDocumentContent` lands. Emit the path so
         // CLI consumers can still see the reference site.
-        ModuleSource::Wasm { path, .. } => Some(path.clone()),
+        ModuleSource::Wasm { path, .. } => Some(path.to_string()),
     }
 }
 
@@ -99,26 +99,4 @@ pub(crate) fn span_to_range(span: &Span) -> Range {
             character: span.end_column.saturating_sub(1) as u32,
         },
     }
-}
-
-/// Resolve the cursor at `(line, col)` to the [`SymbolKey`] of the binding it
-/// names — either via use→def lookup or because the cursor lands directly on a
-/// declared symbol. Returns `None` when the cursor is not on a name.
-///
-/// `line` and `col` are 1-based to match compiler conventions.
-pub(crate) fn resolve_def_key(
-    annotated: &Annotated,
-    module: &ModuleSource,
-    line: usize,
-    col: usize,
-) -> Option<SymbolKey> {
-    let ast_id = annotated.ast_id_at(module, line, col)?;
-    let cursor_key = SymbolKey::new(module.clone(), ast_id);
-    if let Some(def) = annotated.referenced_symbol(&cursor_key) {
-        return Some(def);
-    }
-    if annotated.symbol_at(&cursor_key).is_some() {
-        return Some(cursor_key);
-    }
-    None
 }

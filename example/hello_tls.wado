@@ -1,21 +1,28 @@
 // Raw TLS example: fetch https://httpbin.org/get directly over TCP + wasi:tls.
 //
-// Port of wasmtime's p3_tls_sample_application.rs. Unlike example/http-get.wado
+// Port of wasmtime's p3_tls_sample_application.rs. Unlike example/http_get.wado
 // (which uses the high-level wasi:http Client), this example wires a wasi:tls
 // Connector between a wasi:sockets TcpSocket and the application's own byte
 // streams, then speaks HTTP/1.1 by hand.
 //
-// Status: the bindings in wado-compiler/lib/wasi/tls/ exist but are not yet
-// reachable from user code. To actually compile and run this example you still
-// need to:
-//   1. Register "wasi:tls", "wasi:tls/client.wado", "wasi:tls/types.wado" and
-//      "wasi:tls/worlds.wado" in wado-compiler/src/stdlib.rs (next to the
-//      existing wasi:sockets entries).
-//   2. Link wasmtime-wasi-tls into wado-cli/src/runtime.rs so the host can
-//      satisfy the wasi:tls imports at runtime.
-//   3. Ensure the target CLI world imports wasi:sockets and wasi:tls.
+// Status: most of the plumbing now exists — the wasi:tls bindings are
+// registered in `wado-compiler/src/stdlib.rs`, `wasmtime-wasi-tls` is linked
+// into both `wado-cli/src/runtime.rs` and the e2e test harness, and a smoke
+// fixture (`wasi_tls_import.wado`) verifies that user code can import wasi:tls
+// types and call `Connector::new`. What still blocks compiling THIS file:
+//   1. The codegen lowers `Result<T, E>` by always reusing the canonical
+//      `wasi:cli/types#error-code` enum for `E`. wasi:tls's `Future<Result<(),
+//      Error>>` (where `Error` is the `wasi:tls/types#error` resource) needs
+//      Result lowering that respects a non-`error-code` E. This shows up as a
+//      Wasm validation failure ("export name `[constructor]connector` is not
+//      valid / resource used in function does not have a name in this
+//      context").
+//   2. The default `wasi:cli/command` world does not declare wasi:tls imports.
+//      Once (1) is fixed, either extend `wado-from-idl` to merge wasi:tls into
+//      the cli world or define a separate combined world (e.g.
+//      `wado:cli/command-tls`) selected via `--world`.
 //
-// Usage (once the above is wired up):
+// Usage (once the above are unblocked):
 //   cargo run --bin wado -- run example/hello_tls.wado
 #![TODO]
 use { println, Stdout } from "core:cli";

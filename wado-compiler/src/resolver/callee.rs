@@ -52,15 +52,16 @@ impl CalleeRef {
     }
 
     /// A callee reached through a namespace-qualified call `Prefix::name`
-    /// where `Prefix` is a module path (e.g. `Stdout::write`). The `prefix`
-    /// is treated as a `ModuleSource::Local` path for codegen routing.
-    pub fn local_namespace(prefix: impl Into<String>, name: impl Into<String>) -> Self {
-        Self::new(
-            ModuleSource::Local {
-                path: prefix.into(),
-            },
-            name,
-        )
+    /// where `Prefix` is a module path (e.g. `Stdout::write`). The
+    /// `prefix` is interned through the resolver's
+    /// [`crate::name::ModuleSourceInterner`] and wrapped in a
+    /// `ModuleSource::Local`.
+    pub fn local_namespace(
+        interner: &mut crate::name::ModuleSourceInterner,
+        prefix: &str,
+        name: impl Into<String>,
+    ) -> Self {
+        Self::new(interner.local(prefix), name)
     }
 }
 

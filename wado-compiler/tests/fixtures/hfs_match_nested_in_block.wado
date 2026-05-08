@@ -1,0 +1,47 @@
+// Regression: a `Match` nested inside another expression position
+// (here, a labeled block expression that evaluates to a value used by
+// an outer expression). Before per-call-site sync, the surrounding
+// stmt's whole-stmt sync would clobber the scalar-update arm because
+// the nested match was not at the stmt's top level.
+//
+// Each iteration runs:
+//   - scalar update arm (i even) sets b.v += 1 inside the labeled block.
+//   - call arm (i odd) runs external_inc which sets b.v += 10.
+// 4 iterations: i=0 +1, i=1 +10, i=2 +1, i=3 +10 → b.v = 22.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    v: i32,
+    pad: i32,
+}
+
+#[inline(never)]
+fn external_inc(b: &mut Buf) {
+    b.v = b.v + 10;
+}
+
+export fn run() with Stdout {
+    let mut b = Buf { v: 0, pad: 0 };
+    let mut i = 0;
+    while i < 4 {
+        b.v = b.v + 0;
+        b.v = b.v + 0;
+        let _result = scope: {
+            match i % 2 {
+                0 => b.v = b.v + 1,
+                _ => external_inc(&mut b),
+            }
+            break scope: 1;
+        };
+        b.v = b.v + 0;
+        i = i + 1;
+    }
+    println(`{b.v}`);
+}
+
+__DATA__
+{
+    "stdout": "22\n",
+    "wir_expect:O2": ["let __hfs_v_"]
+}

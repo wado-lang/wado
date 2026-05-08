@@ -8,9 +8,9 @@
 use crate::ast::{
     AssertStmt, AssignExpr, AstId, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    ConditionElement, ContinueStmt, EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr,
-    ForOfStmt, ForStmt, FormatSpec, Function, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock,
-    IndexExpr, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
+    ConditionElement, ContinueStmt, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
+    FormatSpec, Function, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, IndexExpr,
+    InterfaceDecl, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
     MatchExpr, MethodCallExpr, Module, Newtype, Pattern, ReturnStmt, StaticMethodCallExpr, Stmt,
     StructDecl, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplatePart,
     TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseItem,
@@ -178,7 +178,7 @@ fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
         Item::Variant(v) => Item::Variant(v.clone()),
         Item::Flags(f) => Item::Flags(f.clone()),
         Item::Newtype(t) => Item::Newtype(desugar_newtype(t)),
-        Item::Effect(e) => Item::Effect(desugar_effect(e)),
+        Item::Interface(e) => Item::Interface(desugar_interface(e)),
         Item::Use(u) => Item::Use(u.clone()),
         Item::Resource(r) => Item::Resource(r.clone()),
         Item::World(w) => Item::World(w.clone()),
@@ -293,7 +293,7 @@ fn desugar_newtype(t: &Newtype) -> Newtype {
     t.clone()
 }
 
-fn desugar_effect(e: &EffectDecl) -> EffectDecl {
+fn desugar_interface(e: &InterfaceDecl) -> InterfaceDecl {
     e.clone()
 }
 
@@ -644,16 +644,12 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                 .collect(),
             span: m.span,
         })),
-        Expr::Closure(c) => {
-            let source_text = crate::unparse::unparse_expr_simple(&Expr::Closure(c.clone()));
-            Expr::Closure(Box::new(ClosureExpr {
-                id: c.id,
-                params: c.params.clone(),
-                body: desugar_expr(&c.body),
-                source_text: Some(source_text),
-                span: c.span,
-            }))
-        }
+        Expr::Closure(c) => Expr::Closure(Box::new(ClosureExpr {
+            id: c.id,
+            params: c.params.clone(),
+            body: desugar_expr(&c.body),
+            span: c.span,
+        })),
         Expr::TemplateString(t) => Expr::TemplateString(Box::new(desugar_template_string(t))),
         Expr::Cast(c) => Expr::Cast(Box::new(CastExpr {
             id: c.id,

@@ -1,0 +1,29 @@
+// Test: Result<T, E> where E is a wasi resource (wasi:tls/types#error).
+//
+// Without the codegen fix in `emit_cm_val_type`'s Result branch the validator
+// rejects this with:
+//   `export name '[constructor]connector' is not valid:
+//    resource used in function does not have a name in this context`
+// because `Result`'s E was always lowered to `wasi:cli/types#error-code`,
+// even when the Wado-side type parameter was a resource (own/borrow).
+//
+// `Connector::connect(this, server-name)` is the simplest call that returns
+// `AsyncCall<Result<(), Error>>` in the bindings — `Connector::send` and
+// `Connector::receive` exercise the same path through `Future<Result<…>>`.
+//
+// At runtime the host's TLS connect will fail because the connector has no
+// streams wired up, so the program exits via the `Err` arm without raising
+// the catastrophic Wasm-trap path.
+use { println, Stdout } from "core:cli";
+use { Connector, Error } from "wasi:tls";
+
+export fn run() with Stdout, Connector, Error {
+    let conn = Connector::new();
+    match Connector::connect(conn, "example.com").wait() {
+        Ok(_) => println("connected"),
+        Err(_) => println("connect failed"),
+    }
+}
+
+__DATA__
+{"stdout": "connect failed\n"}

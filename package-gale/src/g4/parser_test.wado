@@ -1361,6 +1361,62 @@ r : A<foo=> ;";
     assert g.parser_rules[0].alternatives.len() == 1;
 }
 
+test "element options on action block attach to the alternative" {
+    // ANTLR4 attaches `<...>` immediately after `{ ... }` to the action
+    // element. The canonical use is `<p=N>` overriding the precedence of a
+    // left-recursive alt. Gale discards action-body source (host language;
+    // Stage C territory), so the action element has no IR slot of its own,
+    // and we promote the options up to the enclosing `Alternative.options`
+    // — preserving the alt-level metadata that downstream codegen needs.
+    let input = "grammar T;
+e : a=e op=('+'|'-') b=e {}<p=3>
+  | INT
+  ;";
+    let g = parse(input).unwrap();
+    let alt = &g.parser_rules[0].alternatives[0];
+    assert alt.options.len() == 1;
+    assert alt.options[0].name == "p";
+    assert_option_int(&alt.options[0], 3);
+    assert alt.elements.len() == 3;
+}
+
+test "element options on semantic predicate attach to the alternative" {
+    // `<fail='custom message'>` after `{ ... }?` is the predicate-failure
+    // override documented in `vendor/antlr4/doc/predicates.md`. Gale
+    // discards predicate bodies, so the option is promoted to the
+    // alternative just like the action-block case above.
+    let input = "grammar T;
+a : a ID {pred}?<fail='custom message'>
+  | ID
+  ;";
+    let g = parse(input).unwrap();
+    let alt = &g.parser_rules[0].alternatives[0];
+    assert alt.options.len() == 1;
+    assert alt.options[0].name == "fail";
+    assert_option_str(&alt.options[0], "custom message");
+    assert alt.elements.len() == 2;
+}
+
+test "element options on multiple actions and predicates merge into the alternative" {
+    // Real-world LR rule from antlr4 runtime-testsuite:
+    //   LeftRecursion/MultipleActionsPredicatesOptions_1
+    //     e : a=e op=('+'|'-') b=e  {}<p=3>{pred}?<fail='Message'>
+    // Both option blocks must be recognised, and each must be attributed
+    // to the surrounding alternative since the action/predicate elements
+    // are themselves discarded.
+    let input = "grammar T;
+e : a=e op=('+'|'-') b=e  {}<p=3>{pred}?<fail='Message'>
+  | INT
+  ;";
+    let g = parse(input).unwrap();
+    let alt = &g.parser_rules[0].alternatives[0];
+    assert alt.options.len() == 2;
+    assert alt.options[0].name == "p";
+    assert_option_int(&alt.options[0], 3);
+    assert alt.options[1].name == "fail";
+    assert_option_str(&alt.options[1], "Message");
+}
+
 test "parse_checked rejects undefined parser rule reference" {
     // ANTLR4 SymbolChecks.checkForUnresolvedRuleRefs: every rule reference
     // must resolve to a defined rule in the same translation unit
@@ -1511,6 +1567,36 @@ expr : <assoc=right> expr '**' expr | INT ;
 INT : [0-9]+ ;";
     let g = parse(input).unwrap();
     assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with non-greedy optional ?? on rule ref" {
+    let input = "grammar Test;
+a : 'x' b ?? ;
+b : 'y' ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 2;
+    if let Repeat(r) = &elems[1] {
+        assert r.kind == RepeatKind::Optional;
+        assert r.non_greedy == true, "expected ?? to mark Optional repeat as non_greedy";
+    } else {
+        panic("expected Repeat at index 1");
+    }
+}
+
+test "lexer rule with non-greedy optional ?? on rule ref" {
+    let input = "lexer grammar L;
+CMT : '//' .*? '\\n' CMT?? ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    let elems = &body[0].elements;
+    let last_idx = elems.len() - 1;
+    if let Repeat(r) = elems[last_idx] {
+        assert r.kind == RepeatKind::Optional;
+        assert r.non_greedy == true, "expected ?? to mark Optional lexer repeat as non_greedy";
+    } else {
+        panic("expected last lexer element to be a Repeat");
+    }
 }
 
 fn assert_option_ident(opt: &GrammarOption, expected: String) {

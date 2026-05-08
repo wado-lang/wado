@@ -3,3 +3,25 @@ name = "gale"
 version = "0.1.0"
 command = "src/main.wado"
 generator = "src/generator.wado"
+
+[test]
+# `tests/kiln-consumer/` is a sub-package whose `src/main.wado` only
+# compiles when its `with { generator: ... }` `use` is resolved against a
+# path layout the universal `wado test` walker does not currently match
+# (the Kiln redirect's `./grammar.g4` resolves relative to the importing
+# file's dir, but the file lives in `src/` while the grammar lives one
+# level up). Cargo-side tests in `wado-cli/tests/kiln_*.rs` already cover
+# the pipeline; keep it out of discovery until the path-resolution gap is
+# fixed independently.
+#
+# `build/` holds Kiln intermediates. For split grammars (e.g.
+# `css3Parser.g4` alone, no lexer half) the parser-only intermediate
+# references TK_<lexer-rule> globals that are only declared once Kiln
+# merges the two halves. Compiling the intermediate standalone fails
+# with "or-pattern alternatives must bind the same names" because the
+# undeclared TK_* identifiers fall through to name-binding patterns
+# inside `_gale_kind_set_*` helpers. The intermediate is a build
+# artefact, not a source file (gitignored at the repo root); the
+# `wado test` walker should ignore `build/` but currently doesn't, so
+# we exclude it explicitly here.
+exclude = ["tests/kiln-consumer/**", "build/**"]

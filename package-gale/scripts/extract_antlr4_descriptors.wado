@@ -1,0 +1,1196 @@
+#!/usr/bin/env wado
+//! Extract ANTLR4 runtime-testsuite descriptors into Wado parse-only tests.
+//!
+//! Source:  vendor/antlr4/runtime-testsuite/resources/org/antlr/v4/test/runtime/descriptors/
+//! Outputs:
+//!   package-gale/tests/antlr4-compat/grammars/<Category>/<Name>.g4
+//!   package-gale/tests/antlr4-compat/<category>_test.wado
+//!
+//! Triage data lives in package-gale/tests/antlr4-compat/status.toml:
+//!   [todo]
+//!   "LexerExec/CharSetWithMissingEscapeChar" = "Gale rejects malformed escape"
+//!   [skip]
+//!   "Listeners/SomeJavaSpecific" = "target-language only"
+//!
+//! The script never initializes the antlr4 submodule itself. If the source
+//! directory is missing it errors out with instructions and exits non-zero.
+//!
+//! Usage (from the repository root):
+//!   wado run package-gale/scripts/extract_antlr4_descriptors.wado [Category ...]
+//!   wado run package-gale/scripts/extract_antlr4_descriptors.wado all
+//!
+//! Default categories (Phase 1): Sets, LexerExec, ParseTrees.
+
+use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use {
+    Preopens,
+    Descriptor,
+    DescriptorType,
+    DescriptorFlags,
+    PathFlags,
+    OpenFlags,
+    DirectoryEntry,
+    Filesize,
+} from "wasi:filesystem";
+use { ErrorCode } from "wasi:filesystem/types.wado";
+use { CodeWriter } from "../src/wadopoet.wado";
+
+// ===== Constants =====
+
+fn descriptors_root() -> String {
+    return "vendor/antlr4/runtime-testsuite/resources/org/antlr/v4/test/runtime/descriptors";
+}
+
+/// Root of the generated artefacts (everything compat-related lives here).
+fn compat_root_dir() -> String {
+    return "package-gale/tests/antlr4-compat";
+}
+
+/// Subdirectory holding the extracted `.g4` files (`<Category>/<Name>.g4`).
+fn grammars_subdir() -> String {
+    return "grammars";
+}
+
+/// Path to the triage file relative to repo root.
+fn status_file_path() -> String {
+    return "package-gale/tests/antlr4-compat/status.toml";
+}
+
+fn default_categories() -> Array<String> {
+    return ["Sets", "LexerExec", "ParseTrees"];
+}
+
+/// `#![generated(by = ...)]` attribute string written at the top of every
+/// generated test file. The `by` value is the canonical path of the
+/// generator script (relative to repo root) per the Wado convention used
+/// by `wado-from-idl` etc.
+fn generator_attr() -> String {
+    return "#![generated(by = \"package-gale/scripts/extract_antlr4_descriptors.wado\")]";
+}
+
+// ===== Descriptor format =====
+
+fn is_known_section(name: &String) -> bool {
+    return match *name {
+        "notes" | "type" | "grammar" | "slaveGrammar" | "start" | "input" | "output" | "errors" | "flags" | "skip" => true,
+        _ => false,
+    };
+}
+
+struct DescriptorPair {
+    name: String,
+    value: String,  // raw collected value, before post-processing
+}
+
+struct ParsedDescriptor {
+    grammar: String,
+    slave_grammars: Array<String>,
+    /// `[input]` block — the raw test input fed to the generated parser.
+    /// Empty when the descriptor declares no `[input]` (lexer-only smoke
+    /// tests, etc.).
+    input: String,
+    /// `[output]` block — the expected `to_string_tree()` (or host-language
+    /// artefact) the upstream test runner asserts. Empty when missing.
+    /// Stage B's `normalize_output_for_stage_b` decides whether this is a
+    /// parse-tree shape we can compare against.
+    output: String,
+    /// `[start]` field — the rule the upstream runner enters at. Gale's
+    /// generated parser always exposes the first parser rule via `parse()`,
+    /// so descriptors whose `[start]` differs from the first rule will fail
+    /// Stage B and are routed to `[stage_b_skip]` after triage.
+    start: String,
+}
+
+/// Mirrors `RuntimeTestDescriptorParser.parse` — section detection plus the
+/// triple-quote / trailing-newline post-processing applied to each value.
+/// We only return the fields we care about (grammar text + slave grammars).
+fn parse_descriptor_text(text: &String) -> ParsedDescriptor {
+    let mut pairs: Array<DescriptorPair> = [];
+    let mut current_name: String = "";
+    let mut have_current = false;
+    let mut current_value = String::with_capacity(256);
+
+    for let line of text.lines() {
+        let section_name = section_header_of(&line);
+        match section_name {
+            Some(name) => {
+                if have_current {
+                    pairs.push(DescriptorPair {
+                        name: current_name,
+                        value: current_value,
+                    });
+                }
+                current_name = name;
+                have_current = true;
+                current_value = String::with_capacity(256);
+            },
+            None => {
+                current_value.push_str(line);
+                current_value.push('\n');
+            },
+        }
+    }
+    if have_current {
+        pairs.push(DescriptorPair {
+            name: current_name,
+            value: current_value,
+        });
+    }
+
+    let mut grammar: String = "";
+    let mut slaves: Array<String> = [];
+    let mut input: String = "";
+    let mut output: String = "";
+    let mut start: String = "";
+    for let p of pairs {
+        let processed = post_process(&p.value);
+        match p.name {
+            "grammar" => {
+                grammar = unescape_st_text(&processed);
+            },
+            "slaveGrammar" => {
+                slaves.push(unescape_st_text(&processed));
+            },
+            "input" => {
+                input = processed;
+            },
+            "output" => {
+                output = processed;
+            },
+            "start" => {
+                start = processed;
+            },
+            _ => {
+            },
+        }
+    }
+    return ParsedDescriptor {
+        grammar,
+        slave_grammars: slaves,
+        input,
+        output,
+        start,
+    };
+}
+
+/// Mirror StringTemplate's text-mode escape handling for the descriptor's
+/// `[grammar]` / `[slaveGrammar]` blocks. The upstream test runner wraps
+/// the descriptor text in `new ST(group, descriptor.grammar)` with `<` /
+/// `>` delimiters before handing it to `antlr4`, so any literal that needs
+/// to survive ST as `\` must be written as `\\` in the descriptor (and any
+/// literal `<` / `>` as `\<` / `\>`). Without this step, descriptors like
+/// `LETTERS : ('a'|'\\u00E0'..'\\u00E5')` reach the g4 parser with the
+/// 6-character escape text `\u00E0`, which cannot serve as a range bound.
+///
+/// We deliberately leave non-delimiter backslash sequences (`\n`, `\u…`,
+/// `\t`, …) intact: ST's text mode does not interpret them, so passing
+/// them through preserves the upstream-equivalent input for the g4 lexer.
+fn unescape_st_text(s: &String) -> String {
+    let mut out = String::with_capacity(s.len());
+    let chars: Array<char> = s.chars().collect();
+    let n = chars.len();
+    let mut i = 0;
+    while i < n {
+        let c = chars[i];
+        if c == '\\' && i + 1 < n {
+            let next = chars[i + 1];
+            if next == '\\' || next == '<' || next == '>' {
+                out.push(next);
+                i += 2;
+                continue;
+            }
+        }
+        out.push(c);
+        i += 1;
+    }
+    return out;
+}
+
+/// If `line` is a known `[section]` header, return the section name.
+fn section_header_of(line: &String) -> Option<String> {
+    if line.len() <= 2 {
+        return null;
+    }
+    if !line.starts_with("[") {
+        return null;
+    }
+    let last_idx = line.len() - 1;
+    if line.get_byte(last_idx) != 0x5D {
+        // ']'
+        return null;
+    }
+    let candidate = line.substr_bytes(1, last_idx);
+    if !is_known_section(&candidate) {
+        return null;
+    }
+    return Option::Some(candidate);
+}
+
+/// Apply the same trim / triple-quote / trailing-newline rules as
+/// RuntimeTestDescriptorParser.parse.
+fn post_process(raw: &String) -> String {
+    let trimmed = raw.trim();
+    if trimmed.starts_with("\"\"\"") {
+        return trimmed.replace("\"\"\"", "");
+    }
+    if trimmed.contains("\n") {
+        let mut s = String::with_capacity(trimmed.len() + 1);
+        s.push_str(trimmed);
+        s.push('\n');
+        return s;
+    }
+    return trimmed;
+}
+
+// ===== Status file =====
+
+variant Triage {
+    Pass,
+    Todo(String),  // reason
+    Skip(String),  // reason
+}
+
+struct TriageMap {
+    /// Entries keyed by `"Category/Name"` (no `.txt` suffix).
+    pub entries: Array<TriageEntry>,
+}
+
+struct TriageEntry {
+    pub key: String,
+    pub triage: Triage,
+}
+
+impl TriageMap {
+    pub fn new() -> TriageMap {
+        return TriageMap { entries: [] };
+    }
+
+    pub fn lookup(&self, key: &String) -> Triage {
+        for let e of &self.entries {
+            if e.key == *key {
+                return e.triage;
+            }
+        }
+        return Triage::Pass;
+    }
+}
+
+/// Holds the two orthogonal triage axes parsed from `status.toml`:
+///
+/// - **stage_a** comes from the `[todo]` / `[skip]` buckets and applies to
+///   parse-only descriptor tests (Phase 1+2). Drives whether a descriptor
+///   is emitted at all and whether the emitted test is `#[TODO]`-marked.
+/// - **stage_b** comes from the `[stage_b_todo]` / `[stage_b_skip]` buckets
+///   and applies to the upcoming tree-shape equivalence tests (Phase 3).
+///   A descriptor can be Stage A green and Stage B skipped if its `[output]`
+///   block is a host-language artefact rather than a parse tree, and vice
+///   versa. The two maps are deliberately independent so triaging one
+///   axis never quietly toggles the other.
+struct TriageMaps {
+    pub stage_a: TriageMap,
+    pub stage_b: TriageMap,
+}
+
+/// Parse the status file. Tolerant of missing file (returns empty maps).
+/// Format is intentionally a strict subset of TOML:
+///
+///   # comments
+///   [todo]
+///   "Category/Name" = "reason text"
+///   [skip]
+///   "Category/Name" = "reason text"
+///   [stage_b_todo]
+///   "Category/Name" = "reason text"
+///   [stage_b_skip]
+///   "Category/Name" = "reason text"
+fn load_triage_maps(content: &Option<String>) -> TriageMaps {
+    let mut stage_a = TriageMap::new();
+    let mut stage_b = TriageMap::new();
+    let text = match content {
+        Some(t) => t,
+        None => {
+            return TriageMaps { stage_a, stage_b };
+        },
+    };
+    let mut section: String = "";
+    for let raw_line of text.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with("#") {
+            continue;
+        }
+        if line.starts_with("[") && line.ends_with("]") {
+            section = line.substr_bytes(1, line.len() - 1);
+            continue;
+        }
+        // Expect `"key" = "value"`
+        let eq_idx = match line.find("=") {
+            Some(i) => i,
+            None => {
+                continue;
+            },
+        };
+        let reason = unquote(&line.substr_bytes(eq_idx + 1, line.len()).trim());
+        let key = unquote(&line.substr_bytes(0, eq_idx).trim());
+        match section {
+            "todo" => stage_a.entries.push(TriageEntry { key, triage: Triage::Todo(reason) }),
+            "skip" => stage_a.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
+            "stage_b_todo" => stage_b.entries.push(TriageEntry { key, triage: Triage::Todo(reason) }),
+            "stage_b_skip" => stage_b.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
+            _ => {
+            },
+        }
+    }
+    return TriageMaps { stage_a, stage_b };
+}
+
+/// Stage-A-only convenience wrapper retained so the test blocks at the
+/// bottom of this file can keep using a single map without destructuring
+/// `TriageMaps`.
+fn load_triage_map(content: &Option<String>) -> TriageMap {
+    return load_triage_maps(content).stage_a;
+}
+
+fn unquote(s: &String) -> String {
+    if s.len() >= 2 && s.starts_with("\"") && s.ends_with("\"") {
+        return s.substr_bytes(1, s.len() - 1);
+    }
+    return *s;
+}
+
+// ===== File system helpers =====
+
+fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorCode> {
+    let opened = match dir.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    ).wait() {
+        Ok(file) => file,
+        Err(e) => {
+            return Result::Err(e);
+        },
+    };
+    let [stream, done] = opened.read_via_stream(0 as Filesize);
+    let mut bytes: Array<u8> = [];
+    loop {
+        let chunk = stream.read(8192);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let b of chunk {
+            bytes.push(b);
+        }
+    }
+    stream.drop();
+    done.drop();
+    return match String::from_utf8(bytes) {
+        Ok(s) => Result::Ok(s),
+        Err(_) => Result::Err(ErrorCode::IllegalByteSequence),
+    };
+}
+
+fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Result<(), ErrorCode> {
+    let file = match dir.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    ).wait() {
+        Ok(f) => f,
+        Err(e) => {
+            return Result::Err(e);
+        },
+    };
+    let bytes: Array<u8> = content.bytes().collect();
+    let [rx, tx] = Stream::<u8>::new();
+    let sub = file.write_via_stream(rx, 0 as Filesize);
+    tx.write(bytes);
+    tx.drop();
+    sub.drop();
+    return Result::Ok(());
+}
+
+/// Remove a regular file. `Err(NoEntry)` is treated like other errors — the
+/// caller decides whether a missing file is fatal (typical use is "best
+/// effort cleanup", where any failure is silently ignored).
+fn remove_file(dir: &Descriptor, path: &String) -> Result<(), ErrorCode> {
+    return dir.unlink_file_at(*path).wait();
+}
+
+fn ensure_dir(parent: &Descriptor, name: &String) -> Result<Descriptor, ErrorCode> {
+    // Ignore "exists" — we just want the directory to be present.
+    let _ = parent.create_directory_at(*name).wait();
+    return parent.open_at(
+        PathFlags::none(),
+        *name,
+        OpenFlags::Directory,
+        DescriptorFlags::Read | DescriptorFlags::MutateDirectory,
+    ).wait();
+}
+
+fn open_dir(parent: &Descriptor, name: &String, mutate: bool) -> Result<Descriptor, ErrorCode> {
+    let flags = if mutate { DescriptorFlags::Read | DescriptorFlags::MutateDirectory } else { DescriptorFlags::Read };
+    return parent.open_at(
+        PathFlags::none(),
+        *name,
+        OpenFlags::Directory,
+        flags,
+    ).wait();
+}
+
+fn list_files_with_suffix(dir: &Descriptor, suffix: &String) -> Array<String> {
+    let mut out: Array<String> = [];
+    let [stream, done] = dir.read_directory();
+    loop {
+        let chunk = stream.read(64);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let e of chunk {
+            if e.type matches { RegularFile } && e.name.ends_with(*suffix) {
+                out.push(e.name);
+            }
+        }
+    }
+    stream.drop();
+    done.drop();
+    out.sort();
+    return out;
+}
+
+fn list_subdirs(dir: &Descriptor) -> Array<String> {
+    let mut out: Array<String> = [];
+    let [stream, done] = dir.read_directory();
+    loop {
+        let chunk = stream.read(64);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let e of chunk {
+            if e.type matches { Directory } {
+                out.push(e.name);
+            }
+        }
+    }
+    stream.drop();
+    done.drop();
+    out.sort();
+    return out;
+}
+
+// ===== Test file emission =====
+
+fn category_to_snake(name: &String) -> String {
+    // CamelCase → snake_case
+    let mut out = String::with_capacity(name.len() + 4);
+    let mut first = true;
+    for let c of name.chars() {
+        if c.is_ascii_uppercase() {
+            if !first {
+                out.push('_');
+            }
+            out.push(c.to_ascii_lowercase());
+        } else {
+            out.push(c);
+        }
+        first = false;
+    }
+    return out;
+}
+
+/// Escape a string so it can sit between Wado `"..."` quotes.
+fn escape_for_wado_str(s: &String) -> String {
+    let mut out = String::with_capacity(s.len());
+    for let c of s.chars() {
+        match c {
+            '\\' => {
+                out.push_str("\\\\");
+            },
+            '"' => {
+                out.push_str("\\\"");
+            },
+            _ => {
+                out.push(c);
+            },
+        }
+    }
+    return out;
+}
+
+struct DescriptorEntry {
+    /// e.g. "Sets/CharSetLiteral"
+    key: String,
+    /// e.g. "CharSetLiteral"
+    name: String,
+    /// e.g. "Sets"
+    category: String,
+    /// e.g. "Sets/CharSetLiteral.g4" (relative to `grammars/`).
+    g4_relpath: String,
+    /// Slave grammars (relative paths; empty for non-composite descriptors).
+    slave_relpaths: Array<String>,
+    triage: Triage,
+}
+
+fn emit_test_file_for_category(category: &String, entries: &Array<DescriptorEntry>) -> String {
+    let mut w = CodeWriter::new();
+    w.line(&generator_attr());
+    w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
+    w.line(&"//");
+    w.line(&`// Source category: {*category} (ANTLR4 runtime-testsuite).`);
+    w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml");
+    w.blank();
+    w.line(&"use { parse } from \"../../src/g4/parser.wado\";");
+    w.blank();
+    for let e of entries {
+        match &e.triage {
+            Skip(_) => {
+                continue;
+            },
+            Todo(reason) => {
+                w.line(&"#[TODO]");
+                w.line(&`// triage: {escape_for_wado_str(reason)}`);
+            },
+            Pass => {
+            },
+        }
+        w.begin(&`test "{*category}/{e.name}"`);
+        w.line(&`let input = #include_str("./grammars/{e.g4_relpath}");`);
+        for let slave of &e.slave_relpaths {
+            w.line(&`let _slave = #include_str("./grammars/{*slave}");`);
+        }
+        w.line(&"let result = parse(input);");
+        w.line(&"if let Err(err) = &result {");
+        w.indent();
+        // Single-quoted Wado string keeps `{...}` literal so the
+        // backticks land in the generated file unmolested.
+        w.line(&"panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);");
+        w.dedent();
+        w.line(&"}");
+        w.end();
+        w.blank();
+    }
+    return w.to_string();
+}
+
+/// Emit one Stage B driver test file for a single descriptor.
+///
+/// The file lives at
+/// `tests/antlr4-compat/stage_b/<Category>/<Name>_test.wado` so each
+/// descriptor's grammar can be imported via Kiln (`use ... with {
+/// generator: ... }`) under its own `output_dir`, which avoids the
+/// one-grammar-per-file aliasing that a single per-category test file
+/// would require.
+///
+/// The emitted test:
+///   1. Imports the descriptor's `.g4` through Gale's generator,
+///   2. Runs the generated parser on `[input]`,
+///   3. Compares `to_string_tree()` against the normalised `[output]`.
+///
+/// Triage (`[stage_b_todo]` / `[stage_b_skip]`) decorates the emission:
+/// `Skip` callers should not invoke this function at all; `Todo` causes
+/// the test to be `#[TODO]`-marked so a known-failing assertion is
+/// recorded on a separate axis from real failures (matches Stage A).
+fn emit_stage_b_test_file(category: &String, name: &String, input: &String, expected_tree: &String, triage: &Triage) -> String {
+    let mut w = CodeWriter::new();
+    w.line(&generator_attr());
+    w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
+    w.line(&"//");
+    w.line(&`// Source descriptor: {*category}/{*name} (ANTLR4 runtime-testsuite).`);
+    w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_*]).");
+    w.blank();
+    w.line(&`use t from "../../grammars/{*category}/{*name}.g4"`);
+    w.line(&"    with {");
+    w.line(&"        generator: {");
+    w.line(&`            module: "../../../../src/generator.wado",`);
+    w.line(&"            options: { highlight: false },");
+    w.line(&`            output_dir: "tests/generated/antlr4_compat/{*category}/{*name}",`);
+    w.line(&"        },");
+    w.line(&"    };");
+    w.line(&`use \{ normalize_tree \} from "../../grammars/{*category}/{*name}.g4";`);
+    w.blank();
+    if let Todo(reason) = triage {
+        w.line(&"#[TODO]");
+        w.line(&`// triage: {escape_for_wado_str(reason)}`);
+    }
+    w.begin(&`test "stage_b: {*category}/{*name}"`);
+    w.line(&`let input = "{escape_for_wado_str(input)}";`);
+    w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
+    w.line(&"let root = t::parse(&input).unwrap();");
+    w.line(&"let actual = t::to_tree(&root).to_string_tree();");
+    w.line(&"let norm = normalize_tree(&expected);");
+    // Backticks land in the generated source verbatim; the Wado compiler
+    // there interprets them as a template string with `{actual}` etc.
+    w.line(&"assert actual == norm, `actual:   {actual}\\nexpected: {norm}`;");
+    w.end();
+    return w.to_string();
+}
+
+// ===== Main =====
+
+struct CliArgs {
+    want_all: bool,
+    categories: Array<String>,
+}
+
+fn parse_cli_args(arguments: Array<String>) -> CliArgs {
+    let mut want_all = false;
+    let mut categories: Array<String> = [];
+    for let a of arguments {
+        match a {
+            "all" => {
+                want_all = true;
+            },
+            _ => {
+                if !a.starts_with("-") {
+                    categories.push(a);
+                }
+            },
+        }
+    }
+    if !want_all && categories.is_empty() {
+        categories = default_categories();
+    }
+    return CliArgs { want_all, categories };
+}
+
+export fn run() with Stdout, Stderr, Environment, Preopens {
+    let cli = parse_cli_args(args());
+    let want_all = cli.want_all;
+    let mut categories = cli.categories;
+
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("extract: no preopened directories available (run via `wado run`)");
+        return;
+    }
+    let root = dirs[0].0;
+
+    // Open the antlr4 descriptors source. If missing, error out — never auto-init.
+    let src_root = match open_dir(&root, &descriptors_root(), false) {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln(`extract: cannot open '{descriptors_root()}'`);
+            eprintln("extract: the antlr4 submodule appears to be missing.");
+            eprintln("extract: run: git submodule update --init --recommend-shallow vendor/antlr4");
+            eprintln("extract: (this script never auto-initializes submodules)");
+            return;
+        },
+    };
+
+    if want_all {
+        categories = list_subdirs(&src_root);
+    }
+
+    println(`extract: source root  = {descriptors_root()}`);
+    println(`extract: target dir   = {compat_root_dir()}`);
+    println(`extract: status file  = {status_file_path()}`);
+    let mut categories_str = String::with_capacity(64);
+    for let mut i = 0; i < categories.len(); i += 1 {
+        if i > 0 {
+            categories_str.push_str(", ");
+        }
+        categories_str.push_str(categories[i]);
+    }
+    println(`extract: categories   = {categories_str}`);
+
+    // Open the package-gale tests directory (mutable: we will create files there).
+    let tests_dir = match open_dir(&root, &"package-gale/tests", true) {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln("extract: cannot open 'package-gale/tests' for writing");
+            return;
+        },
+    };
+
+    // Ensure the compat root exists — everything we generate is rooted here.
+    let compat_dir = match ensure_dir(&tests_dir, &"antlr4-compat") {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln("extract: cannot create or open antlr4-compat/");
+            return;
+        },
+    };
+
+    let status_text = match read_file_to_string(&root, &status_file_path()) {
+        Ok(s) => Option::Some(s),
+        Err(_) => null,
+    };
+    let triage_maps = load_triage_maps(&status_text);
+    let triage_map = triage_maps.stage_a;
+    let stage_b_triage_map = triage_maps.stage_b;
+
+    let grammars_dir = match ensure_dir(&compat_dir, &grammars_subdir()) {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln("extract: cannot create or open antlr4-compat/grammars/");
+            return;
+        },
+    };
+
+    let stage_b_dir = match ensure_dir(&compat_dir, &"stage_b") {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln("extract: cannot create or open antlr4-compat/stage_b/");
+            return;
+        },
+    };
+
+    let mut total_emitted = 0;
+    let mut total_todo = 0;
+    let mut total_skip = 0;
+    let mut stage_b_emitted = 0;
+    let mut stage_b_todo = 0;
+    let mut stage_b_skip = 0;
+    let mut stage_b_auto_skip = 0;
+
+    for let category of &categories {
+        let cat_src_dir = match open_dir(&src_root, category, false) {
+            Ok(d) => d,
+            Err(_) => {
+                eprintln(`extract: missing category '{*category}', skipping`);
+                continue;
+            },
+        };
+        let cat_out_dir = match ensure_dir(&grammars_dir, category) {
+            Ok(d) => d,
+            Err(_) => {
+                eprintln(`extract: cannot create category dir '{*category}', skipping`);
+                continue;
+            },
+        };
+        let stage_b_cat_dir = match ensure_dir(&stage_b_dir, category) {
+            Ok(d) => d,
+            Err(_) => {
+                eprintln(`extract: cannot create stage_b/{*category}/, skipping`);
+                continue;
+            },
+        };
+
+        let txt_files = list_files_with_suffix(&cat_src_dir, &".txt");
+        let mut entries: Array<DescriptorEntry> = [];
+        // Tracks per-category I/O / parse failures separately from triage
+        // skips. `entries.is_empty()` alone cannot distinguish "every
+        // descriptor was [skip]-triaged" (intentional, we want to drop
+        // the file) from "every descriptor errored out" (real failure;
+        // we must not silently delete the previous run's output).
+        let mut category_errors = 0;
+
+        for let txt_name of &txt_files {
+            // Strip ".txt" → descriptor name.
+            let base = txt_name.substr_bytes(0, txt_name.len() - 4);
+            let key = `{*category}/{base}`;
+
+            let triage = triage_map.lookup(&key);
+            if let Skip(reason) = &triage {
+                println(`  skip:  {key} — {*reason}`);
+                total_skip += 1;
+                continue;
+            }
+
+            let raw = match read_file_to_string(&cat_src_dir, txt_name) {
+                Ok(s) => s,
+                Err(_) => {
+                    eprintln(`extract: cannot read {key}`);
+                    category_errors += 1;
+                    continue;
+                },
+            };
+
+            let parsed = parse_descriptor_text(&raw);
+            if parsed.grammar.is_empty() {
+                eprintln(`extract: {key} has no [grammar] section, skipping`);
+                category_errors += 1;
+                continue;
+            }
+
+            // Write the main grammar.
+            let g4_filename = `{base}.g4`;
+            if let Err(_) = write_file_string(&cat_out_dir, &g4_filename, &parsed.grammar) {
+                eprintln(`extract: cannot write {key}.g4`);
+                category_errors += 1;
+                continue;
+            }
+
+            // Write slave grammars if present.
+            let mut slave_relpaths: Array<String> = [];
+            for let mut i = 0; i < parsed.slave_grammars.len(); i += 1 {
+                let slave_name = `{base}.slave{i + 1}.g4`;
+                if let Err(_) = write_file_string(&cat_out_dir, &slave_name, &parsed.slave_grammars[i]) {
+                    eprintln(`extract: cannot write {key} slave {i}`);
+                    continue;
+                }
+                slave_relpaths.push(`{*category}/{slave_name}`);
+            }
+
+            if let Todo(_) = &triage {
+                total_todo += 1;
+            }
+            total_emitted += 1;
+
+            entries.push(DescriptorEntry {
+                key,
+                name: base,
+                category: *category,
+                g4_relpath: `{*category}/{g4_filename}`,
+                slave_relpaths,
+                triage,
+            });
+
+            // ----- Stage B: emit a tree-shape equivalence test if eligible.
+            // Eligibility (all must hold):
+            //   * descriptor has a non-empty [output] block,
+            //   * descriptor has a non-empty [input] block (otherwise there is
+            //     nothing to feed to the generated parser),
+            //   * descriptor is single-grammar (composite descriptors with
+            //     slave grammars cannot be reached through one `use` directive,
+            //     and Stage B currently has no machinery for grammar imports),
+            //   * the [output] normaliser recognises it as a parse tree,
+            //   * the [output] tree's root rule equals [start]. ANTLR4
+            //     descriptors often print a sub-tree via an `@after` action
+            //     like `<ToStringTree("$labeled.ctx"):writeln()>`; their
+            //     [output] starts with a non-start rule name. Gale's
+            //     `t::parse(input)` always returns the start rule's full
+            //     tree, so wrapping would cause a false-negative. Detect by
+            //     checking that the normalised output starts with `(<start>`.
+            // Anything else is silently skipped (auto-skip counter); explicit
+            // [stage_b_skip] / [stage_b_todo] entries override the default.
+            if parsed.output.is_empty() || parsed.input.is_empty() || parsed.slave_grammars.len() > 0 {
+                continue;
+            }
+            let normalised = match normalize_output_for_stage_b(&parsed.output) {
+                Some(t) => t,
+                None => {
+                    stage_b_auto_skip += 1;
+                    continue;
+                },
+            };
+            let start_trimmed = parsed.start.trim();
+            let start_prefix = `({start_trimmed}`;
+            if !start_trimmed.is_empty() && !normalised.starts_with(start_prefix) {
+                stage_b_auto_skip += 1;
+                continue;
+            }
+            let stage_b_triage = stage_b_triage_map.lookup(&key);
+            if let Skip(reason) = &stage_b_triage {
+                println(`  skipB: {key} — {*reason}`);
+                stage_b_skip += 1;
+                continue;
+            }
+            let stage_b_src = emit_stage_b_test_file(
+                category,
+                &base,
+                &parsed.input,
+                &normalised,
+                &stage_b_triage,
+            );
+            let stage_b_filename = `{base}_test.wado`;
+            if let Err(_) = write_file_string(&stage_b_cat_dir, &stage_b_filename, &stage_b_src) {
+                eprintln(`extract: cannot write stage_b/{*category}/{stage_b_filename}`);
+                continue;
+            }
+            if let Todo(_) = &stage_b_triage {
+                stage_b_todo += 1;
+            }
+            stage_b_emitted += 1;
+        }
+
+        // Emit the per-category test file. Skip when nothing would land in
+        // the file *and* no descriptor errored out along the way — i.e. the
+        // empty result is the intentional case where every descriptor was
+        // `[skip]`-triaged (currently only `Listeners`). When at least one
+        // descriptor failed to load / parse / write, leave any previous
+        // file in place: deleting it would silently hide the failure
+        // behind an `empty:` line, and rewriting it as a header-only stub
+        // would erase the last good run's coverage.
+        let test_filename = `{category_to_snake(category)}_test.wado`;
+        if entries.is_empty() {
+            if category_errors > 0 {
+                eprintln(`extract: {*category} had {category_errors} descriptor failure(s); leaving antlr4-compat/{test_filename} untouched`);
+                continue;
+            }
+            if let Err(_) = remove_file(&compat_dir, &test_filename) {
+                // No prior file is fine; only a real I/O failure would surface here.
+            }
+            println(`  empty: antlr4-compat/{test_filename} (no descriptors emitted; not writing)`);
+            continue;
+        }
+        let test_src = emit_test_file_for_category(category, &entries);
+        if let Err(_) = write_file_string(&compat_dir, &test_filename, &test_src) {
+            eprintln(`extract: cannot write {test_filename}`);
+            continue;
+        }
+        println(`  wrote: antlr4-compat/{test_filename} ({entries.len()} tests)`);
+    }
+
+    println("");
+    println(`extract: stage A: emitted {total_emitted} descriptor(s) across {categories.len()} categor(ies)`);
+    println(`extract:          {total_todo} marked #[TODO]`);
+    println(`extract:          {total_skip} skipped`);
+    println(`extract: stage B: emitted {stage_b_emitted} tree-shape test(s)`);
+    println(`extract:          {stage_b_todo} marked #[TODO]`);
+    println(`extract:          {stage_b_skip} explicit skip`);
+    println(`extract:          {stage_b_auto_skip} auto-skip (output is not a parse tree)`);
+}
+
+// ===== Stage B: descriptor [output] normaliser =====
+
+/// Decide whether a descriptor `[output]` block can be checked as a Stage B
+/// parse-tree shape. The descriptor format is documented in
+/// `vendor/antlr4/runtime-testsuite/test/.../RuntimeTestDescriptorParser.java`;
+/// in practice `[output]` carries one of:
+///
+/// - **a parse tree** in `to_string_tree()` form, e.g. `(s (declarator a))`.
+///   These are emitted by descriptors whose grammar prequel ends with
+///   `@after { <ToStringTree("$ctx"):writeln()> }`. Stage B can compare
+///   against `tree.to_string_tree()`.
+/// - **a host-language artefact** — lexer token-type names (one per
+///   line), `Lexer.next()` token dumps (`[@0,0:-1='<EOF>',<-1>,1:0]`),
+///   ATN decision traces (`Decision 0:\n s0-ID->:s1`), or arbitrary
+///   action-block prints. None of these reflect the parse tree, so they
+///   are not Stage B testable and must be triaged as `[stage_b_skip]`.
+///
+/// Returns `Some(tree)` for the parse-tree case, with ANTLR4's literal
+/// ` <EOF>` token stripped — Gale's `to_string_tree()` omits empty-text
+/// tokens (see `package-gale/CLAUDE.md` "Driver Tests"). Returns `None`
+/// for everything else.
+///
+/// The detector is intentionally conservative: any leftover `<…>` token
+/// in the output (after `<EOF>` stripping) is treated as a testsuite
+/// StringTemplate substitution (e.g. `<AltNum()>`) rather than a real
+/// parse-tree node, and the descriptor is rejected. Likewise, `${…}`
+/// always denotes an action-block reference. False rejections are
+/// triaged as `[stage_b_todo]` once the underlying capability lands.
+fn normalize_output_for_stage_b(raw: &String) -> Option<String> {
+    let s = raw.trim();
+    if s.is_empty() {
+        return null;
+    }
+    if !s.starts_with("(") {
+        return null;
+    }
+    let chars: Array<char> = s.chars().collect();
+    if chars.len() < 2 {
+        return null;
+    }
+    if !is_tree_node_name_start(chars[1]) {
+        return null;
+    }
+    if s.contains("${") {
+        return null;
+    }
+    let stripped = s.replace(" <EOF>", "");
+    if stripped.contains("<") || stripped.contains(">") {
+        return null;
+    }
+    return Option::<String>::Some(stripped);
+}
+
+fn is_tree_node_name_start(c: char) -> bool {
+    return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || c == '_';
+}
+
+test "normalize: clean parse tree passes through trimmed" {
+    let result = normalize_output_for_stage_b(&"(a x y)\n");
+    assert result matches { Some(_) };
+    if let Some(s) = result {
+        assert s == "(a x y)", `expected '(a x y)', got '{s}'`;
+    }
+}
+
+test "normalize: trailing <EOF> token is stripped" {
+    // ANTLR4 emits the EOF token literally because `to_string_tree(rule)`
+    // includes every consumed terminal, but Gale's runtime drops empty-text
+    // tokens (CLAUDE.md "Driver Tests"). The normaliser bridges this gap
+    // so descriptor `[output]` blocks line up with Gale's actual emission.
+    let result = normalize_output_for_stage_b(&"(s (declarator a) <EOF>)");
+    assert result matches { Some(_) };
+    if let Some(s) = result {
+        assert s == "(s (declarator a))", `got '{s}'`;
+    }
+}
+
+test "normalize: nested tree with literal token text is preserved" {
+    // Bracket characters are legitimate token text from grammars whose
+    // alphabet contains them; the detector must not reject them.
+    let result = normalize_output_for_stage_b(&"(s (declarator (declarator a) [ ]) <EOF>)");
+    assert result matches { Some(_) };
+    if let Some(s) = result {
+        assert s == "(s (declarator (declarator a) [ ]))", `got '{s}'`;
+    }
+}
+
+test "normalize: empty output is not Stage B testable" {
+    assert normalize_output_for_stage_b(&"") matches { None };
+    assert normalize_output_for_stage_b(&"\n") matches { None };
+    assert normalize_output_for_stage_b(&"   ") matches { None };
+}
+
+test "normalize: action $text echo is not a tree" {
+    // `[output]` like `abc` comes from a grammar whose action prints
+    // `$text` after a successful parse — not a tree shape.
+    assert normalize_output_for_stage_b(&"abc") matches { None };
+    assert normalize_output_for_stage_b(&"alt 1") matches { None };
+    assert normalize_output_for_stage_b(&"alt 2\n") matches { None };
+}
+
+test "normalize: lexer token-type names are not a tree" {
+    // LexerExec descriptors print one token-type name per line.
+    assert normalize_output_for_stage_b(&"I\nI\n") matches { None };
+    assert normalize_output_for_stage_b(&"DASHBRACK\nDASHBRACK\n") matches { None };
+}
+
+test "normalize: lexer token dump is not a tree" {
+    // `[@0,0:-1='<EOF>',<-1>,1:0]` is `Token.toString()` from the runtime
+    // — looks like a tree at first glance because of the `[`, but starts
+    // with `[` rather than `(`.
+    assert normalize_output_for_stage_b(&"[@0,0:-1='<EOF>',<-1>,1:0]") matches { None };
+}
+
+test "normalize: ATN decision trace is not a tree" {
+    // FullContextParsing descriptors that exercise ATN decisions emit a
+    // `<DecisionInfo>`-style dump. It does not start with `(`.
+    assert normalize_output_for_stage_b(&"Decision 0:\ns0-ID->:s1^=>1") matches { None };
+}
+
+test "normalize: testsuite ${...} substitution is rejected" {
+    // `(s ${ (v ? a) ? })` from ParseTrees/ExtraTokensAndAltLabels carries
+    // an action-block reference the testsuite resolves at runtime. Not a
+    // self-contained parse tree.
+    assert normalize_output_for_stage_b(&"(s ${ (v ? a) ? })") matches { None };
+}
+
+test "normalize: leftover <...> substitution is rejected" {
+    // Any `<…>` other than the literal `<EOF>` token is a testsuite
+    // StringTemplate directive (e.g. `<AltNum()>` injects `:N`). After
+    // stripping `<EOF>` we should see no remaining angle brackets in a
+    // clean tree; if any do, the descriptor is not Stage B testable.
+    assert normalize_output_for_stage_b(&"(s <AltNum()> x)") matches { None };
+}
+
+test "normalize: line-noise output starting with paren but no name is rejected" {
+    // `()`, `( )`, or `(123 ...)` are not valid `to_string_tree()` output
+    // — every node starts with an identifier (the rule name).
+    assert normalize_output_for_stage_b(&"()") matches { None };
+    assert normalize_output_for_stage_b(&"( a)") matches { None };
+    assert normalize_output_for_stage_b(&"(123 abc)") matches { None };
+}
+
+// ===== Stage B: status.toml triage parser =====
+
+fn assert_triage_skip(maps: &TriageMaps, axis: &String, key: &String, expected_reason: &String) {
+    let map = if *axis == "a" { &maps.stage_a } else { &maps.stage_b };
+    if let Skip(reason) = &map.lookup(key) {
+        assert *reason == *expected_reason, `axis {*axis} key '{*key}': expected Skip('{*expected_reason}'), got Skip('{*reason}')`;
+    } else {
+        panic(`axis {*axis} key '{*key}': expected Skip, got other`);
+    }
+}
+
+fn assert_triage_todo(maps: &TriageMaps, axis: &String, key: &String, expected_reason: &String) {
+    let map = if *axis == "a" { &maps.stage_a } else { &maps.stage_b };
+    if let Todo(reason) = &map.lookup(key) {
+        assert *reason == *expected_reason, `axis {*axis} key '{*key}': expected Todo('{*expected_reason}'), got Todo('{*reason}')`;
+    } else {
+        panic(`axis {*axis} key '{*key}': expected Todo, got other`);
+    }
+}
+
+fn assert_triage_pass(maps: &TriageMaps, axis: &String, key: &String) {
+    let map = if *axis == "a" { &maps.stage_a } else { &maps.stage_b };
+    assert map.lookup(key) matches { Pass }, `axis {*axis} key '{*key}': expected Pass, got other`;
+}
+
+test "triage: missing file yields empty maps on both axes" {
+    let none_text: Option<String> = null;
+    let maps = load_triage_maps(&none_text);
+    assert maps.stage_a.entries.is_empty();
+    assert maps.stage_b.entries.is_empty();
+}
+
+test "triage: stage A skip and todo populate stage_a only" {
+    let toml = Option::<String>::Some(
+        "[todo]
+\"LeftRecursion/Foo\" = \"reason A todo\"
+[skip]
+\"Listeners/Bar\" = \"reason A skip\"
+",
+    );
+    let maps = load_triage_maps(&toml);
+    assert_triage_todo(&maps, &"a", &"LeftRecursion/Foo", &"reason A todo");
+    assert_triage_skip(&maps, &"a", &"Listeners/Bar", &"reason A skip");
+    // Stage B map must remain untouched — the two axes are independent.
+    assert_triage_pass(&maps, &"b", &"LeftRecursion/Foo");
+    assert_triage_pass(&maps, &"b", &"Listeners/Bar");
+}
+
+test "triage: stage B skip and todo populate stage_b only" {
+    let toml = Option::<String>::Some(
+        "[stage_b_todo]
+\"ParserExec/AltLabels\" = \"alt-num emission not yet supported\"
+[stage_b_skip]
+\"LexerExec/Foo\" = \"output is a lexer token type list\"
+",
+    );
+    let maps = load_triage_maps(&toml);
+    assert_triage_todo(&maps, &"b", &"ParserExec/AltLabels", &"alt-num emission not yet supported");
+    assert_triage_skip(&maps, &"b", &"LexerExec/Foo", &"output is a lexer token type list");
+    // Symmetric: Stage B entries must not bleed into Stage A.
+    assert_triage_pass(&maps, &"a", &"ParserExec/AltLabels");
+    assert_triage_pass(&maps, &"a", &"LexerExec/Foo");
+}
+
+test "triage: same key can carry independent stage A and stage B verdicts" {
+    // A descriptor that parses fine (Stage A pass) but whose [output] is
+    // host-language chatter (Stage B skip) is the canonical case.
+    let toml = Option::<String>::Some(
+        "[stage_b_skip]
+\"FullContextParsing/AmbigYieldsCtxSensitiveDFA\" = \"output is an ATN decision trace\"
+",
+    );
+    let maps = load_triage_maps(&toml);
+    assert_triage_pass(&maps, &"a", &"FullContextParsing/AmbigYieldsCtxSensitiveDFA");
+    assert_triage_skip(
+        &maps,
+        &"b",
+        &"FullContextParsing/AmbigYieldsCtxSensitiveDFA",
+        &"output is an ATN decision trace",
+    );
+}
+
+test "triage: comments and blank lines are tolerated" {
+    let toml = Option::<String>::Some(
+        "# Stage A
+[todo]
+
+# real entry
+\"LeftRecursion/X\" = \"reason\"
+
+# Stage B
+[stage_b_skip]
+\"LexerExec/Y\" = \"reason\"
+",
+    );
+    let maps = load_triage_maps(&toml);
+    assert_triage_todo(&maps, &"a", &"LeftRecursion/X", &"reason");
+    assert_triage_skip(&maps, &"b", &"LexerExec/Y", &"reason");
+}
+
+test "triage: unknown bucket section is silently ignored" {
+    // Forward compatibility: a future bucket name (e.g. [stage_c_todo])
+    // must not crash today's extractor. Entries under unknown sections
+    // are dropped quietly.
+    let toml = Option::<String>::Some(
+        "[stage_c_todo]
+\"Foo/Bar\" = \"future feature\"
+[stage_b_skip]
+\"Baz/Qux\" = \"present feature\"
+",
+    );
+    let maps = load_triage_maps(&toml);
+    assert maps.stage_a.entries.is_empty();
+    assert maps.stage_b.entries.len() == 1;
+    assert_triage_skip(&maps, &"b", &"Baz/Qux", &"present feature");
+    assert_triage_pass(&maps, &"a", &"Foo/Bar");
+    assert_triage_pass(&maps, &"b", &"Foo/Bar");
+}

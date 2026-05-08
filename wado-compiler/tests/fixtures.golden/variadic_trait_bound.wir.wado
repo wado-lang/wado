@@ -96,31 +96,27 @@ type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(r
 
 type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(31)
 
-type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(32)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(32)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(33)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(33)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(34)
+type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(34)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(35)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(35)
 
-type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(36)
+type "functype//wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String,bool>^Eq::eq" = fn(ref "tuple//[i32, String, bool]", ref "tuple//[i32, String, bool]") -> bool;  // TypeId(36)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(37)
+type "functype//wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32>^Eq::eq" = fn(ref "tuple//[i32]", ref "tuple//[i32]") -> bool;  // TypeId(37)
 
-type "functype//wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String,bool>^Eq::eq" = fn(ref "tuple//[i32, String, bool]", ref "tuple//[i32, String, bool]") -> bool;  // TypeId(38)
+type "functype//wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String>^Eq::eq" = fn(ref "tuple//[i32, String]", ref "tuple//[i32, String]") -> bool;  // TypeId(38)
 
-type "functype//wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32>^Eq::eq" = fn(ref "tuple//[i32]", ref "tuple//[i32]") -> bool;  // TypeId(39)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
-type "functype//wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String>^Eq::eq" = fn(ref "tuple//[i32, String]", ref "tuple//[i32, String]") -> bool;  // TypeId(40)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(41)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(44)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(42)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -168,46 +164,46 @@ fn "wado-compiler/tests/fixtures/variadic_trait_bound.wado/run"() {
     let __local_33: ref "core:prelude/format.wado//Formatter";
     let __local_34: ref "core:prelude/string.wado//String";
     let __local_35: ref "core:prelude/format.wado//Formatter";
-    let __local_37: ref "tuple//[i32, String]";
-    let __local_38: ref "tuple//[i32, String]";
-    let __local_42: ref "core:prelude/format.wado//Formatter";
-    let __local_47: ref "core:prelude/format.wado//Formatter";
-    let __local_50: ref "tuple//[i32, String]";
-    let __local_51: ref "tuple//[i32, String]";
-    let __local_55: ref "core:prelude/format.wado//Formatter";
-    let __local_60: ref "core:prelude/format.wado//Formatter";
-    let __local_63: ref "tuple//[i32, String]";
-    let __local_64: ref "tuple//[i32, String]";
-    let __local_68: ref "core:prelude/format.wado//Formatter";
-    let __local_73: ref "core:prelude/format.wado//Formatter";
-    let __local_76: ref "tuple//[i32, String]";
-    let __local_77: ref "tuple//[i32, String]";
-    let __local_81: ref "core:prelude/format.wado//Formatter";
-    let __local_86: ref "core:prelude/format.wado//Formatter";
-    let __local_89: ref "tuple//[i32, String]";
-    let __local_90: ref "tuple//[i32, String]";
-    let __local_94: ref "core:prelude/format.wado//Formatter";
-    let __local_99: ref "core:prelude/format.wado//Formatter";
-    let __local_102: ref "tuple//[i32]";
-    let __local_103: ref "tuple//[i32]";
-    let __local_107: ref "core:prelude/format.wado//Formatter";
-    let __local_112: ref "core:prelude/format.wado//Formatter";
-    let __local_115: ref "tuple//[i32]";
-    let __local_116: ref "tuple//[i32]";
-    let __local_120: ref "core:prelude/format.wado//Formatter";
-    let __local_125: ref "core:prelude/format.wado//Formatter";
-    let __local_128: ref "tuple//[i32, String, bool]";
-    let __local_129: ref "tuple//[i32, String, bool]";
-    let __local_133: ref "core:prelude/format.wado//Formatter";
-    let __local_138: ref "core:prelude/format.wado//Formatter";
-    let __local_141: ref "tuple//[i32, String, bool]";
-    let __local_142: ref "tuple//[i32, String, bool]";
-    let __local_146: ref "core:prelude/format.wado//Formatter";
-    let __local_151: ref "core:prelude/format.wado//Formatter";
+    let a_37: ref "tuple//[i32, String]";
+    let b_38: ref "tuple//[i32, String]";
+    let f_42: ref "core:prelude/format.wado//Formatter";
+    let f_47: ref "core:prelude/format.wado//Formatter";
+    let a_50: ref "tuple//[i32, String]";
+    let b_51: ref "tuple//[i32, String]";
+    let f_55: ref "core:prelude/format.wado//Formatter";
+    let f_60: ref "core:prelude/format.wado//Formatter";
+    let a_63: ref "tuple//[i32, String]";
+    let b_64: ref "tuple//[i32, String]";
+    let f_68: ref "core:prelude/format.wado//Formatter";
+    let f_73: ref "core:prelude/format.wado//Formatter";
+    let a_76: ref "tuple//[i32, String]";
+    let b_77: ref "tuple//[i32, String]";
+    let f_81: ref "core:prelude/format.wado//Formatter";
+    let f_86: ref "core:prelude/format.wado//Formatter";
+    let a_89: ref "tuple//[i32, String]";
+    let b_90: ref "tuple//[i32, String]";
+    let f_94: ref "core:prelude/format.wado//Formatter";
+    let f_99: ref "core:prelude/format.wado//Formatter";
+    let a_102: ref "tuple//[i32]";
+    let b_103: ref "tuple//[i32]";
+    let f_107: ref "core:prelude/format.wado//Formatter";
+    let f_112: ref "core:prelude/format.wado//Formatter";
+    let a_115: ref "tuple//[i32]";
+    let b_116: ref "tuple//[i32]";
+    let f_120: ref "core:prelude/format.wado//Formatter";
+    let f_125: ref "core:prelude/format.wado//Formatter";
+    let a_128: ref "tuple//[i32, String, bool]";
+    let b_129: ref "tuple//[i32, String, bool]";
+    let f_133: ref "core:prelude/format.wado//Formatter";
+    let f_138: ref "core:prelude/format.wado//Formatter";
+    let a_141: ref "tuple//[i32, String, bool]";
+    let b_142: ref "tuple//[i32, String, bool]";
+    let f_146: ref "core:prelude/format.wado//Formatter";
+    let f_151: ref "core:prelude/format.wado//Formatter";
     __v0_0 = __inline_all_equal_Tuple_i32_String___2: block -> bool {
-        __local_37 = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
-        __local_38 = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
-        break __inline_all_equal_Tuple_i32_String___2: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String>^Eq::eq"(__local_37, __local_38);
+        a_37 = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
+        b_38 = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
+        break __inline_all_equal_Tuple_i32_String___2: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String>^Eq::eq"(a_37, b_38);
         unreachable;
     };
     if __v0_0 == 0 {
@@ -224,15 +220,15 @@ fn "wado-compiler/tests/fixtures/variadic_trait_bound.wado/run"() {
             "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variadic_trait_bound.wado"), used: 54 });
             "core:prelude/string.wado/String::push"(__local_18, 58);
             __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 };
-            __local_42 = __local_19;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(11, __local_42);
+            f_42 = __local_19;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(11, f_42);
             "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: all_equal([1, \"hello\"], [1, \"hello\"])
 "), used: 50 });
             "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all_equal([1, \"hello\"], [1, \"hello\"]): "), used: 39 });
             __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 };
-            __local_47 = __local_19;
-            "core:prelude/format.wado/Formatter::pad"(__local_47, (if __v0_0 -> ref "core:prelude/string.wado//String" {
+            f_47 = __local_19;
+            "core:prelude/format.wado/Formatter::pad"(f_47, (if __v0_0 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -244,9 +240,9 @@ condition: all_equal([1, \"hello\"], [1, \"hello\"])
         unreachable;
     }
     __v0_2 = __inline_all_equal_Tuple_i32_String___10: block -> bool {
-        __local_50 = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
-        __local_51 = struct.new "tuple//[i32, String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
-        break __inline_all_equal_Tuple_i32_String___10: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String>^Eq::eq"(__local_50, __local_51);
+        a_50 = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
+        b_51 = struct.new "tuple//[i32, String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
+        break __inline_all_equal_Tuple_i32_String___10: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String>^Eq::eq"(a_50, b_51);
         unreachable;
     };
     __cond_3 = __v0_2 == 0;
@@ -264,15 +260,15 @@ condition: all_equal([1, \"hello\"], [1, \"hello\"])
             "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variadic_trait_bound.wado"), used: 54 });
             "core:prelude/string.wado/String::push"(__local_20, 58);
             __local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
-            __local_55 = __local_21;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(12, __local_55);
+            f_55 = __local_21;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(12, f_55);
             "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: !all_equal([1, \"hello\"], [2, \"hello\"])
 "), used: 51 });
             "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all_equal([1, \"hello\"], [2, \"hello\"]): "), used: 39 });
             __local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
-            __local_60 = __local_21;
-            "core:prelude/format.wado/Formatter::pad"(__local_60, (if __v0_2 -> ref "core:prelude/string.wado//String" {
+            f_60 = __local_21;
+            "core:prelude/format.wado/Formatter::pad"(f_60, (if __v0_2 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -284,9 +280,9 @@ condition: !all_equal([1, \"hello\"], [2, \"hello\"])
         unreachable;
     }
     __v0_4 = __inline_all_equal_Tuple_i32_String___18: block -> bool {
-        __local_63 = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
-        __local_64 = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
-        break __inline_all_equal_Tuple_i32_String___18: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String>^Eq::eq"(__local_63, __local_64);
+        a_63 = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
+        b_64 = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
+        break __inline_all_equal_Tuple_i32_String___18: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String>^Eq::eq"(a_63, b_64);
         unreachable;
     };
     __cond_5 = __v0_4 == 0;
@@ -304,15 +300,15 @@ condition: !all_equal([1, \"hello\"], [2, \"hello\"])
             "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variadic_trait_bound.wado"), used: 54 });
             "core:prelude/string.wado/String::push"(__local_22, 58);
             __local_23 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_22 };
-            __local_68 = __local_23;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(13, __local_68);
+            f_68 = __local_23;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(13, f_68);
             "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: !all_equal([1, \"hello\"], [1, \"world\"])
 "), used: 51 });
             "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all_equal([1, \"hello\"], [1, \"world\"]): "), used: 39 });
             __local_23 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_22 };
-            __local_73 = __local_23;
-            "core:prelude/format.wado/Formatter::pad"(__local_73, (if __v0_4 -> ref "core:prelude/string.wado//String" {
+            f_73 = __local_23;
+            "core:prelude/format.wado/Formatter::pad"(f_73, (if __v0_4 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -324,9 +320,9 @@ condition: !all_equal([1, \"hello\"], [1, \"world\"])
         unreachable;
     }
     __v0_6 = __inline_not_equal_Tuple_i32_String___26: block -> bool {
-        __local_76 = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
-        __local_77 = struct.new "tuple//[i32, String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
-        break __inline_not_equal_Tuple_i32_String___26: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String>^Eq::eq"(__local_76, __local_77) == 0;
+        a_76 = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
+        b_77 = struct.new "tuple//[i32, String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
+        break __inline_not_equal_Tuple_i32_String___26: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String>^Eq::eq"(a_76, b_77) == 0;
         unreachable;
     };
     if __v0_6 == 0 {
@@ -343,15 +339,15 @@ condition: !all_equal([1, \"hello\"], [1, \"world\"])
             "core:prelude/string.wado/String::push_str"(__local_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variadic_trait_bound.wado"), used: 54 });
             "core:prelude/string.wado/String::push"(__local_24, 58);
             __local_25 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
-            __local_81 = __local_25;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(16, __local_81);
+            f_81 = __local_25;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(16, f_81);
             "core:prelude/string.wado/String::push_str"(__local_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: not_equal([1, \"hello\"], [2, \"hello\"])
 "), used: 50 });
             "core:prelude/string.wado/String::push_str"(__local_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not_equal([1, \"hello\"], [2, \"hello\"]): "), used: 39 });
             __local_25 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
-            __local_86 = __local_25;
-            "core:prelude/format.wado/Formatter::pad"(__local_86, (if __v0_6 -> ref "core:prelude/string.wado//String" {
+            f_86 = __local_25;
+            "core:prelude/format.wado/Formatter::pad"(f_86, (if __v0_6 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -363,9 +359,9 @@ condition: not_equal([1, \"hello\"], [2, \"hello\"])
         unreachable;
     }
     __v0_8 = __inline_not_equal_Tuple_i32_String___34: block -> bool {
-        __local_89 = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
-        __local_90 = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
-        break __inline_not_equal_Tuple_i32_String___34: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String>^Eq::eq"(__local_89, __local_90) == 0;
+        a_89 = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
+        b_90 = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
+        break __inline_not_equal_Tuple_i32_String___34: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String>^Eq::eq"(a_89, b_90) == 0;
         unreachable;
     };
     __cond_9 = __v0_8 == 0;
@@ -383,15 +379,15 @@ condition: not_equal([1, \"hello\"], [2, \"hello\"])
             "core:prelude/string.wado/String::push_str"(__local_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variadic_trait_bound.wado"), used: 54 });
             "core:prelude/string.wado/String::push"(__local_26, 58);
             __local_27 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_26 };
-            __local_94 = __local_27;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(17, __local_94);
+            f_94 = __local_27;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(17, f_94);
             "core:prelude/string.wado/String::push_str"(__local_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: !not_equal([1, \"hello\"], [1, \"hello\"])
 "), used: 51 });
             "core:prelude/string.wado/String::push_str"(__local_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not_equal([1, \"hello\"], [1, \"hello\"]): "), used: 39 });
             __local_27 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_26 };
-            __local_99 = __local_27;
-            "core:prelude/format.wado/Formatter::pad"(__local_99, (if __v0_8 -> ref "core:prelude/string.wado//String" {
+            f_99 = __local_27;
+            "core:prelude/format.wado/Formatter::pad"(f_99, (if __v0_8 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -403,9 +399,9 @@ condition: !not_equal([1, \"hello\"], [1, \"hello\"])
         unreachable;
     }
     __v0_10 = __inline_all_equal_Tuple_i32___42: block -> bool {
-        __local_102 = struct.new "tuple//[i32]" { 0: 42 };
-        __local_103 = struct.new "tuple//[i32]" { 0: 42 };
-        break __inline_all_equal_Tuple_i32___42: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32>^Eq::eq"(__local_102, __local_103);
+        a_102 = struct.new "tuple//[i32]" { 0: 42 };
+        b_103 = struct.new "tuple//[i32]" { 0: 42 };
+        break __inline_all_equal_Tuple_i32___42: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32>^Eq::eq"(a_102, b_103);
         unreachable;
     };
     if __v0_10 == 0 {
@@ -422,15 +418,15 @@ condition: !not_equal([1, \"hello\"], [1, \"hello\"])
             "core:prelude/string.wado/String::push_str"(__local_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variadic_trait_bound.wado"), used: 54 });
             "core:prelude/string.wado/String::push"(__local_28, 58);
             __local_29 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_28 };
-            __local_107 = __local_29;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(20, __local_107);
+            f_107 = __local_29;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(20, f_107);
             "core:prelude/string.wado/String::push_str"(__local_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: all_equal([42], [42])
 "), used: 34 });
             "core:prelude/string.wado/String::push_str"(__local_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all_equal([42], [42]): "), used: 23 });
             __local_29 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_28 };
-            __local_112 = __local_29;
-            "core:prelude/format.wado/Formatter::pad"(__local_112, (if __v0_10 -> ref "core:prelude/string.wado//String" {
+            f_112 = __local_29;
+            "core:prelude/format.wado/Formatter::pad"(f_112, (if __v0_10 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -442,9 +438,9 @@ condition: all_equal([42], [42])
         unreachable;
     }
     __v0_12 = __inline_all_equal_Tuple_i32___50: block -> bool {
-        __local_115 = struct.new "tuple//[i32]" { 0: 42 };
-        __local_116 = struct.new "tuple//[i32]" { 0: 99 };
-        break __inline_all_equal_Tuple_i32___50: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32>^Eq::eq"(__local_115, __local_116);
+        a_115 = struct.new "tuple//[i32]" { 0: 42 };
+        b_116 = struct.new "tuple//[i32]" { 0: 99 };
+        break __inline_all_equal_Tuple_i32___50: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32>^Eq::eq"(a_115, b_116);
         unreachable;
     };
     __cond_13 = __v0_12 == 0;
@@ -462,15 +458,15 @@ condition: all_equal([42], [42])
             "core:prelude/string.wado/String::push_str"(__local_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variadic_trait_bound.wado"), used: 54 });
             "core:prelude/string.wado/String::push"(__local_30, 58);
             __local_31 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_30 };
-            __local_120 = __local_31;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(21, __local_120);
+            f_120 = __local_31;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(21, f_120);
             "core:prelude/string.wado/String::push_str"(__local_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: !all_equal([42], [99])
 "), used: 35 });
             "core:prelude/string.wado/String::push_str"(__local_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all_equal([42], [99]): "), used: 23 });
             __local_31 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_30 };
-            __local_125 = __local_31;
-            "core:prelude/format.wado/Formatter::pad"(__local_125, (if __v0_12 -> ref "core:prelude/string.wado//String" {
+            f_125 = __local_31;
+            "core:prelude/format.wado/Formatter::pad"(f_125, (if __v0_12 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -482,9 +478,9 @@ condition: !all_equal([42], [99])
         unreachable;
     }
     __v0_14 = __inline_all_equal_Tuple_i32_String_bool___58: block -> bool {
-        __local_128 = struct.new "tuple//[i32, String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, 2: 1 };
-        __local_129 = struct.new "tuple//[i32, String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, 2: 1 };
-        break __inline_all_equal_Tuple_i32_String_bool___58: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String,bool>^Eq::eq"(__local_128, __local_129);
+        a_128 = struct.new "tuple//[i32, String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, 2: 1 };
+        b_129 = struct.new "tuple//[i32, String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, 2: 1 };
+        break __inline_all_equal_Tuple_i32_String_bool___58: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String,bool>^Eq::eq"(a_128, b_129);
         unreachable;
     };
     if __v0_14 == 0 {
@@ -501,15 +497,15 @@ condition: !all_equal([42], [99])
             "core:prelude/string.wado/String::push_str"(__local_32, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variadic_trait_bound.wado"), used: 54 });
             "core:prelude/string.wado/String::push"(__local_32, 58);
             __local_33 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_32 };
-            __local_133 = __local_33;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(24, __local_133);
+            f_133 = __local_33;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(24, f_133);
             "core:prelude/string.wado/String::push_str"(__local_32, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: all_equal([1, \"a\", true], [1, \"a\", true])
 "), used: 54 });
             "core:prelude/string.wado/String::push_str"(__local_32, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all_equal([1, \"a\", true], [1, \"a\", true]): "), used: 43 });
             __local_33 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_32 };
-            __local_138 = __local_33;
-            "core:prelude/format.wado/Formatter::pad"(__local_138, (if __v0_14 -> ref "core:prelude/string.wado//String" {
+            f_138 = __local_33;
+            "core:prelude/format.wado/Formatter::pad"(f_138, (if __v0_14 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -521,9 +517,9 @@ condition: all_equal([1, \"a\", true], [1, \"a\", true])
         unreachable;
     }
     __v0_16 = __inline_all_equal_Tuple_i32_String_bool___66: block -> bool {
-        __local_141 = struct.new "tuple//[i32, String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, 2: 1 };
-        __local_142 = struct.new "tuple//[i32, String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, 2: 0 };
-        break __inline_all_equal_Tuple_i32_String_bool___66: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String,bool>^Eq::eq"(__local_141, __local_142);
+        a_141 = struct.new "tuple//[i32, String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, 2: 1 };
+        b_142 = struct.new "tuple//[i32, String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, 2: 0 };
+        break __inline_all_equal_Tuple_i32_String_bool___66: "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String,bool>^Eq::eq"(a_141, b_142);
         unreachable;
     };
     __cond_17 = __v0_16 == 0;
@@ -541,15 +537,15 @@ condition: all_equal([1, \"a\", true], [1, \"a\", true])
             "core:prelude/string.wado/String::push_str"(__local_34, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variadic_trait_bound.wado"), used: 54 });
             "core:prelude/string.wado/String::push"(__local_34, 58);
             __local_35 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_34 };
-            __local_146 = __local_35;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(25, __local_146);
+            f_146 = __local_35;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(25, f_146);
             "core:prelude/string.wado/String::push_str"(__local_34, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: !all_equal([1, \"a\", true], [1, \"a\", false])
 "), used: 56 });
             "core:prelude/string.wado/String::push_str"(__local_34, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all_equal([1, \"a\", true], [1, \"a\", false]): "), used: 44 });
             __local_35 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_34 };
-            __local_151 = __local_35;
-            "core:prelude/format.wado/Formatter::pad"(__local_151, (if __v0_16 -> ref "core:prelude/string.wado//String" {
+            f_151 = __local_35;
+            "core:prelude/format.wado/Formatter::pad"(f_151, (if __v0_16 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -709,7 +705,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let abs_val: i64;
     let digit_count: i32;
     let offset: i32;
-    let __local_6: ref "core:prelude/string.wado//String";
+    let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
@@ -719,8 +715,8 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
-        __local_6 = f.buf;
-        break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        self_6 = f.buf;
+        break __inline_String__internal_raw_bytes_0: self_6.repr;
         unreachable;
     }, offset, abs_val, digit_count);
 }
@@ -729,19 +725,19 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<u8>;
-    let __local_5: i32;
-    let __local_7: i32;
+    let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_5 = __inline_i32_max_1: block -> i32 {
-            __local_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+        a_5 = __inline_i32_max_1: block -> i32 {
+            a_7 = capacity * 2;
+            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
             unreachable;
         };
-        break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
         unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
@@ -776,21 +772,12 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     self.used = new_used;
 }
 
-fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
-    let len_a: i32;
-    len_a = self.used;
-    if len_a != other.used {
-        return 0;
-    }
-    return "core:prelude/string.wado/String^Eq::eq_bytes"(self.repr, other.repr, len_a);
-}
-
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
     __for_1: block {
         i = 0;
         block {
-            l38: loop {
+            l37: loop {
                 if i >= len {
                     break __for_1;
                 }
@@ -798,7 +785,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
                     return 0;
                 }
                 i = i + 1;
-                continue l38;
+                continue l37;
             };
         };
     };
@@ -832,31 +819,24 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
-    let i: i32;
-    let _licm_buf_4: ref "core:prelude/string.wado//String";
-    __for_0: block {
-        i = 0;
-        _licm_buf_4 = self.buf;
-        block {
-            l46: loop {
-                if i >= n {
-                    break __for_0;
-                }
-                "core:prelude/string.wado/String::push"(_licm_buf_4, c);
-                i = i + 1;
-                continue l46;
-            };
-        };
-    };
-}
-
 fn "core:prelude/format.wado/Formatter::pad"(self, content) {
     let content_len: i32;
     let padding: i32;
     let align: "core:prelude/format.wado//enum:Alignment";
     let left_pad: i32;
     let right_pad: i32;
+    let c_9: char;
+    let i_11: i32;
+    let c_13: char;
+    let i_15: i32;
+    let c_17: char;
+    let i_19: i32;
+    let c_21: char;
+    let i_23: i32;
+    let _licm_buf_24: ref "core:prelude/string.wado//String";
+    let _licm_buf_25: ref "core:prelude/string.wado//String";
+    let _licm_buf_26: ref "core:prelude/string.wado//String";
+    let _licm_buf_27: ref "core:prelude/string.wado//String";
     content_len = content.used;
     if (if self.width <= 0 -> i32 {
         1;
@@ -872,15 +852,71 @@ fn "core:prelude/format.wado/Formatter::pad"(self, content) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         "core:prelude/string.wado/String::push_str"(self.buf, content);
-        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
+        c_9 = self.fill;
+        __inline_Formatter__write_char_n_1____for_0: block {
+            i_11 = 0;
+            _licm_buf_24 = self.buf;
+            block {
+                l48: loop {
+                    if i_11 >= padding {
+                        break __inline_Formatter__write_char_n_1____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_24, c_9);
+                    i_11 = i_11 + 1;
+                    continue l48;
+                };
+            };
+        };
     } else if align == 1 {
         left_pad = padding / 2;
         right_pad = padding - left_pad;
-        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, left_pad);
+        c_13 = self.fill;
+        __inline_Formatter__write_char_n_2____for_0: block {
+            i_15 = 0;
+            _licm_buf_25 = self.buf;
+            block {
+                l52: loop {
+                    if i_15 >= left_pad {
+                        break __inline_Formatter__write_char_n_2____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_25, c_13);
+                    i_15 = i_15 + 1;
+                    continue l52;
+                };
+            };
+        };
         "core:prelude/string.wado/String::push_str"(self.buf, content);
-        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, right_pad);
+        c_17 = self.fill;
+        __inline_Formatter__write_char_n_3____for_0: block {
+            i_19 = 0;
+            _licm_buf_26 = self.buf;
+            block {
+                l55: loop {
+                    if i_19 >= right_pad {
+                        break __inline_Formatter__write_char_n_3____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_26, c_17);
+                    i_19 = i_19 + 1;
+                    continue l55;
+                };
+            };
+        };
     } else {
-        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
+        c_21 = self.fill;
+        __inline_Formatter__write_char_n_4____for_0: block {
+            i_23 = 0;
+            _licm_buf_27 = self.buf;
+            block {
+                l58: loop {
+                    if i_23 >= padding {
+                        break __inline_Formatter__write_char_n_4____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_27, c_21);
+                    i_23 = i_23 + 1;
+                    continue l58;
+                };
+            };
+        };
         "core:prelude/string.wado/String::push_str"(self.buf, content);
     }
 }
@@ -896,6 +932,20 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let i_19: i32;
+    let c_21: char;
+    let i_23: i32;
+    let c_25: char;
+    let i_27: i32;
+    let c_29: char;
+    let i_31: i32;
+    let c_33: char;
+    let i_35: i32;
+    let _licm_buf_36: ref "core:prelude/string.wado//String";
+    let _licm_buf_37: ref "core:prelude/string.wado//String";
+    let _licm_buf_38: ref "core:prelude/string.wado//String";
+    let _licm_buf_39: ref "core:prelude/string.wado//String";
+    let _licm_buf_40: ref "core:prelude/string.wado//String";
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
@@ -926,7 +976,20 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         if prefix_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
-        "core:prelude/format.wado/Formatter::write_char_n"(self, 48, padding);
+        __inline_Formatter__write_char_n_2____for_0: block {
+            i_19 = 0;
+            _licm_buf_36 = self.buf;
+            block {
+                l70: loop {
+                    if i_19 >= padding {
+                        break __inline_Formatter__write_char_n_2____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_36, 48);
+                    i_19 = i_19 + 1;
+                    continue l70;
+                };
+            };
+        };
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
     align = self.align;
@@ -940,12 +1003,40 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
             "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
         offset_10 = "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
-        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
+        c_21 = self.fill;
+        __inline_Formatter__write_char_n_3____for_0: block {
+            i_23 = 0;
+            _licm_buf_37 = self.buf;
+            block {
+                l76: loop {
+                    if i_23 >= padding {
+                        break __inline_Formatter__write_char_n_3____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_37, c_21);
+                    i_23 = i_23 + 1;
+                    continue l76;
+                };
+            };
+        };
         return offset_10;
     } else if align == 1 {
         left_pad = padding / 2;
         right_pad = padding - left_pad;
-        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, left_pad);
+        c_25 = self.fill;
+        __inline_Formatter__write_char_n_4____for_0: block {
+            i_27 = 0;
+            _licm_buf_38 = self.buf;
+            block {
+                l80: loop {
+                    if i_27 >= left_pad {
+                        break __inline_Formatter__write_char_n_4____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_38, c_25);
+                    i_27 = i_27 + 1;
+                    continue l80;
+                };
+            };
+        };
         if sign_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
@@ -953,10 +1044,38 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
             "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
         offset_13 = "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
-        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, right_pad);
+        c_29 = self.fill;
+        __inline_Formatter__write_char_n_5____for_0: block {
+            i_31 = 0;
+            _licm_buf_39 = self.buf;
+            block {
+                l85: loop {
+                    if i_31 >= right_pad {
+                        break __inline_Formatter__write_char_n_5____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, c_29);
+                    i_31 = i_31 + 1;
+                    continue l85;
+                };
+            };
+        };
         return offset_13;
     } else {
-        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
+        c_33 = self.fill;
+        __inline_Formatter__write_char_n_6____for_0: block {
+            i_35 = 0;
+            _licm_buf_40 = self.buf;
+            block {
+                l88: loop {
+                    if i_35 >= padding {
+                        break __inline_Formatter__write_char_n_6____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_40, c_33);
+                    i_35 = i_35 + 1;
+                    continue l88;
+                };
+            };
+        };
         if sign_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
@@ -968,41 +1087,37 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 }
 
 fn "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String,bool>^Eq::eq"(self, other) {
-    let a: ref "core:prelude/string.wado//String";
-    let b: ref "core:prelude/string.wado//String";
+    let a_8: ref "core:prelude/string.wado//String";
+    let b_9: ref "core:prelude/string.wado//String";
+    let len_a: i32;
     let __sroa___sroa___tuple_2_0_0: i32;
     let __sroa___sroa___tuple_2_0_1: i32;
     let __sroa___sroa___tuple_2_1_0: ref "core:prelude/string.wado//String";
     let __sroa___sroa___tuple_2_1_1: ref "core:prelude/string.wado//String";
     let __sroa___sroa___tuple_2_2_0: bool;
     let __sroa___sroa___tuple_2_2_1: bool;
-    let __sroa___pattern_temp_2_0_27: i32;
-    let __sroa___pattern_temp_2_1_28: i32;
-    let __sroa___pattern_temp_2_0_29: ref "core:prelude/string.wado//String";
-    let __sroa___pattern_temp_2_1_30: ref "core:prelude/string.wado//String";
-    let __sroa___pattern_temp_2_0_31: bool;
-    let __sroa___pattern_temp_2_1_32: bool;
     __sroa___sroa___tuple_2_0_0 = struct.new "tuple//[Tuple<i32,String,bool>, Tuple<i32,String,bool>]" { 0: self, 1: other }.0.0;
     __sroa___sroa___tuple_2_0_1 = struct.new "tuple//[Tuple<i32,String,bool>, Tuple<i32,String,bool>]" { 0: self, 1: other }.1.0;
     __sroa___sroa___tuple_2_1_0 = struct.new "tuple//[Tuple<i32,String,bool>, Tuple<i32,String,bool>]" { 0: self, 1: other }.0.1;
     __sroa___sroa___tuple_2_1_1 = struct.new "tuple//[Tuple<i32,String,bool>, Tuple<i32,String,bool>]" { 0: self, 1: other }.1.1;
     __sroa___sroa___tuple_2_2_0 = struct.new "tuple//[Tuple<i32,String,bool>, Tuple<i32,String,bool>]" { 0: self, 1: other }.0.2;
     __sroa___sroa___tuple_2_2_1 = struct.new "tuple//[Tuple<i32,String,bool>, Tuple<i32,String,bool>]" { 0: self, 1: other }.1.2;
-    __sroa___pattern_temp_2_0_27 = __sroa___sroa___tuple_2_0_0;
-    __sroa___pattern_temp_2_1_28 = __sroa___sroa___tuple_2_0_1;
-    if __sroa___pattern_temp_2_0_27 != __sroa___pattern_temp_2_1_28 {
+    if __sroa___sroa___tuple_2_0_0 != __sroa___sroa___tuple_2_0_1 {
         return 0;
     }
-    __sroa___pattern_temp_2_0_29 = __sroa___sroa___tuple_2_1_0;
-    __sroa___pattern_temp_2_1_30 = __sroa___sroa___tuple_2_1_1;
-    a = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa___pattern_temp_2_0_29.repr)), used: __sroa___pattern_temp_2_0_29.used };
-    b = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa___pattern_temp_2_1_30.repr)), used: __sroa___pattern_temp_2_1_30.used };
-    if "core:prelude/string.wado/String^Eq::eq"(a, b) == 0 {
+    a_8 = __sroa___sroa___tuple_2_1_0;
+    b_9 = __sroa___sroa___tuple_2_1_1;
+    if __inline_String_Eq__eq_0: block -> bool {
+        len_a = a_8.used;
+        if len_a != b_9.used {
+            break __inline_String_Eq__eq_0: 0;
+        }
+        break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(a_8.repr, b_9.repr, len_a);
+        unreachable;
+    } == 0 {
         return 0;
     }
-    __sroa___pattern_temp_2_0_31 = __sroa___sroa___tuple_2_2_0;
-    __sroa___pattern_temp_2_1_32 = __sroa___sroa___tuple_2_2_1;
-    if __sroa___pattern_temp_2_0_31 != __sroa___pattern_temp_2_1_32 {
+    if __sroa___sroa___tuple_2_2_0 != __sroa___sroa___tuple_2_2_1 {
         return 0;
     }
     return 1;
@@ -1011,43 +1126,39 @@ fn "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String,bool
 fn "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32>^Eq::eq"(self, other) {
     let __sroa___sroa___tuple_2_0_0: i32;
     let __sroa___sroa___tuple_2_0_1: i32;
-    let __sroa___pattern_temp_2_0: i32;
-    let __sroa___pattern_temp_2_1: i32;
     __sroa___sroa___tuple_2_0_0 = struct.new "tuple//[Tuple<i32>, Tuple<i32>]" { 0: self, 1: other }.0.0;
     __sroa___sroa___tuple_2_0_1 = struct.new "tuple//[Tuple<i32>, Tuple<i32>]" { 0: self, 1: other }.1.0;
-    __sroa___pattern_temp_2_0 = __sroa___sroa___tuple_2_0_0;
-    __sroa___pattern_temp_2_1 = __sroa___sroa___tuple_2_0_1;
-    if __sroa___pattern_temp_2_0 != __sroa___pattern_temp_2_1 {
+    if __sroa___sroa___tuple_2_0_0 != __sroa___sroa___tuple_2_0_1 {
         return 0;
     }
     return 1;
 }
 
 fn "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,String>^Eq::eq"(self, other) {
-    let a: ref "core:prelude/string.wado//String";
-    let b: ref "core:prelude/string.wado//String";
+    let a_8: ref "core:prelude/string.wado//String";
+    let b_9: ref "core:prelude/string.wado//String";
+    let len_a: i32;
     let __sroa___sroa___tuple_2_0_0: i32;
     let __sroa___sroa___tuple_2_0_1: i32;
     let __sroa___sroa___tuple_2_1_0: ref "core:prelude/string.wado//String";
     let __sroa___sroa___tuple_2_1_1: ref "core:prelude/string.wado//String";
-    let __sroa___pattern_temp_2_0_20: i32;
-    let __sroa___pattern_temp_2_1_21: i32;
-    let __sroa___pattern_temp_2_0_22: ref "core:prelude/string.wado//String";
-    let __sroa___pattern_temp_2_1_23: ref "core:prelude/string.wado//String";
     __sroa___sroa___tuple_2_0_0 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: self, 1: other }.0.0;
     __sroa___sroa___tuple_2_0_1 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: self, 1: other }.1.0;
     __sroa___sroa___tuple_2_1_0 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: self, 1: other }.0.1;
     __sroa___sroa___tuple_2_1_1 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: self, 1: other }.1.1;
-    __sroa___pattern_temp_2_0_20 = __sroa___sroa___tuple_2_0_0;
-    __sroa___pattern_temp_2_1_21 = __sroa___sroa___tuple_2_0_1;
-    if __sroa___pattern_temp_2_0_20 != __sroa___pattern_temp_2_1_21 {
+    if __sroa___sroa___tuple_2_0_0 != __sroa___sroa___tuple_2_0_1 {
         return 0;
     }
-    __sroa___pattern_temp_2_0_22 = __sroa___sroa___tuple_2_1_0;
-    __sroa___pattern_temp_2_1_23 = __sroa___sroa___tuple_2_1_1;
-    a = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa___pattern_temp_2_0_22.repr)), used: __sroa___pattern_temp_2_0_22.used };
-    b = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa___pattern_temp_2_1_23.repr)), used: __sroa___pattern_temp_2_1_23.used };
-    if "core:prelude/string.wado/String^Eq::eq"(a, b) == 0 {
+    a_8 = __sroa___sroa___tuple_2_1_0;
+    b_9 = __sroa___sroa___tuple_2_1_1;
+    if __inline_String_Eq__eq_0: block -> bool {
+        len_a = a_8.used;
+        if len_a != b_9.used {
+            break __inline_String_Eq__eq_0: 0;
+        }
+        break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(a_8.repr, b_9.repr, len_a);
+        unreachable;
+    } == 0 {
         return 0;
     }
     return 1;

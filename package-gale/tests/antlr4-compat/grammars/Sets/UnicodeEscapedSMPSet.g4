@@ -1,0 +1,5 @@
+grammar T;
+a : LETTERS  {<InputText():writeln()>} ;
+// Note the double-backslash to avoid Java passing
+// unescaped values as part of the grammar.
+LETTERS : ('a'|'\u{1D5BA}'|'\u{1D5BE}'|'\u{1D5C2}'|'\u{1D5C8}'|'\u{1D5CE}')* 'c';

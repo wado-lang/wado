@@ -1,6 +1,7 @@
 pub mod analyze;
 pub mod annotate;
 pub mod ast;
+pub mod ast_index;
 pub mod bind;
 pub mod builtin_registry;
 pub mod cm_abi;
@@ -31,7 +32,9 @@ pub mod syntax;
 pub mod synthesis;
 pub mod tir;
 pub mod tir_visitor;
+pub mod tiri;
 pub mod token;
+pub mod trace;
 pub mod unparse;
 pub mod wir;
 pub mod wir_build;
@@ -41,7 +44,7 @@ pub mod wir_visitor;
 pub mod world_registry;
 
 pub use analyze::Analyzer;
-pub use annotate::{Annotated, Definition, annotate, annotate_with_invocations};
+pub use annotate::{Annotated, Cursor, Definition, annotate, annotate_with_invocations};
 pub use ast::{AstId, AstNodeKind, AstPtr};
 pub use bind::{BindError, Binder};
 pub use compiler_host::{
@@ -357,6 +360,7 @@ fn compile_after_load<H: CompilerHost>(
         symbols,
         state,
         tir_modules,
+        interner,
         ..
     } = annotated;
 
@@ -364,11 +368,17 @@ fn compile_after_load<H: CompilerHost>(
         entry_module_source,
         tir_modules,
         symbols,
+        // Move trait_env out of `state` rather than cloning the `Arc`,
+        // so that `Package` is the unique owner. `synthesize` later relies
+        // on `Arc::try_unwrap` succeeding to swap layers in place; a stray
+        // clone here would force a deep `TraitEnv` clone instead.
+        state.trait_env,
         implicit_modules,
         module_name,
         state.wasi_registry,
         state.world_registry,
         state.builtin_registry,
+        interner,
     );
 
     // Apply options to package (must be before synthesis)
@@ -475,7 +485,25 @@ fn compile_after_load<H: CompilerHost>(
         check_stores(&package.tir_modules, logger)?;
     }
 
-    // === Phase 8b: Link (Package → FlatPackage) ===
+    // === Phase 8c: Effect Dispatch Synthesis ===
+    // Lowers `WithHandler` / `Resume` and generates per-effect dispatch
+    // infrastructure (struct, mut global, dispatch wrappers). Runs after
+    // effect-check so that handler-skip semantics are validated against
+    // the original `WithHandler` shape.
+    let package = {
+        let _span = logger.span("effect-dispatch");
+        synthesis::effect_dispatch::synthesize_post_check(package).map_err(|message| {
+            let _ = logger.error(compiler_host::Diagnostic {
+                severity: compiler_host::Severity::Error,
+                code: compiler_host::Code::UnsupportedFeature,
+                message,
+                span: None,
+            });
+            Bail
+        })?
+    };
+
+    // === Phase 8d: Link (Package → FlatPackage) ===
     let mut flat = {
         let _span = logger.span("link");
         link::link(package)
@@ -655,10 +683,13 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             })?
     };
 
+    // Wrap the loader's interner for sharing across analyze + resolve.
+    let interner = std::rc::Rc::new(std::cell::RefCell::new(load_result.interner));
+
     // === Phase 6: Analyze all modules ===
     let symbols = {
         let _span = logger.span("analyze");
-        let mut analyzer = Analyzer::new(&logger);
+        let mut analyzer = Analyzer::new(&logger).with_interner(interner.clone());
         analyzer.analyze_loaded_modules(
             &load_result.modules,
             &load_result.entry_module_source,
@@ -668,7 +699,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     };
 
     // === Phase 7: Resolve all modules to TIR ===
-    let tir_modules = {
+    let resolve_output = {
         let _span = logger.span("resolve");
         Resolver::resolve_all_modules(
             &symbols,
@@ -677,14 +708,21 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             &logger,
             &load_result.included_files,
             load_result.invocations.clone(),
+            interner.clone(),
         )
         .ok()
     };
-
-    // Snapshot resolved TIR with an independent TypeTable clone so that
-    // later optimization passes (which call TypeTable::retain) cannot mutate it.
-    let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
-        tir_modules.as_ref().map(snapshot_tir_modules);
+    // Destructure rather than clone the `Arc<TraitEnv>`: keeping a stray
+    // reference alive forces `synthesize`'s `Arc::try_unwrap` into the
+    // deep-clone fallback. Snapshotting the TIR consumes the modules, so
+    // no need to keep `resolve_output` past this point.
+    let (tir_modules_by_source, trait_env): (
+        Option<IndexMap<ModuleSource, tir::TirModule>>,
+        Option<std::sync::Arc<crate::resolver::trait_env::TraitEnv>>,
+    ) = match resolve_output {
+        Some((modules, env)) => (Some(snapshot_tir_modules(&modules)), Some(env)),
+        None => (None, None),
+    };
 
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
     // Create Package early so CM binding synthesis runs before monomorphize,
@@ -713,11 +751,13 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 load_result.entry_module_source.clone(),
                 resolved_modules,
                 symbols.clone(),
+                trait_env.expect("trait_env is set when resolve succeeded"),
                 load_result.implicit_modules.clone(),
                 module_name,
                 wasi_registry,
                 world_registry,
                 builtin_registry,
+                interner,
             );
 
             // Apply target world override (must be before synthesis)
@@ -744,6 +784,21 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             let package = {
                 let _span = logger.span("synthesis");
                 synthesis::synthesize(package).map_err(|message| {
+                    let _ = logger.error(compiler_host::Diagnostic {
+                        severity: compiler_host::Severity::Error,
+                        code: compiler_host::Code::UnsupportedFeature,
+                        message,
+                        span: None,
+                    });
+                    Bail
+                })?
+            };
+
+            // Effect dispatch synthesis (lowers WithHandler / Resume).
+            // Dump path mirrors the main compile pipeline (Phase 8c).
+            let package = {
+                let _span = logger.span("effect-dispatch");
+                synthesis::effect_dispatch::synthesize_post_check(package).map_err(|message| {
                     let _ = logger.error(compiler_host::Diagnostic {
                         severity: compiler_host::Severity::Error,
                         code: compiler_host::Code::UnsupportedFeature,

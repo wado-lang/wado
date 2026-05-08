@@ -98,7 +98,7 @@ pub fn lower(flat: &mut FlatPackage) {
     // lift code using the concrete T (post-monomorphise). Must happen
     // before boxing so the newly-emitted struct/variant constructors get
     // boxed consistently with the rest of the module.
-    cm_intrinsics::expand_cm_intrinsics(&mut temp_module);
+    cm_intrinsics::expand_cm_intrinsics(&mut temp_module, &flat.interner);
 
     // Pre-boxing passes
     lower_pre_boxing(&mut temp_module, &global_variant_map);

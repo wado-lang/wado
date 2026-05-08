@@ -1,6 +1,10 @@
-#![TODO]
-// Compile-only test for wasi:clocks/timezone
-// Timezone is not yet implemented in wasmtime, so we only verify compilation.
+// E2E test for wasi:clocks/timezone.
+//
+// Wasmtime ships only the binding for this interface (gated by the unstable
+// `clocks-timezone` feature) and not the host implementation, so the test
+// runtime in `tests/common.rs` (and `wado run`/`wado serve` via
+// `wado_cli::timezone_host`) wires its own implementation backed by
+// `localtime_r` + the `iana-time-zone` crate.
 
 use { SystemClock, Instant, Timezone } from "wasi:clocks";
 

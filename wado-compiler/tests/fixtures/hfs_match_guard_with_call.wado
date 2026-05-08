@@ -1,0 +1,58 @@
+// Regression: a match arm whose **guard** contains a `&mut local`
+// call sits next to a scalar-update arm. The guard's call needs its
+// own sync wrapper at the guard expression position so the surrounding
+// scalar-update arm is unaffected.
+//
+// Per iteration the guard `probe(&mut b) > 0` runs first. probe always
+// mutates b.v (+= 5) regardless of pass/fail, and returns the new
+// value. So:
+//   - i=0: probe runs, b.v becomes 5, returns 5. guard 5 > 0 → true.
+//          arm 0 fires: scalar update +1 → b.v becomes 6.
+//   - i=1: probe runs, b.v becomes 11, returns 11. arm 0 fires.
+//          scalar update +1 → b.v becomes 12.
+//   - i=2: probe runs, b.v becomes 17, returns 17. arm 0 fires.
+//          scalar update +1 → b.v becomes 18.
+//   - i=3: probe runs, b.v becomes 23, returns 23. arm 0 fires.
+//          scalar update +1 → b.v becomes 24.
+// Note: arm 0's body is a pure scalar update; the probe call is in
+// the GUARD, not the body. With per-call-site sync, the guard's
+// wrapper commits/rereads scalar, then arm 0's body uses the rereaded
+// scalar to do its +1.
+// final b.v = 24.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    v: i32,
+    pad: i32,
+}
+
+#[inline(never)]
+fn probe(b: &mut Buf) -> i32 {
+    b.v = b.v + 5;
+    return b.v;
+}
+
+export fn run() with Stdout {
+    let mut b = Buf { v: 0, pad: 0 };
+    let mut i = 0;
+    while i < 4 {
+        b.v = b.v + 0;
+        b.v = b.v + 0;
+        match i {
+            x && probe(&mut b) > 0 => b.v = b.v + 1,
+            _ => {},
+        }
+        b.v = b.v + 0;
+        i = i + 1;
+    }
+    println(`{b.v}`);
+}
+
+__DATA__
+{
+    "stdout": "24\n",
+    "wir_expect:O2": [
+        "let __hfs_v_"
+    ]
+}

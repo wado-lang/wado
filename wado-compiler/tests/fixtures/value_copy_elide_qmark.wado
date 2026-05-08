@@ -1,0 +1,49 @@
+// Test that the value-copy elider strips `$value_copy$T<id>` wrappers
+// generated around the `?` operator's Result<T, E> match desugaring.
+//
+// In a `let v: T = make()?;` pattern, `?` lowers to
+//   `match make() { Ok(__qm_v) => __qm_v, Err(e) => return Err(e) }`
+// and the binding wraps the whole match in `$value_copy$T(...)` to
+// preserve Wado's value-copy semantics. The match scrutinee is a fresh
+// rvalue (a function call), so the aliasing the wrapper would prevent
+// is unobservable — the elider must strip the wrapper.
+//
+// Before the fix, `tir/inline` ran before `tir/value_copy_elide` in
+// each iteration, expanding the wrapper into a labeled block before
+// the elider could match the `Call($value_copy$T, [Match])` shape;
+// the wrapper survived to the final TIR. The pre-inline elision pass
+// added in `optimize.rs` resolves this.
+
+use { println } from "core:cli";
+
+pub struct Pair {
+    pub a: i32,
+    pub b: i32,
+}
+
+fn make_pair(ok: bool) -> Result<Pair, i32> {
+    if ok {
+        return Result::<Pair, i32>::Ok(Pair { a: 10, b: 20 });
+    }
+    return Result::<Pair, i32>::Err(-1);
+}
+
+fn extract() -> Result<i32, i32> {
+    let p: Pair = make_pair(true)?;
+    return Result::<i32, i32>::Ok(p.a + p.b);
+}
+
+export fn run() with Stdout {
+    match extract() {
+        Ok(n) => println(`{n}`),
+        Err(_) => println("err"),
+    };
+}
+
+__DATA__
+{
+    "stdout": "30\n",
+    "wir_not_expect:O2": [
+        "$value_copy$"
+    ]
+}

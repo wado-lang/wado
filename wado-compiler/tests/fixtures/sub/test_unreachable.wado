@@ -1,0 +1,14 @@
+// Helper module imported by `test_imported_test_block_skipped.wado`.
+//
+// Has its own `test` block that traps. When the parent file is compiled with
+// the test world, this test block must NOT be exported (and therefore must
+// not be executed by the runner). If it were executed, the trap would fail
+// the parent's test run.
+
+pub fn helper() -> i32 {
+    return 42;
+}
+
+test "imported module test block must not run" {
+    unreachable();
+}

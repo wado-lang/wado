@@ -35,15 +35,24 @@ use geo from "./geo.wado";
 let p = geo::Point::new(1, 2);  // access via namespace
 ```
 
-## Schema Imports (Kiln)
+### Schema Imports
 
-Non-`.wado` schemas (`.g4`, `.proto`, ...) are imported via a generator declared in `[build-dependencies]` of `wado.toml`. See [WEP: Kiln](./wep-2026-04-12-kiln.md), [WEP: Gale](./wep-2026-03-02-gale.md).
+Non-`.wado` files (`.g4`, `.proto`, ...) are imported via a generator declared in `[build-dependencies]` of `wado.toml`. See [WEP: Kiln](./wep-2026-04-12-kiln.md) for the mechanism, [WEP: Gale](./wep-2026-03-02-gale.md) for the real-world usage.
 
 ```wado
-use { Parser } from "./Calc.g4" with {                  // Gale parses ANTLR4 .g4
-    generator: { module: "wado:gale@0.1", options: { highlight: false } },
+use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
+    generator: {
+        module: "wado:gale@0.1",
+        options: { highlight: false },
+    },
 };
 ```
+
+## Value Semantics
+
+See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
+
+Wado uses Wasm GC for memory management. There is no borrow checker or lifetime annotations. Primitives and composite types have value semantics: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
 
 ## Literals
 
@@ -116,14 +125,6 @@ fn example() {
     counter = counter + 1;          // write mutable global
 }
 ```
-
-Global variables map directly to WebAssembly globals. Constant expressions are evaluated at instantiation; non-constant expressions use lazy initialization.
-
-## Value Semantics
-
-See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
-
-Wado uses GC-based memory management (Wasm GC). There is no borrow checker or lifetime annotations. Primitives and composite types have value semantics: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
 
 ## Types
 
@@ -259,6 +260,7 @@ for let c of "hello".chars() {
 ### Structs
 
 ```wado
+// Simple struct
 struct Point {
     x: i32,
     y: i32,
@@ -284,7 +286,7 @@ let c = ServerConfig { host: "localhost" };  // port=8080, debug=false
 let p = Point { x: 10, y: 20 };
 let b = Pair { first: 0, second: 1 };  // F and S are inferred as i32
 
-// Shorthand (variable name matches field)
+// Shorthand
 let x = 10;
 let y = 20;
 let p: Point = { x, y };
@@ -318,7 +320,7 @@ for let { x, y } of points {
 
 Wado has three distinct type kinds for Component Model alignment: enums (no payload), variants (with payload), and flags (bitmask).
 
-Enums are discriminated values without payloads (i32 discriminant):
+Enums are discriminated values without payloads:
 
 ```wado
 enum Color {
@@ -383,8 +385,8 @@ pub flags Perms {
 }
 
 let rw = Perms::Read | Perms::Write;   // bitwise combination
-let masked = rw & Perms::Read;          // bitwise AND
-let toggled = rw ^ Perms::Read;         // bitwise XOR
+let masked = rw & Perms::Read;         // bitwise AND
+let toggled = rw ^ Perms::Read;        // bitwise XOR
 
 let none = Perms::none();  // 0 (no bits set)
 let all  = Perms::all();   // 7 (all bits set)
@@ -475,8 +477,8 @@ if let Some(mut x) = opt {
 }
 
 // Match ergonomics: &T scrutinees match against inner type
-let ro = &opt;                   // &Option<i32>
-if let Some(x) = ro {           // x: &i32
+let ro = &opt;                // &Option<i32>
+if let Some(x) = ro {         // x: &i32
     println(`Got: {*x}`);
 }
 
@@ -501,9 +503,8 @@ for let i of 0..<10 { println(`{i}`); }    // 0 to 9
 for let i of 1..=10 { println(`{i}`); }    // 1 to 10
 for let c of 'a'..='z' { print(`{c}`); }   // abcdefghijklmnopqrstuvwxyz
 
-// Tuple for-of (compile-time expansion, each element may have a different type)
-let t = [42, "hello", true];
-for let v of t {
+// Tuple for-of (compile-time expansion)
+for let v of [42, "hello", true] {
     println(`{v}`);
 }
 
@@ -570,10 +571,10 @@ let desc = match value {
 
 // Range patterns
 let grade = match score {
-    0..<60 => "F",
-    60..<70 => "D",
-    70..<80 => "C",
-    80..<90 => "B",
+    0..<60   => "F",
+    60..<70  => "D",
+    70..<80  => "C",
+    80..<90  => "B",
     90..=100 => "A",
     _ => "invalid",
 };
@@ -582,8 +583,8 @@ let grade = match score {
 Semicolons do not have particular semantics; they are just separators to statements. Convention in `wado format`: single-line block does not use semicolon.
 
 ```wado
-let a = if true { 1 } else { 2 };   // either 1 or 2
-let b = if true { 1; } else { 2; }; // ditto
+let a = if cond() { 1 } else { 2 };   // either 1 or 2
+let b = if cond() { 1; } else { 2; }; // ditto
 ```
 
 ## Assert
@@ -888,9 +889,11 @@ All primitives implement `Eq` and `Ord`. Structs auto-derive `Eq` and `Ord` when
 
 Variants auto-derive `Eq` and `Ord` as well. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `Array<T: Eq>` implement `Eq`. `Array<T: Ord>` implements `Ord`.
 
-`Inspect` and `InspectAlt` are auto-derived, and `Display` and `DisplayAlt` default to `Inspect` and `InspectAlt` respectively.
+`Inspect` and `InspectAlt` are also auto-derived. The compiler synthesizes `Display` and `DisplayAlt` fallbacks that delegate to `Inspect` and `InspectAlt` respectively.
 
-`Default` is auto-derived for a non-generic struct when every field has a declared default expression (`f: T = expr`). A user-written `impl Default for S` overrides the auto-derived one.
+`Default` is auto-derived for a non-generic struct when every field has a declared default expression (`f: T = expr`).
+
+Auto-derived traits are overridden by user-written `impl Trait for T`.
 
 ## Associated Constants
 
@@ -915,6 +918,7 @@ f64::abs(x)    f64::ceil(x)   f64::floor(x)
 f64::pow(x, y) f64::ln(x)     f64::exp(x)
 
 x.is_nan()     x.is_finite()    // where x is f64 or f32
+
 f64::from_str("3.14")           // Result<f64, ParseFloatError>
 i32::from_str("42")             // Result<i32, ParseIntError>
 i32::from_str_hex("ff")         // Result<i32, ParseIntError> (radix 16)
@@ -1008,9 +1012,9 @@ fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
 }
 
 // E is inferred from the closure's effects at each call site
-wrapper(|| { println("hello"); });           // E = Stdout
-let x = apply(|n: i32| n + 1, 41);           // E = (none)
-let y = apply(|n: i32| {                     // E = Stdout
+wrapper(|| { println("hello"); });     // E = Stdout
+let x = apply(|n: i32| n + 1, 41);     // E = (none)
+let y = apply(|n: i32| {               // E = Stdout
     println(`{n}`);
     return n * 2;
 }, 21);
@@ -1026,9 +1030,42 @@ run_both(
 );  // E = Stdout + Stderr
 ```
 
+### Effect Handlers
+
+See [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md).
+
+An effect handler is an `impl Effect for Type` where the methods may call `resume value` to continue the suspended computation. The `with` block installs handlers for the duration of its `do` body. The `=>` arrow reads as "calls to E dispatch to h".
+
+```wado
+interface Counter {
+    fn next() -> i32;
+}
+
+struct MyCounter { value: i32 }
+
+impl Counter for MyCounter {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
+    }
+}
+
+fn main() {
+    let mut m = MyCounter { value: 0 };
+    with Counter => &mut m do {
+        let a = Counter::next();   // 1
+        let b = Counter::next();   // 2
+    }
+    // Multiple handlers — comma-separated
+    // with Stdin => &mut s, Stdout => &mut o do { ... }
+}
+```
+
+`resume value` (only valid inside a handler method) hands `value` back to the caller of the operation. Without post-resume code it lowers to `return value`.
+
 ## Entrypoints
 
-The entrypoint is defined in a World, which requires `export` keyword.
+The entrypoint is defined in a world, which requires `export` keyword.
 
 `run()` is the entry point for `wasi:cli/command`:
 
@@ -1046,12 +1083,13 @@ export fn run() with Stdout {
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
-    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let headers = Fields::new();
-    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    let [response, _tx_future] = Response::new(headers, null, trailers_rx);
 
     // task return: delivers result without ending the function
     task return Result::<Response, ErrorCode>::Ok(response);
+
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }
 ```
@@ -1063,11 +1101,23 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 Test blocks compile to the `test` world. Files with test blocks are discovered and executed by `wado test`:
 
 ```sh
-wado test                            # discover and run *_test.wado files
-wado test file.wado                  # run specific file
-wado test --filter pattern           # filter tests by name
-wado compile --world test file.wado  # compile with test world
+wado test                            # walk the project for every *.wado file
+wado test file.wado                  # run a specific file
+wado test --filter '*pattern*'       # keep files whose path matches the wildcard
+wado compile --world test file.wado  # compile a single file with the test world
 ```
+
+Discovery walks the project root for every `*.wado` file, honouring
+`.gitignore`, `.gitmodules`, dot-prefixed entries, and nested `wado.toml`
+boundaries (each sub-package is run in its own context). Add
+`[test].exclude = ["..."]` to `wado.toml` to skip extra paths. Files without
+`test` blocks are still parsed and compiled (compile-only validation); only
+files with `test` blocks register and run tests.
+
+`--filter <pattern>` is a path-based shell wildcard (`*`, `?`, `[...]`); it
+is _not_ a regex. To match anywhere in a path, wrap the term in `*`s, e.g.
+`'*foo*'`. The runner exits non-zero on any compile failure, test failure,
+or `#[TODO]` test that resolved unexpectedly.
 
 ```wado
 test {
@@ -1096,20 +1146,27 @@ test "not yet implemented" {
 
 For full API reference, see:
 
-- Core stdlib (one file per module):
-  - [`core:prelude`](./stdlib-core-prelude.md) - auto-imported types, traits, primitive APIs
+- Core library:
+  - [`core:prelude`](./stdlib-core-prelude.md) - auto-imported types and traits
   - [`core:cli`](./stdlib-core-cli.md) - stdout/stderr printing
-  - [`core:collections`](./stdlib-core-collections.md) - `TreeMap`, `TreeSet`
-  - [`core:serde`](./stdlib-core-serde.md) - `Serialize` / `Deserialize` framework
-  - [`core:json`](./stdlib-core-json.md) - JSON (self-describing)
-  - [`core:json_nsd`](./stdlib-core-json_nsd.md) - JSON (non-self-describing)
-  - [`core:json_value`](./stdlib-core-json_value.md) - dynamic JSON value
-  - [`core:base64`](./stdlib-core-base64.md) - base64 encoding
-  - [`core:zlib`](./stdlib-core-zlib.md) - zlib (de)compression
+  - [`core:collections`](./stdlib-core-collections.md) - `TreeMap<K,V>` and `TreeSet<T>`
+  - [`core:serde`](./stdlib-core-serde.md) - `Serialize` and `Deserialize` framework
+  - [`core:json`](./stdlib-core-json.md) - JSON and its serde integration
+  - [`core:json_nsd`](./stdlib-core-json_nsd.md) - non-self-describing JSON and its serde integration
+  - [`core:json_value`](./stdlib-core-json_value.md) - dynamic JSON value and its serde integration
+  - [`core:base64`](./stdlib-core-base64.md) - base64 encoding and decoding
+  - [`core:zlib`](./stdlib-core-zlib.md) - zlib/gzip compression and decompression
   - [`core:simd`](./stdlib-core-simd.md) - Wasm 128-bit SIMD
   - [`core:url`](./stdlib-core-url.md) - WHATWG URL parsing
   - [`core:kiln`](./stdlib-core-kiln.md) - Kiln IDL host bindings
-- [WASI Standard Library Reference](./stdlib-wasi.md) - `wasi:cli`, `wasi:filesystem`, `wasi:http`, `wasi:clocks`, `wasi:random`, `wasi:sockets`
+- [WASI Standard Library Reference](./stdlib-wasi.md)
+  - `wasi:cli`
+  - `wasi:random`
+  - `wasi:clocks`
+  - `wasi:http`
+  - `wasi:filesystem`
+  - `wasi:sockets`
+  - `wasi:tls`
 
 ```wado
 // core:prelude (auto-imported)
@@ -1129,15 +1186,6 @@ let opt = map.get("key"); // fallible access returns Option<V>
 
 let set = ["foo", "bar", "baz"] as TreeSet<String>;
 assert set.contains("foo");
-
-// other standard library
-import { encode, encode_url, encode_with, decode, decode_bytes } from "core:base64";
-import zlib from "core:zlib";             // Wado port of the original zlib
-import serde from "core:serde";           // Wado port of serde crate
-import json from "core:json";             // a.k.a. "serde json"
-import json_value from "core:json_value"; // dynamic JSON value
-import simd from "core:simd";             // interface to Wasm SIMD
-import url from "core:url";               // WHATWG URL
 ```
 
 ## Compile-Time Literals
@@ -1159,7 +1207,7 @@ Paths in `#include_str` and `#include_bytes` are resolved relative to the source
 ```wado
 #![no_prelude]             // disable auto-import of core:prelude
 #![TODO]                   // all tests must fail or not compile
-#![generated]              // marks machine-generated code for tools
+#![generated]              // marks machine-generated code
 #![generated(by = "wado-from-idl", sources = ["deps/random.wit"])]  // with metadata
 
 struct Foo {
@@ -1183,6 +1231,3 @@ Wado supports 128-bit SIMD operations including Relaxed SIMD. See [WEP: SIMD v12
 ## See Also
 
 - [Language Specification](./spec.md) - Full language specification
-- Core Standard Library — one reference per module: [`prelude`](./stdlib-core-prelude.md), [`cli`](./stdlib-core-cli.md), [`collections`](./stdlib-core-collections.md), [`serde`](./stdlib-core-serde.md), [`json`](./stdlib-core-json.md), [`json_nsd`](./stdlib-core-json_nsd.md), [`json_value`](./stdlib-core-json_value.md), [`base64`](./stdlib-core-base64.md), [`zlib`](./stdlib-core-zlib.md), [`simd`](./stdlib-core-simd.md), [`url`](./stdlib-core-url.md), [`kiln`](./stdlib-core-kiln.md)
-- [WASI Standard Library Reference](./stdlib-wasi.md) - WASI stdlib reference
-- [wado-compiler/tests/fixtures/\*.wado](wado-compiler/tests/fixtures) - E2E test fixtures

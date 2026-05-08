@@ -1,6 +1,7 @@
 //! Function collection — gathers all reachable functions from the `FlatPackage`,
 //! registers their types and creates `WirFunction` stubs (bodies filled later).
 
+use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
 use crate::tir::{TirFunction, TypeTable};
 use crate::wir::{
@@ -110,11 +111,11 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             let local_name = func.local_alias_name();
 
             // Only register functions that are actually used (per-function check).
-            // This is more precise than has_effect() which includes ALL functions
+            // This is more precise than has_interface() which includes ALL functions
             // for a used effect. Per-function filtering avoids importing unused
             // WASI functions that the component builder doesn't support (e.g.,
             // [static] HTTP functions like consume_body).
-            let wasi_func_key = format!("{}::{}", func.effect_name, func.method_name);
+            let wasi_func_key = format!("{}::{}", func.interface_name, func.method_name);
             if !ctx.package.used_wasi_functions.contains(&wasi_func_key) {
                 continue;
             }
@@ -323,7 +324,11 @@ fn register_methods(ctx: &mut WirContext<'_>) {
             continue;
         }
 
-        if tir_func.body.is_none() {
+        // Bodyless methods are normally external/CM-import declarations and
+        // get skipped here. The exception is `FnCanonicalDispatch`: WIR build
+        // supplies its body in `translate_function_bodies`, so the entry must
+        // still be registered so call sites resolve.
+        if tir_func.body.is_none() && tir_func.fn_canonical_dispatch().is_none() {
             continue;
         }
 
@@ -365,16 +370,28 @@ fn register_single_function(
         return;
     }
 
-    // Build param types, filtering out unit-type params (unit has no Wasm representation)
+    // Build param types, filtering out unit-type params (unit has no Wasm representation).
+    // WIR locals are looked up by name during codegen, so any two params sharing a
+    // name would clobber each other in `current_locals`. Disambiguate duplicates by
+    // suffixing `_{local_index}`; matches `FunctionTranslator::local_name`.
     let mut params: Vec<WirType> = Vec::new();
     let mut param_names: Vec<String> = Vec::new();
+    let mut name_counts: IndexMap<String, u32> = IndexMap::default();
+    for p in &tir_func.params {
+        *name_counts.entry(p.name.clone()).or_insert(0) += 1;
+    }
     for p in &tir_func.params {
         let wir_type = ctx.type_id_to_wir_type(type_table, p.type_id);
         if matches!(wir_type, WirType::Unit) {
             continue;
         }
         params.push(wir_type);
-        param_names.push(p.name.clone());
+        let unique_name = if name_counts.get(&p.name).copied().unwrap_or(0) > 1 {
+            format!("{}_{}", p.name, p.local_index)
+        } else {
+            p.name.clone()
+        };
+        param_names.push(unique_name);
     }
 
     // Build result types
@@ -513,14 +530,21 @@ fn register_globals(ctx: &mut WirContext<'_>) {
 
         let mut wir_type = ctx.type_id_to_wir_type(type_table, global.ty);
 
-        // For nullable globals (lazy-init reference types), ensure the WIR type is nullable
-        if global.is_nullable
-            && let WirType::Ref { type_id, .. } = wir_type
-        {
-            wir_type = WirType::Ref {
-                type_id,
-                nullable: true,
-            };
+        // For nullable globals (lazy-init reference types, or constant
+        // `null` initialisers on reference-typed globals), widen the WIR
+        // slot to its nullable form so the `ref.null` placeholder in the
+        // Wasm initialiser validates. Both `WirType::Ref` (concrete
+        // struct/array references) and `WirType::AbstractRef` (e.g.
+        // closure-typed globals lowered to abstract `structref`) need
+        // this. Codegen narrows reads back to the non-null type via
+        // `ref.as_non_null` for `lazy_init` globals.
+        if global.is_nullable {
+            match &mut wir_type {
+                WirType::Ref { nullable, .. } | WirType::AbstractRef { nullable, .. } => {
+                    *nullable = true;
+                }
+                _ => {}
+            }
         }
 
         // Convert the initializer to a WIR constant instruction
@@ -534,6 +558,7 @@ fn register_globals(ctx: &mut WirContext<'_>) {
             ty: wir_type,
             mutable: global.mutable,
             init,
+            lazy_init: global.lazy_init,
             meta: WirMeta {
                 module_source: Some(module_source.clone()),
                 ..WirMeta::default()
@@ -605,6 +630,19 @@ fn translate_global_init(
 
 /// Build a mangled function name from TIR function and module source.
 fn build_mangled_name(tir_func: &TirFunction, _module_source: &ModuleSource) -> String {
+    // For monomorphized functions, prefer `tir_func.name` because the
+    // monomorphizer set it to the canonical mangled name produced by
+    // `function_instantiation_name` / `method_instantiation_name`. The
+    // string-typed `method_info.method_type_args` field is populated by
+    // resolver/monomorphizer call sites that historically used
+    // `mangle_type_name` (unqualified for `Variant`/`Newtype`/etc.); calling
+    // `method_info.to_mangled_name()` on a monomorphized function would
+    // therefore drop the module qualification that the call-rewrite path
+    // already baked into `tir_func.name`, leaving the func_map registered
+    // under a name no call site looks up.
+    if tir_func.monomorph_info.is_some() {
+        return tir_func.name.clone();
+    }
     if let Some(ref method_info) = tir_func.method_info {
         method_info.to_mangled_name()
     } else {

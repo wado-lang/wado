@@ -1,0 +1,47 @@
+use g from "./grammars/at_end_alt_gaps.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/at_end_alt_gaps",
+        },
+    };
+use { normalize_tree } from "./grammars/at_end_alt_gaps.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = g::parse(input).unwrap();
+    let tree = g::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+test "paren caller: typespec commits to bare ID alt" {
+    assert_tree(&"(T)", &"
+        (prog (entry ( (typespec T) )))
+    ");
+}
+
+test "paren caller: typespec commits to ID '[' ']' alt" {
+    assert_tree(&"(T[])", &"
+        (prog (entry ( (typespec T [ ]) )))
+    ");
+}
+
+test "index caller: typespec must pick bare ID alt despite '[' lookahead" {
+    // The trap: at depth=1 in typespec (after consuming `T`), the next token
+    // is `[`. The dropped at-end alt 0 should win here because alt 1's body
+    // `[ ]` does not match the input `[1`.
+    assert_tree(&"new T[1]", &"
+        (prog (entry new (typespec T) [ 1 ]))
+    ");
+}
+
+test "interleaved entries exercise both dispatch paths in one parse" {
+    assert_tree(&"(T) new T[1] (T[])", &"
+        (prog
+          (entry ( (typespec T) ))
+          (entry new (typespec T) [ 1 ])
+          (entry ( (typespec T [ ]) )))
+    ");
+}

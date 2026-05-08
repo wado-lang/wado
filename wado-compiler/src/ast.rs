@@ -65,7 +65,7 @@ pub enum AstNodeKind {
     EnumCase,
     VariantCase,
     FlagsVariant,
-    EffectMethod,
+    InterfaceMethod,
     AssocTypeDecl,
     AssocConst,
     AssocTypeBinding,
@@ -309,8 +309,8 @@ pub trait AstVisitor: Sized {
         walk_function(self, func);
     }
 
-    fn visit_effect_method(&mut self, method: &EffectMethod) {
-        walk_effect_method(self, method);
+    fn visit_interface_method(&mut self, method: &InterfaceMethod) {
+        walk_interface_method(self, method);
     }
 
     fn visit_block(&mut self, block: &Block) {
@@ -354,10 +354,10 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             }
         }
         Item::Function(func) => v.visit_function(func),
-        Item::Effect(e) => {
+        Item::Interface(e) => {
             v.visit_id(e.id, e.span);
             for m in &e.methods {
-                v.visit_effect_method(m);
+                v.visit_interface_method(m);
             }
         }
         Item::Struct(s) => {
@@ -445,7 +445,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
                 v.visit_id(p.id, p.span);
             }
             for m in &r.methods {
-                v.visit_effect_method(m);
+                v.visit_interface_method(m);
             }
         }
         Item::World(w) => v.visit_id(w.id, w.span),
@@ -481,7 +481,7 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
     }
 }
 
-pub fn walk_effect_method<V: AstVisitor>(v: &mut V, method: &EffectMethod) {
+pub fn walk_interface_method<V: AstVisitor>(v: &mut V, method: &InterfaceMethod) {
     v.visit_id(method.id, method.span);
     for param in &method.params {
         v.visit_id(param.id, param.span);
@@ -828,6 +828,23 @@ impl Module {
             .map(AttrArg::as_str)
     }
 
+    /// Returns the canonical bundled-stdlib import path declared by
+    /// `#![stdlib("core:...")]` / `#![stdlib("wasi:...")]`, if any.
+    ///
+    /// This attribute is intended for use only by files inside
+    /// `wado-compiler/lib/`. It declares the module's canonical identity
+    /// independent of how the file is loaded (entry vs. transitive
+    /// import), so the loader can pin the entry to its `Core`/`Wasi`
+    /// `ModuleSource` and dedup against the bundled cache when an editor
+    /// opens the file directly.
+    pub fn stdlib_identity(&self) -> Option<&str> {
+        self.inner_attributes
+            .iter()
+            .find(|a| a.name == "stdlib")
+            .and_then(|a| a.args.first())
+            .map(AttrArg::as_str)
+    }
+
     /// Returns the value of a scalar `key = "value"` argument on any
     /// `#![generated(...)]` inner attribute.
     ///
@@ -873,7 +890,7 @@ impl Module {
 pub enum Item {
     Use(UseDecl),
     Function(Function),
-    Effect(EffectDecl),
+    Interface(InterfaceDecl),
     Struct(StructDecl),
     Enum(EnumDecl),
     Variant(VariantDecl),
@@ -1066,8 +1083,8 @@ pub struct ResourceDecl {
     /// Generic type parameters: `resource Future<T> { ... }`
     pub type_params: Vec<GenericParam>,
     pub attrs: Vec<Attribute>,
-    /// Methods declared within the resource block (reuses `EffectMethod` structure)
-    pub methods: Vec<EffectMethod>,
+    /// Methods declared within the resource block (reuses `InterfaceMethod` structure)
+    pub methods: Vec<InterfaceMethod>,
     pub span: Span,
 }
 
@@ -1091,32 +1108,58 @@ pub struct WorldDecl {
     pub span: Span,
 }
 
-/// A world import group
+/// A world import declaration (bare interface reference, WIT-faithful).
+///
 /// ```wado
-/// import EffectName {
-///     function_name_1,
-///     function_name_2,
-/// }
+/// import Stdout;
 /// ```
+///
+/// Wado does not support `from "<package>"` or `as` qualifications: every
+/// importable interface is a `pub interface Foo` declaration whose
+/// `#[cm("...")]` attribute is the source of truth for its CM FQ name.
+/// Resource methods and types reach call sites through ordinary `use`
+/// statements.
 #[derive(Debug, Clone)]
 pub struct WorldImport {
-    pub effect_name: String,
-    pub functions: Vec<String>,
+    pub interface_name: String,
     pub span: Span,
 }
 
-/// A world export declaration
-/// ```wado
-/// export async fn run() -> Result<(), ()>;
-/// export fn get_version() -> string;
-/// ```
+/// A world export declaration. Two shapes:
+/// - Interface export (`export Foo;`) — references a `pub interface Foo`
+///   declaration; the CM-side instance export is materialized by codegen
+///   from the interface's functions and `#[cm("...")]`.
+/// - Function export (`export [async] fn name(...) -> ret;`) — a direct
+///   freestanding-function export. Used by synthetic worlds (test world)
+///   and for WIT worlds whose export is a bare freestanding function.
 #[derive(Debug, Clone)]
-pub struct WorldExport {
+pub enum WorldExport {
+    Interface(WorldExportInterface),
+    Function(WorldExportFn),
+}
+
+#[derive(Debug, Clone)]
+pub struct WorldExportInterface {
+    pub interface_name: String,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct WorldExportFn {
     pub name: String,
     pub is_async: bool,
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
     pub span: Span,
+}
+
+impl WorldExport {
+    pub fn span(&self) -> Span {
+        match self {
+            WorldExport::Interface(i) => i.span,
+            WorldExport::Function(f) => f.span,
+        }
+    }
 }
 
 /// Use declaration item with optional renaming
@@ -1138,8 +1181,8 @@ pub enum UseItem {
         alias: Option<String>,
     },
     /// Effect with functions: `Effect::{func1, func2}`
-    EffectFunctions {
-        effect_name: String,
+    InterfaceFunctions {
+        interface_name: String,
         functions: Vec<UseItemSimple>,
     },
     /// Wildcard import: `use _ from "..."` (load module for side effects only)
@@ -1588,7 +1631,7 @@ pub enum Expr {
     Spread(Box<Expr>, Span),
     /// Range expression: `a..<b` (exclusive) or `a..=b` (inclusive)
     Range(Box<RangeExpr>),
-    /// Effect handler installation block: `with E1 = h1, E2 = h2 do { body }`.
+    /// Effect handler installation block: `with E1 => h1, E2 => h2 do { body }`.
     /// See `docs/wep-2026-04-11-effect-handler.md`.
     WithHandler(Box<WithHandlerExpr>),
     /// `resume value` — control-flow expression valid only inside an effect
@@ -1597,7 +1640,7 @@ pub enum Expr {
     Resume(Box<ResumeExpr>),
 }
 
-/// `with E1 = h1, E2 = h2 do { body }` — installs effect handlers for the
+/// `with E1 => h1, E2 => h2 do { body }` — installs effect handlers for the
 /// duration of `body`. The block's value is the value of `body`.
 #[derive(Debug, Clone)]
 pub struct WithHandlerExpr {
@@ -1607,7 +1650,7 @@ pub struct WithHandlerExpr {
     pub span: Span,
 }
 
-/// A single `Effect = handler` binding inside `with ... do`.
+/// A single `Effect => handler` binding inside `with ... do`.
 ///
 /// `effect` is `None` for handler bundling: `with &mut value do { ... }`
 /// installs the value as a handler for every effect it implements.
@@ -1618,7 +1661,7 @@ pub struct WithHandlerExpr {
 #[derive(Debug, Clone)]
 pub struct EffectHandlerBinding {
     pub id: AstId,
-    /// Effect type on the LHS of `=` (e.g., `Stdout`, `Stream<u8>`). `None`
+    /// Effect type on the LHS of `=>` (e.g., `Stdout`, `Stream<u8>`). `None`
     /// for bundled handlers (`with &mut value do { ... }`).
     pub effect: Option<Type>,
     /// Handler expression, e.g., `&mut mock`.
@@ -2327,8 +2370,6 @@ pub struct ClosureExpr {
     pub id: AstId,
     pub params: Vec<ClosureParam>,
     pub body: Expr,
-    /// Pre-desugar source text, set by the desugar phase before transforming the body.
-    pub source_text: Option<String>,
     pub span: Span,
 }
 
@@ -2506,19 +2547,19 @@ impl std::fmt::Display for StoresEntry {
 
 // Placeholder types for future implementation
 #[derive(Debug, Clone)]
-pub struct EffectDecl {
+pub struct InterfaceDecl {
     pub id: AstId,
     pub name: String,
-    /// Span of the effect name identifier.
+    /// Span of the interface name identifier.
     pub name_span: Span,
     pub is_pub: bool,
     pub attrs: Vec<Attribute>,
-    pub methods: Vec<EffectMethod>,
+    pub methods: Vec<InterfaceMethod>,
     pub span: Span,
 }
 
 #[derive(Debug, Clone)]
-pub struct EffectMethod {
+pub struct InterfaceMethod {
     pub id: AstId,
     pub name: String,
     /// Span of the method name identifier.

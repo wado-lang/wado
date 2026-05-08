@@ -190,7 +190,7 @@ fn visit_item(spans: &mut TypeSpans, item: &Item) {
                 visit_function(spans, method);
             }
         }
-        Item::Effect(e) => {
+        Item::Interface(e) => {
             for method in &e.methods {
                 for param in &method.params {
                     visit_type(spans, &param.ty);

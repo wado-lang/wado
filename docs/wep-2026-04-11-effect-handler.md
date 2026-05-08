@@ -1,21 +1,111 @@
 # Effect Handler
 
-Status: Draft
+Status: Stable
 
 ## Implementation Status
 
-- [x] Front-end (lexer / AST / parser / unparser): `with E = h do { ... }`,
-      `resume value`, and `..` rest in `impl Effect for Type` blocks.
-      Resolver currently emits a "not yet implemented" compile error for
-      `with`-do blocks and `resume` expressions; downstream phases (effect
-      checker, TIR/WIR lowering, Wasm dispatch codegen) are pending.
-- [ ] Resolver / effect-check: track installed handlers in scope and skip
-      handled effects when checking caller requirements.
-- [ ] TIR/WIR lowering: dispatch records, global save/restore, handler
-      method as funcref vtable.
-- [ ] Wasm GC codegen: per-effect global, `$Dispatch_<Effect>` GC struct,
-      one dispatch function per operation.
-- [ ] `MockCM` and handler bundling helpers in `core:test`.
+The full dispatch protocol — front-end, resolver/effect-check, synthesis pass,
+codegen — is shipping. Detailed development history is in the git log; this
+section records only the current state.
+
+- [x] Front-end: `with E => h do { ... }`, `resume value`, and `..` rest in
+      `impl Effect for Type`.
+- [x] Resolver / effect-check: `TirExprKind::WithHandler` and
+      `TirExprKind::Resume` carry the structure through TIR. The resolver
+      validates effect-decl reference, handler-impls-effect relationship,
+      and `resume`-only-in-handler-method. Effect-check skips handled
+      effects from caller requirements while walking the body.
+- [x] Dispatch synthesis (`synthesis/effect_dispatch.rs`) emits, per effect:
+      a `__Dispatch_<E>` Wasm GC struct (recursive `outer: Option<&Self>` +
+      one `fn(args) -> ret` closure field per operation), an
+      `__effect_<E>: Option<&__Dispatch_<E>>` mut global initialised to
+      `null`, and an `__effect_dispatch__<E>__<op>` wrapper per operation.
+      `WithHandler` lowers to a desugared block that saves the global,
+      builds closures capturing the handler, populates the dispatch
+      struct, installs the global, runs the body, and restores on exit.
+      Every `<E>::<op>` call site is rewritten to call the wrapper, so
+      installed handlers are observed at any call-stack depth.
+- [x] Cross-function-boundary dispatch. Calls to effect operations from
+      helper functions invoked inside `with` reach the installed handler
+      via the global. The wrapper restores `outer` before invoking the
+      handler closure, so a handler method calling its own effect's
+      operation reaches the outer handler chain rather than recursing
+      through itself. Unimplemented operations (`..` rest) get a trapping
+      stub closure.
+      Fixtures: `effect_handler_cross_function.wado`,
+      `effect_handler_nested_same.wado`, `effect_handler_self_delegation.wado`.
+- [x] Early-exit restore. `return v` / `break L: v` / `continue` /
+      label-less `break` that cross out of a `with` body splice the
+      restore sequence in front of the jump (`RestoreInjector` TIR
+      walker). Value-carrying jumps evaluate the value under the
+      still-installed handler before restoring. Jumps to labels declared
+      inside the do-block body are skipped; closures are not descended
+      into. Fixtures: `effect_handler_early_return.wado`,
+      `effect_handler_break_label_cross.wado`,
+      `effect_handler_continue_cross.wado`,
+      `effect_handler_inner_break.wado` (negative).
+- [x] Bundled handlers (`with &mut h do`, `with h do`). The resolver
+      expands a bundled binding into one `TirHandlerBinding` per effect
+      that the handler's type implements. Bindings install in source
+      order; a later binding wins when the same effect appears twice on
+      a `with` line, with the earlier binding reachable via the outer
+      chain. All bindings from one bundled clause share a synthesised
+      `__h_<bundle>` local (`TirHandlerBinding.bundle_group`), so the
+      handler expression evaluates exactly once and mutations through
+      any installed effect are observed by the rest — the contract that
+      makes value-form `with h do` work. Diagnostics:
+      `BundledHandlerImplementsNoEffect`,
+      `BundledHandlerUnsupportedHandlerType` (e.g. type parameters,
+      associated-type projections; user is directed to `with E => h do`).
+      Fixtures: `effect_handler_bundled.wado`,
+      `effect_handler_bundled_value.wado`,
+      `effect_handler_bundled_mixed.wado`,
+      `effect_handler_bundled_no_effect.wado` (negative),
+      `effect_handler_bundled_type_param_rejected.wado` (negative).
+- [x] Resource handler dispatch. Resources participate in the dispatch
+      protocol identically to effects: `with R => h do` installs a
+      handler whose `impl R for T` methods are one-shot handler bodies
+      (`resume` is valid), `R::<op>(args)` and `r.<op>(args)` call sites
+      route through the dispatch wrapper, and the handler body sees the
+      outer scope so `R::<op>` from inside the impl delegates to the
+      wasmtime-provided implementation.
+      `synthesis::effect_dispatch::build_effect_index` walks both
+      `module.effects` and `module.resources` into one
+      `EffectKey -> EffectMeta` index; `EffectMeta.is_resource` keeps
+      the wrapper's `effects: vec![]` empty for resources (matching the
+      cm_binding adapter — resources are not effects).
+      Fixture: `effect_handler_resource_fields.wado` (counting handler
+      for `wasi:http`'s `Fields` with self-delegation to real WASI).
+
+- [x] Generic-resource handler dispatch (`Stream<T>`,
+      `StreamWritable<T>`, `Future<T>`, `FutureWritable<T>`).
+      The dispatch synthesis runs in two halves around the cm_binding
+      pass: `synthesize_pre_cm_binding` (wrappers, globals, structs,
+      call-site rewriting) before `cm_binding`, and
+      `synthesize_post_check` (`WithHandler` desugaring) after
+      `effect_check`. Per `(module, base, type_args)` instantiation
+      key, the synthesis substitutes the resource's operation template
+      and emits a distinct `__Dispatch_Stream<u8>` struct +
+      `__effect_Stream<u8>` global + `__effect_dispatch__Stream<u8>__op`
+      wrapper triple. `&self` / `&mut self` shorthand on impl methods is
+      synthesised as a `TirEffectOp` receiver at index 0
+      (`Self = GenericResource { name, module, type_args }`), and call
+      sites — both static (`Stream::<u8>::new()`) and instance
+      (`tx.write(payload)`) — are rewritten through the matching
+      wrapper. The wrapper's no-handler else-branch emits the same
+      `MethodCall`/`Call { cm_name }` shape that user code emits, with
+      `MonomorphInfo { impl_type_args }` for static methods, so
+      cm_binding rewrites both paths uniformly.
+      Fixtures: `effect_handler_resource_stream.wado` (`MockStream`
+      implementing both ends, round-tripping bytes through a buffer),
+      `effect_handler_resource_future.wado` (`MockFuture` round-tripping
+      a value through a stored slot).
+
+- [ ] `core:test::MockCM` and handler-bundling helpers (e.g.
+      `MockStdout::drain()`). With generic-resource dispatch in place,
+      packaging the buffered Stream/Future handlers from the
+      [Buffered CM Handlers (MockCM)](#buffered-cm-handlers-mockcm)
+      section into a reusable `core:test` fixture is the remaining work.
 
 ## Context
 
@@ -39,7 +129,7 @@ Effects are capabilities required by functions. The runtime (wasmtime) provides 
 An effect declaration defines an interface (like a trait). Any struct that implements the effect's operations can serve as a handler:
 
 ```wado
-effect Stdin {
+interface Stdin {
     fn read_line() -> String;
 }
 
@@ -61,12 +151,12 @@ Handler implementations add `&self` or `&mut self` to access the handler's state
 
 ### Using Handlers
 
-The `with Effect = value do { ... }` block installs a handler for the scope of the `do` block:
+The `with Effect => value do { ... }` block installs a handler for the scope of the `do` block. The `=>` arrow reads as a dispatch binding ("calls to `Effect` go to `value`"); it mirrors the match-arm arrow and is deliberately not `=`, since the operation pushes a handler onto a per-effect stack rather than performing assignment.
 
 ```wado
 fn test_input() {
     let mut mock = MockStdin { responses: ["hello", "world"], index: 0 };
-    with Stdin = &mut mock do {
+    with Stdin => &mut mock do {
         let a = Stdin::read_line();  // "hello"
         let b = Stdin::read_line();  // "world"
     }
@@ -77,7 +167,7 @@ fn test_input() {
 Multiple handlers:
 
 ```wado
-with Stdin = &mut mock_stdin, Stdout = &mut mock_stdout do {
+with Stdin => &mut mock_stdin, Stdout => &mut mock_stdout do {
     // ...
 }
 ```
@@ -106,7 +196,7 @@ impl Stdin for LoggingStdin {
 // Caller must have Stdout (handler method's effect), but not Stdin (handled)
 fn test_logging() with Stdout {
     let mock = LoggingStdin { response: "mocked" };
-    with Stdin = &mock do {
+    with Stdin => &mock do {
         let line = Stdin::read_line();
     }
 }
@@ -175,7 +265,7 @@ Handlers only handle the effects they declare. All other effects forward to the 
 
 ```wado
 let mock = MockClient;
-with Client = &mock do {
+with Client => &mock do {
     let headers = Fields::new();    // Fields is not handled → forwards to outer scope
     let req = Request::new(...);    // Request is not handled → forwards to outer scope
     let resp = Client::send(req);   // Client IS handled → goes to MockClient
@@ -207,7 +297,7 @@ impl Client for CachingClient {
 
 export fn run() with Stdout, Client {
     let mut cache = TreeMap::<String, Response>::new();
-    with Client = &mut CachingClient { cache: &mut cache } do {
+    with Client => &mut CachingClient { cache: &mut cache } do {
         app();
     }
 }
@@ -220,8 +310,8 @@ Handlers nest naturally. Inner handlers override specific effects; unhandled eff
 ```wado
 let mut mock_stdout = MockStdout { captured: [] };
 let mock_client = MockClient;
-with Stdout = &mut mock_stdout do {
-    with Client = &mock_client do {
+with Stdout => &mut mock_stdout do {
+    with Client => &mock_client do {
         println("sending...");   // Stdout → MockStdout (outer handler)
         Client::send(req);       // Client → MockClient (inner handler)
     }
@@ -382,14 +472,12 @@ impl<T> FutureWritable<T> for MockCM {
 
 ### Handler Bundling
 
-- [ ] Not yet implemented.
-
 When a type implements multiple effects, listing each one in `with` is verbose. If the effect name is omitted, the `with` block handles all effects the type implements:
 
 ```wado
 // Explicit: list each effect separately
-with Stream<u8> = &mut cm, StreamWritable<u8> = &mut cm,
-     Future<T> = &mut cm, FutureWritable<T> = &mut cm do { ... }
+with Stream<u8> => &mut cm, StreamWritable<u8> => &mut cm,
+     Future<T> => &mut cm, FutureWritable<T> => &mut cm do { ... }
 
 // Bundled: handle all effects MockCM implements
 with &mut cm do { ... }
@@ -398,7 +486,7 @@ with &mut cm do { ... }
 Multiple handlers compose naturally:
 
 ```wado
-with &mut cm, Stdout = &mut stdout, Client = &mut client do {
+with &mut cm, Stdout => &mut stdout, Client => &mut client do {
     run();
 }
 ```
@@ -447,7 +535,7 @@ impl MockStdout {
 test "println captures output" {
     let mut cm = MockCM::new();
     let mut stdout = MockStdout { streams: [] };
-    with &mut cm, Stdout = &mut stdout do {
+    with &mut cm, Stdout => &mut stdout do {
         println("hello");
         println("world");
         // drain() must be called inside MockCM scope (fake handles are only valid here)
@@ -474,7 +562,7 @@ stdout.drain():
 
 #### HTTP Client Handler Example
 
-Testing code that calls `Client::send` (e.g., `example/http-get.wado`). The mock constructs a Response with body data pre-written to a buffered stream — this is safe because `MockCM` streams are buffered, so `body_tx.write()` succeeds immediately without a concurrent reader:
+Testing code that calls `Client::send` (e.g., `example/http_get.wado`). The mock constructs a Response with body data pre-written to a buffered stream — this is safe because `MockCM` streams are buffered, so `body_tx.write()` succeeds immediately without a concurrent reader:
 
 ```wado
 struct MockClient {
@@ -514,8 +602,8 @@ test "http-get fetches and prints" {
         response_body: `{"origin": "127.0.0.1"}`,
         status: 200,
     };
-    with &mut cm, Stdout = &mut stdout, Client = &mut client do {
-        run();  // example/http-get.wado's export fn run()
+    with &mut cm, Stdout => &mut stdout, Client => &mut client do {
+        run();  // example/http_get.wado's export fn run()
         assert client.requests[0] == "/get";
         let output = stdout.drain();
         assert output contains "Status: 200";
@@ -577,8 +665,8 @@ test "timing middleware records elapsed time" {
     let downstream = MockHandler { status: 200, body: "ok" };
     let mut timing = TimingMiddleware { log: [] };
     with &mut cm do {
-        with Handler = &downstream do {
-            with Handler = &mut timing do {
+        with Handler => &downstream do {
+            with Handler => &mut timing do {
                 let req = create_test_request("/api");
                 let resp = Handler::handle(req);
                 assert resp matches { Ok(_) };
@@ -614,7 +702,7 @@ for a TypeScript token of that name).
 
 #### Handler expressions are restricted to unary expressions
 
-Inside `with E1 = handler do { ... }`, the `handler` slot is parsed
+Inside `with E1 => handler do { ... }`, the `handler` slot is parsed
 with `parse_unary_expr`, which covers references (`&h`, `&mut h`),
 prefix-`*` deref, `!`/`~`/`-`, identifiers, calls, method calls, and
 field/index access. It deliberately stops short of:
@@ -627,7 +715,7 @@ This keeps the grammar unambiguous: stopping at unary level prevents the
 handler expression from greedily eating the trailing `,` or `do` token
 that closes the binding list. Cases that need the excluded forms must
 wrap the handler in parentheses, e.g.
-`with E = (h as &mut MockE) do { ... }`.
+`with E => (h as &mut MockE) do { ... }`.
 
 ### Dispatch Mechanism: funcref vtable + Wasm Global
 
@@ -678,21 +766,21 @@ The outer-scope restoration before `call_ref` ensures that handler method bodies
 ### Compilation of `with ... do`
 
 ```wado
-with Stdout = &mut mock do { body }
+with Stdout => &mut mock do { body }
 ```
 
 Compiles to:
 
 1. Construct a dispatch record: `struct.new $Dispatch_Stdout (global.get $__effect_Stdout, mock_ref, funcref_for_each_op)`
 2. `global.set $__effect_Stdout` with the new dispatch record
-3. Execute body
+3. Execute body — every control-flow exit from the body (`return`, `break L`/`continue` to a target outside the body) gets the restore step (4) spliced in front of it; value-carrying jumps bind the value to a temp local first so it evaluates under the still-installed handler
 4. `global.set $__effect_Stdout` with the dispatch record's `outer` field (restore)
 
 Nesting composes naturally — each `with` block links to the previous dispatch record via `outer`.
 
 ### Compilation of `resume`
 
-In the MVP, only `resume` without post-resume code is supported. `resume value` compiles to `return value`. The handler method is a normal function; the dispatch function receives and propagates the return value. Post-resume (e.g., cleanup after the `do` block) requires Wasm Stack Switching and is deferred.
+`resume value` compiles to `return value`. The handler method is a normal function; the dispatch function receives and propagates the return value. Post-resume code (e.g., cleanup after the `do` block) requires Wasm Stack Switching and is deferred.
 
 ### Wildcard `..`
 

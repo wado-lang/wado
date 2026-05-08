@@ -1,855 +1,634 @@
-//! Constant folding optimization for Wado TIR
+//! Constant folding optimization for Wado TIR.
 //!
-//! This module folds compile-time-known expressions into literal values.
-//! For example, `2 + 3` becomes `5`, `10 > 5` becomes `true`.
+//! Walks every function body and applies the [`tiri::Interpreter`]
+//! rewrite rules at each visited node. All reduction logic
+//! (literal folding, integer cast collapsing, short-circuit identity
+//! rules, env-aware local lookup, **field-aware local-field reads**)
+//! lives in [`crate::tiri`]; this module is only the visitor glue
+//! that drives `reduce_local` across function bodies and feeds the
+//! interpreter's local-variable env *and* its `field_env` from
+//! `Let` / `Assign` statements, struct-literal RHSs, and recognized
+//! `$value_copy$T(arg)` helpers.
 //!
-//! Supported operations:
-//! - Integer arithmetic: Add, Sub, Mul, Div, Mod
-//! - Integer comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
-//! - Integer bitwise: `BitAnd`, `BitOr`, `BitXor`, Shl, Shr
-//! - Integer unary: Neg, `BitNot`
-//! - Integer types: i8, i16, i32, i64, u8, u16, u32, u64
-//! - Integer cast: truncation/extension between integer types
-//! - Float arithmetic: Add, Sub, Mul, Div (skipped when result is NaN)
-//! - Float comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
-//! - Float unary: Neg (via sign-bit flip, safe for all values including NaN)
-//! - Float types: f32, f64
-//! - Boolean logical: And, Or
-//! - Boolean equality: Eq, `NotEq`
-//! - Boolean unary: Not
+//! The field-knowledge bookkeeping was originally a separate pass
+//! (`optimize::field_forward`); merging it into const-fold breaks the
+//! per-iteration ping-pong observed at `-O3 inline_threshold ≥ 35`,
+//! where a single iteration only propagates one statement of a chain
+//! because `field_forward` and `const_fold` had to alternate to make
+//! `let used = __b.used; __b.used = used + 1` advance one push at a
+//! time. With both responsibilities in the same walk, the chain
+//! folds in a single pass.
 //!
-//! Float arithmetic uses native Rust IEEE 754 ops (same as Wasm), following
-//! cranelift's approach: fold the result, but skip if it is NaN since NaN
-//! bit patterns are nondeterministic across architectures.
-//! Float negation is a pure bit flip (XOR sign bit), always deterministic.
-//!
-//! Integer division/modulo by zero and signed MIN / -1 are not folded —
-//! they must remain runtime traps.
+//! See [`super::alias::build_alias_info`] /
+//! [`super::alias::build_value_copy_helpers`] for the per-function
+//! alias / helper computations the visitor consumes.
 
 use crate::flat_package::FlatPackage;
+use crate::hashmap::IndexMap;
+use crate::hashmap::IndexSet;
+use crate::name::ModuleSource;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    TypeTable,
 };
+use crate::tir_visitor::{
+    TirOptVisitor, TirRefVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt,
+};
+use crate::tiri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
 
-use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
-
-enum FoldedExpr {
-    Int { value: u64, prim: PrimitiveType },
-    Float { value: f64, repr: String },
-    Bool(bool),
-}
-
-impl FoldedExpr {
-    fn into_expr_kind(self) -> TirExprKind {
-        match self {
-            Self::Int { value, prim } => TirExprKind::IntLiteral {
-                repr: format_int_value(value, prim),
-                value,
-            },
-            Self::Float { value, repr } => TirExprKind::FloatLiteral { value, repr },
-            Self::Bool(b) => TirExprKind::BoolLiteral(b),
-        }
-    }
-}
+use super::alias::{build_alias_info, build_value_copy_helpers, recognize_value_copy};
 
 /// Apply constant folding to all functions in the project.
 pub fn fold_constants(project: &mut FlatPackage) -> bool {
     let mut changed = false;
     let type_table = project.type_table.borrow();
+    // Build the CalleeMap once per pass with Rc handles aliased with
+    // `project.functions`. The interpreter reads callee bodies via
+    // `try_borrow`, which bails cleanly when the visitor already
+    // holds `borrow_mut` on the same function (the case where we'd
+    // try to fold a self-call inside the function being walked).
+    let callees = build_callee_map(project);
+    // Build the GlobalEnv once per pass: every immutable global whose
+    // initializer reduces to a `Const(_)` becomes a `GlobalVarGet`
+    // rewrite target; mutable globals are recorded as `NonConst`.
+    let globals = build_global_env(project, &type_table, &callees);
+    // Build the `$value_copy$T<id>` helpers map once per pass; the
+    // visitor uses it to recognize calls that transfer field
+    // knowledge across the synthesized one-level shallow copies
+    // (see `lower::value_copy::synthesize`).
+    let value_copy_helpers = build_value_copy_helpers(project);
     let mut visitor = ConstFoldVisitor {
+        interpreter: Interpreter::new(&type_table),
         type_table: &type_table,
+        value_copy_helpers: &value_copy_helpers,
     };
+    visitor.interpreter.with_callees(&callees);
+    visitor.interpreter.with_globals(&globals);
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
+        let address_taken = func.address_taken_locals.clone();
+        let stores_aliased = func.stores_aliased_locals.clone();
         if let Some(ref mut body) = func.body {
+            // Local indices are unique per function, not project-wide,
+            // so reset the interpreter's env at every function boundary.
+            visitor.interpreter.enter_function();
+            // Compute per-function alias annotations (driven by the
+            // function's stable address-taken / stores sets plus a
+            // body walk for transient inlined-in copies). The
+            // interpreter consults these every time the visitor calls
+            // `bind_field` / `invalidate_field` /
+            // `invalidate_aliased_fields`.
+            let alias_info = build_alias_info(body, &address_taken, &stores_aliased, &type_table);
+            visitor.interpreter.set_alias_info(alias_info);
             changed |= visitor.visit_block(body);
         }
     }
     changed
 }
 
+/// Pre-build the [`CalleeMap`] from every CTFE-eligible function in
+/// `project`. The map stores `Rc<RefCell<TirFunction>>` handles
+/// aliased with `project.functions`, so rebuilding the map every
+/// optimizer iteration costs only refcount bumps. The key shape
+/// `(module_source, full_name)` mirrors what `try_call_fold`
+/// synthesises from a `Call` node's `FunctionRef`.
+fn build_callee_map(project: &FlatPackage) -> CalleeMap {
+    let mut map = CalleeMap::default();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        if !is_ctfe_eligible(&func) {
+            continue;
+        }
+        let module_source = func.module_source.clone();
+        let full_name = FunctionRef::from_resolved(&func, module_source.clone()).full_name();
+        drop(func);
+        map.insert((module_source, full_name), func_rc.clone());
+    }
+    map
+}
+
+/// Pre-build the [`GlobalEnv`] from every global in `project`. Each
+/// non-`mut` global's initializer is reduced through a fresh
+/// [`Interpreter`] (with `callees` installed so calls in initializers
+/// fold, and with the partially-built env installed so a later global
+/// initializer can read constants computed from earlier ones).
+/// Mutable globals are recorded as `NonConst` so a parent fold like
+/// `GLOBAL_MUT + 1` correctly reports `NonConst` instead of
+/// `Unevaluated`. Globals whose initializer doesn't reduce are left
+/// out of the map (absent → `Lattice::Unevaluated` by default).
+fn build_global_env(
+    project: &FlatPackage,
+    type_table: &TypeTable,
+    callees: &CalleeMap,
+) -> GlobalEnv {
+    let mut env = GlobalEnv::default();
+    for global in &project.globals {
+        let key = (global.module_source.clone(), global.name.clone());
+        let lattice = if global.mutable {
+            Lattice::NonConst
+        } else {
+            // The initializer runs at module scope: no local env, but
+            // it may call pure functions and read previously-declared
+            // globals. Threading `&env` in lets `global B = A + 1;`
+            // fold once `A` has been recorded earlier in this loop.
+            let mut interp = Interpreter::new(type_table);
+            interp.with_callees(callees);
+            interp.with_globals(&env);
+            interp.reduce_to_lattice(&global.initializer)
+        };
+        if !matches!(lattice, Lattice::Unevaluated) {
+            env.insert(key, lattice);
+        }
+    }
+    env
+}
+
 struct ConstFoldVisitor<'a> {
+    interpreter: Interpreter<'a>,
     type_table: &'a TypeTable,
+    /// `(module_source, func_name) → struct type id` for every
+    /// synthesized `$value_copy$T<id>` helper. The visitor uses this
+    /// to recognize `Call(helper, [Local(src)])` shapes inside `let
+    /// dst = …` and propagate `src`'s recorded fields onto `dst`
+    /// via [`Self::update_field_env_from_let`].
+    value_copy_helpers: &'a IndexMap<(ModuleSource, String), TypeId>,
 }
 
 impl TirOptVisitor for ConstFoldVisitor<'_> {
-    fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
-        // Bottom-up: recurse into children first
-        let mut changed = opt_walk_expr(self, expr);
-        // Then try to fold this expression
-        if let Some(folded) = try_fold_expr(expr, self.type_table) {
-            expr.kind = folded.into_expr_kind();
-            changed = true;
-        }
-        // Identity folding for boolean short-circuit operators:
-        // `false || X` → X, `true || X` → true (already handled above)
-        // `true && X` → X, `false && X` → false (already handled above)
-        if let TirExprKind::Binary { left, op, right } = &mut expr.kind {
-            match (&left.kind, *op) {
-                (TirExprKind::BoolLiteral(false), TirBinaryOp::Or)
-                | (TirExprKind::BoolLiteral(true), TirBinaryOp::And) => {
-                    let rhs = std::mem::replace(
-                        right.as_mut(),
-                        TirExpr {
-                            kind: TirExprKind::Unit,
-                            type_id: expr.type_id,
-                            span: expr.span,
-                        },
-                    );
-                    *expr = rhs;
-                    changed = true;
-                }
-                (_, TirBinaryOp::Or) if matches!(right.kind, TirExprKind::BoolLiteral(false)) => {
-                    let lhs = std::mem::replace(
-                        left.as_mut(),
-                        TirExpr {
-                            kind: TirExprKind::Unit,
-                            type_id: expr.type_id,
-                            span: expr.span,
-                        },
-                    );
-                    *expr = lhs;
-                    changed = true;
-                }
-                (_, TirBinaryOp::And) if matches!(right.kind, TirExprKind::BoolLiteral(true)) => {
-                    let lhs = std::mem::replace(
-                        left.as_mut(),
-                        TirExpr {
-                            kind: TirExprKind::Unit,
-                            type_id: expr.type_id,
-                            span: expr.span,
-                        },
-                    );
-                    *expr = lhs;
-                    changed = true;
-                }
-                _ => {}
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
+        // Control-flow stmts need branch-aware field-env handling so
+        // a `local.field = …` inside a branch doesn't leak as known
+        // field knowledge to code that runs only when the branch was
+        // skipped. Locals don't need this fork (the only mutation
+        // channel is `let mut`, recorded preemptively as `NonConst`),
+        // so the existing single-walk env handling stays intact.
+        match &mut stmt.kind {
+            TirStmtKind::Loop { body } => {
+                // Loop back-edge: any local assigned in the body must
+                // be `NonConst` for the body's first walk.
+                self.invalidate_locals_assigned_in(body);
+                // Loops can re-execute and re-assign anything; drop
+                // outer field knowledge entirely.
+                self.interpreter.clear_fields();
+                let changed = self.visit_block(body);
+                self.interpreter.clear_fields();
+                return changed;
             }
+            TirStmtKind::LabeledBlock { block, .. } => {
+                // Sequential scope: outer knowledge flows in, but a
+                // `break label: value` inside could skip writes that
+                // would otherwise have invalidated entries — drop on
+                // exit.
+                let changed = self.visit_block(block);
+                self.interpreter.clear_fields();
+                return changed;
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                let mut changed = self.visit_expr(condition);
+                let snap = self.interpreter.snapshot_fields();
+                changed |= self.visit_block(then_block);
+                self.interpreter.restore_fields(snap);
+                if let Some(eb) = else_block {
+                    changed |= self.visit_block(eb);
+                }
+                self.interpreter.clear_fields();
+                return changed;
+            }
+            TirStmtKind::IfLet {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                let mut changed = self.visit_expr(scrutinee);
+                let snap = self.interpreter.snapshot_fields();
+                changed |= self.visit_block(then_block);
+                self.interpreter.restore_fields(snap);
+                if let Some(eb) = else_block {
+                    changed |= self.visit_block(eb);
+                }
+                self.interpreter.clear_fields();
+                return changed;
+            }
+            _ => {}
         }
+
+        // Bottom-up: walk children first so the RHS of `let x = …` is
+        // already folded by the time we record `x` in env / field_env.
+        let changed = opt_walk_stmt(self, stmt);
+        self.update_env_from_stmt(stmt);
+        changed
+    }
+
+    fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
+        // `Assign { target, value }` is special-cased: the OUTER `target`
+        // expression is an lvalue (write position) and tiri's leaf
+        // rewrites — particularly the `FieldAccess(Local, field)`
+        // arm — would happily fold a known field-value into the LHS,
+        // turning `obj.f = newval` into `5 = newval`. Only `target`'s
+        // sub-expressions (the receiver of a `FieldAccess`, the
+        // indexee of an `Index`) are read positions; walk those, but
+        // leave the outer `target` shape opaque. After the walk,
+        // observe what was assigned so the field env stays in sync.
+        if matches!(&expr.kind, TirExprKind::Assign { .. }) {
+            return self.visit_assign(expr);
+        }
+
+        // Branch / scope expressions — fork or clear field state so
+        // a `local.field = …` inside one arm doesn't leak as known
+        // field knowledge to code reachable only when another arm
+        // ran.
+        match &mut expr.kind {
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let mut changed = self.visit_expr(condition);
+                let snap = self.interpreter.snapshot_fields();
+                changed |= self.visit_block(then_branch);
+                self.interpreter.restore_fields(snap);
+                if let Some(eb) = else_branch {
+                    changed |= self.visit_block(eb);
+                }
+                self.interpreter.clear_fields();
+                changed |= self.interpreter.reduce_local(expr);
+                return changed;
+            }
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                let mut changed = self.visit_expr(scrutinee);
+                for arm in arms {
+                    let snap = self.interpreter.snapshot_fields();
+                    if let Some(g) = &mut arm.guard {
+                        changed |= self.visit_expr(g);
+                    }
+                    changed |= self.visit_expr(&mut arm.body);
+                    self.interpreter.restore_fields(snap);
+                }
+                self.interpreter.clear_fields();
+                changed |= self.interpreter.reduce_local(expr);
+                return changed;
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                let mut changed = self.visit_expr(scrutinee);
+                // Each arm sees the pre-Switch state and must not
+                // leak its own writes to siblings; snapshot before
+                // each, restore after. The default arm is just
+                // another sibling — by the end of the arms loop we
+                // are already back to pre-Switch state, so walking
+                // `default` directly and clearing is equivalent and
+                // saves one redundant snapshot/restore round-trip.
+                for arm in arms.iter_mut() {
+                    let snap = self.interpreter.snapshot_fields();
+                    changed |= self.visit_block(arm);
+                    self.interpreter.restore_fields(snap);
+                }
+                changed |= self.visit_block(default);
+                self.interpreter.clear_fields();
+                changed |= self.interpreter.reduce_local(expr);
+                return changed;
+            }
+            TirExprKind::Block(b) => {
+                // Sequential scope; outer knowledge flows in. After
+                // the block, an interior `break label: value` could
+                // have skipped some writes, so clear conservatively.
+                let mut changed = self.visit_block(b);
+                self.interpreter.clear_fields();
+                changed |= self.interpreter.reduce_local(expr);
+                return changed;
+            }
+            TirExprKind::LabeledBlock { block, .. } => {
+                let mut changed = self.visit_block(block);
+                self.interpreter.clear_fields();
+                changed |= self.interpreter.reduce_local(expr);
+                return changed;
+            }
+            TirExprKind::Closure { body, .. } => {
+                // Closure body executes in its own scope; clear
+                // before walking so the body sees a clean slate, and
+                // clear again after so outer code doesn't pick up
+                // anything leaked.
+                self.interpreter.clear_fields();
+                let mut changed = self.visit_expr(body);
+                self.interpreter.clear_fields();
+                changed |= self.interpreter.reduce_local(expr);
+                return changed;
+            }
+            _ => {}
+        }
+
+        // Bottom-up walk for the remaining expressions.
+        let mut changed = opt_walk_expr(self, expr);
+        // After children have been walked, observe side effects that
+        // could have mutated aliased state.
+        self.update_field_env_from_expr(expr);
+        changed |= self.interpreter.reduce_local(expr);
+        changed
+    }
+
+    fn visit_block(&mut self, block: &mut TirBlock) -> bool {
+        // Bottom-up: walk children first so each If stmt's condition is
+        // already folded to a literal (when feasible) by the time we
+        // ask the interpreter to splice the chosen branch into this block.
+        let mut changed = opt_walk_block(self, block);
+        changed |= self.interpreter.reduce_local_block(block);
         changed
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Top-level fold dispatch
-// ──────────────────────────────────────────────────────────────────────────────
+impl ConstFoldVisitor<'_> {
+    /// Walk an `Assign { target, value }` expression. The outer
+    /// `target` shape is left opaque (lvalue), only its inner
+    /// sub-expression is folded. After the walk, the field env is
+    /// updated from the assignment shape:
+    ///
+    /// - `local = expr`: invalidate `local` and the local-derived
+    ///   field knowledge for it.
+    /// - `local.field = lit`: invalidate `(local, field)` then re-bind
+    ///   if `lit` is a forwardable literal.
+    /// - `local.field = expr` where `expr` is non-literal: invalidate
+    ///   `(local, field)`.
+    /// - Any more complex target shape (`(*p).field = …`,
+    ///   `arr[i] = …`, etc.): conservatively invalidate every
+    ///   aliased local's fields.
+    fn visit_assign(&mut self, expr: &mut TirExpr) -> bool {
+        let TirExprKind::Assign { target, value } = &mut expr.kind else {
+            unreachable!("visit_assign called on non-Assign");
+        };
+        let mut changed = self.visit_expr(value);
+        match &mut target.kind {
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::Index { expr: inner, .. } => {
+                changed |= self.visit_expr(inner);
+            }
+            _ => {}
+        }
+        // Field-env update based on the (post-walk) shape.
+        match &target.kind {
+            TirExprKind::Local { index, .. } => {
+                // Invalidates the local's lattice AND drops any field
+                // knowledge tied to it. Captures field-knowledge
+                // transfer for `dst = src` (Local→Local copy on a ref
+                // type, where both names alias the same heap object).
+                self.interpreter.invalidate_local(*index);
+                let dst = *index;
+                self.update_field_env_from_let(dst, value);
+            }
+            TirExprKind::FieldAccess {
+                expr: inner,
+                field_name,
+                ..
+            } => match &inner.kind {
+                TirExprKind::Local { index, .. } => {
+                    let local_index = *index;
+                    self.interpreter.invalidate_field(local_index, field_name);
+                    if let Some(v) = Value::from_literal_expr(value, self.type_table) {
+                        self.interpreter.bind_field(local_index, field_name, v);
+                    }
+                }
+                _ => {
+                    // `(*p).field = …` / `q.outer.inner = …` —
+                    // unknown receiver, drop every aliased local's
+                    // fields.
+                    self.interpreter.invalidate_aliased_fields();
+                }
+            },
+            _ => {
+                // Index / Deref / something else: opaque write.
+                self.interpreter.invalidate_aliased_fields();
+            }
+        }
+        changed |= self.interpreter.reduce_local(expr);
+        changed
+    }
 
-fn try_fold_expr(expr: &TirExpr, type_table: &TypeTable) -> Option<FoldedExpr> {
+    /// After a non-Assign expression's children have been walked,
+    /// update the field env to reflect side-effects that may have
+    /// mutated aliased state. Calls drop every aliased local's
+    /// fields; `&mut local` escapes a mutable reference and drops
+    /// `local`'s entry; struct / tuple / variant constructors that
+    /// capture an aliased local invalidate aliased fields too.
+    fn update_field_env_from_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::Call { args, func, .. } => {
+                for arg in args {
+                    if arg.is_mut
+                        && let TirExprKind::Local { index, .. } = &arg.expr.kind
+                    {
+                        self.interpreter.invalidate_local(*index);
+                    }
+                }
+                // `$value_copy$T<id>(arg)` is a pure shallow copy that
+                // doesn't mutate `arg`; the caller (visit_assign /
+                // update_field_env_from_let) wants to copy field
+                // knowledge from `arg` to the binding's target. Skip
+                // the aliased-invalidation here so that path keeps
+                // working.
+                let key = (func.module_source.clone(), func.name.clone());
+                if !self.value_copy_helpers.contains_key(&key) {
+                    self.interpreter.invalidate_aliased_fields();
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                // Auto-ref hides &mut self: the receiver may have
+                // been mutated by the call.
+                if let TirExprKind::Local { index, .. } = &receiver.kind {
+                    self.interpreter.invalidate_local(*index);
+                }
+                for arg in args {
+                    if arg.is_mut
+                        && let TirExprKind::Local { index, .. } = &arg.expr.kind
+                    {
+                        self.interpreter.invalidate_local(*index);
+                    }
+                }
+                self.interpreter.invalidate_aliased_fields();
+            }
+            TirExprKind::IndirectCall { .. } | TirExprKind::CmRawCall { .. } => {
+                // Indirect callee is unknown — closures may capture
+                // and mutate any aliased local.
+                self.interpreter.invalidate_aliased_fields();
+            }
+            TirExprKind::Unary {
+                op: TirUnaryOp::MutRef,
+                expr: inner,
+            } => {
+                if let TirExprKind::Local { index, .. } = &inner.kind {
+                    self.interpreter.invalidate_local(*index);
+                }
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                let aliased = self.interpreter.aliased_locals();
+                if fields
+                    .iter()
+                    .any(|f| value_captures_aliased_local(&f.value, aliased))
+                {
+                    self.interpreter.invalidate_aliased_fields();
+                }
+            }
+            TirExprKind::TupleLiteral { elements, .. } => {
+                let aliased = self.interpreter.aliased_locals();
+                if elements
+                    .iter()
+                    .any(|e| value_captures_aliased_local(e, aliased))
+                {
+                    self.interpreter.invalidate_aliased_fields();
+                }
+            }
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(p) = payload
+                    && value_captures_aliased_local(p, self.interpreter.aliased_locals())
+                {
+                    self.interpreter.invalidate_aliased_fields();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// After a statement is walked, capture any introduced binding into
+    /// the interpreter's env so subsequent uses can fold against it.
+    fn update_env_from_stmt(&mut self, stmt: &TirStmt) {
+        match &stmt.kind {
+            TirStmtKind::Let {
+                local_index,
+                is_mut,
+                value,
+                ..
+            } => {
+                let lat = if *is_mut {
+                    // `let mut x = …` — any later `x = …` would
+                    // invalidate the binding anyway. The interpreter
+                    // doesn't track flow-sensitive values for mutable
+                    // locals, so be conservative up front.
+                    Lattice::NonConst
+                } else {
+                    self.interpreter.reduce_to_lattice(value)
+                };
+                // Drop any prior knowledge keyed by this index (rare
+                // — a fresh `let` typically introduces a unique
+                // index, but defensive). This also clears stale field
+                // entries from a same-index reuse before we record
+                // new ones below.
+                self.interpreter.invalidate_local(*local_index);
+                self.interpreter.bind_local(*local_index, lat);
+                self.update_field_env_from_let(*local_index, value);
+            }
+            // LetDestructure binds multiple locals via pattern matching
+            // (`let [a, b] = tuple`). Tuple-aware lattice values aren't
+            // modelled yet, so leave the destructured locals
+            // Unevaluated. They'll resolve to NonConst the first time
+            // they're observed in env, which is the correct
+            // conservative answer.
+            TirStmtKind::LetDestructure { .. } => {}
+            _ => {}
+        }
+    }
+
+    /// Update field env after `let local = value` (or
+    /// `local = value` Assign). Recognized RHS shapes:
+    ///
+    /// - `StructLiteral { f: lit, … }`: bind each forwardable
+    ///   field into `field_env`.
+    /// - `Local(src)`: copy `src`'s recorded fields onto `local`
+    ///   (covers reference-typed `let dst = src` aliasing — for
+    ///   value-typed copies the lower phase wraps in
+    ///   `$value_copy$T(src)` so the next case handles them).
+    /// - `Call($value_copy$T(src))`: same as above; the helper is a
+    ///   one-level shallow copy (field-by-field projection plus
+    ///   `array_clone` for raw arrays — see
+    ///   `lower::value_copy::synthesize`), and the only fields we
+    ///   actually forward are primitive literals (`Int` / `Float` /
+    ///   `Bool` / `Char`) for which a shallow copy is observably
+    ///   equivalent to a deep copy. Reference-typed fields stay
+    ///   un-forwarded so the shared backing they preserve doesn't
+    ///   become a soundness hazard.
+    fn update_field_env_from_let(&mut self, local_index: u32, value: &TirExpr) {
+        // Unwrap a chained `$value_copy$T<id>(arg)` so the underlying
+        // source's knowledge is what we read.
+        let inner = match recognize_value_copy(value, self.value_copy_helpers) {
+            Some(arg) => arg,
+            None => value,
+        };
+        match &inner.kind {
+            TirExprKind::StructLiteral { fields, .. } => {
+                for f in fields {
+                    if let Some(v) = Value::from_literal_expr(&f.value, self.type_table) {
+                        self.interpreter.bind_field(local_index, &f.name, v);
+                    }
+                }
+            }
+            TirExprKind::Local { index: src, .. } => {
+                self.interpreter.copy_fields_from(*src, local_index);
+            }
+            _ => {}
+        }
+    }
+
+    /// Walk `block` (and every nested expression / statement) collecting
+    /// every `Local` index that appears as the target of an `Assign`,
+    /// then invalidate each in env. Conservative — any mutation inside
+    /// the loop body is treated as making the local non-constant for
+    /// the entire loop, which is the only sound choice without modelling
+    /// loop iteration.
+    fn invalidate_locals_assigned_in(&mut self, block: &TirBlock) {
+        let mut collector = AssignedLocalsCollector {
+            targets: IndexSet::default(),
+        };
+        collector.visit_block(block);
+        for idx in collector.targets {
+            self.interpreter.invalidate_local(idx);
+        }
+    }
+}
+
+/// True when an expression appearing as a struct / tuple / variant
+/// field value would hand the freshly-built aggregate access to an
+/// already-aliased local. Mirrors the predicate the original
+/// `field_forward` pass used inline; kept here so the const-fold
+/// visitor doesn't reach back into `optimize::alias`'s private
+/// module surface.
+fn value_captures_aliased_local(expr: &TirExpr, aliased: &IndexSet<u32>) -> bool {
     match &expr.kind {
-        TirExprKind::Binary { left, op, right } => {
-            try_fold_binary(expr.type_id, left, *op, right, type_table)
-        }
         TirExprKind::Unary { op, expr: inner } => {
-            try_fold_unary(expr.type_id, *op, inner, type_table)
+            (matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
+                && matches!(inner.kind, TirExprKind::Local { .. }))
+                || value_captures_aliased_local(inner, aliased)
         }
-        TirExprKind::Cast { expr: inner, .. } => {
-            let prim = get_int_primitive(expr.type_id, type_table)?;
-            let value = match &inner.kind {
-                TirExprKind::IntLiteral { value, .. } => *value,
-                TirExprKind::CharLiteral(c) => *c as u64,
-                _ => return None,
-            };
-            Some(FoldedExpr::Int {
-                value: truncate_int(value, prim),
-                prim,
-            })
+        TirExprKind::Local { index, .. } => aliased.contains(index),
+        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::Cast { expr: inner, .. } => {
+            value_captures_aliased_local(inner, aliased)
         }
-        _ => None,
+        _ => false,
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Binary operation folding
-// ──────────────────────────────────────────────────────────────────────────────
-
-fn try_fold_binary(
-    result_type: TypeId,
-    left: &TirExpr,
-    op: TirBinaryOp,
-    right: &TirExpr,
-    type_table: &TypeTable,
-) -> Option<FoldedExpr> {
-    if let (TirExprKind::BoolLiteral(lb), TirExprKind::BoolLiteral(rb)) = (&left.kind, &right.kind)
-    {
-        return match op {
-            TirBinaryOp::And => Some(FoldedExpr::Bool(*lb && *rb)),
-            TirBinaryOp::Or => Some(FoldedExpr::Bool(*lb || *rb)),
-            TirBinaryOp::Eq => Some(FoldedExpr::Bool(*lb == *rb)),
-            TirBinaryOp::NotEq => Some(FoldedExpr::Bool(*lb != *rb)),
-            _ => None,
-        };
-    }
-
-    if let (
-        TirExprKind::FloatLiteral { value: lv, .. },
-        TirExprKind::FloatLiteral { value: rv, .. },
-    ) = (&left.kind, &right.kind)
-    {
-        return if is_f32_type(left.type_id, type_table) {
-            try_fold_f32_binary(*lv, op, *rv)
-        } else {
-            try_fold_f64_binary(*lv, op, *rv)
-        };
-    }
-
-    if let (TirExprKind::IntLiteral { value: lv, .. }, TirExprKind::IntLiteral { value: rv, .. }) =
-        (&left.kind, &right.kind)
-    {
-        let operand_prim = get_int_primitive(left.type_id, type_table)?;
-        return try_fold_int_binary(result_type, *lv, op, *rv, operand_prim, type_table);
-    }
-
-    None
+/// Read-only walk that records every `Local` index assigned to inside
+/// the visited subtree. Drives the loop back-edge invalidation in
+/// [`ConstFoldVisitor::invalidate_locals_assigned_in`].
+struct AssignedLocalsCollector {
+    targets: IndexSet<u32>,
 }
 
-fn try_fold_int_binary(
-    result_type: TypeId,
-    lval: u64,
-    op: TirBinaryOp,
-    rval: u64,
-    prim: PrimitiveType,
-    type_table: &TypeTable,
-) -> Option<FoldedExpr> {
-    match op {
-        TirBinaryOp::Add => Some(FoldedExpr::Int {
-            value: eval_int_add(lval, rval, prim)?,
-            prim,
-        }),
-        TirBinaryOp::Sub => Some(FoldedExpr::Int {
-            value: eval_int_sub(lval, rval, prim)?,
-            prim,
-        }),
-        TirBinaryOp::Mul => Some(FoldedExpr::Int {
-            value: eval_int_mul(lval, rval, prim)?,
-            prim,
-        }),
-        TirBinaryOp::Div => Some(FoldedExpr::Int {
-            value: eval_int_div(lval, rval, prim)?,
-            prim,
-        }),
-        TirBinaryOp::Mod => Some(FoldedExpr::Int {
-            value: eval_int_mod(lval, rval, prim)?,
-            prim,
-        }),
-
-        TirBinaryOp::Eq
-        | TirBinaryOp::NotEq
-        | TirBinaryOp::Lt
-        | TirBinaryOp::LtEq
-        | TirBinaryOp::Gt
-        | TirBinaryOp::GtEq => Some(FoldedExpr::Bool(eval_int_cmp(lval, op, rval, prim))),
-
-        TirBinaryOp::BitAnd => Some(FoldedExpr::Int {
-            value: truncate_int(lval & rval, prim),
-            prim,
-        }),
-        TirBinaryOp::BitOr => Some(FoldedExpr::Int {
-            value: truncate_int(lval | rval, prim),
-            prim,
-        }),
-        TirBinaryOp::BitXor => Some(FoldedExpr::Int {
-            value: truncate_int(lval ^ rval, prim),
-            prim,
-        }),
-        TirBinaryOp::Shl => eval_int_shl(lval, rval, prim).map(|value| FoldedExpr::Int {
-            value,
-            prim: get_int_primitive(result_type, type_table).unwrap_or(prim),
-        }),
-        TirBinaryOp::Shr => eval_int_shr(lval, rval, prim).map(|value| FoldedExpr::Int {
-            value,
-            prim: get_int_primitive(result_type, type_table).unwrap_or(prim),
-        }),
-
-        TirBinaryOp::And | TirBinaryOp::Or | TirBinaryOp::RefEq | TirBinaryOp::RefNotEq => None,
-    }
-}
-
-fn try_fold_f64_binary(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedExpr> {
-    match op {
-        TirBinaryOp::Add => non_nan_float(lval + rval),
-        TirBinaryOp::Sub => non_nan_float(lval - rval),
-        TirBinaryOp::Mul => non_nan_float(lval * rval),
-        TirBinaryOp::Div => non_nan_float(lval / rval),
-        _ => try_fold_float_comparison(lval, op, rval),
-    }
-}
-
-fn try_fold_f32_binary(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedExpr> {
-    let l = lval as f32;
-    let r = rval as f32;
-    match op {
-        TirBinaryOp::Add => non_nan_float(f64::from(l + r)),
-        TirBinaryOp::Sub => non_nan_float(f64::from(l - r)),
-        TirBinaryOp::Mul => non_nan_float(f64::from(l * r)),
-        TirBinaryOp::Div => non_nan_float(f64::from(l / r)),
-        TirBinaryOp::Eq => Some(FoldedExpr::Bool(l == r)),
-        TirBinaryOp::NotEq => Some(FoldedExpr::Bool(l != r)),
-        TirBinaryOp::Lt => Some(FoldedExpr::Bool(l < r)),
-        TirBinaryOp::LtEq => Some(FoldedExpr::Bool(l <= r)),
-        TirBinaryOp::Gt => Some(FoldedExpr::Bool(l > r)),
-        TirBinaryOp::GtEq => Some(FoldedExpr::Bool(l >= r)),
-        _ => None,
-    }
-}
-
-fn try_fold_float_comparison(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedExpr> {
-    match op {
-        TirBinaryOp::Eq => Some(FoldedExpr::Bool(lval == rval)),
-        TirBinaryOp::NotEq => Some(FoldedExpr::Bool(lval != rval)),
-        TirBinaryOp::Lt => Some(FoldedExpr::Bool(lval < rval)),
-        TirBinaryOp::LtEq => Some(FoldedExpr::Bool(lval <= rval)),
-        TirBinaryOp::Gt => Some(FoldedExpr::Bool(lval > rval)),
-        TirBinaryOp::GtEq => Some(FoldedExpr::Bool(lval >= rval)),
-        _ => None,
-    }
-}
-
-fn non_nan_float(value: f64) -> Option<FoldedExpr> {
-    if value.is_nan() {
-        return None;
-    }
-    Some(FoldedExpr::Float {
-        repr: format_float(value),
-        value,
-    })
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Unary operation folding
-// ──────────────────────────────────────────────────────────────────────────────
-
-fn try_fold_unary(
-    result_type: TypeId,
-    op: TirUnaryOp,
-    inner: &TirExpr,
-    type_table: &TypeTable,
-) -> Option<FoldedExpr> {
-    match op {
-        TirUnaryOp::Neg => match &inner.kind {
-            TirExprKind::IntLiteral { value, .. } => {
-                let prim = get_int_primitive(result_type, type_table)?;
-                eval_int_neg(*value, prim).map(|value| FoldedExpr::Int { value, prim })
-            }
-            TirExprKind::FloatLiteral { value, .. } => {
-                let negated = f64::from_bits(value.to_bits() ^ (1u64 << 63));
-                Some(FoldedExpr::Float {
-                    repr: format_float(negated),
-                    value: negated,
-                })
-            }
-            _ => None,
-        },
-        TirUnaryOp::Not => {
-            let TirExprKind::BoolLiteral(b) = &inner.kind else {
-                return None;
-            };
-            Some(FoldedExpr::Bool(!b))
+impl TirRefVisitor for AssignedLocalsCollector {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let TirExprKind::Assign { target, .. } = &expr.kind
+            && let TirExprKind::Local { index, .. } = &target.kind
+        {
+            self.targets.insert(*index);
         }
-        TirUnaryOp::BitNot => {
-            let TirExprKind::IntLiteral { value, .. } = &inner.kind else {
-                return None;
-            };
-            let prim = get_int_primitive(result_type, type_table)?;
-            Some(FoldedExpr::Int {
-                value: truncate_int(!value, prim),
-                prim,
-            })
-        }
-        TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref => None,
-    }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Integer comparison
-// ──────────────────────────────────────────────────────────────────────────────
-
-fn eval_int_cmp(lval: u64, op: TirBinaryOp, rval: u64, prim: PrimitiveType) -> bool {
-    let is_signed = matches!(
-        prim,
-        PrimitiveType::I8 | PrimitiveType::I16 | PrimitiveType::I32 | PrimitiveType::I64
-    );
-    if is_signed {
-        let l = lval as i64;
-        let r = rval as i64;
-        match op {
-            TirBinaryOp::Eq => l == r,
-            TirBinaryOp::NotEq => l != r,
-            TirBinaryOp::Lt => l < r,
-            TirBinaryOp::LtEq => l <= r,
-            TirBinaryOp::Gt => l > r,
-            TirBinaryOp::GtEq => l >= r,
-            _ => unreachable!(),
-        }
-    } else {
-        match op {
-            TirBinaryOp::Eq => lval == rval,
-            TirBinaryOp::NotEq => lval != rval,
-            TirBinaryOp::Lt => lval < rval,
-            TirBinaryOp::LtEq => lval <= rval,
-            TirBinaryOp::Gt => lval > rval,
-            TirBinaryOp::GtEq => lval >= rval,
-            _ => unreachable!(),
-        }
-    }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Integer shift operations
-// ──────────────────────────────────────────────────────────────────────────────
-
-fn eval_int_shl(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
-    let bits = int_bit_width(prim);
-    let shift = (rval as u32) & (bits - 1);
-    Some(truncate_int(lval.wrapping_shl(shift), prim))
-}
-
-fn eval_int_shr(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
-    let bits = int_bit_width(prim);
-    let shift = (rval as u32) & (bits - 1);
-    let is_signed = matches!(
-        prim,
-        PrimitiveType::I8 | PrimitiveType::I16 | PrimitiveType::I32 | PrimitiveType::I64
-    );
-    if is_signed {
-        let result = (lval as i64).wrapping_shr(shift);
-        Some(truncate_int(result as u64, prim))
-    } else {
-        Some(truncate_int(lval.wrapping_shr(shift), prim))
-    }
-}
-
-fn int_bit_width(prim: PrimitiveType) -> u32 {
-    match prim {
-        PrimitiveType::I8 | PrimitiveType::U8 => 8,
-        PrimitiveType::I16 | PrimitiveType::U16 => 16,
-        PrimitiveType::I32 | PrimitiveType::U32 => 32,
-        PrimitiveType::I64 | PrimitiveType::U64 => 64,
-        _ => 32,
-    }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ──────────────────────────────────────────────────────────────────────────────
-
-fn format_int_value(value: u64, prim: PrimitiveType) -> String {
-    match prim {
-        PrimitiveType::I8 | PrimitiveType::I16 | PrimitiveType::I32 | PrimitiveType::I64 => {
-            (value as i64).to_string()
-        }
-        _ => value.to_string(),
-    }
-}
-
-fn format_float(value: f64) -> String {
-    if value.is_infinite() {
-        return if value.is_sign_positive() {
-            "Infinity".to_string()
-        } else {
-            "-Infinity".to_string()
-        };
-    }
-    let s = value.to_string();
-    if s.contains('.') || s.contains('e') || s.contains('E') {
-        s
-    } else {
-        format!("{s}.0")
-    }
-}
-
-fn is_f32_type(type_id: TypeId, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(type_id),
-        ResolvedType::Primitive(PrimitiveType::F32)
-    )
-}
-
-fn get_int_primitive(type_id: TypeId, type_table: &TypeTable) -> Option<PrimitiveType> {
-    match type_table.get(type_id) {
-        ResolvedType::Primitive(
-            p @ (PrimitiveType::I8
-            | PrimitiveType::I16
-            | PrimitiveType::I32
-            | PrimitiveType::I64
-            | PrimitiveType::U8
-            | PrimitiveType::U16
-            | PrimitiveType::U32
-            | PrimitiveType::U64),
-        ) => Some(*p),
-        _ => None,
-    }
-}
-
-fn truncate_int(value: u64, prim: PrimitiveType) -> u64 {
-    match prim {
-        PrimitiveType::U8 => value & 0xFF,
-        PrimitiveType::U16 => value & 0xFFFF,
-        PrimitiveType::U32 => value & 0xFFFF_FFFF,
-        PrimitiveType::U64 => value,
-        PrimitiveType::I8 => i64::from(value as i8) as u64,
-        PrimitiveType::I16 => i64::from(value as i16) as u64,
-        PrimitiveType::I32 => i64::from(value as i32) as u64,
-        PrimitiveType::I64 => value,
-        _ => value,
-    }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Integer arithmetic evaluators
-// ──────────────────────────────────────────────────────────────────────────────
-
-fn eval_int_add(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
-    Some(truncate_int(lval.wrapping_add(rval), prim))
-}
-
-fn eval_int_sub(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
-    Some(truncate_int(lval.wrapping_sub(rval), prim))
-}
-
-fn eval_int_mul(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
-    Some(truncate_int(lval.wrapping_mul(rval), prim))
-}
-
-fn eval_int_div(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
-    if rval == 0 {
-        return None;
-    }
-    match prim {
-        PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64 => {
-            Some(truncate_int(lval / rval, prim))
-        }
-        PrimitiveType::I8 => {
-            let result = (lval as i8).wrapping_div(rval as i8);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I16 => {
-            let result = (lval as i16).wrapping_div(rval as i16);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I32 => {
-            if lval as i32 == i32::MIN && rval as i32 == -1 {
-                return None;
-            }
-            let result = (lval as i32).wrapping_div(rval as i32);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I64 => {
-            if lval as i64 == i64::MIN && rval as i64 == -1 {
-                return None;
-            }
-            let result = (lval as i64).wrapping_div(rval as i64);
-            Some(result as u64)
-        }
-        _ => None,
-    }
-}
-
-fn eval_int_mod(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
-    if rval == 0 {
-        return None;
-    }
-    match prim {
-        PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64 => {
-            Some(truncate_int(lval % rval, prim))
-        }
-        PrimitiveType::I8 => {
-            let result = (lval as i8).wrapping_rem(rval as i8);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I16 => {
-            let result = (lval as i16).wrapping_rem(rval as i16);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I32 => {
-            if lval as i32 == i32::MIN && rval as i32 == -1 {
-                return None;
-            }
-            let result = (lval as i32).wrapping_rem(rval as i32);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I64 => {
-            if lval as i64 == i64::MIN && rval as i64 == -1 {
-                return None;
-            }
-            let result = (lval as i64).wrapping_rem(rval as i64);
-            Some(result as u64)
-        }
-        _ => None,
-    }
-}
-
-fn eval_int_neg(value: u64, prim: PrimitiveType) -> Option<u64> {
-    match prim {
-        PrimitiveType::I8 => {
-            let result = (value as i8).wrapping_neg();
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I16 => {
-            let result = (value as i16).wrapping_neg();
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I32 => {
-            let result = (value as i32).wrapping_neg();
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I64 => {
-            let result = (value as i64).wrapping_neg();
-            Some(result as u64)
-        }
-        _ => None,
-    }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Tests
-// ──────────────────────────────────────────────────────────────────────────────
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_truncate_int_unsigned() {
-        assert_eq!(truncate_int(256, PrimitiveType::U8), 0);
-        assert_eq!(truncate_int(255, PrimitiveType::U8), 255);
-        assert_eq!(truncate_int(0x1_0000, PrimitiveType::U16), 0);
-        assert_eq!(truncate_int(0x1_0000_0000, PrimitiveType::U32), 0);
-        assert_eq!(truncate_int(u64::MAX, PrimitiveType::U64), u64::MAX);
-    }
-
-    #[test]
-    fn test_truncate_int_signed() {
-        assert_eq!(truncate_int(128, PrimitiveType::I8) as i64, -128);
-        assert_eq!(truncate_int(127, PrimitiveType::I8), 127);
-        assert_eq!(truncate_int(0x8000, PrimitiveType::I16) as i64, -32768);
-        assert_eq!(
-            truncate_int(0x8000_0000, PrimitiveType::I32) as i64,
-            -2_147_483_648
-        );
-    }
-
-    #[test]
-    fn test_add_wrapping() {
-        assert_eq!(eval_int_add(255, 1, PrimitiveType::U8), Some(0));
-        assert_eq!(eval_int_add(21, 21, PrimitiveType::I32), Some(42));
-    }
-
-    #[test]
-    fn test_sub() {
-        assert_eq!(eval_int_sub(10, 3, PrimitiveType::I32), Some(7));
-        assert_eq!(eval_int_sub(0, 1, PrimitiveType::U8), Some(255));
-    }
-
-    #[test]
-    fn test_mul() {
-        assert_eq!(eval_int_mul(6, 7, PrimitiveType::I32), Some(42));
-        assert_eq!(eval_int_mul(21, 2, PrimitiveType::I32), Some(42));
-    }
-
-    #[test]
-    fn test_div() {
-        assert_eq!(eval_int_div(42, 6, PrimitiveType::I32), Some(7));
-        assert_eq!(eval_int_div(42, 0, PrimitiveType::I32), None);
-        let neg7 = (-7_i32) as u64;
-        let result = eval_int_div(neg7, 2, PrimitiveType::I32);
-        assert_eq!(result.map(|v| v as i32), Some(-3));
-        let i32_min = i32::MIN as u64;
-        let neg1_i32 = (-1_i32) as u64;
-        assert_eq!(eval_int_div(i32_min, neg1_i32, PrimitiveType::I32), None);
-        let i64_min = i64::MIN as u64;
-        let neg1_i64 = (-1_i64) as u64;
-        assert_eq!(eval_int_div(i64_min, neg1_i64, PrimitiveType::I64), None);
-        let i8_min = (-128_i8) as u64;
-        let neg1_i8 = (-1_i8) as u64;
-        assert!(eval_int_div(i8_min, neg1_i8, PrimitiveType::I8).is_some());
-    }
-
-    #[test]
-    fn test_mod() {
-        assert_eq!(eval_int_mod(10, 3, PrimitiveType::I32), Some(1));
-        assert_eq!(eval_int_mod(10, 0, PrimitiveType::I32), None);
-        let i32_min = i32::MIN as u64;
-        let neg1 = (-1_i32) as u64;
-        assert_eq!(eval_int_mod(i32_min, neg1, PrimitiveType::I32), None);
-        let i64_min = i64::MIN as u64;
-        let neg1_i64 = (-1_i64) as u64;
-        assert_eq!(eval_int_mod(i64_min, neg1_i64, PrimitiveType::I64), None);
-    }
-
-    #[test]
-    fn test_neg() {
-        assert_eq!(
-            eval_int_neg(42, PrimitiveType::I32).map(|v| v as i32),
-            Some(-42)
-        );
-        assert_eq!(eval_int_neg(42, PrimitiveType::U32), None);
-    }
-
-    #[test]
-    fn test_cast_mask() {
-        assert_eq!(truncate_int(1_000_000, PrimitiveType::I64), 1_000_000);
-        assert_eq!(truncate_int(0x1_0000_0001, PrimitiveType::I32), 1);
-        assert_eq!(truncate_int(300, PrimitiveType::U8), 44);
-        let neg128 = (-128_i64) as u64;
-        assert_eq!(truncate_int(neg128, PrimitiveType::I8) as i64, -128);
-    }
-
-    #[test]
-    fn test_int_cmp_unsigned() {
-        assert!(eval_int_cmp(10, TirBinaryOp::Eq, 10, PrimitiveType::U32));
-        assert!(!eval_int_cmp(10, TirBinaryOp::Eq, 20, PrimitiveType::U32));
-        assert!(eval_int_cmp(10, TirBinaryOp::NotEq, 20, PrimitiveType::U32));
-        assert!(eval_int_cmp(5, TirBinaryOp::Lt, 10, PrimitiveType::U32));
-        assert!(!eval_int_cmp(10, TirBinaryOp::Lt, 5, PrimitiveType::U32));
-        assert!(eval_int_cmp(5, TirBinaryOp::LtEq, 5, PrimitiveType::U32));
-        assert!(eval_int_cmp(10, TirBinaryOp::Gt, 5, PrimitiveType::U32));
-        assert!(eval_int_cmp(10, TirBinaryOp::GtEq, 10, PrimitiveType::U32));
-    }
-
-    #[test]
-    fn test_int_cmp_signed() {
-        let neg5 = (-5_i32) as u64;
-        let neg10 = (-10_i32) as u64;
-        assert!(eval_int_cmp(
-            neg5,
-            TirBinaryOp::Gt,
-            neg10,
-            PrimitiveType::I32
-        ));
-        assert!(eval_int_cmp(
-            neg10,
-            TirBinaryOp::Lt,
-            neg5,
-            PrimitiveType::I32
-        ));
-        assert!(eval_int_cmp(neg5, TirBinaryOp::Lt, 5, PrimitiveType::I32));
-    }
-
-    #[test]
-    fn test_bitwise_and() {
-        assert_eq!(truncate_int(0xFF & 0x0F, PrimitiveType::U8), 0x0F);
-    }
-
-    #[test]
-    fn test_bitwise_or() {
-        assert_eq!(truncate_int(0xF0 | 0x0F, PrimitiveType::U8), 0xFF);
-    }
-
-    #[test]
-    fn test_bitwise_xor() {
-        assert_eq!(truncate_int(0xFF ^ 0x0F, PrimitiveType::U8), 0xF0);
-    }
-
-    #[test]
-    fn test_bitwise_not() {
-        assert_eq!(truncate_int(!0u64, PrimitiveType::U8), 0xFF);
-        assert_eq!(truncate_int(!0u64, PrimitiveType::I32) as i64, -1);
-    }
-
-    #[test]
-    fn test_shift_left() {
-        assert_eq!(eval_int_shl(1, 4, PrimitiveType::U32), Some(16));
-        assert_eq!(eval_int_shl(1, 32, PrimitiveType::U32), Some(1));
-    }
-
-    #[test]
-    fn test_shift_right_unsigned() {
-        assert_eq!(eval_int_shr(16, 4, PrimitiveType::U32), Some(1));
-        assert_eq!(eval_int_shr(0xFF, 4, PrimitiveType::U8), Some(0x0F));
-    }
-
-    #[test]
-    fn test_shift_right_signed() {
-        let neg128 = (-128_i32) as u64;
-        let result = eval_int_shr(neg128, 1, PrimitiveType::I32);
-        assert_eq!(result.map(|v| v as i32), Some(-64));
-    }
-
-    #[test]
-    fn test_float_format() {
-        assert_eq!(format_float(3.25), "3.25");
-        assert_eq!(format_float(0.0), "0.0");
-        assert_eq!(format_float(4.0), "4.0");
-        assert_eq!(format_float(f64::INFINITY), "Infinity");
-        assert_eq!(format_float(f64::NEG_INFINITY), "-Infinity");
-    }
-
-    #[test]
-    fn test_f64_arithmetic() {
-        let r = try_fold_f64_binary(1.5, TirBinaryOp::Add, 2.5);
-        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 4.0));
-        let r = try_fold_f64_binary(10.0, TirBinaryOp::Sub, 3.5);
-        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 6.5));
-        let r = try_fold_f64_binary(3.0, TirBinaryOp::Mul, 2.0);
-        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 6.0));
-        let r = try_fold_f64_binary(10.0, TirBinaryOp::Div, 4.0);
-        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 2.5));
-        let r = try_fold_f64_binary(1.0, TirBinaryOp::Div, 0.0);
-        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == f64::INFINITY));
-    }
-
-    #[test]
-    fn test_f32_arithmetic() {
-        let r = try_fold_f32_binary(1.5, TirBinaryOp::Add, 2.5);
-        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 4.0));
-        let r = try_fold_f32_binary(1.0, TirBinaryOp::Div, 3.0);
-        let expected = f64::from(1.0f32 / 3.0f32);
-        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == expected));
-    }
-
-    #[test]
-    fn test_float_nan_skipped() {
-        assert!(try_fold_f64_binary(0.0, TirBinaryOp::Div, 0.0).is_none());
-        assert!(try_fold_f64_binary(f64::INFINITY, TirBinaryOp::Sub, f64::INFINITY).is_none());
-        assert!(try_fold_f64_binary(0.0, TirBinaryOp::Mul, f64::INFINITY).is_none());
-        assert!(try_fold_f32_binary(0.0, TirBinaryOp::Div, 0.0).is_none());
-    }
-
-    #[test]
-    fn test_f32_comparison() {
-        let pi_f64 = std::f64::consts::PI;
-        let tau_f64 = std::f64::consts::TAU;
-        let pi_times_2 = f64::from(pi_f64 as f32 * 2.0_f32);
-        assert_ne!(tau_f64, pi_times_2);
-        assert!(matches!(
-            try_fold_f32_binary(tau_f64, TirBinaryOp::Eq, pi_times_2),
-            Some(FoldedExpr::Bool(true))
-        ));
-        assert!(matches!(
-            try_fold_f32_binary(tau_f64, TirBinaryOp::NotEq, pi_times_2),
-            Some(FoldedExpr::Bool(false))
-        ));
-        assert!(matches!(
-            try_fold_f32_binary(f64::NAN, TirBinaryOp::Eq, f64::NAN),
-            Some(FoldedExpr::Bool(false))
-        ));
-    }
-
-    #[test]
-    fn test_float_comparison() {
-        assert!(matches!(
-            try_fold_f64_binary(1.0, TirBinaryOp::Lt, 2.0),
-            Some(FoldedExpr::Bool(true))
-        ));
-        assert!(matches!(
-            try_fold_f64_binary(2.0, TirBinaryOp::Lt, 1.0),
-            Some(FoldedExpr::Bool(false))
-        ));
-        assert!(matches!(
-            try_fold_f64_binary(1.0, TirBinaryOp::Eq, 1.0),
-            Some(FoldedExpr::Bool(true))
-        ));
-        assert!(matches!(
-            try_fold_f64_binary(f64::NAN, TirBinaryOp::Eq, f64::NAN),
-            Some(FoldedExpr::Bool(false))
-        ));
-        assert!(matches!(
-            try_fold_f64_binary(f64::NAN, TirBinaryOp::NotEq, f64::NAN),
-            Some(FoldedExpr::Bool(true))
-        ));
-        assert!(matches!(
-            try_fold_f64_binary(f64::NAN, TirBinaryOp::Lt, 1.0),
-            Some(FoldedExpr::Bool(false))
-        ));
+        self.walk_expr(expr);
     }
 }

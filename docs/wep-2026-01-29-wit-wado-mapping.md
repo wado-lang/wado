@@ -85,7 +85,7 @@ When generating WIT, both become `interface`:
 
 ```wado
 // effect = import-side interface (Wado semantics: effect tracking)
-effect Stdout {
+interface Stdout {
     fn print(s: String);
 }
 
@@ -235,7 +235,7 @@ An `effect` with the `export` keyword becomes an exported CM interface. This is 
 
 ```wado
 // Producer component: provides logging capability
-export effect Logger {
+export interface Logger {
     log,
     set_level,
 }

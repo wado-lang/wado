@@ -1,0 +1,50 @@
+# Triage state for ANTLR4 runtime-testsuite descriptors.
+#
+# Each entry's key is "<Category>/<Name>" (no .txt suffix). Sections:
+#
+#   [todo] — Stage A: descriptor parses cleanly with `antlr4` but Gale
+#            rejects it. The generated test gets `#[TODO]` so the failure
+#            is recorded without blocking CI. Drop the entry once the
+#            underlying gap is closed.
+#   [skip] — Stage A: descriptor will not be emitted as a Wado test at
+#            all (use for genuinely target-language-specific tests,
+#            never for things we just haven't fixed yet).
+#
+#   [stage_b_todo] — Stage B: tree-shape comparison fails at runtime;
+#            the test is emitted with `#[TODO]` so it is recorded as
+#            expected-to-fail. Drop once the underlying divergence is
+#            fixed (Gale codegen, LR rewriting, or action handling).
+#   [stage_b_skip] — Stage B: emission is skipped entirely. Use when
+#            the test cannot even compile (e.g. Gale codegen produces
+#            invalid Wado for the descriptor's grammar) so a `#[TODO]`
+#            marker has nothing to attach to.
+#
+# The free-form value is a one-line reason that flows into the generated
+# test as a comment. The reason text is written verbatim — keep it free
+# of backslashes (the parser does not unescape) and double quotes.
+#
+# After editing this file, re-run:
+#   package-gale/scripts/extract-antlr4-descriptors.sh
+
+[todo]
+
+[skip]
+"ParseTrees/AltNum" = "grammar-level <...> StringTemplate directive that the ANTLR4 testsuite substitutes per target before antlr4 ever sees the .g4 — not a self-contained grammar"
+"ParseTrees/TokenAndRuleContextString" = "grammar-level <...> StringTemplate directive that the ANTLR4 testsuite substitutes per target before antlr4 ever sees the .g4 — not a self-contained grammar"
+"Listeners/Basic" = "top-level <ImportListener(...)> / <BasicListener(...)> StringTemplate directives the testsuite substitutes per target — not a self-contained .g4"
+"Listeners/LR" = "top-level <ImportListener(...)> / <LRListener(...)> StringTemplate directives the testsuite substitutes per target — not a self-contained .g4"
+"Listeners/LRWithLabels" = "top-level <ImportListener(...)> / <LRWithLabelsListener(...)> StringTemplate directives the testsuite substitutes per target — not a self-contained .g4"
+"Listeners/RuleGetters_1" = "top-level <ImportListener(...)> / <RuleGetterListener(...)> StringTemplate directives the testsuite substitutes per target — not a self-contained .g4"
+"Listeners/RuleGetters_2" = "top-level <ImportListener(...)> / <RuleGetterListener(...)> StringTemplate directives the testsuite substitutes per target — not a self-contained .g4"
+"Listeners/TokenGetters_1" = "top-level <ImportListener(...)> / <TokenGetterListener(...)> StringTemplate directives the testsuite substitutes per target — not a self-contained .g4"
+"Listeners/TokenGetters_2" = "top-level <ImportListener(...)> / <TokenGetterListener(...)> StringTemplate directives the testsuite substitutes per target — not a self-contained .g4"
+"ParserExec/ParserProperty" = "top-level <ParserPropertyMember()> StringTemplate directive the testsuite substitutes per target — not a self-contained .g4"
+"ParserErrors/SingleSetInsertionConsumption" = "trailing <! ... !> StringTemplate comment outside any rule — testsuite descriptor artifact, not a self-contained .g4"
+"ParserErrors/SingleTokenDeletionConsumption" = "trailing <! ... !> StringTemplate comment outside any rule — testsuite descriptor artifact, not a self-contained .g4"
+
+[stage_b_todo]
+"LeftRecursion/SemPredFailOption" = "Stage B parse-tree shape diverges because action bodies are skipped (the predicate guard is dropped) — Stage C territory"
+"SemPredEvalParser/PredFromAltTestedInLoopBack_1" = "Stage B test parse fails with Result::Err — semantic predicate enforcement is Stage C"
+"SemPredEvalParser/PredFromAltTestedInLoopBack_2" = "Stage B test parse fails with Result::Err — semantic predicate enforcement is Stage C"
+
+[stage_b_skip]

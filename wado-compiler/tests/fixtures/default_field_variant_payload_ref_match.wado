@@ -1,0 +1,42 @@
+// Test: pattern-matching a variant payload that contains a struct with a
+// defaulted field, via a ref binding (`if let X(y) = &e`), must produce
+// a valid Wasm module.
+//
+// Regression: this used to panic in codegen with
+//   "Internal compiler error: WIR pipeline generated invalid core Wasm module
+//    Validation error: type mismatch: expected (ref null $type), found (ref $type)"
+// because the field-default placement interacted badly with the
+// reference-binding lowering for variant payloads.
+
+variant Elem {
+    A(Foo),
+    B(i32),
+}
+
+struct Foo {
+    name: String,
+    cache: String = "",
+}
+
+fn norm(e: Elem) -> Elem {
+    if let A(f) = &e {
+        if !f.cache.is_empty() {
+            return e;
+        }
+        return Elem::A(Foo { name: f.name, cache: "x" });
+    }
+    return e;
+}
+
+export fn run() {
+    let e = Elem::A(Foo { name: "n" });
+    let n = norm(e);
+    if let A(f) = n {
+        assert f.cache == "x";
+    } else {
+        panic("expected A");
+    }
+}
+
+__DATA__
+{"stdout": ""}

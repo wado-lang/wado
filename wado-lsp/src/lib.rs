@@ -3,13 +3,14 @@ mod diagnostics;
 mod document_highlight;
 pub mod host;
 mod hover;
+pub mod kiln;
 mod location;
 mod references;
 pub mod semantic_tokens;
 pub mod server;
 
 use indexmap::IndexMap;
-use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic as CompilerDiagnostic, LogLevel};
+use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic};
 
 pub use definition::DefinitionResult;
 pub use diagnostics::{Diagnostic, Position, Range, Severity};
@@ -118,6 +119,28 @@ impl Engine {
         document_highlight::document_highlight(source, position, uri, host).await
     }
 
+    /// Resolve a `core:` / `wasi:` URI to its bundled stdlib source.
+    ///
+    /// Powers `workspace/textDocumentContent` so editors can open
+    /// `core:cli` / `wasi:filesystem/types.wado` jump-to-definition targets
+    /// even though the source lives only in the compiler's binary.
+    /// Tolerates the rfc3986-normalised form `core:/cli` that some clients
+    /// emit when round-tripping the URI through their parser.
+    #[must_use]
+    pub fn text_document_content(&self, uri: &str) -> Option<&'static str> {
+        let (scheme, rest) = uri.split_once(':')?;
+        if scheme != "core" && scheme != "wasi" {
+            return None;
+        }
+        // Canonical form (`core:cli`) hits get_stdlib_module without an
+        // intermediate allocation; only the normalised form (`core:/cli`)
+        // needs its slash stripped and the URI re-formed.
+        match rest.strip_prefix('/') {
+            None => wado_compiler::stdlib::get_stdlib_module(uri),
+            Some(path) => wado_compiler::stdlib::get_stdlib_module(&format!("{scheme}:{path}")),
+        }
+    }
+
     /// Compute semantic tokens for the given document.
     ///
     /// Returns delta-encoded token data for LSP `textDocument/semanticTokens/full`.
@@ -133,25 +156,29 @@ impl Engine {
 
     /// Compute diagnostics for the given document.
     ///
-    /// Runs the compiler with a silent host that collects diagnostics without printing.
-    /// The `host` is used to load imported modules from the filesystem (or any other source).
+    /// Runs the compiler's `annotate` pipeline (parse → bind → desugar → load
+    /// → analyze → resolve) with a silent host that collects diagnostics
+    /// without printing. Codegen and downstream phases are intentionally
+    /// skipped: they can panic on compiler-internal bugs (e.g. invalid Wasm
+    /// emitted from an unusual entry module) and produce nothing useful for
+    /// editor feedback even when they succeed. All user-actionable
+    /// diagnostics — type errors, undefined symbols, prelude collisions,
+    /// effect violations — surface during `annotate`.
     pub async fn diagnostics<H: CompilerHost>(&self, uri: &str, host: &H) -> Vec<Diagnostic> {
         let Some(source) = self.documents.get(uri) else {
             return Vec::new();
         };
 
         let filename = uri_to_filename(uri);
-        let options = CompilerOptions {
-            log_level: Some(LogLevel::Off),
-            ..CompilerOptions::default()
-        };
-
-        // Compile and collect diagnostics. We don't care about the result —
-        // errors are captured by the host via emit_diagnostic.
         let collecting_host = DiagnosticCollector::new(host);
-        let _ =
-            wado_compiler::compile_with_options(source, &collecting_host, Some(&filename), options)
-                .await;
+        let invocations = kiln::prepare_invocations(&filename, source, &collecting_host);
+        let _ = wado_compiler::annotate_with_invocations(
+            source,
+            &collecting_host,
+            Some(&filename),
+            invocations,
+        )
+        .await;
 
         collecting_host
             .take_diagnostics()
@@ -240,5 +267,39 @@ mod tests {
             "/home/user/test.wado"
         );
         assert_eq!(uri_to_filename("untitled:1"), "untitled:1");
+    }
+
+    #[test]
+    fn text_document_content_resolves_core_module() {
+        let engine = Engine::new();
+        let text = engine.text_document_content("core:cli").unwrap();
+        assert!(text.contains("println"));
+    }
+
+    #[test]
+    fn text_document_content_resolves_wasi_interface() {
+        let engine = Engine::new();
+        let text = engine
+            .text_document_content("wasi:filesystem/types.wado")
+            .unwrap();
+        assert!(text.contains("Descriptor"));
+    }
+
+    #[test]
+    fn text_document_content_tolerates_normalized_uri() {
+        let engine = Engine::new();
+        assert!(engine.text_document_content("core:/cli").is_some());
+    }
+
+    #[test]
+    fn text_document_content_rejects_unknown_scheme() {
+        let engine = Engine::new();
+        assert!(engine.text_document_content("file:///etc/passwd").is_none());
+    }
+
+    #[test]
+    fn text_document_content_rejects_unknown_module() {
+        let engine = Engine::new();
+        assert!(engine.text_document_content("core:nonexistent").is_none());
     }
 }

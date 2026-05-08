@@ -1,0 +1,46 @@
+// Regression test: WIR pipeline used to emit invalid core Wasm for a `match` arm that
+// `let _ = ...` discarded a struct field, when embedded in a `while` loop.
+//
+// Background: discovered while investigating a `null reference` trap inside
+// `core:json/JsonDeserializer::read_json_string` with the optimizer's
+// inline threshold raised to 33+ on the json-catalog benchmark — that trap
+// turned out to be a separate `field_scalarize` (HFS) bug, but minimizing
+// the repro produced this independent compiler bug.
+//
+// Root cause: the resolver lowered `let _ = expr;` to `TirStmtKind::Expr(expr)`,
+// losing the "discard the value" semantic. The block resolver then took the
+// last statement's `Expr(s.a)` as the trailing expression, typing the arm
+// body (and therefore the whole match) as `i32` — producing a Wasm
+// `(if (result i32) ...)` whose `_ => {}` arm left nothing on the stack.
+//
+// Fix: lower `let _ = expr;` to `TirStmtKind::LetDestructure { pattern:
+// Wildcard, value, .. }` instead. The block resolver only considers
+// `TirStmtKind::Expr` / `Return` as a trailing-expression, so the match arm
+// is now correctly typed as unit. The lower phase
+// (`lower::pattern::lower_let_pattern`) then converts the `Wildcard`
+// destructure back to a plain `TirStmtKind::Expr(value)`, which the WIR
+// builder already wraps in `Drop` for non-unit values via the existing
+// `TirStmtKind::Expr` translation path.
+
+struct S {
+    a: i32,
+}
+
+export fn run() {
+    let mut i = 0;
+    while i < 2 {
+        match i {
+            0 => {
+                let s = S { a: 1 };
+                let _ = s.a;
+            },
+            _ => {},
+        }
+        i += 1;
+    }
+}
+
+__DATA__
+{
+    "stdout": ""
+}

@@ -83,6 +83,18 @@ pub struct SemanticTokensParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextDocumentContentParams {
+    pub uri: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextDocumentContentResult {
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SemanticTokens {
     pub data: Vec<u32>,
 }
@@ -124,6 +136,20 @@ pub struct ServerCapabilities {
     pub document_highlight_provider: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_tokens_provider: Option<SemanticTokensOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<WorkspaceServerCapabilities>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceServerCapabilities {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_document_content: Option<TextDocumentContentOptions>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TextDocumentContentOptions {
+    pub schemes: &'static [&'static str],
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -197,4 +223,7 @@ pub mod error_codes {
     /// Server received a request/notification before `initialize`.
     /// LSP 3.18 §initialize.
     pub const SERVER_NOT_INITIALIZED: i32 = -32002;
+    /// A request was syntactically correct (method known, params valid)
+    /// but failed for a request-specific reason. LSP 3.18 §responseError.
+    pub const REQUEST_FAILED: i32 = -32803;
 }

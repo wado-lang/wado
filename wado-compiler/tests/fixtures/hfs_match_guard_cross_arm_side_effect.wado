@@ -1,0 +1,79 @@
+// Regression: the walker analyzed each match arm with `entry_states`
+// at the arm's pre-state. Guards run sequentially at runtime — arm K's
+// guard runs only after arms 1..K-1's patterns matched and their
+// guards failed. A `&mut` call inside arm 1's guard mutates the field
+// state before arm 2's body is reached; without modeling that, the
+// walker emits arm 2's body sync as if state were `entry_states`,
+// while runtime state is post-arm-1's-guard.
+//
+// Shape:
+//
+//   match v {
+//       Foo if probe(&mut state) > 0 => {                // guard: &mut
+//           // pattern matched but guard returned false → fall to next arm
+//       }
+//       Bar => {
+//           sum = sum + state.field;                      // reads scalar
+//       }
+//   }
+//
+// Without the cross-arm fix, arm `Bar`'s body reads the stale __hfs
+// scalar — `probe`'s `&mut state` left state in `FieldOnly`, but the
+// walker analyzed Bar from entry=`Both` and emitted no re-read.
+//
+// This fixture is constructed so the iteration count rises into HFS's
+// scalarization threshold (4+ accesses on `state.value`).
+
+use { println, Stdout } from "core:cli";
+
+struct State {
+    value: i32,
+    seen: i32,
+}
+
+#[inline(never)]
+fn probe(s: &mut State) -> i32 {
+    // Side effect: bump seen and value via &mut. This makes state.value
+    // FieldOnly after the guard runs, regardless of the guard's bool result.
+    s.seen = s.seen + 1;
+    s.value = s.value + 100;
+    return 0; // guard never matches; arm 2 always runs
+}
+
+export fn run() with Stdout {
+    let mut state = State { value: 0, seen: 0 };
+    let mut sum = 0;
+    let mut i = 0;
+    loop {
+        if i >= 3 { break; }
+        // Arm 1's guard always returns 0, so arm 1's body never runs;
+        // arm 2 is always taken. But arm 1's `&mut` guard runs first
+        // and mutates state.value. Without the cross-arm fix, arm 2's
+        // `state.value` read uses the stale scalar.
+        match i {
+            // Pattern `_n` binds (always matches), so guard runs on
+            // every iteration. probe always returns 0, so this arm
+            // never fires; arm 2 runs after the guard's side effects.
+            _n && probe(&mut state) > 0 => {
+                state.value = -1;
+            }
+            _ => {
+                sum = sum + state.value;
+                state.value = state.value + 1;
+            }
+        }
+        // Outer-body reads to push state.value past MIN_ACCESS_COUNT.
+        sum = sum + state.value;
+        state.value = state.value + 1000;
+        i = i + 1;
+    }
+    println(`{sum} {state.value} {state.seen}`);
+}
+
+__DATA__
+{
+    "stdout": "7209 3303 3\n",
+    "wir_expect:O2": [
+        "let __hfs_value_"
+    ]
+}

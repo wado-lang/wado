@@ -561,6 +561,10 @@ impl TypeTable {
     /// Distinguished from user-defined structs named "Tuple" by `module_source.is_core()`.
     pub const TUPLE_TYPE_NAME: &'static str = "Tuple";
 
+    /// Canonical name for the unit type `()` used in method lookup and impl indexing.
+    /// Must match what `format_type_name(TypeNameInfo::Unit)` returns.
+    pub const UNIT_TYPE_NAME: &'static str = "unit";
+
     /// Check if a name and `module_source` identify a built-in tuple type.
     pub fn is_tuple_type(name: &str, module_source: &ModuleSource) -> bool {
         name == Self::TUPLE_TYPE_NAME && module_source.is_core()
@@ -820,11 +824,33 @@ impl TypeTable {
     /// This physically removes entries from the backing `IndexMap`s so that
     /// subsequent iterations (e.g. WIR type registration) no longer see them.
     /// The intern map and secondary indices are rebuilt to stay consistent.
+    ///
+    /// `retain` preserves the invariant that `self.get(id)` does not panic
+    /// for any surviving `id`. After `erase_newtypes_and_flags`, `get(id)`
+    /// follows `self.redirects` to a canonical `TypeId`; if the redirect's
+    /// target were removed, `get(id)` would panic on a surviving id.
+    /// To keep the invariant, the kept set is implicitly extended with
+    /// the redirect targets of every kept id, and stale redirect entries
+    /// (whose source or target did not survive) are dropped.
     pub fn retain(&mut self, keep: &IndexSet<TypeId>) {
-        self.types.retain(|id, _| keep.contains(id));
+        // Implicit closure under `redirects`: every kept id whose `get`
+        // result lives at a different id must keep that target alive too.
+        let mut effective_keep: IndexSet<TypeId> = keep.clone();
+        for &id in keep {
+            if let Some(&target) = self.redirects.get(&id) {
+                effective_keep.insert(target);
+            }
+        }
+
+        self.types.retain(|id, _| effective_keep.contains(id));
+        // A redirect entry is meaningful only when both endpoints survive.
+        self.redirects
+            .retain(|id, target| effective_keep.contains(id) && effective_keep.contains(target));
         // Retain SymbolKey indices to surviving TypeIds only.
-        self.symbol_by_type.retain(|id, _| keep.contains(id));
-        self.type_by_symbol.retain(|_, id| keep.contains(id));
+        self.symbol_by_type
+            .retain(|id, _| effective_keep.contains(id));
+        self.type_by_symbol
+            .retain(|_, id| effective_keep.contains(id));
         // Rebuild intern map from the surviving entries.
         self.intern_map.clear();
         self.struct_name_index.clear();
@@ -1008,7 +1034,7 @@ impl TypeTable {
         let module_source = self
             .tuple_module_source
             .clone()
-            .unwrap_or_else(|| ModuleSource::core("prelude"));
+            .unwrap_or_else(ModuleSource::prelude);
         self.intern(ResolvedType::GenericInstance {
             name: Self::TUPLE_TYPE_NAME.to_string(),
             module_source,
@@ -1919,6 +1945,84 @@ impl TypeTable {
         format_type_name(info)
     }
 
+    /// Mangle `id` for use as a type argument inside a generic instance's
+    /// or monomorphized entity's identity name (e.g. as the `T` in
+    /// `Result<unit, T>` or `Box<T>`).
+    ///
+    /// Unlike [`Self::mangle_type_name`], this *always* qualifies named
+    /// user-defined types whose simple name alone is not unique across
+    /// the type table — `Variant`, `Enum`, `Resource`, `Newtype`, and
+    /// `Flags` — by prefixing their declaring `ModuleSource`. Without
+    /// this, two distinct types from different modules sharing a simple
+    /// name (e.g. `wasi:filesystem`'s `pub variant ErrorCode` and
+    /// `wasi:cli`'s `pub enum ErrorCode`) collapse onto the same generic-
+    /// instance / monomorph identity at the WIR layer, causing
+    /// `register_mono_variants` to register only the first instantiation
+    /// it encounters and the later one's case-struct payload to silently
+    /// inherit the wrong representation.
+    ///
+    /// `Struct` is intentionally *not* qualified here: same-named structs
+    /// from different modules already get distinct
+    /// `StructName(ModuleSource, name)` map keys at the WIR layer, and
+    /// the monomorphizer's `instantiation_name` builds names with the
+    /// unqualified mangle. Threading qualified `Struct` names through
+    /// would require a lockstep update of every struct-identity map and
+    /// is out of scope for the bug-2 fix.
+    ///
+    /// Standalone uses (e.g. `mangle_type_name(ErrorCode)` outside a
+    /// generic instance, or method-dispatch `base_struct_name`) keep the
+    /// short name so that `wasi_registry`, `LocalMethodName`, and
+    /// `ModuleSource::interface_name` keys remain unchanged.
+    ///
+    /// User-facing display (`TypeTable::type_name`) is independent and
+    /// is unaffected by this function.
+    pub fn mangle_type_arg_for_generic(&self, id: TypeId) -> String {
+        match self.get(id) {
+            ResolvedType::Variant {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Enum {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Resource {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Flags {
+                name,
+                module_source,
+                ..
+            } => format!("{module_source}/{name}"),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                self.mangle_type_arg_for_generic(*inner)
+            }
+            // GenericInstance / Struct / primitives / arrays / functions
+            // delegate to `mangle_type_name`. For `GenericInstance`, that
+            // already recursively qualifies *its* type arguments through
+            // this same function — see `get_type_name_info`.
+            _ => self.mangle_type_name(id),
+        }
+    }
+
+    /// Module-qualifying analogue of
+    /// [`Self::mangle_type_name_resolving_newtypes`]. Used by the few WIR
+    /// fq lookup sites that consult the newtype-resolved form
+    /// (`wir_build/context.rs`).
+    pub fn mangle_type_arg_for_generic_resolving_newtypes(&self, id: TypeId) -> String {
+        let resolved = self.resolve_newtype_base(id);
+        self.mangle_type_arg_for_generic(resolved)
+    }
+
     /// Return the base type name without type arguments.
     ///
     /// For `GenericInstance { name: "Option", type_args: [String] }` → `"Option"`.
@@ -2006,7 +2110,7 @@ impl TypeTable {
             } => {
                 let args: Vec<String> = type_args
                     .iter()
-                    .map(|t| self.mangle_type_name(*t))
+                    .map(|t| self.mangle_type_arg_for_generic(*t))
                     .collect();
                 TypeNameInfo::Generic {
                     name: name.clone(),
@@ -2033,7 +2137,7 @@ impl TypeTable {
             } => {
                 let args: Vec<String> = type_args
                     .iter()
-                    .map(|t| self.mangle_type_name(*t))
+                    .map(|t| self.mangle_type_arg_for_generic(*t))
                     .collect();
                 TypeNameInfo::Generic {
                     name: name.clone(),
@@ -2396,8 +2500,25 @@ pub enum TirExprKind {
         /// Optional functor ID assigned during lowering.
         /// Used by monomorphize phase to look up the corresponding `ClosureFunctor`.
         functor_id: Option<u32>,
-        /// Pre-desugar source text for inspect output.
-        source_text: Option<String>,
+        /// Closure-scope address-taken locals, captured from the
+        /// closure's resolution `FunctionContext`. The boxing pass uses
+        /// this when descending into the closure body — the body's
+        /// `Local { index: N }` references closure locals, not the
+        /// parent function's, so the parent's set would mis-box. Empty
+        /// for synthesised closures (e.g. effect-handler dispatch),
+        /// which never take addresses.
+        address_taken_locals: crate::hashmap::IndexSet<u32>,
+        /// Body-level let-bindings inside the closure, in declaration
+        /// order. Indices `0..params.len()` belong to the closure's
+        /// parameters (whose info lives in `params`); these body locals
+        /// occupy `params.len()..params.len()+body_locals.len()` in the
+        /// closure's local-index namespace.
+        ///
+        /// Captured at resolve time from the closure's `FunctionContext`
+        /// so pattern lowering can seed a closure-scoped allocator
+        /// without re-walking the body. Synthetic closures created by
+        /// `synthesis/` have an empty `body_locals`.
+        body_locals: Vec<TirLocal>,
     },
 
     /// Indirect call through a callable value (closure or funcref)
@@ -2508,6 +2629,66 @@ pub enum TirExprKind {
     TemplateString {
         parts: Vec<TirTemplatePart>,
     },
+
+    /// Effect handler installation: `with E1 => h1, ... do { body }`.
+    /// See `docs/wep-2026-04-11-effect-handler.md`.
+    ///
+    /// Each binding installs a handler for one effect for the duration of `body`.
+    /// The block evaluates to `body`'s value; in MVP `result_type` is always Unit
+    /// because do-block bodies are statement blocks, not expression blocks.
+    WithHandler {
+        bindings: Vec<TirHandlerBinding>,
+        body: TirBlock,
+        result_type: TypeId,
+    },
+
+    /// `resume value` — control-flow expression valid only inside an effect
+    /// handler method body.
+    ///
+    /// In the MVP (no post-resume code), `resume` lowers to `Return { value }`.
+    /// The expression itself is typed as `Unit` because it does not produce a
+    /// value to its enclosing expression — it transfers control out.
+    Resume {
+        value: Box<TirExpr>,
+    },
+}
+
+/// One `Effect => handler` binding inside a `with ... do` block.
+#[derive(Debug, Clone)]
+pub struct TirHandlerBinding {
+    /// The effect being handled. The resolver always fills this in with a
+    /// concrete effect reference — the bundled `with &mut h do` form is
+    /// expanded to one binding per implemented effect, each carrying a
+    /// concrete `EffectRef`. `None` only appears transiently when an
+    /// upstream diagnostic prevented resolution.
+    pub effect: Option<EffectRef>,
+    /// Concrete `TypeId`s of the trait / resource type arguments at this
+    /// installation site (e.g. `[u8]` for `with Stream<u8> => &mut s do`,
+    /// or as derived from the impl block in a bundled `with &mut s do`
+    /// where `MockCM` implements `Stream<u8>`). Empty for non-generic
+    /// effects / resources. The dispatch synthesis projects this together
+    /// with `effect.module_source` and `effect.name` into the
+    /// `InstantiationKey` it uses to look up the per-monomorphisation
+    /// dispatch infrastructure.
+    pub trait_type_args: Vec<TypeId>,
+    /// Handler value expression (e.g., `&mut mock`).
+    pub handler: TirExpr,
+    /// The concrete struct type (after deref) implementing the effect.
+    /// Used by codegen to pick the correct `impl E for T` methods.
+    pub handler_type: TypeId,
+    pub span: Span,
+    /// If `Some(id)`, this binding came from a bundled `with &mut h do`
+    /// expansion. All bindings produced from one bundled clause share the
+    /// same `id`. The dispatch synthesis uses this to allocate a single
+    /// `__h_<bundle>` local that every per-effect closure captures, so the
+    /// handler value is evaluated once and mutations from any installed
+    /// effect are observed by the rest. `None` for explicit
+    /// `Effect => handler` bindings (each gets its own `__h_<E>` local).
+    ///
+    /// IDs are unique within a single `WithHandler` expression but are not
+    /// reused across separate `with` blocks; the synthesis pass starts
+    /// fresh for each `WithHandler` it visits.
+    pub bundle_group: Option<u32>,
 }
 
 /// A part of a resolved template string.
@@ -2819,11 +3000,31 @@ pub struct TirGlobal {
     pub module_source: ModuleSource,
     pub span: Span,
     /// True if this global's Wasm type should be nullable.
-    /// Set by lower phase for lazy-initialized reference type globals.
+    /// Set by the lower phase for two distinct cases:
+    /// 1. Lazy-initialized reference globals — the slot starts `null`
+    ///    until `__initialize_module` runs, so the storage must accept
+    ///    `ref.null`. (`lazy_init` is also set in this case.)
+    /// 2. Constant-initialized reference globals whose user-facing
+    ///    initializer is `null` (e.g. `global mut x: Option<&T> = null`)
+    ///    — the slot needs to accept `ref.null` because that IS the
+    ///    intended runtime value. (`lazy_init` stays false.)
     pub is_nullable: bool,
-    /// Local variable types used by the initializer expression.
-    /// Populated when the initializer is non-trivial (e.g., `SequenceLiteralBuilder` coercion).
-    pub local_types: Vec<TypeId>,
+    /// True when this global is lazy-initialized: the Wasm slot starts
+    /// `null`, and `__initialize_module` runs the original (non-constant)
+    /// initializer to assign the real value before any non-init use.
+    /// Codegen narrows `global.get` results with `ref.as_non_null` for
+    /// these globals, since the read result is guaranteed non-null after
+    /// init.
+    ///
+    /// `false` for constant-initialized globals (including
+    /// `Option<&T> = null` whose `null` is itself the runtime value) —
+    /// codegen leaves the read result nullable so a `None` value reads
+    /// back as `ref.null` instead of trapping in `ref.as_non_null`.
+    pub lazy_init: bool,
+    /// Per-local metadata for the initializer expression. Populated when
+    /// the initializer is non-trivial (e.g., `SequenceLiteralBuilder`
+    /// coercion). Indexed by local index, like `TirFunction::locals`.
+    pub locals: Vec<TirLocal>,
 }
 
 #[derive(Debug, Clone)]
@@ -2862,7 +3063,13 @@ pub struct TirFunction {
     pub body: Option<TirBlock>,
     pub span: Span,
     pub local_count: u32,
-    pub local_types: Vec<TypeId>,
+    /// Per-local metadata — `name`, `type_id`, `is_mut` — indexed by Wasm
+    /// local index. Entries `0..params.len()` shadow the corresponding
+    /// `params[i]` (for uniform absolute indexing); body let-bindings and
+    /// resolver/optimizer-allocated temporaries occupy `params.len()..`.
+    /// `local_count == locals.len()` post-resolve; passes that grow the
+    /// local set must keep the two in sync.
+    pub locals: Vec<TirLocal>,
     /// Local indices that have their address taken (&x or &mut x).
     /// For mutable primitives, these locals are stored in box structs.
     pub address_taken_locals: IndexSet<u32>,
@@ -2877,6 +3084,13 @@ pub struct TirFunction {
     /// between Wado GC types and CM linear memory with special effect semantics.
     pub is_cm_binding: bool,
 
+    /// Whether this function is a synthesised effect-dispatch wrapper
+    /// (generated by `synthesis::effect_dispatch`). Effect-operation
+    /// call-site rewriting must skip these — their fallback path
+    /// directly calls `__cm_binding__<E>_<op>`, which would loop back
+    /// through the wrapper if rewritten.
+    pub is_dispatch_wrapper: bool,
+
     /// Whether this function is a synthesized CM *export* binding (world export wrapper).
     /// When true, the global initializer (`__initialize_modules`) is injected at the start
     /// of this function's body during lowering.
@@ -2884,7 +3098,7 @@ pub struct TirFunction {
 
     /// Whether this function is marked `#[ambient]`. Ambient functions are implicitly
     /// available to callers without requiring matching `with` clauses — they still carry
-    /// effect declarations for documentation / implementation purposes, but the effect
+    /// interface declarations for documentation / implementation purposes, but the effect
     /// checker does not propagate those requirements to callers.
     pub is_ambient: bool,
 
@@ -2910,6 +3124,17 @@ pub struct TirFunction {
 /// Semantic category of a `TirFunction`. Carries the type operand so the
 /// optimizer can reason about the call without re-deriving it from the
 /// signature.
+/// Identifies which `Fn<N, Ret>` trait method an auto-derived
+/// dispatch stub implements. Recovered from
+/// [`FunctionKind::FnCanonicalDispatch`] so WIR build can choose
+/// the right vtable slot (`inspect` vs `inspect_alt`) without
+/// re-parsing mangled names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FnDispatchTrait {
+    Inspect,
+    InspectAlt,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum FunctionKind {
     /// Ordinary user-defined or synthesized function.
@@ -2919,6 +3144,25 @@ pub enum FunctionKind {
     /// `type_id`. Calls to such functions may be elided when the argument is
     /// provably fresh.
     ValueCopy { type_id: TypeId },
+    /// Auto-derived `Fn<arity, return_type>^Inspect::inspect` (or
+    /// `^InspectAlt::inspect_alt`) dispatch stub.
+    ///
+    /// The TIR body is `unreachable()` — a placeholder that exists
+    /// only so the function is registered and the call is resolvable
+    /// from templates and from user code. WIR build recognises this
+    /// kind and supplies the real body: a `call_ref` through the
+    /// matching `CanonicalClosure_K`'s `inspect` / `inspect_alt`
+    /// vtable slot. Carries `(arity, return_type)` as structured
+    /// fields so neither WIR build nor DCE has to recover them by
+    /// parsing the mangled function name.
+    ///
+    /// See WEP: Inspect (Debug Output) > Closure Inspect via Runtime
+    /// Dispatch.
+    FnCanonicalDispatch {
+        trait_kind: FnDispatchTrait,
+        arity: usize,
+        return_type: TypeId,
+    },
 }
 
 /// Inline hint for a function, extracted from `#[inline(...)]` attributes.
@@ -2962,7 +3206,23 @@ impl TirFunction {
     pub fn value_copy_type(&self) -> Option<TypeId> {
         match self.kind {
             FunctionKind::ValueCopy { type_id } => Some(type_id),
-            FunctionKind::Regular => None,
+            _ => None,
+        }
+    }
+
+    /// Returns the dispatch coordinates if this is an auto-derived
+    /// `Fn<arity, return_type>^Inspect` / `^InspectAlt` stub.
+    /// WIR build uses the result to supply the indirect-call body
+    /// without scanning mangled function names.
+    #[inline]
+    pub fn fn_canonical_dispatch(&self) -> Option<(FnDispatchTrait, usize, TypeId)> {
+        match self.kind {
+            FunctionKind::FnCanonicalDispatch {
+                trait_kind,
+                arity,
+                return_type,
+            } => Some((trait_kind, arity, return_type)),
+            _ => None,
         }
     }
 
@@ -2970,6 +3230,44 @@ impl TirFunction {
     #[inline]
     pub fn is_value_copy(&self) -> bool {
         matches!(self.kind, FunctionKind::ValueCopy { .. })
+    }
+}
+
+/// A resolved local-slot entry in a function, global initializer, or
+/// closure scope, identified by its declaration / order in the surrounding
+/// local environment.
+///
+/// `FunctionContext::add_local` records every local — source-level
+/// parameters, `let` bindings, destructure bindings, and resolver-generated
+/// temporaries — as a `TirLocal`. The single source of truth for the local
+/// namespace is `FunctionContext::locals: Vec<TirLocal>`; from there it is
+/// projected onto:
+///
+/// * `TirFunction::locals` and `TirGlobal::locals` — the function/global's
+///   absolute local table, keyed by Wasm local index.
+/// * `TirExprKind::Closure { body_locals, .. }` — the closure's
+///   body-level let-bindings (params live in `params` so they aren't
+///   duplicated). Pattern lowering reconstructs the closure-scope local
+///   table from `params + body_locals` while descending in.
+#[derive(Debug, Clone)]
+pub struct TirLocal {
+    /// Source-level name of the binding (or a synthesised `__name` for
+    /// resolver-generated temporaries that have no surface syntax).
+    pub name: String,
+    pub type_id: TypeId,
+    pub is_mut: bool,
+}
+
+impl TirLocal {
+    /// Build a `TirLocal` for a synthesised slot whose name follows the
+    /// `__local_N` convention used by `wir_build` when no source-level
+    /// name is available.
+    pub fn synth(index: u32, type_id: TypeId, is_mut: bool) -> Self {
+        Self {
+            name: format!("__local_{index}"),
+            type_id,
+            is_mut,
+        }
     }
 }
 
@@ -3142,6 +3440,13 @@ pub struct TirEffectOp {
     pub params: Vec<TirParam>,
     pub return_type: TypeId,
     pub span: Span,
+    /// CM canonical name from `#[cm("...")]` on the resource method
+    /// declaration (e.g. `"stream-write"`, `"future-read"`). `None` for
+    /// effect operations and for resource methods that don't carry a
+    /// CM attribute. The dispatch synthesis uses this to map raw
+    /// resource call sites — which carry `cm_name` on their
+    /// `MethodInfo` — back to the right per-monomorphisation wrapper.
+    pub cm_name: Option<String>,
 }
 
 /// Resource declaration captured in TIR for effect propagation.

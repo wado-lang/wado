@@ -9,6 +9,7 @@ use rust from "./grammars/RustLexer.g4"
             module: "../src/generator.wado",
             inputs: ["./grammars/RustParser.g4"],
             options: { highlight: false },
+            output_dir: "tests/generated/rust",
         },
     };
 use { normalize_tree } from "./grammars/RustLexer.g4";
@@ -149,23 +150,28 @@ test "tree: deeply nested grouping" {
 }
 
 test "tree: negation scoping with boolean and comparison" {
+    // Per ANTLR4 left-recursion precedence: a prefix alt's inner self-ref
+    // is called with the alt's own precedence, so `!`/`-` (NegationExpression
+    // at alt position 13) only admits suffix operators with strictly higher
+    // precedence — the boolean and comparison operators below it do not
+    // attach. `!true && 1 != 2 || false` therefore parses as
+    // `((!true) && (1 != 2)) || false`.
     assert_tree(&"const X: i32 = !true && 1 != 2 || false;", &"
         (crate (item (visItem (constantItem
             const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
                 (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
             =
-            (expression !
+            (expression
                 (expression
+                    (expression ! (expression (literalExpression true)))
+                    &&
                     (expression
-                        (expression (literalExpression true))
-                        &&
-                        (expression
-                            (expression (literalExpression 1))
-                            (comparisonOperator !=)
-                            (expression (literalExpression 2))))
-                    ||
-                    (expression (literalExpression false))))
+                        (expression (literalExpression 1))
+                        (comparisonOperator !=)
+                        (expression (literalExpression 2))))
+                ||
+                (expression (literalExpression false)))
             ;))))
     ");
 }

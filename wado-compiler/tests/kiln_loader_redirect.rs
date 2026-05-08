@@ -8,8 +8,7 @@ use std::sync::Mutex;
 
 use indexmap::IndexMap;
 use wado_compiler::{
-    CompilerHost, Diagnostic, ModuleSource, SourceError, annotate_with_invocations,
-    kiln::InvocationIndex,
+    CompilerHost, Diagnostic, SourceError, annotate_with_invocations, kiln::InvocationIndex,
 };
 
 struct MapHost {
@@ -89,9 +88,10 @@ pub fn greet() {}
         );
     };
 
-    let redirected = ModuleSource::Redirected {
-        uri: "build/kiln/test-invocation/sample.wado".to_string(),
-    };
+    let redirected = annotated
+        .interner
+        .borrow_mut()
+        .redirected("build/kiln/test-invocation/sample.wado");
     assert!(
         annotated.modules.contains_key(&redirected),
         "loader should have loaded the generated entry module, got: {:?}",
@@ -113,8 +113,6 @@ export fn run() {}
         idx,
     ))
     .unwrap();
-    let entry_ms = ModuleSource::EntryPoint {
-        filename: "entry.wado".to_string(),
-    };
+    let entry_ms = annotated.interner.borrow_mut().entry_point("entry.wado");
     assert!(annotated.modules.contains_key(&entry_ms));
 }

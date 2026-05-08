@@ -282,18 +282,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// callers should consult this only as a fallback after the regular
     /// impl-lookup paths.
     pub(super) fn auto_derive_default_struct_type(&self, struct_name: &str) -> Option<TypeId> {
-        let info = self.struct_fields.get(struct_name)?;
+        let info = self.lookup_struct_fields(struct_name)?;
         if info.fields.is_empty() || !info.field_defaults.iter().all(Option::is_some) {
             return None;
         }
         if !info.type_param_type_ids.is_empty() {
             return None;
         }
-        Some(
-            self.type_table
-                .borrow_mut()
-                .make_struct(info.name.clone(), info.module_source.clone()),
-        )
+        let (n, src) = (info.name.clone(), info.module_source.clone());
+        Some(self.type_table.borrow_mut().make_struct(n, src))
     }
 
     /// Find the module source for a struct by name.
@@ -346,7 +343,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Check newtypes/flags — the impl block may live in the module that defines the type
-        if let Some(&type_id) = self.newtypes.get(struct_name) {
+        if let Some(type_id) = self.lookup_newtype(struct_name) {
             let ms = match self.type_table.borrow().get(type_id).clone() {
                 ResolvedType::Newtype { module_source, .. }
                 | ResolvedType::Flags { module_source, .. } => Some(module_source),
@@ -521,6 +518,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Use None to trigger "search all loaded modules" logic
                 (prim.as_str().to_string(), None, None, None)
             }
+            // Unit type () - search for impl blocks in loaded modules
+            ResolvedType::Unit => (TypeTable::UNIT_TYPE_NAME.to_string(), None, None, None),
             // Enum types - search for impl blocks by enum name
             ResolvedType::Enum {
                 name,
@@ -572,8 +571,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Try looking up in loaded modules (for imported structs)
         // Only check inherent impls (not trait impls) - trait impls are handled separately
         if let Some(ref module_source) = struct_module_source {
-            // Pre-populate module type maps cache before borrowing loaded_modules
-            self.ensure_module_maps_cached(module_source);
+            // Build the source module's import context once so that type names
+            // in the method's signature resolve in that module's perspective.
+            let (target_imports, target_originals) = self
+                .loaded_modules
+                .get(module_source)
+                .map(|m| {
+                    Self::build_imported_type_sources(
+                        &mut self.interner.borrow_mut(),
+                        m,
+                        module_source,
+                        Some(&self.entry_module_source),
+                        &self.invocations,
+                    )
+                })
+                .unwrap_or_default();
             if let Some(module) = self.loaded_modules.get(module_source) {
                 for item in &module.items {
                     if let Item::Impl(impl_block) = item {
@@ -625,80 +637,61 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         );
                                     }
 
-                                    // Resolve return type and param types in the source module's
-                                    // type context, not the caller's. This prevents same-named types
-                                    // from different modules being confused (e.g., both modules
-                                    // define "Config" with different fields).
-                                    // Use cached module type maps (O(1) swap) instead of
-                                    // rebuilding maps from scratch on every call.
-                                    let mut cached = scope
-                                        .module_type_maps_cache
-                                        .shift_remove(module_source)
-                                        .expect("cache populated by ensure_module_maps_cached");
-                                    std::mem::swap(
-                                        &mut scope.struct_fields,
-                                        &mut cached.struct_fields,
+                                    // Resolve return / param types in the source module's
+                                    // perspective so same-named types from different modules
+                                    // don't get confused. The perspective swap keeps existing
+                                    // local additions out of the way and restores them on exit.
+                                    let (
+                                        return_type,
+                                        self_kind,
+                                        param_types,
+                                        param_is_mut,
+                                        param_defaults,
+                                        param_names,
+                                    ) = scope.with_module_perspective(
+                                        module_source.clone(),
+                                        target_imports,
+                                        target_originals,
+                                        |s| {
+                                            let return_type = method
+                                                .return_type
+                                                .as_ref()
+                                                .map(|t| s.resolve_type(t))
+                                                .unwrap_or(TypeTable::UNIT);
+                                            let self_kind = method
+                                                .params
+                                                .first()
+                                                .map(|p| p.self_kind)
+                                                .unwrap_or(ast::SelfKind::None);
+                                            let param_types = s.extract_param_types(&method.params);
+                                            let param_is_mut: Vec<bool> = method
+                                                .params
+                                                .iter()
+                                                .filter(|p| p.name != "self")
+                                                .map(|p| p.is_mut)
+                                                .collect();
+                                            let param_defaults: Vec<Option<ast::Expr>> = method
+                                                .params
+                                                .iter()
+                                                .filter(|p| p.name != "self")
+                                                .map(|p| p.default.clone())
+                                                .collect();
+                                            let param_names: Vec<String> = method
+                                                .params
+                                                .iter()
+                                                .filter(|p| p.name != "self")
+                                                .map(|p| p.name.clone())
+                                                .collect();
+                                            (
+                                                return_type,
+                                                self_kind,
+                                                param_types,
+                                                param_is_mut,
+                                                param_defaults,
+                                                param_names,
+                                            )
+                                        },
                                     );
-                                    std::mem::swap(
-                                        &mut scope.variant_cases,
-                                        &mut cached.variant_cases,
-                                    );
-                                    std::mem::swap(&mut scope.enum_cases, &mut cached.enum_cases);
-                                    std::mem::swap(&mut scope.flags_cases, &mut cached.flags_cases);
-                                    std::mem::swap(&mut scope.newtypes, &mut cached.newtypes);
-                                    std::mem::swap(
-                                        &mut scope.resource_types,
-                                        &mut cached.resource_types,
-                                    );
-
-                                    let return_type = method
-                                        .return_type
-                                        .as_ref()
-                                        .map(|t| scope.resolve_type(t))
-                                        .unwrap_or(TypeTable::UNIT);
-                                    let self_kind = method
-                                        .params
-                                        .first()
-                                        .map(|p| p.self_kind)
-                                        .unwrap_or(ast::SelfKind::None);
-                                    let param_types = scope.extract_param_types(&method.params);
-                                    let param_is_mut: Vec<bool> = method
-                                        .params
-                                        .iter()
-                                        .filter(|p| p.name != "self")
-                                        .map(|p| p.is_mut)
-                                        .collect();
-                                    let param_defaults: Vec<Option<ast::Expr>> = method
-                                        .params
-                                        .iter()
-                                        .filter(|p| p.name != "self")
-                                        .map(|p| p.default.clone())
-                                        .collect();
-                                    let param_names: Vec<String> = method
-                                        .params
-                                        .iter()
-                                        .filter(|p| p.name != "self")
-                                        .map(|p| p.name.clone())
-                                        .collect();
-
-                                    std::mem::swap(
-                                        &mut scope.struct_fields,
-                                        &mut cached.struct_fields,
-                                    );
-                                    std::mem::swap(
-                                        &mut scope.variant_cases,
-                                        &mut cached.variant_cases,
-                                    );
-                                    std::mem::swap(&mut scope.enum_cases, &mut cached.enum_cases);
-                                    std::mem::swap(&mut scope.flags_cases, &mut cached.flags_cases);
-                                    std::mem::swap(&mut scope.newtypes, &mut cached.newtypes);
-                                    std::mem::swap(
-                                        &mut scope.resource_types,
-                                        &mut cached.resource_types,
-                                    );
-                                    scope
-                                        .module_type_maps_cache
-                                        .insert(module_source.clone(), cached);
                                     drop(scope);
 
                                     return Some(MethodInfo {
@@ -1651,7 +1644,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // all items in all modules.
         let names_to_check: Vec<String> = {
             let mut names = vec![struct_name.to_string()];
-            if let Some(&newtype_id) = self.newtypes.get(struct_name) {
+            if let Some(newtype_id) = self.lookup_newtype(struct_name) {
                 let mut current = newtype_id;
                 loop {
                     match self.type_table.borrow().get(current).clone() {
@@ -2943,12 +2936,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // Falling back to current_module_source causes type identity mismatches when
                     // the struct is defined in a different module.
                     let module_source = self
-                        .variant_cases
-                        .get(base_name.as_str())
+                        .lookup_variant_case(base_name.as_str())
                         .map(|info| info.module_source.clone())
                         .or_else(|| {
-                            self.struct_fields
-                                .get(base_name.as_str())
+                            self.lookup_struct_fields(base_name.as_str())
                                 .map(|info| info.module_source.clone())
                         })
                         .unwrap_or_else(|| self.current_module_source.clone());

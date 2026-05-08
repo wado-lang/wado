@@ -578,6 +578,11 @@ fn record_defs_from_expr(expr: &TirExpr, defs: &mut DefMap) {
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
     }
 }
 

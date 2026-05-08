@@ -29,20 +29,21 @@ The optimizer runs after lowering and before Wasm emission. `optimize.rs` orches
 1. Early DCE — remove unreachable functions/types/globals (all levels).
 2. Fixed-point iteration loop (skipped at `-O0`):
    1. Container SROA
-   2. Function Inlining
-   3. LabeledBlock Fusion
-   4. Reference Elimination
-   5. SROA
-   6. Copy Propagation
-   7. Common Subexpression Elimination
-   8. Store-to-Load Forwarding
-   9. Constant Propagation
-   10. Constant Folding
-   11. Constant Global Promotion
-   12. Constant Branch Pruning
-   13. Loop-Invariant Code Motion
-   14. Condition Implication
-   15. Template String Buffer Hoisting
+   2. Value-Copy Elision
+   3. Function Inlining
+   4. LabeledBlock Fusion
+   5. Reference Elimination
+   6. SROA
+   7. Copy Propagation
+   8. Common Subexpression Elimination
+   9. Store-to-Load Forwarding
+   10. Constant Propagation
+   11. Constant Folding
+   12. Constant Global Promotion
+   13. Constant Branch Pruning
+   14. Loop-Invariant Code Motion
+   15. Condition Implication
+   16. Template String Buffer Hoisting
 3. Hot Field Scalarization — runs once after the loop converges.
 4. Final DCE — clean up code made dead by optimizations.
 5. Select Lowering — post-optimization rewrite (all levels).
@@ -57,6 +58,16 @@ All TIR passes live in `wado-compiler/src/optimize/`.
 Replaces small pure-function calls with their body, sized by an expression-count threshold. Eligible callees are pure, non-recursive, non-generic, take/return no references, are not from the core library, and fit under the threshold. `#[inline]` multiplies the threshold 5×, `#[inline(always)]` forces, `#[inline(never)]` blocks.
 
 E2E: [opt_inline.wado](../wado-compiler/tests/fixtures/opt_inline.wado), [opt_inline_backtrack_miscompile.wado](../wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado).
+
+### Value-Copy Elision (`value_copy_elide.rs`)
+
+Strips the synthesized `$value_copy$T<id>(arg)` wrapper from `let x = $value_copy$T(arg)` (and the equivalent `Assign`) bindings whose target is observably read-only — when the source root that `arg` reads from is not assigned, field-mutated, or captured for the rest of the function, eliding the wrapper aliases storage in a way that's externally indistinguishable from the freshly-allocated copy.
+
+Runs once per fixed-point iteration, before `tir/inline`. The inliner expands every reachable `$value_copy$T` body into a labeled block, after which the `Call($value_copy$T, [arg])` shape the elider matches on no longer exists; running before inline is what lets the elider strip wrappers around `match make()? { Ok(v) => v, Err(e) => return Err(e) }`-style `?` desugarings (without the pre-inline ordering, the wrappers in every `parse_*` `?` site would survive through codegen). The only way a fresh wrapper `Call` shape can appear after lowering is for the inliner to expand a function whose body still contains a wrapper — those are caught by the next iteration's run, and if the loop converges (no pass returned `changed`) the inliner did nothing this round so no new wrappers were introduced.
+
+The strip walker descends through every TIR expression that can syntactically embed a `TirBlock` (`If`, `Match`, `Switch`, `Block`, `LabeledBlock`, calls, struct/tuple/variant literals, …) so wrappers nested inside `let x = if cond { let y = $value_copy$T(...); ... } else { ... };` patterns — common in `parse_*` rule bodies — are reached.
+
+E2E: [value_copy_elide_qmark.wado](../wado-compiler/tests/fixtures/value_copy_elide_qmark.wado).
 
 ### Container SROA (`container_sroa.rs`)
 
@@ -112,17 +123,25 @@ When a literal is stored to a local and later loaded with no intervening modific
 
 E2E: [opt_hfs_stores_ref_sync.wado](../wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado).
 
-### Constant Propagation (`const_propagation.rs`)
-
-Replaces `GlobalVarGet` references to immutable globals with their constant values.
-
-E2E: [opt_const.wado](../wado-compiler/tests/fixtures/opt_const.wado).
-
 ### Constant Folding (`const_folding.rs`)
 
-Evaluates compile-time-known expressions: integer/float arithmetic and comparison, boolean logic, bitwise ops, integer casts. Guards against division by zero and signed `MIN / -1` traps. Also folds boolean identities (`false || x → x`, `true && x → x`, etc.).
+A thin TIR visitor that walks each function body via `opt_walk_expr` and asks the [TIR Interpreter (`tiri`)](#tir-interpreter-tiri) to apply its local rewrite rules at every node. All reduction logic — literal folding, integer cast collapsing, the `&&` / `||` short-circuit identity rules, and `GlobalVarGet` rewriting for immutable globals — lives in `tiri`; this pass owns no rewrite logic of its own.
 
 E2E: [const_fold.wado](../wado-compiler/tests/fixtures/const_fold.wado), [opt_const_fold_div_zero.wado](../wado-compiler/tests/fixtures/opt_const_fold_div_zero.wado).
+
+### TIR Interpreter (`tiri`)
+
+`tiri` (`src/tiri.rs`) is the partial evaluator that backs constant folding. The canonical entry point is
+
+```rust
+Interpreter::new(type_table).reduce(&expr) -> TirExpr
+```
+
+`reduce` is idempotent and monotone: it always returns a (possibly identical) `TirExpr`, leaving literal leaves with their original lexical repr (`0xFF` is not rewritten to `255`). Visitor drivers that already walk every TIR kind via `tir_visitor::opt_walk_expr` use `reduce_local(&mut TirExpr) -> bool` instead, which performs only the single-node rewrite at `expr`. Unit tests can use `reduce_to_value(&TirExpr) -> Option<Value>` to extract a `Value` directly.
+
+Today the engine reduces literal-only Binary / Unary / Cast expressions, the short-circuit identity rules `false || X → X` and `true && X → X` (and their right-hand variants), `let`-bound locals via a per-function `env`, `if` expressions and statements (constant-condition splice and both-arms-equal collapse), and `match` expressions over payload-free patterns (constant-scrutinee chosen-arm splice and all-arms-equal collapse, covering wildcard / integer / bool / char literals, integer and char ranges, or-patterns, and `ConstantValue`). Future work — payload-aware variant matching, bounded loop unrolling, pure function inlining, and a complementary wasm-CTFE backend — is described in [WEP: TIR Interpreter Evolution Plan](./wep-2026-04-27-tir-interpreter.md).
+
+Unit tests: [`wado-compiler/tests/tiri.rs`](../wado-compiler/tests/tiri.rs).
 
 ### Constant Global Promotion (`const_global_promotion.rs`)
 
@@ -161,9 +180,15 @@ E2E: [tmpl_hoist_loop.wado](../wado-compiler/tests/fixtures/tmpl_hoist_loop.wado
 
 ### Hot Field Scalarization (`field_scalarize.rs`)
 
-Hoists frequently accessed struct fields from GC heap objects to local scalar variables for the duration of a loop. Runs once after the fixed-point loop converges to avoid re-triggering from the write-back/re-read statements it inserts. Write-backs are inserted before `return` and `break` statements that exit the HFS loop scope; an optimization sinks write-backs for unlabeled `break` at loop depth 0, since the post-loop write-backs already cover them.
+Hoists frequently accessed struct fields from GC heap objects to local scalar variables for the duration of a loop. Runs once after the fixed-point loop converges to avoid re-triggering from the write-back/re-read statements it inserts.
 
-E2E: [opt_hfs_immut_ref_no_reread.wado](../wado-compiler/tests/fixtures/opt_hfs_immut_ref_no_reread.wado), [opt_hfs_immut_ref_sync.wado](../wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado), [opt_hfs_mut_ref_reread.wado](../wado-compiler/tests/fixtures/opt_hfs_mut_ref_reread.wado), [opt_hfs_loop_exit_no_writeback.wado](../wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado).
+Sync placement is dataflow-driven. For each scalarized field `(L, F)` (with scalar local `__hfs_F`), the walker tracks one of three states per program point: `Both` (`__hfs_F == L.F`), `ScalarOnly` (`__hfs_F` holds the truth, `L.F` is stale), or `FieldOnly` (`L.F` holds the truth, `__hfs_F` is stale). A scalar write transitions to `ScalarOnly`; a `&mut T` call transitions to `FieldOnly`; a `&T` call requires field-canonical state but does not change it. Sync is emitted only at transitions: `ScalarOnly → Both/FieldOnly` writes back, `FieldOnly → Both/ScalarOnly` re-reads, and `Both → *` is a relabel with no sync. Consecutive `&mut` calls therefore produce zero inter-call sync — once the state is `FieldOnly`, every subsequent `&mut` call's pre-state requirement is satisfied without any sync stmt.
+
+Branch joins (`If`/`Switch`/`Match`) walk each arm with cloned entry state and pick a per-candidate join target; convergence sync is inserted at each arm's exit. A call in one match arm can never trigger sync that clobbers a sibling scalar-update arm (issue #1008). Loops commit any `ScalarOnly` candidate before the body runs (so inner reads see an up-to-date field) and join entry-state with body-exit-state for the post-loop state — capturing both the zero-iterations and the `>= 1`-iteration paths. Escape paths (`return`, `break` to a non-enclosing label) commit `ScalarOnly` candidates so the field is canonical at exit. The unlabeled `break` at `loop_depth 0` shortcut elides this pre-break commit since the body-end force-`Both` already covers the same scalars.
+
+Match arm bodies whose value is non-unit (and arm blocks of non-unit `If`/`Switch`) capture the trailing expression into a per-type pooled `__hfs_call_*` temp before appending convergence sync, so the block still evaluates to the original arm's value. All other call sites use stmt-level sync injection — no temp.
+
+E2E: [opt_hfs_immut_ref_no_reread.wado](../wado-compiler/tests/fixtures/opt_hfs_immut_ref_no_reread.wado), [opt_hfs_immut_ref_sync.wado](../wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado), [opt_hfs_mut_ref_reread.wado](../wado-compiler/tests/fixtures/opt_hfs_mut_ref_reread.wado), [opt_hfs_loop_exit_no_writeback.wado](../wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado), [hfs_match_scalar_arm_mixed_with_call_arm.wado](../wado-compiler/tests/fixtures/hfs_match_scalar_arm_mixed_with_call_arm.wado), [hfs_match_let_value_non_unit.wado](../wado-compiler/tests/fixtures/hfs_match_let_value_non_unit.wado), [hfs_match_guarded_arm.wado](../wado-compiler/tests/fixtures/hfs_match_guarded_arm.wado), [hfs_match_guard_with_call.wado](../wado-compiler/tests/fixtures/hfs_match_guard_with_call.wado), [hfs_multi_call_in_expression.wado](../wado-compiler/tests/fixtures/hfs_multi_call_in_expression.wado), [hfs_if_let_value_non_unit.wado](../wado-compiler/tests/fixtures/hfs_if_let_value_non_unit.wado), [hfs_early_return_with_wrapped_call.wado](../wado-compiler/tests/fixtures/hfs_early_return_with_wrapped_call.wado).
 
 ### Dead Code Elimination (`dce.rs`)
 
@@ -208,6 +233,11 @@ E2E: [pattern_match_exhaustive_variant_last_arm.wado](../wado-compiler/tests/fix
 
 Substitutes `StructGet(LocalGet(x), field)` with the inner value when `x` is defined by `LocalSet(x, StructNew { [inner] })`. Runs after parameter SROA so freshly exposed locals are caught.
 
+Two complementary variants run in sequence:
+
+- Re-evaluation-safe elision (`elide_single_field_struct_locals`) — substitutes when the inner field initializer is referentially transparent (no heap reads, no calls, no allocations). Safe regardless of how far apart def and use are.
+- Adjacent-use elision (`elide_adjacent_single_use_struct_locals`) — relaxes the purity check by relying on adjacency instead. Fires when the local has exactly one def + one use, the use is the immediately-following sibling instruction (skipping intervening `Nop`s), and the use is the leftmost-evaluated descendant of that instruction. Recovers the very common `Box<T>` boxing+inlining pattern (e.g. `Box<char> { value: <heap-reading block> }` followed by `.value`) where the inner reads heap state but no intervening operation could mutate it.
+
 ### Phase 3: Data Flow
 
 - Collapse array append sequences — merges consecutive `append` calls into `array.new_fixed`. E2E: [array_append_collapse.wado](../wado-compiler/tests/fixtures/array_append_collapse.wado).
@@ -238,6 +268,7 @@ Trivial init-guard removal — removes compiler-generated module-initialization 
 
 ### Phase 8: Final DCE and Compaction
 
+- Dead defined-function elimination — `mark_unreachable_defined_functions` walks `module.exports` + `module.elements` and BFSes the WIR call graph, marking unreachable defined-function indices as dead. Catches functions orphaned by Phase 3 `collapse_array_push_sequences` (e.g. `Array<T>::push` / `::grow` instantiations whose only call site was a single-element array literal). Marks via `module.dead_func_indices`; the actual removal + reindexing happens in compaction. The pass reads the `WirFuncId` ↔ array-index offset from `WirPackage::defined_func_base`, so the same implementation handles both the GC module (`DEFINED_FUNC_BASE`) and the linear-memory module (`0`); the latter is invoked from `codegen/component.rs::lower_core_module` where `dead_type_indices` is also populated to mirror the mem module's 1:1 function/type correspondence. E2E: [wir_optimize_dce_orphan_push.wado](../wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado).
 - Dead type elimination — removes GC type definitions not referenced by any live code (transitive).
 - Compact dead items — removes all items marked dead from the module.
 

@@ -1,0 +1,47 @@
+// Phase 4 cross-function dispatch: an effect operation is called from a
+// helper function that is NOT directly inside the `with` block — the
+// call must still route through the installed handler.
+//
+// Phase 3's MVP only statically devirtualised direct calls inside the
+// do-block body; calls reached through helper functions stayed routed
+// to the WASI binding (or unresolved for user effects). Phase 4
+// introduces a per-effect dispatch wrapper + global so any call site,
+// no matter how deep down the call stack, observes the currently-
+// installed handler.
+
+use { println, Stdout } from "core:cli";
+
+interface Counter {
+    fn next() -> i32;
+}
+
+struct CounterState {
+    value: i32,
+}
+
+impl Counter for CounterState {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
+    }
+}
+
+// Helper function — the `with Counter => ... do` block does not
+// contain `Counter::next()` directly; it delegates to this helper.
+fn pull_three() -> i32 with Counter {
+    let a = Counter::next();
+    let b = Counter::next();
+    let c = Counter::next();
+    return a + b + c;
+}
+
+export fn run() with Stdout {
+    let mut c = CounterState { value: 0 };
+    with Counter => &mut c do {
+        let total = pull_three();
+        println(`total={total}, final={c.value}`);
+    }
+}
+
+__DATA__
+{"stdout_contains": ["total=6, final=3"]}

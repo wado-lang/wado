@@ -1,30 +1,14 @@
-#![TODO]
-// TODO: effect handler installation `with E = h do { ... }`.
-//
-// Goal state: install a fixed-time `MonotonicClock` mock and observe
-// that calls to `MonotonicClock::now()` inside the `do` block return
-// the mocked value rather than the real wasmtime clock. This is one
-// of the simplest realistic uses of effect handlers — `now()` is a
-// plain `() -> Mark` operation, so the test exercises only:
-//
-// - `with` scope: install / restore the per-effect dispatch global
-// - dispatch function for `MonotonicClock::now`
-// - `resume value` lowered to `return value` inside the handler body
-//
-// Specifically, this fixture does NOT depend on:
-// - `Stream<T>` / `Future<T>` / `StreamWritable<T>` / `FutureWritable<T>`
-//   dispatch (handler body has no I/O), so `MockCM` (buffered CM
-//   handlers) is not required here.
-// - effect forwarding through nested handler scopes.
+// Install a fixed-time `MonotonicClock` mock and observe that calls
+// to `MonotonicClock::now()` inside the `do` block return the mocked
+// value. This is one of the simplest realistic uses of effect
+// handlers — `now()` is a plain `() -> Mark` operation, so the test
+// exercises only the `with` scope, the dispatch wrapper for
+// `MonotonicClock::now`, and `resume value` lowered to `return value`
+// inside the handler body.
 //
 // `println` outside the `do` block uses real `Stdout` from wasmtime;
-// when no user handler is installed for `Stdout`, dispatch lands on
-// the null-fast-path that calls the CM adapter directly.
-//
-// When Phase 2 (resolver + effect-check) and Phase 3 (Wasm GC dispatch
-// codegen) of `docs/wep-2026-04-11-effect-handler.md` land, this
-// fixture will print "mark: 12345" and the runner will flag that
-// `#![TODO]` must be removed.
+// when no user handler is installed for `Stdout`, the dispatch wrapper
+// falls through to the CM adapter directly.
 
 use { println, Stdout } from "core:cli";
 use { Mark, MonotonicClock } from "wasi:clocks";
@@ -42,7 +26,7 @@ impl MonotonicClock for FixedClock {
 
 export fn run() with Stdout {
     let clock = FixedClock { mark: 12345 as Mark };
-    with MonotonicClock = &clock do {
+    with MonotonicClock => &clock do {
         let m = MonotonicClock::now();
         println(`mark: {m}`);
     }

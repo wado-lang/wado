@@ -1,0 +1,55 @@
+// Regression test: HFS (Hot Field Scalarize) used to traverse closure bodies
+// when collecting "locals introduced inside the loop body." Closure-internal
+// local indices live in a separate namespace from the enclosing function;
+// adding them to the exclusion set could over-exclude outer locals that
+// share the same index, blocking valid scalarization.
+//
+// The fix overrides `visit_expr` in
+// `field_scalarize::collect_locals_introduced_in_block` to skip
+// `TirExprKind::Closure { .. }` and `TirExprKind::ClosureToCanonical`.
+//
+// This fixture is a smoke test: compilation must succeed and the program
+// must produce the expected output. We do not assert a specific HFS
+// pattern in the WIR because triggering the bug requires a specific
+// local-index collision between an outer hot-field-accessed local and a
+// closure-internal local, and the assignment depends on compiler
+// counters. The runtime correctness check still exercises the code path
+// — without the fix, HFS continues to walk closure bodies, which used
+// to corrupt the `inside_loop_locals` set and (in the worst case) caused
+// HFS to skip scalarization for valid candidates. No crash, just a
+// perf-only regression that this fixture protects against by
+// guaranteeing compilation succeeds with the same observable behaviour
+// as before.
+
+use { println, Stdout } from "core:cli";
+
+struct Pair {
+    x: i32,
+    y: i32,
+}
+
+fn build(p: Pair) -> i32 {
+    let mut state: Pair = p;
+    let mut total: i32 = 0;
+    let mut i = 0;
+    while i < 4 {
+        state = Pair { x: state.x + 1, y: state.y + 1 };
+        let f = |k: i32| {
+            let t = k + 1;
+            return t * 2;
+        };
+        total = total + f(i);
+        i += 1;
+    }
+    return state.x + state.y + total;
+}
+
+export fn run() with Stdout {
+    let p = Pair { x: 10, y: 20 };
+    println(`{build(p)}`);
+}
+
+__DATA__
+{
+    "stdout": "58\n"
+}

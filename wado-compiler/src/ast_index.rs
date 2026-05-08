@@ -1,0 +1,636 @@
+//! Per-module structural index over an [`ast::Module`].
+//!
+//! `AstIndex` is built once per module right after parse/desugar and stored on
+//! [`crate::annotate::Annotated`]. It collects positional facts that LSP
+//! queries and the `annotate` phase used to rediscover with bespoke recursive
+//! walkers — `name_span_in_module`, `collect_write_target_ids`, and the
+//! `span_of_ast_id` fallback in `wado-lsp/src/definition.rs`. By centralising
+//! these tables behind an [`AstVisitor`] traversal we keep extension cheap:
+//! when the AST grows a new decl-bearing node, only this builder needs an
+//! update instead of every consumer in the LSP layer.
+//!
+//! The index is intentionally narrow. It holds *only* facts derivable from the
+//! AST itself (spans, declaration name spans, assignment write targets); the
+//! semantic facts (resolved references, types, symbols) live elsewhere on
+//! [`crate::annotate::Annotated`].
+
+use crate::ast::{
+    AstId, AstVisitor, Expr, Function, ImplBlock, InterfaceMethod, Item, Module, Pattern,
+    walk_expr, walk_function, walk_interface_method, walk_item, walk_pattern,
+};
+use crate::hashmap::{IndexMap, IndexSet};
+use crate::token::Span;
+
+/// Structural facts about an [`ast::Module`].
+#[derive(Debug, Default, Clone)]
+pub struct AstIndex {
+    /// Span attached to every id-bearing AST node, exactly as the
+    /// default [`AstVisitor`] traversal emits it via `visit_id`. For
+    /// container nodes (functions, items, blocks) this is the full span;
+    /// for leaf identifier nodes (patterns, params, use specifiers) it
+    /// already coincides with the name span.
+    spans: IndexMap<AstId, Span>,
+    /// Identifier-only span for declaration nodes — the narrower span the
+    /// AST stores in fields like `Function::name_span` or
+    /// `StructField::name_span`. Useful for `goto-definition` ranges that
+    /// should not cover the entire item body.
+    ///
+    /// Populated for every named declaration the AST exposes a
+    /// `name_span` for. Nodes without a dedicated `name_span` (e.g.
+    /// `Item::Resource`, anonymous `Item::Impl`) are absent; consumers
+    /// should fall back to [`Self::span_of`].
+    name_spans: IndexMap<AstId, Span>,
+    /// `IdentExpr.id` values that appear as the direct LHS target of
+    /// `=` or a compound-assign. Direct targets only — for `obj.field = v`
+    /// only the `field` identifier is recorded (and that one lives on the
+    /// `FieldAccess` node, not the `IdentExpr`), so the `IdentExpr` for
+    /// `obj` is *not* a write target. This matches the document-highlight
+    /// classification: writes to the binding itself, not through a path.
+    write_targets: IndexSet<AstId>,
+}
+
+impl AstIndex {
+    /// Build the index by walking `module` once.
+    #[must_use]
+    pub fn build(module: &Module) -> Self {
+        let mut builder = IndexBuilder {
+            index: Self::default(),
+        };
+        for item in &module.items {
+            builder.visit_item(item);
+        }
+        builder.index
+    }
+
+    /// Span attached to `id`, or `None` if the id was never observed during
+    /// the build walk.
+    #[must_use]
+    pub fn span_of(&self, id: AstId) -> Option<Span> {
+        self.spans.get(&id).copied()
+    }
+
+    /// Identifier-only span for a declaration node, or `None` if `id` does
+    /// not name a decl with a dedicated name span.
+    #[must_use]
+    pub fn name_span_of(&self, id: AstId) -> Option<Span> {
+        self.name_spans.get(&id).copied()
+    }
+
+    /// True iff `id` is the `IdentExpr.id` of a direct assignment target.
+    #[must_use]
+    pub fn is_write_target(&self, id: AstId) -> bool {
+        self.write_targets.contains(&id)
+    }
+
+    /// `AstId` of the smallest id-bearing AST node whose span contains the
+    /// given 1-based `(line, column)`. Equivalent to
+    /// [`crate::ast::Module::ast_id_at`] but answered from the cached
+    /// [`Self::span_of`] table without re-walking the AST.
+    #[must_use]
+    pub fn ast_id_at(&self, line: usize, column: usize) -> Option<AstId> {
+        let mut best: Option<(AstId, Span)> = None;
+        for (&id, &span) in &self.spans {
+            if !span_contains(span, line, column) {
+                continue;
+            }
+            match best {
+                None => best = Some((id, span)),
+                Some((_, current)) if span_byte_len(span) <= span_byte_len(current) => {
+                    best = Some((id, span));
+                }
+                _ => {}
+            }
+        }
+        best.map(|(id, _)| id)
+    }
+}
+
+/// Returns true if `(line, column)` lies in
+/// `[span.line:column, span.end_line:end_column)`. Mirrors the helper
+/// in `ast.rs` (kept module-private there); duplicated here to keep the
+/// position-lookup logic colocated with the data.
+fn span_contains(span: Span, line: usize, column: usize) -> bool {
+    if line < span.line || line > span.end_line {
+        return false;
+    }
+    if line == span.line && column < span.column {
+        return false;
+    }
+    if line == span.end_line && column >= span.end_column {
+        return false;
+    }
+    true
+}
+
+fn span_byte_len(span: Span) -> usize {
+    span.end.saturating_sub(span.start)
+}
+
+struct IndexBuilder {
+    index: AstIndex,
+}
+
+impl IndexBuilder {
+    fn record_name_span(&mut self, id: AstId, span: Span) {
+        self.index.name_spans.insert(id, span);
+    }
+}
+
+impl AstVisitor for IndexBuilder {
+    fn visit_id(&mut self, id: AstId, span: Span) {
+        // First write wins: the same id can be visited from a leaf walker
+        // path (which emits the name span) and from a containing node
+        // (which emits the full span). Preferring the first observation
+        // matches the current `Module::ast_id_at` / `Module::span_of_ast_id`
+        // semantics, which also use the first emission.
+        self.index.spans.entry(id).or_insert(span);
+    }
+
+    fn visit_item(&mut self, item: &Item) {
+        record_item_name_spans(&mut self.index, item);
+        walk_item(self, item);
+    }
+
+    fn visit_function(&mut self, func: &Function) {
+        // Record the function's own name span. Top-level `Item::Function`
+        // already gets this via `record_item_name_spans`, but impl-block
+        // and trait methods reach this visitor through `walk_item ->
+        // visit_function` without that recording. Inserting here covers
+        // both paths uniformly; the duplicate write for `Item::Function`
+        // is harmless (same key, same value).
+        self.record_name_span(func.id, func.name_span);
+        for p in &func.params {
+            self.record_name_span(p.id, p.name_span);
+        }
+        for tp in &func.type_params {
+            self.record_name_span(tp.id, tp.name_span);
+        }
+        walk_function(self, func);
+    }
+
+    fn visit_interface_method(&mut self, method: &InterfaceMethod) {
+        self.record_name_span(method.id, method.name_span);
+        for p in &method.params {
+            self.record_name_span(p.id, p.name_span);
+        }
+        walk_interface_method(self, method);
+    }
+
+    fn visit_pattern(&mut self, pat: &Pattern) {
+        if let Pattern::Ident { id, span, .. } | Pattern::MutIdent { id, span, .. } = pat {
+            self.record_name_span(*id, *span);
+        }
+        walk_pattern(self, pat);
+    }
+
+    fn visit_expr(&mut self, expr: &Expr) {
+        match expr {
+            Expr::Assign(e) => {
+                if let Expr::Ident(target) = &e.target {
+                    self.index.write_targets.insert(target.id);
+                }
+            }
+            Expr::CompoundAssign(e) => {
+                if let Expr::Ident(target) = &e.target {
+                    self.index.write_targets.insert(target.id);
+                }
+            }
+            Expr::Closure(c) => {
+                for p in &c.params {
+                    self.record_name_span(p.id, p.name_span);
+                }
+            }
+            _ => {}
+        }
+        walk_expr(self, expr);
+    }
+}
+
+fn record_item_name_spans(index: &mut AstIndex, item: &Item) {
+    match item {
+        Item::Function(f) => {
+            index.name_spans.insert(f.id, f.name_span);
+            for tp in &f.type_params {
+                index.name_spans.insert(tp.id, tp.name_span);
+            }
+        }
+        Item::Struct(s) => {
+            index.name_spans.insert(s.id, s.name_span);
+            for tp in &s.type_params {
+                index.name_spans.insert(tp.id, tp.name_span);
+            }
+            for field in &s.fields {
+                index.name_spans.insert(field.id, field.name_span);
+            }
+        }
+        Item::Enum(e) => {
+            index.name_spans.insert(e.id, e.name_span);
+            for tp in &e.type_params {
+                index.name_spans.insert(tp.id, tp.name_span);
+            }
+            for case in &e.cases {
+                index.name_spans.insert(case.id, case.name_span);
+            }
+        }
+        Item::Variant(v) => {
+            index.name_spans.insert(v.id, v.name_span);
+            for tp in &v.type_params {
+                index.name_spans.insert(tp.id, tp.name_span);
+            }
+            for case in &v.cases {
+                index.name_spans.insert(case.id, case.name_span);
+            }
+        }
+        Item::Flags(f) => {
+            index.name_spans.insert(f.id, f.name_span);
+            for flag in &f.flags {
+                index.name_spans.insert(flag.id, flag.name_span);
+            }
+        }
+        Item::Newtype(n) => {
+            index.name_spans.insert(n.id, n.name_span);
+            for tp in &n.type_params {
+                index.name_spans.insert(tp.id, tp.name_span);
+            }
+        }
+        Item::Trait(t) => {
+            index.name_spans.insert(t.id, t.name_span);
+            for tp in &t.type_params {
+                index.name_spans.insert(tp.id, tp.name_span);
+            }
+            // Methods and their params get their name_spans recorded when
+            // `visit_function` dispatches them during the walk.
+        }
+        Item::Interface(i) => {
+            index.name_spans.insert(i.id, i.name_span);
+            // Interface method name_spans are recorded by the
+            // `visit_interface_method` override.
+        }
+        Item::Resource(r) => {
+            // ResourceDecl has no `name_span`; the table simply has no
+            // entry for `r.id` — consumers should fall back to span_of.
+            for tp in &r.type_params {
+                index.name_spans.insert(tp.id, tp.name_span);
+            }
+        }
+        Item::Global(g) => {
+            index.name_spans.insert(g.id, g.name_span);
+        }
+        Item::Impl(imp) => record_impl_name_spans(index, imp),
+        Item::Use(_) | Item::World(_) | Item::Test(_) | Item::TupleTypeDecl(_) => {}
+    }
+}
+
+fn record_impl_name_spans(index: &mut AstIndex, imp: &ImplBlock) {
+    for tp in &imp.type_params {
+        index.name_spans.insert(tp.id, tp.name_span);
+    }
+    // ImplBlock itself has no own name_span (anonymous decl); methods and
+    // params are recorded by `visit_function` during the walk.
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::Stmt;
+    use crate::lexer::Lexer;
+    use crate::parser::Parser;
+
+    fn parse(source: &str) -> Module {
+        let tokens = Lexer::new(source).tokenize().expect("lex");
+        let mut parser = Parser::new(tokens);
+        parser.parse().expect("parse")
+    }
+
+    #[test]
+    fn function_name_span_is_indexed() {
+        let module = parse("fn add(a: i32, b: i32) -> i32 { return a + b; }\n");
+        let index = AstIndex::build(&module);
+        let func = match &module.items[0] {
+            Item::Function(f) => f,
+            _ => unreachable!(),
+        };
+        assert_eq!(index.name_span_of(func.id), Some(func.name_span));
+        for p in &func.params {
+            assert_eq!(index.name_span_of(p.id), Some(p.name_span));
+        }
+    }
+
+    #[test]
+    fn struct_field_name_spans_are_indexed() {
+        let module = parse("struct Point { x: i32, y: i32 }\n");
+        let index = AstIndex::build(&module);
+        let s = match &module.items[0] {
+            Item::Struct(s) => s,
+            _ => unreachable!(),
+        };
+        assert_eq!(index.name_span_of(s.id), Some(s.name_span));
+        for f in &s.fields {
+            assert_eq!(index.name_span_of(f.id), Some(f.name_span));
+        }
+    }
+
+    #[test]
+    fn write_target_is_recorded_for_direct_assign() {
+        let module = parse("fn f() {\n    let mut x: i32 = 0;\n    x = 1;\n    x += 2;\n}\n");
+        let index = AstIndex::build(&module);
+        let func = match &module.items[0] {
+            Item::Function(f) => f,
+            _ => unreachable!(),
+        };
+        let body = func.body.as_ref().expect("body");
+        let mut writes = 0;
+        for stmt in &body.stmts {
+            if let Stmt::Expr(es) = stmt {
+                let target = match &es.expr {
+                    Expr::Assign(a) => &a.target,
+                    Expr::CompoundAssign(a) => &a.target,
+                    _ => continue,
+                };
+                if let Expr::Ident(id) = target {
+                    assert!(index.is_write_target(id.id));
+                    writes += 1;
+                }
+            }
+        }
+        assert_eq!(writes, 2);
+    }
+
+    #[test]
+    fn read_only_ident_is_not_a_write_target() {
+        let module = parse("fn f() -> i32 {\n    let x: i32 = 1;\n    return x + x;\n}\n");
+        let index = AstIndex::build(&module);
+        let func = match &module.items[0] {
+            Item::Function(f) => f,
+            _ => unreachable!(),
+        };
+        let body = func.body.as_ref().expect("body");
+        let mut idents = 0;
+        for stmt in &body.stmts {
+            if let Stmt::Return(r) = stmt
+                && let Some(Expr::Binary(b)) = r.value.as_ref()
+            {
+                for side in [&b.left, &b.right] {
+                    if let Expr::Ident(id) = side {
+                        assert!(!index.is_write_target(id.id));
+                        idents += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(idents, 2);
+    }
+
+    #[test]
+    fn top_level_items_have_spans() {
+        let module = parse(
+            "struct P { x: i32 }\nfn f() -> i32 {\n    let p = P { x: 1 };\n    return p.x;\n}\n",
+        );
+        let index = AstIndex::build(&module);
+        for item in &module.items {
+            let id = match item {
+                Item::Struct(s) => s.id,
+                Item::Function(f) => f.id,
+                _ => continue,
+            };
+            assert!(index.span_of(id).is_some(), "missing span for {id:?}");
+        }
+    }
+
+    #[test]
+    fn enum_decl_and_cases_are_indexed() {
+        let module = parse("enum Color { Red, Green, Blue }\n");
+        let index = AstIndex::build(&module);
+        let e = match &module.items[0] {
+            Item::Enum(e) => e,
+            _ => unreachable!(),
+        };
+        assert_eq!(index.name_span_of(e.id), Some(e.name_span));
+        for case in &e.cases {
+            assert_eq!(index.name_span_of(case.id), Some(case.name_span));
+        }
+    }
+
+    #[test]
+    fn variant_decl_cases_and_type_params_are_indexed() {
+        let module = parse("variant Maybe<T> { Just(T), Nothing }\n");
+        let index = AstIndex::build(&module);
+        let v = match &module.items[0] {
+            Item::Variant(v) => v,
+            _ => unreachable!(),
+        };
+        assert_eq!(index.name_span_of(v.id), Some(v.name_span));
+        for tp in &v.type_params {
+            assert_eq!(index.name_span_of(tp.id), Some(tp.name_span));
+        }
+        for case in &v.cases {
+            assert_eq!(index.name_span_of(case.id), Some(case.name_span));
+        }
+    }
+
+    #[test]
+    fn flags_decl_and_members_are_indexed() {
+        let module = parse("flags Perms { Read, Write, Execute }\n");
+        let index = AstIndex::build(&module);
+        let f = match &module.items[0] {
+            Item::Flags(f) => f,
+            _ => unreachable!(),
+        };
+        assert_eq!(index.name_span_of(f.id), Some(f.name_span));
+        for member in &f.flags {
+            assert_eq!(index.name_span_of(member.id), Some(member.name_span));
+        }
+    }
+
+    #[test]
+    fn newtype_and_type_params_are_indexed() {
+        let module = parse("type Box<T> = T;\n");
+        let index = AstIndex::build(&module);
+        let n = match &module.items[0] {
+            Item::Newtype(n) => n,
+            _ => unreachable!(),
+        };
+        assert_eq!(index.name_span_of(n.id), Some(n.name_span));
+        for tp in &n.type_params {
+            assert_eq!(index.name_span_of(tp.id), Some(tp.name_span));
+        }
+    }
+
+    #[test]
+    fn trait_decl_methods_and_type_params_are_indexed() {
+        let module = parse(concat!(
+            "trait Greet<L> {\n",
+            "    fn greet(&self) -> String;\n",
+            "    fn farewell(&self) -> String;\n",
+            "}\n",
+        ));
+        let index = AstIndex::build(&module);
+        let t = match &module.items[0] {
+            Item::Trait(t) => t,
+            _ => unreachable!(),
+        };
+        assert_eq!(index.name_span_of(t.id), Some(t.name_span));
+        for tp in &t.type_params {
+            assert_eq!(index.name_span_of(tp.id), Some(tp.name_span));
+        }
+        for method in &t.methods {
+            assert_eq!(
+                index.name_span_of(method.id),
+                Some(method.name_span),
+                "method {} missing name_span",
+                method.name,
+            );
+        }
+    }
+
+    #[test]
+    fn impl_block_methods_and_type_params_are_indexed() {
+        let module = parse(concat!(
+            "struct Point { x: i32, y: i32 }\n",
+            "impl<T> Point {\n",
+            "    fn origin() -> Point { return Point { x: 0, y: 0 }; }\n",
+            "    fn sum(&self) -> i32 { return self.x + self.y; }\n",
+            "}\n",
+        ));
+        let index = AstIndex::build(&module);
+        let imp = match &module.items[1] {
+            Item::Impl(i) => i,
+            _ => unreachable!(),
+        };
+        for tp in &imp.type_params {
+            assert_eq!(index.name_span_of(tp.id), Some(tp.name_span));
+        }
+        for method in &imp.methods {
+            assert_eq!(
+                index.name_span_of(method.id),
+                Some(method.name_span),
+                "method {} missing name_span",
+                method.name,
+            );
+            for p in &method.params {
+                assert_eq!(index.name_span_of(p.id), Some(p.name_span));
+            }
+        }
+    }
+
+    #[test]
+    fn interface_decl_and_methods_are_indexed() {
+        let module = parse(concat!(
+            "interface Stdout {\n",
+            "    fn write(s: String);\n",
+            "    fn flush();\n",
+            "}\n",
+        ));
+        let index = AstIndex::build(&module);
+        let i = match &module.items[0] {
+            Item::Interface(i) => i,
+            _ => unreachable!(),
+        };
+        assert_eq!(index.name_span_of(i.id), Some(i.name_span));
+        for method in &i.methods {
+            assert_eq!(
+                index.name_span_of(method.id),
+                Some(method.name_span),
+                "method {} missing name_span",
+                method.name,
+            );
+            for p in &method.params {
+                assert_eq!(index.name_span_of(p.id), Some(p.name_span));
+            }
+        }
+    }
+
+    #[test]
+    fn global_decl_is_indexed() {
+        let module = parse("global PI: f64 = 3.14;\n");
+        let index = AstIndex::build(&module);
+        let g = match &module.items[0] {
+            Item::Global(g) => g,
+            _ => unreachable!(),
+        };
+        assert_eq!(index.name_span_of(g.id), Some(g.name_span));
+    }
+
+    #[test]
+    fn closure_param_name_spans_are_indexed() {
+        let module = parse(concat!(
+            "fn f() -> i32 {\n",
+            "    let g = |x: i32, y: i32| x + y;\n",
+            "    return g(1, 2);\n",
+            "}\n",
+        ));
+        let index = AstIndex::build(&module);
+        // Walk the AST to find the closure and check each param.
+        let func = match &module.items[0] {
+            Item::Function(f) => f,
+            _ => unreachable!(),
+        };
+        let body = func.body.as_ref().expect("body");
+        let Stmt::Let(let_stmt) = &body.stmts[0] else {
+            panic!("expected let stmt");
+        };
+        let value = let_stmt.value.as_ref().expect("let value");
+        let Expr::Closure(closure) = value else {
+            panic!("expected closure");
+        };
+        for p in &closure.params {
+            assert_eq!(index.name_span_of(p.id), Some(p.name_span));
+        }
+    }
+
+    #[test]
+    fn pattern_ident_name_spans_are_indexed() {
+        let module = parse(concat!(
+            "fn f(opt: Option<i32>) -> i32 {\n",
+            "    if let Some(v) = opt { return v; }\n",
+            "    return 0;\n",
+            "}\n",
+        ));
+        let index = AstIndex::build(&module);
+        // The cursor on `v` should resolve to the binding's AstId, and
+        // its name_span should equal the AST pattern's span. Walk the
+        // body to find the `Some(v)` pattern and check `v`.
+        let func = match &module.items[0] {
+            Item::Function(f) => f,
+            _ => unreachable!(),
+        };
+        let body = func.body.as_ref().expect("body");
+        let Stmt::If(if_stmt) = &body.stmts[0] else {
+            panic!("expected if-let");
+        };
+        let crate::ast::Condition::LetChain { elements, .. } = &if_stmt.condition else {
+            panic!("expected let-chain");
+        };
+        let crate::ast::ConditionElement::Let { pattern, .. } = &elements[0] else {
+            panic!("expected let element");
+        };
+        // pattern should be `Some(v)`; the binding pattern is the first
+        // child.
+        let crate::ast::Pattern::Variant { bindings, .. } = pattern else {
+            panic!("expected variant pattern");
+        };
+        let crate::ast::Pattern::Ident { id, span, .. } = &bindings[0] else {
+            panic!("expected ident pattern");
+        };
+        assert_eq!(index.name_span_of(*id), Some(*span));
+    }
+
+    #[test]
+    fn ast_id_at_finds_innermost_node() {
+        let module = parse("fn add(a: i32, b: i32) -> i32 { return a + b; }\n");
+        let index = AstIndex::build(&module);
+        // Cursor on the return-statement identifier `a` (line 1, col 41).
+        // Should resolve to the IdentExpr's id, not the surrounding stmt.
+        let id = index.ast_id_at(1, 41).expect("ast id at cursor");
+        let span = index.span_of(id).expect("span for id");
+        assert_eq!(span.line, 1);
+        assert!(span.column <= 41 && 41 < span.end_column);
+    }
+
+    #[test]
+    fn ast_id_at_returns_none_outside_module() {
+        let module = parse("fn f() {}\n");
+        let index = AstIndex::build(&module);
+        assert!(index.ast_id_at(99, 1).is_none());
+    }
+}

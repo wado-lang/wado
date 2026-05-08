@@ -322,15 +322,36 @@ fn register_struct(
             },
             fields,
             meta: WirMeta {
-                module_source: Some(effective_module),
+                module_source: Some(effective_module.clone()),
                 ..WirMeta::default()
             },
             generic_origin,
             newtype_origin: None,
+            supertype: None,
         }),
     );
 
-    ctx.struct_type_map.insert(struct_name, type_id);
+    ctx.struct_type_map.insert(struct_name, type_id.clone());
+
+    // Also register under the qualified-args mangle so that lookups
+    // through `mangle_type_name(GenericInstance)` (which threads
+    // `mangle_type_arg_for_generic` through its args, see bug-2 fix)
+    // resolve to this same struct. The monomorphizer's
+    // `instantiation_name` keeps producing the unqualified form so that
+    // method dispatch / `current_impl_struct_name` keep working; this
+    // alias bridges the two name forms in the WIR layer only.
+    if let Some(ref mono) = tir_struct.monomorph_info {
+        let qualified_args: Vec<String> = mono
+            .impl_type_args
+            .iter()
+            .map(|t| type_table.mangle_type_arg_for_generic(*t))
+            .collect();
+        let qualified_name = crate::name::mangle_generic_name(&mono.generic_name, &qualified_args);
+        if qualified_name != tir_struct.name {
+            let qualified_sn = StructName::new(effective_module, qualified_name);
+            ctx.struct_type_map.entry(qualified_sn).or_insert(type_id);
+        }
+    }
 }
 
 /// Register a single variant type.
@@ -420,6 +441,7 @@ fn register_variant(
                 meta: WirMeta::default(),
                 generic_origin: None,
                 newtype_origin: None,
+                supertype: None,
             }),
         );
         ctx.variant_case_info
@@ -527,6 +549,7 @@ fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: crate::w
                 type_args: vec![prim_name.to_string()],
             }),
             newtype_origin: None,
+            supertype: None,
         }),
     );
     ctx.struct_type_map.insert(struct_name, type_id);
@@ -638,6 +661,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                         meta: WirMeta::default(),
                         generic_origin: None,
                         newtype_origin: None,
+                        supertype: None,
                     }),
                 );
                 ctx.tuple_type_map
@@ -793,9 +817,15 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                         continue;
                     }
 
+                    // Use module-qualified type-arg names so that two
+                    // distinct types with the same simple name (e.g.
+                    // `wasi:filesystem` `pub variant ErrorCode` vs
+                    // `wasi:cli` `pub enum ErrorCode`) produce distinct
+                    // generic-instance fqs and therefore distinct WIR
+                    // type registrations.
                     let type_arg_names: Vec<String> = type_args
                         .iter()
-                        .map(|t| type_table.mangle_type_name(*t))
+                        .map(|t| type_table.mangle_type_arg_for_generic(*t))
                         .collect();
                     let mangled = crate::name::mangle_generic_name(name, &type_arg_names);
                     let fq = format!("{module_source}//{mangled}");
@@ -853,12 +883,14 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                                                 {
                                                     let idx = *index as usize;
                                                     if idx < type_args.len() {
-                                                        type_table.mangle_type_name(type_args[idx])
+                                                        type_table.mangle_type_arg_for_generic(
+                                                            type_args[idx],
+                                                        )
                                                     } else {
-                                                        variant_tt.mangle_type_name(*arg)
+                                                        variant_tt.mangle_type_arg_for_generic(*arg)
                                                     }
                                                 } else {
-                                                    variant_tt.mangle_type_name(*arg)
+                                                    variant_tt.mangle_type_arg_for_generic(*arg)
                                                 }
                                             })
                                             .collect();
@@ -866,7 +898,11 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                                             inner_name,
                                             &sub_arg_names,
                                         );
-                                        // Find the concrete TypeId in the consumer's type table
+                                        // Find the concrete TypeId in the consumer's type table.
+                                        // `mangle_type_name` of a GenericInstance after the bug-2
+                                        // fix recursively qualifies its type args via
+                                        // `mangle_type_arg_for_generic`, matching the
+                                        // qualified `mangled` name we just built.
                                         let concrete_id = type_table.iter_type_ids().find(|tid| {
                                             type_table.mangle_type_name(*tid) == mangled
                                         });
@@ -970,6 +1006,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                         meta: WirMeta::default(),
                         generic_origin: None,
                         newtype_origin: None,
+                        supertype: None,
                     }),
                 );
                 ctx.variant_case_info
@@ -1035,8 +1072,16 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
     use crate::tir::{PrimitiveType, ResolvedType};
     use crate::wir::WirType;
 
-    // Collect all unique function signatures from the shared type table
-    let mut fn_sigs: Vec<(Vec<WirType>, Vec<WirType>)> = Vec::new();
+    // Collect all unique function signatures from the shared type table.
+    // Each entry carries `(param_wirs, result_wirs, is_inspectable,
+    // fn_struct_name)` so we can pick the right `CanonicalClosure_K`
+    // schema (slim `{ env, func }` vs fat `{ env, func, inspect,
+    // inspect_alt }`) up front based on whether `Fn<arity, ret>^Inspect
+    // / InspectAlt` survived DCE for that signature, and so we can
+    // map `(arity, return_type)` back to the canonical struct type
+    // id for the WIR-level dispatch body.
+    let mut fn_sigs: Vec<(Vec<WirType>, Vec<WirType>, bool, usize, crate::tir::TypeId)> =
+        Vec::new();
     let mut seen_keys: crate::hashmap::IndexSet<String> = crate::hashmap::IndexSet::default();
 
     {
@@ -1082,15 +1127,21 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
                 };
                 let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
                 if seen_keys.insert(key) {
-                    fn_sigs.push((param_wirs, result_wirs));
+                    let arity = params.len();
+                    let is_inspectable =
+                        ctx.inspectable_fn_dispatch.contains(&(arity, *return_type));
+                    fn_sigs.push((param_wirs, result_wirs, is_inspectable, arity, *return_type));
                 }
             }
         }
     }
 
-    // Register canonical closure types for each signature
-    for (param_wirs, result_wirs) in fn_sigs {
-        ctx.get_or_create_canonical_closure_type(param_wirs, result_wirs);
+    // Register canonical closure types for each signature. Inspectable
+    // signatures share the supertype `$canonical_inspectable_base`,
+    // which is what the `Fn<N, Ret>^Inspect` dispatch stub `ref.cast`s
+    // to — so no per-`(N, Ret)` struct map is needed.
+    for (param_wirs, result_wirs, is_inspectable, _arity, _return_type) in fn_sigs {
+        ctx.get_or_create_canonical_closure_type(param_wirs, result_wirs, is_inspectable);
     }
 }
 
@@ -1211,6 +1262,7 @@ fn register_array_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
                 type_args: vec![elem_name.to_string()],
             }),
             newtype_origin: None,
+            supertype: None,
         }),
     );
     ctx.struct_type_map.insert(struct_name, type_id);

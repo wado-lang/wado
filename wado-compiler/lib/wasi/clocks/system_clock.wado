@@ -1,7 +1,7 @@
 #![generated(by = "wado-from-idl", sources = ["vendor/wasmtime/crates/wasi/src/p3/wit/deps/clocks.wit"])]
+#![stdlib("wasi:clocks/system_clock.wado")]
 
 use { Duration } from "wasi:clocks/types.wado";
-
 
 /// An "instant", or "exact time", is a point in time without regard to any
 /// time zone: just the time since a particular external reference point,
@@ -38,7 +38,7 @@ pub struct Instant {
 /// 
 /// It is intended for reporting the current date and time for humans.
 #[cm("wasi:clocks/system-clock@0.3.0-rc-2026-03-15")]
-pub effect SystemClock {
+pub interface SystemClock {
     /// Read the current value of the clock.
     /// 
     /// This clock is not monotonic, therefore calling this function repeatedly

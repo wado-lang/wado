@@ -10,6 +10,40 @@ use {
 } from "./gen_util.wado";
 use { TreeMap } from "core:collections";
 
+/// A token-kind set interned during parser codegen. Multi-element
+/// `<expr> matches { TK_X | TK_Y | ... }` checks are emitted as
+/// `_gale_kind_set_<id>(<expr>)`; the body is shared via a single
+/// helper function emitted at the end of the parser section.
+pub struct KindSetEntry {
+    pub id: i32,
+    /// Canonical (sorted, unique) token list. Tokens are `TK_*` global
+    /// constants in the generated source.
+    pub tokens: Array<String>,
+}
+
+/// A follow-aware variant of a parser rule, registered when a `RuleRef`
+/// call site's caller-local `FOLLOW` set intersects the callee's
+/// `tail_greedy_first` (the tokens its tail-position `Optional` / `Star`
+/// / `Plus` elements would greedily consume). The variant's body is
+/// emitted with that intersection treated as additional follow, which
+/// suppresses tail-greedy consumption of tokens the caller is going to
+/// claim — implementing one level of LL(*) full-context prediction
+/// statically. See `vendor/antlr4/runtime/Java/src/org/antlr/v4/runtime/atn/LL1Analyzer.java`
+/// for the dynamic analogue ANTLR4 performs at runtime.
+pub struct FollowVariantEntry {
+    pub id: i32,
+    pub rule_name: String,
+    /// Canonical (sorted, unique) intersection `tail_greedy_first(rule)
+    /// ∩ caller_follow`. Stored as `TK_*` constant names for stability
+    /// across runs and to share variants across call sites that produce
+    /// the same intersection.
+    pub mask: Array<String>,
+    /// Set when at least one scan-side call site uses the variant.
+    pub scan_used: bool,
+    /// Set when at least one parse-side call site uses the variant.
+    pub parse_used: bool,
+}
+
 pub struct GenContext {
     pub parser_rules: Array<ParserRule>,
     pub lit_tokens: Array<LitToken>,
@@ -21,9 +55,62 @@ pub struct GenContext {
     pub current_rule_name: String,
     pub group_counter: i32,
     pub alt_gc_starts: Array<i32>,
+    /// Override for self-recursive RuleRef calls inside a prefix alt body.
+    /// When non-zero, `gen_element`'s RuleRef branch emits
+    /// `parse_<rule>(p, prefix_self_ref_min_prec)` instead of the default
+    /// `parse_<rule>(p)`. Set by call sites that wrap `gen_alt_body` for
+    /// prefix alts (non-LR alts containing a self-ref) so the inner
+    /// self-ref runs with the precedence ANTLR4 assigns to that alt.
+    /// 0 means no override (the default emission applies).
+    pub prefix_self_ref_min_prec: i32,
+    /// `min_prec` argument that `gen_scan_element` passes when emitting a
+    /// `scan_<rule>(tokens, pos, …)` call for a `RuleRef`. Default is 0
+    /// (full LR scan, matching the parser side). `gen_bt_scan_elements`
+    /// raises this to `i32::MAX` for the LAST element when it is a
+    /// self-reference to the current rule, so that prefix-alt scans
+    /// (`op expr`, etc.) short-circuit the LR suffix loop the OUTER
+    /// LR loop is going to consume — mirroring ANTLR4's k-lookahead.
+    /// Non-LR `scan_<rule>` accept an unused `min_prec` parameter so the
+    /// emitted call site is uniform regardless of whether the target rule
+    /// is left-recursive.
+    pub scan_ruleref_min_prec: i32,
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: TreeMap<String, String>,
+    /// Registry of token-kind sets keyed by canonical (sorted, joined
+    /// with `|`) representation. IDs are assigned in insertion order so
+    /// the same input grammar always produces the same helper names.
+    kind_set_registry: TreeMap<String, KindSetEntry>,
+    /// Cache of `tail_greedy_first(rule)` keyed by rule name.
+    tail_greedy_cache: TreeMap<String, Array<String>>,
+    /// Registry of follow-aware rule variants keyed by `rule_name + ':'
+    /// + canonical_mask`. IDs are assigned in insertion order. See
+    /// `FollowVariantEntry`.
+    follow_variant_registry: TreeMap<String, FollowVariantEntry>,
+    /// Registry keys in registration (= id) order. `follow_variants()`
+    /// returns entries in this order so generated source is stable
+    /// across runs. Each key directly indexes
+    /// `follow_variant_registry`, giving an O(n) walk.
+    follow_variant_order: Array<String>,
+    /// Mask currently in effect when emitting the body of a variant
+    /// function. Empty for the regular `scan_X` / `parse_X` paths.
+    /// Tail-position `Optional` / `Star` / `Plus` first-sets get
+    /// `mask` subtracted before deciding whether to emit; if the
+    /// subtracted set is empty, the repeat is suppressed. Element
+    /// emission outside tail position ignores it.
+    pub current_follow_mask: Array<String>,
+    /// Caller-local FOLLOW set at the current `RuleRef` emission site.
+    /// Set by alt-element walkers (`gen_scan_elements`, `gen_alt_elements`,
+    /// `gen_scan_elements_in_block`) right before delegating to
+    /// `gen_scan_element` / `gen_element`, then cleared after the
+    /// delegation returns. Nested element emitters (`gen_scan_repeat`,
+    /// `gen_repeat`, `gen_scan_group`, `gen_group_*`) save and clear
+    /// this field for the duration of their inner emission so that an
+    /// inner `RuleRef` inside a `Repeat` / `Group` does not pick up
+    /// the outer site's follow. RuleRef branches consult it via
+    /// `intern_follow_variant` to choose between the regular function
+    /// and a `__follow_<id>` variant.
+    pub ruleref_call_follow: Array<String>,
 }
 
 impl GenContext {
@@ -44,7 +131,15 @@ impl GenContext {
             current_rule_name: "",
             group_counter: 0,
             alt_gc_starts: [],
+            prefix_self_ref_min_prec: 0,
+            scan_ruleref_min_prec: 0,
             single_alt_owner,
+            kind_set_registry: TreeMap::<String, KindSetEntry>::new(),
+            tail_greedy_cache: TreeMap::<String, Array<String>>::new(),
+            follow_variant_registry: TreeMap::<String, FollowVariantEntry>::new(),
+            follow_variant_order: [],
+            current_follow_mask: [],
+            ruleref_call_follow: [],
         };
     }
 
@@ -201,6 +296,10 @@ impl GenContext {
     /// Deep nullability: true if every element from `start` onwards can match
     /// zero input tokens, recursively checking referenced rules (unlike the
     /// shallow `is_nullable` which only inspects top-level Repeat kind).
+    ///
+    /// Used both as "is the suffix from `start` nullable?" (by alt
+    /// walkers gating follow propagation) and as "is the rule body
+    /// nullable?" (by tail-greedy analysis).
     pub fn tail_is_nullable_deep(&mut self, elements: &Array<Element>, start: i32) -> bool {
         for let mut i = start; i < elements.len(); i += 1 {
             let mut visiting: Array<String> = [];
@@ -320,9 +419,16 @@ impl GenContext {
             for let alt of &rule.alternatives {
                 let mut non_nullable_count = 0;
                 let mut single_ok = false;
+                let mut has_nullable = false;
                 for let elem of &alt.elements {
                     if is_nullable(elem) {
-                        continue;
+                        // A nullable element (Star/Optional Repeat) can consume
+                        // additional tokens when its inner matches. e.g.
+                        // `'-'? Integer` is 1 token without `-` but 2 with `-`.
+                        // Treat any nullable element as disqualifying so the
+                        // rule isn't misclassified as strictly single-token.
+                        has_nullable = true;
+                        break;
                     }
                     non_nullable_count += 1;
                     if non_nullable_count > 1 {
@@ -334,7 +440,7 @@ impl GenContext {
                         single_ok = self.rule_is_single_token(&r.name, visiting);
                     }
                 }
-                if non_nullable_count != 1 || !single_ok {
+                if has_nullable || non_nullable_count != 1 || !single_ok {
                     all_alts_ok = false;
                     break;
                 }
@@ -351,16 +457,22 @@ impl GenContext {
         return result;
     }
 
-    /// Returns true if the rule is safe AND cheap to scan as a predicate prefix.
+    /// Returns true if the rule is safe to scan as a predicate prefix.
     ///
     /// Left-recursive (LR) rules have faithful `scan_X_atom` / `scan_X_prec` /
-    /// `scan_X_lr_N` generated for them so they can be correctly consumed by
-    /// nested scans. However, at the top level a full LR-rule scan expands to
-    /// a deep traversal (precedence climbing over every suffix operator), which
-    /// is orders of magnitude more expensive than parsing the rule with
-    /// backtracking-based dispatch. Group-level dispatch (Stage C) therefore
-    /// treats LR rules — and any rule that transitively references an LR rule —
-    /// as *not* scannable, and falls back to `bt_try` for those alternations.
+    /// `scan_X_lr_N` generated for them so nested scans can recurse through
+    /// them correctly. The cost concern that previously forced a top-level
+    /// LR gate here — exhaustive longest-match tournaments running every
+    /// candidate's full LR scan even when an earlier alt already matched —
+    /// is addressed at the dispatch sites: `emit_scan_partition_body`,
+    /// `gen_group_scan_dispatch`, `gen_general_group_scan_dispatch`, and
+    /// `gen_rule_ref_group_scan_dispatch` use first-success-wins on
+    /// `sort_group_by_element_count` order, mirroring parse-side `bt_try`.
+    /// Sorting longest-first ensures the most specific candidate is tried
+    /// first, so commit-on-success is correctness-equivalent to longest-
+    /// match here. See `AGENTS.md` "Failed Approaches: Removing the LR
+    /// Gate ... 2026-04" for the historical context that ruled out a naive
+    /// gate removal.
     pub fn is_rule_scannable(&mut self, name: &String, visiting: &mut Array<String>) -> bool {
         let cached = self.scannable_cache.get(*name);
         if let Some(val) = cached {
@@ -378,29 +490,14 @@ impl GenContext {
         let mut result = false;
         let rule = self.find_rule(name);
         if let Some(rule) = rule {
-            let mut has_lr = false;
+            let mut all_ok = true;
             for let alt of &rule.alternatives {
-                if alt.elements.len() > 0 {
-                    if let RuleRef(r) = &alt.elements[0] {
-                        if r.name == *name {
-                            has_lr = true;
-                            break;
-                        }
-                    }
+                if !self.is_alt_scannable(&alt.elements, visiting) {
+                    all_ok = false;
+                    break;
                 }
             }
-            if has_lr {
-                result = false;
-            } else {
-                let mut all_ok = true;
-                for let alt of &rule.alternatives {
-                    if !self.is_alt_scannable(&alt.elements, visiting) {
-                        all_ok = false;
-                        break;
-                    }
-                }
-                result = all_ok;
-            }
+            result = all_ok;
         }
 
         remove_from_visiting(visiting, name);
@@ -454,6 +551,308 @@ impl GenContext {
         }
         return self.current_rule_name;
     }
+
+    /// Intern a token-kind set. The same set (regardless of input order
+    /// or duplicates) maps to a single `id`. Helper IDs are assigned in
+    /// first-seen order across the codegen pass.
+    pub fn intern_kind_set(&mut self, tokens: &Array<String>) -> i32 {
+        let canonical = canonical_kind_set(tokens);
+        let key = join_pipe(&canonical);
+        if let Some(entry) = self.kind_set_registry.get(key) {
+            return entry.id;
+        }
+        let id = self.kind_set_registry.len();
+        self.kind_set_registry[key] = KindSetEntry { id, tokens: canonical };
+        return id;
+    }
+
+    /// All interned kind sets in helper-ID order (i.e. insertion order).
+    /// Consumed by `gen_kind_set_helpers` to emit the helper functions.
+    pub fn kind_sets(&self) -> Array<KindSetEntry> {
+        return self.kind_set_registry.values();
+    }
+
+    /// Render a token-set membership check on `expr`.
+    ///
+    ///   - 0 tokens → `"true"` (the empty set never excludes anything in
+    ///     practice; callers that build up first-sets use this).
+    ///   - 1 token  → `<expr> == TK_X` (no `matches` overhead).
+    ///   - ≥2 tokens → `_gale_kind_set_<id>(<expr>)` after interning.
+    ///
+    /// Multi-element sets always go through the helper indirection so
+    /// duplicate sets across the grammar share a single function body
+    /// in the generated wasm.
+    pub fn kind_check_str(&mut self, tokens: &Array<String>, expr: &String) -> String {
+        if tokens.is_empty() {
+            return "true";
+        }
+        if tokens.len() == 1 {
+            return `{*expr} == {tokens[0]}`;
+        }
+        let id = self.intern_kind_set(tokens);
+        return `_gale_kind_set_{id}({*expr})`;
+    }
+
+    /// Sugar for `kind_check_str` against `p.peek_kind()`.
+    pub fn first_check_str(&mut self, first_set: &Array<String>) -> String {
+        return self.kind_check_str(first_set, &"p.peek_kind()");
+    }
+
+    /// Returns the set of token kinds that the rule's body may greedily
+    /// consume at tail position, i.e. tokens that would be claimed by an
+    /// `Optional` / `Star` / `Plus` element which has no required element
+    /// after it in the alt.
+    ///
+    /// Used to filter follow-aware variant generation: if a `RuleRef`
+    /// call site's caller-local `FOLLOW` does not intersect this set,
+    /// the callee's tail-greedy elements cannot collide with the
+    /// caller's expectations and no variant is needed.
+    pub fn tail_greedy_first_of_rule(&mut self, name: &String, visiting: &mut Array<String>) -> Array<String> {
+        let cached = self.tail_greedy_cache.get(*name);
+        if let Some(result) = cached {
+            return result;
+        }
+
+        let visiting_set = str_set_from(visiting);
+        if visiting_set.contains(*name) {
+            return [];
+        }
+
+        let is_top_level = visiting.is_empty();
+        visiting.push(*name);
+
+        let mut result: Array<String> = [];
+        let rule = self.find_rule(name);
+        if let Some(rule) = rule {
+            for let alt of &rule.alternatives {
+                let af = self.tail_greedy_first_of_elements(&alt.elements, visiting);
+                extend_dedup(&mut result, &af);
+            }
+        }
+
+        remove_from_visiting(visiting, name);
+
+        if is_top_level {
+            self.tail_greedy_cache[*name] = result;
+        }
+
+        return result;
+    }
+
+    /// Walk an alt element list from the tail, collecting tail-greedy
+    /// first sets. Stops at the first non-deeply-nullable element. A
+    /// `Repeat (Optional|Star|Plus)` contributes `first_of_element(inner)`.
+    /// A nested `Group` recurses per alt. A `RuleRef` to a rule with a
+    /// non-empty `tail_greedy_first` contributes that set transitively.
+    fn tail_greedy_first_of_elements(&mut self, elements: &Array<Element>, visiting: &mut Array<String>) -> Array<String> {
+        let mut result: Array<String> = [];
+        let mut i = elements.len() - 1;
+        while i >= 0 {
+            let elem = &elements[i];
+            let tg = self.tail_greedy_first_of_element(elem, visiting);
+            extend_dedup(&mut result, &tg);
+            let mut nv: Array<String> = [];
+            if !self.element_is_nullable_deep(elem, &mut nv) {
+                break;
+            }
+            i -= 1;
+        }
+        return result;
+    }
+
+    fn tail_greedy_first_of_element(&mut self, elem: &Element, visiting: &mut Array<String>) -> Array<String> {
+        return match elem {
+            Repeat(rep) => {
+                // Only count Repeats whose inner consumes EXACTLY one
+                // token per iteration. Multi-token bodies like
+                // `(htmlElement | CDATA | htmlComment) htmlChardata?`
+                // in HTMLParser's `htmlContent` rule cannot be safely
+                // suppressed by a follow mask: the outer caller's
+                // follow set legitimately overlaps with the inner's
+                // first set (e.g. TAG_OPEN starts a nested htmlElement
+                // AS WELL AS the closing `</div>` tag), and the
+                // runtime lookahead-2 distinguishes them in a way
+                // static analysis cannot. Restricting to single-token
+                // inners keeps the LL repair (`Y?` in `a : X Y?`)
+                // working without breaking those grammars.
+                let mut stv: Array<String> = [];
+                let single = self.element_is_single_token(&rep.element, &mut stv);
+                let result: Array<String> = if !single {
+                    []
+                } else {
+                    let mut fv: Array<String> = [];
+                    self.first_of_element(&rep.element, &mut fv)
+                };
+                result;
+            },
+            Group(g) => {
+                let mut acc: Array<String> = [];
+                for let alt of &g.alternatives {
+                    let inner = self.tail_greedy_first_of_elements(&alt.elements, visiting);
+                    extend_dedup(&mut acc, &inner);
+                }
+                acc;
+            },
+            Label(lab) => self.tail_greedy_first_of_element(&lab.element, visiting),
+            RuleRef(r) => self.tail_greedy_first_of_rule(&r.name, visiting),
+            // Token / Literal / Wildcard / Not consume exactly one token
+            // and never leak — they are the "stop" condition.
+            TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => [],
+        };
+    }
+
+    /// Intern a follow-aware variant for `rule_name` given a caller-side
+    /// `caller_follow` set. The mask stored in the registry is the
+    /// intersection with the rule's `tail_greedy_first`, so call sites
+    /// whose follows differ outside that intersection share a single
+    /// variant. Returns `None` when the intersection is empty (no
+    /// variant required — caller should emit the regular `scan_X` /
+    /// `parse_X` call). The `is_scan` flag records which side's call
+    /// site triggered the registration; the variant emit pass uses the
+    /// flags to decide whether to emit a scan-side body, parse-side
+    /// body, or both.
+    pub fn intern_follow_variant(&mut self, rule_name: &String, caller_follow: &Array<String>, is_scan: bool) -> Option<i32> {
+        // v1 limitation: variant emit only handles non-LR, single-alt
+        // rules. Refusing registration here keeps call sites pointing
+        // at the regular function so the generated parser stays
+        // well-formed (multi-alt and LR variant emit are deferred —
+        // see TODO.md).
+        let rule_opt = self.find_rule(rule_name);
+        if let Some(rule) = rule_opt {
+            if rule.alternatives.len() != 1 {
+                return null;
+            }
+            for let alt of &rule.alternatives {
+                if rule_alt_is_left_recursive(alt, rule_name) {
+                    return null;
+                }
+            }
+        } else {
+            return null;
+        }
+        let mut visiting: Array<String> = [];
+        let tg = self.tail_greedy_first_of_rule(rule_name, &mut visiting);
+        if tg.is_empty() || caller_follow.is_empty() {
+            return null;
+        }
+        let mut intersection: Array<String> = [];
+        let follow_set = str_set_from(caller_follow);
+        for let tk of &tg {
+            if follow_set.contains(*tk) {
+                intersection.push(*tk);
+            }
+        }
+        if intersection.is_empty() {
+            return null;
+        }
+        let canonical = canonical_kind_set(&intersection);
+        let key = `{*rule_name}:{join_pipe(&canonical)}`;
+        let existing_id: Option<i32> = if let Some(entry) = self.follow_variant_registry.get(key) {
+            Option::<i32>::Some(entry.id)
+        } else {
+            null
+        };
+        if let Some(id) = existing_id {
+            let mut entry = self.follow_variant_registry[key];
+            if is_scan {
+                entry.scan_used = true;
+            } else {
+                entry.parse_used = true;
+            }
+            self.follow_variant_registry[key] = entry;
+            return Option::<i32>::Some(id);
+        }
+        let id = self.follow_variant_order.len();
+        let entry = FollowVariantEntry {
+            id,
+            rule_name: *rule_name,
+            mask: canonical,
+            scan_used: is_scan,
+            parse_used: !is_scan,
+        };
+        self.follow_variant_registry[key] = entry;
+        self.follow_variant_order.push(key);
+        return Option::<i32>::Some(id);
+    }
+
+    /// All registered follow variants in registration (= id) order.
+    /// Consumed by `gen_scan_follow_variants` and
+    /// `gen_parse_follow_variants`. O(n) — each `follow_variant_order`
+    /// entry is the registry key, so we look up directly.
+    pub fn follow_variants(&self) -> Array<FollowVariantEntry> {
+        let mut out: Array<FollowVariantEntry> = [];
+        for let key of &self.follow_variant_order {
+            if let Some(entry) = self.follow_variant_registry.get(*key) {
+                out.push(entry);
+            }
+        }
+        return out;
+    }
+
+    /// Render the negation of a token-set membership check —
+    /// `!_gale_kind_set_<id>(<expr>)` for ≥2 tokens, else
+    /// `<expr> != TK_X`. Used by non-greedy emit sites.
+    pub fn kind_negate_check_str(&mut self, tokens: &Array<String>, expr: &String) -> String {
+        if tokens.is_empty() {
+            return "false";
+        }
+        if tokens.len() == 1 {
+            return `{*expr} != {tokens[0]}`;
+        }
+        let id = self.intern_kind_set(tokens);
+        return `!_gale_kind_set_{id}({*expr})`;
+    }
+}
+
+/// Mirror of `is_left_recursive` from `parser_gen.wado` for use inside
+/// `GenContext` where the codegen-side helper isn't visible. An alt is
+/// left-recursive when its first non-trivial element is a self-reference
+/// to the rule. ANTLR4 only rewrites direct left recursion (see
+/// `vendor/antlr4/doc/left-recursion.md`), so a shallow first-element
+/// check is sufficient.
+fn rule_alt_is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
+    if alt.elements.is_empty() {
+        return false;
+    }
+    return rule_alt_element_is_self_ref(&alt.elements[0], rule_name);
+}
+
+fn rule_alt_element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
+    return match elem {
+        RuleRef(r) => r.name == *rule_name,
+        Label(lab) => rule_alt_element_is_self_ref(&lab.element, rule_name),
+        _ => false,
+    };
+}
+
+/// Sort tokens lexicographically and remove duplicates, producing the
+/// canonical representative of the set. Two `matches { ... }` checks
+/// over equal sets (regardless of order or repeated elements) collapse
+/// to the same canonical form and therefore the same helper id.
+fn canonical_kind_set(tokens: &Array<String>) -> Array<String> {
+    let mut sorted = *tokens;
+    sorted.sort();
+    let mut out: Array<String> = [];
+    for let mut i = 0; i < sorted.len(); i += 1 {
+        if i == 0 || sorted[i] != sorted[i - 1] {
+            out.push(sorted[i]);
+        }
+    }
+    return out;
+}
+
+/// Join an already-canonicalised token list with `|`. The resulting
+/// string is the registry key. `|` cannot appear in `TK_*` identifiers
+/// so this is unambiguous.
+fn join_pipe(tokens: &Array<String>) -> String {
+    let mut s = String::with_capacity(64);
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if i > 0 {
+            s.push('|');
+        }
+        s.push_str(tokens[i]);
+    }
+    return s;
 }
 
 /// Build a map from single-alt group type name to the first rule that contains it.

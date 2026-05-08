@@ -36,8 +36,8 @@ impl Monomorphizer {
                 param.type_id = rewriter.rewrite_type_id(param.type_id);
             }
             func.return_type = rewriter.rewrite_type_id(func.return_type);
-            for local_type in &mut func.local_types {
-                *local_type = rewriter.rewrite_type_id(*local_type);
+            for local in &mut func.locals {
+                local.type_id = rewriter.rewrite_type_id(local.type_id);
             }
             if let Some(body) = &mut func.body {
                 rewriter.visit_block(body);
@@ -109,10 +109,12 @@ impl Monomorphizer {
                     };
                 }
 
-                // Build the mangled name using type names (not TypeIds)
+                // Build the mangled name using type names (not TypeIds).
+                // Use `mangle_type_arg_for_generic` so the lookup key matches
+                // what `instantiation_name` registered the struct under.
                 let type_names: Vec<String> = type_args
                     .iter()
-                    .map(|&arg| type_table.mangle_type_name(arg))
+                    .map(|&arg| type_table.mangle_type_arg_for_generic(arg))
                     .collect();
                 let mangled_name = mangle_generic_name(&name, &type_names);
 
@@ -243,7 +245,7 @@ impl Monomorphizer {
                         indexed_args.sort_by_key(|(idx, _)| *idx);
                         let type_names: Vec<String> = indexed_args
                             .iter()
-                            .map(|(_, arg_id)| type_table.mangle_type_name(*arg_id))
+                            .map(|(_, arg_id)| type_table.mangle_type_arg_for_generic(*arg_id))
                             .collect();
                         let mangled_name = mangle_generic_name(&name, &type_names);
                         if let Some(tid) =
@@ -301,7 +303,7 @@ impl Monomorphizer {
 
                 let type_names: Vec<String> = new_args
                     .iter()
-                    .map(|&arg| type_table.mangle_type_name(arg))
+                    .map(|&arg| type_table.mangle_type_arg_for_generic(arg))
                     .collect();
                 let mangled_name = mangle_generic_name(&name, &type_names);
                 if let Some(tid) = type_table.find_struct_by_name(&mangled_name, &module_source) {
@@ -437,7 +439,7 @@ impl TirMutVisitor for TypeRewriter<'_> {
                     } => {
                         let type_names: Vec<String> = type_args
                             .iter()
-                            .map(|&arg| self.type_table.mangle_type_name(arg))
+                            .map(|&arg| self.type_table.mangle_type_arg_for_generic(arg))
                             .collect();
                         *struct_name = mangle_generic_name(name, &type_names);
                     }

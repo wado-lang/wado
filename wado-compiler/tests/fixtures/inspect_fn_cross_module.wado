@@ -1,0 +1,25 @@
+// Cross-module `Fn<arity, Ret>^Inspect` dispatch with DIFFERENT closure
+// shapes per module.
+//
+// `synthesize_traits` runs per-module and uses an in-pass dedup keyed by
+// `(base_struct_name, trait_name) == ("Fn", "Inspect")`. If the helper
+// module's pass adds `Fn<1, bool>^Inspect::inspect` first, the entry
+// module's pass sees `has_impl("Fn", "Inspect") == true` and skips
+// adding `Fn<1, i32>^Inspect::inspect` — leaving the entry module's
+// `{g:?}` template call referencing a stub that was never synthesised.
+//
+// Likewise, registering the helper's stub in the project-wide
+// `SynthesisedImpls` collapses every `Fn<...>` shape into one entry
+// pointing at whichever module synthesised first; template expansion
+// must instead route closure-method calls to the *current* module.
+use { println, Stdout } from "core:cli";
+use sub from "./sub/inspect_fn_cross_module_helper.wado";
+
+export fn run() with Stdout {
+    sub::show_in_helper();
+    let g = |y: i32| y * 2;
+    println(`from main: {g:?}`);
+}
+
+__DATA__
+{"stdout": "from helper: |i32| -> bool\nfrom main: |i32| -> i32\n"}

@@ -437,6 +437,16 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             return Ok(());
         }
 
+        // Skip dispatch wrapper functions - they are synthesised dispatch
+        // infrastructure that internally calls cm_binding adapters /
+        // canonical intrinsics, which carry their own effects. The
+        // wrapper's caller doesn't need to declare those effects because
+        // the wrapper itself satisfies them; mirroring the `is_cm_binding`
+        // skip above keeps the call-site analysis honest.
+        if func.is_dispatch_wrapper {
+            return Ok(());
+        }
+
         // `#[ambient]` functions intentionally bypass the effect system so
         // logging / panic / unreachable work anywhere. Their bodies perform
         // resource operations (Stream::new, Future::drop) that would otherwise
@@ -719,6 +729,35 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     self.check_block(arm)?;
                 }
                 self.check_block(default)?;
+            }
+            TirExprKind::WithHandler { bindings, body, .. } => {
+                // Handler expressions are evaluated in the outer scope (no
+                // effect substitution applies to them).
+                for binding in bindings {
+                    self.check_expr(&binding.handler)?;
+                }
+                // Inside the body, any effect handled by a binding is
+                // satisfied locally — temporarily extend `current_effects`
+                // with the handled effects so the body's calls to those
+                // effects don't propagate to the caller.
+                let added: Vec<EffectRef> = bindings
+                    .iter()
+                    .filter_map(|b| b.effect.clone())
+                    .filter(|e| !self.current_effects.contains(e))
+                    .collect();
+                for eff in &added {
+                    self.current_effects.insert(eff.clone());
+                }
+                let result = self.check_block(body);
+                for eff in &added {
+                    self.current_effects.shift_remove(eff);
+                }
+                result?;
+            }
+            TirExprKind::Resume { value } => {
+                // `resume` is control-flow; the value flows into the
+                // suspended computation. Check the value expression itself.
+                self.check_expr(value)?;
             }
             // Leaf expressions - no sub-expressions to check
             TirExprKind::IntLiteral { .. }
@@ -1203,6 +1242,27 @@ fn check_pure_expr<H: CompilerHost>(
                 check_pure_block(checker, arm, logger);
             }
             check_pure_block(checker, default, logger);
+        }
+        TirExprKind::WithHandler { bindings, body, .. } => {
+            // `with` blocks install handlers and run a body. They are not
+            // pure (they touch the dispatch global), so emit an error.
+            let _ = logger.error(DefaultPurityError {
+                callee: "<with-handler>".to_string(),
+                span: expr.span,
+            });
+            for binding in bindings {
+                check_pure_expr(checker, &binding.handler, logger);
+            }
+            check_pure_block(checker, body, logger);
+        }
+        TirExprKind::Resume { value } => {
+            // `resume` is control-flow inside a handler; cannot appear in
+            // a pure default expression context.
+            let _ = logger.error(DefaultPurityError {
+                callee: "<resume>".to_string(),
+                span: expr.span,
+            });
+            check_pure_expr(checker, value, logger);
         }
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }

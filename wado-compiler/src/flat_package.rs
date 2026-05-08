@@ -97,6 +97,20 @@ pub struct FlatPackage {
     /// "<export>")]` attributes). Consumed by
     /// `codegen::component::embed_imported_wasm_modules`.
     pub wasm_assets: IndexMap<String, crate::loader::WasmAsset>,
+
+    /// `ModuleSource` interner inherited from [`crate::package::Package`].
+    /// Kept alive through the lower phase because passes such as
+    /// `expand_cm_intrinsics` synthesise fresh `ModuleSource` values
+    /// when lifting WASI records and need them ptr-equal to the
+    /// resolver-registered counterparts. Dropped at the
+    /// `FlatPackage → WirPackage` boundary.
+    pub interner: std::rc::Rc<std::cell::RefCell<crate::name::ModuleSourceInterner>>,
+
+    /// Project-wide trait knowledge inherited from `Package` and grown
+    /// here by [`crate::monomorphize::monomorphize`], which adds the
+    /// instantiation layer once it has materialised the concrete
+    /// trait-method instances.
+    pub trait_env: std::sync::Arc<crate::resolver::trait_env::TraitEnv>,
 }
 
 impl FlatPackage {
@@ -105,13 +119,21 @@ impl FlatPackage {
         self.target_world == world_registry::TEST_WORLD
     }
 
-    /// Check if the project targets the Kiln generator well-known world
-    /// (`core:kiln/generator`). The codegen path uses this to emit the
-    /// kiln-specific CM record/variant types and to point the
-    /// `task-return` canon at the `result<response, error>` shape
-    /// required by the generator's export signature.
-    pub fn is_kiln_generator_world(&self) -> bool {
-        self.target_world == "core:kiln/generator"
+    /// Check whether the active world declares an
+    /// `import {interface_name} { ... }` block.
+    ///
+    /// Drives world-shape decisions in codegen / lowering / DCE that used to
+    /// hinge on `target_world == "core:kiln/generator"` string matches —
+    /// `imports_interface("KilnHost")` is true for the kiln generator world and
+    /// any future world that imports the same interface, so adding a new
+    /// generator-shaped world no longer needs new branches.
+    ///
+    /// Returns `false` for the synthetic test world and for unknown worlds
+    /// (both have no entry in the registry).
+    pub fn world_imports_interface(&self, interface_name: &str) -> bool {
+        self.world_registry
+            .get(&self.target_world)
+            .is_some_and(|w| w.imports_interface(interface_name))
     }
 
     /// Look up a variant by `(module_source, name)`.
@@ -133,8 +155,8 @@ impl FlatPackage {
     }
 
     /// Check if any function from the given WASI effect is used.
-    pub fn has_effect(&self, effect_name: &str) -> bool {
-        let prefix = format!("{effect_name}::");
+    pub fn has_interface(&self, interface_name: &str) -> bool {
+        let prefix = format!("{interface_name}::");
         self.used_wasi_functions
             .iter()
             .any(|f| f.starts_with(&prefix))

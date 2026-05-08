@@ -1,97 +1,23 @@
 #![generated(by = "wado-from-idl", sources = ["vendor/wasmtime/crates/wasi-http/src/p3/wit/deps/http.wit"])]
+#![stdlib("wasi:http/worlds.wado")]
 
 /// The `wasi:http/service` world captures a broad category of HTTP services
 /// including web applications, API servers, and proxies. It may be `include`d
 /// in more specific worlds such as `wasi:http/middleware`.
 #[cm("wasi:http/service@0.3.0-rc-2026-03-15")]
 pub world Service {
-    import Stdout {
-        write_via_stream,
-    }
+    import Stdout;
+    import Stderr;
+    import Stdin;
+    import Client;
+    import MonotonicClock;
+    import SystemClock;
+    import Timezone;
+    import Random;
+    import Insecure;
+    import InsecureSeed;
 
-    import Stderr {
-        write_via_stream,
-    }
-
-    import Stdin {
-        read_via_stream,
-    }
-
-    import Types {
-        Fields::new,
-        Fields::from_list,
-        Fields::get,
-        Fields::has,
-        Fields::set,
-        Fields::delete,
-        Fields::get_and_delete,
-        Fields::append,
-        Fields::copy_all,
-        Fields::clone,
-        Request::new,
-        Request::get_method,
-        Request::set_method,
-        Request::get_path_with_query,
-        Request::set_path_with_query,
-        Request::get_scheme,
-        Request::set_scheme,
-        Request::get_authority,
-        Request::set_authority,
-        Request::get_options,
-        Request::get_headers,
-        Request::consume_body,
-        RequestOptions::new,
-        RequestOptions::get_connect_timeout,
-        RequestOptions::set_connect_timeout,
-        RequestOptions::get_first_byte_timeout,
-        RequestOptions::set_first_byte_timeout,
-        RequestOptions::get_between_bytes_timeout,
-        RequestOptions::set_between_bytes_timeout,
-        RequestOptions::clone,
-        Response::new,
-        Response::get_status_code,
-        Response::set_status_code,
-        Response::get_headers,
-        Response::consume_body,
-    }
-
-    import Client {
-        send,
-    }
-
-    import MonotonicClock {
-        now,
-        get_resolution,
-        wait_until,
-        wait_for,
-    }
-
-    import SystemClock {
-        now,
-        get_resolution,
-    }
-
-    import Timezone {
-        iana_id,
-        utc_offset,
-        to_debug_string,
-    }
-
-    import Random {
-        get_random_bytes,
-        get_random_u64,
-    }
-
-    import Insecure {
-        get_insecure_random_bytes,
-        get_insecure_random_u64,
-    }
-
-    import InsecureSeed {
-        get_insecure_seed,
-    }
-
-    export async fn handle(request: Request) -> Result<Response, ErrorCode>;
+    export Handler;
 }
 
 /// The `wasi:http/middleware` world captures HTTP services that forward HTTP
@@ -102,95 +28,17 @@ pub world Service {
 /// `service` and corresponding `response` flows in the opposite direction.
 #[cm("wasi:http/middleware@0.3.0-rc-2026-03-15")]
 pub world Middleware {
-    import Types {
-        Fields::new,
-        Fields::from_list,
-        Fields::get,
-        Fields::has,
-        Fields::set,
-        Fields::delete,
-        Fields::get_and_delete,
-        Fields::append,
-        Fields::copy_all,
-        Fields::clone,
-        Request::new,
-        Request::get_method,
-        Request::set_method,
-        Request::get_path_with_query,
-        Request::set_path_with_query,
-        Request::get_scheme,
-        Request::set_scheme,
-        Request::get_authority,
-        Request::set_authority,
-        Request::get_options,
-        Request::get_headers,
-        Request::consume_body,
-        RequestOptions::new,
-        RequestOptions::get_connect_timeout,
-        RequestOptions::set_connect_timeout,
-        RequestOptions::get_first_byte_timeout,
-        RequestOptions::set_first_byte_timeout,
-        RequestOptions::get_between_bytes_timeout,
-        RequestOptions::set_between_bytes_timeout,
-        RequestOptions::clone,
-        Response::new,
-        Response::get_status_code,
-        Response::set_status_code,
-        Response::get_headers,
-        Response::consume_body,
-    }
+    import Handler;
+    import Stdout;
+    import Stderr;
+    import Stdin;
+    import Client;
+    import MonotonicClock;
+    import SystemClock;
+    import Timezone;
+    import Random;
+    import Insecure;
+    import InsecureSeed;
 
-    import Handler {
-        handle,
-    }
-
-    import Stdout {
-        write_via_stream,
-    }
-
-    import Stderr {
-        write_via_stream,
-    }
-
-    import Stdin {
-        read_via_stream,
-    }
-
-    import Client {
-        send,
-    }
-
-    import MonotonicClock {
-        now,
-        get_resolution,
-        wait_until,
-        wait_for,
-    }
-
-    import SystemClock {
-        now,
-        get_resolution,
-    }
-
-    import Timezone {
-        iana_id,
-        utc_offset,
-        to_debug_string,
-    }
-
-    import Random {
-        get_random_bytes,
-        get_random_u64,
-    }
-
-    import Insecure {
-        get_insecure_random_bytes,
-        get_insecure_random_u64,
-    }
-
-    import InsecureSeed {
-        get_insecure_seed,
-    }
-
-    export async fn handle(request: Request) -> Result<Response, ErrorCode>;
+    export Handler;
 }

@@ -5,20 +5,19 @@
 // How to run:
 //   mise run benchmark-fts
 
-use { println, Stdout } from "core:cli";
+use { Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
+use { Benchmark } from "core:benchmark";
 
-test "benchmark" {
-    run();
+struct FtsResult {
+    total_bytes: u64,
+    byte_sum: u64,
 }
 
-export fn run() with Stdout, MonotonicClock {
-    let n = 500000;
+fn fts_run(n: i32) -> FtsResult {
     let mut state: u32 = 42;
     let mut total_bytes: u64 = 0;
     let mut byte_sum: u64 = 0;
-
-    let t0 = MonotonicClock::now();
 
     for let mut i = 0; i < n; i += 1 {
         state = state * 1103515245 + 12345 & 0x7FFFFFFF;
@@ -29,11 +28,18 @@ export fn run() with Stdout, MonotonicClock {
             byte_sum += b as u64;
         }
     }
+    return FtsResult { total_bytes, byte_sum };
+}
 
-    let elapsed_ns = (MonotonicClock::now() - t0) as u64;
-    let elapsed_ms = elapsed_ns / 1000000;
+test "smoke" {
+    let r = fts_run(100);
+    assert r.total_bytes > 0;
+    assert r.byte_sum > 0;
+}
 
-    println(`fts: {n} f64 conversions (%.6f)`);
-    println(`Total bytes: {total_bytes}, byte sum: {byte_sum}`);
-    println(`Elapsed: {elapsed_ms} ms`);
+export fn run() with Stdout, MonotonicClock {
+    let n = 500000;
+    let mut b = Benchmark::new(`fts: {n} f64 conversions (%.6f)`);
+    let r = b.run("", || fts_run(n));
+    b.println(`total bytes = {r.total_bytes}, byte sum = {r.byte_sum}`);
 }

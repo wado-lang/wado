@@ -686,7 +686,7 @@ impl<'a> Lexer<'a> {
             "of" => TokenKind::Of,
             "pub" => TokenKind::Pub,
             "effect" => TokenKind::Effect,
-            "handler" => TokenKind::Handler,
+            "interface" => TokenKind::Interface,
             "reactive" => TokenKind::Reactive,
             "move" => TokenKind::Move,
             "unique" => TokenKind::Unique,

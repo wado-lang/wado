@@ -19,8 +19,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
-    TirExprKind, TirField, TirFunction, TirParam, TirStmt, TirStmtKind, TirStruct, TirStructField,
-    TypeId, TypeTable,
+    TirExprKind, TirField, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TirStruct,
+    TirStructField, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirOptVisitor, TirRefVisitor, opt_walk_block, opt_walk_expr};
 use crate::token::Span;
@@ -160,10 +160,15 @@ fn generate_copy_function(
         body: Some(body),
         span,
         local_count: 1,
-        local_types: vec![type_id],
+        locals: vec![TirLocal {
+            name: "v".to_string(),
+            type_id,
+            is_mut: false,
+        }],
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
+        is_dispatch_wrapper: false,
         is_cm_export: false,
         is_ambient: false,
         inline_hint: InlineHint::Auto,

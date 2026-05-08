@@ -1,0 +1,48 @@
+// Regression: a single call passes the same scalarized local twice
+// as `&mut` args. compute_sync_at_call iterates each arg position
+// and dedupes via IndexSet — both positions contribute the same
+// (local, field) pair which is collapsed into a single write_back /
+// re_read.
+//
+// Trace: each iteration adds 1 then doubles via the two-arg call.
+//
+// i=0: scalar b.v=0 +1 → 1. f doubles → b.v=2. sum += 2.
+// i=1: b.v=2 +1 → 3. f doubles → b.v=6. sum += 6.
+// i=2: b.v=6 +1 → 7. f doubles → b.v=14. sum += 14.
+// i=3: b.v=14 +1 → 15. f doubles → b.v=30. sum += 30.
+// final sum = 2 + 6 + 14 + 30 = 52, b.v = 30.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    v: i32,
+    pad: i32,
+}
+
+#[inline(never)]
+fn double_via_two_refs(reader: &mut Buf, writer: &mut Buf) {
+    let v = reader.v;
+    writer.v = v * 2;
+}
+
+export fn run() with Stdout {
+    let mut b = Buf { v: 0, pad: 0 };
+    let mut sum = 0;
+    let mut i = 0;
+    while i < 4 {
+        b.v = b.v + 0;
+        b.v = b.v + 0;
+        b.v = b.v + 1;
+        double_via_two_refs(&mut b, &mut b);
+        sum = sum + b.v;
+        b.v = b.v + 0;
+        i = i + 1;
+    }
+    println(`{sum} {b.v}`);
+}
+
+__DATA__
+{
+    "stdout": "52 30\n",
+    "wir_expect:O2": ["let __hfs_v_"]
+}

@@ -4,12 +4,13 @@
 //
 // Parses a CITM catalog with events, performances, and seat categories.
 
-use { println, Stdout } from "core:cli";
+use { Stdout } from "core:cli";
 use { Serialize, Deserialize } from "core:serde";
 use { from_string } from "core:json";
 use { TreeMap } from "core:collections";
 use { MonotonicClock } from "wasi:clocks";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { Benchmark } from "core:benchmark";
 
 struct Event {
     #[serde(default)]
@@ -123,37 +124,36 @@ fn read_file(path: String) -> String with Preopens {
     return buf;
 }
 
-test "benchmark" {
-    run();
+test "smoke" {
+    // Minimal valid CitmCatalog with empty maps and no events / performances.
+    let counts = parse_counts("{\"areaNames\":{},\"audienceSubCategoryNames\":{},\"blockNames\":{},\"events\":{},\"performances\":[],\"seatCategoryNames\":{},\"subTopicNames\":{},\"subjectNames\":{},\"topicNames\":{},\"topicSubTopics\":{},\"venueNames\":{}}");
+    assert counts.events == 0;
+    assert counts.performances == 0;
+}
+
+struct CatalogCounts {
+    events: i32,
+    performances: i32,
+}
+
+fn parse_counts(json_data: String) -> CatalogCounts {
+    let catalog = match from_string::<CitmCatalog>(json_data) {
+        Ok(c) => c,
+        Err(e) => panic(`Parse error: {e.message}`),
+    };
+    return CatalogCounts {
+        events: catalog.events.len(),
+        performances: catalog.performances.len(),
+    };
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file("json_catalog/citm_catalog.json");
-    let iterations = 1;
-    println(`json-catalog: {json_data.len()} bytes, {iterations} iterations`);
+    let mut b = Benchmark::new("json-catalog");
+    b.input_size = Option::Some(json_data.len());
 
-    let start = MonotonicClock::now();
-    let mut total_events = 0;
-    let mut total_performances = 0;
-    for let mut i = 0; i < iterations; i += 1 {
-        let result = from_string::<CitmCatalog>(json_data);
-        if let Ok(catalog) = result {
-            total_events = total_events + catalog.events.len();
-            total_performances = total_performances + catalog.performances.len();
-        } else {
-            if let Err(e) = result {
-                println(`Parse error: {e.message}`);
-            }
-            break;
-        }
-    }
-    let end = MonotonicClock::now();
-    let elapsed_ns = (end - start) as u64;
-    let elapsed_ms = elapsed_ns / 1000000;
-    let elapsed_us = elapsed_ns / 1000;
-
-    assert total_events == 184 * iterations;
-    assert total_performances == 243 * iterations;
-    println(`Parsed {total_events} events, {total_performances} performances`);
-    println(`Elapsed: {elapsed_ms}.{elapsed_us % 1000} ms`);
+    let counts = b.run("", || parse_counts(json_data));
+    assert counts.events == 184;
+    assert counts.performances == 243;
+    b.println(`parsed {counts.events} events, {counts.performances} performances`);
 }

@@ -1,0 +1,54 @@
+// Regression: an unlabeled `break` from `loop_depth 0` must commit
+// any `ScalarOnly` candidate to the field. The body-end force-Both
+// is appended to body.stmts and only runs on fall-through; when
+// `break` is taken, the scalar's latest value would otherwise never
+// reach the field, and the post-loop reader would observe a stale
+// value.
+//
+// Shape (mirrors gale's `parse_lexer_actions` loop, which exposed
+// the bug): a hot field is mutated by branches in the `&mut`-method
+// loop body; the loop terminates on a sentinel via `break`; the
+// caller reads the field after the loop. With HFS scalarization the
+// four writes to `Actions::channel` cross the access-count threshold;
+// without the inline commit at break, the post-loop read sees `0`.
+
+use { println, Stdout } from "core:cli";
+
+struct Actions {
+    channel: i32,
+    pad0: i32,
+}
+
+impl Actions {
+    fn fill(&mut self) {
+        let mut i = 0;
+        loop {
+            if i == 0 {
+                self.channel = 9;
+            } else if i == 1 {
+                self.channel = 8;
+            } else if i == 2 {
+                self.channel = 7;
+            } else if i == 3 {
+                self.channel = 1;
+                break;
+            }
+            i = i + 1;
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let mut actions = Actions { channel: 0, pad0: 0 };
+    actions.fill();
+    println(`{actions.channel}`);
+}
+
+__DATA__
+{
+    "stdout": "1\n",
+    "wir_expect:O2": [
+        "let __hfs_channel_",
+        "self.channel = __hfs_channel_2;\n                break"
+    ]
+}

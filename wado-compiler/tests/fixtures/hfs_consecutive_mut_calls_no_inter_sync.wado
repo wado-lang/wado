@@ -1,0 +1,83 @@
+// Marquee invariant of the dataflow-driven HFS rewrite: when state is
+// already `FieldOnly` (every `&mut` call leaves it that way), a
+// subsequent `&mut` call's pre-state requirement is satisfied without
+// any sync. Three consecutive `&mut` calls therefore emit at most ONE
+// write-back (before the first call, if needed) — the second and third
+// calls produce zero inter-call sync stmts.
+//
+// Before the rewrite, each call site was wrapped with its own
+// write_back/re-read pair, so three consecutive calls produced six
+// redundant sync stmts (write_back + re_read after every call). The
+// dataflow lattice removes those: scalar canonicality is tracked
+// across stmts, and only true transitions emit sync.
+//
+// Trace per iteration (2 iterations, starting b.v=0):
+//   pre-call a: write_back b.v = __hfs_v (only first call)
+//   a(&mut b): b.v += 1, returns b.v
+//   pre-call b: state=FieldOnly already, NO sync
+//   b(&mut b): b.v += 10, returns b.v
+//   pre-call c: state=FieldOnly already, NO sync
+//   c(&mut b): b.v += 100, returns b.v
+//   sum += a + b + c
+//   end of iter: scalar update b.v = b.v + 0; back-edge force-Both
+//
+// i=0: a:b=1 r=1, b:b=11 r=11, c:b=111 r=111. sum += 123. b=111.
+// i=1: a:b=112 r=112, b:b=122 r=122, c:b=222 r=222. sum += 456. b=222.
+//   (adding the +0 stmt's no-op: b stays 222 logically)
+// final sum = 579, b.v = 222.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    v: i32,
+    pad: i32,
+}
+
+#[inline(never)]
+fn add1(b: &mut Buf) -> i32 {
+    b.v = b.v + 1;
+    return b.v;
+}
+
+#[inline(never)]
+fn add10(b: &mut Buf) -> i32 {
+    b.v = b.v + 10;
+    return b.v;
+}
+
+#[inline(never)]
+fn add100(b: &mut Buf) -> i32 {
+    b.v = b.v + 100;
+    return b.v;
+}
+
+export fn run() with Stdout {
+    let mut b = Buf { v: 0, pad: 0 };
+    let mut sum = 0;
+    let mut i = 0;
+    while i < 2 {
+        b.v = b.v + 0;
+        b.v = b.v + 0;
+        let a_ret = add1(&mut b);
+        let b_ret = add10(&mut b);
+        let c_ret = add100(&mut b);
+        sum = sum + a_ret + b_ret + c_ret;
+        b.v = b.v + 0;
+        i = i + 1;
+    }
+    println(`{sum} {b.v}`);
+}
+
+__DATA__
+{
+    "stdout": "579 222\n",
+    "wir_expect:O2": [
+        "let __hfs_v_"
+    ],
+    "wir_not_expect:O2": [
+        "/add1\"(b);\n            __hfs_v_",
+        "/add10\"(b);\n            __hfs_v_",
+        "/add10\"(b);\n            b.v = __hfs_v_",
+        "/add1\"(b);\n            b.v = __hfs_v_"
+    ]
+}

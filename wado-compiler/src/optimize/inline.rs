@@ -11,8 +11,8 @@ use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::name::ModuleSource;
 use crate::tir::{
-    CallArg, InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirPattern,
-    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    CallArg, InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::block_has_break_to;
 use crate::token::Span;
@@ -104,6 +104,11 @@ fn count_expr(expr: &TirExpr) -> usize {
         | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => count_expr(expr),
         TirExprKind::LabeledBlock { block, .. } => count_block_exprs(block),
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
     }
 }
 
@@ -336,6 +341,11 @@ fn collect_inner_labels_from_expr(expr: &TirExpr, labels: &mut IndexSet<String>)
         | TirExprKind::EnumConstruct { .. } => {}
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }
@@ -670,6 +680,11 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
+        }
     }
 }
 
@@ -708,6 +723,13 @@ pub fn inline_functions(project: &mut FlatPackage, inline_threshold: usize) -> b
     }
     drop(type_table);
 
+    crate::compiler_trace!(
+        "opt_loop",
+        "inline: threshold={} candidates={}",
+        inline_threshold,
+        inline_candidates.len()
+    );
+
     if inline_candidates.is_empty() {
         return false;
     }
@@ -722,9 +744,9 @@ pub fn inline_functions(project: &mut FlatPackage, inline_threshold: usize) -> b
         if let Some(mut body) = func.body.take() {
             // Track which functions were inlined into this function
             let mut inlined_funcs: Vec<(ModuleSource, String)> = Vec::new();
-            // Take ownership of local_count and local_types to avoid borrow conflicts
+            // Take ownership of local_count and locals to avoid borrow conflicts
             let mut local_count = func.local_count;
-            let mut local_types = std::mem::take(&mut func.local_types);
+            let mut locals = std::mem::take(&mut func.locals);
             // Counter for generating unique inline labels
             let mut inline_counter: u32 = 0;
             inline_calls_in_block(
@@ -732,13 +754,13 @@ pub fn inline_functions(project: &mut FlatPackage, inline_threshold: usize) -> b
                 &inline_candidates,
                 &caller_module_source,
                 &mut local_count,
-                &mut local_types,
+                &mut locals,
                 &project.type_table.borrow(),
                 &mut inlined_funcs,
                 &mut inline_counter,
             );
             func.local_count = local_count;
-            func.local_types = local_types;
+            func.locals = locals;
             func.body = Some(body);
 
             if !inlined_funcs.is_empty() {
@@ -790,7 +812,7 @@ fn inline_calls_in_block(
     candidates: &IndexMap<(ModuleSource, String), TirFunction>,
     current_module: &ModuleSource,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<(ModuleSource, String)>,
     inline_counter: &mut u32,
@@ -814,7 +836,7 @@ fn inline_calls_in_block(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     inline_counter,
                 )
@@ -824,7 +846,7 @@ fn inline_calls_in_block(
                         candidates,
                         current_module,
                         local_count,
-                        local_types,
+                        locals,
                         type_table,
                         inline_counter,
                     )
@@ -841,7 +863,7 @@ fn inline_calls_in_block(
                         candidates,
                         current_module,
                         local_count,
-                        local_types,
+                        locals,
                         type_table,
                         &mut new_stmts,
                         inlined_funcs,
@@ -868,7 +890,7 @@ fn inline_calls_in_block(
                         candidates,
                         current_module,
                         local_count,
-                        local_types,
+                        locals,
                         type_table,
                         &mut new_stmts,
                         inlined_funcs,
@@ -895,7 +917,7 @@ fn inline_calls_in_block(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     inline_counter,
                 )
@@ -905,7 +927,7 @@ fn inline_calls_in_block(
                         candidates,
                         current_module,
                         local_count,
-                        local_types,
+                        locals,
                         type_table,
                         inline_counter,
                     )
@@ -921,7 +943,7 @@ fn inline_calls_in_block(
                         candidates,
                         current_module,
                         local_count,
-                        local_types,
+                        locals,
                         type_table,
                         &mut new_stmts,
                         inlined_funcs,
@@ -936,7 +958,7 @@ fn inline_calls_in_block(
                         candidates,
                         current_module,
                         local_count,
-                        local_types,
+                        locals,
                         type_table,
                         &mut new_stmts,
                         inlined_funcs,
@@ -952,7 +974,7 @@ fn inline_calls_in_block(
                         candidates,
                         current_module,
                         local_count,
-                        local_types,
+                        locals,
                         type_table,
                         inline_counter,
                     )
@@ -962,7 +984,7 @@ fn inline_calls_in_block(
                             candidates,
                             current_module,
                             local_count,
-                            local_types,
+                            locals,
                             type_table,
                             inline_counter,
                         )
@@ -978,7 +1000,7 @@ fn inline_calls_in_block(
                             candidates,
                             current_module,
                             local_count,
-                            local_types,
+                            locals,
                             type_table,
                             &mut new_stmts,
                             inlined_funcs,
@@ -997,7 +1019,7 @@ fn inline_calls_in_block(
                             candidates,
                             current_module,
                             local_count,
-                            local_types,
+                            locals,
                             type_table,
                             &mut new_stmts,
                             inlined_funcs,
@@ -1024,7 +1046,7 @@ fn inline_calls_in_block(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     &mut new_stmts,
                     inlined_funcs,
@@ -1035,7 +1057,7 @@ fn inline_calls_in_block(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     inlined_funcs,
                     inline_counter,
@@ -1046,7 +1068,7 @@ fn inline_calls_in_block(
                         candidates,
                         current_module,
                         local_count,
-                        local_types,
+                        locals,
                         type_table,
                         inlined_funcs,
                         inline_counter,
@@ -1068,7 +1090,7 @@ fn inline_calls_in_block(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     inlined_funcs,
                     inline_counter,
@@ -1081,7 +1103,7 @@ fn inline_calls_in_block(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     inlined_funcs,
                     inline_counter,
@@ -1102,7 +1124,7 @@ fn inline_calls_in_block(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     &mut new_stmts,
                     inlined_funcs,
@@ -1113,7 +1135,7 @@ fn inline_calls_in_block(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     inlined_funcs,
                     inline_counter,
@@ -1124,7 +1146,7 @@ fn inline_calls_in_block(
                         candidates,
                         current_module,
                         local_count,
-                        local_types,
+                        locals,
                         type_table,
                         inlined_funcs,
                         inline_counter,
@@ -1148,7 +1170,7 @@ fn inline_calls_in_block(
                         candidates,
                         current_module,
                         local_count,
-                        local_types,
+                        locals,
                         type_table,
                         &mut new_stmts,
                         inlined_funcs,
@@ -1178,7 +1200,7 @@ fn inline_calls_in_block(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     &mut new_stmts,
                     inlined_funcs,
@@ -1259,7 +1281,7 @@ fn build_inlined_labeled_block(
     bindings: Vec<InlineBinding>,
     call_span: Span,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     inline_counter: &mut u32,
 ) -> TirExpr {
     // Generate unique label for this inline site.
@@ -1293,9 +1315,13 @@ fn build_inlined_labeled_block(
         let new_local_index = local_offset + i as u32;
         param_to_local.insert(binding.callee_local_index, new_local_index);
 
-        // Extend local_types for parameter using the binding's actual local_type
+        // Extend locals for parameter using the binding's actual local_type
         // (handles monomorphization type variance and &mut self ref wrapping).
-        local_types.push(binding.local_type);
+        locals.push(TirLocal {
+            name: binding.name.clone(),
+            type_id: binding.local_type,
+            is_mut: binding.is_mut,
+        });
         *local_count += 1;
 
         // Use original parameter name (not _inline_ prefix).
@@ -1316,10 +1342,12 @@ fn build_inlined_labeled_block(
     // param_offset marks where non-param locals start (after all params).
     let param_offset = local_offset + callee_param_count;
 
-    // Now extend local_types for the non-parameter locals.
+    // Now extend locals for the non-parameter locals — keep their original
+    // names from the callee so the inlined body's debug-friendly identity
+    // survives, just renumbered into the caller's index space.
     for i in callee_param_count..callee_local_count {
-        if let Some(&type_id) = candidate.local_types.get(i as usize) {
-            local_types.push(type_id);
+        if let Some(callee_local) = candidate.locals.get(i as usize) {
+            locals.push(callee_local.clone());
         }
     }
     *local_count += new_locals_needed;
@@ -1362,7 +1390,7 @@ fn try_inline_call_expr(
     candidates: &IndexMap<(ModuleSource, String), TirFunction>,
     current_module: &ModuleSource,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     _type_table: &TypeTable,
     inline_counter: &mut u32,
 ) -> Option<(TirExpr, (ModuleSource, String))> {
@@ -1397,7 +1425,7 @@ fn try_inline_call_expr(
         bindings,
         expr.span,
         local_count,
-        local_types,
+        locals,
         inline_counter,
     );
 
@@ -1411,7 +1439,7 @@ fn try_inline_method_call_expr(
     candidates: &IndexMap<(ModuleSource, String), TirFunction>,
     current_module: &ModuleSource,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     type_table: &TypeTable,
     inline_counter: &mut u32,
 ) -> Option<(TirExpr, (ModuleSource, String))> {
@@ -1487,7 +1515,7 @@ fn try_inline_method_call_expr(
         bindings,
         expr.span,
         local_count,
-        local_types,
+        locals,
         inline_counter,
     );
 
@@ -1875,14 +1903,16 @@ fn remap_expr_inner(
             body,
             captures,
             functor_id,
-            source_text,
+            address_taken_locals,
+            body_locals,
         } => TirExprKind::Closure {
             params: params.clone(),
             // Closures have their own return scope — don't propagate label
             body: Box::new(remap_expr(body, param_to_local, local_offset, param_count)),
             captures: captures.clone(),
             functor_id: *functor_id,
-            source_text: source_text.clone(),
+            address_taken_locals: address_taken_locals.clone(),
+            body_locals: body_locals.clone(),
         },
         TirExprKind::IndirectCall { callee, args } => TirExprKind::IndirectCall {
             callee: re_box(callee),
@@ -1976,6 +2006,11 @@ fn remap_expr_inner(
         | TirExprKind::EnumConstruct { .. } => expr.kind.clone(),
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     };
 
@@ -2160,7 +2195,7 @@ fn inline_calls_in_expr(
     candidates: &IndexMap<(ModuleSource, String), TirFunction>,
     current_module: &ModuleSource,
     local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
+    locals: &mut Vec<TirLocal>,
     type_table: &TypeTable,
     pre_stmts: &mut Vec<TirStmt>,
     inlined_funcs: &mut Vec<(ModuleSource, String)>,
@@ -2173,7 +2208,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2184,7 +2219,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2197,7 +2232,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2210,7 +2245,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2221,7 +2256,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2234,7 +2269,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2249,7 +2284,7 @@ fn inline_calls_in_expr(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     pre_stmts,
                     inlined_funcs,
@@ -2262,7 +2297,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 inline_counter,
             ) {
@@ -2279,7 +2314,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2291,7 +2326,7 @@ fn inline_calls_in_expr(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     pre_stmts,
                     inlined_funcs,
@@ -2304,7 +2339,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 inline_counter,
             ) {
@@ -2321,7 +2356,7 @@ fn inline_calls_in_expr(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     pre_stmts,
                     inlined_funcs,
@@ -2340,7 +2375,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2353,7 +2388,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2364,7 +2399,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2378,7 +2413,7 @@ fn inline_calls_in_expr(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     pre_stmts,
                     inlined_funcs,
@@ -2393,7 +2428,7 @@ fn inline_calls_in_expr(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     pre_stmts,
                     inlined_funcs,
@@ -2407,7 +2442,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2419,7 +2454,7 @@ fn inline_calls_in_expr(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     pre_stmts,
                     inlined_funcs,
@@ -2433,7 +2468,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2447,7 +2482,7 @@ fn inline_calls_in_expr(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     pre_stmts,
                     inlined_funcs,
@@ -2462,7 +2497,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 inlined_funcs,
                 inline_counter,
@@ -2478,7 +2513,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2489,7 +2524,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 inlined_funcs,
                 inline_counter,
@@ -2500,7 +2535,7 @@ fn inline_calls_in_expr(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     inlined_funcs,
                     inline_counter,
@@ -2513,7 +2548,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2526,7 +2561,7 @@ fn inline_calls_in_expr(
                         candidates,
                         current_module,
                         local_count,
-                        local_types,
+                        locals,
                         type_table,
                         pre_stmts,
                         inlined_funcs,
@@ -2538,7 +2573,7 @@ fn inline_calls_in_expr(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     pre_stmts,
                     inlined_funcs,
@@ -2552,7 +2587,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 inlined_funcs,
                 inline_counter,
@@ -2564,7 +2599,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2577,7 +2612,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2592,7 +2627,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2610,7 +2645,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 pre_stmts,
                 inlined_funcs,
@@ -2622,7 +2657,7 @@ fn inline_calls_in_expr(
                     candidates,
                     current_module,
                     local_count,
-                    local_types,
+                    locals,
                     type_table,
                     inlined_funcs,
                     inline_counter,
@@ -2633,7 +2668,7 @@ fn inline_calls_in_expr(
                 candidates,
                 current_module,
                 local_count,
-                local_types,
+                locals,
                 type_table,
                 inlined_funcs,
                 inline_counter,
@@ -2655,6 +2690,11 @@ fn inline_calls_in_expr(
         | TirExprKind::EnumConstruct { .. } => {}
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
+        }
+        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+            unreachable!(
+                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
+            )
         }
     }
 }

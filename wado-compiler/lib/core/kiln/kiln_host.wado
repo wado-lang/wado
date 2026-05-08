@@ -1,4 +1,5 @@
 #![generated(by = "wado-from-idl", sources = ["wado-compiler/lib/core/kiln/generator.wit"])]
+#![stdlib("core:kiln/kiln_host.wado")]
 
 #[cm("core:kiln/kiln-host@0.1.0#host-error")]
 pub variant HostError {
@@ -49,7 +50,7 @@ pub struct Diagnostic {
 /// no clocks, no random, no network, no filesystem beyond `read-file`.
 /// See WEP 2026-04-12 (Kiln) §"The `kiln` world".
 #[cm("core:kiln/kiln-host@0.1.0")]
-pub effect KilnHost {
+pub interface KilnHost {
     /// Read a file from the compiler's `CompilerHost`. Paths are resolved
     /// relative to the invocation's declaration site (manifest directory
     /// or the source file containing a `use ... with`). Every call is

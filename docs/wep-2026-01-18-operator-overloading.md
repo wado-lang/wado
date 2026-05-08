@@ -677,11 +677,11 @@ let scaled = v * 2.0;  // Vec3
 
 | Aspect              | Rust/Wado (Traits)         | C++/Kotlin (operator keyword) | Zig (No overloading) |
 | ------------------- | -------------------------- | ----------------------------- | -------------------- |
-| Discoverability     | ✅ High (via traits)       | ⚠️ Medium (special syntax)     | ✅ N/A               |
-| Type safety         | ✅ High (associated types) | ⚠️ Medium                      | ✅ N/A               |
-| Generic programming | ✅ Yes (trait bounds)      | ⚠️ Limited (templates)         | ❌ No                |
-| Verbosity           | ⚠️ Verbose                  | ✅ Concise                    | ✅ Explicit calls    |
-| Consistency         | ✅ Part of trait system    | ⚠️ Special case                | ✅ No special cases  |
+| Discoverability     | ✅ High (via traits)       | ⚠️ Medium (special syntax)    | ✅ N/A               |
+| Type safety         | ✅ High (associated types) | ⚠️ Medium                     | ✅ N/A               |
+| Generic programming | ✅ Yes (trait bounds)      | ⚠️ Limited (templates)        | ❌ No                |
+| Verbosity           | ⚠️ Verbose                 | ✅ Concise                    | ✅ Explicit calls    |
+| Consistency         | ✅ Part of trait system    | ⚠️ Special case               | ✅ No special cases  |
 | Ergonomics (math)   | ✅ Good                    | ✅ Good                       | ❌ Poor              |
 
 ## Examples

@@ -1,12 +1,18 @@
 //! Constant branch pruning for Wado TIR
 //!
-//! Eliminates branches with known boolean conditions and simplifies trivial blocks:
-//! - `if true { A } else { B }` → `A`
-//! - `if false { A } else { B }` → `B`
+//! Simplifies trivial blocks left over after other passes:
 //! - `{ expr; }` → `expr`
 //! - `label: { break label: val; }` → `val`
 //! - `label: { let x = y; ... }` → substitute x with y in remaining stmts
 //! - Empty blocks → `()`
+//!
+//! Constant-condition `if` folding (`if true { A } else { B }` → `A`,
+//! both at the expression and statement level) is handled by `tiri` via
+//! the `const_folding` pass — see `docs/wep-2026-04-27-tir-interpreter.md`
+//! Stage 2. This pass intentionally does *not* duplicate that logic; if
+//! you find yourself adding an `if`-condition rewrite here, push it into
+//! `tiri` instead so the lattice-driven engine stays the single source
+//! of truth.
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
@@ -45,30 +51,12 @@ impl TirOptVisitor for BranchPruner {
     }
 }
 
-/// Prune constant conditions and simplify trivial blocks at the expression level.
+/// Simplify trivial blocks at the expression level.
+///
+/// Constant-condition `if` folding lives in `tiri` (Stage 2 of the TIR
+/// interpreter); this function deliberately does not handle that case.
 fn prune_expr(expr: &mut TirExpr) -> bool {
     let mut changed = false;
-
-    // Prune expression-level `if` with constant boolean condition
-    if let TirExprKind::If { condition, .. } = &expr.kind
-        && let TirExprKind::BoolLiteral(value) = condition.kind
-    {
-        let TirExprKind::If {
-            then_branch,
-            else_branch,
-            ..
-        } = std::mem::replace(&mut expr.kind, TirExprKind::Unit)
-        else {
-            unreachable!();
-        };
-        if value {
-            expr.kind = TirExprKind::Block(then_branch);
-        } else if let Some(else_blk) = else_branch {
-            expr.kind = TirExprKind::Block(else_blk);
-        }
-        // false without else: type is Unit, TirExprKind::Unit is already set
-        changed = true;
-    }
 
     // Simplify `{ expr; }` → `expr` (single-expression unlabeled block)
     if let TirExprKind::Block(block) = &expr.kind
@@ -125,18 +113,16 @@ fn prune_expr(expr: &mut TirExpr) -> bool {
 }
 
 /// Eliminate dead statements from a block:
-/// - `if true { A } [else { B }]` → inline A's statements
-/// - `if false { A }` → remove
-/// - `if false { A } else { B }` → inline B's statements
 /// - `label: { }` (empty labeled block) → remove
 /// - `label: { stmts }` (unused label) → flatten stmts into parent
+/// - Trivial Unit / Block / unused-LabeledBlock expression stmts → flatten
+///
+/// Constant-condition `if` statement folding (`if true { … }` →
+/// inline branch) lives in `tiri::Interpreter::reduce_local_block`
+/// and runs as part of the `const_folding` pass.
 fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
     let dominated = |s: &TirStmt| {
         matches!(
-            &s.kind,
-            TirStmtKind::If { condition, .. }
-                if matches!(condition.kind, TirExprKind::BoolLiteral(_))
-        ) || matches!(
             &s.kind,
             TirStmtKind::LabeledBlock { label, block }
                 if block.stmts.is_empty() || !block_has_break_to(label, block)
@@ -154,25 +140,6 @@ fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
 
     let old_stmts = std::mem::take(&mut block.stmts);
     for stmt in old_stmts {
-        // Constant `if` → inline taken branch or drop
-        if let TirStmtKind::If { ref condition, .. } = stmt.kind
-            && let TirExprKind::BoolLiteral(value) = condition.kind
-        {
-            let TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } = stmt.kind
-            else {
-                unreachable!();
-            };
-            if value {
-                block.stmts.extend(then_block.stmts);
-            } else if let Some(else_blk) = else_block {
-                block.stmts.extend(else_blk.stmts);
-            }
-            continue;
-        }
         // Labeled block with unused label → flatten stmts into parent
         if let TirStmtKind::LabeledBlock {
             ref label,

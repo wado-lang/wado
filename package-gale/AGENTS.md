@@ -145,22 +145,27 @@ test "parse JSON.g4" {
 
 ### Test Grammars (`tests/grammars/`)
 
-| File                  | Language     | Notes                                                        |
-| --------------------- | ------------ | ------------------------------------------------------------ |
-| `JSON.g4`             | JSON         | Combined grammar. Clean (no actions).                        |
-| `sexpression.g4`      | S-expression | Combined grammar. Clean.                                     |
-| `calculator.g4`       | Calculator   | Combined grammar. Clean.                                     |
-| `SQLite.g4`           | SQLite       | Combined grammar. Large, clean.                              |
-| `css3Lexer.g4`        | CSS3         | Split lexer. Clean.                                          |
-| `css3Parser.g4`       | CSS3         | Split parser. Clean.                                         |
-| `HTMLLexer.g4`        | HTML         | Split lexer. Clean.                                          |
-| `HTMLParser.g4`       | HTML         | Split parser. Clean.                                         |
-| `ANTLRv4Lexer.g4`     | ANTLR4       | Split lexer. Has action blocks and `superClass`.             |
-| `ANTLRv4Parser.g4`    | ANTLR4       | Split parser. Clean.                                         |
-| `RustLexer.g4`        | Rust         | Split lexer. Has semantic predicates and `superClass`.       |
-| `RustParser.g4`       | Rust         | Split parser. Has semantic predicates and `superClass`.      |
-| `TypeScriptLexer.g4`  | TypeScript   | Split lexer. Has semantic predicates and `superClass`.       |
-| `TypeScriptParser.g4` | TypeScript   | Split parser. Has many semantic predicates and `superClass`. |
+| File                    | Language     | Notes                                                                     |
+| ----------------------- | ------------ | ------------------------------------------------------------------------- |
+| `JSON.g4`               | JSON         | Combined grammar. Clean (no actions).                                     |
+| `sexpression.g4`        | S-expression | Combined grammar. Clean.                                                  |
+| `calculator.g4`         | Calculator   | Combined grammar. Clean.                                                  |
+| `SQLite.g4`             | SQLite       | Combined grammar. Large, clean.                                           |
+| `css3Lexer.g4`          | CSS3         | Split lexer. Clean.                                                       |
+| `css3Parser.g4`         | CSS3         | Split parser. Clean.                                                      |
+| `HTMLLexer.g4`          | HTML         | Split lexer. Clean.                                                       |
+| `HTMLParser.g4`         | HTML         | Split parser. Clean.                                                      |
+| `ANTLRv4Lexer.g4`       | ANTLR4       | Split lexer. Has action blocks and `superClass`.                          |
+| `ANTLRv4Parser.g4`      | ANTLR4       | Split parser. Clean.                                                      |
+| `RustLexer.g4`          | Rust         | Split lexer. Has semantic predicates and `superClass`.                    |
+| `RustParser.g4`         | Rust         | Split parser. Has semantic predicates and `superClass`.                   |
+| `TypeScriptLexer.g4`    | TypeScript   | Split lexer. Has semantic predicates and `superClass`.                    |
+| `TypeScriptParser.g4`   | TypeScript   | Split parser. Has many semantic predicates and `superClass`.              |
+| `ll_basic.g4`           | LL fixture   | Combined. Tail-greedy `Y?` with required follow `b : Y` — passes (v1 LL). |
+| `ll_nullable_suffix.g4` | LL fixture   | Combined. Like `ll_basic` but next sibling is nullable — `#[TODO]`.       |
+| `ll_multi_alt.g4`       | LL fixture   | Combined. Tail-greedy callee is multi-alt — `#[TODO]`.                    |
+| `ll_lr_atom.g4`         | LL fixture   | Combined. Tail-greedy callee is left-recursive — `#[TODO]`.               |
+| `ll_ctx_follow.g4`      | LL fixture   | Combined. Follow propagation through a passthrough rule — `#[TODO]`.      |
 
 Clean grammars (JSON, sexpression, calculator, SQLite, CSS3, HTML) contain no target-language-dependent elements and should be fully parseable and code-generatable.
 
@@ -172,13 +177,44 @@ Grammars with actions/predicates (ANTLR4, Rust, TypeScript) contain `{...}` acti
 2. Add a parse test in `g4/integration_test.wado`
 3. Add a driver test under `tests/` that imports the grammar via `use ... with { generator: { module: "../src/generator.wado", options: { ... } } }`. The compiler runs Gale on the `.g4` at build time and resolves the `use` against the freshly generated parser.
 
+### Layer 3: ANTLR4 Descriptor Compatibility Tests (`tests/antlr4-compat/`)
+
+A separate, long-lived effort that imports ANTLR4's upstream
+runtime-testsuite descriptors as parse-only Wado tests. Tracked in
+[`antlr4-compatibility.md`](./antlr4-compatibility.md) — read that
+for the stages, the descriptor pipeline, the regeneration commands,
+and the triage workflow. The doc remains the single source of truth
+even after the contract is fully met; the entry here is just a
+pointer.
+
 ## Inlined Runtime
 
 `runtime.wado` is included verbatim into every generated file via `#include_str` in `codegen.wado`. It must remain self-contained (no imports from other source files). See [WEP: Compile-Time File Inclusion](../docs/wep-2026-03-02-include-str.md).
 
 ## Generated Parser Rules
 
-- **No backtracking in new code.** Use static k-token lookahead prediction to disambiguate alternatives. If prediction cannot resolve within depth 5, file an issue rather than adding backtracking. Existing backtracking sites are being migrated to prediction; do not add new ones.
+- **No backtracking in new code.** Use static k-token lookahead prediction
+  to disambiguate alternatives. If prediction cannot resolve within depth 5,
+  file an issue rather than adding backtracking. The Stage C codegen no
+  longer emits `bt_try` or `opt_bt` blocks — an alt whose suffix is
+  unscannable at a tournament site is a codegen-time `panic!`. (The
+  rule-level LR-atom path in `gen_prediction_code_inner` retains a
+  save-and-rewind pattern as a structural fallback when scan helpers are
+  unavailable; no committed grammar exercises it, but the code is kept
+  for malformed-grammar diagnostics.)
+
+### Migration status (2026-04)
+
+The bt → scan-dispatch migration is complete. `bt_try` and `opt_bt` count
+is 0 across every committed grammar (`sqlite`, `sqlite_highlight`, `rust`,
+`type_script`, `antlrv4`, plus the smaller fixture grammars). Stage C
+dispatch sites use scan-side first-success-wins on
+`sort_group_by_element_count` (longest-first) order, and
+`gen_scan_multi_alt` partitions atom alts by their depth-0 first token
+before applying first-success-wins inside each partition — that
+combination is correctness-equivalent to the longest-match tournament for
+the cases that actually arise (e.g. `expr`'s `column_ref` IDENT vs
+`function_call` IDENT '(' … ')').
 
 ## Failed Approaches (Do Not Repeat)
 
@@ -186,7 +222,7 @@ Grammars with actions/predicates (ANTLR4, Rust, TypeScript) contain `{...}` acti
 
 **Goal:** Expand multi-token RuleRefs during SLL prediction to reduce backtracking.
 
-**What was tried:** Added `return_stack` to `SllConfig` to track continuation points when entering a referenced rule. `sll_expand_rule_ref` pushed return frames and advanced inside sub-rules. `try_expand_opaque` called expansion when `build_sll_node` would otherwise produce `Backtrack`.
+**What was tried:** Added `return_stack` to `SllConfig` to track continuation points when entering a referenced rule. `sll_expand_rule_ref` pushed return frames and advanced inside sub-rules. `try_expand_opaque` called expansion when `build_sll_node` would otherwise produce `Ambiguous` (then named `Backtrack`).
 
 **Why it failed (3 distinct bugs):**
 
@@ -204,22 +240,22 @@ Grammars with actions/predicates (ANTLR4, Rust, TypeScript) contain `{...}` acti
 - To use expansion correctly, the prediction must map expanded tokens back to the decision point's lookahead depth (essentially an ATN simulator)
 - `sll_dedup_by_alt` is too aggressive for expanded configs — alternatives sharing sub-rules get merged
 
-### Removing the LR Gate in `is_rule_scannable` without Smarter Stage C (2026-04)
+### LL(\*) variant emit — three over-broad attempts (2026-05)
 
-**Goal:** Drop the "has-left-recursive-alt" guard at `gen_context.wado:is_rule_scannable` so Stage C group-level dispatch can activate for `sql_stmt`'s statement-type alternation (nine shared-first-token alts that all transitively reference the LR rule `expr`). Expected: eliminate the last nine `bt_try` blocks in `sqlite.wado`.
+**Goal:** Static-analysis-based one-level LL(\*) repair via per-(rule, follow-mask) `__follow_<id>` variants. See [`antlr4-compatibility.md`'s "Phase 4 (landed)" section](./antlr4-compatibility.md#phase-4-landed--static-analysis-llrepair-via-__follow_id-variants) for the design and `tests/grammars/ll_*.g4` for the regression suite.
 
-**What was tried:** Generated faithful scan-side twins of the parser's precedence-climbing infrastructure (`scan_X_atom` / `scan_X_prec` / `scan_X_lr_N`), mirroring `parse_X_prec` with token-kind dispatch, `peek_at(1)` overlap dispatch, and precedence guards. Then removed the LR gate in `is_rule_scannable`.
+**Three attempts that broke real grammars and had to be narrowed back:**
 
-**Why it failed:**
+1. **Swapping `alt_sort_priority` 2 ↔ 3 globally** (so multi-element-RuleRef alts beat single-RuleRef alts everywhere). This made `(a b | a) EOF` pick `a b` correctly but broke `LeftRecursion/PrefixAndOtherAlt_*` — `expr : literal | op expr | expr op expr` would try `op expr` before `literal` for input `-1`, committing to a non-LL alt. Fix: keep priority unchanged at the rule level; introduce `sort_group_by_mandatory_count_desc` and use it ONLY at group-level dispatch sites (`gen_consume_group*`, `gen_general_group_store*`, `gen_group_prediction_code_skip` Ambiguous).
 
-- `bt_try` count on `sqlite.wado` dropped 54 → 38 as expected, but `sqlite_parse` regressed **14,379 → 136,947 µs/iter (10×)**.
-- Root cause: Stage C uses a **tournament dispatch** (scan every candidate alt to completion, then pick the longest match). For `sql_stmt`'s nine statement-type alts that all share first tokens on `{WITH, SELECT, DELETE, INSERT, REPLACE, UPDATE, VALUES}`, the tournament runs nine full LR scans per statement. Each scan is a deep precedence-climbing traversal over every suffix operator, so the total cost is `O(statement_length × 9)` — no matter which alt actually matches.
-- `bt_try` wins here by being **first-success-wins**: when alt 1 parses cleanly, alts 2..9 are never touched. The scan-based tournament has no such short-circuit.
+2. **Adopting any tail-position Repeat into `tail_greedy_first`** regardless of the inner element shape. This treated HTMLParser's `htmlContent` rule (`htmlChardata? ((htmlElement | CDATA | htmlComment) htmlChardata?)*`) as having tail-greedy = first set of the inner Group, including `TAG_OPEN`. The inner Group's `htmlElement` alt **legitimately** re-enters on `TAG_OPEN`, but the variant's mask suppressed all TAG_OPEN-led iterations, breaking nested-tag parses. Fix: restrict `tail_greedy_first_of_element`'s `Repeat` arm to `Repeat`s whose inner is `element_is_single_token` (single TokenRef / Literal / Wildcard / Not / single-token RuleRef).
 
-**What remains:** The faithful `scan_X_atom` / `scan_X_prec` / `scan_X_lr_N` generators are correct and committed — they fix a real divergence bug where the old naive scan could commit to the wrong LR alt on shared-first-token suffixes (e.g. `K_NOT K_IN` vs `K_NOT K_LIKE` vs `K_NOT K_BETWEEN` under `expr`). The LR gate in `is_rule_scannable` is kept, with a docstring explaining the cost tradeoff. Net win: `sqlite_parse` 14,883 → 11,826 µs (−21%) from other scan improvements, not from LR unlock.
+3. **Registering variants for any `RuleRef` call site with a non-empty caller-side follow** — including suffix-nullable positions where the local follow propagates the outer rule's follow. This fired on CSS3's `selector : simpleSelectorSequence ws (combinator simpleSelectorSequence ws)*`, where `ws`'s follow at position 1 is `first(combinator) = {Plus, Greater, Tilde, Space}`. The variant suppressed `ws` from consuming Space, leaving Space for the (often-empty) combinator loop and breaking `* { … }` selectors. Fix: in `gen_alt_elements` and friends, only set `ruleref_call_follow` when the immediate next sibling is **strictly required** (`!ctx.tail_is_nullable_deep(elements, i + 1)`). Suffix-nullable positions get an empty follow → no variant.
+
+**What remains:** All three guards are committed as inline conservatism with explicit comments at the relevant call sites. The corresponding gaps are catalogued in `TODO.md` and exercised by `tests/grammars/ll_{nullable_suffix,multi_alt,lr_atom,ctx_follow}.g4`.
 
 **Lessons:**
 
-- `bt_try` is not strictly worse than scan-dispatch: ordered-lazy first-success-wins beats exhaustive tournament whenever alts are not mutually-exclusive-by-first-token and the cost of the wrong scan is large.
-- Faithful scan semantics (correctness) and cheap Stage C dispatch (performance) are **independent concerns**. Solving one does not unlock the other.
-- Before removing the LR gate, Stage C needs one of: (a) k=2/3 lookahead partitioning to shrink the candidate set before the tournament, (b) first-success-wins mode when alt first-sets are disjoint within a group, or (c) ATN-style adaptive prediction. See `TODO.md` for the plan.
+- Static analysis can't distinguish "tail-greedy that should yield to caller" from "tail-greedy that legitimately re-enters." The conservative side is silent failure (variant doesn't fire); the unsound side is broken parses.
+- Each LL repair must be paired with a regression fixture covering the rejection case, not just the hit case — otherwise the next contributor relaxes the guard and quietly breaks `htmlContent` / `selector` again.
+- The ANTLR4 `ParserATNSimulator`'s closure / DFA cache exists precisely because a single global rule cannot decide "should this token be consumed here or by my caller?". A static repair will always have edges; pick the edge that matches today's grammar set and add a fixture so it stays the edge.

@@ -9,6 +9,7 @@ const CLIENT_ID = 'wadoLanguageServer';
 const CLIENT_NAME = 'Wado Language Server';
 const WASM_PATH_SEGMENTS = ['out', 'wado_lsp.wasm'] as const;
 const RESTART_DEBOUNCE_MS = 250;
+const STDLIB_SCHEMES = ['core', 'wasi'] as const;
 
 let outputChannel: vscode.LogOutputChannel | undefined;
 let client: LanguageClient | undefined;
@@ -80,7 +81,50 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }),
     );
 
+    registerStdlibContentProvider(context);
+
     await enqueueLifecycle(() => startClientLocked(context));
+}
+
+// Bridges `core:` / `wasi:` URIs (emitted by the LSP for jump-to-definition into
+// bundled stdlib modules) to the server's `workspace/textDocumentContent`
+// request, so VS Code can open them as read-only virtual documents. The
+// `wado` language is forced on documents we served because opaque URIs
+// (e.g. `core:cli`) carry no extension for VS Code's language detector.
+function registerStdlibContentProvider(context: vscode.ExtensionContext): void {
+    // Track URIs our provider has actually served, so we only override the
+    // language on documents we own — other extensions could conceivably
+    // claim the same scheme, and we shouldn't clobber their language.
+    const ownedUris = new Set<string>();
+    const provider: vscode.TextDocumentContentProvider = {
+        async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
+            const active = client;
+            if (!active) {
+                throw new Error('Wado language server is not running.');
+            }
+            const result = await active.sendRequest<{ text: string }>(
+                'workspace/textDocumentContent',
+                { uri: uri.toString() },
+            );
+            ownedUris.add(uri.toString());
+            return result.text;
+        },
+    };
+    for (const scheme of STDLIB_SCHEMES) {
+        context.subscriptions.push(
+            vscode.workspace.registerTextDocumentContentProvider(scheme, provider),
+        );
+    }
+    context.subscriptions.push(
+        vscode.workspace.onDidOpenTextDocument((doc) => {
+            if (ownedUris.has(doc.uri.toString()) && doc.languageId !== LANGUAGE_ID) {
+                void vscode.languages.setTextDocumentLanguage(doc, LANGUAGE_ID);
+            }
+        }),
+        vscode.workspace.onDidCloseTextDocument((doc) => {
+            ownedUris.delete(doc.uri.toString());
+        }),
+    );
 }
 
 export async function deactivate(): Promise<void> {

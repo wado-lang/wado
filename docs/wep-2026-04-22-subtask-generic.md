@@ -132,7 +132,7 @@ GET or body-less request (no stream parameter):
 let resp = Client::send(req).wait();
 ```
 
-POST with body stream (mirror of `example/http-bin.wado`'s `task return`
+POST with body stream (mirror of `example/http_bin.wado`'s `task return`
 pattern, but for the outbound direction):
 
 ```wado
@@ -155,7 +155,7 @@ trailers_tx.write(Result::Ok(null));
 
 - The existing non-generic `Subtask` resource is replaced by the new
   `Subtask<T>`. Call sites (`internal::wait_for_subtask`,
-  `tests/fixtures/cm-subtask-join.wado`) migrate. The CM canonical operations
+  `tests/fixtures/cm_subtask_join.wado`) migrate. The CM canonical operations
   `subtask-drop`, `subtask-cancel`, `waitable-join` remain internally
   accessible to the compiler but no longer directly exposed as methods on a
   user-facing resource.
@@ -192,11 +192,11 @@ trailers_tx.write(Result::Ok(null));
    `async` keyword and wrap the return type in `Subtask<…>`. World exports
    keep the `async` keyword as today.
 6. **Regenerate stdlib**: `mise run update-stdlib-wasi`.
-7. **Migrate existing fixtures**. Only `http-client-send-simple.wado`,
-   `http-client-advanced.wado`, `http-client-send-body-read.wado` and a few
-   others use `Client::send`; add `.wait()` to each call. `cm-subtask-join.wado`
+7. **Migrate existing fixtures**. Only `http_client_send_simple.wado`,
+   `http_client_advanced.wado`, `http_client_send_body_read.wado` and a few
+   others use `Client::send`; add `.wait()` to each call. `cm_subtask_join.wado`
    migrates to the new type.
-8. **Add a new fixture** `http-client-send-with-body.wado` that exercises
+8. **Add a new fixture** `http_client_send_with_body.wado` that exercises
    spawn → write → wait → done end-to-end with an `outgoing_mocks` endpoint,
    replacing the current TODO comment.
 9. **Update `example/llm.wado`** to use the new pattern.

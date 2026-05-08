@@ -16,6 +16,7 @@ pub mod header;
 pub mod import_check;
 pub mod inline;
 pub mod invocation;
+pub mod metadata;
 pub mod options;
 pub mod options_check;
 pub mod plan;

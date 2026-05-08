@@ -8,9 +8,11 @@ use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
+use crate::resolver::trait_env::TraitEnv;
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
 use crate::world_registry::{self, WorldRegistry};
+use std::sync::Arc;
 
 /// A Wado package in per-module form.
 ///
@@ -25,6 +27,11 @@ pub struct Package {
     pub tir_modules: IndexMap<ModuleSource, TirModule>,
     /// Symbol table from analysis phase
     pub symbols: SymbolTable,
+    /// Project-wide trait knowledge built once during the resolve phase.
+    /// Synthesis, monomorphize, and friends consult this instead of
+    /// re-scanning all modules. Held by `Arc` because the resolver also
+    /// keeps a reference (LSP queries reuse the same indices).
+    pub(crate) trait_env: Arc<TraitEnv>,
     /// Implicitly imported modules (e.g., core:prelude)
     pub implicit_modules: IndexSet<ModuleSource>,
     /// Module name for the output (derived from filename)
@@ -65,29 +72,54 @@ pub struct Package {
     /// by the resolver, which synthesises Wado declarations from each
     /// asset's exports.
     pub wasm_assets: IndexMap<String, crate::loader::WasmAsset>,
+
+    /// Per-instantiation effect-dispatch plans, populated by the early
+    /// `synthesis::effect_dispatch::synthesize_pre_cm_binding` half and
+    /// consumed by the late `synthesize_post_check` half (which lowers
+    /// `WithHandler` against them). Carrying the plans through the
+    /// `Package` avoids re-deriving the same `(struct_type_id,
+    /// global_name, wrapper_names, …)` triple from existing TIR
+    /// declarations between the two halves.
+    pub dispatch_plans: IndexMap<
+        crate::synthesis::effect_dispatch::InstantiationKey,
+        crate::synthesis::effect_dispatch::DispatchPlan,
+    >,
+
+    /// `ModuleSource` interner shared with the resolver. Synthesis
+    /// passes (`cm_binding`, `effect_dispatch`) borrow this when they
+    /// need to construct fresh `ModuleSource` values for synthesised
+    /// items. Dropped at the `Package → FlatPackage` boundary —
+    /// downstream phases (link, monomorphize, lower, optimize, codegen)
+    /// only consume existing `ModuleSource` values.
+    pub interner: std::rc::Rc<std::cell::RefCell<crate::name::ModuleSourceInterner>>,
 }
 
 impl Package {
     /// Create a new Package from compilation artifacts (before optimization).
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         entry_module_source: ModuleSource,
         tir_modules: IndexMap<ModuleSource, TirModule>,
         symbols: SymbolTable,
+        trait_env: Arc<TraitEnv>,
         implicit_modules: IndexSet<ModuleSource>,
         module_name: String,
         wasi_registry: &'static WasiRegistry,
         world_registry: &'static WorldRegistry,
         builtin_registry: BuiltinRegistry,
+        interner: std::rc::Rc<std::cell::RefCell<crate::name::ModuleSourceInterner>>,
     ) -> Self {
         Self {
             entry_module_source,
             tir_modules,
             symbols,
+            trait_env,
             implicit_modules,
             module_name,
             wasi_registry,
             world_registry,
             builtin_registry,
+            interner,
             // Usage analysis fields default to empty/false
             used_wasi_functions: IndexSet::default(),
             // Codegen options
@@ -99,6 +131,8 @@ impl Package {
             task_return_flat_params: None,
             // Wasm assets loaded from `use _ from "<path>" with { type: ... }`
             wasm_assets: IndexMap::default(),
+            // Effect-dispatch plans flow from pre-cm_binding to post-check
+            dispatch_plans: IndexMap::default(),
         }
     }
 
@@ -117,10 +151,10 @@ impl Package {
         self.target_world == world_registry::TEST_WORLD
     }
 
-    /// Check if any function from the given WASI effect is used.
-    /// Effect names are like "Stdout", "Stderr", "Environment", etc.
-    pub fn has_effect(&self, effect_name: &str) -> bool {
-        let prefix = format!("{effect_name}::");
+    /// Check if any function from the given WASI interface is used.
+    /// Interface names are like "Stdout", "Stderr", "Environment", etc.
+    pub fn has_interface(&self, interface_name: &str) -> bool {
+        let prefix = format!("{interface_name}::");
         self.used_wasi_functions
             .iter()
             .any(|f| f.starts_with(&prefix))

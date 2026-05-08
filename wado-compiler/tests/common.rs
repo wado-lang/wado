@@ -18,6 +18,21 @@ use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpHooks, WasiHttpView};
+use wasmtime_wasi_tls::{
+    Error as WasiTlsError, TlsProvider, TlsStream, TlsTransport, WasiTlsCtx, WasiTlsCtxBuilder,
+    WasiTlsCtxView, WasiTlsView,
+};
+
+/// Install the rustls process-level `CryptoProvider` exactly once. See the
+/// matching helper in `wado-cli/src/runtime.rs` for the rationale; the test
+/// harness needs the same setup so `WasiTlsCtxBuilder::new()` does not panic
+/// on the rustls auto-detect path.
+pub fn install_rustls_provider_for_tests() {
+    static INSTALLED: std::sync::Once = std::sync::Once::new();
+    INSTALLED.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
 
 use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, Diagnostic, OptLevel, SourceError,
@@ -385,12 +400,145 @@ impl WasiHttpHooks for TestHttpCtx {
     }
 }
 
+/// Mock spec for a single `wasi:tls` handshake.
+///
+/// Keys in `tls_mocks` are matched against the `server_name` argument the
+/// guest passes to `Connector::connect(this, server_name)`.
+#[derive(Debug, Clone, serde::Deserialize, Default)]
+pub struct TlsMockResponse {
+    /// Cleartext bytes the mock delivers to the guest's `Connector::receive`
+    /// stream as if they were decrypted from the server. Read-side closes
+    /// (EOFs) once exhausted. Default: empty.
+    #[serde(default)]
+    pub recv: String,
+
+    /// If set, the handshake fails with this error message and the guest's
+    /// `Connector::connect()` future resolves to `Err`.
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+/// In-memory `TlsStream` used by `MockTlsProvider`.
+///
+/// Reads drain `recv_buf` (canned cleartext from the spec) and EOF once empty.
+/// Writes are captured into `sent` so tests could later assert on what the
+/// guest sent — currently we only need the read side, but the buffer is kept
+/// in case fixtures want to inspect it via a host hook in the future.
+struct MockTlsStream {
+    recv_buf: std::io::Cursor<Vec<u8>>,
+    sent: Vec<u8>,
+}
+
+impl MockTlsStream {
+    fn new(recv: Vec<u8>) -> Self {
+        Self {
+            recv_buf: std::io::Cursor::new(recv),
+            sent: Vec::new(),
+        }
+    }
+}
+
+impl tokio::io::AsyncRead for MockTlsStream {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        let remaining = self.recv_buf.get_ref().len() as u64 - self.recv_buf.position();
+        if remaining == 0 {
+            return std::task::Poll::Ready(Ok(())); // EOF
+        }
+        let want = buf.remaining().min(remaining as usize);
+        let pos = self.recv_buf.position() as usize;
+        let slice = &self.recv_buf.get_ref()[pos..pos + want];
+        buf.put_slice(slice);
+        self.recv_buf.set_position((pos + want) as u64);
+        std::task::Poll::Ready(Ok(()))
+    }
+}
+
+impl tokio::io::AsyncWrite for MockTlsStream {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        self.sent.extend_from_slice(buf);
+        std::task::Poll::Ready(Ok(buf.len()))
+    }
+
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(
+        self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+}
+
+impl TlsStream for MockTlsStream {}
+
+/// `TlsProvider` that returns canned in-memory streams keyed by `server_name`.
+///
+/// Mirrors the `TestHttpCtx` convention: any handshake whose `server_name` is
+/// not in the mock table fails closed with a clear error so tests can't
+/// silently reach the real network.
+pub struct MockTlsProvider {
+    mocks: indexmap::IndexMap<String, TlsMockResponse>,
+}
+
+impl MockTlsProvider {
+    pub fn new(mocks: indexmap::IndexMap<String, TlsMockResponse>) -> Self {
+        Self { mocks }
+    }
+}
+
+impl TlsProvider for MockTlsProvider {
+    fn connect(
+        &self,
+        server_name: String,
+        _transport: Box<dyn TlsTransport>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<Box<dyn TlsStream>, WasiTlsError>> + Send>>
+    {
+        let mock = self.mocks.get(&server_name).cloned();
+        Box::pin(async move {
+            match mock {
+                Some(spec) => {
+                    if let Some(err) = spec.error {
+                        return Err(WasiTlsError::msg(err));
+                    }
+                    Ok(Box::new(MockTlsStream::new(spec.recv.into_bytes())) as Box<dyn TlsStream>)
+                }
+                None => Err(WasiTlsError::msg(format!(
+                    "no TLS mock configured for server '{server_name}'"
+                ))),
+            }
+        })
+    }
+}
+
+/// Build a `WasiTlsCtx` whose provider is the mock provider seeded with `mocks`.
+/// Always installs the rustls crypto provider first (idempotent).
+pub fn build_tls_ctx(mocks: indexmap::IndexMap<String, TlsMockResponse>) -> WasiTlsCtx {
+    install_rustls_provider_for_tests();
+    WasiTlsCtxBuilder::new()
+        .provider(Box::new(MockTlsProvider::new(mocks)))
+        .build()
+}
+
 /// Unified WASI state for all test worlds (CLI, test, HTTP service)
 pub struct WasiState {
     pub ctx: WasiCtx,
     pub table: ResourceTable,
     pub http_ctx: WasiHttpCtx,
     pub http_hooks: TestHttpCtx,
+    pub tls_ctx: WasiTlsCtx,
 }
 
 impl WasiView for WasiState {
@@ -412,6 +560,15 @@ impl WasiHttpView for WasiState {
     }
 }
 
+impl WasiTlsView for WasiState {
+    fn tls(&mut self) -> WasiTlsCtxView<'_> {
+        WasiTlsCtxView {
+            ctx: &mut self.tls_ctx,
+            table: &mut self.table,
+        }
+    }
+}
+
 impl WasiState {
     /// Create a new state with captured stdout/stderr
     pub fn new_with_pipes(
@@ -424,6 +581,7 @@ impl WasiState {
             table: ResourceTable::new(),
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
+            tls_ctx: build_tls_ctx(indexmap::IndexMap::new()),
         }
     }
 
@@ -435,6 +593,7 @@ impl WasiState {
             table: ResourceTable::new(),
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
+            tls_ctx: build_tls_ctx(indexmap::IndexMap::new()),
         }
     }
 }
@@ -448,12 +607,72 @@ impl Default for WasiState {
 /// Backward-compat alias
 pub type CliWasiState = WasiState;
 
-/// Set up a linker for all test worlds (WASI + HTTP)
+/// Set up a linker for all test worlds (WASI + HTTP + TLS)
 pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     let mut linker: Linker<WasiState> = Linker::new(engine);
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+    wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
+    timezone_host::add_to_linker(&mut linker)?;
     Ok(linker)
+}
+
+/// Host implementation for `wasi:clocks/timezone`. Mirrors
+/// `wado_cli::timezone_host` (we cannot depend on `wado-cli` from the
+/// compiler tests because of the dependency direction).
+mod timezone_host {
+    use wasmtime::component::{HasData, Linker};
+    use wasmtime_wasi::p3::bindings::clocks::timezone::{self, Host, Instant, LinkOptions};
+
+    pub struct WadoTimezone;
+
+    impl HasData for WadoTimezone {
+        type Data<'a> = TimezoneCtx;
+    }
+
+    pub struct TimezoneCtx;
+
+    impl Host for TimezoneCtx {
+        fn iana_id(&mut self) -> wasmtime::Result<Option<String>> {
+            Ok(iana_time_zone::get_timezone().ok())
+        }
+
+        fn utc_offset(&mut self, when: Instant) -> wasmtime::Result<Option<i64>> {
+            Ok(local_offset_nanos(when.seconds))
+        }
+
+        fn to_debug_string(&mut self) -> wasmtime::Result<String> {
+            Ok(match iana_time_zone::get_timezone() {
+                Ok(timezone) => timezone,
+                Err(err) => format!("timezone unavailable: {err}"),
+            })
+        }
+    }
+
+    pub fn add_to_linker<T: 'static>(linker: &mut Linker<T>) -> anyhow::Result<()> {
+        let mut options = LinkOptions::default();
+        options.clocks_timezone(true);
+        timezone::add_to_linker::<T, WadoTimezone>(linker, &options, |_| TimezoneCtx)?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn local_offset_nanos(secs: i64) -> Option<i64> {
+        use std::mem::MaybeUninit;
+        let t: libc::time_t = secs.try_into().ok()?;
+        let mut tm: MaybeUninit<libc::tm> = MaybeUninit::uninit();
+        let ret = unsafe { libc::localtime_r(&raw const t, tm.as_mut_ptr()) };
+        if ret.is_null() {
+            return None;
+        }
+        let tm = unsafe { tm.assume_init() };
+        Some(tm.tm_gmtoff * 1_000_000_000)
+    }
+
+    #[cfg(not(unix))]
+    fn local_offset_nanos(_secs: i64) -> Option<i64> {
+        None
+    }
 }
 
 /// Backward-compat alias
@@ -637,15 +856,22 @@ pub fn run_wasm_with_options(
     dirs: &[(String, String)],
     stdin_data: Option<&str>,
 ) -> anyhow::Result<WasmRunResult> {
-    run_wasm_with_full_options(wasm, dirs, stdin_data, indexmap::IndexMap::new())
+    run_wasm_with_full_options(
+        wasm,
+        dirs,
+        stdin_data,
+        indexmap::IndexMap::new(),
+        indexmap::IndexMap::new(),
+    )
 }
 
-/// Run a compiled Wasm component with full options including outgoing HTTP mocks.
+/// Run a compiled Wasm component with full options including outgoing HTTP and TLS mocks.
 pub fn run_wasm_with_full_options(
     wasm: Vec<u8>,
     dirs: &[(String, String)],
     stdin_data: Option<&str>,
     outgoing_mocks: indexmap::IndexMap<String, OutgoingMockResponse>,
+    tls_mocks: indexmap::IndexMap<String, TlsMockResponse>,
 ) -> anyhow::Result<WasmRunResult> {
     use wasmtime::component::Component;
     use wasmtime_wasi::p2::pipe::{MemoryInputPipe, MemoryOutputPipe};
@@ -681,6 +907,7 @@ pub fn run_wasm_with_full_options(
             http_hooks: TestHttpCtx {
                 mocks: outgoing_mocks,
             },
+            tls_ctx: build_tls_ctx(tls_mocks),
         };
         let mut store = Store::new(engine, state);
         // Set epoch deadline for timeout enforcement

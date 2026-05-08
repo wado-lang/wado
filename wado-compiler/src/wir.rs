@@ -63,6 +63,19 @@ pub struct WirPackage {
     /// Populated during WIR translation via `WirContext::ensure_canonical`.
     /// Used by the component codegen to determine which canonical imports to generate.
     pub needed_canonicals: IndexSet<CanonicalIntrinsic>,
+    /// Absolute Wasm function index of the first defined function (i.e. the
+    /// number of imported functions). Defined function `i` (the `i`-th entry
+    /// in [`functions`](Self::functions)) has the absolute index
+    /// `defined_func_base + i`, which is the value carried by `WirFuncId`.
+    ///
+    /// - GC module (built by `wir_build`): [`crate::wir_build::DEFINED_FUNC_BASE`].
+    /// - Memory module (built by `WasmModuleInfo::to_wir_package`): `0` (no
+    ///   function imports).
+    ///
+    /// Used by DCE / compaction passes to translate between absolute
+    /// `WirFuncId` indices and 0-based array indices into
+    /// [`functions`](Self::functions) without hard-coding the offset.
+    pub defined_func_base: u32,
 }
 
 /// Functions and globals extracted from a `#![wasm_module("name")]` source module.
@@ -231,6 +244,7 @@ impl WirPackage {
             dead_func_indices: IndexSet::default(),
             dead_global_indices: IndexSet::default(),
             needed_canonicals: IndexSet::default(),
+            defined_func_base: 0,
         }
     }
 }
@@ -668,6 +682,11 @@ pub struct WirStructType {
     /// Name (fq: "core:prelude//Point").
     pub name: WirName,
     /// Fields with names and types.
+    ///
+    /// When `supertype` is `Some`, the supertype's fields must appear as
+    /// the prefix of this list (Wasm GC `sub` requires the subtype to
+    /// list all inherited fields explicitly, in the same order, with
+    /// matching types and mutability).
     pub fields: Vec<WirField>,
     /// Metadata (module source, span, attributes).
     pub meta: WirMeta,
@@ -675,6 +694,12 @@ pub struct WirStructType {
     pub generic_origin: Option<WirGenericOrigin>,
     /// If this type was a newtype in the source (resolved by WIR phase).
     pub newtype_origin: Option<WirNewtypeOrigin>,
+    /// Optional supertype (for `(type $T (sub $S (struct ...)))`).
+    /// Currently used only to share an inspectable closure base across
+    /// all per-signature `CanonicalClosure_K` instances so the
+    /// `Fn<N, Ret>^Inspect` dispatch stub can `ref.cast` to one common
+    /// type rather than one per parameter shape.
+    pub supertype: Option<WirTypeId>,
 }
 
 /// A field in a struct type.
@@ -2992,6 +3017,13 @@ pub struct WirGlobal {
     pub mutable: bool,
     /// Initial value expression.
     pub init: WirInstr,
+    /// True for lazy-initialized globals: the Wasm slot starts `null`,
+    /// `__initialize_module` runs the original initializer to write the
+    /// real value, and codegen narrows subsequent `global.get` results
+    /// with `ref.as_non_null` since the value is guaranteed non-null
+    /// after init. Genuine-nullable globals (e.g. `Option<&T> = null`)
+    /// leave this `false` and codegen skips the narrowing.
+    pub lazy_init: bool,
     /// Metadata.
     pub meta: WirMeta,
 }

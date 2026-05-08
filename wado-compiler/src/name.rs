@@ -10,7 +10,7 @@
 //! - With trait: `{filename}/{struct_name}^{trait_name}::{method_name}` (e.g., `./geometry.wado/Point^Display::fmt`)
 //!
 //! ## Effect Operation Names
-//! - Qualified: `{effect_name}::{operation_name}` (e.g., `Stdout::write_via_stream`)
+//! - Qualified: `{interface_name}::{operation_name}` (e.g., `Stdout::write_via_stream`)
 //!
 //! ## WASI Names
 //! - Full: `wasi:{package}/{interface}::{function}` (e.g., `wasi:cli/stdout::write-via-stream`)
@@ -30,9 +30,252 @@
 //! - For projects with `wado.toml`: relative to the directory containing `wado.toml`
 //! - For standalone scripts: relative to the entry point's directory
 
+use crate::hashmap::IndexSet;
 use fluent_uri::UriRef;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::ops::Deref;
+use std::sync::{Arc, LazyLock};
+
+// =============================================================================
+// Module source string interning (strict ptr-eq / ptr-hash)
+// =============================================================================
+//
+// `ModuleSource` is used pervasively as `IndexMap` key during monomorphization
+// and resolver lookups. To make `clone`/`eq`/`hash` O(1), every string field
+// is canonicalized into an `Arc<str>` shared via `ModuleSourceInterner`.
+//
+// Well-known names (the targets of zero-arg constructors like
+// `ModuleSource::prelude()`) live in `LazyLock<Arc<str>>` statics so they
+// can be constructed without an interner reference. The interner adopts
+// these statics on construction, ensuring that
+// `interner.core("prelude") == ModuleSource::prelude()` (ptr-equal).
+
+/// Sentinel `Arc<str>` for `ModuleSource::default()` placeholders.
+/// Distinct identity from any real interned core name (no real module
+/// has empty content).
+static PLACEHOLDER_NAME: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from(""));
+
+static CORE_PRELUDE: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("prelude"));
+static CORE_BUILTIN: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("builtin"));
+static CORE_INTERNAL: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("internal"));
+static CORE_ALLOCATOR: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("allocator"));
+static CORE_CLI: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("cli"));
+static CORE_PRELUDE_STRING: LazyLock<Arc<str>> =
+    LazyLock::new(|| Arc::<str>::from("prelude/string.wado"));
+static CORE_PRELUDE_ARRAY: LazyLock<Arc<str>> =
+    LazyLock::new(|| Arc::<str>::from("prelude/array.wado"));
+static CORE_PRELUDE_FORMAT: LazyLock<Arc<str>> =
+    LazyLock::new(|| Arc::<str>::from("prelude/format.wado"));
+static CORE_PRELUDE_INT128: LazyLock<Arc<str>> =
+    LazyLock::new(|| Arc::<str>::from("prelude/int128.wado"));
+static CORE_PRELUDE_PRIMITIVE: LazyLock<Arc<str>> =
+    LazyLock::new(|| Arc::<str>::from("prelude/primitive.wado"));
+static CORE_PRELUDE_TYPES: LazyLock<Arc<str>> =
+    LazyLock::new(|| Arc::<str>::from("prelude/types.wado"));
+static CORE_PRELUDE_TRAITS: LazyLock<Arc<str>> =
+    LazyLock::new(|| Arc::<str>::from("prelude/traits.wado"));
+static CORE_PRELUDE_RANGE: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("prelude/range"));
+static CORE_SERDE: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("serde"));
+
+// Well-known WASI interface names embedded in the compiler.
+static WASI_CLI: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("cli"));
+static WASI_CLOCKS: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("clocks"));
+static WASI_FILESYSTEM: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("filesystem"));
+static WASI_HTTP: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("http"));
+
+// Synthetic entry-point filenames used by from_path / loader.
+static ENTRY_FILENAME_ENTRY: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("<entry>"));
+static ENTRY_FILENAME_STDIN: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("<stdin>"));
+static ENTRY_FILENAME_UNINITIALIZED: LazyLock<Arc<str>> =
+    LazyLock::new(|| Arc::<str>::from("<uninitialized>"));
+
+fn well_known_arcs() -> Vec<Arc<str>> {
+    vec![
+        PLACEHOLDER_NAME.clone(),
+        CORE_PRELUDE.clone(),
+        CORE_BUILTIN.clone(),
+        CORE_INTERNAL.clone(),
+        CORE_ALLOCATOR.clone(),
+        CORE_CLI.clone(),
+        CORE_PRELUDE_STRING.clone(),
+        CORE_PRELUDE_ARRAY.clone(),
+        CORE_PRELUDE_FORMAT.clone(),
+        CORE_PRELUDE_INT128.clone(),
+        CORE_PRELUDE_PRIMITIVE.clone(),
+        CORE_PRELUDE_TYPES.clone(),
+        CORE_PRELUDE_TRAITS.clone(),
+        CORE_PRELUDE_RANGE.clone(),
+        CORE_SERDE.clone(),
+        WASI_CLI.clone(),
+        WASI_CLOCKS.clone(),
+        WASI_FILESYSTEM.clone(),
+        WASI_HTTP.clone(),
+        ENTRY_FILENAME_ENTRY.clone(),
+        ENTRY_FILENAME_STDIN.clone(),
+        ENTRY_FILENAME_UNINITIALIZED.clone(),
+    ]
+}
+
+/// Interned string used for `ModuleSource` payloads.
+///
+/// Identity is by pointer: every `InternedStr` is constructed either
+/// through a [`ModuleSourceInterner`] (which canonicalises content
+/// against its `Arc<str>` pool) or by adopting one of the well-known
+/// `LazyLock<Arc<str>>` statics. The interner adopts every well-known
+/// static on construction, so calls like
+/// `interner.core("prelude")` and `ModuleSource::prelude()` share the
+/// same `Arc` and compare equal in O(1).
+///
+/// Hash also uses pointer identity. This is sound because two values
+/// with the same content always land in the same canonical `Arc` —
+/// either through the interner or via a well-known static.
+#[derive(Debug, Clone)]
+pub struct InternedStr(Arc<str>);
+
+impl InternedStr {
+    /// Build from a raw `Arc<str>`. Restricted to this crate so external
+    /// callers cannot bypass the interner.
+    pub(crate) fn from_arc(arc: Arc<str>) -> Self {
+        Self(arc)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Deref for InternedStr {
+    type Target = str;
+    fn deref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<str> for InternedStr {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl PartialEq for InternedStr {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+impl Eq for InternedStr {}
+
+impl Hash for InternedStr {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (Arc::as_ptr(&self.0).cast::<()>() as usize).hash(state);
+    }
+}
+
+impl fmt::Display for InternedStr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl PartialEq<str> for InternedStr {
+    fn eq(&self, other: &str) -> bool {
+        &*self.0 == other
+    }
+}
+
+impl PartialEq<&str> for InternedStr {
+    fn eq(&self, other: &&str) -> bool {
+        &*self.0 == *other
+    }
+}
+
+/// Interner for `ModuleSource` payloads. Owns the canonical `Arc<str>`
+/// for each interned content; clones are cheap (refcount bump).
+///
+/// `ModuleSourceInterner::new()` adopts every well-known static
+/// (`PLACEHOLDER_NAME`, `CORE_PRELUDE`, ...), so calls like
+/// `interner.core("prelude")` return the same `Arc` as the static — and
+/// therefore the same `InternedStr` as `ModuleSource::prelude()`.
+#[derive(Debug)]
+pub struct ModuleSourceInterner {
+    strings: IndexSet<Arc<str>>,
+}
+
+impl ModuleSourceInterner {
+    pub fn new() -> Self {
+        let well_known = well_known_arcs();
+        let mut strings =
+            IndexSet::with_capacity_and_hasher(well_known.len(), rustc_hash::FxBuildHasher);
+        for arc in well_known {
+            strings.insert(arc);
+        }
+        Self { strings }
+    }
+
+    pub fn intern(&mut self, s: &str) -> InternedStr {
+        if let Some(existing) = self.strings.get(s) {
+            return InternedStr::from_arc(existing.clone());
+        }
+        let arc: Arc<str> = Arc::from(s);
+        self.strings.insert(arc.clone());
+        InternedStr::from_arc(arc)
+    }
+
+    pub fn core(&mut self, name: &str) -> ModuleSource {
+        ModuleSource::Core {
+            name: self.intern(name),
+        }
+    }
+    pub fn wasi(&mut self, interface: &str) -> ModuleSource {
+        ModuleSource::Wasi {
+            interface: self.intern(interface),
+        }
+    }
+    pub fn local(&mut self, path: &str) -> ModuleSource {
+        ModuleSource::Local {
+            path: self.intern(path),
+        }
+    }
+    pub fn remote(&mut self, url: &str) -> ModuleSource {
+        ModuleSource::Remote {
+            url: self.intern(url),
+        }
+    }
+    pub fn redirected(&mut self, uri: &str) -> ModuleSource {
+        ModuleSource::Redirected {
+            uri: self.intern(uri),
+        }
+    }
+    pub fn wasm(&mut self, path: &str, kind: WasmAssetKind) -> ModuleSource {
+        ModuleSource::Wasm {
+            path: self.intern(path),
+            kind,
+        }
+    }
+    pub fn entry_point(&mut self, filename: &str) -> ModuleSource {
+        ModuleSource::EntryPoint {
+            filename: self.intern(filename),
+        }
+    }
+
+    /// Convert from the legacy `&[String]` module path representation.
+    pub fn from_path(&mut self, segments: &[String]) -> ModuleSource {
+        match segments {
+            // Legacy: empty path represents entry module.
+            [] => ModuleSource::entry_point_synthetic(),
+            [first] if first.starts_with("./") || first.starts_with("../") => self.local(first),
+            [first, rest @ ..] if first == "core" => self.core(&rest.join("/")),
+            [first, rest @ ..] if first == "wasi" => self.wasi(&rest.join("/")),
+            segments => self.local(&segments.join("/")),
+        }
+    }
+}
+
+impl Default for ModuleSourceInterner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Format of a wasm asset imported via `use ... with { type: "..." }`.
 ///
@@ -65,18 +308,23 @@ impl WasmAssetKind {
 /// This enum provides a structured representation of module paths,
 /// replacing raw `Vec<String>` for better type safety and clearer semantics.
 ///
+/// String payloads are [`InternedStr`]; construct values via the
+/// well-known zero-arg constructors (e.g. [`ModuleSource::prelude`])
+/// or through [`ModuleSourceInterner`].
+///
 /// # Examples
 ///
 /// ```ignore
-/// // Core library modules
-/// ModuleSource::Core { name: "prelude".to_string() }  // core:prelude
-/// ModuleSource::Core { name: "cli".to_string() }      // core:cli
+/// // Well-known sources need no interner.
+/// let prelude = ModuleSource::prelude();           // core:prelude
+/// let cli     = ModuleSource::cli();               // core:cli
+/// let wasi    = ModuleSource::wasi_cli();          // wasi:cli
 ///
-/// // WASI modules
-/// ModuleSource::Wasi { interface: "cli".to_string() } // wasi:cli
-///
-/// // Local modules
-/// ModuleSource::Local { path: "./geometry.wado".to_string() }
+/// // Arbitrary content goes through the interner so identity is
+/// // canonicalised (`Arc::ptr_eq` on the inner string).
+/// let mut interner = ModuleSourceInterner::new();
+/// let local  = interner.local("./geometry.wado");
+/// let wasi_x = interner.wasi("io");
 /// ```
 ///
 /// Note: Two `EntryPoint` variants are considered equal regardless of their
@@ -87,27 +335,27 @@ pub enum ModuleSource {
     /// Core library module (e.g., `core:prelude`, `core:cli`, `core:internal`, `core:builtin`)
     Core {
         /// Module name within core (e.g., "prelude", "cli", "internal", "builtin")
-        name: String,
+        name: InternedStr,
     },
     /// WASI module (e.g., `wasi:cli`, `wasi:io`)
     Wasi {
         /// Interface name (e.g., "cli", "io", "filesystem")
-        interface: String,
+        interface: InternedStr,
     },
     /// Local module relative to project root
     Local {
         /// Relative path (e.g., "./geometry.wado", "./utils/helper.wado")
-        path: String,
+        path: InternedStr,
     },
     /// Remote module loaded via HTTP/HTTPS
     Remote {
         /// Full URL (e.g., "<https://example.com/lib.wado>")
-        url: String,
+        url: InternedStr,
     },
     /// Entry point module (the main file being compiled)
     EntryPoint {
         /// Filename of the entry point (e.g., "hello.wado", "<stdin>", "<entry>")
-        filename: String,
+        filename: InternedStr,
     },
     /// Module loaded through a Kiln invocation redirect.
     ///
@@ -123,7 +371,7 @@ pub enum ModuleSource {
     /// [`crate::kiln::InvocationIndex`]; never written by user source.
     Redirected {
         /// Absolute URI (typically `file:///abs/path/to/file.wado`).
-        uri: String,
+        uri: InternedStr,
     },
     /// Wasm asset imported via `use ... from "<path>" with { type: "wat"|"wasm" }`.
     ///
@@ -141,7 +389,7 @@ pub enum ModuleSource {
         /// Canonical path identifier (used as the unique module key and
         /// as the namespace component of the synthesized
         /// `#[canonical("wasm:<path>", "<export>")]` attributes).
-        path: String,
+        path: InternedStr,
         /// `wat` or `wasm` source format.
         kind: WasmAssetKind,
     },
@@ -198,143 +446,77 @@ impl Default for ModuleSource {
     /// Placeholder value — replaced by the link phase with the real module source.
     fn default() -> Self {
         Self::Core {
-            name: String::new(),
+            name: InternedStr::from_arc(PLACEHOLDER_NAME.clone()),
         }
     }
 }
 
-impl ModuleSource {
-    /// Create a core module source.
-    #[must_use]
-    pub fn core(name: impl Into<String>) -> Self {
-        Self::Core { name: name.into() }
-    }
-
-    /// Create a WASI module source.
-    #[must_use]
-    pub fn wasi(interface: impl Into<String>) -> Self {
-        Self::Wasi {
-            interface: interface.into(),
-        }
-    }
-
-    /// Create a local module source.
-    #[must_use]
-    pub fn local(path: impl Into<String>) -> Self {
-        Self::Local { path: path.into() }
-    }
-
-    /// Create a remote module source.
-    #[must_use]
-    pub fn remote(url: impl Into<String>) -> Self {
-        Self::Remote { url: url.into() }
-    }
-
-    /// `core:prelude` — the prelude module.
-    #[must_use]
-    pub fn prelude() -> Self {
-        Self::core("prelude")
-    }
-
-    /// `core:prelude/string.wado` — the String type.
-    #[must_use]
-    pub fn string() -> Self {
-        Self::core("prelude/string.wado")
-    }
-
-    /// `core:prelude/array.wado` — the Array type.
-    #[must_use]
-    pub fn array() -> Self {
-        Self::core("prelude/array.wado")
-    }
-
-    /// `core:prelude/format.wado` — format trait helpers.
-    #[must_use]
-    pub fn format() -> Self {
-        Self::core("prelude/format.wado")
-    }
-
-    /// `core:prelude/int128.wado` — 128-bit integer types.
-    #[must_use]
-    pub fn int128() -> Self {
-        Self::core("prelude/int128.wado")
-    }
-
-    /// `core:prelude/primitive.wado` — primitive type methods.
-    #[must_use]
-    pub fn primitive() -> Self {
-        Self::core("prelude/primitive.wado")
-    }
-
-    /// `core:prelude/types.wado` — core type definitions.
-    #[must_use]
-    pub fn types() -> Self {
-        Self::core("prelude/types.wado")
-    }
-
-    /// `core:prelude/traits.wado` — builtin trait definitions.
-    #[must_use]
-    pub fn traits() -> Self {
-        Self::core("prelude/traits.wado")
-    }
-
-    /// `core:internal` — compiler internal functions.
-    #[must_use]
-    pub fn internal() -> Self {
-        Self::core("internal")
-    }
-
-    /// `core:allocator` — linear memory allocator (compiled into "mem" Wasm module).
-    #[must_use]
-    pub fn allocator() -> Self {
-        Self::core("allocator")
-    }
-
-    /// `core:builtin` — builtin wasm instruction mappings.
-    #[must_use]
-    pub fn builtin() -> Self {
-        Self::core("builtin")
-    }
-
-    /// `core:cli` — CLI output functions.
-    #[must_use]
-    pub fn cli() -> Self {
-        Self::core("cli")
-    }
-
-    /// Create an entry point module source with a filename.
-    #[must_use]
-    pub fn entry_point_with_filename(filename: impl Into<String>) -> Self {
-        Self::EntryPoint {
-            filename: filename.into(),
-        }
-    }
-
-    /// Convert from a legacy `Vec<String>` module path.
-    ///
-    /// This enables gradual migration from the old representation.
-    #[must_use]
-    pub fn from_path(path: &[String]) -> Self {
-        match path {
-            // Legacy: empty path represents entry module
-            // TODO: Remove this case by changing resolve_all_modules to return IndexMap<ModuleSource, _>
-            [] => Self::entry_point_with_filename("<entry>"),
-            [first] if first.starts_with("./") || first.starts_with("../") => Self::Local {
-                path: first.clone(),
-            },
-            [first, rest @ ..] if first == "core" => Self::Core {
-                name: rest.join("/"),
-            },
-            [first, rest @ ..] if first == "wasi" => Self::Wasi {
-                interface: rest.join("/"),
-            },
-            segments => {
-                // Treat as local path
-                Self::Local {
-                    path: segments.join("/"),
-                }
+/// Generate a zero-arg `ModuleSource` constructor that adopts a
+/// well-known `LazyLock<Arc<str>>` static. Keeps the constructor body
+/// regular so the only per-name input is the variant + field + static.
+macro_rules! well_known_module_sources {
+    (
+        $(
+            $(#[$meta:meta])*
+            $vis:vis fn $fn_name:ident() = $variant:ident { $field:ident: $arc:ident }
+        ),* $(,)?
+    ) => {
+        $(
+            $(#[$meta])*
+            #[must_use]
+            $vis fn $fn_name() -> Self {
+                Self::$variant { $field: InternedStr::from_arc($arc.clone()) }
             }
-        }
+        )*
+    };
+}
+
+impl ModuleSource {
+    well_known_module_sources! {
+        /// `core:prelude` — the prelude module.
+        pub fn prelude() = Core { name: CORE_PRELUDE },
+        /// `core:prelude/string.wado` — the String type.
+        pub fn string() = Core { name: CORE_PRELUDE_STRING },
+        /// `core:prelude/array.wado` — the Array type.
+        pub fn array() = Core { name: CORE_PRELUDE_ARRAY },
+        /// `core:prelude/format.wado` — format trait helpers.
+        pub fn format() = Core { name: CORE_PRELUDE_FORMAT },
+        /// `core:prelude/int128.wado` — 128-bit integer types.
+        pub fn int128() = Core { name: CORE_PRELUDE_INT128 },
+        /// `core:prelude/primitive.wado` — primitive type methods.
+        pub fn primitive() = Core { name: CORE_PRELUDE_PRIMITIVE },
+        /// `core:prelude/types.wado` — core type definitions.
+        pub fn types() = Core { name: CORE_PRELUDE_TYPES },
+        /// `core:prelude/traits.wado` — builtin trait definitions.
+        pub fn traits() = Core { name: CORE_PRELUDE_TRAITS },
+        /// `core:prelude/range` — range types.
+        pub fn range() = Core { name: CORE_PRELUDE_RANGE },
+        /// `core:internal` — compiler internal functions.
+        pub fn internal() = Core { name: CORE_INTERNAL },
+        /// `core:allocator` — linear memory allocator (compiled into "mem" Wasm module).
+        pub fn allocator() = Core { name: CORE_ALLOCATOR },
+        /// `core:builtin` — builtin wasm instruction mappings.
+        pub fn builtin() = Core { name: CORE_BUILTIN },
+        /// `core:cli` — CLI output functions.
+        pub fn cli() = Core { name: CORE_CLI },
+        /// `core:serde` — serde framework.
+        pub fn serde() = Core { name: CORE_SERDE },
+
+        /// `wasi:cli` — CLI interface root.
+        pub fn wasi_cli() = Wasi { interface: WASI_CLI },
+        /// `wasi:clocks` — clocks interface root.
+        pub fn wasi_clocks() = Wasi { interface: WASI_CLOCKS },
+        /// `wasi:filesystem` — filesystem interface root.
+        pub fn wasi_filesystem() = Wasi { interface: WASI_FILESYSTEM },
+        /// `wasi:http` — http interface root.
+        pub fn wasi_http() = Wasi { interface: WASI_HTTP },
+
+        /// Synthetic `<entry>` placeholder used by `from_path(&[])`.
+        pub fn entry_point_synthetic() = EntryPoint { filename: ENTRY_FILENAME_ENTRY },
+        /// `<uninitialized>` sentinel for resolver bootstrap.
+        pub fn entry_point_uninitialized() = EntryPoint { filename: ENTRY_FILENAME_UNINITIALIZED },
+        /// `<stdin>` placeholder.
+        pub fn entry_point_stdin() = EntryPoint { filename: ENTRY_FILENAME_STDIN },
     }
 
     /// Convert to the legacy `Vec<String>` module path representation.
@@ -343,22 +525,13 @@ impl ModuleSource {
     #[must_use]
     pub fn to_path(&self) -> Vec<String> {
         match self {
-            Self::Core { name } => vec!["core".to_string(), name.clone()],
-            Self::Wasi { interface } => vec!["wasi".to_string(), interface.clone()],
-            Self::Local { path } => vec![path.clone()],
-            Self::Remote { url } => vec![url.clone()],
-            Self::EntryPoint { filename } => vec![filename.clone()],
-            Self::Redirected { uri } => vec![uri.clone()],
-            Self::Wasm { path, .. } => vec![path.clone()],
-        }
-    }
-
-    /// Construct a wasm-asset module source.
-    #[must_use]
-    pub fn wasm(path: impl Into<String>, kind: WasmAssetKind) -> Self {
-        Self::Wasm {
-            path: path.into(),
-            kind,
+            Self::Core { name } => vec!["core".to_string(), name.to_string()],
+            Self::Wasi { interface } => vec!["wasi".to_string(), interface.to_string()],
+            Self::Local { path } => vec![path.to_string()],
+            Self::Remote { url } => vec![url.to_string()],
+            Self::EntryPoint { filename } => vec![filename.to_string()],
+            Self::Redirected { uri } => vec![uri.to_string()],
+            Self::Wasm { path, .. } => vec![path.to_string()],
         }
     }
 
@@ -444,9 +617,9 @@ impl ModuleSource {
             && !path[0].contains('.')
     }
 
-    /// Get the effect name if this is an effect-like module.
+    /// Get the interface name if this is an interface-like module.
     #[must_use]
-    pub fn effect_name(&self) -> Option<String> {
+    pub fn interface_name(&self) -> Option<String> {
         if self.is_effect_like() {
             let path = self.to_path();
             path.into_iter().next()
@@ -494,7 +667,7 @@ impl ModuleSource {
                 if filename.starts_with('<') {
                     String::new() // synthetic names like <stdin>, <entry>
                 } else {
-                    filename.clone()
+                    filename.to_string()
                 }
             }
             other => other.to_string(),
@@ -565,9 +738,13 @@ impl FreeFunctionName {
 
     /// Create a `FreeFunctionName` from a module path and name.
     /// This is a convenience method for code that still uses `Vec<String>` paths.
-    pub fn from_path_and_name(module_path: &[String], name: &str) -> Self {
+    pub fn from_path_and_name(
+        interner: &mut ModuleSourceInterner,
+        module_path: &[String],
+        name: &str,
+    ) -> Self {
         Self {
-            module_source: ModuleSource::from_path(module_path),
+            module_source: interner.from_path(module_path),
             name: name.to_string(),
             is_monomorphized: false,
             base_name: None,
@@ -576,10 +753,14 @@ impl FreeFunctionName {
 
     /// Create a `FreeFunctionName` from string literal slices.
     /// Convenience method for when you have &[&str] instead of &[String].
-    pub fn from_strs(module_path: &[&str], name: &str) -> Self {
+    pub fn from_strs(
+        interner: &mut ModuleSourceInterner,
+        module_path: &[&str],
+        name: &str,
+    ) -> Self {
         let path: Vec<String> = module_path.iter().map(|s| (*s).to_string()).collect();
         Self {
-            module_source: ModuleSource::from_path(&path),
+            module_source: interner.from_path(&path),
             name: name.to_string(),
             is_monomorphized: false,
             base_name: None,
@@ -769,8 +950,26 @@ pub struct LocalMethodName {
     /// The base struct name without type args (e.g., "Point")
     /// This is preserved during monomorphization for lookup purposes.
     pub base_struct_name: String,
-    /// The trait name if this is a trait method (e.g., "Display")
+    /// The trait/effect/resource name, possibly with type args
+    /// (e.g., `"Display"`, `"Stream<u8>"`).
     pub trait_name: Option<String>,
+    /// The base trait name without type args (e.g., "Display", "Stream").
+    /// Mirrors `base_struct_name`: kept alongside `trait_name` so generic
+    /// trait/resource impls (`impl Stream<u8> for MockCM`) round-trip a
+    /// distinct mangled `trait_name` for codegen while still resolving
+    /// against the bare-name decl indices used by trait/effect/resource
+    /// dispatch.
+    pub base_trait_name: Option<String>,
+    /// Concrete `TypeId`s of the trait / resource type arguments at this
+    /// impl site (e.g. `[u8]` for `impl Stream<u8> for MockCM`). Empty
+    /// for non-generic traits / effects, and for the bare base form
+    /// recorded outside of impl-block method context. The dispatch
+    /// synthesis consumes this to produce **per-monomorphisation**
+    /// dispatch infrastructure: each unique `(base_trait, trait_type_args)`
+    /// pair gets its own `__Dispatch_<R>__<args>` struct + global +
+    /// per-op wrappers, with the resource's operation types substituted
+    /// for that combination.
+    pub trait_type_args: Vec<crate::tir::TypeId>,
     /// The method name (e.g., "sum" or "fmt")
     pub method_name: String,
     /// Method-level type args (e.g., ["i64"] for transform<i64>)
@@ -788,21 +987,49 @@ pub struct LocalMethodName {
     pub cm_name: Option<String>,
 }
 
+/// Derive the bare base name from a possibly-mangled type/trait name.
+///
+/// `mangle_ref_aware` and friends produce names like `Stream<u8>` or
+/// `From<i32>` by appending the type-arg list to the base name; the
+/// reverse — recovering the base by truncating at the first `<` — is
+/// the canonical inverse and lives here so other components stay
+/// agnostic to name-format details (per the wado-compiler CLAUDE
+/// rules: "Use utilities in name.rs to handle name mangling and
+/// monomorphization. Other components must not know the details of
+/// name formats.").
+fn split_base_name(name: &str) -> &str {
+    match name.find('<') {
+        Some(i) => &name[..i],
+        None => name,
+    }
+}
+
 impl LocalMethodName {
     /// Create a new `LocalMethodName` directly from components.
     ///
     /// IMPORTANT: `struct_name` must be the base struct name WITHOUT type parameters.
     /// Use `with_type_args()` or `with_struct_type_args()` to add type parameters.
+    ///
+    /// `trait_name` may be either the bare base form (`"Display"`) or a
+    /// pre-mangled form (`"Stream<u8>"`); `base_trait_name` is derived by
+    /// truncating at the first `<`. Pass the form your caller already has;
+    /// `with_trait_type_args` is available when type args need to be
+    /// applied separately.
     #[must_use]
     pub fn new(struct_name: String, trait_name: Option<String>, method_name: String) -> Self {
         debug_assert!(
             !struct_name.contains('<'),
             "LocalMethodName::new() expects base struct name without type params, got: {struct_name}"
         );
+        let base_trait_name = trait_name
+            .as_deref()
+            .map(|n| split_base_name(n).to_string());
         Self {
             base_struct_name: struct_name.clone(),
             struct_name,
+            base_trait_name,
             trait_name,
+            trait_type_args: Vec::new(),
             method_name,
             method_type_args: vec![],
             is_type_param_receiver: false,
@@ -814,7 +1041,8 @@ impl LocalMethodName {
     /// Create a new `LocalMethodName` with all components including method type args.
     ///
     /// IMPORTANT: `struct_name` must be the base struct name WITHOUT type parameters.
-    /// Use `with_type_args()` to add struct type parameters.
+    /// `trait_name` may be either bare or pre-mangled — see `new` for the
+    /// derivation rule for `base_trait_name`.
     #[must_use]
     pub fn with_method_type_args(
         struct_name: String,
@@ -826,10 +1054,15 @@ impl LocalMethodName {
             !struct_name.contains('<'),
             "LocalMethodName::with_method_type_args() expects base struct name without type params, got: {struct_name}"
         );
+        let base_trait_name = trait_name
+            .as_deref()
+            .map(|n| split_base_name(n).to_string());
         Self {
             base_struct_name: struct_name.clone(),
             struct_name,
+            base_trait_name,
             trait_name,
+            trait_type_args: Vec::new(),
             method_name,
             method_type_args,
             is_type_param_receiver: false,
@@ -842,7 +1075,8 @@ impl LocalMethodName {
     ///
     /// `impl_type_args` are applied to the struct name (e.g., "Array" + ["i32"] → "Array<i32>").
     /// `method_type_args` are stored separately (not embedded in `method_name`).
-    /// `base_struct_name` is preserved (not changed by type args).
+    /// `base_struct_name` and `base_trait_name` are preserved (not changed
+    /// by type args).
     #[must_use]
     pub fn with_type_args(&self, impl_type_args: &[String], method_type_args: &[String]) -> Self {
         let mangled_struct = if impl_type_args.is_empty() {
@@ -854,6 +1088,8 @@ impl LocalMethodName {
             struct_name: mangled_struct,
             base_struct_name: self.base_struct_name.clone(),
             trait_name: self.trait_name.clone(),
+            base_trait_name: self.base_trait_name.clone(),
+            trait_type_args: self.trait_type_args.clone(),
             method_name: self.method_name.clone(),
             method_type_args: method_type_args.to_vec(),
             is_type_param_receiver: self.is_type_param_receiver,
@@ -869,6 +1105,33 @@ impl LocalMethodName {
         self.with_type_args(type_args, &[])
     }
 
+    /// Create a version with the trait name mangled with type args.
+    ///
+    /// `trait_type_args` are applied to the trait name (e.g.,
+    /// `"Stream"` + `["u8"]` → `"Stream<u8>"`). `base_trait_name` is
+    /// preserved so dispatch synthesis / decl-index lookups continue to
+    /// resolve against the bare trait declaration.
+    ///
+    /// Panics if `self.trait_name` is `None` — type args on an inherent
+    /// method don't have a trait to mangle.
+    #[must_use]
+    pub fn with_trait_type_args(&self, trait_type_args: &[String]) -> Self {
+        let base = self
+            .base_trait_name
+            .clone()
+            .expect("with_trait_type_args() requires a trait name");
+        let mangled = if trait_type_args.is_empty() {
+            base.clone()
+        } else {
+            mangle_ref_aware(&base, trait_type_args)
+        };
+        Self {
+            trait_name: Some(mangled),
+            base_trait_name: Some(base),
+            ..self.clone()
+        }
+    }
+
     /// Create a version with the struct name directly substituted (not wrapped with type args).
     /// Used when the struct name is a type parameter (e.g., `T^Ord::cmp` → `i32^Ord::cmp`).
     ///
@@ -880,6 +1143,8 @@ impl LocalMethodName {
             struct_name: new_name.to_string(),
             base_struct_name: base_name.to_string(),
             trait_name: self.trait_name.clone(),
+            base_trait_name: self.base_trait_name.clone(),
+            trait_type_args: self.trait_type_args.clone(),
             method_name: self.method_name.clone(),
             method_type_args: self.method_type_args.clone(),
             is_type_param_receiver: false,
@@ -979,9 +1244,13 @@ impl StructName {
     /// Create a `StructName` from a module path and name.
     /// This is a convenience method for code that still uses `Vec<String>` paths.
     #[must_use]
-    pub fn from_path_and_name(module_path: &[String], name: &str) -> Self {
+    pub fn from_path_and_name(
+        interner: &mut ModuleSourceInterner,
+        module_path: &[String],
+        name: &str,
+    ) -> Self {
         Self {
-            module_source: ModuleSource::from_path(module_path),
+            module_source: interner.from_path(module_path),
             name: name.to_string(),
         }
     }
@@ -989,10 +1258,14 @@ impl StructName {
     /// Create a `StructName` from string slices.
     /// This is a convenience method for tests and initialization.
     #[must_use]
-    pub fn from_strs(module_path: &[&str], name: &str) -> Self {
+    pub fn from_strs(
+        interner: &mut ModuleSourceInterner,
+        module_path: &[&str],
+        name: &str,
+    ) -> Self {
         let path: Vec<String> = module_path.iter().map(|&s| s.to_string()).collect();
         Self {
-            module_source: ModuleSource::from_path(&path),
+            module_source: interner.from_path(&path),
             name: name.to_string(),
         }
     }
@@ -1009,8 +1282,11 @@ impl fmt::Display for StructName {
 /// Format: `core/internal/{name}`
 ///
 /// Example: `core/internal/log_stdout`
-pub fn build_core_internal_name(name: &str) -> FreeFunctionName {
-    FreeFunctionName::from_strs(&["core", "internal"], name)
+pub fn build_core_internal_name(
+    interner: &mut ModuleSourceInterner,
+    name: &str,
+) -> FreeFunctionName {
+    FreeFunctionName::from_strs(interner, &["core", "internal"], name)
 }
 
 /// Validate that a module path is a valid URI reference.
@@ -1134,8 +1410,12 @@ pub fn resolve_module_path(base: &str, relative: &str) -> String {
 ///
 /// # Returns
 /// The resolved `ModuleSource`.
-pub fn resolve_import(from_module: &ModuleSource, import_source: &str) -> ModuleSource {
-    resolve_import_with_entry(from_module, import_source, None)
+pub fn resolve_import(
+    interner: &mut ModuleSourceInterner,
+    from_module: &ModuleSource,
+    import_source: &str,
+) -> ModuleSource {
+    resolve_import_with_entry(interner, from_module, import_source, None)
 }
 
 /// Resolve an import source, consulting a Kiln [`crate::kiln::InvocationIndex`]
@@ -1150,6 +1430,7 @@ pub fn resolve_import(from_module: &ModuleSource, import_source: &str) -> Module
 /// available — typically the CLI and LSP compile entry points, after the
 /// Kiln pipeline has populated the index.
 pub fn resolve_import_with_invocations(
+    interner: &mut ModuleSourceInterner,
     from_module: &ModuleSource,
     import_source: &str,
     entry_module: Option<&ModuleSource>,
@@ -1163,34 +1444,27 @@ pub fn resolve_import_with_invocations(
             _ => "",
         };
         if let Some(entry_uri) = invocations.redirect(decl_file, import_source) {
-            return ModuleSource::Redirected {
-                uri: entry_uri.to_string(),
-            };
+            return interner.redirected(entry_uri);
         }
     }
-    resolve_import_with_entry(from_module, import_source, entry_module)
+    resolve_import_with_entry(interner, from_module, import_source, entry_module)
 }
 
 pub fn resolve_import_with_entry(
+    interner: &mut ModuleSourceInterner,
     from_module: &ModuleSource,
     import_source: &str,
     entry_module: Option<&ModuleSource>,
 ) -> ModuleSource {
     // Handle special prefixes
     if let Some(name) = import_source.strip_prefix("core:") {
-        return ModuleSource::Core {
-            name: name.to_string(),
-        };
+        return interner.core(name);
     }
     if let Some(interface) = import_source.strip_prefix("wasi:") {
-        return ModuleSource::Wasi {
-            interface: interface.to_string(),
-        };
+        return interner.wasi(interface);
     }
     if import_source.starts_with("https://") || import_source.starts_with("http://") {
-        return ModuleSource::Remote {
-            url: import_source.to_string(),
-        };
+        return interner.remote(import_source);
     }
 
     // Handle relative imports from local modules
@@ -1210,14 +1484,12 @@ pub fn resolve_import_with_entry(
                 return entry.clone();
             }
         }
-        return ModuleSource::Local { path: resolved };
+        return interner.local(&resolved);
     }
 
     // Fallback: normalize and return as Local path
     // This handles EntryPoint imports and bare imports
-    ModuleSource::Local {
-        path: normalize_module_path(import_source),
-    }
+    interner.local(&normalize_module_path(import_source))
 }
 
 /// Get the canonical name for an entry point file.
@@ -1461,16 +1733,54 @@ pub fn mangle_local_trait_method(struct_name: &str, trait_name: &str, method_nam
     format!("{struct_name}^{trait_name}::{method_name}")
 }
 
+/// Build the per-instantiation effect-dispatch struct name.
+///
+/// `label` is the dispatch instantiation label produced by the
+/// effect-dispatch synthesis (`Counter`, `Stream<u8>`, …).
+///
+/// Examples:
+/// - `dispatch_struct_name("Counter")` → `"__Dispatch_Counter"`
+/// - `dispatch_struct_name("Stream<u8>")` → `"__Dispatch_Stream<u8>"`
+pub fn dispatch_struct_name(label: &str) -> String {
+    format!("__Dispatch_{label}")
+}
+
+/// Build the per-instantiation effect-dispatch global name.
+///
+/// Examples:
+/// - `dispatch_global_name("Counter")` → `"__effect_Counter"`
+/// - `dispatch_global_name("Stream<u8>")` → `"__effect_Stream<u8>"`
+pub fn dispatch_global_name(label: &str) -> String {
+    format!("__effect_{label}")
+}
+
+/// Build the per-operation effect-dispatch wrapper function name.
+///
+/// Examples:
+/// - `dispatch_wrapper_name("Counter", "next")` → `"__effect_dispatch__Counter__next"`
+/// - `dispatch_wrapper_name("Stream<u8>", "read")` → `"__effect_dispatch__Stream<u8>__read"`
+pub fn dispatch_wrapper_name(label: &str, op_name: &str) -> String {
+    format!("__effect_dispatch__{label}__{op_name}")
+}
+
+/// Build the dispatch struct's per-operation field name.
+///
+/// Examples:
+/// - `dispatch_field_name("next")` → `"op_next"`
+/// - `dispatch_field_name("read")` → `"op_read"`
+pub fn dispatch_field_name(op_name: &str) -> String {
+    format!("op_{op_name}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_method_name_to_string_simple() {
+        let mut interner = ModuleSourceInterner::new();
         let method = MethodName::new(
-            ModuleSource::Local {
-                path: "./geometry.wado".to_string(),
-            },
+            interner.local("./geometry.wado"),
             "Point".to_string(),
             None,
             "sum".to_string(),
@@ -1480,10 +1790,9 @@ mod tests {
 
     #[test]
     fn test_method_name_to_string_with_trait() {
+        let mut interner = ModuleSourceInterner::new();
         let method = MethodName::new(
-            ModuleSource::Local {
-                path: "./geometry.wado".to_string(),
-            },
+            interner.local("./geometry.wado"),
             "Point".to_string(),
             Some("Display".to_string()),
             "fmt".to_string(),
@@ -1493,7 +1802,9 @@ mod tests {
 
     #[test]
     fn test_free_function_name_to_string() {
+        let mut interner = ModuleSourceInterner::new();
         let func = FreeFunctionName::from_path_and_name(
+            &mut interner,
             &["core".to_string(), "cli".to_string()],
             "println",
         );
@@ -1502,40 +1813,59 @@ mod tests {
 
     #[test]
     fn test_free_function_name_from_strs() {
-        let func = FreeFunctionName::from_strs(&["core", "internal"], "log_stdout");
+        let mut interner = ModuleSourceInterner::new();
+        let func = FreeFunctionName::from_strs(&mut interner, &["core", "internal"], "log_stdout");
         assert_eq!(func.to_string(), "core/internal/log_stdout");
     }
 
     #[test]
     fn test_free_function_name_empty_path() {
-        let func = FreeFunctionName::from_strs(&[], "main");
+        let mut interner = ModuleSourceInterner::new();
+        let func = FreeFunctionName::from_strs(&mut interner, &[], "main");
         assert_eq!(func.to_string(), "main");
     }
 
     #[test]
     fn test_struct_name_to_string() {
-        let struct_name = StructName::from_path_and_name(&["./geometry.wado".to_string()], "Point");
+        let mut interner = ModuleSourceInterner::new();
+        let struct_name = StructName::from_path_and_name(
+            &mut interner,
+            &["./geometry.wado".to_string()],
+            "Point",
+        );
         assert_eq!(struct_name.to_string(), "./geometry.wado/Point");
     }
 
     #[test]
     fn test_struct_name_from_strs() {
-        let struct_name = StructName::from_strs(&["core", "internal"], "SomeType");
+        let mut interner = ModuleSourceInterner::new();
+        let struct_name = StructName::from_strs(&mut interner, &["core", "internal"], "SomeType");
         assert_eq!(struct_name.to_string(), "core:internal/SomeType");
     }
 
     #[test]
     fn test_struct_name_empty_path() {
-        let struct_name = StructName::from_path_and_name(&[], "Point");
+        let mut interner = ModuleSourceInterner::new();
+        let struct_name = StructName::from_path_and_name(&mut interner, &[], "Point");
         assert_eq!(struct_name.to_string(), "<entry>/Point");
     }
 
     #[test]
     fn test_struct_name_hash_eq() {
         use crate::hashmap::IndexSet;
-        let s1 = StructName::from_path_and_name(&["./geometry.wado".to_string()], "Point");
-        let s2 = StructName::from_path_and_name(&["./geometry.wado".to_string()], "Point");
-        let s3 = StructName::from_path_and_name(&["./other.wado".to_string()], "Point");
+        let mut interner = ModuleSourceInterner::new();
+        let s1 = StructName::from_path_and_name(
+            &mut interner,
+            &["./geometry.wado".to_string()],
+            "Point",
+        );
+        let s2 = StructName::from_path_and_name(
+            &mut interner,
+            &["./geometry.wado".to_string()],
+            "Point",
+        );
+        let s3 =
+            StructName::from_path_and_name(&mut interner, &["./other.wado".to_string()], "Point");
 
         let mut set = IndexSet::default();
         set.insert(s1);
@@ -1545,7 +1875,8 @@ mod tests {
 
     #[test]
     fn test_build_core_internal_name() {
-        let name = build_core_internal_name("log_stdout");
+        let mut interner = ModuleSourceInterner::new();
+        let name = build_core_internal_name(&mut interner, "log_stdout");
         assert_eq!(name.to_string(), "core/internal/log_stdout");
         assert_eq!(name.module_source, ModuleSource::internal());
         assert_eq!(name.name, "log_stdout");
@@ -1696,73 +2027,77 @@ mod tests {
 
     #[test]
     fn test_module_source_from_path_core() {
-        let source = ModuleSource::from_path(&["core".to_string(), "prelude".to_string()]);
-        assert!(matches!(source, ModuleSource::Core { name } if name == "prelude"));
+        let mut interner = ModuleSourceInterner::new();
+        let source = interner.from_path(&["core".to_string(), "prelude".to_string()]);
+        assert!(matches!(source, ModuleSource::Core { ref name } if name == "prelude"));
 
-        let source = ModuleSource::from_path(&["core".to_string(), "cli".to_string()]);
-        assert!(matches!(source, ModuleSource::Core { name } if name == "cli"));
+        let source = interner.from_path(&["core".to_string(), "cli".to_string()]);
+        assert!(matches!(source, ModuleSource::Core { ref name } if name == "cli"));
 
-        let source = ModuleSource::from_path(&["core".to_string(), "internal".to_string()]);
+        let source = interner.from_path(&["core".to_string(), "internal".to_string()]);
         assert!(source.is_core_internal());
     }
 
     #[test]
     fn test_module_source_from_path_wasi() {
-        let source = ModuleSource::from_path(&["wasi".to_string(), "cli".to_string()]);
-        assert!(matches!(source, ModuleSource::Wasi { interface } if interface == "cli"));
+        let mut interner = ModuleSourceInterner::new();
+        let source = interner.from_path(&["wasi".to_string(), "cli".to_string()]);
+        assert!(matches!(source, ModuleSource::Wasi { ref interface } if interface == "cli"));
 
-        let source = ModuleSource::from_path(&["wasi".to_string(), "io".to_string()]);
+        let source = interner.from_path(&["wasi".to_string(), "io".to_string()]);
         assert!(source.is_wasi());
     }
 
     #[test]
     fn test_module_source_from_path_local() {
-        let source = ModuleSource::from_path(&["./geometry.wado".to_string()]);
-        assert!(matches!(source, ModuleSource::Local { path } if path == "./geometry.wado"));
+        let mut interner = ModuleSourceInterner::new();
+        let source = interner.from_path(&["./geometry.wado".to_string()]);
+        assert!(matches!(source, ModuleSource::Local { ref path } if path == "./geometry.wado"));
 
-        let source = ModuleSource::from_path(&["../lib.wado".to_string()]);
+        let source = interner.from_path(&["../lib.wado".to_string()]);
         assert!(source.is_local());
     }
 
     #[test]
     fn test_module_source_from_path_entry_point() {
         // Legacy: empty path represents entry module
-        let source = ModuleSource::from_path(&[]);
+        let mut interner = ModuleSourceInterner::new();
+        let source = interner.from_path(&[]);
         assert!(source.is_entry_point());
     }
 
     #[test]
     fn test_module_source_to_path() {
+        let mut interner = ModuleSourceInterner::new();
         let source = ModuleSource::prelude();
         assert_eq!(source.to_path(), vec!["core", "prelude"]);
 
-        let source = ModuleSource::wasi("cli");
+        let source = interner.wasi("cli");
         assert_eq!(source.to_path(), vec!["wasi", "cli"]);
 
-        let source = ModuleSource::local("./geometry.wado");
+        let source = interner.local("./geometry.wado");
         assert_eq!(source.to_path(), vec!["./geometry.wado"]);
 
-        let source = ModuleSource::entry_point_with_filename("test.wado");
+        let source = interner.entry_point("test.wado");
         assert_eq!(source.to_path(), vec!["test.wado"]);
     }
 
     #[test]
     fn test_module_source_display() {
+        let mut interner = ModuleSourceInterner::new();
         assert_eq!(ModuleSource::prelude().to_string(), "core:prelude");
         assert_eq!(ModuleSource::cli().to_string(), "core:cli");
-        assert_eq!(ModuleSource::wasi("cli").to_string(), "wasi:cli");
+        assert_eq!(interner.wasi("cli").to_string(), "wasi:cli");
         assert_eq!(
-            ModuleSource::local("./geometry.wado").to_string(),
+            interner.local("./geometry.wado").to_string(),
             "./geometry.wado"
         );
-        assert_eq!(
-            ModuleSource::entry_point_with_filename("hello.wado").to_string(),
-            "hello.wado"
-        );
+        assert_eq!(interner.entry_point("hello.wado").to_string(), "hello.wado");
     }
 
     #[test]
     fn test_module_source_helpers() {
+        let mut interner = ModuleSourceInterner::new();
         let core = ModuleSource::internal();
         assert!(core.is_core());
         assert!(core.is_core_internal());
@@ -1775,31 +2110,32 @@ mod tests {
         let prelude = ModuleSource::prelude();
         assert!(prelude.is_core_prelude());
 
-        let wasi = ModuleSource::wasi("cli");
+        let wasi = interner.wasi("cli");
         assert!(wasi.is_wasi());
         assert!(!wasi.is_core());
 
-        let local = ModuleSource::local("./file.wado");
+        let local = interner.local("./file.wado");
         assert!(local.is_local());
         assert!(!local.is_core());
     }
 
     #[test]
     fn test_module_source_qualify_name() {
+        let mut interner = ModuleSourceInterner::new();
         assert_eq!(
             ModuleSource::prelude().qualify_name("Option"),
             "core:prelude//Option"
         );
         assert_eq!(
-            ModuleSource::local("./geometry.wado").qualify_name("Point"),
+            interner.local("./geometry.wado").qualify_name("Point"),
             "./geometry.wado//Point"
         );
         assert_eq!(
-            ModuleSource::wasi("cli").qualify_name("Stdout"),
+            interner.wasi("cli").qualify_name("Stdout"),
             "wasi:cli//Stdout"
         );
         assert_eq!(
-            ModuleSource::entry_point_with_filename("main.wado").qualify_name("Foo"),
+            interner.entry_point("main.wado").qualify_name("Foo"),
             "main.wado//Foo"
         );
     }
@@ -1813,8 +2149,9 @@ mod tests {
             vec!["./geometry.wado".to_string()],
         ];
 
+        let mut interner = ModuleSourceInterner::new();
         for path in paths {
-            let source = ModuleSource::from_path(&path);
+            let source = interner.from_path(&path);
             assert_eq!(source.to_path(), path, "Roundtrip failed for {path:?}");
         }
     }

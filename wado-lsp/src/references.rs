@@ -10,11 +10,11 @@
 
 use serde::{Deserialize, Serialize};
 use wado_compiler::CompilerHost;
-use wado_compiler::annotate::{Annotated, annotate};
+use wado_compiler::annotate::{Annotated, annotate_with_invocations};
 use wado_compiler::symbol::SymbolKey;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{module_uri, resolve_def_key, span_to_range, symbol_uri, uri_to_filename};
+use crate::location::{module_uri, span_to_range, symbol_uri, uri_to_filename};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReferenceLocation {
@@ -35,7 +35,9 @@ pub async fn find_references<H: CompilerHost>(
     host: &H,
 ) -> Vec<ReferenceLocation> {
     let filename = uri_to_filename(uri);
-    let Ok(annotated) = annotate(source, host, Some(&filename)).await else {
+    let invocations = crate::kiln::prepare_invocations(&filename, source, host);
+    let Ok(annotated) = annotate_with_invocations(source, host, Some(&filename), invocations).await
+    else {
         return Vec::new();
     };
 
@@ -43,7 +45,10 @@ pub async fn find_references<H: CompilerHost>(
     let line = position.line as usize + 1;
     let col = position.character as usize + 1;
 
-    let Some(def_key) = resolve_def_key(&annotated, &module, line, col) else {
+    let Some(cursor) = annotated.cursor_at(&module, line, col) else {
+        return Vec::new();
+    };
+    let Some(def_key) = cursor.def_key() else {
         return Vec::new();
     };
 
@@ -51,7 +56,7 @@ pub async fn find_references<H: CompilerHost>(
     if include_declaration && let Some(loc) = declaration_location(&annotated, &def_key, uri) {
         out.push(loc);
     }
-    for use_key in annotated.references_to(&def_key) {
+    for use_key in cursor.references_to_def() {
         if let Some(loc) = use_site_location(&annotated, &use_key, uri) {
             out.push(loc);
         }

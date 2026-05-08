@@ -6,7 +6,6 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::{self, AstId, Condition, Expr, IfExpr, Item, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
-use crate::symbol::SymbolKey;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirMatchArm,
     TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
@@ -37,7 +36,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Expr::Literal(lit) => self.resolve_literal(lit, ctx),
             Expr::Ident(ident) => self.resolve_ident(ident, ctx, expected_type),
             Expr::Binary(binary) => self.resolve_binary(binary, ctx, expected_type),
-            Expr::Unary(unary) => self.resolve_unary(unary, ctx),
+            Expr::Unary(unary) => self.resolve_unary(unary, ctx, expected_type),
             Expr::Assign(assign) => self.resolve_assign(assign, ctx),
             Expr::Call(call) => self.resolve_call(call, ctx, expected_type),
             Expr::MethodCall(method_call) => {
@@ -63,7 +62,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Expr::If(if_expr) => self.resolve_if_expr(if_expr, ctx, expected_type),
             Expr::Match(match_expr) => self.resolve_match_expr(match_expr, ctx, expected_type),
-            Expr::Closure(closure) => self.resolve_closure(closure, ctx),
+            Expr::Closure(closure) => self.resolve_closure(closure, ctx, expected_type),
             Expr::TemplateString(template) => self.resolve_template_string(template, ctx),
             Expr::Cast(cast) => self.resolve_cast(cast, ctx),
             Expr::StructLiteral(struct_lit) => {
@@ -115,23 +114,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx),
             Expr::Range(range) => self.resolve_range(range, ctx),
-            Expr::WithHandler(w) => {
-                // Phase 1: front-end only. Effect handler installation is
-                // parsed and walked, but semantic resolution / codegen come
-                // in later phases (see docs/wep-2026-04-11-effect-handler.md).
-                let _ = self.logger.error(TypeError::NotYetImplemented {
-                    feature: "effect handler installation `with E = h do { ... }`".to_string(),
-                    span: w.span,
-                });
-                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, w.span)
-            }
-            Expr::Resume(r) => {
-                let _ = self.logger.error(TypeError::NotYetImplemented {
-                    feature: "`resume` expression".to_string(),
-                    span: r.span,
-                });
-                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, r.span)
-            }
+            Expr::WithHandler(w) => self.resolve_with_handler(w, ctx),
+            Expr::Resume(r) => self.resolve_resume(r, ctx),
         }
     }
 
@@ -327,9 +311,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     type_id,
                     defining_ast_id,
                 } => {
-                    if let Some(def_id) = defining_ast_id {
-                        self.record_reference(ident.id, def_id);
-                    }
+                    self.record_reference_opt(ident.id, defining_ast_id);
                     return TirExpr::new(
                         TirExprKind::Local {
                             index,
@@ -344,9 +326,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     type_id,
                     defining_ast_id,
                 } => {
-                    if let Some(def_id) = defining_ast_id {
-                        self.record_reference(ident.id, def_id);
-                    }
+                    self.record_reference_opt(ident.id, defining_ast_id);
                     return TirExpr::new(
                         TirExprKind::Capture {
                             index,
@@ -362,9 +342,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     inner_type_id,
                     defining_ast_id,
                 } => {
-                    if let Some(def_id) = defining_ast_id {
-                        self.record_reference(ident.id, def_id);
-                    }
+                    self.record_reference_opt(ident.id, defining_ast_id);
                     // Deref capture: `*self.__capture_N` where the field holds `&mut T`
                     let capture_expr = TirExpr::new(
                         TirExprKind::Capture {
@@ -398,7 +376,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let prefix = &ident.name[..pos];
             let suffix = &ident.name[pos + 2..];
 
-            if let Some(variant_info) = self.variant_cases.get(prefix).cloned() {
+            if let Some(variant_info) = self.lookup_variant_case(prefix).cloned() {
                 // Find the case by name
                 if let Some((case_index, case_data)) = variant_info
                     .cases
@@ -407,18 +385,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .find(|(_, c)| c.name == suffix)
                     .map(|(i, c)| (i, c.clone()))
                 {
-                    // Record use->def for path segments.
-                    // - segments[0] (prefix) -> variant type decl in current module
-                    // - segments[1] (suffix) -> case decl's AstId in owning module
-                    if let Some(prefix_seg) = ident.segments.first() {
-                        self.record_item_reference_by_name(prefix_seg.id, prefix);
-                    }
-                    if let Some(suffix_seg) = ident.segments.get(1) {
-                        self.record_reference_to_key(
-                            suffix_seg.id,
-                            SymbolKey::new(variant_info.module_source.clone(), case_data.ast_id),
-                        );
-                    }
+                    self.record_qualified_case(
+                        ident,
+                        prefix,
+                        &variant_info.module_source,
+                        case_data.ast_id,
+                    );
                     // Unit variant - payload must be unit type
                     let payload_is_unit = matches!(
                         self.type_table.borrow().get(case_data.payload),
@@ -463,18 +435,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
 
             // Check for enum case: Color::Red (enums have no payload)
-            if let Some(enum_info) = self.enum_cases.get(prefix).cloned()
+            if let Some(enum_info) = self.lookup_enum_case(prefix).cloned()
                 && let Some(case_data) = enum_info.find_case(suffix).cloned()
             {
-                if let Some(prefix_seg) = ident.segments.first() {
-                    self.record_item_reference_by_name(prefix_seg.id, prefix);
-                }
-                if let Some(suffix_seg) = ident.segments.get(1) {
-                    self.record_reference_to_key(
-                        suffix_seg.id,
-                        SymbolKey::new(enum_info.module_source.clone(), case_data.ast_id),
-                    );
-                }
+                self.record_qualified_case(
+                    ident,
+                    prefix,
+                    &enum_info.module_source,
+                    case_data.ast_id,
+                );
                 // Use canonical name (not import alias) for consistent TypeId interning
                 let enum_type = self
                     .type_table
@@ -494,22 +463,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // Check for flags member: PathFlags::SymlinkFollow
             // Flags members are bitmask integers (1 << index) represented as IntLiteral
-            if let Some(flags_info) = self.flags_cases.get(prefix).cloned()
+            if let Some(flags_info) = self.lookup_flags_case(prefix).cloned()
                 && let Some(member) = flags_info
                     .members
                     .iter()
                     .find(|m| m.name == suffix)
                     .cloned()
             {
-                if let Some(prefix_seg) = ident.segments.first() {
-                    self.record_item_reference_by_name(prefix_seg.id, prefix);
-                }
-                if let Some(suffix_seg) = ident.segments.get(1) {
-                    self.record_reference_to_key(
-                        suffix_seg.id,
-                        SymbolKey::new(flags_info.module_source.clone(), member.ast_id),
-                    );
-                }
+                self.record_qualified_case(ident, prefix, &flags_info.module_source, member.ast_id);
                 return TirExpr::new(
                     TirExprKind::IntLiteral {
                         value: u64::from(member.bitmask),
@@ -527,12 +488,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let type_name = &suffix[..inner_pos];
                 let case_name = &suffix[inner_pos + 2..];
 
-                self.ensure_module_maps_cached(&ns_source);
-                // Check variant cases
+                // Check variant cases — namespace imports always look up by
+                // canonical name in the source module, so we can read directly
+                // from the shared `all_*` table without any per-module cache.
                 let ns_variant = self
-                    .module_type_maps_cache
+                    .all_variant_cases
                     .get(&ns_source)
-                    .and_then(|maps| maps.variant_cases.get(type_name))
+                    .and_then(|m| m.get(type_name))
                     .cloned();
                 if let Some(variant_info) = ns_variant
                     && let Some((case_index, case_data)) = variant_info
@@ -542,12 +504,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .find(|(_, c)| c.name == case_name)
                         .map(|(i, c)| (i, c.clone()))
                 {
-                    if let Some(seg) = ident.segments.get(2) {
-                        self.record_reference_to_key(
-                            seg.id,
-                            SymbolKey::new(variant_info.module_source.clone(), case_data.ast_id),
-                        );
-                    }
+                    self.record_namespaced_case(
+                        ident,
+                        &variant_info.module_source,
+                        case_data.ast_id,
+                    );
                     let payload_is_unit = matches!(
                         self.type_table.borrow().get(case_data.payload),
                         ResolvedType::Unit
@@ -588,19 +549,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 // Check enum cases
                 let ns_enum = self
-                    .module_type_maps_cache
+                    .all_enum_cases
                     .get(&ns_source)
-                    .and_then(|maps| maps.enum_cases.get(type_name))
+                    .and_then(|m| m.get(type_name))
                     .cloned();
                 if let Some(enum_info) = ns_enum
                     && let Some(case_data) = enum_info.find_case(case_name).cloned()
                 {
-                    if let Some(seg) = ident.segments.get(2) {
-                        self.record_reference_to_key(
-                            seg.id,
-                            SymbolKey::new(enum_info.module_source.clone(), case_data.ast_id),
-                        );
-                    }
+                    self.record_namespaced_case(ident, &enum_info.module_source, case_data.ast_id);
                     let enum_type = self
                         .type_table
                         .borrow_mut()
@@ -618,9 +574,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 // Check flags members
                 let ns_flags = self
-                    .module_type_maps_cache
+                    .all_flags_cases
                     .get(&ns_source)
-                    .and_then(|maps| maps.flags_cases.get(type_name))
+                    .and_then(|m| m.get(type_name))
                     .cloned();
                 if let Some(flags_info) = ns_flags
                     && let Some(member) = flags_info
@@ -629,12 +585,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .find(|m| m.name == case_name)
                         .cloned()
                 {
-                    if let Some(seg) = ident.segments.get(2) {
-                        self.record_reference_to_key(
-                            seg.id,
-                            SymbolKey::new(flags_info.module_source.clone(), member.ast_id),
-                        );
-                    }
+                    self.record_namespaced_case(ident, &flags_info.module_source, member.ast_id);
                     return TirExpr::new(
                         TirExprKind::IntLiteral {
                             value: u64::from(member.bitmask),
@@ -832,11 +783,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             _ => return,
         };
-        if let Some(info) = self.lookup_struct_fields(&struct_name, &module_source) {
+        if let Some(info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
             for ((fname, _, _), fid) in info.fields.iter().zip(info.field_ast_ids.iter()) {
                 if fname == field_name {
-                    let def_key = SymbolKey::new(module_source, *fid);
-                    self.record_reference_to_key(use_id, def_key);
+                    self.record_reference_to_decl(use_id, &module_source, *fid);
                     return;
                 }
             }
@@ -859,7 +809,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 module_source,
                 ..
             } => {
-                if let Some(struct_info) = self.lookup_struct_fields(&name, &module_source) {
+                if let Some(struct_info) = self.lookup_struct_fields_in(&name, &module_source) {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             return (index as u32, *ftype);
@@ -901,7 +851,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return (0, TypeTable::UNKNOWN);
                 }
                 // Clone fields to avoid borrow issues
-                let fields_clone = self.lookup_struct_fields(&name, &module_source).cloned();
+                let fields_clone = self.lookup_struct_fields_in(&name, &module_source).cloned();
                 if let Some(struct_info) = fields_clone {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
@@ -949,7 +899,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Look up field visibility
-        if let Some(struct_info) = self.lookup_struct_fields(&struct_name, &module_source) {
+        if let Some(struct_info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
             for (fname, _, is_pub) in &struct_info.fields {
                 if fname == field_name && !is_pub {
                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
@@ -1360,8 +1310,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Condition::Expr(expr) => {
                 let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
-                let then_block = self.resolve_block(&if_expr.then_block, ctx, expected_type);
-                let else_block = if_expr
+                let mut then_block = self.resolve_block(&if_expr.then_block, ctx, expected_type);
+                let mut else_block = if_expr
                     .else_block
                     .as_ref()
                     .map(|b| self.resolve_block(b, ctx, expected_type));
@@ -1376,11 +1326,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                     // `never` is the bottom type: a branch returning `never` is compatible
                     // with any type, so the result type comes from the non-never branch.
+                    //
+                    // We also let `Option<UNKNOWN>` (typically a bare `null` literal whose
+                    // inner type could not be inferred) defer to the sibling branch's
+                    // resolved type. The unresolved branch's tail is patched below.
+                    let tt = self.type_table.borrow();
+                    let then_unknown = tt.contains_unknown(then_type);
+                    let else_unknown = tt.contains_unknown(else_type);
+                    drop(tt);
                     if then_type == else_type {
                         then_type
                     } else if then_type == TypeTable::NEVER {
                         else_type
                     } else if else_type == TypeTable::NEVER {
+                        then_type
+                    } else if then_unknown && !else_unknown {
+                        else_type
+                    } else if else_unknown && !then_unknown {
                         then_type
                     } else if else_block.is_none() {
                         if then_type != TypeTable::UNIT {
@@ -1403,6 +1365,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         then_type
                     }
                 };
+
+                // Patch unresolved `null` tails in either branch using the determined
+                // result type — see `patch_unresolved_null` for the rationale.
+                {
+                    let tt = self.type_table.borrow();
+                    if !tt.contains_unknown(type_id) {
+                        patch_unresolved_null_in_block(&mut then_block, type_id, &tt);
+                        if let Some(eb) = else_block.as_mut() {
+                            patch_unresolved_null_in_block(eb, type_id, &tt);
+                        }
+                    }
+                }
 
                 TirExpr::new(
                     TirExprKind::If {
@@ -1427,7 +1401,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let scrutinee = self.resolve_expr(&match_expr.expr, ctx, None);
         let scrutinee_type = scrutinee.type_id;
 
-        let arms: Vec<TirMatchArm> = match_expr
+        let mut arms: Vec<TirMatchArm> = match_expr
             .arms
             .iter()
             .map(|arm| self.resolve_match_arm(arm, scrutinee_type, ctx, expected_type))
@@ -1438,9 +1412,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let type_id = expected_type.unwrap_or_else(|| {
             // Skip `never`-typed arms: `never` is the bottom type and is compatible
             // with any type, so the match result type is determined by the non-never arms.
+            //
+            // Also skip arms whose type still contains UNKNOWN — typically a bare
+            // `null` literal whose `Option<...>` inner could not be inferred from
+            // the arm body alone. A sibling arm with a fully-resolved type
+            // (e.g. `Option::Some(s)` where `s: String`) wins; we then patch the
+            // unresolved `null` arm bodies below.
+            let tt = self.type_table.borrow();
             arms.iter()
                 .map(|a| a.body.type_id)
-                .find(|&t| t != TypeTable::NEVER)
+                .find(|&t| t != TypeTable::NEVER && !tt.contains_unknown(t))
+                .or_else(|| {
+                    arms.iter()
+                        .map(|a| a.body.type_id)
+                        .find(|&t| t != TypeTable::NEVER)
+                })
                 .unwrap_or_else(|| {
                     // All arms return `never` — the match itself is `never`.
                     arms.first()
@@ -1448,6 +1434,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .unwrap_or(TypeTable::UNIT)
                 })
         });
+
+        // Patch `null`-bodied arms whose `Option<???>` inner could not be inferred.
+        // If the match's overall type is fully resolved we know the inner type;
+        // rewrite the `Null`'s `type_id` so WIR translation can see it.
+        {
+            let tt = self.type_table.borrow();
+            if !tt.contains_unknown(type_id) {
+                for arm in &mut arms {
+                    patch_unresolved_null(&mut arm.body, type_id, &tt);
+                }
+            }
+        }
 
         TirExpr::new(
             TirExprKind::Match {
@@ -1503,7 +1501,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         match &resolved {
             ResolvedType::Enum { name, .. } => {
-                if let Some(enum_info) = self.enum_cases.get(name) {
+                if let Some(enum_info) = self.lookup_enum_case(name) {
                     let all_cases: IndexSet<&str> =
                         enum_info.cases.iter().map(|c| c.name.as_str()).collect();
                     let covered: IndexSet<&str> = {
@@ -1531,7 +1529,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.check_variant_exhaustiveness(arms, name, span);
             }
             ResolvedType::GenericInstance { name, .. } => {
-                if self.variant_cases.contains_key(name) {
+                if self.contains_variant(name) {
                     self.check_variant_exhaustiveness(arms, name, span);
                 }
             }
@@ -1571,7 +1569,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     fn check_variant_exhaustiveness(&self, arms: &[TirMatchArm], variant_name: &str, span: Span) {
-        if let Some(variant_info) = self.variant_cases.get(variant_name) {
+        if let Some(variant_info) = self.lookup_variant_case(variant_name) {
             let all_cases: IndexSet<&str> =
                 variant_info.cases.iter().map(|c| c.name.as_str()).collect();
             let covered: IndexSet<&str> = {
@@ -2208,6 +2206,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 None
             }
             TirExprKind::Block(block) => Self::find_return_type_in_block(block),
+            // `resume value` is the handler-method analogue of `return value`:
+            // it transfers control out of the current method and yields
+            // `value` to the enclosing computation. The MVP lowers it to
+            // `Return { value }` (no post-resume continuation), so a method
+            // whose body terminates with `resume` satisfies the
+            // missing-return check just like a method that ends with
+            // `return`.
+            TirExprKind::Resume { value } => Some(value.type_id),
             _ => None,
         }
     }
@@ -2235,7 +2241,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Resolve struct name and module_source.
         // Local definitions shadow imported/prelude structs.
         let (struct_name, struct_module_source) = if self
-            .lookup_struct_fields(name, &self.current_module_source)
+            .lookup_struct_fields_in(name, &self.current_module_source)
             .is_some()
         {
             (name.clone(), self.current_module_source.clone())
@@ -2252,13 +2258,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Use canonical name from struct_fields info (not import alias) for consistent TypeId
         let struct_name = self
-            .lookup_struct_fields(&struct_name, &struct_module_source)
+            .lookup_struct_fields_in(&struct_name, &struct_module_source)
             .map(|info| info.name.clone())
             .unwrap_or(struct_name);
 
         // Get expected field types using (name, module_source) lookup.
         let struct_field_types: Vec<(String, TypeId)> = self
-            .lookup_struct_fields(&struct_name, &struct_module_source)
+            .lookup_struct_fields_in(&struct_name, &struct_module_source)
             .map(|info| {
                 info.fields
                     .iter()
@@ -2270,7 +2276,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Record use→def references for each field name, pointing at the
         // field definition's AstId in the struct declaration.
         let field_refs: Vec<(AstId, AstId)> = self
-            .lookup_struct_fields(&struct_name, &struct_module_source)
+            .lookup_struct_fields_in(&struct_name, &struct_module_source)
             .map(|info| {
                 struct_lit
                     .fields
@@ -2286,8 +2292,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             })
             .unwrap_or_default();
         for (use_id, def_id) in field_refs {
-            let def_key = SymbolKey::new(struct_module_source.clone(), def_id);
-            self.record_reference_to_key(use_id, def_key);
+            self.record_reference_to_decl(use_id, &struct_module_source, def_id);
         }
 
         // Resolve field expressions, converting tuple literals to arrays when needed.
@@ -2413,7 +2418,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // provided; fields with `= expr` are synthesized from the default
         // expression (pure, resolved in the struct's module scope).
         let struct_field_defaults: Vec<Option<ast::Expr>> = self
-            .lookup_struct_fields(&struct_name, &struct_module_source)
+            .lookup_struct_fields_in(&struct_name, &struct_module_source)
             .map(|info| info.field_defaults.clone())
             .unwrap_or_default();
         let mut fields = fields;
@@ -2446,7 +2451,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Check field visibility: non-pub fields cannot be set from other modules
         if struct_module_source != self.current_module_source
             && let Some(struct_info) =
-                self.lookup_struct_fields(&struct_name, &struct_module_source)
+                self.lookup_struct_fields_in(&struct_name, &struct_module_source)
         {
             for (fname, _, is_pub) in &struct_info.fields {
                 if !is_pub && fields.iter().any(|f| f.name == *fname) {
@@ -2484,8 +2489,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 fields
             } else {
                 let struct_param_map: IndexMap<TypeId, TypeId> = self
-                    .struct_fields
-                    .get(&struct_name)
+                    .lookup_struct_fields(&struct_name)
                     .map(|info| {
                         info.type_param_type_ids
                             .iter()
@@ -2529,7 +2533,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // Check trait bounds on inferred type arguments
             if let Some(struct_info) = self
-                .lookup_struct_fields(&struct_name, &struct_module_source)
+                .lookup_struct_fields_in(&struct_name, &struct_module_source)
                 .cloned()
             {
                 for (i, (param_name, bounds)) in struct_info.type_param_bounds.iter().enumerate() {
@@ -2646,7 +2650,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             type_param_bounds: Vec::new(),
             type_param_type_ids: Vec::new(),
         };
-        self.struct_fields.insert(anon_name.clone(), field_info);
+        self.local_struct_fields
+            .insert(anon_name.clone(), field_info);
 
         // Create TirStruct definition for codegen
         let tir_fields: Vec<TirField> = resolved_fields
@@ -2708,7 +2713,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         fields: &[TirStructField],
         expected_type: Option<TypeId>,
     ) -> Vec<TypeId> {
-        let Some(struct_info) = self.struct_fields.get(struct_name).cloned() else {
+        let Some(struct_info) = self.lookup_struct_fields(struct_name).cloned() else {
             return vec![];
         };
         if struct_info.type_param_type_ids.is_empty() {
@@ -3235,6 +3240,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         struct_name: target_name.clone(),
                         base_struct_name: target_name,
                         trait_name: Some(from_trait),
+                        base_trait_name: Some("From".to_string()),
+                        trait_type_args: vec![],
                         method_name: "from".to_string(),
                         method_type_args: vec![],
                         is_type_param_receiver: false,
@@ -3446,7 +3453,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .borrow()
                     .range_exclusive_module_source
                     .clone()
-                    .unwrap_or_else(|| ModuleSource::core("prelude/range"));
+                    .unwrap_or_else(ModuleSource::range);
                 let fields = vec![
                     TirStructField {
                         name: "start".to_string(),
@@ -3467,7 +3474,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .borrow()
                     .range_inclusive_module_source
                     .clone()
-                    .unwrap_or_else(|| ModuleSource::core("prelude/range"));
+                    .unwrap_or_else(ModuleSource::range);
                 let fields = vec![
                     TirStructField {
                         name: "start".to_string(),
@@ -3508,5 +3515,80 @@ impl<H: CompilerHost> Resolver<'_, H> {
             struct_type,
             range.span,
         )
+    }
+}
+
+/// Recursively patch any `Null` literals inside `expr` whose `Option<???>`
+/// inner is still UNKNOWN, rewriting them to use `target_type`.
+///
+/// `Literal::Null` initially resolves to `Option<UNKNOWN>` (see
+/// `resolve_literal`). When a `null` literal sits in a match arm or `if`
+/// branch, its concrete inner type is determined by a sibling arm — but
+/// that information isn't propagated back during arm resolution. Once the
+/// match/if's overall result type is known we walk the arm bodies and
+/// rewrite the unresolved `Null`'s `type_id` so WIR translation sees a
+/// fully-resolved `Option<T>`.
+///
+/// Only the tail/result positions are walked; nested expressions whose
+/// value is discarded (e.g. inside an arbitrary call argument) are not
+/// affected — they would have been forced to a known type by their own
+/// surrounding context anyway.
+fn patch_unresolved_null(expr: &mut TirExpr, target_type: TypeId, type_table: &TypeTable) {
+    if matches!(expr.kind, TirExprKind::Null) && type_table.contains_unknown(expr.type_id) {
+        expr.type_id = target_type;
+        return;
+    }
+    match &mut expr.kind {
+        TirExprKind::Block(block) => {
+            patch_unresolved_null_in_block(block, target_type, type_table);
+        }
+        TirExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            patch_unresolved_null_in_block(then_branch, target_type, type_table);
+            if let Some(eb) = else_branch {
+                patch_unresolved_null_in_block(eb, target_type, type_table);
+            }
+        }
+        TirExprKind::Match { arms, .. } => {
+            for arm in arms {
+                patch_unresolved_null(&mut arm.body, target_type, type_table);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn patch_unresolved_null_in_block(
+    block: &mut TirBlock,
+    target_type: TypeId,
+    type_table: &TypeTable,
+) {
+    let Some(last) = block.stmts.last_mut() else {
+        return;
+    };
+    match &mut last.kind {
+        TirStmtKind::Expr(e) => {
+            patch_unresolved_null(e, target_type, type_table);
+        }
+        TirStmtKind::If {
+            then_block,
+            else_block: Some(eb),
+            ..
+        } => {
+            patch_unresolved_null_in_block(then_block, target_type, type_table);
+            patch_unresolved_null_in_block(eb, target_type, type_table);
+        }
+        TirStmtKind::IfLet {
+            then_block,
+            else_block: Some(eb),
+            ..
+        } => {
+            patch_unresolved_null_in_block(then_block, target_type, type_table);
+            patch_unresolved_null_in_block(eb, target_type, type_table);
+        }
+        _ => {}
     }
 }
