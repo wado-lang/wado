@@ -26,7 +26,7 @@ use wasmtime_wasi_http::p3::bindings::Service;
 use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags, OptLevel};
 use crate::manifest;
-use crate::runtime::{self, WasiState};
+use crate::runtime::{self, Preopens, WasiState};
 use wado_compiler::LogLevel;
 
 pub struct ServeOptions {
@@ -186,17 +186,20 @@ async fn handle_http_request(
     engine: &Engine,
     component: &Component,
     linker: &Linker<WasiState>,
-    preopened_dirs: &[(String, String)],
+    preopens: &Preopens,
     req: HyperRequest<hyper::body::Incoming>,
 ) -> Result<HyperResponse<BoxBody<Bytes, Infallible>>> {
     type HttpErrorCode = wasmtime_wasi_http::p3::bindings::http::types::ErrorCode;
 
-    // Each request gets a fresh WASI state — preopened dirs are scoped
-    // per-request. Use the no-env variant: an HTTP server's environment
-    // typically holds secrets (DB creds, API tokens) that must not leak
-    // into per-request handler components, matching the pre-refactor
-    // behaviour where serve only inherited stdio.
-    let state = WasiState::new_no_inherit_env(preopened_dirs, &[])?;
+    // Each request gets a fresh WASI state — the WASI ctx is scoped
+    // per-request — but the preopened dirs are opened once at server
+    // startup and shared via reference-counted `cap_std::fs::Dir` handles,
+    // so per-request setup does not re-`openat` the host paths. Use the
+    // no-env variant: an HTTP server's environment typically holds secrets
+    // (DB creds, API tokens) that must not leak into per-request handler
+    // components, matching the pre-refactor behaviour where serve only
+    // inherited stdio.
+    let state = WasiState::new_no_inherit_env_with_preopens(preopens, &[]);
     let mut store = Store::new(engine, state);
 
     let service = Service::instantiate_async(&mut store, component, linker).await?;
@@ -279,12 +282,17 @@ async fn run_http_server(
     let engine = runtime::create_engine(cranelift_opt, &runtime::ProfileMode::None)?;
     let component = Component::new(&engine, &wasm)?;
     let linker = runtime::create_linker(&engine)?;
+    // Open preopens once here, then share across requests. Each request
+    // attaches them via `WasiState::new_no_inherit_env_with_preopens`,
+    // which clones the underlying `Arc<cap_std::fs::Dir>` rather than
+    // re-running `openat` per request.
+    let preopens = Preopens::open(&preopened_dirs)?;
 
     // Wrap in Arc for sharing across connections
     let engine = Arc::new(engine);
     let component = Arc::new(component);
     let linker = Arc::new(Mutex::new(linker));
-    let preopened_dirs = Arc::new(preopened_dirs);
+    let preopens = Arc::new(preopens);
 
     let addr: SocketAddr = addr.parse()?;
     let listener = TcpListener::bind(addr).await?;
@@ -299,18 +307,18 @@ async fn run_http_server(
         let engine = Arc::clone(&engine);
         let component = Arc::clone(&component);
         let linker = Arc::clone(&linker);
-        let preopened_dirs = Arc::clone(&preopened_dirs);
+        let preopens = Arc::clone(&preopens);
 
         tokio::spawn(async move {
             let service = service_fn(|req| {
                 let engine = Arc::clone(&engine);
                 let component = Arc::clone(&component);
                 let linker = Arc::clone(&linker);
-                let preopened_dirs = Arc::clone(&preopened_dirs);
+                let preopens = Arc::clone(&preopens);
 
                 async move {
                     let linker = linker.lock().await;
-                    handle_http_request(&engine, &component, &linker, &preopened_dirs, req).await
+                    handle_http_request(&engine, &component, &linker, &preopens, req).await
                 }
             });
 
