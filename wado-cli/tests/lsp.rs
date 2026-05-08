@@ -239,7 +239,9 @@ fn lsp_workspace_text_document_content_rejects_unknown_uri() {
     );
     let resp = session.read_message();
     assert_eq!(resp["id"], id);
-    assert_eq!(resp["error"]["code"], -32602); // InvalidParams
+    // The request was syntactically valid but the URI doesn't resolve to any
+    // bundled module → RequestFailed (-32803) per LSP 3.18, not InvalidParams.
+    assert_eq!(resp["error"]["code"].as_i64(), Some(-32803));
 
     assert_eq!(session.shutdown_and_exit(), 0);
 }

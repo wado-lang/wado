@@ -230,7 +230,7 @@ pub async fn dispatch<W: Write>(
                         transport::send_error(
                             writer,
                             id,
-                            error_codes::INVALID_PARAMS,
+                            error_codes::REQUEST_FAILED,
                             format!("no bundled content for URI: {}", p.uri),
                         )?;
                     }

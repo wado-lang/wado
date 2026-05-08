@@ -223,4 +223,7 @@ pub mod error_codes {
     /// Server received a request/notification before `initialize`.
     /// LSP 3.18 §initialize.
     pub const SERVER_NOT_INITIALIZED: i32 = -32002;
+    /// A request was syntactically correct (method known, params valid)
+    /// but failed for a request-specific reason. LSP 3.18 §responseError.
+    pub const REQUEST_FAILED: i32 = -32803;
 }
