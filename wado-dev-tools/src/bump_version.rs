@@ -47,12 +47,14 @@ pub fn run(mut parser: lexopt::Parser) {
     // Mode flags are mutually exclusive — silently ignoring extras would let
     // a misuse like `--show 1.0.0` or `--check 1.0.0 --bump major` look
     // successful while doing the wrong thing in CI.
-    if show && (check || bump_kind.is_some() || positional.is_some()) {
-        panic!("--show takes no other arguments");
-    }
-    if check && bump_kind.is_some() {
-        panic!("--check is incompatible with --bump");
-    }
+    assert!(
+        !(show && (check || bump_kind.is_some() || positional.is_some())),
+        "--show takes no other arguments"
+    );
+    assert!(
+        !(check && bump_kind.is_some()),
+        "--check is incompatible with --bump"
+    );
 
     if show {
         let current = read_workspace_version();
