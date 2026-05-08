@@ -582,7 +582,9 @@ async fn compile_one_file(
         Err(failure) if failure.is_todo_module => {
             let dur = format_duration(compile_duration);
             println!("[{elapsed}] Compiled {path} (TODO module, compile error expected, {dur})");
-            return Ok(CompileTaskResult::TodoCompileError(TodoCompileError { path }));
+            return Ok(CompileTaskResult::TodoCompileError(TodoCompileError {
+                path,
+            }));
         }
         Err(_) => {
             let dur = format_duration(compile_duration);
@@ -657,8 +659,7 @@ async fn collect_test_jobs(
     let mut compile_failures = Vec::new();
 
     for join_result in task_results {
-        let task_result = join_result
-            .map_err(|e| anyhow!("compile worker panicked: {e}"))??;
+        let task_result = join_result.map_err(|e| anyhow!("compile worker panicked: {e}"))??;
         match task_result {
             CompileTaskResult::Compiled {
                 path,
