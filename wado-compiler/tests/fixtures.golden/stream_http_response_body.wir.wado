@@ -280,7 +280,6 @@ fn "wado-compiler/tests/fixtures/stream_http_response_body.wado/handle"(request)
     let __b_8: ref "core:prelude//Array<u8>";
     let data: ref "core:prelude//Array<u8>";
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
-    let __local_11: i32;
     let __tv_1: i32;
     let __tv_2: i32;
     let __tv_3: i64;
@@ -436,12 +435,10 @@ fn "wado-compiler/tests/fixtures/stream_http_response_body.wado/handle"(request)
     __tv_6 = 0;
     __tv_7 = 0;
     if ref.test "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"(__task_ret) {
-        __local_11 = 0;
         __ok_val = ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"(__task_ret).payload_0;
         __tv_1 = __ok_val;
         "wasi/task-return"(0, __tv_1, 0, 0_i64, 0, 0, 0, 0);
     } else {
-        __local_11 = 1;
         __err_val = ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err"(__task_ret).payload_0;
         __tv_1 = __err_val.discriminant;
         if ref.test "wasi:http/types.wado//ErrorCode::DnsError"(__err_val) {

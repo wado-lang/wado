@@ -146,6 +146,17 @@ pub(super) fn collect_pinned(project: &FlatPackage) -> IndexSet<FnKey> {
     for global in &project.globals {
         walker.visit_expr(&global.initializer);
     }
+    // Pin every closure functor `__call`. Even for non-trait closures that
+    // are only invoked directly from their matching `__closure_wrapper_*`,
+    // the closure may be coerced to a typed `fn(...)` via
+    // `lower::closure::fn_param_specializations` and dispatched through a
+    // function table whose signature must match the closure's declared
+    // parameter list — dropping a "dead" parameter from `__call` then
+    // desynchronises the wrapper's call site from the table-level signature
+    // and traps in `ref.cast` (Wasm validation: "expected (ref $type),
+    // found (ref (exact $type))" for fixtures like `closure_2.wado`).
+    // Trait-shaped `__call`s are also covered by this pin (and additionally
+    // by `is_eligible`'s `trait_name` check).
     for functor in &project.closure_functors {
         let cm = functor.call_method.borrow();
         pinned.insert((cm.module_source.clone(), cm.name.clone()));

@@ -99,12 +99,32 @@ impl TirMutVisitor for Elider<'_> {
         let stmts = std::mem::take(&mut block.stmts);
         let mut new_stmts = Vec::with_capacity(stmts.len());
         for mut stmt in stmts {
+            // `let x = expr;` where `x` is unread.
             if let TirStmtKind::Let {
                 local_index, value, ..
             } = &mut stmt.kind
                 && !self.kept.contains(local_index)
             {
                 let value = std::mem::replace(value, dummy_unit_expr());
+                self.changed = true;
+                if is_pure_expr(&value) {
+                    continue;
+                }
+                new_stmts.push(TirStmt::new(TirStmtKind::Expr(value), stmt.span));
+                continue;
+            }
+            // `x = value;` (Assign at stmt position) where `x` is unread.
+            // This catches the SROA / variant-lowering shadow-temp pattern
+            // where a pass introduces a local and writes to it via Assign,
+            // then a downstream pass folds away the only read site. The
+            // matching `let x;` declaration falls out at WIR cleanup once
+            // every write to `x` is gone.
+            if let TirStmtKind::Expr(expr) = &mut stmt.kind
+                && let TirExprKind::Assign { target, value } = &mut expr.kind
+                && let TirExprKind::Local { index, .. } = &target.kind
+                && !self.kept.contains(index)
+            {
+                let value = std::mem::replace(value.as_mut(), dummy_unit_expr());
                 self.changed = true;
                 if is_pure_expr(&value) {
                     continue;
