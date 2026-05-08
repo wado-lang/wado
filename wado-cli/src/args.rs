@@ -201,7 +201,7 @@ pub const ALLOCATOR_SPEC: OptSpec = OptSpec {
     long: Some("allocator"),
     short: None,
     value: Some("<mode>"),
-    desc: "Allocator mode: bump (default for CLI), freelist (default for HTTP), debug (no-reuse + 0xFF poison)",
+    desc: "Allocator mode (default depends on target world):\nbump (CLI), freelist (HTTP), debug (test; no-reuse + 0xFF poison)",
 };
 
 /// Shared spec: `--dir <path>` (preopen for WASI filesystem access).
