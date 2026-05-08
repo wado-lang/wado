@@ -2,11 +2,27 @@ use std::path::{Path, PathBuf};
 
 use dprint_plugin_markdown::configuration::ConfigurationBuilder;
 use dprint_plugin_markdown::format_text;
+use lexopt::Arg::{Long, Value};
 
 const DEFAULT_EXCLUDED_DIRS: &[&str] =
     &[".vscode-test", "vendor", "target", "node_modules", ".git"];
 
-pub fn run(paths: &[String], check: bool) -> bool {
+pub fn run(mut parser: lexopt::Parser) {
+    let mut check = false;
+    let mut paths: Vec<String> = Vec::new();
+    while let Some(arg) = parser.next().expect("failed to parse args") {
+        match arg {
+            Long("check") => check = true,
+            Value(v) => paths.push(v.to_string_lossy().into_owned()),
+            _ => panic!("unexpected argument: {arg:?}"),
+        }
+    }
+    if !format(&paths, check) {
+        std::process::exit(1);
+    }
+}
+
+fn format(paths: &[String], check: bool) -> bool {
     let files = if paths.is_empty() {
         collect_md_files(Path::new("."))
     } else {
