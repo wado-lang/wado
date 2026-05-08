@@ -89,9 +89,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 // Bridges `core:` / `wasi:` URIs (emitted by the LSP for jump-to-definition into
 // bundled stdlib modules) to the server's `workspace/textDocumentContent`
 // request, so VS Code can open them as read-only virtual documents. The
-// `wado` language is forced on the resulting documents because opaque URIs
+// `wado` language is forced on documents we served because opaque URIs
 // (e.g. `core:cli`) carry no extension for VS Code's language detector.
 function registerStdlibContentProvider(context: vscode.ExtensionContext): void {
+    // Track URIs our provider has actually served, so we only override the
+    // language on documents we own — other extensions could conceivably
+    // claim the same scheme, and we shouldn't clobber their language.
+    const ownedUris = new Set<string>();
     const provider: vscode.TextDocumentContentProvider = {
         async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
             const active = client;
@@ -102,6 +106,7 @@ function registerStdlibContentProvider(context: vscode.ExtensionContext): void {
                 'workspace/textDocumentContent',
                 { uri: uri.toString() },
             );
+            ownedUris.add(uri.toString());
             return result.text;
         },
     };
@@ -112,12 +117,12 @@ function registerStdlibContentProvider(context: vscode.ExtensionContext): void {
     }
     context.subscriptions.push(
         vscode.workspace.onDidOpenTextDocument((doc) => {
-            if (
-                (STDLIB_SCHEMES as readonly string[]).includes(doc.uri.scheme) &&
-                doc.languageId !== LANGUAGE_ID
-            ) {
+            if (ownedUris.has(doc.uri.toString()) && doc.languageId !== LANGUAGE_ID) {
                 void vscode.languages.setTextDocumentLanguage(doc, LANGUAGE_ID);
             }
+        }),
+        vscode.workspace.onDidCloseTextDocument((doc) => {
+            ownedUris.delete(doc.uri.toString());
         }),
     );
 }

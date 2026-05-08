@@ -132,9 +132,13 @@ impl Engine {
         if scheme != "core" && scheme != "wasi" {
             return None;
         }
-        let path = rest.strip_prefix('/').unwrap_or(rest);
-        let key = format!("{scheme}:{path}");
-        wado_compiler::stdlib::get_stdlib_module(&key)
+        // Canonical form (`core:cli`) hits get_stdlib_module without an
+        // intermediate allocation; only the normalised form (`core:/cli`)
+        // needs its slash stripped and the URI re-formed.
+        match rest.strip_prefix('/') {
+            None => wado_compiler::stdlib::get_stdlib_module(uri),
+            Some(path) => wado_compiler::stdlib::get_stdlib_module(&format!("{scheme}:{path}")),
+        }
     }
 
     /// Compute semantic tokens for the given document.

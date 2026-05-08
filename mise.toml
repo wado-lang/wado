@@ -242,8 +242,8 @@ run = "rm -f ~/.vscode/extensions/wado-lang.wado-0.0.1"
 description = "Run wado-vscode tests"
 run = "cd wado-vscode && npm install && npm run test:unit && npm run test"
 
-[tasks.build-wado-lsp-wasm]
-description = "Build wado-lsp wasm + wado-vscode TS into wado-vscode/out/"
+[tasks.build-wado-lsp-wasm-rust]
+description = "Build the wado-lsp wasm32-wasip1 binary into wado-vscode/out/ (Rust only)"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
@@ -253,6 +253,14 @@ set -xe -o pipefail
 cargo build -p wado-lsp --bin wado-lsp --target wasm32-wasip1 --release
 mkdir -p wado-vscode/out
 cp target/wasm32-wasip1/release/wado-lsp.wasm wado-vscode/out/wado_lsp.wasm
+"""
+
+[tasks.build-wado-lsp-wasm]
+description = "Build wado-lsp wasm + wado-vscode TS into wado-vscode/out/"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+mise run build-wado-lsp-wasm-rust
 
 # Compile the extension TS so wado-vscode/out/extension.js stays in sync —
 # otherwise a Reload Window picks up stale JS that doesn't match the wasm.
@@ -279,16 +287,14 @@ trap 'kill -TERM $TSC_PID 2>/dev/null || true; wait $TSC_PID 2>/dev/null || true
 
 # cargo watch rebuilds the wasm on every Rust change. The extension's
 # FileSystemWatcher picks the new wasm up and restarts the LSP server,
-# so Rust-only changes do not require a Reload Window.
-#
-# Inline the wasm rebuild rather than `mise run build-wado-lsp-wasm` so we
-# don't kick off a redundant `npm run compile` (already handled by the tsc
-# watcher above) on every Rust edit.
+# so Rust-only changes do not require a Reload Window. Use the rust-only
+# build task so we don't kick off a redundant `npm run compile` on every
+# Rust edit (the tsc watcher above already keeps extension.js fresh).
 cargo watch \\
     -w wado-lsp \\
     -w wado-compiler \\
     -w wado-manifest \\
-    -s 'cargo build -p wado-lsp --bin wado-lsp --target wasm32-wasip1 --release && mkdir -p wado-vscode/out && cp target/wasm32-wasip1/release/wado-lsp.wasm wado-vscode/out/wado_lsp.wasm'
+    -s 'mise run build-wado-lsp-wasm-rust'
 """
 
 [tasks.update-wado-vscode-grammar]
