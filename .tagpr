@@ -14,10 +14,9 @@
 # regex is line-anchored, matching `version = "..."` only at the start
 # of a line. Our root Cargo.toml has exactly one such line — the
 # [workspace.package].version — because every member crate inherits its
-# version from the workspace (via `version.workspace = true` or
-# `version = { workspace = true }`). The `version = "..."` entries inside
-# [workspace.dependencies] inline tables are not at the start of a line,
-# so the bump is unambiguous.
+# version from the workspace via `version = { workspace = true }`. The
+# `version = "..."` entries inside [workspace.dependencies] inline tables
+# are not at the start of a line, so the bump is unambiguous.
 versionFile = Cargo.toml
 
 # After tagpr writes the new version, sync Cargo.lock so the release PR
