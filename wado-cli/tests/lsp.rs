@@ -187,8 +187,61 @@ fn lsp_initialize_returns_capabilities() {
     assert_eq!(caps["textDocumentSync"]["openClose"], true);
     assert_eq!(caps["textDocumentSync"]["change"], 1); // Full sync
 
+    let schemes = caps["workspace"]["textDocumentContent"]["schemes"]
+        .as_array()
+        .expect("workspace.textDocumentContent.schemes should be advertised");
+    let schemes: Vec<&str> = schemes.iter().filter_map(Value::as_str).collect();
+    assert!(schemes.contains(&"core"));
+    assert!(schemes.contains(&"wasi"));
+
     let info = &resp["result"]["serverInfo"];
     assert_eq!(info["name"], "wado-lsp");
+
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_workspace_text_document_content_returns_bundled_stdlib() {
+    let mut session = LspSession::start();
+    session.initialize();
+
+    let id = session.send_request(
+        "workspace/textDocumentContent",
+        json!({ "uri": "core:cli" }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    let text = resp["result"]["text"]
+        .as_str()
+        .expect("text field should be present");
+    assert!(text.contains("println"));
+
+    let id = session.send_request(
+        "workspace/textDocumentContent",
+        json!({ "uri": "wasi:filesystem/types.wado" }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    let text = resp["result"]["text"].as_str().unwrap();
+    assert!(text.contains("Descriptor"));
+
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_workspace_text_document_content_rejects_unknown_uri() {
+    let mut session = LspSession::start();
+    session.initialize();
+
+    let id = session.send_request(
+        "workspace/textDocumentContent",
+        json!({ "uri": "core:does_not_exist" }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    // The request was syntactically valid but the URI doesn't resolve to any
+    // bundled module → RequestFailed (-32803) per LSP 3.18, not InvalidParams.
+    assert_eq!(resp["error"]["code"].as_i64(), Some(-32803));
 
     assert_eq!(session.shutdown_and_exit(), 0);
 }

@@ -38,6 +38,12 @@ Language service engine for the Wado compiler toolchain.
 
 `server::run_stdio` is the binary's only entrypoint and is also re-used by `wado-cli/src/lsp.rs`. I/O is synchronous (`std::io`) so the crate builds for `wasm32-wasip2`, where tokio's `io-std` is unavailable; the dispatcher still awaits `Engine` futures between messages. Async is driven by `futures::executor::block_on` — the crate does not depend on tokio.
 
+### Bundled stdlib content
+
+Jump-to-definition into bundled stdlib modules emits `core:<name>` / `wasi:<interface>` URIs from `module_uri` (`src/location.rs`). The server advertises a `workspace.textDocumentContent` capability for the `core` and `wasi` schemes; clients call `workspace/textDocumentContent` to retrieve the source. The handler in `src/server/dispatch.rs` resolves it via `Engine::text_document_content` (`src/lib.rs`), which looks the URI up in `wado_compiler::stdlib::get_stdlib_module`. Both `core:cli` and the rfc3986-normalised form `core:/cli` are accepted.
+
+The VS Code extension (`wado-vscode/src/extension.ts`) bridges this with a `TextDocumentContentProvider` registered for both schemes, and forces opened documents to language `wado` because opaque URIs (e.g. `core:cli`) carry no extension for VS Code's language detector.
+
 ## Related Files in wado-cli
 
 | File                   | Role                                                                           |
@@ -119,7 +125,6 @@ Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kin
 - [ ] `workspace/didChangeWatchedFiles`
 - [ ] `workspace/executeCommand`
 - [ ] `workspace/applyEdit`
-- [ ] `workspace/textDocumentContent`
 - [ ] File operations (`willCreateFiles` / `didCreateFiles` / `willRenameFiles` / `didRenameFiles` / `willDeleteFiles` / `didDeleteFiles`)
 
 ### Window Features
@@ -136,13 +141,6 @@ Known gaps and quality debts in `src/definition.rs` / `src/location.rs` not tied
 to a specific LSP request kind. Each item identifies the symptom and the
 concrete code location involved.
 
-- [ ] **Serve bundled stdlib content for `core:` / `wasi:` URIs.** `module_uri`
-      in `src/location.rs` returns `core:<name>` / `wasi:<interface>` URIs for
-      jumps into bundled stdlib modules, but LSP clients cannot open them.
-      Implement `workspace/textDocumentContent` (LSP 3.18) so the server can
-      respond with the bundled source strings from `wado_compiler::stdlib::*`.
-      As a bridge, the VS Code extension can register a
-      `TextDocumentContentProvider` for the `core:` / `wasi:` schemes.
 - [ ] **Jump-to-def for non-`Simple` `UseItem` variants.**
       `Resolver::record_use_specifier_references` (`wado-compiler/src/resolver.rs`)
       skips `UseItem::{EffectFunctions, Namespace}`. Give `UseItemSimple`
@@ -171,10 +169,11 @@ concrete code location involved.
       `Item::Test` have no dedicated `name_span` field). Either give every
       decl-bearing AST node a `name_span` so `name_span_of` becomes total,
       or accept the fallback and remove this TODO.
-- [ ] **Split `module_uri` into display-vs-navigation helpers.** The current
-      single helper in `src/location.rs` is used by both CLI output (where
-      `core:<name>` is a readable pointer) and by LSP responses (where the
-      client cannot open it). Introduce `module_display_uri` for CLI /
-      informational use and keep `module_uri` strictly for URIs a client can
-      open (returning `None` for unopenable stdlib modules until
-      `workspace/textDocumentContent` lands).
+- [ ] **Serve bundled `.wat` / `.wasm` assets via `workspace/textDocumentContent`.**
+      `core:` / `wasi:` source modules are now openable, but the
+      `ModuleSource::Wasm { path, .. }` arm of `module_uri` in
+      `src/location.rs` still returns the import path verbatim — clients have
+      no way to open `core:libm.wat`. Extend `Engine::text_document_content`
+      to dispatch to `wado_compiler::stdlib::get_stdlib_wasm_asset` for `.wat`
+      assets (text) and either disassemble or skip `.wasm` (binary). Decide
+      whether to advertise additional schemes or reuse `core:` / `wasi:`.

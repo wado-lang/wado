@@ -43,8 +43,10 @@ jobs:
 
       # Build the bundled Wasm language server that the extension loads on
       # activation. See docs/wep-2026-04-18-lsp-architecture.md for rationale.
+      # The TS bundle is compiled by the explicit `npm ci` + `npm run compile`
+      # steps below, so this job uses the Rust-only task to avoid redoing it.
       - name: Build wado-lsp.wasm (wasm32-wasip1)
-        run: mise run build-wado-lsp-wasm
+        run: mise run build-wado-lsp-wasm-rust
 
       - name: Install npm dependencies
         working-directory: wado-vscode

@@ -119,6 +119,28 @@ impl Engine {
         document_highlight::document_highlight(source, position, uri, host).await
     }
 
+    /// Resolve a `core:` / `wasi:` URI to its bundled stdlib source.
+    ///
+    /// Powers `workspace/textDocumentContent` so editors can open
+    /// `core:cli` / `wasi:filesystem/types.wado` jump-to-definition targets
+    /// even though the source lives only in the compiler's binary.
+    /// Tolerates the rfc3986-normalised form `core:/cli` that some clients
+    /// emit when round-tripping the URI through their parser.
+    #[must_use]
+    pub fn text_document_content(&self, uri: &str) -> Option<&'static str> {
+        let (scheme, rest) = uri.split_once(':')?;
+        if scheme != "core" && scheme != "wasi" {
+            return None;
+        }
+        // Canonical form (`core:cli`) hits get_stdlib_module without an
+        // intermediate allocation; only the normalised form (`core:/cli`)
+        // needs its slash stripped and the URI re-formed.
+        match rest.strip_prefix('/') {
+            None => wado_compiler::stdlib::get_stdlib_module(uri),
+            Some(path) => wado_compiler::stdlib::get_stdlib_module(&format!("{scheme}:{path}")),
+        }
+    }
+
     /// Compute semantic tokens for the given document.
     ///
     /// Returns delta-encoded token data for LSP `textDocument/semanticTokens/full`.
@@ -245,5 +267,39 @@ mod tests {
             "/home/user/test.wado"
         );
         assert_eq!(uri_to_filename("untitled:1"), "untitled:1");
+    }
+
+    #[test]
+    fn text_document_content_resolves_core_module() {
+        let engine = Engine::new();
+        let text = engine.text_document_content("core:cli").unwrap();
+        assert!(text.contains("println"));
+    }
+
+    #[test]
+    fn text_document_content_resolves_wasi_interface() {
+        let engine = Engine::new();
+        let text = engine
+            .text_document_content("wasi:filesystem/types.wado")
+            .unwrap();
+        assert!(text.contains("Descriptor"));
+    }
+
+    #[test]
+    fn text_document_content_tolerates_normalized_uri() {
+        let engine = Engine::new();
+        assert!(engine.text_document_content("core:/cli").is_some());
+    }
+
+    #[test]
+    fn text_document_content_rejects_unknown_scheme() {
+        let engine = Engine::new();
+        assert!(engine.text_document_content("file:///etc/passwd").is_none());
+    }
+
+    #[test]
+    fn text_document_content_rejects_unknown_module() {
+        let engine = Engine::new();
+        assert!(engine.text_document_content("core:nonexistent").is_none());
     }
 }
