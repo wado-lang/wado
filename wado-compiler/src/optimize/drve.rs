@@ -31,6 +31,7 @@ use crate::tir::{
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
+use super::dae;
 use super::elide_local::is_pure_expr;
 
 type FnKey = dae::FnKey;
@@ -165,16 +166,11 @@ impl TirRefVisitor for ReturnPurityChecker {
     }
 }
 
-use super::dae;
-
 fn collect_pinned(project: &FlatPackage) -> IndexSet<FnKey> {
     dae::collect_pinned(project)
 }
 
-fn validate_call_sites(
-    project: &FlatPackage,
-    mut candidates: IndexSet<FnKey>,
-) -> IndexSet<FnKey> {
+fn validate_call_sites(project: &FlatPackage, mut candidates: IndexSet<FnKey>) -> IndexSet<FnKey> {
     let mut validator = CallValidator {
         candidates: &candidates,
         rejected: IndexSet::default(),
@@ -309,7 +305,6 @@ impl TirRefVisitor for UseScanner<'_> {
     }
 }
 
-
 fn apply_drve(project: &mut FlatPackage, confirmed: &IndexSet<FnKey>) {
     // Step A: convert each candidate to void return. The candidate filter
     // guarantees every reachable `Return { value: Some(_) }` carries a pure
@@ -385,4 +380,3 @@ impl TirMutVisitor for ReturnVoidRewriter {
         self.walk_expr(expr);
     }
 }
-

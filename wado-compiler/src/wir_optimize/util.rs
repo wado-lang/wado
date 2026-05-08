@@ -65,14 +65,9 @@ pub(super) fn collect_local_gets_deep(instr: &WirInstr, names: &mut IndexSet<Str
 /// calls (potentially I/O), the explicit [`WirInstr::Unreachable`] trap, and
 /// control-flow exits that bypass subsequent siblings. Does **not** classify
 /// implicit-trap ops (integer divide / remainder, float→int trunc, OOB heap
-/// reads / loads, null `ref.as_non_null` / `ref.cast`, etc.) as observable —
-/// preserving the long-standing semantics of [`is_side_effect_free`], which
-/// is intentionally permissive there to let passes like write-only-local
-/// elimination drop dead loads. Tightening that contract is out of scope
-/// here; it would affect every consumer.
+/// reads / loads, null `ref.as_non_null` / `ref.cast`, etc.) as observable.
 ///
-/// Does not look at children; combine with recursion (see
-/// [`is_side_effect_free`]) for tree purity.
+/// Does not look at children; recurse manually for tree purity.
 pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
     matches!(
         instr,
@@ -108,20 +103,4 @@ pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
         | WirInstr::BrTable { .. }
         | WirInstr::Return { .. }
     )
-}
-
-/// True if no node in `instr`'s sub-tree is observable. Pure loads
-/// (`StructGet`, `ArrayGet*`, memory loads, `LocalGet`, `GlobalGet`) and
-/// arithmetic / ref ops are treated as side-effect-free.
-pub(super) fn is_side_effect_free(instr: &WirInstr) -> bool {
-    if is_root_observable(instr) {
-        return false;
-    }
-    let mut ok = true;
-    instr.for_each_child(&mut |child| {
-        if ok && !is_side_effect_free(child) {
-            ok = false;
-        }
-    });
-    ok
 }

@@ -49,10 +49,7 @@ pub fn eliminate_dead_arguments(project: &mut FlatPackage) -> bool {
         }
         let dead = find_dead_params(&func);
         if dead.iter().any(|&d| d) {
-            candidates.insert(
-                (func.module_source.clone(), func.name.clone()),
-                dead,
-            );
+            candidates.insert((func.module_source.clone(), func.name.clone()), dead);
         }
     }
     if candidates.is_empty() {
@@ -162,13 +159,16 @@ struct FuncRefCollector<'a> {
 
 impl TirRefVisitor for FuncRefCollector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
-        if let TirExprKind::FuncRef { module_source, name } = &expr.kind {
+        if let TirExprKind::FuncRef {
+            module_source,
+            name,
+        } = &expr.kind
+        {
             self.out.insert((module_source.clone(), name.clone()));
         }
         self.walk_expr(expr);
     }
 }
-
 
 /// Walk every call site once per validation. A single impure argument at a
 /// dead position drops the candidate completely so we never end up rewriting
@@ -254,7 +254,6 @@ impl TirRefVisitor for CallSiteValidator<'_> {
     }
 }
 
-
 fn apply_dae(project: &mut FlatPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) {
     // Phase 3a: shrink the parameter list of every confirmed callee, then
     // renumber locals so `params[k].local_index == k` continues to hold.
@@ -325,9 +324,7 @@ fn shrink_params_and_renumber(func: &mut TirFunction, dead: &[bool]) {
     // Compute the set of dead local_indices (one per dead param).
     let mut dead_local_indices: IndexSet<u32> = IndexSet::default();
     for (i, &d) in dead.iter().enumerate() {
-        if d
-            && let Some(p) = func.params.get(i)
-        {
+        if d && let Some(p) = func.params.get(i) {
             dead_local_indices.insert(p.local_index);
         }
     }
@@ -438,4 +435,3 @@ impl TirMutVisitor for LocalRemap<'_> {
         self.walk_pattern(pattern);
     }
 }
-

@@ -14,19 +14,20 @@
 //! | `const_forward`   | Struct field constant forwarding            |
 //! | `peephole`        | Constant folding, copy elision, MV elision  |
 //! | `cleanup`         | Nop/dead-code removal, normalization        |
-//! | `dae`             | Dead argument elimination                   |
-//! | `drve`            | Dead return value elimination               |
-//! | `elide_local`     | Write-only local elimination                |
 //! | `init_guard`      | Trivial init-guard global removal           |
 //! | `dce`             | Dead code / type / global elimination       |
+//!
+//! Dead-argument / dead-return-value / write-only-local elimination used to
+//! live here too. They were moved to TIR (`optimize::dae`, `optimize::drve`,
+//! `optimize::elide_local`) so they can interact with `inline` / `copy_prop`
+//! / `const_fold` / `dce` inside the same fixed-point loop. Disabling the
+//! WIR copies showed no test or benchmark regression — the patterns the WIR
+//! versions used to cover are now caught earlier at TIR.
 
 mod array;
 mod cleanup;
 mod const_forward;
-mod dae;
 mod dce;
-mod drve;
-mod elide_local;
 mod elide_struct;
 mod init_guard;
 mod nullable_ref;
@@ -46,9 +47,6 @@ use array::{
 };
 use cleanup::cleanup;
 use const_forward::forward_struct_field_constants;
-use dae::eliminate_dead_arguments;
-use drve::eliminate_dead_return_values;
-use elide_local::elide_write_only_locals;
 use elide_struct::{
     elide_adjacent_single_use_struct_locals, elide_multi_field_struct_locals,
     elide_single_field_struct_locals, flatten_seq_assignments,
@@ -178,16 +176,8 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     elide_multi_field_struct_locals(module);
     profiler.span_end("wir/phase5_peephole");
 
-    // Phase 6: Dead value elimination
-    //
-    // Eliminate dead arguments, dead return values, and write-only locals.
-    // No `cleanup` is needed afterwards: phase 7 only touches globals, and
-    // phase 7's final `cleanup` catches any Nops/dead locals left here.
-    profiler.span_start("wir/phase6_dead_value_elim");
-    eliminate_dead_arguments(module);
-    eliminate_dead_return_values(module);
-    elide_write_only_locals(module);
-    profiler.span_end("wir/phase6_dead_value_elim");
+    // Phase 6 (dead value elimination) used to live here. See module-level
+    // doc comment.
 
     // Phase 7: Global cleanup
     //

@@ -44,7 +44,10 @@ fn elide_in_function(func: &mut TirFunction) -> bool {
     collector.visit_block(func.body.as_ref().unwrap());
 
     let body = func.body.as_mut().unwrap();
-    let mut elider = Elider { kept: &kept, changed: false };
+    let mut elider = Elider {
+        kept: &kept,
+        changed: false,
+    };
     elider.visit_block(body);
     elider.changed
 }
@@ -164,9 +167,7 @@ pub(super) fn is_pure_expr(expr: &TirExpr) -> bool {
         TirExprKind::VariantConstruct { payload, .. } => {
             payload.as_ref().is_none_or(|p| is_pure_expr(p))
         }
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            is_pure_block(block)
-        }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => is_pure_block(block),
         TirExprKind::If {
             condition,
             then_branch,
