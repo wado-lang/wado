@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778204128200,
+  "lastUpdate": 1778206866501,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20297,6 +20297,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/40f6f8d88012ab997716eef0f5392ebd6ccc19f7"
         },
         "date": 1778204127842,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 514574,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2bcad113b468c3c0042629c23960744bf306ca63",
+          "message": "Merge pull request #1022 from wado-lang/codex/2026-05-08-update-mise-action-from-@3-to-@4\n\nchore: bump jdx/mise-action to v4 in GitHub workflows",
+          "timestamp": "2026-05-08T11:16:00+09:00",
+          "tree_id": "e64aeb323478d71cec2d911422ee00183c93189a",
+          "url": "https://github.com/wado-lang/wado/commit/2bcad113b468c3c0042629c23960744bf306ca63"
+        },
+        "date": 1778206866269,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
