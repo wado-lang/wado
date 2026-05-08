@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778167631116,
+  "lastUpdate": 1778201308002,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20209,6 +20209,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/49c75a4392221d3ced27f1fa35ebb958431c57cc"
         },
         "date": 1778167630747,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 514574,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d85052b0f1096c8c3bd00dd6f061b2c3891cbfde",
+          "message": "Merge pull request #1020 from wado-lang/gfx/lsp_workspace_text_document_content\n\nfeat: LSP: serve bundled stdlib via workspace/textDocumentContent",
+          "timestamp": "2026-05-08T09:43:18+09:00",
+          "tree_id": "d4d2571718c4ed7f89166e4cf50a4af6c29b5699",
+          "url": "https://github.com/wado-lang/wado/commit/d85052b0f1096c8c3bd00dd6f061b2c3891cbfde"
+        },
+        "date": 1778201307622,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
