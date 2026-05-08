@@ -35,13 +35,44 @@ impl WasiState {
     /// `preopened_dirs`: `(host_path, guest_path)` pairs.
     /// `args`: arguments passed to the guest program via `wasi:cli/environment.get-arguments`.
     ///
+    /// Inherits the host's environment so guest CLI/test programs can read
+    /// `PATH`, `HOME`, etc. — appropriate for `wado run` and `wado test`,
+    /// where the user is launching the guest from their own shell. Long-
+    /// running services should use [`Self::new_no_inherit_env`] instead so
+    /// secrets from the server's environment are not exposed to handlers.
+    ///
     /// # Errors
     ///
     /// Returns an error if a preopened directory cannot be opened.
     pub fn new(preopened_dirs: &[(String, String)], args: &[String]) -> Result<Self> {
+        Self::build(preopened_dirs, args, true)
+    }
+
+    /// Like [`Self::new`], but does NOT inherit the host process's
+    /// environment. Used by `wado serve`: an HTTP server's env typically
+    /// holds secrets (DB credentials, API tokens) that must not leak into
+    /// per-request handler components.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a preopened directory cannot be opened.
+    pub fn new_no_inherit_env(
+        preopened_dirs: &[(String, String)],
+        args: &[String],
+    ) -> Result<Self> {
+        Self::build(preopened_dirs, args, false)
+    }
+
+    fn build(
+        preopened_dirs: &[(String, String)],
+        args: &[String],
+        inherit_env: bool,
+    ) -> Result<Self> {
         let mut builder = WasiCtx::builder();
         builder.inherit_stdio();
-        builder.inherit_env();
+        if inherit_env {
+            builder.inherit_env();
+        }
         builder.args(args);
         for (host_path, guest_path) in preopened_dirs {
             builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;

@@ -376,6 +376,15 @@ fn serve_no_dir_default() {
     assert!(opts.preopened_dirs.is_empty());
 }
 
+#[test]
+fn serve_rejects_no_dir() {
+    // `serve` deliberately omits `--no-dir`: the default is already no
+    // preopens, so the flag would be a misleading no-op. Confirm parsing
+    // fails rather than silently accepting it.
+    let parser = Parser::from_args(&["--no-dir", "input.wado"]);
+    assert_err(wado_cli::serve::parse_args(parser), "invalid option");
+}
+
 // ---- test ----
 
 #[test]

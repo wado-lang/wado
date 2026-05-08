@@ -47,7 +47,6 @@ pub struct ServeOptions {
 enum Opt {
     Addr,
     Dir,
-    NoDir,
     OptLevel,
     InlineThreshold,
     OptIterations,
@@ -60,7 +59,6 @@ impl Opt {
     const ALL: &[Self] = &[
         Self::Addr,
         Self::Dir,
-        Self::NoDir,
         Self::OptLevel,
         Self::InlineThreshold,
         Self::OptIterations,
@@ -77,8 +75,12 @@ impl Opt {
                 value: Some("<addr>"),
                 desc: "Address to listen on (default: 0.0.0.0:8080)",
             },
+            // `serve` exposes `--dir` but not `--no-dir`: the default for
+            // a service is "no preopens" (services rarely need filesystem
+            // access), so `--no-dir` would have nothing to disable. We
+            // intentionally diverge from `run`/`test` here rather than
+            // accept a misleading no-op flag.
             Self::Dir => args::DIR_SPEC,
-            Self::NoDir => args::NO_DIR_SPEC,
             Self::OptLevel => args::OPT_LEVEL_SPEC,
             Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
@@ -119,14 +121,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut opt_iterations: Option<u32> = None;
     let mut allocator: Option<String> = None;
     let mut preopened_dirs: Vec<(String, String)> = Vec::new();
-    let mut no_dir = false;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Addr => addr = args::require_string(&mut parser)?,
                 Opt::Dir => preopened_dirs.push(args::parse_dir_arg(&mut parser)?),
-                Opt::NoDir => no_dir = true,
                 Opt::OptLevel => opt_level = compile::parse_opt_level_arg(&mut parser)?,
                 Opt::InlineThreshold => {
                     inline_threshold = Some(args::parse_inline_threshold_arg(
@@ -151,10 +151,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
             return Err(args::unexpected_arg(arg, &usage));
         }
     }
-
-    // `--no-dir` is a no-op for `wado serve` (the default is already no
-    // preopens), kept for symmetry with `run`/`test`. Accept it silently.
-    let _ = no_dir;
 
     Ok(ServeOptions {
         input: manifest::resolve_input(input, manifest::EntryPointKind::Service, &usage)?,
@@ -195,9 +191,12 @@ async fn handle_http_request(
 ) -> Result<HyperResponse<BoxBody<Bytes, Infallible>>> {
     type HttpErrorCode = wasmtime_wasi_http::p3::bindings::http::types::ErrorCode;
 
-    // Each request gets a fresh WASI state — preopened dirs and program
-    // args are scoped per-request, just like the original HttpWasiState.
-    let state = WasiState::new(preopened_dirs, &[])?;
+    // Each request gets a fresh WASI state — preopened dirs are scoped
+    // per-request. Use the no-env variant: an HTTP server's environment
+    // typically holds secrets (DB creds, API tokens) that must not leak
+    // into per-request handler components, matching the pre-refactor
+    // behaviour where serve only inherited stdio.
+    let state = WasiState::new_no_inherit_env(preopened_dirs, &[])?;
     let mut store = Store::new(engine, state);
 
     let service = Service::instantiate_async(&mut store, component, linker).await?;
