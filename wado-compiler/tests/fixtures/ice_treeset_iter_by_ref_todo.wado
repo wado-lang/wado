@@ -1,0 +1,35 @@
+#![TODO]
+// TODO: ICE in WIR pipeline — `for let k of &TreeSet<T>` (and the same
+// shape on `&TreeMap<K, V>`) panics:
+//
+//   Internal compiler error: WIR pipeline generated invalid core Wasm module
+//   Validation error: type mismatch: expected (ref null $type), found (ref $type)
+//
+// Iterating *by value* (`for let k of a`) is fine, and `Array<T>` works
+// either way — the bug is specific to `core:collections` containers
+// when iterated through a `&` borrow. The implementations are generic
+// over `T`; both `i32` and `String` reproduce.
+//
+// Discovered while attempting to migrate `package-gale/src/follow_env.wado`'s
+// `FollowSet.kinds` from `Array<String>` to `TreeSet<String>` for an
+// O(n²) → O(n log n) speedup on the FOLLOW fixed-point. The migration
+// was reverted (TreeSet is now used as an internal accelerator inside
+// the existing Array-keyed API instead) until this ICE is fixed.
+//
+// Likely culprit: the `IntoIterator` impl on `&TreeSet<T>` /
+// `&TreeMap<K, V>` lowers to a Wasm GC reference whose nullability the
+// WIR layer treats inconsistently — the inner traversal expects a
+// `(ref null $type)` slot but the iterator hands back `(ref $type)`.
+// `Array<T>`'s by-ref iter doesn't trip this, so the divergence is in
+// the BTree-based collections' iterator type.
+
+use { TreeSet } from "core:collections";
+
+export fn run() {
+    let a = TreeSet::<String>::new();
+    for let _k of &a {
+    }
+}
+
+__DATA__
+{"trapped": true}
