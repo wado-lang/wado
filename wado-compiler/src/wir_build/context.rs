@@ -131,6 +131,13 @@ pub struct WirContext<'a> {
     /// Key: structured canonical intrinsic (e.g., `FutureNew(Some(S32))`).
     /// Value: the `WirFuncId` for the registered import.
     pub needed_canonicals: IndexMap<CanonicalIntrinsic, WirFuncId>,
+
+    /// Set of `(function_name, module_source)` pairs whose TIR
+    /// `return_abi` is `MultiValue`. Names alone are not unique across
+    /// modules (e.g. two `make_pair` in different `.wado` files), so the
+    /// pair is what the call-site translator queries via `is_multi_value_call`.
+    /// Computed from `package.functions` at WIR-build start.
+    pub multi_value_return_funcs: IndexSet<(String, ModuleSource)>,
 }
 
 /// A function body that needs to be translated from TIR to WIR.
@@ -221,6 +228,25 @@ impl<'a> WirContext<'a> {
         // slim `{ env, func }`.
         let inspectable_fn_dispatch = compute_inspectable_fn_dispatch(package);
 
+        // Pre-compute the set of multi-value-return functions (set by the
+        // TIR `optimize::multi_value_return` pass). The translator queries
+        // this map at call sites to decide between `LocalSet` (single
+        // result) and `MultiValueLocalBind` (split into N locals).
+        // Keyed by `(name, module_source)` because plain names are not
+        // unique across modules.
+        let multi_value_return_funcs: IndexSet<(String, ModuleSource)> = package
+            .functions
+            .iter()
+            .filter_map(|f| {
+                let f = f.try_borrow().ok()?;
+                if matches!(f.return_abi, crate::tir::ReturnAbi::MultiValue { .. }) {
+                    Some((f.name.clone(), f.module_source.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         Self {
             package,
             types: Vec::new(),
@@ -258,6 +284,7 @@ impl<'a> WirContext<'a> {
             available_wasi_funcs: IndexSet::default(),
             pending_bodies: Vec::new(),
             needed_canonicals: IndexMap::default(),
+            multi_value_return_funcs,
         }
     }
 

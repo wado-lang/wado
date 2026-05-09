@@ -41,6 +41,7 @@ mod field_scalarize;
 mod inline;
 mod labeled_block_fusion;
 mod licm;
+mod multi_value_return;
 mod ref_elim;
 mod select_lowering;
 mod sroa;
@@ -208,6 +209,17 @@ pub fn optimize(
     profiler.span_start("tir/select_lowering");
     select_lowering::select_lowering(&mut project);
     profiler.span_end("tir/select_lowering");
+
+    // Multi-value return ABI classification: marks tuple-returning user
+    // functions whose every return site is `MultiValueLiteral` and whose
+    // every call site destructures via `MultiValueProject`. WIR build
+    // emits the multi-value Wasm signature for these; the WIR
+    // `multi_value_calls` pass rewrites their call-site temps to
+    // `MultiValueLocalBind`. Runs after every other transformation so
+    // the analysis sees the final TIR shape.
+    profiler.span_start("tir/multi_value_return");
+    multi_value_return::classify_multi_value_returns(&mut project);
+    profiler.span_end("tir/multi_value_return");
 
     project
 }
