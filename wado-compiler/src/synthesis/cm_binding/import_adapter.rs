@@ -56,8 +56,22 @@ pub fn binding_func_name(interface_name: &str, method_name: &str) -> String {
 /// and `AsyncCall<T>::wait` calls through it. This keeps the lift code
 /// fully concrete — visible to monomorphize and DCE like any other Wado
 /// function — instead of deferring it to a post-monomorphize intrinsic.
-pub fn lift_func_name(interface_name: &str, method_name: &str) -> String {
+fn lift_func_name(interface_name: &str, method_name: &str) -> String {
     format!("__cm_lift__{interface_name}_{method_name}")
+}
+
+/// Functions produced by [`synthesize_adapter`] for a single WASI import.
+///
+/// Every import yields one `adapter` (the user-visible
+/// `__cm_binding__<iface>_<method>`); CM `async func` imports additionally
+/// yield one `auxiliary` entry — the per-import `__cm_lift__<iface>_<method>`
+/// function pointed to by `AsyncCall<T>::__cm_lift`. The caller pushes the
+/// adapter into the call-site rewrite map and adds every artifact (adapter
+/// plus auxiliaries) to the entry module so they all flow through
+/// monomorphize / lower / DCE.
+pub(super) struct AdapterArtifacts {
+    pub adapter: Rc<RefCell<TirFunction>>,
+    pub auxiliary: Vec<Rc<RefCell<TirFunction>>>,
 }
 
 /// Canonical ABI: maximum number of flat return values before outptr is used.
@@ -273,19 +287,7 @@ fn wasi_return_type_id(func_info: &WasiFunctionInfo, wasi_registry: &WasiRegistr
     }
 }
 
-/// Synthesize a CM binding function for a WASI import.
-///
-/// The binding function:
-/// 1. Accepts the same parameter types as the WASI function
-/// 2. Lowers parameters to flat CM ABI (String → ptr/len, etc.)
-/// 3. Calls the lowered WASI function via `CmRawCall`
-/// 4. Lifts the result from flat CM ABI back to Wado types
-/// 5. Returns the Wado-typed result
-///
-/// The binding's Wado-level return type matches the WASI function declaration.
-/// All return types are lifted inline using `synthesize_lift` — no per-type
-/// converter functions are needed.
-/// Synthesise the per-import CM lift function for an async `func_info`.
+/// Synthesize the per-import CM lift function for an async `func_info`.
 ///
 /// The function body reads the bytes the host wrote at `outptr` and
 /// returns them as the Wado-typed result, using the same `synthesize_lift`
@@ -294,14 +296,13 @@ fn wasi_return_type_id(func_info: &WasiFunctionInfo, wasi_registry: &WasiRegistr
 /// emits — e.g. `Array::with_capacity` for list lifts — visible to the
 /// monomorphizer.
 fn synthesize_async_lift_function(
+    name: String,
     func_info: &WasiFunctionInfo,
     inner_type_id: TypeId,
     wasi_registry: &WasiRegistry,
     type_table: &RefCell<TypeTable>,
     interner: &RefCell<crate::name::ModuleSourceInterner>,
 ) -> Rc<RefCell<TirFunction>> {
-    let name = lift_func_name(&func_info.interface_name, &func_info.method_name);
-
     let mut next_local: u32 = 0;
     let mut locals: Vec<TirLocal> = Vec::new();
     let mut body_stmts: Vec<TirStmt> = Vec::new();
@@ -350,6 +351,22 @@ fn synthesize_async_lift_function(
     )
 }
 
+/// Synthesize a CM binding function for a WASI import.
+///
+/// The binding function:
+/// 1. Accepts the same parameter types as the WASI function
+/// 2. Lowers parameters to flat CM ABI (String → ptr/len, etc.)
+/// 3. Calls the lowered WASI function via `CmRawCall`
+/// 4. Lifts the result from flat CM ABI back to Wado types
+/// 5. Returns the Wado-typed result
+///
+/// The binding's Wado-level return type matches the WASI function declaration.
+/// All return types are lifted inline using `synthesize_lift` — no per-type
+/// converter functions are needed.
+///
+/// For async imports the adapter additionally emits a sibling
+/// [`synthesize_async_lift_function`]; both are returned via
+/// [`AdapterArtifacts`].
 pub(super) fn synthesize_adapter(
     func_info: &WasiFunctionInfo,
     wasi_registry: &WasiRegistry,
@@ -357,7 +374,7 @@ pub(super) fn synthesize_adapter(
     interner: &RefCell<crate::name::ModuleSourceInterner>,
     owner_module: &ModuleSource,
     entry_source: &ModuleSource,
-) -> Vec<Rc<RefCell<TirFunction>>> {
+) -> AdapterArtifacts {
     let name = binding_func_name(&func_info.interface_name, &func_info.method_name);
     let local_name = func_info.local_alias_name();
 
@@ -403,10 +420,11 @@ pub(super) fn synthesize_adapter(
     let mut locals: Vec<TirLocal> = Vec::new();
     let mut body_stmts: Vec<TirStmt> = Vec::new();
     let mut flat_args: Vec<TirExpr> = Vec::new();
-    // For async imports, holds the per-import lift function that
-    // populates the `AsyncCall<T>::__cm_lift` field. Returned alongside
-    // the adapter so the caller can add it to the entry module.
-    let mut async_lift_fn: Option<Rc<RefCell<TirFunction>>> = None;
+    // Per-import lift function returned alongside the adapter for CM
+    // `async func` imports. The adapter writes a `FuncRef` to it into the
+    // emitted `AsyncCall<T>`'s `__cm_lift` field; the caller is responsible
+    // for adding it to the entry module.
+    let mut auxiliary: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
 
     // ---- Pass 1: Allocate all parameter locals (contiguous) ----
     // Wasm requires params at indices [0..n-1], so allocate them first.
@@ -1212,11 +1230,13 @@ pub(super) fn synthesize_adapter(
         //
         // For Wado-level `async fn foo(...) -> AsyncCall<T>` imports, the
         // adapter does NOT wait for the subtask or lift the result here.
-        // Instead it packages `(packed_handle, outptr, size, align)` into a
-        // `AsyncCall<T>` struct and returns it immediately, letting the
-        // caller interleave stream-parameter writes with the host subtask
-        // before explicitly `.wait()`-ing. The wait + lift + free logic
-        // lives in the synthesised `AsyncCall<T>::wait` method.
+        // Instead it packages `(packed_handle, outptr, size, align,
+        // __cm_lift_fn)` into an `AsyncCall<T>` struct and returns it
+        // immediately, letting the caller interleave stream-parameter
+        // writes with the host subtask before explicitly `.wait()`-ing.
+        // `AsyncCall<T>::wait` then performs the wait + free; the lift
+        // itself runs in the per-import `__cm_lift__*` function emitted
+        // alongside this adapter and reached through `__cm_lift`.
         let subtask_local = next_local;
         locals.push(TirLocal::synth(next_local, TypeTable::I32, false));
         next_local += 1;
@@ -1259,11 +1279,12 @@ pub(super) fn synthesize_adapter(
 
         // Per-import lift function: `AsyncCall<T>::wait` calls back through
         // this `FuncRef` to materialise the result. Synthesising a concrete
-        // function here (instead of leaving a generic
-        // `cm_lift_async_result::<T>` intrinsic in `wait`) keeps every
-        // generic call the lift emits — e.g. `Array::with_capacity` for
-        // list lifts — visible to monomorphize, like the sync path.
+        // function here keeps every generic call the lift emits — e.g.
+        // `Array::with_capacity` for list lifts — visible to monomorphize,
+        // like the sync path.
+        let lift_fn_name = lift_func_name(&func_info.interface_name, &func_info.method_name);
         let lift_fn = synthesize_async_lift_function(
+            lift_fn_name.clone(),
             func_info,
             inner_type_id,
             wasi_registry,
@@ -1279,7 +1300,7 @@ pub(super) fn synthesize_adapter(
         let lift_fn_ref = TirExpr::new(
             TirExprKind::FuncRef {
                 module_source: entry_source.clone(),
-                name: lift_func_name(&func_info.interface_name, &func_info.method_name),
+                name: lift_fn_name,
             },
             lift_fn_type,
             synth_span(),
@@ -1322,9 +1343,7 @@ pub(super) fn synthesize_adapter(
         );
         body_stmts.push(return_stmt(Some(subtask_struct)));
         adapter_return_type = subtask_type;
-        // Stash the lift fn so the caller can register it alongside the
-        // adapter (declared after the main body is built; see end of fn).
-        async_lift_fn = Some(lift_fn);
+        auxiliary.push(lift_fn);
     } else if let Some((alloc_size, alloc_align)) = outptr_alloc {
         body_stmts.push(expr_stmt(raw_call_expr));
         let outptr_local = next_local - 1;
@@ -1448,9 +1467,8 @@ pub(super) fn synthesize_adapter(
             module_source: owner_module.clone(),
         });
     }
-    let mut out = vec![binding];
-    if let Some(lift_fn) = async_lift_fn {
-        out.push(lift_fn);
+    AdapterArtifacts {
+        adapter: binding,
+        auxiliary,
     }
-    out
 }

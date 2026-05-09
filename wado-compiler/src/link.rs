@@ -133,7 +133,6 @@ pub fn link(package: Package) -> FlatPackage {
         builtin_registry: package.builtin_registry,
         task_return_flat_params: package.task_return_flat_params,
         wasm_assets: package.wasm_assets,
-        interner: package.interner,
         trait_env: package.trait_env,
     }
 }

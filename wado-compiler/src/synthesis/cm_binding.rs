@@ -157,7 +157,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                     &func_info.package,
                 )
                 .unwrap_or_else(|| project.interner.borrow_mut().wasi(&func_info.package));
-                let mut produced = synthesize_adapter(
+                let produced = synthesize_adapter(
                     &func_info,
                     project.wasi_registry,
                     &entry_type_table,
@@ -165,8 +165,8 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                     &owner_module,
                     &entry_source,
                 );
-                let adapter = produced.remove(0);
-                auxiliary_functions.extend(produced);
+                auxiliary_functions.extend(produced.auxiliary);
+                let adapter = produced.adapter;
                 adapters.insert(qualified_name.clone(), adapter.clone());
                 // Also index by binding function name for lookup
                 adapters.insert(binding_name, adapter);
