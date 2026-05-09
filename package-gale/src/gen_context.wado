@@ -413,6 +413,64 @@ impl GenContext {
         };
     }
 
+    /// True if this element's `first` set is an *exact* predictor: i.e.
+    /// "the first-set token is present at the input position" implies
+    /// "this element will successfully consume that token (and only
+    /// that token) when it matches". The criterion underlying LL repair
+    /// for nullable suffixes (Phase 5 step 3): a deep-nullable suffix
+    /// can contribute its first set to a `RuleRef`'s caller-follow only
+    /// when every walked element is first-exact. Otherwise the
+    /// suffix's first might be a multi-element alt's leading token
+    /// whose suppression at the preceding `RuleRef` would leave the
+    /// runtime stranded — this is the css3 selector / HTMLParser
+    /// htmlContent hazard documented in `package-gale/CLAUDE.md`.
+    ///
+    /// Single-token elements are trivially first-exact. A `Repeat`
+    /// inherits first-exactness from its inner: `b?` where `b : Y` has
+    /// a single-token inner so its first is exactly `{Y}`. A `Group`
+    /// is first-exact only when every alt is a single first-exact
+    /// element — anything more complex risks the multi-element alt
+    /// hazard.
+    pub fn element_is_first_exact(&mut self, elem: &Element) -> bool {
+        return match elem {
+            TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => true,
+            RuleRef(r) => {
+                let mut visiting: Array<String> = [];
+                self.rule_is_single_token(&r.name, &mut visiting);
+            },
+            Label(lab) => self.element_is_first_exact(&lab.element),
+            Repeat(rep) => self.element_is_first_exact(&rep.element),
+            Group(g) => {
+                let mut all_exact = true;
+                for let alt of &g.alternatives {
+                    if alt.elements.len() != 1 {
+                        all_exact = false;
+                        break;
+                    }
+                    if !self.element_is_first_exact(&alt.elements[0]) {
+                        all_exact = false;
+                        break;
+                    }
+                }
+                all_exact;
+            },
+        };
+    }
+
+    /// True if every element of `elements[start..]` is first-exact —
+    /// the precondition for unioning the suffix's first set into a
+    /// preceding `RuleRef`'s caller-follow when the suffix is
+    /// deep-nullable. See `element_is_first_exact` for the semantic
+    /// argument.
+    pub fn deep_suffix_is_first_exact(&mut self, elements: &Array<Element>, start: i32) -> bool {
+        for let mut i = start; i < elements.len(); i += 1 {
+            if !self.element_is_first_exact(&elements[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     pub fn rule_is_single_token(&mut self, name: &String, visiting: &mut Array<String>) -> bool {
         let cached = self.single_token_cache.get(*name);
         if let Some(val) = cached {

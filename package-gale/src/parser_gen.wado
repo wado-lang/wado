@@ -2106,11 +2106,7 @@ fn gen_scan_elements(w: &mut CodeWriter, elements: &Array<Element>, start: i32, 
         // ...)*` is the canonical hazard: Space is in both `ws`'s
         // tail-greedy and combinator's first set, but `ws` should still
         // consume Space when there is no combinator to follow).
-        ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(elements, i + 1) {
-            ctx.current_outer_follow;
-        } else {
-            ctx.first_of_elements_from(elements, i + 1);
-        };
+        ctx.ruleref_call_follow = compute_ruleref_call_follow(elements, i, ctx);
         let elem = &elements[i];
         if let Repeat(rep) = elem {
             if let Optional = rep.kind {
@@ -2166,11 +2162,7 @@ fn gen_scan_elements_in_block(w: &mut CodeWriter, elements: &Array<Element>, sta
     let saved_call_follow = ctx.ruleref_call_follow;
     for let mut i = start; i < end; i += 1 {
         ctx.current_follow_mask = if ctx.tail_is_nullable_deep(elements, i + 1) { saved_mask } else { [] };
-        ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(elements, i + 1) {
-            ctx.current_outer_follow;
-        } else {
-            ctx.first_of_elements_from(elements, i + 1);
-        };
+        ctx.ruleref_call_follow = compute_ruleref_call_follow(elements, i, ctx);
         let elem = &elements[i];
         if let Repeat(rep) = elem {
             if let Optional = rep.kind {
@@ -2827,11 +2819,7 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
     }
     let saved_call_follow = ctx.ruleref_call_follow;
     for let mut i = skip; i < alt.elements.len(); i += 1 {
-        ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(&alt.elements, i + 1) {
-            ctx.current_outer_follow;
-        } else {
-            ctx.first_of_elements_from(&alt.elements, i + 1);
-        };
+        ctx.ruleref_call_follow = compute_ruleref_call_follow(&alt.elements, i, ctx);
         let elem = &alt.elements[i];
         if let Repeat(rep) = elem {
             if let Optional = rep.kind {
@@ -2927,11 +2915,7 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut Gen
     let mut name_counts: Array<[String, i32]> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
         ctx.current_follow_mask = if ctx.tail_is_nullable_deep(elements, i + 1) { saved_mask } else { [] };
-        ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(elements, i + 1) {
-            ctx.current_outer_follow;
-        } else {
-            ctx.first_of_elements_from(elements, i + 1);
-        };
+        ctx.ruleref_call_follow = compute_ruleref_call_follow(elements, i, ctx);
         let elem = &elements[i];
         if let Repeat(rep) = elem {
             if let Optional = rep.kind {
@@ -2967,11 +2951,7 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, c
         // not deep-nullable). Nullable suffixes keep `ruleref_call_follow`
         // empty so the regular function is called — see
         // `gen_scan_elements` for the rationale.
-        ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(elements, i + 1) {
-            ctx.current_outer_follow;
-        } else {
-            ctx.first_of_elements_from(elements, i + 1);
-        };
+        ctx.ruleref_call_follow = compute_ruleref_call_follow(elements, i, ctx);
         let elem = &elements[i];
         if let Repeat(rep) = elem {
             if rep.non_greedy {
@@ -3498,6 +3478,37 @@ fn gen_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenC
             w.end();
         }
     }
+}
+
+/// Per-position caller-side FOLLOW used by alt walkers to decide
+/// whether to register a `__follow_<id>` variant for a `RuleRef` at
+/// position `i` in `elements`.
+///
+/// - When the immediate suffix `elements[i+1..]` is strictly required
+///   (not deep-nullable), use its `first` set verbatim.
+/// - When the suffix is deep-nullable AND first-exact (every walked
+///   element's first uniquely predicts that element matching, see
+///   `GenContext::element_is_first_exact`), union the suffix's first
+///   with the outer follow. This closes `ll_nullable_suffix`'s gap:
+///   `b?` where `b : Y` is first-exact, so `Y` legitimately enters
+///   the preceding `RuleRef`'s follow.
+/// - When the suffix is deep-nullable but NOT first-exact (e.g. a
+///   `Star` over a multi-element Group like CSS3 `(combinator sss
+///   ws)*`), drop the suffix's first and propagate only the outer
+///   follow. The hazard documented in `package-gale/CLAUDE.md`
+///   "Failed Approaches" #3: `combinator`'s first contains `Space`
+///   but `combinator` requires `Space sss` together, so suppressing
+///   `Space` at the preceding `ws` would leave the runtime stranded
+///   on a lone `Space`.
+fn compute_ruleref_call_follow(elements: &Array<Element>, i: i32, ctx: &mut GenContext) -> Array<String> {
+    let first = ctx.first_of_elements_from(elements, i + 1);
+    if !ctx.tail_is_nullable_deep(elements, i + 1) {
+        return first;
+    }
+    if ctx.deep_suffix_is_first_exact(elements, i + 1) {
+        return union_sets(&first, &ctx.current_outer_follow);
+    }
+    return ctx.current_outer_follow;
 }
 
 fn union_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
@@ -5149,11 +5160,7 @@ fn gen_group_scan_dispatch(w: &mut CodeWriter, sorted: &Array<i32>, alts: &Array
             // Same per-position follow threading that `gen_alt_elements`
             // does, but only register a variant when the next sibling is
             // strictly required (see `gen_scan_elements`).
-            ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(&alt.elements, i + 1) {
-                [];
-            } else {
-                ctx.first_of_elements_from(&alt.elements, i + 1);
-            };
+            ctx.ruleref_call_follow = compute_ruleref_call_follow(&alt.elements, i, ctx);
             gen_element(w, &alt.elements[i], ctx, &mut nc);
             ctx.ruleref_call_follow = [];
         }
@@ -6396,8 +6403,8 @@ fn alt_sort_priority(alt: &Alternative) -> i32 {
 fn sort_group_by_mandatory_count_desc(group: &mut Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext) {
     for let mut i = 0; i < group.len(); i += 1 {
         for let mut j = i + 1; j < group.len(); j += 1 {
-            let li = mandatory_element_count(&alts[group[i]], ctx);
-            let lj = mandatory_element_count(&alts[group[j]], ctx);
+            let li = ll_match_length(&alts[group[i]], ctx);
+            let lj = ll_match_length(&alts[group[j]], ctx);
             let mut swap = false;
             if lj > li {
                 swap = true;
@@ -6435,6 +6442,37 @@ fn mandatory_element_count(alt: &Alternative, ctx: &mut GenContext) -> i32 {
     for let elem of &alt.elements {
         let mut visiting: Array<String> = [];
         if !ctx.element_is_nullable_deep(elem, &mut visiting) {
+            count += 1;
+        }
+    }
+    return count;
+}
+
+/// LL-aware "match length" for `alt`, used to sort group alternatives so
+/// the more specific LL alt wins on overlap-prefix ties. Counts every
+/// mandatory top-level element plus every *trailing* deep-nullable
+/// element that is first-exact (single-token-derived; see
+/// `GenContext::element_is_first_exact`).
+///
+/// Why this is the right key: a first-exact nullable trailing element
+/// like `b?` (where `b : Y`) is "1 token whose presence is decisive" —
+/// when `Y` is in the input, alt 0 of `(a b? | a)` is the LL-correct
+/// pick because `b?` will fire and consume `Y`. Counting it as a
+/// pseudo-mandatory token sorts alt 0 ahead of the bare-RuleRef
+/// catch-all alt 1, mirroring ANTLR4's full-context LL preference for
+/// the longer meaningful match. Multi-element nullable structures
+/// (SQLite's `(',' tor)*` Star) stay at the original count because
+/// their first set is not first-exact, preserving the join-clause
+/// catch-all behaviour their grammars depend on.
+fn ll_match_length(alt: &Alternative, ctx: &mut GenContext) -> i32 {
+    let mut count: i32 = 0;
+    let mut seen_mandatory: bool = false;
+    for let elem of &alt.elements {
+        let mut visiting: Array<String> = [];
+        if !ctx.element_is_nullable_deep(elem, &mut visiting) {
+            count += 1;
+            seen_mandatory = true;
+        } else if seen_mandatory && ctx.element_is_first_exact(elem) {
             count += 1;
         }
     }
