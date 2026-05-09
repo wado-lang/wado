@@ -1080,9 +1080,8 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
 /// returning here would leak dangling `__follow_<id>` references into
 /// the generated source.
 fn emit_follow_variant(w: &mut CodeWriter, entry: &FollowVariantEntry, ctx: &mut GenContext) {
-    let rule_opt = ctx.find_rule(&entry.rule_name);
-    let rule = if let Some(r) = rule_opt {
-        *r;
+    let rule = if let Some(r) = ctx.find_rule(&entry.rule_name) {
+        r;
     } else {
         panic(
             `emit_follow_variant: rule '{entry.rule_name}' not found; intern_follow_variant should reject unknown rules`,
@@ -1101,10 +1100,10 @@ fn emit_follow_variant(w: &mut CodeWriter, entry: &FollowVariantEntry, ctx: &mut
     let scan_name = `scan_{rule.snake_name}__follow_{entry.id}`;
     let parse_name = `parse_{rule.snake_name}__follow_{entry.id}`;
     if entry.scan_used {
-        gen_scan_function_named(w, &rule, ctx, &scan_name, /*allow_lr_split=*/ true);
+        gen_scan_function_named(w, rule, ctx, &scan_name, /*allow_lr_split=*/ true);
     }
     if entry.parse_used {
-        gen_parse_fn_named(w, &rule, ctx, &parse_name, &scan_name, /*emit_visibility=*/ false);
+        gen_parse_fn_named(w, rule, ctx, &parse_name, &scan_name, /*emit_visibility=*/ false);
     }
 
     ctx.current_rule_name = saved_rule_name;
@@ -2738,6 +2737,15 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContex
     }
 }
 
+/// Emit the `span:` field for a constructed AST node. The end is
+/// clamped at `start` so a zero-token alt (every element nullable
+/// and absent) doesn't synthesise a reversed span when `last_end()`
+/// reflects the previous token. Used at every parse-side
+/// rule/variant emit site.
+fn emit_clamped_span_field(w: &mut CodeWriter) {
+    w.line("span: Span::new(start, i32::max(start, p.last_end())),");
+}
+
 fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<String>, struct_name: Option<String>, alt: &Alternative, ctx: &mut GenContext) {
     let gc_start = ctx.group_counter;
     gen_alt_elements(w, &alt.elements, ctx);
@@ -2747,14 +2755,14 @@ fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<Str
         let sname = struct_name.unwrap();
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
         w.indent();
-        w.line("span: Span::new(start, i32::max(start, p.last_end())),");
+        emit_clamped_span_field(w);
         gen_field_assignments(w, &alt.elements, ctx);
         w.dedent();
         w.line("}));");
     } else {
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
         w.indent();
-        w.line("span: Span::new(start, i32::max(start, p.last_end())),");
+        emit_clamped_span_field(w);
         gen_field_assignments(w, &alt.elements, ctx);
         w.dedent();
         w.line("});");
@@ -2815,14 +2823,14 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
         let sname = struct_name.unwrap();
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
         w.indent();
-        w.line("span: Span::new(start, i32::max(start, p.last_end())),");
+        emit_clamped_span_field(w);
         gen_field_assignments(w, &alt.elements, ctx);
         w.dedent();
         w.line("}));");
     } else {
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
         w.indent();
-        w.line("span: Span::new(start, i32::max(start, p.last_end())),");
+        emit_clamped_span_field(w);
         gen_field_assignments(w, &alt.elements, ctx);
         w.dedent();
         w.line("});");
@@ -5400,7 +5408,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         let first_field = first_binding;
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case_names[lr_idx]}({sname} \{`);
         w.indent();
-        w.line("span: Span::new(start, i32::max(start, p.last_end())),");
+        emit_clamped_span_field(w);
         if first_is_list_label {
             // Cast so `[left]` matches the `Array<T>` field type rather
             // than the inferred 1-tuple `[T]`.

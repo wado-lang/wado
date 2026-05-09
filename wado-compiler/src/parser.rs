@@ -149,21 +149,29 @@ impl Parser {
     /// allocates first (DFS parse order), so the comment naturally lands
     /// on the AST node it semantically belongs to.
     fn alloc_ast_id(&mut self) -> crate::ast::AstId {
-        let next_token_start = self
-            .tokens
-            .get(self.pos)
-            .map(|t| t.span.start)
-            .unwrap_or(usize::MAX);
-        let mut leading: Vec<crate::comment::Comment> = Vec::new();
-        while self.comment_cursor < self.comments.len()
-            && self.comments[self.comment_cursor].span.start < next_token_start
-        {
-            leading.push(self.comments[self.comment_cursor].clone());
-            self.comment_cursor += 1;
-        }
         let id = crate::ast::AstId(self.next_ast_id);
         self.next_ast_id += 1;
-        self.trivia.attach_leading(id, leading);
+        // Comment-stream lockstep: pure tokenisations skip the Vec
+        // allocation entirely. Most AST nodes have no preceding
+        // comments, so the empty-cursor check happens on the parser
+        // hot path.
+        if self.comment_cursor < self.comments.len() {
+            let next_token_start = self
+                .tokens
+                .get(self.pos)
+                .map(|t| t.span.start)
+                .unwrap_or(usize::MAX);
+            if self.comments[self.comment_cursor].span.start < next_token_start {
+                let mut leading: Vec<crate::comment::Comment> = Vec::new();
+                while self.comment_cursor < self.comments.len()
+                    && self.comments[self.comment_cursor].span.start < next_token_start
+                {
+                    leading.push(self.comments[self.comment_cursor].clone());
+                    self.comment_cursor += 1;
+                }
+                self.trivia.attach_leading(id, leading);
+            }
+        }
         id
     }
 
