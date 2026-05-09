@@ -210,6 +210,8 @@ fn make_trait_method(
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     }
 }
 
@@ -2328,6 +2330,8 @@ fn generate_display_fallback(
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     }
 }
 

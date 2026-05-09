@@ -571,6 +571,8 @@ fn synthesize_stream_read_func(
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     }
 }
 

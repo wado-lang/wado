@@ -711,6 +711,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             export_name: Self::extract_export_name(&func.attrs),
             allocator_tag: Self::extract_allocator_tag(&func.attrs),
             kind: FunctionKind::Regular,
+
+            return_abi: crate::tir::ReturnAbi::default(),
         })
     }
 
@@ -795,6 +797,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             export_name: None,
             allocator_tag: None,
             kind: FunctionKind::Regular,
+
+            return_abi: crate::tir::ReturnAbi::default(),
         };
 
         let tir_test = TirTest {
@@ -1224,6 +1228,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             export_name: None,
             allocator_tag: None,
             kind: FunctionKind::Regular,
+
+            return_abi: crate::tir::ReturnAbi::default(),
         })
     }
 }

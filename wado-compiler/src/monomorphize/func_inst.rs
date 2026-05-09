@@ -882,6 +882,8 @@ impl Monomorphizer {
             export_name: generic.export_name.clone(),
             allocator_tag: generic.allocator_tag.clone(),
             kind: FunctionKind::Regular,
+
+            return_abi: crate::tir::ReturnAbi::default(),
         })
     }
 

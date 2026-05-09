@@ -1339,6 +1339,23 @@ impl FunctionTranslator<'_, '_> {
             TirStmtKind::Return { value } => {
                 if let Some(expr) = value {
                     let value_instr = self.translate_expr(expr);
+                    // For multi-value-ABI functions, unwrap a top-level
+                    // `MultiValueStructNew` so the return pushes the N
+                    // tuple elements directly onto the stack instead of
+                    // wrapping them in a heap struct. The Wasm function
+                    // signature has `(result T0 T1 …)` slots that match
+                    // the inner `Seq` produced by Phase 4's
+                    // `MultiValueLiteral` lowering.
+                    let value_instr = if matches!(
+                        self.tir_func.return_abi,
+                        crate::tir::ReturnAbi::MultiValue { .. }
+                    ) && let WirInstr::MultiValueStructNew { instr, .. } =
+                        value_instr
+                    {
+                        *instr
+                    } else {
+                        value_instr
+                    };
                     Some(WirInstr::Return {
                         value: Some(Box::new(value_instr)),
                     })

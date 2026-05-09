@@ -253,6 +253,8 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     };
 
     module.functions.push(Rc::new(RefCell::new(init_func)));
@@ -779,6 +781,8 @@ pub(super) fn generate_initialize_modules_flat(flat: &mut FlatPackage) {
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     };
 
     flat.functions

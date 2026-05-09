@@ -176,6 +176,8 @@ fn generate_copy_function(
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::ValueCopy { type_id },
+
+        return_abi: crate::tir::ReturnAbi::default(),
     }
 }
 

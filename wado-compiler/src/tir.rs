@@ -3141,6 +3141,32 @@ pub struct TirFunction {
     /// optimizer can apply targeted transformations (e.g. freshness-based
     /// elision for `ValueCopy`).
     pub kind: FunctionKind,
+
+    /// ABI for delivering the function's return value at WIR / Wasm level.
+    /// Defaults to [`ReturnAbi::Single`]; an analysis pass sets
+    /// [`ReturnAbi::MultiValue`] for tuple-returning functions whose every
+    /// call site destructures the result and whose body's returns produce
+    /// `MultiValueLiteral`. WIR build then emits a multi-value Wasm result
+    /// signature (no heap struct round-trip).
+    pub return_abi: ReturnAbi,
+}
+
+/// How a function delivers its return value at the Wasm level.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum ReturnAbi {
+    /// Single Wasm return value. The function's TIR `return_type` is taken
+    /// as-is; tuple types lower to a heap struct ref.
+    #[default]
+    Single,
+    /// Multi-value Wasm return: each tuple element becomes a separate Wasm
+    /// result. Carries the per-element TIR type ids for WIR-build's
+    /// signature emission. The function's TIR `return_type` is unchanged
+    /// (it remains the tuple type) — only the WIR-level ABI shifts.
+    MultiValue {
+        /// Tuple element TIR types, in element order. Length matches the
+        /// arity of the function's tuple return type.
+        result_types: Vec<TypeId>,
+    },
 }
 
 /// Semantic category of a `TirFunction`. Carries the type operand so the
