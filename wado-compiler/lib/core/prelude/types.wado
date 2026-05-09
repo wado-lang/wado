@@ -292,6 +292,14 @@ pub struct AsyncCall<T> {
     pub __cm_size: i32,
     /// Alignment of the result buffer (for realloc-based free).
     pub __cm_align: i32,
+    /// Per-import lift function: reads the host-written CM-ABI bytes at
+    /// `__cm_outptr` and materialises them as `T`. Populated by the
+    /// synthesised `__cm_binding__<iface>_<method>` adapter for every CM
+    /// `async func` import, with a body produced by the same
+    /// `synthesize_lift` helper that handles sync imports — so async lifts
+    /// are concrete TIR by the time monomorphize runs, not a generic
+    /// intrinsic to expand later.
+    pub __cm_lift: fn(i32) -> T,
 }
 
 impl AsyncCall<T> {
@@ -317,7 +325,7 @@ impl AsyncCall<T> {
             raw.drop();
             ws.drop();
         }
-        let result = builtin::cm_lift_async_result::<T>(self.__cm_outptr);
+        let result = (self.__cm_lift)(self.__cm_outptr);
         let _ = builtin::realloc(self.__cm_outptr, self.__cm_size, self.__cm_align, 0);
         return result;
     }

@@ -5,26 +5,8 @@
 // Connector between a wasi:sockets TcpSocket and the application's own byte
 // streams, then speaks HTTP/1.1 by hand.
 //
-// Status: most of the plumbing now exists — the wasi:tls bindings are
-// registered in `wado-compiler/src/stdlib.rs`, `wasmtime-wasi-tls` is linked
-// into both `wado-cli/src/runtime.rs` and the e2e test harness, and a smoke
-// fixture (`wasi_tls_import.wado`) verifies that user code can import wasi:tls
-// types and call `Connector::new`. What still blocks compiling THIS file:
-//   1. The codegen lowers `Result<T, E>` by always reusing the canonical
-//      `wasi:cli/types#error-code` enum for `E`. wasi:tls's `Future<Result<(),
-//      Error>>` (where `Error` is the `wasi:tls/types#error` resource) needs
-//      Result lowering that respects a non-`error-code` E. This shows up as a
-//      Wasm validation failure ("export name `[constructor]connector` is not
-//      valid / resource used in function does not have a name in this
-//      context").
-//   2. The default `wasi:cli/command` world does not declare wasi:tls imports.
-//      Once (1) is fixed, either extend `wado-from-idl` to merge wasi:tls into
-//      the cli world or define a separate combined world (e.g.
-//      `wado:cli/command-tls`) selected via `--world`.
-//
-// Usage (once the above are unblocked):
+// Usage:
 //   cargo run --bin wado -- run example/hello_tls.wado
-#![TODO]
 use { println, Stdout } from "core:cli";
 use {
     TcpSocket,
@@ -35,7 +17,7 @@ use {
     Ipv6SocketAddress,
     IpNameLookup,
 } from "wasi:sockets";
-use { Connector } from "wasi:tls";
+use { Connector, Error } from "wasi:tls";
 
 fn family_of(ip: &IpAddress) -> IpAddressFamily {
     return match ip {
@@ -56,7 +38,7 @@ fn socket_address(ip: IpAddress, port: u16) -> IpSocketAddress {
     };
 }
 
-export fn run() with Stdout, IpNameLookup {
+export fn run() with Stdout, IpNameLookup, TcpSocket, Connector, Error {
     let domain = "httpbin.org";
     let port: u16 = 443;
 

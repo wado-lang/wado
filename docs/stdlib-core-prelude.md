@@ -2974,6 +2974,16 @@ Size of the result buffer (for realloc-based free).
 
 Alignment of the result buffer (for realloc-based free).
 
+#### `__cm_lift: fn(i32) -> T`
+
+Per-import lift function: reads the host-written CM-ABI bytes at
+`__cm_outptr` and materialises them as `T`. Populated by the
+synthesised `__cm_binding__<iface>_<method>` adapter for every CM
+`async func` import, with a body produced by the same
+`synthesize_lift` helper that handles sync imports — so async lifts
+are concrete TIR by the time monomorphize runs, not a generic
+intrinsic to expand later.
+
 #### `pub fn wait(&self) -> T`
 
 Wait for the subtask to complete and return the lifted result.

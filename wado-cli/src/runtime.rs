@@ -99,6 +99,11 @@ impl WasiState {
         for (host_path, guest_path) in preopened_dirs {
             builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;
         }
+        // `wado run` is invoked by the developer; mirror native CLI tools by
+        // letting `wasi:sockets`/`wasi:tls` reach the host network. Test
+        // harnesses that need hermeticity build their own `WasiCtx`.
+        builder.inherit_network();
+        builder.allow_ip_name_lookup(true);
         let ctx = builder.build();
         let table = ResourceTable::new();
         let http = WasiHttpCtx::new();
