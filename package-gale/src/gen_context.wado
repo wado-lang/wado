@@ -111,6 +111,20 @@ pub struct GenContext {
     /// `intern_follow_variant` to choose between the regular function
     /// and a `__follow_<id>` variant.
     pub ruleref_call_follow: Array<String>,
+    /// FOLLOW set propagated from outside the alt currently being
+    /// walked. Empty during regular `parse_X` / `scan_X` emission;
+    /// set to the variant's mask while emitting a `__follow_<id>`
+    /// variant body (`gen_parse_follow_variant`,
+    /// `gen_scan_follow_variant`). Alt walkers consult it when the
+    /// immediate suffix at a `RuleRef` site is deep-nullable —
+    /// without this propagation, a passthrough rule whose body is
+    /// `a` alone would compute an empty FOLLOW for the inner `a`
+    /// even when the variant's caller had already promised a
+    /// non-empty follow. See `package-gale/CLAUDE.md` "Failed
+    /// Approaches" for why this propagation is restricted to
+    /// variant emit (using it in regular emit over-approximates and
+    /// breaks css3 / htmlContent).
+    pub current_outer_follow: Array<String>,
 }
 
 impl GenContext {
@@ -140,6 +154,7 @@ impl GenContext {
             follow_variant_order: [],
             current_follow_mask: [],
             ruleref_call_follow: [],
+            current_outer_follow: [],
         };
     }
 
@@ -678,10 +693,10 @@ impl GenContext {
                 let mut stv: Array<String> = [];
                 let single = self.element_is_single_token(&rep.element, &mut stv);
                 let result: Array<String> = if !single {
-                    []
+                    [];
                 } else {
                     let mut fv: Array<String> = [];
-                    self.first_of_element(&rep.element, &mut fv)
+                    self.first_of_element(&rep.element, &mut fv);
                 };
                 result;
             },
@@ -748,9 +763,9 @@ impl GenContext {
         let canonical = canonical_kind_set(&intersection);
         let key = `{*rule_name}:{join_pipe(&canonical)}`;
         let existing_id: Option<i32> = if let Some(entry) = self.follow_variant_registry.get(key) {
-            Option::<i32>::Some(entry.id)
+            Option::<i32>::Some(entry.id);
         } else {
-            null
+            null;
         };
         if let Some(id) = existing_id {
             let mut entry = self.follow_variant_registry[key];

@@ -1,11 +1,4 @@
-use g from "./grammars/ll_ctx_follow.g4"
-    with {
-        generator: {
-            module: "../src/generator.wado",
-            options: { highlight: false },
-            output_dir: "tests/generated/ll_ctx_follow",
-        },
-    };
+use g from "./grammars/ll_ctx_follow.g4" with { generator: { module: "../src/generator.wado", options: { highlight: false }, output_dir: "tests/generated/ll_ctx_follow" } };
 use { normalize_tree } from "./grammars/ll_ctx_follow.g4";
 
 fn assert_tree(input: &String, expected: &String) {
@@ -16,10 +9,6 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
 }
 
-#[TODO]
-// Gap: 2-hop FOLLOW propagation. `a`'s call site (inside `wrapper`)
-// has no local siblings, so v1 sees an empty caller-follow. Needs a
-// rule-level FOLLOW fixed point — see TODO.md.
 test "tree: X Y picks (wrapper b) when wrapper passes through to a" {
     assert_tree(&"X Y", &"
         (r (wrapper (a X)) (b Y))
