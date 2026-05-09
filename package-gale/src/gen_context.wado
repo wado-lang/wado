@@ -785,16 +785,12 @@ impl GenContext {
     /// flags to decide whether to emit a scan-side body, parse-side
     /// body, or both.
     pub fn intern_follow_variant(&mut self, rule_name: &String, caller_follow: &Array<String>, is_scan: bool) -> Option<i32> {
-        // v1 limitation: variant emit only handles non-LR, single-alt
-        // rules. Refusing registration here keeps call sites pointing
-        // at the regular function so the generated parser stays
-        // well-formed (multi-alt and LR variant emit are deferred —
-        // see TODO.md).
+        // Phase 5 step 5: multi-alt rules are now supported via the
+        // unified `gen_parse_fn_named` body emit. LR rules remain
+        // out-of-scope for variant emit until step 6 lands the
+        // mask-aware atom + suffix helper naming.
         let rule_opt = self.find_rule(rule_name);
         if let Some(rule) = rule_opt {
-            if rule.alternatives.len() != 1 {
-                return null;
-            }
             for let alt of &rule.alternatives {
                 if rule_alt_is_left_recursive(alt, rule_name) {
                     return null;

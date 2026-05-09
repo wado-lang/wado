@@ -1,11 +1,4 @@
-use g from "./grammars/ll_multi_alt.g4"
-    with {
-        generator: {
-            module: "../src/generator.wado",
-            options: { highlight: false },
-            output_dir: "tests/generated/ll_multi_alt",
-        },
-    };
+use g from "./grammars/ll_multi_alt.g4" with { generator: { module: "../src/generator.wado", options: { highlight: false }, output_dir: "tests/generated/ll_multi_alt" } };
 use { normalize_tree } from "./grammars/ll_multi_alt.g4";
 
 fn assert_tree(input: &String, expected: &String) {
@@ -16,9 +9,6 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
 }
 
-#[TODO]
-// Gap: multi-alt callee `a` is rejected by `intern_follow_variant`.
-// Needs parse-side multi-alt variant emission — see TODO.md.
 test "tree: X Y picks (a b) when a is multi-alt" {
     assert_tree(&"X Y", &"
         (r (a X) (b Y))
