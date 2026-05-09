@@ -1531,7 +1531,7 @@ impl<'a> Unparser<'a> {
         // in that case we skip the single-line attempt entirely.
         if !has_trailing_comma || args.is_empty() {
             let snap = self.snapshot();
-            self.delimited("(", ")", args, Unparser::unparse_expr);
+            self.emit_inline_call_args(args);
             if !self.exceeds_width_since(snap) {
                 return;
             }
@@ -1540,18 +1540,65 @@ impl<'a> Unparser<'a> {
         self.emit_multiline_call_args(args);
     }
 
+    /// Single-line `(arg1, arg2, ...)` form, with inline `/*name=*/`
+    /// comments preserved before each argument they precede in source.
+    /// Mirrors `delimited("(", ")", args, …)` plus the comment hookup.
+    fn emit_inline_call_args(&mut self, args: &[Expr]) {
+        self.output.push('(');
+        for (i, arg) in args.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.emit_inline_arg_block_comments(args, i);
+            self.unparse_expr(arg);
+        }
+        self.output.push(')');
+    }
+
     /// Emit `(arg1,\n arg2,\n ...)` with a trailing comma at the current indent.
     fn emit_multiline_call_args(&mut self, args: &[Expr]) {
         self.output.push_str("(\n");
         self.indent_level += 1;
-        for arg in args {
+        for (i, arg) in args.iter().enumerate() {
             self.write_indent();
+            self.emit_inline_arg_block_comments(args, i);
             self.unparse_expr(arg);
             self.output.push_str(",\n");
         }
         self.indent_level -= 1;
         self.write_indent();
         self.output.push(')');
+    }
+
+    /// Emit any `/*...*/` block comments that appear in source between
+    /// the previous argument's end (or the call's `(` for `i == 0`) and
+    /// `args[i]`. Each comment is followed by a single space so the
+    /// argument that follows reads as `/*name=*/value`. Inline-only:
+    /// `Line` / `DocLine` / `ModuleDoc` kinds are skipped (they would
+    /// force a newline mid-arg-list and aren't a real source pattern
+    /// in this position).
+    fn emit_inline_arg_block_comments(&mut self, args: &[Expr], i: usize) {
+        if i == 0 {
+            // For the first arg the lower bound is `(`, which we don't
+            // track explicitly. Skip to keep the implementation minimal —
+            // first-arg leading comments are rare in practice and can be
+            // added later if needed.
+            return;
+        }
+        let prev_end = args[i - 1].span().end;
+        let next_start = args[i].span().start;
+        if prev_end >= next_start {
+            return;
+        }
+        for comment in self.comments.comments_between(prev_end, next_start) {
+            if !matches!(comment.kind, CommentKind::Block) {
+                continue;
+            }
+            if self.emitted_comments.insert(comment.span.start) {
+                self.emit_comment(comment);
+                self.output.push(' ');
+            }
+        }
     }
 
     fn unparse_field_access(&mut self, f: &FieldAccessExpr) {
