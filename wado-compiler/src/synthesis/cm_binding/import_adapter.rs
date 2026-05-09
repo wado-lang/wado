@@ -47,28 +47,15 @@ pub fn binding_func_name(interface_name: &str, method_name: &str) -> String {
     format!("__cm_binding__{interface_name}_{method_name}")
 }
 
-/// Build the per-import lift function name for a CM `async func` import.
-///
-/// Each async import gets its own concrete-typed lift function whose body
-/// reads the CM-ABI bytes the host wrote at `outptr` and materialises them
-/// as the Wado return type. The synthesised `AsyncCall<T>` returned by the
-/// adapter stores a `FuncRef` to this function in its `__cm_lift` field,
-/// and `AsyncCall<T>::wait` calls through it. This keeps the lift code
-/// fully concrete — visible to monomorphize and DCE like any other Wado
-/// function — instead of deferring it to a post-monomorphize intrinsic.
+/// Per-import lift function name. Pointed to by `AsyncCall<T>::__cm_lift`.
 fn lift_func_name(interface_name: &str, method_name: &str) -> String {
     format!("__cm_lift__{interface_name}_{method_name}")
 }
 
-/// Functions produced by [`synthesize_adapter`] for a single WASI import.
-///
-/// Every import yields one `adapter` (the user-visible
-/// `__cm_binding__<iface>_<method>`); CM `async func` imports additionally
-/// yield one `auxiliary` entry — the per-import `__cm_lift__<iface>_<method>`
-/// function pointed to by `AsyncCall<T>::__cm_lift`. The caller pushes the
-/// adapter into the call-site rewrite map and adds every artifact (adapter
-/// plus auxiliaries) to the entry module so they all flow through
-/// monomorphize / lower / DCE.
+/// Functions produced by [`synthesize_adapter`] for a single WASI import:
+/// the user-visible `__cm_binding__*` adapter, plus any auxiliaries (for
+/// async imports, the `__cm_lift__*` function the adapter's `AsyncCall<T>`
+/// dispatches through).
 pub(super) struct AdapterArtifacts {
     pub adapter: Rc<RefCell<TirFunction>>,
     pub auxiliary: Vec<Rc<RefCell<TirFunction>>>,
@@ -287,14 +274,10 @@ fn wasi_return_type_id(func_info: &WasiFunctionInfo, wasi_registry: &WasiRegistr
     }
 }
 
-/// Synthesize the per-import CM lift function for an async `func_info`.
-///
-/// The function body reads the bytes the host wrote at `outptr` and
-/// returns them as the Wado-typed result, using the same `synthesize_lift`
-/// helper that handles sync imports. Synthesising lift here (rather than
-/// deferring to a post-monomorphize intrinsic) keeps any generic calls it
-/// emits — e.g. `Array::with_capacity` for list lifts — visible to the
-/// monomorphizer.
+/// Synthesise the per-import CM lift function for an async import. Body
+/// is built from `func_info.return_type` via [`synthesize_lift`] — the
+/// same helper sync imports use, so generic calls inside (e.g.
+/// `Array::with_capacity`) are visible to the monomorphizer.
 fn synthesize_async_lift_function(
     name: String,
     func_info: &WasiFunctionInfo,
@@ -1277,11 +1260,8 @@ pub(super) fn synthesize_adapter(
         };
         let subtask_type = type_table.borrow_mut().make_async_call(inner_type_id);
 
-        // Per-import lift function: `AsyncCall<T>::wait` calls back through
-        // this `FuncRef` to materialise the result. Synthesising a concrete
-        // function here keeps every generic call the lift emits — e.g.
-        // `Array::with_capacity` for list lifts — visible to monomorphize,
-        // like the sync path.
+        // Per-import lift function: `AsyncCall<T>::wait` calls back
+        // through this `FuncRef` to materialise the result.
         let lift_fn_name = lift_func_name(&func_info.interface_name, &func_info.method_name);
         let lift_fn = synthesize_async_lift_function(
             lift_fn_name.clone(),

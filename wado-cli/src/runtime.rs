@@ -15,38 +15,15 @@ use wasmtime_wasi_tls::{
 
 use crate::http_hooks::WadoHttpHooks;
 
-/// Install the rustls process-level `CryptoProvider` exactly once. The
-/// workspace pulls in multiple rustls feature combinations through wasmtime's
-/// dependency graph, so the auto-detect path used by `WasiTlsCtxBuilder::new`
-/// would otherwise panic with "could not automatically determine the
-/// process-level `CryptoProvider`".
-fn install_rustls_provider() {
-    static INSTALLED: std::sync::Once = std::sync::Once::new();
-    INSTALLED.call_once(|| {
-        // Ignore the result: another caller may have raced us, in which case
-        // a provider is already in place and that is fine.
-        let _ = rustls::crypto::ring::default_provider().install_default();
-    });
-}
-
-/// Build a [`WasiTlsCtx`] whose rustls trust anchors come from
-/// [`crate::tls_trust::build_root_cert_store`].
-///
-/// `wasmtime_wasi_tls`'s default `RustlsProvider` uses *only* `webpki-roots`,
-/// which omits the operator's `WADO_CA_BUNDLE` / `SSL_CERT_FILE` /
-/// `SSL_CERT_DIR` CAs. Sharing the helper with [`WadoHttpHooks`] keeps the
-/// raw `wasi:tls` connector and the high-level `wasi:http` client
-/// agreeing on which CAs are accepted.
+/// Build a [`WasiTlsCtx`] backed by [`WadoTlsProvider`] so the raw
+/// `wasi:tls` connector and [`WadoHttpHooks`] share the same trust store.
 fn build_wasi_tls_ctx() -> WasiTlsCtx {
-    install_rustls_provider();
     WasiTlsCtxBuilder::new()
         .provider(Box::new(WadoTlsProvider::shared()))
         .build()
 }
 
-/// `TlsProvider` for the raw `wasi:tls` connector. Construction is
-/// process-cached so reusing the same trust store across many subtasks is
-/// just an `Arc::clone`.
+/// `TlsProvider` for `wasi:tls`. The `ClientConfig` is process-cached.
 struct WadoTlsProvider {
     client_config: Arc<rustls::ClientConfig>,
 }
@@ -54,6 +31,7 @@ struct WadoTlsProvider {
 impl WadoTlsProvider {
     fn shared() -> Self {
         static CONFIG: LazyLock<Arc<rustls::ClientConfig>> = LazyLock::new(|| {
+            crate::tls_trust::install_default_crypto_provider();
             let config = rustls::ClientConfig::builder()
                 .with_root_certificates(crate::tls_trust::build_root_cert_store())
                 .with_no_client_auth();

@@ -283,14 +283,10 @@ pub resource Subtask {
 /// let resp = task.wait();             // block for response
 /// ```
 pub struct AsyncCall<T> {
-    // The `__cm_*` fields are CM-ABI plumbing populated by the
-    // synthesised `__cm_binding__<iface>_<method>` adapter via a
-    // TIR-level `StructLiteral` (which bypasses visibility checks).
-    // They are deliberately *not* `pub` so user code cannot construct
-    // or mutate an `AsyncCall<T>` directly: the only stable API surface
-    // is the methods below.
-    /// Raw CM subtask handle packed as `(subtask_handle << 4) | status`,
-    /// as returned by `canon lower async`.
+    // CM-ABI plumbing populated by the synthesised `__cm_binding__*`
+    // adapter via a TIR-level `StructLiteral` (which bypasses field
+    // visibility); kept non-`pub` so user code cannot peek or forge.
+    /// Raw CM subtask handle packed as `(subtask_handle << 4) | status`.
     __cm_packed: i32,
     /// Pointer to the linear-memory buffer holding the async result.
     __cm_outptr: i32,
@@ -298,11 +294,8 @@ pub struct AsyncCall<T> {
     __cm_size: i32,
     /// Alignment of the result buffer (for realloc-based free).
     __cm_align: i32,
-    /// Per-import lift function — reads the host-written CM-ABI bytes
-    /// at `__cm_outptr` and materialises them as `T`. Synthesised
-    /// alongside the adapter so the lift body is concrete TIR by the
-    /// time monomorphize runs, instead of a generic intrinsic to expand
-    /// later.
+    /// Per-import lift function — reads CM-ABI bytes at `__cm_outptr`
+    /// and materialises them as `T`.
     __cm_lift: fn(i32) -> T,
 }
 

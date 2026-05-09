@@ -20,7 +20,7 @@ use wasmtime_wasi::TrappableError;
 use wasmtime_wasi_http::p3::bindings::http::types::{DnsErrorPayload, ErrorCode};
 use wasmtime_wasi_http::p3::{RequestOptions, WasiHttpHooks};
 
-use crate::tls_trust::build_root_cert_store;
+use crate::tls_trust::{build_root_cert_store, install_default_crypto_provider};
 
 macro_rules! warn_log {
     ($($arg:tt)*) => { eprintln!("warning: {}", format_args!($($arg)*)) };
@@ -40,13 +40,6 @@ impl WadoHttpHooks {
             client_config: Arc::new(client_config),
         }
     }
-}
-
-fn install_default_crypto_provider() {
-    static INIT: std::sync::Once = std::sync::Once::new();
-    INIT.call_once(|| {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-    });
 }
 
 impl Default for WadoHttpHooks {

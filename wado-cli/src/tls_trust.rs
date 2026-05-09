@@ -17,12 +17,30 @@
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use std::sync::Once;
 
 use rustls::RootCertStore;
 use rustls::pki_types::CertificateDer;
 
 macro_rules! warn_log {
     ($($arg:tt)*) => { eprintln!("warning: {}", format_args!($($arg)*)) };
+}
+
+/// Install the rustls process-level `CryptoProvider` exactly once.
+///
+/// The workspace pulls in multiple rustls feature combinations through
+/// wasmtime's dependency graph, so the auto-detect path used by
+/// `rustls::ClientConfig::builder()` and `WasiTlsCtxBuilder::new()` panics
+/// with "could not automatically determine the process-level
+/// `CryptoProvider`". Both `WadoHttpHooks` and the `wasi:tls` provider
+/// call this before constructing a `ClientConfig`.
+pub fn install_default_crypto_provider() {
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        // Ignore the result: another caller may have raced us, in which
+        // case a provider is already in place and that is fine.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
 }
 
 /// Build a `RootCertStore` containing `webpki-roots` plus any CA
