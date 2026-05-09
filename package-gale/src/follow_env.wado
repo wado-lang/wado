@@ -7,24 +7,20 @@ use { TreeMap, TreeSet } from "core:collections";
 /// successful parse of the rule, accumulated across every call site
 /// reachable from the start rule.
 ///
+/// `kinds` is a `TreeSet` so the fixed-point solver's repeated
+/// `follow_union` / `follow_eq` calls run at `O(|b| log |a|)` instead
+/// of the linear `Array::contains` scan they would do on an `Array`.
 /// `closed` tracks whether the set is "closed under EOF": i.e. whether
 /// the start rule (or any rule reachable from it through a strictly
 /// nullable suffix chain) is known to be terminated by EOF.
-///
-/// Internally the fixed-point solver builds a transient `TreeSet<String>`
-/// from `kinds` for membership queries during `follow_union` / `follow_eq`
-/// so the asymptotic cost is `O(|b| log |a|)` instead of the naive
-/// linear-scan `O(|a| × |b|)`. The public surface stays as
-/// `Array<String>` so callers (and the kiln-generated parser) don't
-/// have to consume `core:collections::TreeSet`.
 pub struct FollowSet {
-    pub kinds: Array<String>,
+    pub kinds: TreeSet<String>,
     pub closed: bool,
 }
 
 impl FollowSet {
     pub fn empty() -> FollowSet {
-        return FollowSet { kinds: [], closed: false };
+        return FollowSet { kinds: TreeSet::<String>::new(), closed: false };
     }
 }
 
@@ -128,7 +124,9 @@ fn compute_rule_follow(parser_rules: &Array<ParserRule>, ctx: &mut GenContext, s
     }
     if !start_rule.is_empty() {
         if env.contains_key(*start_rule) {
-            env[*start_rule] = FollowSet { kinds: ["TK_EOF"], closed: true };
+            let mut seed = TreeSet::<String>::new();
+            seed.insert("TK_EOF");
+            env[*start_rule] = FollowSet { kinds: seed, closed: true };
         }
     }
 
@@ -182,7 +180,7 @@ fn contribute_for_element(elem: &Element, ctx: &mut GenContext, local: &FollowSe
         Repeat(rep) => {
             let mut fv: Array<String> = [];
             let inner_first = ctx.first_of_element(&rep.element, &mut fv);
-            let inner_outer = follow_union(local, &FollowSet { kinds: inner_first, closed: false });
+            let inner_outer = follow_union(local, &follow_set_from_array(&inner_first, false));
             contribute_for_element(&rep.element, ctx, &inner_outer, env, changed);
         },
         Label(lab) => {
@@ -197,39 +195,44 @@ fn contribute_for_element(elem: &Element, ctx: &mut GenContext, local: &FollowSe
 /// `first(elements[i+1..]) ∪ (suffix deep-nullable → outer_follow)`.
 fn local_follow(elements: &Array<Element>, i: i32, ctx: &mut GenContext, outer_follow: &FollowSet) -> FollowSet {
     let suffix_first = ctx.first_of_elements_from(elements, i + 1);
-    let mut kinds = suffix_first;
+    let mut kinds = TreeSet::<String>::new();
+    for let k of &suffix_first {
+        kinds.insert(*k);
+    }
     let mut closed = false;
     if ctx.tail_is_nullable_deep(elements, i + 1) {
-        let mut seen = str_set_of(&kinds);
         for let k of &outer_follow.kinds {
-            if !seen.contains(*k) {
-                seen.insert(*k);
-                kinds.push(*k);
-            }
+            kinds.insert(k);
         }
         closed = outer_follow.closed;
     }
     return FollowSet { kinds, closed };
 }
 
-/// O(|b| log |a|) union: build a `TreeSet` over `a.kinds` for
-/// membership queries, then push each new element of `b.kinds` onto
-/// the existing array. Replaces the naive `O(|a| × |b|)` linear scan.
+/// Build a `FollowSet` from an `Array<String>` first-set. Used at the
+/// boundary where `GenContext` returns an `Array<String>` and the
+/// FollowEnv-internal representation is a `TreeSet<String>`.
+fn follow_set_from_array(arr: &Array<String>, closed: bool) -> FollowSet {
+    let mut kinds = TreeSet::<String>::new();
+    for let k of arr {
+        kinds.insert(*k);
+    }
+    return FollowSet { kinds, closed };
+}
+
+/// `O(|b| log |a|)` union via `TreeSet::insert` — `insert` short-
+/// circuits on duplicates, so the cost is bounded by the size of `b`
+/// times the lookup depth in `a`'s tree.
 fn follow_union(a: &FollowSet, b: &FollowSet) -> FollowSet {
     let mut kinds = a.kinds;
-    let mut seen = str_set_of(&kinds);
     for let k of &b.kinds {
-        if !seen.contains(*k) {
-            seen.insert(*k);
-            kinds.push(*k);
-        }
+        kinds.insert(k);
     }
     return FollowSet { kinds, closed: a.closed || b.closed };
 }
 
-/// O(|a| log |b|) equality: build a `TreeSet` over the smaller
-/// candidate (sizes already match by the early-out) and walk the
-/// other for membership.
+/// `O(|a| log |b|)` equality: cardinalities first, then membership of
+/// every element of `a` in `b`.
 fn follow_eq(a: &FollowSet, b: &FollowSet) -> bool {
     if a.closed != b.closed {
         return false;
@@ -237,19 +240,10 @@ fn follow_eq(a: &FollowSet, b: &FollowSet) -> bool {
     if a.kinds.len() != b.kinds.len() {
         return false;
     }
-    let b_set = str_set_of(&b.kinds);
     for let k of &a.kinds {
-        if !b_set.contains(*k) {
+        if !b.kinds.contains(k) {
             return false;
         }
     }
     return true;
-}
-
-fn str_set_of(arr: &Array<String>) -> TreeSet<String> {
-    let mut set = TreeSet::<String>::new();
-    for let k of arr {
-        set.insert(*k);
-    }
-    return set;
 }

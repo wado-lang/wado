@@ -1,0 +1,65 @@
+// Previously: `for let k of &TreeSet<T>` panicked the WIR pipeline:
+//
+//   Internal compiler error: WIR pipeline generated invalid core Wasm module
+//   Validation error: type mismatch: expected (ref null $type), found (ref $type)
+//
+// The same shape on `&TreeMap<K, V>` panicked too — even though
+// `TreeMap` does not implement `IntoIterator` at all — because the
+// resolver fell through to the wrong impl match described below.
+// `&TreeMap<K, V>` now correctly reports
+// `no method 'into_iter' found on type 'TreeMap<...>'`. Adding an
+// actual `IntoIterator` impl for `TreeMap` is a separate, additive
+// feature and out of scope for this regression.
+//
+// Root cause was in trait-method lookup for reference-typed receivers
+// (`resolver/method_lookup.rs::find_trait_method_for_type`). When the
+// receiver was `&Foo<T>`, the impl-name match treated all
+// `impl ... for &X<...>` impls as "name = `&`" because
+// `get_type_name(Type::Reference)` collapses to the literal `"&"`.
+// Without an additional inner-type check, `impl<T> IntoIterator for
+// &Array<T>` matched any `&AnyContainer<T>` receiver, and the
+// resolver committed to whichever ref impl appeared first in the
+// scan. The mis-matched impl then walked the receiver as
+// `&Array<String>` (`arr.repr` / `arr.used`), which lowered to a
+// non-null Wasm GC reference where the destination expected a
+// nullable one — that mismatch is what `wasmparser` flagged in
+// `codegen.rs:44`.
+//
+// Fix: in `find_trait_method_for_type`, after the bare name match,
+// when `impl_struct_name` is `"&"` / `"&mut"`, additionally verify
+// the impl's inner outer name matches the receiver's outer name.
+// Blanket `impl<T: Bound> Trait for &T` (where the inner is a bare
+// type-param `Type::Named` whose name isn't a known concrete type)
+// stays exempt — its own bound check downstream handles soundness.
+//
+// Discovered while migrating `package-gale/src/follow_env.wado`'s
+// `FollowSet.kinds` from `Array<String>` to `TreeSet<String>` for an
+// O(n²)→O(n log n) speedup on the FOLLOW fixed point. Tracked at
+// issue #1032.
+
+use { TreeSet } from "core:collections";
+
+export fn run() {
+    // String element type — the original repro that surfaced the
+    // ICE. Iterates by reference so the resolver hits the ref-impl
+    // branch.
+    let mut set_str = TreeSet::<String>::new();
+    set_str.insert("a");
+    let mut set_str_count = 0;
+    for let _k of &set_str {
+        set_str_count = set_str_count + 1;
+    }
+    assert set_str_count == 1;
+
+    // i32 element type — same shape, different generic instantiation.
+    let mut set_int = TreeSet::<i32>::new();
+    set_int.insert(42);
+    let mut set_int_count = 0;
+    for let _k of &set_int {
+        set_int_count = set_int_count + 1;
+    }
+    assert set_int_count == 1;
+}
+
+__DATA__
+{}

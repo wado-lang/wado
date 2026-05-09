@@ -1707,6 +1707,57 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 continue;
             }
 
+            // For reference-typed impls (`impl ... for &Container<T>` or
+            // `impl ... for &mut Container<T>`), the name match above only
+            // checks `"&"` / `"&mut"` because `get_type_name` collapses
+            // every reference to that literal — by design, since many
+            // resolver paths use the literal as a key. Without an
+            // additional inner-type check, EVERY ref impl in scope would
+            // appear to match any `&T` receiver, and the resolver would
+            // commit to whichever one happened to land first in
+            // `impl_refs`. That is exactly how `&TreeSet<String>` ended
+            // up wired to `impl<T> IntoIterator for &Array<T>`, which
+            // then ICEd in WIR validation when `arr.repr` / `arr.used`
+            // accesses lowered against the receiver's actual layout.
+            //
+            // Verify the impl's inner outer name matches the receiver's
+            // outer name. Blanket `impl<T: Bound> Trait for &T` (where
+            // the inner is a bare `Type::Named` whose name is a type
+            // param, not a known concrete type) is exempt — those are
+            // intentionally widely-applicable and the bound check below
+            // handles their soundness.
+            if (impl_struct_name == "&" || impl_struct_name == "&mut")
+                && let Some(rt) = receiver_type_id
+            {
+                let impl_inner_outer = match &impl_block.ty {
+                    Type::Reference(inner) | Type::MutReference(inner) => match inner.as_ref() {
+                        Type::Generic(g) => Some(g.name.clone()),
+                        Type::Named(named) if self.is_known_type_name(&named.name) => {
+                            Some(named.name.clone())
+                        }
+                        _ => None, // blanket `&T` form — handled by the bound check
+                    },
+                    _ => None,
+                };
+                if let Some(impl_inner) = impl_inner_outer {
+                    let receiver_outer = match self.type_table.borrow().get(rt) {
+                        ResolvedType::GenericInstance { name, .. }
+                        | ResolvedType::Struct { name, .. }
+                        | ResolvedType::Enum { name, .. }
+                        | ResolvedType::Resource { name, .. }
+                        | ResolvedType::GenericResource { name, .. }
+                        | ResolvedType::Newtype { name, .. }
+                        | ResolvedType::Flags { name, .. }
+                        | ResolvedType::Variant { name, .. } => name.clone(),
+                        ResolvedType::Primitive(p) => p.as_str().to_string(),
+                        _ => String::new(),
+                    };
+                    if impl_inner != receiver_outer {
+                        continue;
+                    }
+                }
+            }
+
             // If this impl block is a blanket impl (its target type is one of its own type params
             // with bounds), verify the receiver satisfies those bounds. This prevents incorrectly
             // using e.g. `impl<I: Iterator> IntoIterator for I` for a TypeParam `I: IntoIterator`.
