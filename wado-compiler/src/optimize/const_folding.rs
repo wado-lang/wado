@@ -478,19 +478,12 @@ impl ConstFoldVisitor<'_> {
                     self.interpreter.invalidate_aliased_fields();
                 }
             }
-            TirExprKind::TupleLiteral { elements, .. }
-            | TirExprKind::MultiValueLiteral { elements, .. } => {
+            TirExprKind::TupleLiteral { elements, .. } => {
                 let aliased = self.interpreter.aliased_locals();
                 if elements
                     .iter()
                     .any(|e| value_captures_aliased_local(e, aliased))
                 {
-                    self.interpreter.invalidate_aliased_fields();
-                }
-            }
-            TirExprKind::MultiValueProject { source, .. } => {
-                let aliased = self.interpreter.aliased_locals();
-                if value_captures_aliased_local(source, aliased) {
                     self.interpreter.invalidate_aliased_fields();
                 }
             }

@@ -41,7 +41,6 @@ mod field_scalarize;
 mod inline;
 mod labeled_block_fusion;
 mod licm;
-mod multi_value_promote;
 mod ref_elim;
 mod select_lowering;
 mod sroa;
@@ -209,15 +208,6 @@ pub fn optimize(
     profiler.span_start("tir/select_lowering");
     select_lowering::select_lowering(&mut project);
     profiler.span_end("tir/select_lowering");
-
-    // Multi-value promotion: convert non-escaping `let local = TupleLiteral(…)`
-    // bindings to `MultiValueLiteral` so the WIR `peephole` pass can elide
-    // the heap allocation when the destructure pattern allows it. Runs
-    // after every transformation phase — see the module-level docs in
-    // `multi_value_promote.rs` for the rationale.
-    profiler.span_start("tir/multi_value_promote");
-    multi_value_promote::promote_to_multi_value(&mut project);
-    profiler.span_end("tir/multi_value_promote");
 
     project
 }

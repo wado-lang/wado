@@ -196,14 +196,10 @@ fn precompute_modified_expr(
                 precompute_modified_expr(&field.value, modified, cache);
             }
         }
-        TirExprKind::TupleLiteral { elements, .. }
-        | TirExprKind::MultiValueLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 precompute_modified_expr(elem, modified, cache);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            precompute_modified_expr(source, modified, cache);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
@@ -467,14 +463,10 @@ fn collect_modified_in_expr(expr: &TirExpr, modified: &mut IndexSet<u32>) {
                 collect_modified_in_expr(&field.value, modified);
             }
         }
-        TirExprKind::TupleLiteral { elements, .. }
-        | TirExprKind::MultiValueLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 collect_modified_in_expr(elem, modified);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            collect_modified_in_expr(source, modified);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
