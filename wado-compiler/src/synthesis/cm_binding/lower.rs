@@ -825,6 +825,16 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             // Fall through to synthesize_lower for primitives and simple types
             synthesize_lower(&resolved, value, addr, next_local, locals)
         }
+        Type::Tuple(elems) if !elems.is_empty() => synthesize_lower_tuple(
+            elems,
+            value,
+            addr,
+            next_local,
+            locals,
+            wasi_registry,
+            wasi_package,
+            type_table,
+        ),
         _ => synthesize_lower(&resolved, value, addr, next_local, locals),
     }
 }

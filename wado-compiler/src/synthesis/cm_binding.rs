@@ -141,6 +141,11 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
         // defining module).
         let owner_sources = effect_owner_module_sources(&project.tir_modules);
         let mut adapters: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
+        // Auxiliary functions returned alongside an adapter (e.g. the
+        // per-import `__cm_lift__*` for async imports). Not used for
+        // call-site rewriting, but added to the entry module so they
+        // participate in monomorphize / lower / DCE like normal functions.
+        let mut auxiliary_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
         for qualified_name in &seen_effects {
             if let Some(func_info) = project.wasi_registry.get_function(qualified_name) {
                 let func_info = func_info.clone();
@@ -152,26 +157,32 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                     &func_info.package,
                 )
                 .unwrap_or_else(|| project.interner.borrow_mut().wasi(&func_info.package));
-                let adapter = synthesize_adapter(
+                let produced = synthesize_adapter(
                     &func_info,
                     project.wasi_registry,
                     &entry_type_table,
                     &project.interner,
                     &owner_module,
+                    &entry_source,
                 );
+                auxiliary_functions.extend(produced.auxiliary);
+                let adapter = produced.adapter;
                 adapters.insert(qualified_name.clone(), adapter.clone());
                 // Also index by binding function name for lookup
                 adapters.insert(binding_name, adapter);
             }
         }
 
-        // Step 3: Add binding functions to the entry module
+        // Step 3: Add binding functions (and their auxiliaries) to the entry module
         if let Some(entry_module) = project.tir_modules.get_mut(&entry_source) {
             for (key, adapter_rc) in &adapters {
                 // Only add each adapter once (skip the duplicate keyed by binding_name)
                 if key.contains("::") {
                     entry_module.functions.push(adapter_rc.clone());
                 }
+            }
+            for aux in auxiliary_functions {
+                entry_module.functions.push(aux);
             }
         }
 

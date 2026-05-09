@@ -2957,22 +2957,7 @@ body_tx.drop();
 let resp = task.wait();             // block for response
 ```
 
-#### `__cm_packed: i32`
-
-Raw CM subtask handle packed as `(subtask_handle << 4) | status`,
-as returned by `canon lower async`.
-
-#### `__cm_outptr: i32`
-
-Pointer to the linear-memory buffer holding the async result.
-
-#### `__cm_size: i32`
-
-Size of the result buffer (for realloc-based free).
-
-#### `__cm_align: i32`
-
-Alignment of the result buffer (for realloc-based free).
+_Fields are private._
 
 #### `pub fn wait(&self) -> T`
 

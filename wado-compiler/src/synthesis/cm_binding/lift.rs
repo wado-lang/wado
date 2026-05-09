@@ -91,6 +91,12 @@ fn synthesize_lift_inner(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
+    // Unwrap newtype aliases (e.g. `type Ipv4Address = [u8, u8, u8, u8]`)
+    // before dispatching, so the CM-lift logic sees the underlying shape
+    // rather than treating an unknown name as an i32 handle. Other type
+    // shapes pass through `resolve_type` unchanged.
+    let resolved = ctx.wasi_registry.resolve_type(ty);
+    let ty = &resolved;
     match ty {
         Type::Named(named) => match named.name.as_str() {
             "i32" | "u32" => builtin_call("i32_load", vec![addr], TypeTable::I32),

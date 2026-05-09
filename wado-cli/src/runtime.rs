@@ -1,26 +1,65 @@
 use anyhow::Result;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{Arc, LazyLock};
 use wasmtime::component::{Linker, ResourceTable};
 use wasmtime::{Config, Engine, OptLevel, ProfilingStrategy, Store};
 use wasmtime_wasi::filesystem::WasiFilesystemCtx;
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
-use wasmtime_wasi_tls::{WasiTlsCtx, WasiTlsCtxBuilder, WasiTlsCtxView, WasiTlsView};
+use wasmtime_wasi_tls::{
+    Error as WasiTlsError, TlsProvider, TlsStream, TlsTransport, WasiTlsCtx, WasiTlsCtxBuilder,
+    WasiTlsCtxView, WasiTlsView,
+};
 
 use crate::http_hooks::WadoHttpHooks;
 
-/// Install the rustls process-level `CryptoProvider` exactly once. The
-/// workspace pulls in multiple rustls feature combinations through wasmtime's
-/// dependency graph, so the auto-detect path used by `WasiTlsCtxBuilder::new`
-/// would otherwise panic with "could not automatically determine the
-/// process-level `CryptoProvider`".
-fn install_rustls_provider() {
-    static INSTALLED: std::sync::Once = std::sync::Once::new();
-    INSTALLED.call_once(|| {
-        // Ignore the result: another caller may have raced us, in which case
-        // a provider is already in place and that is fine.
-        let _ = rustls::crypto::ring::default_provider().install_default();
-    });
+/// Build a [`WasiTlsCtx`] backed by [`WadoTlsProvider`] so the raw
+/// `wasi:tls` connector and [`WadoHttpHooks`] share the same trust store.
+fn build_wasi_tls_ctx() -> WasiTlsCtx {
+    WasiTlsCtxBuilder::new()
+        .provider(Box::new(WadoTlsProvider::shared()))
+        .build()
+}
+
+/// `TlsProvider` for `wasi:tls`. The `ClientConfig` is process-cached.
+struct WadoTlsProvider {
+    client_config: Arc<rustls::ClientConfig>,
+}
+
+impl WadoTlsProvider {
+    fn shared() -> Self {
+        static CONFIG: LazyLock<Arc<rustls::ClientConfig>> = LazyLock::new(|| {
+            crate::tls_trust::install_default_crypto_provider();
+            let config = rustls::ClientConfig::builder()
+                .with_root_certificates(crate::tls_trust::build_root_cert_store())
+                .with_no_client_auth();
+            Arc::new(config)
+        });
+        Self {
+            client_config: Arc::clone(&CONFIG),
+        }
+    }
+}
+
+impl TlsProvider for WadoTlsProvider {
+    fn connect(
+        &self,
+        server_name: String,
+        transport: Box<dyn TlsTransport>,
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn TlsStream>, WasiTlsError>> + Send>> {
+        let client_config = Arc::clone(&self.client_config);
+        Box::pin(async move {
+            let domain = rustls::pki_types::ServerName::try_from(server_name)
+                .map_err(|_| WasiTlsError::msg("invalid server name"))?;
+            let stream = tokio_rustls::TlsConnector::from(client_config)
+                .connect(domain, transport)
+                .await
+                .map_err(|e| WasiTlsError::msg(e.to_string()))?;
+            Ok(Box::new(stream) as Box<dyn TlsStream>)
+        })
+    }
 }
 
 pub struct WasiState {
@@ -74,8 +113,7 @@ impl WasiState {
         let table = ResourceTable::new();
         let http = WasiHttpCtx::new();
         let http_hooks = WadoHttpHooks::new();
-        install_rustls_provider();
-        let tls = WasiTlsCtxBuilder::new().build();
+        let tls = build_wasi_tls_ctx();
         Self {
             ctx,
             table,
@@ -99,12 +137,20 @@ impl WasiState {
         for (host_path, guest_path) in preopened_dirs {
             builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;
         }
+        // `wado run` and `wado test` are invoked directly by the developer,
+        // so mirror native CLI tools by letting `wasi:sockets`/`wasi:tls`
+        // reach the host network. Long-running services go through
+        // [`Self::new_no_inherit_env_with_preopens`], which keeps the
+        // default deny-all stance — operators opt in explicitly there.
+        // Hermetic test harnesses (compiler `tests/common.rs`) build their
+        // own `WasiCtx` and are unaffected.
+        builder.inherit_network();
+        builder.allow_ip_name_lookup(true);
         let ctx = builder.build();
         let table = ResourceTable::new();
         let http = WasiHttpCtx::new();
         let http_hooks = WadoHttpHooks::new();
-        install_rustls_provider();
-        let tls = WasiTlsCtxBuilder::new().build();
+        let tls = build_wasi_tls_ctx();
         Ok(Self {
             ctx,
             table,
