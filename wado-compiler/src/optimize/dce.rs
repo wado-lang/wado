@@ -1829,17 +1829,14 @@ fn compute_reachable_types(project: &FlatPackage) -> IndexSet<TypeId> {
         // point the only remaining TIR-side reference is the
         // `ClosureFunctor` record itself. Without this insertion, that
         // type-table lookup panics with `TypeId not found`.
-        let surviving_funcs: IndexSet<(crate::name::ModuleSource, String)> = project
-            .functions
-            .iter()
-            .map(|f| {
-                let f = f.borrow();
-                (f.module_source.clone(), f.name.clone())
-            })
-            .collect();
+        // The functor's `call_method` and `project.functions[i]` are the
+        // same `Rc` when DCE has kept the function alive — comparing by
+        // pointer identity avoids cloning `(ModuleSource, String)` per
+        // function just to build a lookup set.
         for functor in &project.closure_functors {
-            let cm = functor.call_method.borrow();
-            if surviving_funcs.contains(&(cm.module_source.clone(), cm.name.clone())) {
+            let cm = &functor.call_method;
+            let surviving = project.functions.iter().any(|f| std::rc::Rc::ptr_eq(f, cm));
+            if surviving {
                 reachable_types.insert(functor.struct_type_id);
                 reachable_types.insert(functor.ref_type_id);
             }

@@ -320,13 +320,14 @@ impl FunctionTranslator<'_, '_> {
             // Translate the body in two parts: the binding-emission instrs
             // (which set up local slots referenced by the body and/or the
             // guard) and the body-proper instr. Keeping them separate lets
-            // the trivially-true + guard branch place the bindings into the
-            // condition `Seq` *exclusively*, instead of duplicating them in
-            // both the condition and the arm's body. The duplicate writes
-            // were previously cleaned up by WIR DAE / write-only-local
-            // elimination; with those passes moved to TIR, leaving the
-            // duplicates here produces visibly redundant `_n = i; if guard
-            // { _n = i; … }` shapes in the lowered output.
+            // the guarded branches place each binding write at exactly one
+            // point — either in the condition `Seq` (so the guard can read
+            // it) or in the inner-if's `then_body`, never both. Emitting the
+            // bindings unconditionally inside both sites would leave a
+            // visibly redundant `_n = i; if guard { _n = i; … }` shape in
+            // the lowered output that no later pass cleans up: write-only
+            // local elimination only removes locals that are *never* read,
+            // not locals that get overwritten by a duplicate store.
             let mut bindings = Vec::new();
             let body = {
                 for _ in 0..if_nesting {
@@ -430,11 +431,12 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     let mut inner_then = bindings.clone();
                     let guard_expr = self.translate_expr(guard);
-                    // Inner if: check guard, run body or fall through to remaining arms.
-                    // The inner-if's `then_body` includes the bindings already (via
-                    // `body_instrs`), so the outer `inner_then` only needs the inner-if
-                    // wrapper itself — but we keep `bindings` here so the bindings run
-                    // before the guard executes (the guard might reference them).
+                    // Bindings run once, before the guard, in the
+                    // `inner_then` prefix below — the guard may reference
+                    // them. The inner-if's `then_body` is the arm body
+                    // alone; re-emitting bindings inside it would produce
+                    // duplicate `_n = i; if guard { _n = i; … }` writes
+                    // that no later pass cleans up.
                     let inner_if = WirInstr::If {
                         condition: Box::new(guard_expr),
                         result: result_wir_type.clone(),

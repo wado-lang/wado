@@ -163,11 +163,13 @@ pub(super) fn collect_reads_in_block(block: &TirBlock, out: &mut IndexSet<u32>) 
 
 /// True when `expr` and every sub-expression has no observable effect.
 ///
-/// Conservative — anything that calls a function, writes a global, assigns,
-/// constructs a closure, takes a `&mut` reference, or evaluates inside a
-/// control-flow construct that may itself be impure is treated as impure.
-/// Pure reads (`Local`, `GlobalVarGet`, `FieldAccess`, `Index`) and arithmetic
-/// are pure. Mirrors the WIR-level `is_side_effect_free` contract.
+/// Conservative — calls, global writes, assignments, closure construction,
+/// and control-flow constructs whose branches are themselves impure are
+/// treated as impure. Pure reads (`Local`, `GlobalVarGet`, `FieldAccess`,
+/// `Index`), arithmetic, and reference-taking (`&x` / `&mut x`) are pure
+/// since the *act* of taking a reference does not mutate; only writing
+/// through the resulting reference would, and that shows up as a separate
+/// `Assign` / call. Mirrors the WIR-level `is_side_effect_free` contract.
 pub(super) fn is_pure_expr(expr: &TirExpr) -> bool {
     match &expr.kind {
         TirExprKind::IntLiteral { .. }

@@ -120,7 +120,8 @@ Removes parameters that the callee body never reads, together with the correspon
 
 After shrinking the parameter list, the pass renumbers the function's `locals[]` so that `params[k].local_index == k` continues to hold — `wir_build/translate.rs` declares `locals[i for i >= params.len()]` as body locals, and a stale dead-param slot left in place would silently re-emit a duplicate WIR `DeclareLocal` with the same name as a live param. Body `Local`, pattern `Binding`, closure `outer_index`, and `VariadicForOf` `binding_local` all get the same remap.
 
-Pinning is conservative: exports, CM bridges (`is_cm_export`, `is_cm_binding`, `is_dispatch_wrapper`), `is_ambient` / `is_async` functions, builtin / wasm-asset modules, trait methods (vtable-shaped), closure functor `__call`s, and any function whose pointer is taken via `FuncRef` are all skipped. Method receivers (param 0) are never dropped so the pass never has to rewrite `MethodCall` → `Call`.
+Pinning is conservative: CM bridges (`is_cm_export`, `is_cm_binding`, `is_dispatch_wrapper`), `is_ambient` functions, builtin / wasm-asset modules, trait methods (vtable-shaped), and any function whose pointer is taken via `FuncRef` are all skipped. `is_export` and `is_async` are _not_ pinned — every user `export fn` reaches the runtime through its synthesised `is_cm_export` wrapper (which is pinned), and `is_async` is just propagated source metadata that has no call-shape constraint after desugar lowers the body to `cm_raw_call task-return(...)`.
+A method whose `self` is dead is rewritten by the rewriter at every call site: `MethodCall(recv, name, args)` collapses to `Call(method_func, args)`. The validator gates this on receiver purity so dropping the receiver evaluation cannot strip an observable effect.
 
 E2E: [wir_optimize_dae.wado](../wado-compiler/tests/fixtures/wir_optimize_dae.wado).
 
@@ -289,9 +290,11 @@ Two complementary variants run in sequence:
 - Multi-field struct local elimination — substitutes `StructGet(LocalGet(x), field_k)` with the corresponding field expression when all fields are accessed exactly once.
 - Labeled-block copy propagation — flattens trivial labeled blocks holding only a copy. E2E: [wir_optimize_labeled_block_copy_prop.wado](../wado-compiler/tests/fixtures/wir_optimize_labeled_block_copy_prop.wado), [wir_optimize_labeled_block_copy_prop_safety.wado](../wado-compiler/tests/fixtures/wir_optimize_labeled_block_copy_prop_safety.wado).
 
-### Phase 6 (removed): Dead Value Elimination
+### Phase 6: Write-Only Local Elimination (WIR-synthesised locals)
 
-DAE / DRVE / write-only-local elimination used to live at WIR level. They were moved to TIR (`optimize::dae`, `optimize::drve`, `optimize::elide_local`) so they can interact with `inline` / `copy_prop` / `const_fold` / `dce` inside the same fixed-point loop. Disabling the WIR copies showed no test or benchmark regression — the WIR-only patterns those passes used to cover are now caught earlier at TIR.
+DAE / DRVE were moved to TIR (`optimize::dae`, `optimize::drve`) so they can interact with `inline` / `copy_prop` / `const_fold` / `dce` inside the same fixed-point loop. The WIR-level copies are gone.
+
+Write-only-local elimination is split across both layers. The TIR pass (`optimize::elide_local`) handles locals that originate at TIR (user `let`, SROA / variant-lowering shadow temps). The WIR pass (`wir_optimize::elide_local`, kept here in Phase 6) handles locals that the WIR builder synthesises during lowering — `__match_scrut_N` for match scrutinee binding, `__pair_temp_N` for Future / Stream pair returns, multi-value temps — that no TIR pass can reach. Both passes are narrow: each rewrites `LocalSet(x, v)` to `Drop(v)` (or `Nop` when `v` is pure) only when `x` is never read.
 
 ### Phase 7: Global Cleanup
 
