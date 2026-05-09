@@ -688,6 +688,14 @@ impl TirRefVisitor for EscapeChecker<'_> {
                 }
                 self.visit_expr(inner);
             }
+            // MultiValueProject on a candidate local is also a safe field access —
+            // it's the multi-value-aware spelling of FieldAccess by index.
+            TirExprKind::MultiValueProject { source, .. } => {
+                if is_candidate_local(source, self.candidates).is_some() {
+                    return;
+                }
+                self.visit_expr(source);
+            }
             // Assign to a field of a candidate is safe for the target side.
             TirExprKind::Assign { target, value } => {
                 if let TirExprKind::FieldAccess { expr: inner, .. }
@@ -826,6 +834,13 @@ impl TirRefVisitor for FieldAccessChecker<'_> {
                 }
                 self.visit_expr(inner);
             }
+            TirExprKind::MultiValueProject { source, .. } => {
+                if let Some(idx) = is_candidate_local(source, self.candidates) {
+                    self.has_access.insert(idx);
+                    return;
+                }
+                self.visit_expr(source);
+            }
             TirExprKind::Assign { target, value } => {
                 if let TirExprKind::FieldAccess { expr: inner, .. }
                 | TirExprKind::TupleSpread { expr: inner }
@@ -904,6 +919,13 @@ impl TirRefVisitor for SoftEscapeChecker<'_> {
                     return;
                 }
                 self.visit_expr(inner);
+            }
+            // MultiValueProject on candidate is also a safe access.
+            TirExprKind::MultiValueProject { source, .. } => {
+                if is_candidate_local(source, self.candidates).is_some() {
+                    return;
+                }
+                self.visit_expr(source);
             }
             // Assign to field of candidate is safe — only recurse into value.
             TirExprKind::Assign { target, value } => {
@@ -1359,6 +1381,23 @@ fn rewrite_expr(
                 };
                 return;
             }
+        }
+    }
+
+    // Same rewrite for MultiValueProject — multi-value-aware destructure of a
+    // tuple temp lowers to MultiValueProject, and SROA scalarises just like
+    // FieldAccess does.
+    if let TirExprKind::MultiValueProject { source, index } = &expr.kind
+        && let Some(local_idx) = is_candidate_local(source, safe_set)
+    {
+        let key = (local_idx, *index);
+        if let Some(&new_local) = field_map.get(&key) {
+            let (new_name, _) = &info_map[&key];
+            expr.kind = TirExprKind::Local {
+                index: new_local,
+                name: new_name.clone(),
+            };
+            return;
         }
     }
 
