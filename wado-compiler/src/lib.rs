@@ -893,11 +893,15 @@ pub fn format(source: &str) -> Result<String, CompileError> {
     })?;
     let (data_section, comments, shebang) = lexer.into_parts();
 
-    // Build comment map
-    let comment_map = comment::CommentMap::from_comments(comments, source);
+    // Position-keyed `CommentMap` backs the residual lookup paths
+    // (file-tail dangling, structural-position queries). The parser's
+    // AstId-keyed `TriviaMap` carries the leading-comment attachments
+    // that are now the primary mechanism for in-tree comments.
+    let comment_map = comment::CommentMap::from_comments(comments.clone(), source);
 
-    // Parser (with shebang and data section)
-    let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+    // Parser (with shebang, data section, and the comment stream so it
+    // can attach leading comments to AST nodes as it allocates ids).
+    let mut parser = Parser::with_trivia(tokens, shebang, data_section, comments);
     let ast = parser.parse().map_err(|e| CompileError::Parser {
         message: e.message,
         line: e.span.line,
@@ -905,9 +909,10 @@ pub fn format(source: &str) -> Result<String, CompileError> {
         filename: None,
         is_todo_module: parser.has_todo(),
     })?;
+    let trivia = parser.take_trivia();
 
     // Unparse (no lowering - preserve high-level constructs)
-    let unparser = unparse::Unparser::new(&comment_map);
+    let unparser = unparse::Unparser::new(&comment_map).with_trivia(&trivia);
     Ok(unparser.unparse(&ast))
 }
 

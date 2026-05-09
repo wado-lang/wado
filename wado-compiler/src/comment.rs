@@ -1,8 +1,24 @@
 // Comment handling for Wado formatter
 //
-// Uses Go-style CommentMap approach: comments are collected by the lexer
-// and associated with AST nodes by position after parsing.
+// Two complementary stores:
+//
+// - `CommentMap` is keyed by source byte position. Used by leaf paths in the
+//   unparser that look up "any comment in this byte range" (file-tail
+//   dangling, comments on closing braces, etc.).
+//
+// - `TriviaMap` is keyed by `AstId`. Populated by the parser as it allocates
+//   ids: every comment that appears in source between the previous token
+//   stream position and the next token of the node being constructed is
+//   attached to that node's id as *leading trivia*. The unparser reads
+//   `trivia.leading_of(id)` immediately before emitting the node, so an
+//   inline `/*name=*/` comment ends up exactly where it semantically
+//   belongs — attached to the AST node it precedes — without any
+//   position-based reconstruction.
+//
+// `TriviaMap` is the primary mechanism for new code. `CommentMap` continues
+// to back the residual position-based paths until they are migrated.
 
+use crate::ast::AstId;
 use crate::token::Span;
 use std::collections::BTreeMap;
 
@@ -152,6 +168,69 @@ impl CommentMap {
             1 => 1,
             _ => 2,
         }
+    }
+}
+
+/// Trivia (currently: comments) attached to AST nodes by [`AstId`].
+///
+/// The parser populates this as it allocates ids: at each `alloc_ast_id`
+/// call, every still-unattached comment whose `span.start` precedes the
+/// next-to-consume token's start is attached to the new id as leading
+/// trivia. Because `alloc_ast_id` is called in DFS parse order — the
+/// outermost node being constructed at a given source position allocates
+/// first — leading comments naturally land on the outermost AST node that
+/// "starts" at that position, which matches the semantic ownership users
+/// expect (`/*flag=*/true` belongs to the literal `true`, not to the
+/// surrounding call).
+///
+/// `dangling` collects comments that fall after the last token of the
+/// last allocated AST node — typically a comment on a trailing line of
+/// the file. Those are emitted by the unparser at a fixed sink (the end
+/// of the module) without an AST anchor.
+#[derive(Debug, Clone, Default)]
+pub struct TriviaMap {
+    leading: BTreeMap<AstId, Vec<Comment>>,
+    dangling: Vec<Comment>,
+}
+
+impl TriviaMap {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Attach `comments` as leading trivia on `id`. Idempotent within a
+    /// single parse — the parser only calls this once per id.
+    pub fn attach_leading(&mut self, id: AstId, comments: Vec<Comment>) {
+        if comments.is_empty() {
+            return;
+        }
+        debug_assert!(
+            !self.leading.contains_key(&id),
+            "TriviaMap::attach_leading called twice for {id:?}",
+        );
+        self.leading.insert(id, comments);
+    }
+
+    /// Set the file-tail dangling comments — those that appear in source
+    /// after the last AST node's end. Called once at parse end.
+    pub fn set_dangling(&mut self, comments: Vec<Comment>) {
+        self.dangling = comments;
+    }
+
+    /// Leading trivia for `id`, or an empty slice if none.
+    pub fn leading_of(&self, id: AstId) -> &[Comment] {
+        self.leading.get(&id).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    /// File-tail dangling comments (after the last AST node).
+    pub fn dangling(&self) -> &[Comment] {
+        &self.dangling
+    }
+
+    /// Iterate every leading comment by `(AstId, &[Comment])`. Useful for
+    /// the unparser's emitted-set seeding and for diagnostic dumps.
+    pub fn iter_leading(&self) -> impl Iterator<Item = (AstId, &[Comment])> {
+        self.leading.iter().map(|(id, cs)| (*id, cs.as_slice()))
     }
 }
 

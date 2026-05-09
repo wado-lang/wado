@@ -44,6 +44,17 @@ pub struct Parser {
     /// parse order so that re-parsing the same source produces the same id
     /// sequence.
     next_ast_id: u32,
+    /// Comments collected by the lexer, ordered by source position. The
+    /// parser consumes them in lockstep with token consumption: at every
+    /// `alloc_ast_id`, all still-unattached comments whose `span.start`
+    /// precedes the next-to-consume token's start are attached to the new
+    /// id's leading trivia. See [`crate::comment::TriviaMap`].
+    comments: Vec<crate::comment::Comment>,
+    /// Index of the next unattached comment in `comments`.
+    comment_cursor: usize,
+    /// Trivia attached to AST nodes during parsing. Exposed via
+    /// [`Parser::take_trivia`] for the formatter pipeline.
+    trivia: crate::comment::TriviaMap,
 }
 
 #[derive(Debug)]
@@ -81,17 +92,7 @@ enum ComparisonChainGroup {
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self {
-            tokens,
-            pos: 0,
-            pending_gt: false,
-            restrict_struct_literals: false,
-            shebang: None,
-            data_section: None,
-            include_paths: crate::hashmap::IndexSet::default(),
-            parsed_inner_attributes: Vec::new(),
-            next_ast_id: 0,
-        }
+        Self::build(tokens, None, None, Vec::new())
     }
 
     /// Creates a new parser with the given tokens, shebang, and data section.
@@ -99,6 +100,28 @@ impl Parser {
         tokens: Vec<Token>,
         shebang: Option<String>,
         data_section: Option<String>,
+    ) -> Self {
+        Self::build(tokens, shebang, data_section, Vec::new())
+    }
+
+    /// Creates a new parser with full lexer output, including the comment
+    /// stream so leading comments can be attached to AST nodes as they are
+    /// allocated. Use this on the formatter path; the comment stream is
+    /// otherwise harmless when omitted.
+    pub fn with_trivia(
+        tokens: Vec<Token>,
+        shebang: Option<String>,
+        data_section: Option<String>,
+        comments: Vec<crate::comment::Comment>,
+    ) -> Self {
+        Self::build(tokens, shebang, data_section, comments)
+    }
+
+    fn build(
+        tokens: Vec<Token>,
+        shebang: Option<String>,
+        data_section: Option<String>,
+        comments: Vec<crate::comment::Comment>,
     ) -> Self {
         Self {
             tokens,
@@ -110,15 +133,52 @@ impl Parser {
             include_paths: crate::hashmap::IndexSet::default(),
             parsed_inner_attributes: Vec::new(),
             next_ast_id: 0,
+            comments,
+            comment_cursor: 0,
+            trivia: crate::comment::TriviaMap::new(),
         }
     }
 
     /// Allocate a fresh [`AstId`] for an AST node currently being constructed.
     /// Ids are dense in `0..next_ast_id` and assigned in parse order.
+    ///
+    /// Side effect: every comment in `self.comments` whose `span.start`
+    /// precedes the next-to-consume token's start and has not already been
+    /// attached is attached to the returned id as leading trivia. The
+    /// outermost AST node being constructed at a given source position
+    /// allocates first (DFS parse order), so the comment naturally lands
+    /// on the AST node it semantically belongs to.
     fn alloc_ast_id(&mut self) -> crate::ast::AstId {
+        let next_token_start = self
+            .tokens
+            .get(self.pos)
+            .map(|t| t.span.start)
+            .unwrap_or(usize::MAX);
+        let mut leading: Vec<crate::comment::Comment> = Vec::new();
+        while self.comment_cursor < self.comments.len()
+            && self.comments[self.comment_cursor].span.start < next_token_start
+        {
+            leading.push(self.comments[self.comment_cursor].clone());
+            self.comment_cursor += 1;
+        }
         let id = crate::ast::AstId(self.next_ast_id);
         self.next_ast_id += 1;
+        self.trivia.attach_leading(id, leading);
         id
+    }
+
+    /// Consume and return the parser's accumulated trivia. Call this once
+    /// after `parse()` returns Ok so the formatter pipeline can read
+    /// leading-comment attachments. Sets file-tail dangling comments to
+    /// any unattached residue.
+    pub fn take_trivia(&mut self) -> crate::comment::TriviaMap {
+        let dangling: Vec<crate::comment::Comment> =
+            self.comments.drain(self.comment_cursor..).collect();
+        self.comments.clear();
+        self.comment_cursor = 0;
+        let mut trivia = std::mem::take(&mut self.trivia);
+        trivia.set_dangling(dangling);
+        trivia
     }
 
     /// Returns true if the parsed inner attributes include `#![TODO]`.

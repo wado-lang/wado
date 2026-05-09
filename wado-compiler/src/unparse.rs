@@ -92,6 +92,13 @@ fn contains_call(expr: &Expr) -> bool {
 
 pub struct Unparser<'a> {
     comments: &'a CommentMap,
+    /// AstId-keyed leading-trivia store, populated by the parser. When
+    /// present, expression and statement emit paths consult
+    /// `trivia.leading_of(node.id)` immediately before writing the node
+    /// so inline `/*name=*/` comments land attached to the node they
+    /// semantically belong to. The `comments` map is still consulted by
+    /// the residual position-based paths (file-tail dangling, etc.).
+    trivia: Option<&'a crate::comment::TriviaMap>,
     output: String,
     indent_level: usize,
     emitted_comments: IndexSet<usize>,
@@ -102,10 +109,49 @@ impl<'a> Unparser<'a> {
     pub fn new(comments: &'a CommentMap) -> Self {
         Self {
             comments,
+            trivia: None,
             output: String::new(),
             indent_level: 0,
             emitted_comments: IndexSet::default(),
             last_source_line: 0,
+        }
+    }
+
+    /// Attach a parser-populated [`TriviaMap`] for AstId-keyed leading
+    /// comments. Builder-style so existing callers (`Unparser::new(...)`)
+    /// keep working without trivia, and the formatter pipeline opts in
+    /// with `Unparser::new(...).with_trivia(&trivia)`.
+    pub fn with_trivia(mut self, trivia: &'a crate::comment::TriviaMap) -> Self {
+        self.trivia = Some(trivia);
+        self
+    }
+
+    /// Leading trivia for `id`, or an empty slice when no trivia map is
+    /// attached or the id has no recorded leading comments.
+    fn leading_of(&self, id: crate::ast::AstId) -> &'a [crate::comment::Comment] {
+        self.trivia.map(|t| t.leading_of(id)).unwrap_or(&[])
+    }
+
+    /// Emit any leading block-trivia comments for `id` inline at the
+    /// current cursor, each followed by a single space. Used by
+    /// delimited-list emit (`emit_inline_arg_leading`,
+    /// `emit_multiline_arg_leading`) so `foo(/*x=*/1, /*y=*/2)` round-
+    /// trips. `Line` / `DocLine` / `ModuleDoc` comments would force a
+    /// newline mid-expression and are skipped here — those kinds are
+    /// not legal in inline position anyway.
+    fn emit_inline_leading_for(&mut self, id: crate::ast::AstId) {
+        // Collect into a local Vec to satisfy the borrow checker — the
+        // immutable borrow of `self.trivia` cannot live across the
+        // mutable `self.output` / `self.emitted_comments` writes below.
+        let comments: Vec<crate::comment::Comment> = self.leading_of(id).to_vec();
+        for comment in comments {
+            if !matches!(comment.kind, crate::comment::CommentKind::Block) {
+                continue;
+            }
+            if self.emitted_comments.insert(comment.span.start) {
+                self.emit_comment(&comment);
+                self.output.push(' ');
+            }
         }
     }
 
@@ -1540,65 +1586,37 @@ impl<'a> Unparser<'a> {
         self.emit_multiline_call_args(args);
     }
 
-    /// Single-line `(arg1, arg2, ...)` form, with inline `/*name=*/`
-    /// comments preserved before each argument they precede in source.
-    /// Mirrors `delimited("(", ")", args, …)` plus the comment hookup.
+    /// Single-line `(arg1, arg2, ...)` form. Each argument's
+    /// AstId-keyed leading block trivia is emitted inline immediately
+    /// before its expression so `foo(/*x=*/1, /*y=*/2)` round-trips.
     fn emit_inline_call_args(&mut self, args: &[Expr]) {
         self.output.push('(');
         for (i, arg) in args.iter().enumerate() {
             if i > 0 {
                 self.output.push_str(", ");
             }
-            self.emit_inline_arg_block_comments(args, i);
+            self.emit_inline_leading_for(arg.id());
             self.unparse_expr(arg);
         }
         self.output.push(')');
     }
 
     /// Emit `(arg1,\n arg2,\n ...)` with a trailing comma at the current indent.
+    /// Same comment-attachment rule as the single-line variant: leading
+    /// block trivia for each arg's AstId is emitted on the wrapped line
+    /// before the arg expression.
     fn emit_multiline_call_args(&mut self, args: &[Expr]) {
         self.output.push_str("(\n");
         self.indent_level += 1;
-        for (i, arg) in args.iter().enumerate() {
+        for arg in args {
             self.write_indent();
-            self.emit_inline_arg_block_comments(args, i);
+            self.emit_inline_leading_for(arg.id());
             self.unparse_expr(arg);
             self.output.push_str(",\n");
         }
         self.indent_level -= 1;
         self.write_indent();
         self.output.push(')');
-    }
-
-    /// Emit any `/*...*/` block comments that appear in source between
-    /// the previous argument's end (or the call's `(` for `i == 0`) and
-    /// `args[i]`. Each comment is followed by a single space so the
-    /// argument that follows reads as `/*name=*/value`. Inline-only:
-    /// `Line` / `DocLine` / `ModuleDoc` kinds are skipped (they would
-    /// force a newline mid-arg-list and aren't a real source pattern
-    /// in this position).
-    fn emit_inline_arg_block_comments(&mut self, args: &[Expr], i: usize) {
-        if i == 0 {
-            // For the first arg the lower bound is `(`, which we don't
-            // track explicitly. Skip to keep the implementation minimal —
-            // first-arg leading comments are rare in practice and can be
-            // added later if needed.
-            return;
-        }
-        let prev_end = args[i - 1].span().end;
-        let next_start = args[i].span().start;
-        if prev_end >= next_start {
-            return;
-        }
-        for comment in self.comments.comments_between(prev_end, next_start) {
-            if !matches!(comment.kind, CommentKind::Block) {
-                continue;
-            }
-            if self.emitted_comments.insert(comment.span.start) {
-                self.emit_comment(comment);
-                self.output.push(' ');
-            }
-        }
     }
 
     fn unparse_field_access(&mut self, f: &FieldAccessExpr) {
