@@ -669,7 +669,6 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_wildcard"() with Stdout 
     let rx_47: i32;
     let tx_48: i32;
     let handle_49: i32;
-    drop(20);
     message_16 = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
@@ -684,7 +683,6 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_wildcard"() with Stdout 
     handle_19 = "wado-compiler/tests/fixtures/struct_2.wado/__cm_binding__Stdout_write_via_stream"(rx_17);
     "core:cli/write_to_stream"(tx_18, message_16, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_19);
-    drop(10);
     message_28 = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
@@ -701,8 +699,6 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_wildcard"() with Stdout 
     "wasi/future-drop-readable:transmission-cli"(handle_31);
     person = struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPerson" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Bob"), used: 3 }, age: 25, email: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bob@example.com"), used: 15 } };
     name = person.name;
-    drop(25);
-    drop(person.email);
     let __pair_temp_3: i64;
     __pair_temp_3 = "wasi/stream-new"();
     rx_41 = builtin::i32_wrap_i64(__pair_temp_3);
@@ -710,9 +706,7 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_wildcard"() with Stdout 
     handle_43 = "wado-compiler/tests/fixtures/struct_2.wado/__cm_binding__Stdout_write_via_stream"(rx_41);
     "core:cli/write_to_stream"(tx_42, name, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_43);
-    drop(person.name);
     age = 25;
-    drop(person.email);
     message_46 = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };

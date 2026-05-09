@@ -76,6 +76,26 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
             self.changed = true;
             return;
         }
+        // `drop(side_effect_free_expr)` is dead — the dropped value is
+        // discarded by definition, so a sub-tree with no observable
+        // effect contributes nothing. Catches the
+        // `Expr(struct.new T { ... })` /
+        // `Expr(self.field)` shapes the TIR-level `elide_local` cannot
+        // remove in stmt position (those Exprs may have started life as
+        // `Expr(Call(...))` or labeled-block remnants of a
+        // `stores`-annotated call, and the TIR pass conservatively
+        // leaves them be — see the `stores_optimize_mixed_calls`
+        // regression test). At WIR level, every effect the call ever
+        // had is already in the WIR shape (`Call` / `LocalSet` /
+        // `StructSet` / ...), so a residual `Drop` whose sub-tree
+        // satisfies `is_side_effect_free` is genuinely dead.
+        if let WirInstr::Drop(value) = instr
+            && is_side_effect_free(value)
+        {
+            *instr = WirInstr::Nop;
+            self.changed = true;
+            return;
+        }
         // Only recurse into bodies (Block/Loop/If/Seq), not expression
         // children. `LocalSet` only appears at body level, so descending
         // through expression operands wastes work.

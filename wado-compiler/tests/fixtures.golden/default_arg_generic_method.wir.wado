@@ -13,15 +13,11 @@ struct wado-compiler/tests/fixtures/default_arg_generic_method.wado//MyBox<Strin
     mut value: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/default_arg_generic_method.wado//MyBox<i32> {  // TypeId(3)
-    mut value: i32,
-}
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
-
-type "functype//wado-compiler/tests/fixtures/default_arg_generic_method.wado/__cm_export__run" = fn();  // TypeId(6)
+type "functype//wado-compiler/tests/fixtures/default_arg_generic_method.wado/__cm_export__run" = fn();  // TypeId(5)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -29,7 +25,6 @@ import memory (1) from "mem/memory";
 
 fn "wado-compiler/tests/fixtures/default_arg_generic_method.wado/__cm_export__run"() {
     let value_47: ref "core:prelude/string.wado//String";
-    drop(struct.new "wado-compiler/tests/fixtures/default_arg_generic_method.wado//MyBox<i32>" { value: 1 });
     drop(__inline_run_0____inline_MyBox_String___new_19: block -> ref "wado-compiler/tests/fixtures/default_arg_generic_method.wado//MyBox<String>" {
         value_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 };
         break __inline_run_0____inline_MyBox_String___new_19: struct.new "wado-compiler/tests/fixtures/default_arg_generic_method.wado//MyBox<String>" { value: value_47 };

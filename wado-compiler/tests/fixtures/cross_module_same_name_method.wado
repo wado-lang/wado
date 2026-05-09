@@ -14,5 +14,16 @@ test "cross-module same-name methods resolve independently" {
     assert b.label() == "B";
 }
 
+// `wir_not_expect:O2`: after inlining `new_a` / `new_b` to a `Widget` literal
+// and folding `a.label() == "A"` / `b.label() == "B"` to `true`, both `let a`
+// / `let b` bindings turn write-only and the underlying `Widget` literals are
+// observation-free. They should be elided entirely — no `drop(struct.new
+// Widget { ... })` should survive in the WIR.
 __DATA__
-{"test": {}}
+{
+    "test": {},
+    "wir_not_expect:O2": [
+        "drop(struct.new \"./sub/cross_module_same_name_method_a.wado//Widget\"",
+        "drop(struct.new \"./sub/cross_module_same_name_method_b.wado//Widget\""
+    ]
+}
