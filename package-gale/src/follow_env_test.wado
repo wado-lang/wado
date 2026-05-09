@@ -50,15 +50,6 @@ fn no_start() -> String {
     return "";
 }
 
-fn contains(arr: &Array<String>, value: String) -> bool {
-    for let item of arr {
-        if *item == value {
-            return true;
-        }
-    }
-    return false;
-}
-
 test "FollowEnv::empty has no rules" {
     let env = FollowEnv::empty();
     let rule_name = "anything";
@@ -137,7 +128,7 @@ test "rule_follow: start rule seeded with EOF when named" {
     let r = "r";
     let fs = env.rule_follow(&r);
     assert fs.closed, "start rule's FOLLOW must be closed";
-    assert contains(&fs.kinds, "TK_EOF"), "start rule's FOLLOW must contain TK_EOF";
+    assert fs.kinds.contains("TK_EOF"), "start rule's FOLLOW must contain TK_EOF";
 }
 
 test "rule_follow: callee gets first(suffix) of caller alt" {
@@ -148,7 +139,7 @@ test "rule_follow: callee gets first(suffix) of caller alt" {
     let env = build(&rules, &mut ctx, &start);
     let a = "a";
     let fs_a = env.rule_follow(&a);
-    assert contains(&fs_a.kinds, "TK_B"), `expected TK_B in FOLLOW(a), got {fs_a.kinds.len()} entries`;
+    assert fs_a.kinds.contains("TK_B"), `expected TK_B in FOLLOW(a), got {fs_a.kinds.len()} entries`;
 }
 
 test "rule_follow: callee at deep-nullable suffix inherits caller's FOLLOW" {
@@ -161,7 +152,7 @@ test "rule_follow: callee at deep-nullable suffix inherits caller's FOLLOW" {
     let env = build(&rules, &mut ctx, &start);
     let a = "a";
     let fs_a = env.rule_follow(&a);
-    assert contains(&fs_a.kinds, "TK_EOF"), "FOLLOW(a) must include TK_EOF transitively from FOLLOW(r)";
+    assert fs_a.kinds.contains("TK_EOF"), "FOLLOW(a) must include TK_EOF transitively from FOLLOW(r)";
 }
 
 test "rule_follow: ll_ctx_follow grammar yields FOLLOW(a) = {TK_Y, TK_EOF}" {
@@ -184,11 +175,11 @@ test "rule_follow: ll_ctx_follow grammar yields FOLLOW(a) = {TK_Y, TK_EOF}" {
     let fs_a = env.rule_follow(&a);
     let fs_w = env.rule_follow(&wrapper);
     let fs_b = env.rule_follow(&b);
-    assert contains(&fs_a.kinds, "TK_Y"), `expected TK_Y in FOLLOW(a) (via wrapper b), got {fs_a.kinds.len()} entries`;
-    assert contains(&fs_a.kinds, "TK_EOF"), "expected TK_EOF in FOLLOW(a) (via wrapper alone in alt 1)";
-    assert contains(&fs_w.kinds, "TK_Y"), "expected TK_Y in FOLLOW(wrapper) (via wrapper b in r alt 0)";
-    assert contains(&fs_w.kinds, "TK_EOF"), "expected TK_EOF in FOLLOW(wrapper) (via wrapper alone in r alt 1)";
-    assert contains(&fs_b.kinds, "TK_EOF"), "expected TK_EOF in FOLLOW(b) (via outer EOF after group in r)";
+    assert fs_a.kinds.contains("TK_Y"), `expected TK_Y in FOLLOW(a) (via wrapper b), got {fs_a.kinds.len()} entries`;
+    assert fs_a.kinds.contains("TK_EOF"), "expected TK_EOF in FOLLOW(a) (via wrapper alone in alt 1)";
+    assert fs_w.kinds.contains("TK_Y"), "expected TK_Y in FOLLOW(wrapper) (via wrapper b in r alt 0)";
+    assert fs_w.kinds.contains("TK_EOF"), "expected TK_EOF in FOLLOW(wrapper) (via wrapper alone in r alt 1)";
+    assert fs_b.kinds.contains("TK_EOF"), "expected TK_EOF in FOLLOW(b) (via outer EOF after group in r)";
 }
 
 test "rule_follow: nullable suffix propagates FOLLOW through Optional" {
@@ -206,8 +197,8 @@ test "rule_follow: nullable suffix propagates FOLLOW through Optional" {
     let env = build(&rules, &mut ctx, &start);
     let a = "a";
     let fs_a = env.rule_follow(&a);
-    assert contains(&fs_a.kinds, "TK_Y"), "FOLLOW(a) must include TK_Y from b?";
-    assert contains(&fs_a.kinds, "TK_EOF"), "FOLLOW(a) must include TK_EOF since b? is nullable";
+    assert fs_a.kinds.contains("TK_Y"), "FOLLOW(a) must include TK_Y from b?";
+    assert fs_a.kinds.contains("TK_EOF"), "FOLLOW(a) must include TK_EOF since b? is nullable";
 }
 
 test "rule_follow: terminates on left recursion" {
@@ -219,6 +210,6 @@ test "rule_follow: terminates on left recursion" {
     let e = "e";
     let fs_e = env.rule_follow(&e);
     // FOLLOW(e) at least includes EOF (start) and TK_PLUS (recursive caller's suffix).
-    assert contains(&fs_e.kinds, "TK_EOF");
-    assert contains(&fs_e.kinds, "TK_PLUS");
+    assert fs_e.kinds.contains("TK_EOF");
+    assert fs_e.kinds.contains("TK_PLUS");
 }

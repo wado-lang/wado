@@ -1,6 +1,6 @@
 use { ParserRule, Alternative, Element, RepeatElement, GroupElement, LabelElement } from "./ir.wado";
 use { GenContext } from "./gen_context.wado";
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 
 /// FOLLOW set for a parser rule, in the classical ANTLR4 sense:
 /// the set of token kinds that may legally appear immediately after a
@@ -9,9 +9,14 @@ use { TreeMap } from "core:collections";
 ///
 /// `closed` tracks whether the set is "closed under EOF": i.e. whether
 /// the start rule (or any rule reachable from it through a strictly
-/// nullable suffix chain) is known to be terminated by EOF. This is
-/// significant for `call_site_follow` propagation when a suffix is
-/// deep-nullable — see Phase 1 step 3 in `antlr4-compatibility.md`.
+/// nullable suffix chain) is known to be terminated by EOF.
+///
+/// Internally the fixed-point solver builds a transient `TreeSet<String>`
+/// from `kinds` for membership queries during `follow_union` / `follow_eq`
+/// so the asymptotic cost is `O(|b| log |a|)` instead of the naive
+/// linear-scan `O(|a| × |b|)`. The public surface stays as
+/// `Array<String>` so callers (and the kiln-generated parser) don't
+/// have to consume `core:collections::TreeSet`.
 pub struct FollowSet {
     pub kinds: Array<String>,
     pub closed: bool,
@@ -195,8 +200,10 @@ fn local_follow(elements: &Array<Element>, i: i32, ctx: &mut GenContext, outer_f
     let mut kinds = suffix_first;
     let mut closed = false;
     if ctx.tail_is_nullable_deep(elements, i + 1) {
+        let mut seen = str_set_of(&kinds);
         for let k of &outer_follow.kinds {
-            if !contains_str(&kinds, k) {
+            if !seen.contains(*k) {
+                seen.insert(*k);
                 kinds.push(*k);
             }
         }
@@ -205,16 +212,24 @@ fn local_follow(elements: &Array<Element>, i: i32, ctx: &mut GenContext, outer_f
     return FollowSet { kinds, closed };
 }
 
+/// O(|b| log |a|) union: build a `TreeSet` over `a.kinds` for
+/// membership queries, then push each new element of `b.kinds` onto
+/// the existing array. Replaces the naive `O(|a| × |b|)` linear scan.
 fn follow_union(a: &FollowSet, b: &FollowSet) -> FollowSet {
     let mut kinds = a.kinds;
+    let mut seen = str_set_of(&kinds);
     for let k of &b.kinds {
-        if !contains_str(&kinds, k) {
+        if !seen.contains(*k) {
+            seen.insert(*k);
             kinds.push(*k);
         }
     }
     return FollowSet { kinds, closed: a.closed || b.closed };
 }
 
+/// O(|a| log |b|) equality: build a `TreeSet` over the smaller
+/// candidate (sizes already match by the early-out) and walk the
+/// other for membership.
 fn follow_eq(a: &FollowSet, b: &FollowSet) -> bool {
     if a.closed != b.closed {
         return false;
@@ -222,19 +237,19 @@ fn follow_eq(a: &FollowSet, b: &FollowSet) -> bool {
     if a.kinds.len() != b.kinds.len() {
         return false;
     }
+    let b_set = str_set_of(&b.kinds);
     for let k of &a.kinds {
-        if !contains_str(&b.kinds, k) {
+        if !b_set.contains(*k) {
             return false;
         }
     }
     return true;
 }
 
-fn contains_str(arr: &Array<String>, value: &String) -> bool {
-    for let item of arr {
-        if *item == *value {
-            return true;
-        }
+fn str_set_of(arr: &Array<String>) -> TreeSet<String> {
+    let mut set = TreeSet::<String>::new();
+    for let k of arr {
+        set.insert(*k);
     }
-    return false;
+    return set;
 }

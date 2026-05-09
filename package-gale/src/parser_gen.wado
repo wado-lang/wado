@@ -3468,11 +3468,14 @@ fn gen_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenC
 /// - When the suffix is deep-nullable but NOT first-exact (e.g. a
 ///   `Star` over a multi-element Group like CSS3 `(combinator sss
 ///   ws)*`), drop the suffix's first and propagate only the outer
-///   follow. The hazard documented in `package-gale/CLAUDE.md`
-///   "Failed Approaches" #3: `combinator`'s first contains `Space`
-///   but `combinator` requires `Space sss` together, so suppressing
-///   `Space` at the preceding `ws` would leave the runtime stranded
-///   on a lone `Space`.
+///   follow. This is the "first-exact deep-nullable suffix"
+///   soundness invariant from `antlr4-compatibility.md`'s
+///   "LL prediction → Soundness invariants" section: `combinator`'s
+///   first contains `Space` but `combinator` requires `Space sss`
+///   together, so suppressing `Space` at the preceding `ws` would
+///   leave the runtime stranded on a lone `Space`. See also
+///   `package-gale/CLAUDE.md` "Failed Approaches" #3 for the
+///   historical narrative of how this guard was narrowed back.
 fn compute_ruleref_call_follow(elements: &Array<Element>, i: i32, ctx: &mut GenContext) -> Array<String> {
     let first = ctx.first_of_elements_from(elements, i + 1);
     if !ctx.tail_is_nullable_deep(elements, i + 1) {
