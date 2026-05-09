@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778322103564,
+  "lastUpdate": 1778324057090,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20473,6 +20473,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fa644e0618fb6d14fc485d9d17b8521835de80c2"
         },
         "date": 1778322103291,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 511983,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "47a495003a9a64cebe0990803b308e0dc318fefb",
+          "message": "Merge pull request #1026 from wado-lang/claude/check-stdlib-docs-pstl8\n\ndocs: add core:benchmark, core:router, wasi:tls to stdlib doc generation",
+          "timestamp": "2026-05-09T19:45:10+09:00",
+          "tree_id": "761da854df46d476942fb3c99dc906e55d9a9bd8",
+          "url": "https://github.com/wado-lang/wado/commit/47a495003a9a64cebe0990803b308e0dc318fefb"
+        },
+        "date": 1778324056733,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
