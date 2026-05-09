@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778324057090,
+  "lastUpdate": 1778335707495,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20517,6 +20517,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/47a495003a9a64cebe0990803b308e0dc318fefb"
         },
         "date": 1778324056733,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 511983,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a5053c83186c755a5b8b4a2aded192f3aaf5d122",
+          "message": "Merge pull request #1027 from wado-lang/claude/fix-tagpr-workflow-nRckb\n\nci: use GitHub App token for tagpr",
+          "timestamp": "2026-05-09T22:59:21+09:00",
+          "tree_id": "0c9cb36d0ef991d78b3ce5d99bb985b0595c9914",
+          "url": "https://github.com/wado-lang/wado/commit/a5053c83186c755a5b8b4a2aded192f3aaf5d122"
+        },
+        "date": 1778335707128,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
