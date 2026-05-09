@@ -123,10 +123,7 @@ fn "wado-compiler/tests/fixtures/cm_future_read_cli.wado/run"() with Stdout {
     let rx_22: i32;
     let tx_23: i32;
     let handle_24: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/future-new:s32"();
-    future_rx = builtin::i32_wrap_i64(__pair_temp_1);
-    future_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [future_rx, future_tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/future-new:s32"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     let __fw_write_ptr_2: i32;
     __fw_write_ptr_2 = "mem/realloc"(0, 0, 4, 4);
     builtin::store_i32(__fw_write_ptr_2, 42);
@@ -166,19 +163,13 @@ fn "wado-compiler/tests/fixtures/cm_future_read_cli.wado/run"() with Stdout {
             break __tmpl: __local_4;
             unreachable;
         };
-        let __pair_temp_5: i64;
-        __pair_temp_5 = "wasi/stream-new"();
-        rx_10 = builtin::i32_wrap_i64(__pair_temp_5);
-        tx_11 = builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+        multivalue_bind [rx_10, tx_11] = let __pair_temp_5: i64; __pair_temp_5 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
         handle_12 = "wado-compiler/tests/fixtures/cm_future_read_cli.wado/__cm_binding__Stdout_write_via_stream"(rx_10);
         "core:cli/write_to_stream"(tx_11, message_9, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_12);
     } else {
         message_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 };
-        let __pair_temp_6: i64;
-        __pair_temp_6 = "wasi/stream-new"();
-        rx_22 = builtin::i32_wrap_i64(__pair_temp_6);
-        tx_23 = builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
+        multivalue_bind [rx_22, tx_23] = let __pair_temp_6: i64; __pair_temp_6 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
         handle_24 = "wado-compiler/tests/fixtures/cm_future_read_cli.wado/__cm_binding__Stdout_write_via_stream"(rx_22);
         "core:cli/write_to_stream"(tx_23, message_21, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_24);

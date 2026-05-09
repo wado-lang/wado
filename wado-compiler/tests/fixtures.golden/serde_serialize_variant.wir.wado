@@ -214,10 +214,7 @@ fn "wado-compiler/tests/fixtures/serde_serialize_variant.wado/run"() with Stdout
     shape = struct.new "wado-compiler/tests/fixtures/serde_serialize_variant.wado//Shape::Circle" { discriminant: 0, payload_0: 5 };
     drop("wado-compiler/tests/fixtures/serde_serialize_variant.wado/Shape^Serialize::serialize<JsonSerializer>"(shape, ser));
     message_3 = ser.buf;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx_4 = builtin::i32_wrap_i64(__pair_temp_1);
-    tx_5 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx_4, tx_5] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle_6 = "wado-compiler/tests/fixtures/serde_serialize_variant.wado/__cm_binding__Stdout_write_via_stream"(rx_4);
     "core:cli/write_to_stream"(tx_5, message_3, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_6);
@@ -225,10 +222,7 @@ fn "wado-compiler/tests/fixtures/serde_serialize_variant.wado/run"() with Stdout
     shape2 = struct.new "wado-compiler/tests/fixtures/serde_serialize_variant.wado//Shape" { 1 };
     drop("wado-compiler/tests/fixtures/serde_serialize_variant.wado/Shape^Serialize::serialize<JsonSerializer>"(shape2, ser));
     message_9 = ser.buf;
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    rx_10 = builtin::i32_wrap_i64(__pair_temp_2);
-    tx_11 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [rx_10, tx_11] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     handle_12 = "wado-compiler/tests/fixtures/serde_serialize_variant.wado/__cm_binding__Stdout_write_via_stream"(rx_10);
     "core:cli/write_to_stream"(tx_11, message_9, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_12);
@@ -315,10 +309,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

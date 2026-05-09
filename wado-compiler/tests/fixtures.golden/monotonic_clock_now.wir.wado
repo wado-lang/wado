@@ -86,19 +86,13 @@ fn "wado-compiler/tests/fixtures/monotonic_clock_now.wado/__cm_export__run"() {
     t2 = "wado-compiler/tests/fixtures/monotonic_clock_now.wado/__cm_binding__MonotonicClock_now"();
     if t2 >=u t1 {
         message_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("monotonic: ok"), used: 13 };
-        let __pair_temp_1: i64;
-        __pair_temp_1 = "wasi/stream-new"();
-        rx_5 = builtin::i32_wrap_i64(__pair_temp_1);
-        tx_6 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+        multivalue_bind [rx_5, tx_6] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
         handle_7 = "wado-compiler/tests/fixtures/monotonic_clock_now.wado/__cm_binding__Stdout_write_via_stream"(rx_5);
         "core:cli/write_to_stream"(tx_6, message_4, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_7);
     } else {
         message_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("monotonic: FAILED"), used: 17 };
-        let __pair_temp_2: i64;
-        __pair_temp_2 = "wasi/stream-new"();
-        rx_11 = builtin::i32_wrap_i64(__pair_temp_2);
-        tx_12 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+        multivalue_bind [rx_11, tx_12] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
         handle_13 = "wado-compiler/tests/fixtures/monotonic_clock_now.wado/__cm_binding__Stdout_write_via_stream"(rx_11);
         "core:cli/write_to_stream"(tx_12, message_10, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_13);

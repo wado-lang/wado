@@ -396,10 +396,7 @@ fn "wado-compiler/tests/fixtures/http_500.wado/handle"() {
     let __packed_153: i64;
     let __ptr_154: i32;
     let __len_155: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/future-new"();
-    trailers_future = builtin::i32_wrap_i64(__pair_temp_1);
-    trailers_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [trailers_future, trailers_tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/future-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     headers = "wado-compiler/tests/fixtures/http_500.wado/__cm_binding__Fields_new"();
     let __sroa___pattern_temp_1_0: i32;
     let __sroa___pattern_temp_1_1: i32;

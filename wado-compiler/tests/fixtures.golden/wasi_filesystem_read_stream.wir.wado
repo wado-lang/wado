@@ -220,10 +220,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/run"() with St
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         message_15 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("read_stream: no preopened directories available"), used: 47 };
-        let __pair_temp_1: i64;
-        __pair_temp_1 = "wasi/stream-new"();
-        rx_16 = builtin::i32_wrap_i64(__pair_temp_1);
-        tx_17 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+        multivalue_bind [rx_16, tx_17] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
         handle_18 = "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__Stderr_write_via_stream"(rx_16);
         "core:cli/write_to_stream"(tx_17, message_15, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_18);
@@ -245,10 +242,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/run"() with St
         multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__Descriptor_read_via_stream"(file, 0_i64);
         file_rx = __sroa___pattern_temp_1_0;
         read_future = __sroa___pattern_temp_1_1;
-        let __pair_temp_2: i64;
-        __pair_temp_2 = "wasi/stream-new"();
-        out_rx = builtin::i32_wrap_i64(__pair_temp_2);
-        out_tx = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+        multivalue_bind [out_rx, out_tx] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
         sub = "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__Stdout_write_via_stream"(out_rx);
         b3: block {
             l4: loop {
@@ -266,10 +260,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/run"() with St
         "wasi/future-drop-readable:transmission-filesystem"(read_future);
     } else {
         message_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("read_stream: failed to open hello.txt"), used: 37 };
-        let __pair_temp_3: i64;
-        __pair_temp_3 = "wasi/stream-new"();
-        rx_25 = builtin::i32_wrap_i64(__pair_temp_3);
-        tx_26 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+        multivalue_bind [rx_25, tx_26] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
         handle_27 = "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__Stderr_write_via_stream"(rx_25);
         "core:cli/write_to_stream"(tx_26, message_24, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_27);
@@ -440,10 +431,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

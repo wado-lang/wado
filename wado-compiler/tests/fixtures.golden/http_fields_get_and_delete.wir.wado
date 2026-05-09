@@ -662,10 +662,7 @@ condition: !fields.has(\"x-temp\" as FieldName)
         });
         unreachable;
     }
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/future-new"();
-    trailers_future = builtin::i32_wrap_i64(__pair_temp_1);
-    trailers_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [trailers_future, trailers_tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/future-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     resp_headers = "wado-compiler/tests/fixtures/http_fields_get_and_delete.wado/__cm_binding__Fields_new"();
     let __sroa___pattern_temp_2_0: i32;
     let __sroa___pattern_temp_2_1: i32;
@@ -1244,10 +1241,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

@@ -116,10 +116,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_3.wado/trait_bound_method_on_type_p
         break __tmpl: __local_0;
         unreachable;
     };
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx_5 = builtin::i32_wrap_i64(__pair_temp_1);
-    tx_6 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx_5, tx_6] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle_7 = "wado-compiler/tests/fixtures/trait_bound_3.wado/__cm_binding__Stdout_write_via_stream"(rx_5);
     "core:cli/write_to_stream"(tx_6, message_4, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_7);
@@ -134,10 +131,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_3.wado/trait_bound_method_on_type_p
         break __tmpl: __local_2;
         unreachable;
     };
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    rx_19 = builtin::i32_wrap_i64(__pair_temp_2);
-    tx_20 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [rx_19, tx_20] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     handle_21 = "wado-compiler/tests/fixtures/trait_bound_3.wado/__cm_binding__Stdout_write_via_stream"(rx_19);
     "core:cli/write_to_stream"(tx_20, message_18, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_21);
@@ -156,10 +150,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_3.wado/__cm_export__run"() {
     "wado-compiler/tests/fixtures/trait_bound_3.wado/trait_bound_method_on_type_param_chain"();
     p = struct.new "wado-compiler/tests/fixtures/trait_bound_3.wado//Player" { player_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, player_score: 100 };
     message = "wado-compiler/tests/fixtures/trait_bound_3.wado/describe<Player>"(p);
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle = "wado-compiler/tests/fixtures/trait_bound_3.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);

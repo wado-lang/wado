@@ -560,7 +560,7 @@ fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.
         global:__effect_Stream<u8> = __saved;
         return __result;
     } else {
-        return let __pair_temp_2: i64, __pair_temp_2 = "wasi/stream-new"(), struct.new "tuple//[Stream<u8>, StreamWritable<u8>]" { 0: builtin::i32_wrap_i64(__pair_temp_2), 1: builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64) };
+        return multivalue_struct_new "tuple//[Stream<u8>, StreamWritable<u8>]"(let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
     }
 }
 

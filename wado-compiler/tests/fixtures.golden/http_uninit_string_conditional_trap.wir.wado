@@ -489,14 +489,8 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle
             unreachable;
         };
     }
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/future-new"();
-    trailers_future = builtin::i32_wrap_i64(__pair_temp_1);
-    trailers_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    body_rx = builtin::i32_wrap_i64(__pair_temp_2);
-    body_tx = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [trailers_future, trailers_tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/future-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [body_rx, body_tx] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     resp_headers = "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_new"();
     drop("wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_append"(resp_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, __inline_StrUtf8ByteIter_Iterator__collect_5: block -> ref "core:prelude//Array<u8>" {
         self_169 = __inline_String__bytes_4: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {

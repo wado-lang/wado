@@ -121,10 +121,7 @@ fn "wado-compiler/tests/fixtures/stream_read_basic.wado/run"() with Stdout {
     let rx_22: i32;
     let tx_23: i32;
     let handle: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx_0 = builtin::i32_wrap_i64(__pair_temp_1);
-    tx_1 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx_0, tx_1] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     "wasi/stream-drop-writable"(tx_1);
     let __sroa_result_repr: ref builtin::array<u8>;
     let __sroa_result_used: i32;
@@ -162,10 +159,7 @@ condition: result.len() == 0
     }
     "wasi/stream-drop-readable"(rx_0);
     message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("read ok"), used: 7 };
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    rx_22 = builtin::i32_wrap_i64(__pair_temp_2);
-    tx_23 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [rx_22, tx_23] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     handle = "wado-compiler/tests/fixtures/stream_read_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_22);
     "core:cli/write_to_stream"(tx_23, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -256,10 +250,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

@@ -452,10 +452,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_error.wado/handle"() with Clie
     let __ptr_155: i32;
     let __len_156: i32;
     headers = "wado-compiler/tests/fixtures/http_client_send_error.wado/__cm_binding__Fields_new"();
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/future-new"();
-    trailers_future = builtin::i32_wrap_i64(__pair_temp_1);
-    trailers_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [trailers_future, trailers_tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/future-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     let __sroa___pattern_temp_1_0: i32;
     let __sroa___pattern_temp_1_1: i32;
     multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = "wado-compiler/tests/fixtures/http_client_send_error.wado/__cm_binding__Request_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 1 });
