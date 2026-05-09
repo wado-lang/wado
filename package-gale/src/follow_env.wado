@@ -1,0 +1,101 @@
+use { ParserRule, Element } from "./ir.wado";
+use { GenContext } from "./gen_context.wado";
+use { TreeMap } from "core:collections";
+
+/// FOLLOW set for a parser rule, in the classical ANTLR4 sense:
+/// the set of token kinds that may legally appear immediately after a
+/// successful parse of the rule, accumulated across every call site
+/// reachable from the start rule.
+///
+/// `closed` tracks whether the set is "closed under EOF": i.e. whether
+/// the start rule (or any rule reachable from it through a strictly
+/// nullable suffix chain) is known to be terminated by EOF. This is
+/// significant for `call_site_follow` propagation when a suffix is
+/// deep-nullable — see Phase 1 step 3 in `antlr4-compatibility.md`.
+pub struct FollowSet {
+    pub kinds: Array<String>,
+    pub closed: bool,
+}
+
+impl FollowSet {
+    pub fn empty() -> FollowSet {
+        return FollowSet { kinds: [], closed: false };
+    }
+}
+
+/// Pure analysis output: the FOLLOW environment of a grammar.
+///
+/// Built once from the parser-rule IR via [`build`] and consumed by the
+/// codegen layer through read-only accessors. No codegen state, no
+/// `CodeWriter`. The mask-aware variant codegen (Phase 2) consults this
+/// to decide which `(rule, mask)` variants to emit and which call sites
+/// dispatch to them.
+///
+/// Phase 1 skeleton: only the per-rule tail-greedy first set is
+/// populated. `rule_follow` and `call_site_follow` are added in
+/// subsequent Phase 1 steps; the variant registry arrives in Phase 2.
+pub struct FollowEnv {
+    /// Token kinds the rule may *greedily* consume at tail position
+    /// (Optional/Star/Plus elements with no required successor in the
+    /// alt). Restricted to single-token-inner repeats: see
+    /// `gen_context::tail_greedy_first_of_element` for the soundness
+    /// argument. Lifted verbatim into `FollowEnv` so subsequent Phase 1
+    /// steps can compute against a snapshot independent of the
+    /// codegen-side cache.
+    tail_greedy: TreeMap<String, Array<String>>,
+    /// Per-rule FOLLOW set — populated by Phase 1 step 2
+    /// (`rule_follow` fixed point). Empty in the skeleton.
+    rule_follow: TreeMap<String, FollowSet>,
+}
+
+impl FollowEnv {
+    /// Skeleton variant: the empty environment. Used in tests and as
+    /// the starting point for incremental wiring.
+    pub fn empty() -> FollowEnv {
+        return FollowEnv {
+            tail_greedy: TreeMap::<String, Array<String>>::new(),
+            rule_follow: TreeMap::<String, FollowSet>::new(),
+        };
+    }
+
+    /// Tail-greedy first set for `rule_name`. Returns the empty array
+    /// for unknown rules, which is the safe choice: an unknown rule
+    /// cannot collide with any caller's follow.
+    pub fn tail_greedy(&self, rule_name: &String) -> Array<String> {
+        if let Some(s) = self.tail_greedy.get(*rule_name) {
+            return s;
+        }
+        return [];
+    }
+
+    /// FOLLOW set for `rule_name`. Returns the empty/closed=false set
+    /// for unknown rules. Phase 1 skeleton: always empty (the fixed
+    /// point lands in step 2).
+    pub fn rule_follow(&self, rule_name: &String) -> FollowSet {
+        if let Some(s) = self.rule_follow.get(*rule_name) {
+            return s;
+        }
+        return FollowSet::empty();
+    }
+}
+
+/// Build the FOLLOW environment for a grammar.
+///
+/// Phase 1 skeleton: populates only the tail-greedy snapshot, by
+/// delegating to `GenContext`'s existing analysis (which already
+/// implements the single-token-inner guard correctly — see
+/// `package-gale/CLAUDE.md` "Failed Approaches" for why that guard is
+/// non-negotiable). The codegen path is untouched, so emission is
+/// bit-identical to the pre-FollowEnv build.
+pub fn build(parser_rules: &Array<ParserRule>, ctx: &mut GenContext) -> FollowEnv {
+    let mut tail_greedy = TreeMap::<String, Array<String>>::new();
+    for let rule of parser_rules {
+        let mut visiting: Array<String> = [];
+        let tg = ctx.tail_greedy_first_of_rule(&rule.name, &mut visiting);
+        tail_greedy[rule.name] = tg;
+    }
+    return FollowEnv {
+        tail_greedy,
+        rule_follow: TreeMap::<String, FollowSet>::new(),
+    };
+}

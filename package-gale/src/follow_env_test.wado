@@ -1,0 +1,108 @@
+use { ParserRule, Alternative, Element, RuleRefElement, TokenRefElement, RepeatElement, RepeatKind, Visibility } from "./ir.wado";
+use { GenContext } from "./gen_context.wado";
+use { LitToken } from "./lexer_gen.wado";
+use { FollowEnv, FollowSet, build } from "./follow_env.wado";
+
+fn tk(name: String) -> Element {
+    return Element::TokenRef(TokenRefElement::new(name));
+}
+
+fn rr(name: String) -> Element {
+    return Element::RuleRef(RuleRefElement::new(name));
+}
+
+fn opt(elem: Element) -> Element {
+    return Element::Repeat(RepeatElement {
+        kind: RepeatKind::Optional,
+        element: elem,
+        non_greedy: false,
+    });
+}
+
+fn alt(elements: Array<Element>) -> Alternative {
+    return Alternative::new(elements);
+}
+
+fn mk_rule(name: String, alts: Array<Alternative>) -> ParserRule {
+    return ParserRule::new(name, Visibility::Private, [], alts);
+}
+
+fn mk_ctx(rules: &Array<ParserRule>) -> GenContext {
+    let toks: Array<LitToken> = [];
+    return GenContext::new(rules, &toks);
+}
+
+test "FollowEnv::empty has no rules" {
+    let env = FollowEnv::empty();
+    let rule_name = "anything";
+    assert env.tail_greedy(&rule_name).is_empty();
+    let fs = env.rule_follow(&rule_name);
+    assert fs.kinds.is_empty();
+    assert !fs.closed;
+}
+
+test "build: empty grammar produces empty env" {
+    let rules: Array<ParserRule> = [];
+    let mut ctx = mk_ctx(&rules);
+    let env = build(&rules, &mut ctx);
+    let unknown = "no_such_rule";
+    assert env.tail_greedy(&unknown).is_empty();
+}
+
+test "build: rule with tail-greedy Y? has TK_Y in tail_greedy" {
+    // a : X Y? ;
+    let rules: Array<ParserRule> = [mk_rule("a", [alt([tk("X"), opt(tk("Y"))])])];
+    let mut ctx = mk_ctx(&rules);
+    let env = build(&rules, &mut ctx);
+    let name = "a";
+    let tg = env.tail_greedy(&name);
+    assert tg.len() == 1, `expected 1 tail-greedy token, got {tg.len()}`;
+    assert tg[0] == "TK_Y", `expected TK_Y, got "{tg[0]}"`;
+}
+
+test "build: rule with mandatory tail has empty tail_greedy" {
+    // b : X Y ;
+    let rules: Array<ParserRule> = [mk_rule("b", [alt([tk("X"), tk("Y")])])];
+    let mut ctx = mk_ctx(&rules);
+    let env = build(&rules, &mut ctx);
+    let name = "b";
+    assert env.tail_greedy(&name).is_empty();
+}
+
+test "build: tail-greedy unions across alts" {
+    // c : X Y? | Z W? ;
+    let rules: Array<ParserRule> = [mk_rule("c", [alt([tk("X"), opt(tk("Y"))]), alt([tk("Z"), opt(tk("W"))])])];
+    let mut ctx = mk_ctx(&rules);
+    let env = build(&rules, &mut ctx);
+    let name = "c";
+    let tg = env.tail_greedy(&name);
+    assert tg.len() == 2, `expected 2 tail-greedy tokens, got {tg.len()}`;
+    let mut sorted = tg;
+    sorted.sort();
+    assert sorted[0] == "TK_W";
+    assert sorted[1] == "TK_Y";
+}
+
+test "build: transitive tail-greedy through RuleRef" {
+    // d : a ;
+    // a : X Y? ;
+    let rules: Array<ParserRule> = [mk_rule("d", [alt([rr("a")])]), mk_rule("a", [alt([tk("X"), opt(tk("Y"))])])];
+    let mut ctx = mk_ctx(&rules);
+    let env = build(&rules, &mut ctx);
+    let d = "d";
+    let a = "a";
+    let tg_d = env.tail_greedy(&d);
+    let tg_a = env.tail_greedy(&a);
+    assert tg_a.len() == 1 && tg_a[0] == "TK_Y";
+    assert tg_d.len() == 1 && tg_d[0] == "TK_Y", `expected transitive TK_Y for d, got {tg_d.len()} entries`;
+}
+
+test "build: left-recursive rule does not infinitely recurse" {
+    // e : e PLUS e | X ;
+    let rules: Array<ParserRule> = [mk_rule("e", [alt([rr("e"), tk("PLUS"), rr("e")]), alt([tk("X")])])];
+    let mut ctx = mk_ctx(&rules);
+    let env = build(&rules, &mut ctx);
+    // Whatever the result, the build must terminate.
+    let name = "e";
+    let _tg = env.tail_greedy(&name);
+}
