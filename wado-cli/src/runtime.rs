@@ -1,11 +1,17 @@
 use anyhow::Result;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{Arc, LazyLock};
 use wasmtime::component::{Linker, ResourceTable};
 use wasmtime::{Config, Engine, OptLevel, ProfilingStrategy, Store};
 use wasmtime_wasi::filesystem::WasiFilesystemCtx;
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
-use wasmtime_wasi_tls::{WasiTlsCtx, WasiTlsCtxBuilder, WasiTlsCtxView, WasiTlsView};
+use wasmtime_wasi_tls::{
+    Error as WasiTlsError, TlsProvider, TlsStream, TlsTransport, WasiTlsCtx, WasiTlsCtxBuilder,
+    WasiTlsCtxView, WasiTlsView,
+};
 
 use crate::http_hooks::WadoHttpHooks;
 
@@ -21,6 +27,61 @@ fn install_rustls_provider() {
         // a provider is already in place and that is fine.
         let _ = rustls::crypto::ring::default_provider().install_default();
     });
+}
+
+/// Build a [`WasiTlsCtx`] whose rustls trust anchors come from
+/// [`crate::tls_trust::build_root_cert_store`].
+///
+/// `wasmtime_wasi_tls`'s default `RustlsProvider` uses *only* `webpki-roots`,
+/// which omits the operator's `WADO_CA_BUNDLE` / `SSL_CERT_FILE` /
+/// `SSL_CERT_DIR` CAs. Sharing the helper with [`WadoHttpHooks`] keeps the
+/// raw `wasi:tls` connector and the high-level `wasi:http` client
+/// agreeing on which CAs are accepted.
+fn build_wasi_tls_ctx() -> WasiTlsCtx {
+    install_rustls_provider();
+    WasiTlsCtxBuilder::new()
+        .provider(Box::new(WadoTlsProvider::shared()))
+        .build()
+}
+
+/// `TlsProvider` for the raw `wasi:tls` connector. Construction is
+/// process-cached so reusing the same trust store across many subtasks is
+/// just an `Arc::clone`.
+struct WadoTlsProvider {
+    client_config: Arc<rustls::ClientConfig>,
+}
+
+impl WadoTlsProvider {
+    fn shared() -> Self {
+        static CONFIG: LazyLock<Arc<rustls::ClientConfig>> = LazyLock::new(|| {
+            let config = rustls::ClientConfig::builder()
+                .with_root_certificates(crate::tls_trust::build_root_cert_store())
+                .with_no_client_auth();
+            Arc::new(config)
+        });
+        Self {
+            client_config: Arc::clone(&CONFIG),
+        }
+    }
+}
+
+impl TlsProvider for WadoTlsProvider {
+    fn connect(
+        &self,
+        server_name: String,
+        transport: Box<dyn TlsTransport>,
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn TlsStream>, WasiTlsError>> + Send>> {
+        let client_config = Arc::clone(&self.client_config);
+        Box::pin(async move {
+            let domain = rustls::pki_types::ServerName::try_from(server_name)
+                .map_err(|_| WasiTlsError::msg("invalid server name"))?;
+            let stream = tokio_rustls::TlsConnector::from(client_config)
+                .connect(domain, transport)
+                .await
+                .map_err(|e| WasiTlsError::msg(e.to_string()))?;
+            Ok(Box::new(stream) as Box<dyn TlsStream>)
+        })
+    }
 }
 
 pub struct WasiState {
@@ -74,8 +135,7 @@ impl WasiState {
         let table = ResourceTable::new();
         let http = WasiHttpCtx::new();
         let http_hooks = WadoHttpHooks::new();
-        install_rustls_provider();
-        let tls = WasiTlsCtxBuilder::new().build();
+        let tls = build_wasi_tls_ctx();
         Self {
             ctx,
             table,
@@ -112,8 +172,7 @@ impl WasiState {
         let table = ResourceTable::new();
         let http = WasiHttpCtx::new();
         let http_hooks = WadoHttpHooks::new();
-        install_rustls_provider();
-        let tls = WasiTlsCtxBuilder::new().build();
+        let tls = build_wasi_tls_ctx();
         Ok(Self {
             ctx,
             table,

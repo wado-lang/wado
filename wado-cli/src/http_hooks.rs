@@ -1,14 +1,10 @@
-//! Custom `WasiHttpHooks` that extends wasmtime's default TLS trust store with
-//! certificates loaded from the `SSL_CERT_FILE` / `SSL_CERT_DIR` /
-//! `WADO_CA_BUNDLE` environment variables.
+//! Custom `WasiHttpHooks` that uses [`crate::tls_trust`]'s augmented
+//! trust store for outbound HTTPS.
 //!
 //! wasmtime's stock `default_send_request` hardcodes `webpki-roots`, which is
 //! not sufficient when the host sits behind a TLS-inspecting proxy that signs
 //! outgoing HTTPS with a private CA (e.g. a sandboxed dev environment).
 
-use std::fs::File;
-use std::io::BufReader;
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -17,13 +13,14 @@ use futures::future::BoxFuture;
 use http::uri::Scheme;
 use http_body_util::BodyExt;
 use http_body_util::combinators::UnsyncBoxBody;
-use rustls::RootCertStore;
-use rustls::pki_types::{CertificateDer, ServerName};
+use rustls::pki_types::ServerName;
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 use wasmtime_wasi::TrappableError;
 use wasmtime_wasi_http::p3::bindings::http::types::{DnsErrorPayload, ErrorCode};
 use wasmtime_wasi_http::p3::{RequestOptions, WasiHttpHooks};
+
+use crate::tls_trust::build_root_cert_store;
 
 macro_rules! warn_log {
     ($($arg:tt)*) => { eprintln!("warning: {}", format_args!($($arg)*)) };
@@ -36,12 +33,8 @@ pub struct WadoHttpHooks {
 impl WadoHttpHooks {
     pub fn new() -> Self {
         install_default_crypto_provider();
-        let mut roots = RootCertStore {
-            roots: webpki_roots::TLS_SERVER_ROOTS.into(),
-        };
-        load_extra_ca_certs(&mut roots);
         let client_config = rustls::ClientConfig::builder()
-            .with_root_certificates(roots)
+            .with_root_certificates(build_root_cert_store())
             .with_no_client_auth();
         Self {
             client_config: Arc::new(client_config),
@@ -59,56 +52,6 @@ fn install_default_crypto_provider() {
 impl Default for WadoHttpHooks {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-fn load_extra_ca_certs(roots: &mut RootCertStore) {
-    for var in ["WADO_CA_BUNDLE", "SSL_CERT_FILE"] {
-        if let Ok(path) = std::env::var(var)
-            && !path.is_empty()
-        {
-            load_pem_bundle(roots, Path::new(&path));
-        }
-    }
-    if let Ok(dir) = std::env::var("SSL_CERT_DIR")
-        && !dir.is_empty()
-    {
-        load_pem_dir(roots, Path::new(&dir));
-    }
-}
-
-fn load_pem_bundle(roots: &mut RootCertStore, path: &Path) {
-    let file = match File::open(path) {
-        Ok(f) => f,
-        Err(err) => {
-            warn_log!("failed to open CA bundle {}: {err}", path.display());
-            return;
-        }
-    };
-    let mut reader = BufReader::new(file);
-    let mut certs: Vec<CertificateDer<'static>> = Vec::new();
-    for item in rustls_pemfile::certs(&mut reader) {
-        match item {
-            Ok(cert) => certs.push(cert),
-            Err(err) => warn_log!("failed to parse cert in {}: {err}", path.display()),
-        }
-    }
-    let (_added, ignored) = roots.add_parsable_certificates(certs);
-    if ignored > 0 {
-        warn_log!("ignored {ignored} invalid certs in {}", path.display());
-    }
-}
-
-fn load_pem_dir(roots: &mut RootCertStore, dir: &Path) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        warn_log!("failed to read SSL_CERT_DIR {}", dir.display());
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_file() {
-            load_pem_bundle(roots, &path);
-        }
     }
 }
 
