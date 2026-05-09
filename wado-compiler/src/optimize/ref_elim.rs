@@ -529,6 +529,9 @@ struct DerefOnlyRef {
 }
 
 /// Collect `let r = &StructLiteral` / `let r = &TupleLiteral` candidates.
+/// `MultiValueLiteral` (the multi-value-form tuple, default since Phase 4)
+/// is recognised here too — both forms have identical heap-construction
+/// shape at the deref-only-elision boundary.
 fn collect_deref_only_refs_in_block(block: &TirBlock, refs: &mut IndexMap<u32, DerefOnlyRef>) {
     for stmt in &block.stmts {
         if let TirStmtKind::Let {
@@ -538,7 +541,9 @@ fn collect_deref_only_refs_in_block(block: &TirBlock, refs: &mut IndexMap<u32, D
             && matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
             && matches!(
                 expr.kind,
-                TirExprKind::StructLiteral { .. } | TirExprKind::TupleLiteral { .. }
+                TirExprKind::StructLiteral { .. }
+                    | TirExprKind::TupleLiteral { .. }
+                    | TirExprKind::MultiValueLiteral { .. }
             )
         {
             refs.insert(

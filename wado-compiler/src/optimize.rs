@@ -213,10 +213,13 @@ pub fn optimize(
     // Multi-value return ABI classification: marks tuple-returning user
     // functions whose every return site is `MultiValueLiteral` and whose
     // every call site destructures via `MultiValueProject`. WIR build
-    // emits the multi-value Wasm signature for these; the WIR
-    // `multi_value_calls` pass rewrites their call-site temps to
-    // `MultiValueLocalBind`. Runs after every other transformation so
-    // the analysis sees the final TIR shape.
+    // (`wir_build::translate::try_emit_multi_value_let`) reads the marker
+    // to emit the multi-value Wasm signature on the function definition
+    // and to rewrite call-site `let __tmp = Call(f)` into
+    // `MultiValueLocalBind [__tmp_0, …] = Call(f)` with subsequent
+    // `MultiValueProject` reads going to the split locals directly.
+    // Runs after every other transformation so the analysis sees the
+    // final TIR shape.
     profiler.span_start("tir/multi_value_return");
     multi_value_return::classify_multi_value_returns(&mut project);
     profiler.span_end("tir/multi_value_return");

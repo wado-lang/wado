@@ -882,22 +882,26 @@ impl FunctionTranslator<'_, '_> {
         WirInstr::StructNew { type_id, fields }
     }
 
-    /// Phase 5: detect `let local = Call(f)` where `f` has
-    /// `ReturnAbi::MultiValue` and emit `MultiValueLocalBind` to N split
-    /// locals instead of a single `LocalSet`. Returns `Some` if the
-    /// rewrite fired (the caller should not emit the regular `LocalSet`).
+    /// Phase 5: detect `let local = Call(f)` (or `MethodCall(f)`) where
+    /// `f` has `ReturnAbi::MultiValue` and emit `MultiValueLocalBind` to
+    /// N split locals instead of a single `LocalSet`. Returns `Some` if
+    /// the rewrite fired (the caller should not emit the regular
+    /// `LocalSet`).
     ///
     /// The split locals use names `<base>_mv_<i>` where `<base>` is the
     /// TIR local name. Subsequent `MultiValueProject(LocalGet(local), i)`
     /// accesses read split[i] directly via `multi_value_split_locals`.
     fn try_emit_multi_value_let(&mut self, local_index: u32, value: &TirExpr) -> Option<WirInstr> {
-        // Only fire on direct `Call(f)` initializers — wrapped calls
-        // (e.g. inlined Block) should have been simplified before this
-        // point.  Wrapped calls would also break the
-        // `MultiValueLocalBind { instr: <Call>, … }` shape peephole/
-        // codegen expects.
-        let TirExprKind::Call { func, .. } = &value.kind else {
-            return None;
+        // Only fire on direct `Call(f)` / `MethodCall(f)` initialisers —
+        // wrapped calls (e.g. inlined Block) should have been simplified
+        // before this point. Wrapped calls would also break the
+        // `MultiValueLocalBind { instr: <Call>, … }` shape peephole /
+        // codegen expects. `MethodCall` lowers to a single `WirInstr::Call`
+        // after receiver / arg translation, so it's interchangeable with
+        // `Call` for the multi-value-bind purpose.
+        let func = match &value.kind {
+            TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => func,
+            _ => return None,
         };
         let key = (func.name.clone(), func.module_source.clone());
         if !self.ctx.multi_value_return_funcs.contains(&key) {

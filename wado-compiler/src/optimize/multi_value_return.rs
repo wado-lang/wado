@@ -3,9 +3,16 @@
 //! Decides which tuple-returning user functions should use the multi-value
 //! Wasm return ABI (each tuple element a separate result) instead of the
 //! default heap-struct ABI. The decision is recorded on
-//! [`TirFunction.return_abi`] and consumed by `wir_build` (function
-//! signature + body return shape) and the WIR `multi_value_calls` pass
-//! (call-site `LocalSet T = Call(f)` → `MultiValueLocalBind [T_0, …]`).
+//! [`TirFunction.return_abi`] and consumed by `wir_build`:
+//! - `wir_build::functions` emits the multi-value Wasm signature on the
+//!   function definition.
+//! - `wir_build::translate::FunctionTranslator::try_emit_multi_value_let`
+//!   rewrites a call site's `let __tmp = Call(f)` into
+//!   `MultiValueLocalBind [__tmp_0, …] = Call(f)` with subsequent
+//!   `MultiValueProject` reads going to the split WIR locals directly.
+//! - `wir_build::translate`'s `Return` arm unwraps the body's
+//!   `MultiValueStructNew` so the function's return pushes N values
+//!   instead of wrapping them in a heap struct.
 //!
 //! Historically this work lived in `wir_optimize::sroa_return`, which
 //! pattern-matched on WIR `StructNew` returns and `StructGet` call-site
@@ -51,6 +58,26 @@ use crate::tir::{
     TirStmtKind, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
+
+/// If `expr` is a direct `Call(f)` or `MethodCall(f)` whose callee `f` is
+/// a candidate in `candidate_names`, return that candidate's index.
+/// Returns `None` for any wrapped / non-candidate / non-call shape.
+///
+/// Used by both the safe-bind detector (`Let { value: candidate_call }`)
+/// and the escape detector (a candidate call appearing in any other
+/// position is an escape — the result flows somewhere we can't rewrite).
+fn candidate_call_idx(
+    expr: &TirExpr,
+    candidate_names: &IndexMap<(String, ModuleSource), usize>,
+) -> Option<usize> {
+    let func = match &expr.kind {
+        TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => func,
+        _ => return None,
+    };
+    candidate_names
+        .get(&(func.name.clone(), func.module_source.clone()))
+        .copied()
+}
 
 /// Classify tuple-returning functions and set `return_abi` on those whose
 /// every return statement and every call site permit the multi-value ABI.
@@ -135,15 +162,31 @@ fn candidate_result_types(func: &TirFunction, type_table: &TypeTable) -> Option<
     if func.has_real_type_params() || !func.impl_type_params.is_empty() {
         return None;
     }
-    // Skip methods. Free-function call sites are easy to rewrite, but
-    // method calls go through receiver-binding / trait-dispatch /
-    // effect-dispatch paths whose ABI assumptions are pinned. Trait
-    // methods invoked via effect handlers in particular feed runtime
-    // `call_ref` plumbing that expects a single-value result. A future
-    // refinement could distinguish "monomorphised to a static call" from
-    // "still goes through dispatch", but for now staying free-fn-only is
-    // the safe choice.
-    if func.is_method() {
+    // Methods on regular `impl` blocks are eligible alongside free
+    // functions: after monomorphisation a method call is a static
+    // `MethodCall { func, .. }` whose `func` resolves the same way a
+    // free-function `Call` does, and the call-site validation below
+    // catches every shape that prevents rewriting (bare local references,
+    // address-take, escape via call argument, etc.).
+    //
+    // Trait methods (`impl Trait for T`) and synthesized closure functor
+    // `__call` methods are excluded: they participate in dispatch
+    // infrastructure (effect handlers, closure functors via the `Fn<…>`
+    // traits, vtable indirect calls) whose canonical Wasm signature is a
+    // single-value `(ref T)` baked into the dispatch type. Reshaping the
+    // impl method to return multi-value would skew the signature against
+    // the vtable slot it's installed into.
+    //
+    // Closure functor `__call` methods are inherent methods syntactically
+    // (`trait_name` is `None`) but are dispatched indirectly via the
+    // `Fn<arity, ret>` canonical type, so `is_trait_method()` alone is not
+    // enough — `is_closure_call()` filters them explicitly.
+    //
+    // A future refinement could detect "trait method whose every caller
+    // is a static `MethodCall`, never an indirect dispatch" and let
+    // those through, but the current bright line keeps the analysis
+    // sound by construction.
+    if func.is_trait_method() || func.is_closure_call() {
         return None;
     }
 
@@ -176,8 +219,8 @@ fn candidate_result_types(func: &TirFunction, type_table: &TypeTable) -> Option<
 ///
 /// All concrete types Wasm GC supports as either a value type
 /// (i32 / i64 / f32 / f64 / v128) or a `(ref T)` slot are eligible.
-/// Type variables and pre-mono placeholders (TypeParam, TypePack,
-/// AssocTypeProjection) shouldn't appear in optimised TIR's tuple
+/// Type variables and pre-mono placeholders (`TypeParam`, `TypePack`,
+/// `AssocTypeProjection`) shouldn't appear in optimised TIR's tuple
 /// positions — be conservative and reject them so the analysis stays
 /// safe even if the invariant is ever broken.
 fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) -> bool {
@@ -311,6 +354,21 @@ fn expr_returns_multi_value(expr: &TirExpr, expected_arity: usize) -> bool {
                     .as_ref()
                     .is_none_or(|b| all_returns_are_multi_value_literal(b, expected_arity))
         }
+        // `return match { … }`: every arm body's tail expression must
+        // produce a `MultiValueLiteral` of matching arity. We approximate
+        // by requiring every `Return` inside each arm body matches; the
+        // arm's final tail expression is checked structurally (each arm
+        // body is itself an expression).
+        TirExprKind::Match { arms, .. } => arms
+            .iter()
+            .all(|arm| expr_returns_multi_value(&arm.body, expected_arity)),
+        // `return switch { … }`: same idea as `Match`, but scrutinee
+        // dispatch goes through indexed `Switch` arms (each a block).
+        TirExprKind::Switch { arms, default, .. } => {
+            arms.iter()
+                .all(|arm| all_returns_are_multi_value_literal(arm, expected_arity))
+                && all_returns_are_multi_value_literal(default, expected_arity)
+        }
         // Anything else (Call result, FieldAccess, etc.) at the return
         // position would mean the function returns an opaque tuple value
         // rather than constructing a fresh one — not a candidate for the
@@ -352,13 +410,11 @@ fn validate_stmt(
             is_mut,
             ..
         } => {
-            // If the RHS is a direct call to a candidate, start tracking
-            // this local. The bind itself is the only safe shape, so we
-            // do not recurse into the Call.
+            // If the RHS is a direct call (free function or method) to a
+            // candidate, start tracking this local. The bind itself is the
+            // only safe shape, so we do not recurse into the Call's args.
             if !*is_mut
-                && let TirExprKind::Call { func, .. } = &value.kind
-                && let Some(&candidate_idx) =
-                    candidate_names.get(&(func.name.clone(), func.module_source.clone()))
+                && let Some(candidate_idx) = candidate_call_idx(value, candidate_names)
             {
                 tracked.insert(*local_index, candidate_idx);
                 return;
@@ -462,7 +518,8 @@ fn walk_expr_for_uses(
         }
         // Direct candidate call in non-Let position → escape (the result
         // doesn't get bound and projected; it flows somewhere we can't
-        // rewrite).
+        // rewrite). Both `Call` and `MethodCall` can resolve to a
+        // candidate after monomorphisation.
         TirExprKind::Call { func, args, .. } => {
             if let Some(&candidate_idx) =
                 candidate_names.get(&(func.name.clone(), func.module_source.clone()))
@@ -473,7 +530,17 @@ fn walk_expr_for_uses(
                 walk_expr_for_uses(&arg.expr, candidate_names, invalid, tracked);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        TirExprKind::MethodCall {
+            receiver,
+            func,
+            args,
+            ..
+        } => {
+            if let Some(&candidate_idx) =
+                candidate_names.get(&(func.name.clone(), func.module_source.clone()))
+            {
+                invalid.insert(candidate_idx);
+            }
             walk_expr_for_uses(receiver, candidate_names, invalid, tracked);
             for arg in args {
                 walk_expr_for_uses(&arg.expr, candidate_names, invalid, tracked);

@@ -826,12 +826,12 @@ fn any_local_use_in_body(body: &[WirInstr], name: &str) -> bool {
                 | WirInstr::LocalTee { name, .. }
                     if name == self.name =>
                 {
-                    self.found = true
+                    self.found = true;
                 }
                 WirInstr::MultiValueLocalBind { locals, .. }
                     if locals.iter().any(|l| l.as_deref() == Some(self.name)) =>
                 {
-                    self.found = true
+                    self.found = true;
                 }
                 _ => self.walk_instr(instr),
             }

@@ -959,6 +959,12 @@ fn synthesize_lift_tuple(
             .collect();
         tt.make_tuple(elem_type_ids)
     };
+    // Heap form (`TupleLiteral`) is intentional here. CM lift bindings
+    // synthesise tuple values that flow across the linear-memory ↔ GC
+    // boundary; downstream consumers (CM record fields, list elements,
+    // result wrappers) all expect a heap struct ref. The multi-value
+    // form (`MultiValueLiteral`) would be wrong because the boundary
+    // crossing materialises a single GC ref, not N stack slots.
     TirExpr::new(
         TirExprKind::TupleLiteral {
             elements: elem_exprs,

@@ -3242,6 +3242,16 @@ impl TirFunction {
             .is_some_and(super::name::LocalMethodName::is_trait_method)
     }
 
+    /// Returns true if this is the synthesized `__call` method on a
+    /// `__Closure_N` functor struct. See
+    /// [`LocalMethodName::is_closure_call`] for the rationale.
+    #[inline]
+    pub fn is_closure_call(&self) -> bool {
+        self.method_info
+            .as_ref()
+            .is_some_and(super::name::LocalMethodName::is_closure_call)
+    }
+
     /// Returns true if this function has type params that need monomorphization
     /// (excludes effect params, which are erased at compile time).
     #[inline]
