@@ -26,12 +26,14 @@ diverges, that is a bug in Gale.
 
 Today the contract is met as follows:
 
-- **Stage A (syntactic)** — green across the full upstream
-  descriptor corpus (14 categories, 345 descriptors, 0 `[todo]`).
-  See the [Current state](#current-state) section below.
-- **Stage B (semantic)** — _partial_; only hand-curated driver
-  fixtures participate. Lifting the descriptor corpus into Stage B
-  is [Phase 3](#phase-3-next--stage-b-tree-shape-equivalence).
+- **Stage A (syntactic)** — green across the full upstream descriptor
+  corpus (14 categories, 345 descriptors, 0 `[todo]`, 12 `[skip]` for
+  testsuite-only StringTemplate artefacts).
+- **Stage B (semantic)** — partial. Curated driver fixtures and the
+  subset of upstream descriptors whose `[output]` is a clean parse
+  tree both participate; descriptors whose `[output]` is action-body
+  output (`writeln(...)`, `Token.toString` dumps, ATN traces) auto-skip
+  until Stage C lands.
 - **Stage C (action-body translation)** — not yet built. Action
   bodies (`{ ... }` action blocks, `{ ... }?` semantic predicates,
   `catch`/`finally` handlers, `@init`/`@after` rule prequels) are
@@ -75,18 +77,25 @@ Two test sources cover Stage A today:
 > same input, a `to_string_tree()` output equal to the one ANTLR4
 > would produce.
 
-Stage B is partially established by the per-grammar driver tests
-under `tests/` (each fixture invokes the generator at compile time
-via `use ... with { generator: ... }`, runs the resulting parser on
-sample input, and compares `to_string_tree()` against a hand-written
-expected tree). The same machinery applies to descriptor-based
-fixtures — the descriptor's `[input]` and a normalised form of
-`[output]` can drive automated equivalence checks where the
-descriptor is "clean" (no host-language action printing).
+Two test sources cover Stage B:
 
-Stage B is _partial today_: only the curated driver fixtures
-participate. Lifting descriptor-based fixtures into Stage B is
-[Phase 3 below](#phase-3-next--stage-b-tree-shape-equivalence).
+1. **Hand-curated driver tests** under `tests/` — each fixture
+   invokes the generator at compile time via
+   `use ... with { generator: ... }`, runs the resulting parser on
+   sample input, and compares `to_string_tree()` against a
+   hand-written expected tree.
+2. **Per-descriptor Stage B drivers** under
+   `tests/antlr4-compat/stage_b/<Category>/<Name>_test.wado`,
+   emitted by the descriptor extractor for every descriptor whose
+   `[output]` is a clean parse tree (rejected by
+   `normalize_output_for_stage_b` otherwise — action-body prints,
+   `Token.toString` dumps, ATN traces, sub-tree-only `[output]` from
+   `<ToStringTree("$X.ctx"):writeln()>` actions). Compares
+   `to_string_tree()` against the normalised descriptor `[output]`.
+
+Descriptors whose `[output]` cannot survive normalisation
+auto-skip; those become eligible only when Stage C makes their
+host-language prints reproducible. See [Current state](#current-state).
 
 ### Stage C — Action-body translation (not yet built)
 
@@ -276,424 +285,107 @@ Once a Gale gap is fixed:
 
 ## Current state
 
-### Phase 1 + Phase 2 (landed) — every descriptor category
+| Stage   | Status    | Numbers                                                                                                                                                                                                                                                                                              |
+| ------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stage A | green     | 14 categories, 345 descriptors emitted, 0 `[todo]`, 12 `[skip]` (all testsuite-only StringTemplate artefacts).                                                                                                                                                                                       |
+| Stage B | partial   | 74 descriptor-driven driver tests emitted, 71 pass, 3 `#[TODO]` (all in Stage C territory: `LeftRecursion/SemPredFailOption`, `SemPredEvalParser/PredFromAltTestedInLoopBack_{1,2}`). ~185 descriptors auto-skip via `normalize_output_for_stage_b`. Curated driver tests under `tests/` separately. |
+| Stage C | not built | Action bodies recognised by the g4 frontend, dropped during code generation.                                                                                                                                                                                                                         |
 
-All 14 categories under `vendor/antlr4/.../descriptors/` are
-extracted: **345 descriptors** emitted, **all pass**, **0 `[todo]`**,
-**12 `[skip]`** (testsuite StringTemplate artefacts). See
-`tests/antlr4-compat/status.toml` for the per-descriptor `[skip]`
-reasons.
+Run `wado test package-gale` for the live numbers; they should match
+or improve on this table. A `#[TODO]` test that _passes_ unexpectedly
+is a build break — remove the entry from `status.toml` (or the
+matching driver `#[TODO]` attribute) so the test runs as a regular
+pass.
 
-### Phase 3 (landed) — Stage B tree-shape equivalence
+Remaining work — multi-token tail-greedy LL gap, ATN-class grammars,
+Stage C action-body translation, performance, composite-descriptor
+Stage B (Stage-C-blocked), and LL-architecture cleanup tasks — is
+tracked in [`TODO.md`](./TODO.md).
 
-For each descriptor whose `[output]` is a clean parse tree, the
-extractor emits a per-descriptor driver test under
-`tests/antlr4-compat/stage_b/<Category>/<Name>_test.wado`. The test
-imports the descriptor's `.g4` through Gale's generator (Kiln inline
-invocation), runs the generated parser on `[input]`, and compares
-`to_string_tree()` against the normalised `[output]`.
+## LL prediction
 
-Current numbers (run `wado test package-gale/tests/antlr4-compat`):
+Gale's parser-side prediction is a static FOLLOW-based repair on top
+of SLL: when a `RuleRef R` call site's caller-local FOLLOW set
+intersects `R`'s tail-greedy first set, Gale emits a
+`scan_R__follow_<id>` / `parse_R__follow_<id>` variant whose body
+suppresses the colliding tail-greedy iterations. The variants are
+emitted through the same `gen_parse_fn_named` /
+`gen_scan_function_named` paths the regular rules go through, so
+multi-alt and left-recursive rules get variant emit "for free" under
+the unified naming scheme `__follow_<id>{,_atom,_lr_N,_bt_N}`.
 
-- **74 Stage B tests emitted** — 71 pass, 3 `#[TODO]` (known
-  divergences tracked in `[stage_b_todo]` of `status.toml`).
-- **0 `[stage_b_skip]`** — the historical four
-  (`LeftRecursion/ReturnValueAndActionsList[12]_[13]`) were unblocked
-  by the LR-helper list-label fix described under
-  [Recently closed gaps](#recently-closed-gaps) below.
-- **~185 auto-skip** — descriptor's `[output]` is not a parse tree at
-  all (lexer token-type names, Token.toString dumps, ATN decision
-  traces, action-block prints) or its `[output]` starts with a
-  rule other than `[start]` (the descriptor's `@after` action prints
-  a sub-tree via `<ToStringTree("$X.ctx"):writeln()>`; Gale's
-  `t::parse(input)` always returns the start rule's full tree).
+The catalogued LL fixtures
+(`tests/grammars/ll_{basic,ctx_follow,nullable_suffix,multi_alt,lr_atom}.g4`)
+are all green; the upstream `ParserExec/PredictionMode_LL`
+descriptor that motivated the work is green as well.
 
-Three independent pieces make up the wiring:
+Implementation references:
 
-1. **`normalize_output_for_stage_b`** in
-   `scripts/extract_antlr4_descriptors.wado` — pure function that
-   decides whether a descriptor's `[output]` is a parse-tree shape.
-   Strips ANTLR4's literal `<EOF>` token (Gale omits empty-text
-   tokens), rejects `${...}` template substitutions and any leftover
-   `<…>` directives, and requires the output to start with
-   `(<start-rule>` so sub-tree prints are rejected.
-2. **`[stage_b_todo]` / `[stage_b_skip]`** in the same
-   `status.toml`, parsed into a parallel `TriageMap` independent
-   from Stage A's `[todo]` / `[skip]` buckets — a descriptor can be
-   Stage A green and Stage B skipped, or vice versa.
-3. **The per-descriptor emitter** writes one Wado file per
-   eligible descriptor so each grammar gets its own Kiln
-   `output_dir`, avoiding cross-grammar name collisions in
-   generated code.
+- `package-gale/src/follow_env.wado` — pure analysis. `FollowEnv`
+  carries the per-rule `tail_greedy` snapshot and the call-graph
+  fixed-point `rule_follow`. No codegen state; consumed read-only.
+- `package-gale/src/gen_context.wado` — `tail_greedy_first_of_rule`,
+  `element_is_first_exact`, `deep_suffix_is_first_exact`,
+  `intern_follow_variant`, `FollowVariantEntry`,
+  `current_outer_follow`, plus the threaded `current_follow_mask`
+  consumed by `gen_*_repeat`.
+- `package-gale/src/parser_gen.wado` — `compute_ruleref_call_follow`
+  (the per-position follow helper used by every alt walker),
+  `emit_follow_variant` (single dispatcher behind the fixed-point
+  variant emit loop), `gen_parse_fn_named` and
+  `gen_scan_function_named` (mask-aware body emitters), the LR
+  helpers (`gen_lr_*` / `gen_scan_lr_*`) parameterised by `fn_name`,
+  and `ll_match_length` (the LL-aware group-dispatch sort key).
 
-The 3 remaining `#[TODO]` entries are the natural Stage B backlog
-and all sit in **Stage C territory** (action / predicate
-execution): `LeftRecursion/SemPredFailOption` (the failing
-predicate guard is silently dropped because action bodies are
-skipped) and `SemPredEvalParser/PredFromAltTestedInLoopBack_{1,2}`
-(semantic predicate enforcement). The fourth was
-`ParserExec/PredictionMode_LL`; it closed when Phase 4
-([below](#phase-4-landed--static-analysis-llrepair-via-__follow_id-variants))
-landed.
+### Soundness invariants
 
-### Recently closed gaps
+Three invariants must be respected by any future LL-related change.
+Violating them broke real grammars in the past, and the corresponding
+guards are present as inline conservatism with explicit comments at
+each site.
 
-The following Stage B blockers are now fixed and the descriptors are
-emitted plain (no `#[TODO]` / `[stage_b_skip]`):
+1. **Single-token tail-greedy inner.** Only `Repeat`s whose inner
+   consumes exactly one token per iteration contribute to a rule's
+   `tail_greedy_first` set. Multi-token-inner Repeats can re-enter
+   on the same first token at a deeper position (HTMLParser's
+   `htmlContent` is the canonical example: `((htmlElement | CDATA |
+   htmlComment) htmlChardata?)*` re-enters on TAG_OPEN), so
+   suppressing them by follow mask would break legitimate parses.
 
-- **Lexer keyword classification was unreachable when no carrier rule
-  existed.** Single-literal lexer rules (`A : 'A' ;`) were collected
-  as keyword candidates even when no longer non-keyword rule could
-  match their first character — the tokenize loop's
-  `if best_end > start { classify_keyword(...) }` gate could never
-  fire, so `A` and friends were never produced. `collect_keyword_rules`
-  now demotes such candidates back to the regular dispatch path.
-  Closed `ParserExec/BuildParseTree_TRUE`.
-- **LR continuation prediction failed the whole scan when a suffix's
-  first token matched but the suffix did not complete.**
-  `gen_scan_lr_call_with_prec` returned `-1` from the entire scan on
-  suffix failure; the enclosing `statement*` driver therefore matched
-  zero statements and reported `expected EOF, got "a"` at position 0.
-  The scan side now saves `pos` and restores+breaks on failure; the
-  parse side consults the scan twin first and only commits when the
-  scan confirms the suffix would succeed. Closed
-  `LeftRecursion/PrecedenceFilterConsidersContext`.
-- **List-label LR alts (`b+=expr`) generated invalid Wado.** When the
-  LR-rewritten recursive position carries a `+=` label (or any other
-  `+=` label appears later in the suffix), the IR field is
-  `Array<T>` but the helper assigned a single `T` value. The helper
-  now wraps both the inherited `left` and each per-iteration value in
-  `[...] as Array<T>`. Closed all four
-  `LeftRecursion/ReturnValueAndActionsList[12]_[13]` skips.
+2. **First-exact deep-nullable suffix.** When a `RuleRef` site's
+   suffix is deep-nullable, its first set may be unioned into the
+   site's caller-follow only if every walked element is
+   `element_is_first_exact` (single-token derived). Multi-element
+   alts (CSS3's `(combinator simpleSelectorSequence ws)*` Star
+   group) over-count: `combinator`'s first includes Space, but
+   suppressing Space at the preceding `ws` strands the runtime on a
+   lone Space.
 
-Earlier closed gaps worth noting (each unblocked ~10 % of the
-historical Stage B bucket and exposed real compiler / codegen bugs):
+3. **Variant emit reproduces the callee body faithfully.** All
+   variant emit paths route through `gen_parse_fn_named` /
+   `gen_scan_function_named` with `fn_name` set to
+   `parse_<rule>__follow_<id>` (and analogous helper-name
+   templates). No shrunken-duplicate body emitters; whatever shape
+   the regular path can emit, the variant path emits as well.
 
-- **Wado compiler ICE on struct-field rebind in `export fn`** — the
-  `sroa_multi_value_returns` WIR pass scalarised the function
-  signature but skipped Returns hidden inside `LocalSet` values
-  (`let _x = if cond { v } else { return ...; };`), leaving early
-  Returns producing a `struct.new` against the new multi-value
-  signature. Fixed by walking unhandled variants via
-  `for_each_boxed_child_mut`. Regression fixture at
-  `wado-compiler/tests/fixtures/struct_field_rebind_in_export_run.wado`.
-- **Gale codegen LR-detection missed labeled self-references** —
-  `is_left_recursive` only matched the bare `RuleRef(rule_name)`
-  shape, so `e : a=e ...` was misclassified as non-LR and routed
-  through the non-LR scan generator that emitted an infinitely
-  self-recursive `scan_e`. Fixed by unwrapping a single `Label`
-  layer (matching ANTLR4's left-recursion semantics) and threading
-  the label name through `gen_lr_suffix_helpers` so the LR helper's
-  struct-literal field name and field-assignment dedup counter
-  match the bt-side parser. Unblocked 9 LR descriptors.
+Beyond what static FOLLOW can decide, runtime ATN simulation is the
+only complete answer (`vendor/antlr4/runtime/Java/src/org/antlr/v4/
+runtime/atn/ParserATNSimulator.java`). Keeping prediction static
+today is a cost-vs-coverage trade-off; tracked in
+[`TODO.md`](./TODO.md) along with the remaining catalogued gaps.
 
-### Phase 4 (landed) — Static-analysis LL repair via `__follow_<id>` variants
+## Compiler bug discipline
 
-Closes `ParserExec/PredictionMode_LL` and the broader class of
-SLL-vs-LL divergences where the LL-correct alt depends on the
-caller's required follow set.
-
-#### The problem
-
-ANTLR4 uses adaptive LL(\*) prediction
-(`vendor/antlr4/runtime/Java/src/org/antlr/v4/runtime/atn/
-ParserATNSimulator.java`): when SLL is ambiguous it switches to
-full-context analysis, considering the call stack and what each
-caller expects to follow. Gale's prediction is SLL-only.
-
-The canonical reproducer (also `tests/grammars/ll_basic.g4`):
-
-```antlr
-r : (a b | a) EOF ;
-a : X Y? ;
-b : Y ;
-```
-
-For input `X Y`, ANTLR4's LL prediction yields `(r (a X) (b Y))` —
-alt 0 wins because `b` claims the trailing `Y`. SLL/greedy yields
-`(r (a X Y))` because `a`'s `Y?` consumes `Y` without knowing the
-caller (`b`) needs it.
-
-#### The design choice
-
-A full ATN simulator is a significant engineering investment. We
-took the static path: when a `RuleRef R` call site has a follow
-set that overlaps `R`'s tail-greedy set, generate a
-`scan_R__follow_<id>` / `parse_R__follow_<id>` whose body
-suppresses the overlapping tail-greedy consumption. Compute the
-analysis at codegen time, never at runtime.
-
-This is one design point on a spectrum from "no LL repair" (Gale
-stays SLL, real grammars diverge) to "runtime ATN simulator"
-(full ANTLR4 fidelity, large engineering cost). Static variant
-emit closes the shapes ANTLR4 itself resolves via static FOLLOW
-analysis and leaves the rest for the simulator if/when we land it.
-
-#### Mechanism
-
-`GenContext` exposes two analyses:
-
-- `tail_greedy_first_of_rule(R)` — token kinds that `R`'s body
-  may **greedily** consume at tail position. Walks each alt from
-  the tail, accumulating `first_of_element(inner)` for tail-position
-  `Repeat` elements; stops at the first non-deeply-nullable
-  element. Transitively follows tail RuleRefs.
-- `intern_follow_variant(R, caller_follow, is_scan)` — registers a
-  variant for `(R, mask)` where `mask = tail_greedy(R) ∩
-  caller_follow`. Same `(R, mask)` pair always returns the same
-  `id`, so call sites with different but outside-the-intersection
-  follows share a single variant.
-
-Two `GenContext` fields thread the mask and per-call-site follow:
-`current_follow_mask` (subtracted from tail-position `Repeat`
-first sets in `gen_*_repeat`) and `ruleref_call_follow` (read by
-`RuleRef` branches in `gen_scan_element` / `gen_element` to look
-up a variant).
-
-A fixed-point loop at the end of `gen_parser` emits all registered
-variants — variant bodies' own RuleRef calls may register
-additional variants in cascade.
-
-Group-level scan dispatches use a separate sort
-(`sort_group_by_mandatory_count_desc`) keyed on
-`mandatory_element_count` (count of non-deeply-nullable top-level
-elements; deep nullability is essential — a `RuleRef` to a
-fully-nullable rule must not inflate the count). This makes
-`(a b | a)` (mandatory lengths 2 and 1) sort the longer alt
-first, while `(table_or_subquery (',' tor)* | join_clause)` (both
-mandatory length 1) ties and falls through to priority. Rule-level
-dispatch keeps its priority-primary sort because the catch-all
-semantics are intentional there.
-
-#### Soundness conditions
-
-The repair must not consume tokens the caller depends on, but it
-must also not refuse to consume tokens that legitimately belong
-to the callee. Three conditions decide whether the repair is sound
-at a given site, and they are necessary — not arbitrary v1 cutoffs:
-
-1. **Single-token tail-greedy inner.** A `Repeat` whose inner
-   consumes more than one token per iteration cannot be safely
-   suppressed by a follow mask. The mask suppresses the iteration's
-   first-token check, but the inner's deeper tokens may
-   legitimately re-enter on overlapping tokens (HTMLParser's
-   `htmlContent` rule re-enters on TAG_OPEN; the closing `</div>`'s
-   TAG_OPEN is the same token). Static analysis can't distinguish
-   the two. `tail_greedy_first_of_element` enforces this: only
-   `Repeat`s whose inner is `element_is_single_token` contribute.
-
-2. **Strictly required next sibling.** When the caller's immediate
-   next sibling is nullable, its first set might or might not be
-   claimed at runtime, and the runtime decision depends on what
-   comes after the nullable element. Suppressing the callee's
-   tail-greedy unconditionally is unsound (CSS3's `selector :
-   simpleSelectorSequence ws (combinator …)*` — `ws`'s follow
-   includes Space from `combinator`'s first set, but `ws` should
-   still consume Space when no combinator follows). Alt-element
-   walkers only set `ruleref_call_follow` when
-   `tail_is_nullable_deep(elements, i + 1)` is false.
-
-3. **Variant emit can faithfully reproduce the callee body.** A
-   `__follow_<id>` variant must emit a function with the same
-   shape as the regular `scan_R` / `parse_R`, parameterised by
-   the mask. Anything `gen_parse_fn` and `gen_scan_function` know
-   how to emit, the variant emit must mirror.
-   `intern_follow_variant` rejects rules the emit pass cannot
-   reproduce, and `gen_*_follow_variant` `panic!` on contract
-   violation so a future relaxation cannot leak dangling
-   references into generated source.
-
-(1) and (2) are inherent limits of static FOLLOW analysis —
-closing them requires either a multi-token lookahead extension or
-a runtime decision. (3) is a registry/emit invariant: the
-registry must not promise variants the emit pass cannot deliver.
-
-#### Current coverage and gaps
-
-The catalogue of LL fixtures and their pass/`#[TODO]` state lives
-in [`TODO.md`](./TODO.md)'s LL section, exercised by
-`tests/grammars/ll_*.g4`. The four catalogued gaps (nullable next
-sibling, multi-alt callee, LR callee, caller-of-caller follow) are
-**not** addressable as incremental work behind the v1 contract: each
-gap targets a different axis of v1's coupling between FOLLOW analysis
-and codegen walk, and we attempted three over-broad patches in
-2026-05 (documented in `package-gale/CLAUDE.md`'s "Failed Approaches"
-section) that each broke real grammars. The path forward is the
-[Phase 5 redesign](#phase-5-planned--ll-followenv-redesign) below,
-which moves FOLLOW analysis into a separate pass and unifies variant
-emit on the regular rule-emit path.
-
-There exist grammars where static FOLLOW cannot decide the
-LL-correct alt — typically those where the decision depends on
-arbitrary lookahead through ambiguous prefixes. Those grammars
-require runtime ATN simulation. The decision to start with static
-repair is a cost-vs-coverage trade-off; we will revisit it once
-Phase 5 lands and the four catalogued static gaps are closed.
-
-### Phase 5 (landed) — LL FollowEnv redesign
-
-Closed the four LL gaps catalogued in [`TODO.md`](./TODO.md):
-`ll_ctx_follow`, `ll_nullable_suffix`, `ll_multi_alt`, `ll_lr_atom`.
-A fifth gap (multi-token tail-greedy inner, no fixture yet) was out
-of scope for this phase. Final state: 1067 → 1084 tests, 0 failed,
-TODO 7 → 3 (the three remaining are Stage C SemPred descriptors,
-unrelated to LL prediction).
-
-#### Why a redesign and not v1 extensions
-
-Phase 4's `intern_follow_variant` / variant-emit contract conflates
-three concerns into one walk: (1) FOLLOW analysis is computed on the
-fly by reading siblings as `gen_*_element` walks past a `RuleRef`;
-(2) variant registration happens as a side effect of that walk; and
-(3) the variant body is emitted by a _shrunken duplicate_ of the
-regular rule-emit path (`gen_scan_follow_variant`,
-`gen_parse_follow_variant`), which is what forces the single-alt /
-non-LR rejection at the registry. Each of the four gaps targets a
-different axis of that coupling:
-
-| Gap                     | Axis                                   | Why v1 cannot extend                                                        |
-| ----------------------- | -------------------------------------- | --------------------------------------------------------------------------- |
-| Nullable next sibling   | (a) FOLLOW propagation depth           | Walk-local follow has no view past the immediate alt's siblings.            |
-| Caller-of-caller follow | (a) FOLLOW propagation depth           | Walk-local follow cannot fixed-point through nullable passthrough rules.    |
-| Multi-alt callee        | (b) callee rule shape                  | `gen_parse_follow_variant` emits `gen_alt_body` once; multi-alt body unfit. |
-| LR callee               | (b) callee rule shape + (d) emit shape | LR rules need atom + per-alt suffix helpers; the variant emit has neither.  |
-
-Lifting any one axis in place forces the others to bend with it
-(e.g. a multi-alt variant body must also know its FOLLOW). The
-redesign cuts the coupling instead.
-
-#### Architecture
-
-Three phases, the first two strictly separated:
-
-1. **Phase 1 — `FollowEnv` construction (pure analysis).** A new
-   module `src/follow_env.wado` takes the `Grammar` IR and produces
-   an immutable `FollowEnv`. No codegen state, no `CodeWriter`, no
-   side effects. Computes:
-   - `rule_follow[R]` — the classical ANTLR4 `FOLLOW(R)` set, via a
-     call-graph fixed point. EOF seeded at the start rule;
-     contributions from each call site `R` appears in propagate
-     transitively through nullable suffixes. _Closes
-     `ll_ctx_follow`._
-   - `call_site_follow[(R, alt, path)]` — local FOLLOW at a specific
-     `RuleRef R` site, equal to `first(suffix) ∪ FOLLOW(enclosing)`
-     when the suffix is deep-nullable (just `first(suffix)`
-     otherwise). _Closes `ll_nullable_suffix`._
-   - `tail_greedy_single[R]` — same definition as Phase 4's
-     `tail_greedy_first_of_rule`, with the same single-token-inner
-     guard preserved (Phase 4's regression on `htmlContent` is the
-     reason this guard is non-negotiable; see `package-gale/CLAUDE.md`).
-   - `variants[(R, mask)]` with `shape ∈ {SingleAlt, MultiAlt,
-     LeftRecursive}`. Registration **does not reject** multi-alt or
-     LR rules; it records the shape so Phase 2 can dispatch.
-
-2. **Phase 2 — Mask-aware unified codegen.** `gen_parse_fn` (split
-   into `gen_parse_fn_named` so the variant pass can supply
-   `parse_<rule>__follow_<id>`) and the LR helpers (`gen_lr_*`,
-   `gen_scan_lr_*`) gained an explicit `fn_name: &String` parameter
-   that propagates through every helper-name template
-   (`{*fn_name}_atom`, `{*fn_name}_lr_<n>`, `{*fn_name}_bt_<n>`).
-   Self-recursive calls inside the LR suffix helpers route through
-   the same `fn_name`, so the mask stays alive across the LR chain.
-   Function naming is unified through a single suffix rule
-   (`__follow_<id>` / `__follow_<id>_atom` / `__follow_<id>_lr_N`).
-   `current_follow_mask` and `current_outer_follow` remain in
-   `GenContext` for now (their threading via save/restore is
-   correct and the further refactor to retire them is parked as
-   future cleanup). _Closed `ll_multi_alt` (multi-alt variants reuse
-   the regular multi-alt path) and `ll_lr_atom` (LR variants reuse
-   the regular LR path)._ The shrunken-duplicate
-   `gen_scan_follow_variant` and `gen_parse_follow_variant` were
-   collapsed into a single `emit_follow_variant` helper that calls
-   `gen_scan_function_named` and `gen_parse_fn_named` directly.
-
-3. **Phase 3 — Variant fixed-point emit.** Phase 4's emission loop
-   at the end of `gen_parser` is preserved, but the loop body
-   re-runs the relevant Phase 1 steps when a variant body's
-   `RuleRef` calls request a not-yet-registered `(R, mask)` pair.
-   Same termination argument as Phase 4 (the registry is monotone).
-
-#### Soundness conditions
-
-Phase 4's three conditions remain in force; the redesign does not
-weaken any of them, only widens the rule-shape envelope:
-
-1. Single-token tail-greedy inner — preserved exactly.
-2. Strictly required next sibling — generalised: a deep-nullable
-   suffix now contributes `FOLLOW(enclosing)` instead of `∅`, so
-   the condition becomes "strictly required _or_ enclosing follow
-   reachable." This is the formal statement of `ll_ctx_follow` /
-   `ll_nullable_suffix` closures.
-3. Variant emit can faithfully reproduce the callee body —
-   _strengthened_: by routing variant emit back through the
-   regular rule-emit path, the condition reduces to "the regular
-   path can emit it," which is true by construction for every rule
-   shape Gale supports.
-
-#### Implementation order
-
-Each step lands as red→green TDD on the existing `tests/grammars/ll_*.g4`
-fixtures, with the full `tests/antlr4-compat/**` corpus and every
-curated driver test (sqlite, css3, html, antlrv4, rust, typescript)
-required to stay green at every step.
-
-- [x] Phase 1 skeleton: `FollowEnv` data types, `tail_greedy_single`
-      lifted from `gen_context.wado` verbatim, no semantic change.
-- [x] Phase 1 `rule_follow` fixed point + variant-mask propagation.
-      Closed `ll_ctx_follow`.
-- [x] Phase 1 `call_site_follow` with first-exact suffix follow +
-      `ll_match_length` sort key. Closed `ll_nullable_suffix`.
-- [x] Phase 2 mask parameterisation of `gen_parse_fn_named` (and
-      `gen_scan_function_named` already had it). No behaviour change.
-- [x] Phase 2 multi-alt variant emit via the regular path. Closed
-      `ll_multi_alt`.
-- [x] Phase 2 LR variant emit via the regular path; unified
-      `__follow_<id>{,_atom,_lr_N}` naming. Closed `ll_lr_atom`.
-- [x] Collapsed `gen_scan_follow_variant` / `gen_parse_follow_variant`
-      into a single `emit_follow_variant` helper (delegates to the
-      unified `gen_*_function_named` body emitters).
-
-Out of scope for Phase 5, parked as future work:
-
-- The fifth gap (multi-token tail-greedy inner, no fixture yet) and
-  any ATN-class grammars discovered en route — to be re-scoped now
-  that the four catalogued static gaps are closed.
-- Moving variant registration from the codegen walk into a separate
-  pre-analysis pass on `FollowEnv` (the "delete walk-side
-  `intern_follow_variant` call sites" goal): the walk-side calls
-  remain because they happen to coincide with the natural place to
-  observe `(R, mask)` pairs. Lifting the discovery into a pure pass
-  is a clean refactor but does not move the LL coverage envelope.
-- Retiring `current_follow_mask` and `current_outer_follow` from
-  `GenContext` in favour of explicit function arguments. The save /
-  restore pattern is correct today; the cleanup is purely
-  ergonomic.
-
-### Future work
-
-- **Stage B for composite descriptors — Stage C dependency.** All
-  17 `CompositeLexers` / `CompositeParsers` descriptors are
-  auto-skipped today, but the bottleneck is _not_ multi-input
-  plumbing: every composite descriptor's `[output]` is a host-side
-  artefact rather than a parse tree. They split as `<writeln(...)>`
-  action-body prints (e.g. `S.a`, `M.b`, `T.y`), `Token.toString`
-  dumps (e.g. `[@0,0:2='abc',<1>,1:0]`), or empty `[output]`. None
-  of these survive `normalize_output_for_stage_b`. Even if the
-  extractor were updated to drop the `parsed.slave_grammars.len() > 0`
-  short-circuit and pass `inputs: [main, slave1, …]` to Kiln (which
-  already supports multi-input), every composite would land back at
-  the same auto-skip counter — the eligibility set stays at zero
-  until Stage C makes action bodies executable and the prints can be
-  reproduced. Re-evaluate this entry once Stage C lands.
-
-When Phase 2/3 surface further compiler bugs, follow the project
-rule from the top-level `CLAUDE.md`: write a minimum reproducible
-fixture under `wado-compiler/tests/fixtures/` first, fix the
-underlying compiler issue, _then_ update the descriptor triage.
-The `optimizer-debug` agent skill (`.claude/skills/optimizer-debug/`)
-documents the env vars (`WADO_TRACE`, `WADO_DUMP_PASS_BEFORE`,
-`WADO_DUMP_PASS_AFTER`) and the `compiler_trace!` macro that helped
-isolate the most recent of those bugs.
+When a descriptor extraction or test run surfaces a compiler bug
+(parser ICE, optimizer mis-translation, codegen crash) en route to
+exercising a `.g4`, follow the project rule from `CLAUDE.md`: write
+a minimum reproducible fixture under
+`wado-compiler/tests/fixtures/` first, fix the underlying compiler
+issue, _then_ update the descriptor triage. The `optimizer-debug`
+agent skill (`.claude/skills/optimizer-debug/`) documents the
+diagnostic environment variables (`WADO_TRACE`,
+`WADO_DUMP_PASS_BEFORE`, `WADO_DUMP_PASS_AFTER`) and the
+`compiler_trace!` macro.
 
 ## See also
 
