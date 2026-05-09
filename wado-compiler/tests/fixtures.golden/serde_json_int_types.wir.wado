@@ -1972,7 +1972,7 @@ fn "core:prelude/intparse.wado/parse_signed_prefix"(s) {
         return struct.new "core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Err" { discriminant: 1, payload_0: 1 };
     }
     start = select i32(has_sign, 1, 0);
-    return struct.new "core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Ok" { discriminant: 0, payload_0: struct.new "tuple//[bool, i32]" { 0: is_negative, 1: start } };
+    return struct.new "core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Ok" { discriminant: 0, payload_0: ref.as_non_null(multivalue_struct_new "tuple//[bool, i32]"(is_negative; start)) };
 }
 
 fn "core:prelude/intparse.wado/parse_unsigned_prefix"(s) {

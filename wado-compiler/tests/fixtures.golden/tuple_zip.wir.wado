@@ -172,15 +172,15 @@ fn "wado-compiler/tests/fixtures/tuple_zip.wado/__test_0_zip_homogeneous"() {
     let __sroa___sroa___tuple_3_1_1: i32;
     let __sroa___sroa___tuple_3_2_0: i32;
     let __sroa___sroa___tuple_3_2_1: i32;
-    a = struct.new "tuple//[i32, i32, i32]" { 0: 1, 1: 2, 2: 3 };
-    b = struct.new "tuple//[i32, i32, i32]" { 0: 4, 1: 5, 2: 6 };
+    a = multivalue_struct_new "tuple//[i32, i32, i32]"(1; 2; 3);
+    b = multivalue_struct_new "tuple//[i32, i32, i32]"(4; 5; 6);
     sum = 0;
-    __sroa___sroa___tuple_3_0_0 = struct.new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.0;
-    __sroa___sroa___tuple_3_0_1 = struct.new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.0;
-    __sroa___sroa___tuple_3_1_0 = struct.new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.1;
-    __sroa___sroa___tuple_3_1_1 = struct.new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.1;
-    __sroa___sroa___tuple_3_2_0 = struct.new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.2;
-    __sroa___sroa___tuple_3_2_1 = struct.new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.2;
+    __sroa___sroa___tuple_3_0_0 = multivalue_struct_new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]"(a; b).0.0;
+    __sroa___sroa___tuple_3_0_1 = multivalue_struct_new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]"(a; b).1.0;
+    __sroa___sroa___tuple_3_1_0 = multivalue_struct_new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]"(a; b).0.1;
+    __sroa___sroa___tuple_3_1_1 = multivalue_struct_new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]"(a; b).1.1;
+    __sroa___sroa___tuple_3_2_0 = multivalue_struct_new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]"(a; b).0.2;
+    __sroa___sroa___tuple_3_2_1 = multivalue_struct_new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]"(a; b).1.2;
     sum = (0 + __sroa___sroa___tuple_3_0_0) + __sroa___sroa___tuple_3_0_1;
     sum = (sum + __sroa___sroa___tuple_3_1_0) + __sroa___sroa___tuple_3_1_1;
     sum = (sum + __sroa___sroa___tuple_3_2_0) + __sroa___sroa___tuple_3_2_1;
@@ -250,12 +250,12 @@ fn "wado-compiler/tests/fixtures/tuple_zip.wado/__test_1_zip_heterogeneous"() {
     let __sroa___sroa_zipped_0_1: i32;
     let __sroa___sroa_zipped_1_0: ref "core:prelude/string.wado//String";
     let __sroa___sroa_zipped_1_1: ref "core:prelude/string.wado//String";
-    a = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
-    b = struct.new "tuple//[i32, String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
-    __sroa___sroa_zipped_0_0 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: a, 1: b }.0.0;
-    __sroa___sroa_zipped_0_1 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: a, 1: b }.1.0;
-    __sroa___sroa_zipped_1_0 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: a, 1: b }.0.1;
-    __sroa___sroa_zipped_1_1 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: a, 1: b }.1.1;
+    a = multivalue_struct_new "tuple//[i32, String]"(1; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
+    b = multivalue_struct_new "tuple//[i32, String]"(2; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 });
+    __sroa___sroa_zipped_0_0 = multivalue_struct_new "tuple//[Tuple<i32,String>, Tuple<i32,String>]"(a; b).0.0;
+    __sroa___sroa_zipped_0_1 = multivalue_struct_new "tuple//[Tuple<i32,String>, Tuple<i32,String>]"(a; b).1.0;
+    __sroa___sroa_zipped_1_0 = multivalue_struct_new "tuple//[Tuple<i32,String>, Tuple<i32,String>]"(a; b).0.1;
+    __sroa___sroa_zipped_1_1 = multivalue_struct_new "tuple//[Tuple<i32,String>, Tuple<i32,String>]"(a; b).1.1;
     __cond_4 = __sroa___sroa_zipped_0_0 == 1;
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -403,16 +403,16 @@ fn "wado-compiler/tests/fixtures/tuple_zip.wado/__test_2_zip_three_tuples"() {
     let __sroa___sroa___tuple_4_1_0: i32;
     let __sroa___sroa___tuple_4_1_1: i32;
     let __sroa___sroa___tuple_4_1_2: i32;
-    a = struct.new "tuple//[i32, i32]" { 0: 1, 1: 2 };
-    b = struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 };
-    c = struct.new "tuple//[i32, i32]" { 0: 5, 1: 6 };
+    a = multivalue_struct_new "tuple//[i32, i32]"(1; 2);
+    b = multivalue_struct_new "tuple//[i32, i32]"(3; 4);
+    c = multivalue_struct_new "tuple//[i32, i32]"(5; 6);
     sum = 0;
-    __sroa___sroa___tuple_4_0_0 = struct.new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.0.0;
-    __sroa___sroa___tuple_4_0_1 = struct.new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.1.0;
-    __sroa___sroa___tuple_4_0_2 = struct.new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.2.0;
-    __sroa___sroa___tuple_4_1_0 = struct.new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.0.1;
-    __sroa___sroa___tuple_4_1_1 = struct.new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.1.1;
-    __sroa___sroa___tuple_4_1_2 = struct.new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.2.1;
+    __sroa___sroa___tuple_4_0_0 = multivalue_struct_new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]"(a; b; c).0.0;
+    __sroa___sroa___tuple_4_0_1 = multivalue_struct_new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]"(a; b; c).1.0;
+    __sroa___sroa___tuple_4_0_2 = multivalue_struct_new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]"(a; b; c).2.0;
+    __sroa___sroa___tuple_4_1_0 = multivalue_struct_new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]"(a; b; c).0.1;
+    __sroa___sroa___tuple_4_1_1 = multivalue_struct_new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]"(a; b; c).1.1;
+    __sroa___sroa___tuple_4_1_2 = multivalue_struct_new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]"(a; b; c).2.1;
     sum = ((0 + __sroa___sroa___tuple_4_0_0) + __sroa___sroa___tuple_4_0_1) + __sroa___sroa___tuple_4_0_2;
     sum = ((sum + __sroa___sroa___tuple_4_1_0) + __sroa___sroa___tuple_4_1_1) + __sroa___sroa___tuple_4_1_2;
     __v0 = sum;
@@ -465,10 +465,10 @@ fn "wado-compiler/tests/fixtures/tuple_zip.wado/__test_3_zip_single_element"() {
     let f_33: ref "core:prelude/format.wado//Formatter";
     let __sroa___sroa___tuple_2_0_0: i32;
     let __sroa___sroa___tuple_2_0_1: i32;
-    a = struct.new "tuple//[i32]" { 0: 42 };
-    b = struct.new "tuple//[i32]" { 0: 99 };
-    __sroa___sroa___tuple_2_0_0 = struct.new "tuple//[Tuple<i32>, Tuple<i32>]" { 0: a, 1: b }.0.0;
-    __sroa___sroa___tuple_2_0_1 = struct.new "tuple//[Tuple<i32>, Tuple<i32>]" { 0: a, 1: b }.1.0;
+    a = multivalue_struct_new "tuple//[i32]"(42);
+    b = multivalue_struct_new "tuple//[i32]"(99);
+    __sroa___sroa___tuple_2_0_0 = multivalue_struct_new "tuple//[Tuple<i32>, Tuple<i32>]"(a; b).0.0;
+    __sroa___sroa___tuple_2_0_1 = multivalue_struct_new "tuple//[Tuple<i32>, Tuple<i32>]"(a; b).1.0;
     __cond_6 = __sroa___sroa___tuple_2_0_0 == 42;
     if __cond_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {

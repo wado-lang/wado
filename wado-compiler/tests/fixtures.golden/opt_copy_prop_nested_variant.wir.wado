@@ -326,7 +326,7 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_nested_variant.wado/parse_shape"(
         return 0, struct.new "wado-compiler/tests/fixtures/opt_copy_prop_nested_variant.wado//Shape::Circle" { discriminant: 0, payload_0: 3.14 }, ref.null none;
     }
     if kind == 2 {
-        return 0, struct.new "wado-compiler/tests/fixtures/opt_copy_prop_nested_variant.wado//Shape::Rect" { discriminant: 1, payload_0: struct.new "tuple//[f64, f64]" { 0: 4, 1: 5 } }, ref.null none;
+        return 0, struct.new "wado-compiler/tests/fixtures/opt_copy_prop_nested_variant.wado//Shape::Rect" { discriminant: 1, payload_0: ref.as_non_null(multivalue_struct_new "tuple//[f64, f64]"(4; 5)) }, ref.null none;
     }
     return 1, ref.null none, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unknown shape"), used: 13 };
 }

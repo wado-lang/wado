@@ -219,7 +219,7 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
     "core:cli/write_to_stream"(tx_62, message_60, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_63);
     items = __seq_lit: block -> ref "core:prelude//Array<Tagged>" {
-        __b_8 = struct.new "core:prelude//Array<Tagged>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged">(struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("P"), used: 1 }, coords: struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 } }, struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Q"), used: 1 }, coords: struct.new "tuple//[i32, i32]" { 0: 5, 1: 6 } }), used: 2 };
+        __b_8 = struct.new "core:prelude//Array<Tagged>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged">(struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("P"), used: 1 }, coords: ref.as_non_null(multivalue_struct_new "tuple//[i32, i32]"(3; 4)) }, struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Q"), used: 1 }, coords: ref.as_non_null(multivalue_struct_new "tuple//[i32, i32]"(5; 6)) }), used: 2 };
         break __seq_lit: __b_8;
         unreachable;
     };
@@ -253,7 +253,7 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
             continue l1;
         };
     };
-    t = struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("X"), used: 1 }, coords: struct.new "tuple//[i32, i32]" { 0: 100, 1: 200 } };
+    t = struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("X"), used: 1 }, coords: ref.as_non_null(multivalue_struct_new "tuple//[i32, i32]"(100; 200)) };
     let __match_scrut_0: ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged";
     __match_scrut_0 = t;
     desc = (if let __struct_field_5: ref "tuple//[i32, i32]"; __struct_field_5 = __match_scrut_0.coords; x_15 = __struct_field_5.0; y_16 = __struct_field_5.1; (x_15 + y_16) > 250 -> ref "core:prelude/string.wado//String" {

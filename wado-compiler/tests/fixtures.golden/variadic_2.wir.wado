@@ -252,6 +252,7 @@ condition: c.2 == \"hello\"
 }
 
 fn "wado-compiler/tests/fixtures/variadic_2.wado/__test_2_spread_eval_once"() {
+    let __spread_0: ref "tuple//[i32, i32]";
     let a_1: ref "tuple//[i32, i32, i32]";
     let __v0_2: i32;
     let __cond_3: bool;
@@ -259,6 +260,7 @@ fn "wado-compiler/tests/fixtures/variadic_2.wado/__test_2_spread_eval_once"() {
     let __cond_5: bool;
     let __v0_6: i32;
     let __cond_7: bool;
+    let b: ref "tuple//[i32, i32, i32]";
     let __v0_9: i32;
     let __cond_10: bool;
     let __v0_11: i32;
@@ -296,12 +298,12 @@ fn "wado-compiler/tests/fixtures/variadic_2.wado/__test_2_spread_eval_once"() {
     let f_96: ref "core:prelude/format.wado//Formatter";
     let f_102: ref "core:prelude/format.wado//Formatter";
     let f_107: ref "core:prelude/format.wado//Formatter";
-    drop(__inline_make_pair_0: block -> ref "tuple//[i32, i32]" {
+    __spread_0 = __inline_make_pair_0: block -> ref "tuple//[i32, i32]" {
         global:call_count = global:call_count + 1;
-        break __inline_make_pair_0: struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 };
+        break __inline_make_pair_0: multivalue_struct_new "tuple//[i32, i32]"(10; 20);
         unreachable;
-    });
-    a_1 = struct.new "tuple//[i32, i32, i32]" { 0: 10, 1: 20, 2: 30 };
+    };
+    a_1 = multivalue_struct_new "tuple//[i32, i32, i32]"(__spread_0.0; __spread_0.1; 30);
     __v0_2 = a_1.0;
     __cond_3 = __v0_2 == 10;
     if __cond_3 == 0 {
@@ -400,16 +402,16 @@ condition: call_count == 1
         });
         unreachable;
     }
-    drop(__inline_eval_prepend_i32_Tuple_i32_i32___22: block -> ref "tuple//[i32, i32, i32]" {
+    b = __inline_eval_prepend_i32_Tuple_i32_i32___22: block -> ref "tuple//[i32, i32, i32]" {
         rest = __inline_make_pair_23: block -> ref "tuple//[i32, i32]" {
             global:call_count = global:call_count + 1;
-            break __inline_make_pair_23: struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 };
+            break __inline_make_pair_23: multivalue_struct_new "tuple//[i32, i32]"(10; 20);
             unreachable;
         };
-        break __inline_eval_prepend_i32_Tuple_i32_i32___22: struct.new "tuple//[i32, i32, i32]" { 0: 99, 1: 10, 2: 20 };
+        break __inline_eval_prepend_i32_Tuple_i32_i32___22: multivalue_struct_new "tuple//[i32, i32, i32]"(99; rest.0; rest.1);
         unreachable;
-    });
-    __v0_9 = 99;
+    };
+    __v0_9 = b.0;
     __cond_10 = __v0_9 == 99;
     if __cond_10 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -442,7 +444,7 @@ condition: b.0 == 99
         });
         unreachable;
     }
-    __v0_11 = 10;
+    __v0_11 = b.1;
     __cond_12 = __v0_11 == 10;
     if __cond_12 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -475,7 +477,7 @@ condition: b.1 == 10
         });
         unreachable;
     }
-    __v0_13 = 20;
+    __v0_13 = b.2;
     __cond_14 = __v0_13 == 20;
     if __cond_14 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {

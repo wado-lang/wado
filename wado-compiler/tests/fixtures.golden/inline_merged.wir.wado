@@ -368,7 +368,7 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/inline_outer"(e) {
     multivalue_bind [__sroa_pm_a, __sroa_pm_b] = "wado-compiler/tests/fixtures/inline_merged.wado/inline_big_match"(idx);
     __pattern_temp_0 = __inline_inline_tuple_fn_2: block -> ref "tuple//[i64, i32]" {
         x = __sroa_pm_a;
-        break __inline_inline_tuple_fn_2: struct.new "tuple//[i64, i32]" { 0: x * 2_i64, 1: 42 };
+        break __inline_inline_tuple_fn_2: multivalue_struct_new "tuple//[i64, i32]"(x * 2_i64; 42);
         unreachable;
     };
     val = __pattern_temp_0.0;

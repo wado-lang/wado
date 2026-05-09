@@ -441,7 +441,7 @@ fn "wado-compiler/tests/fixtures/serde_json_tuple.wado/__test_0_tuple_serialize_
     let other: ref "core:prelude/string.wado//String";
     let len_a: i32;
     let f_18: ref "core:prelude/format.wado//Formatter";
-    t = struct.new "tuple//[i32, String, bool]" { 0: 42, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 };
+    t = multivalue_struct_new "tuple//[i32, String, bool]"(42; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }; 1);
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
@@ -509,7 +509,7 @@ fn "wado-compiler/tests/fixtures/serde_json_tuple.wado/__test_1_tuple_roundtrip_
     let other: ref "core:prelude/string.wado//String";
     let len_a: i32;
     let f_36: ref "core:prelude/format.wado//Formatter";
-    t = struct.new "tuple//[i32, String]" { 0: 10, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
+    t = multivalue_struct_new "tuple//[i32, String]"(10; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 });
     let __sroa_json_r_discriminant: i32;
     let __sroa_json_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_json_r_case1_payload_0: ref null "core:serde//SerializeError";
@@ -607,7 +607,7 @@ fn "wado-compiler/tests/fixtures/serde_json_tuple.wado/__test_2_pair_tuple_seria
     let other: ref "core:prelude/string.wado//String";
     let len_a: i32;
     let f_18: ref "core:prelude/format.wado//Formatter";
-    pair = struct.new "tuple//[f64, f64]" { 0: 3.14, 1: 2.72 };
+    pair = multivalue_struct_new "tuple//[f64, f64]"(3.14; 2.72);
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
@@ -3742,7 +3742,7 @@ fn "wado-compiler/tests/fixtures/serde_json_tuple.wado/Tuple<i32,String>^Deseria
         break __inline__value_copy_T54_0: struct.new "core:json//JsonSeqAccess" { de: v.de, first: v.first };
         unreachable;
     };
-    tuple = struct.new "tuple//[i32, String]" { 0: let __match_scrut_2: ref "core:prelude/types.wado//Result<i32,DeserializeError>"; __match_scrut_2 = "wado-compiler/tests/fixtures/serde_json_tuple.wado/i32^Deserialize::deserialize_next_element_from_seq<JsonSeqAccess>"(seq); (if ref.test "core:prelude/types.wado//Result<i32,DeserializeError>::Ok"(__match_scrut_2) -> i32 {
+    tuple = multivalue_struct_new "tuple//[i32, String]"(let __match_scrut_2: ref "core:prelude/types.wado//Result<i32,DeserializeError>"; __match_scrut_2 = "wado-compiler/tests/fixtures/serde_json_tuple.wado/i32^Deserialize::deserialize_next_element_from_seq<JsonSeqAccess>"(seq); (if ref.test "core:prelude/types.wado//Result<i32,DeserializeError>::Ok"(__match_scrut_2) -> i32 {
         let __cast_5: ref "core:prelude/types.wado//Result<i32,DeserializeError>::Ok";
         __cast_5 = ref.cast "core:prelude/types.wado//Result<i32,DeserializeError>::Ok"(__match_scrut_2);
         __qm_v_4 = __cast_5.payload_0;
@@ -3754,7 +3754,7 @@ fn "wado-compiler/tests/fixtures/serde_json_tuple.wado/Tuple<i32,String>^Deseria
         return struct.new "core:prelude/types.wado//Result<Tuple<i32,String>,DeserializeError>::Err" { discriminant: 1, payload_0: __qm_e_5 };
         unreachable;
         unreachable;
-    }), 1: ref.as_non_null(let __match_scrut_3: ref "core:prelude/types.wado//Result<String,DeserializeError>"; __match_scrut_3 = "wado-compiler/tests/fixtures/serde_json_tuple.wado/String^Deserialize::deserialize_next_element_from_seq<JsonSeqAccess>"(seq); (if ref.test "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__match_scrut_3) -> ref "core:prelude/string.wado//String" {
+    }); ref.as_non_null(let __match_scrut_3: ref "core:prelude/types.wado//Result<String,DeserializeError>"; __match_scrut_3 = "wado-compiler/tests/fixtures/serde_json_tuple.wado/String^Deserialize::deserialize_next_element_from_seq<JsonSeqAccess>"(seq); (if ref.test "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__match_scrut_3) -> ref "core:prelude/string.wado//String" {
         let __cast_7: ref "core:prelude/types.wado//Result<String,DeserializeError>::Ok";
         __cast_7 = ref.cast "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__match_scrut_3);
         __local_9 = __cast_7.payload_0;
@@ -3766,7 +3766,7 @@ fn "wado-compiler/tests/fixtures/serde_json_tuple.wado/Tuple<i32,String>^Deseria
         return struct.new "core:prelude/types.wado//Result<Tuple<i32,String>,DeserializeError>::Err" { discriminant: 1, payload_0: __local_10 };
         unreachable;
         unreachable;
-    })) };
+    })));
     let __match_scrut_4: ref null "core:serde//DeserializeError";
     __match_scrut_4 = "core:json/JsonDeserializer::expect_char"(seq.de, 93);
     if ref.is_null(__match_scrut_4) {

@@ -950,7 +950,7 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<String,String>::set"(se
                     unreachable;
                 } {
                     index_11 = i;
-                    value_12 = struct.new "tuple//[String, String]" { 0: key, 1: value };
+                    value_12 = multivalue_struct_new "tuple//[String, String]"(key; value);
                     builtin::array_set<ref "tuple//[String, String]">(_licm_repr_19, index_11, value_12);
                     return;
                 }
@@ -959,7 +959,7 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<String,String>::set"(se
             };
         };
     };
-    "core:prelude/array.wado/Array<Tuple<String,String>>::push"(self, struct.new "tuple//[String, String]" { 0: key, 1: value });
+    "core:prelude/array.wado/Array<Tuple<String,String>>::push"(self, multivalue_struct_new "tuple//[String, String]"(key; value));
 }
 
 fn "core:prelude/array.wado/Array<Tuple<String,String>>::push"(self, value) {

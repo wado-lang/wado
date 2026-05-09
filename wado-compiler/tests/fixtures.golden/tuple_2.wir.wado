@@ -206,7 +206,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/describe"(a, b) {
     let f_40: ref "core:prelude/format.wado//Formatter";
     let __sroa_self_value_44: bool;
     let __sroa_self_value_45: bool;
-    return let __match_scrut_0: ref "tuple//[TupleValue, TupleValue]", __match_scrut_0 = struct.new "tuple//[TupleValue, TupleValue]" { 0: a, 1: b }, (if __local_13 = __match_scrut_0.0; __local_14 = __match_scrut_0.1; (if __local_13.discriminant == 0 -> i32 {
+    return let __match_scrut_0: ref "tuple//[TupleValue, TupleValue]", __match_scrut_0 = multivalue_struct_new "tuple//[TupleValue, TupleValue]"(a; b), (if __local_13 = __match_scrut_0.0; __local_14 = __match_scrut_0.1; (if __local_13.discriminant == 0 -> i32 {
         __local_14.discriminant == 0;
     } else {
         0;
@@ -365,7 +365,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_for_of"() with Stdout {
     let tx_38: i32;
     let handle_39: i32;
     pairs = __seq_lit: block -> ref "core:prelude//Array<Tuple<i32,String>>" {
-        __b = struct.new "core:prelude//Array<Tuple<i32,String>>" { repr: array.new_fixed<ref "tuple//[i32, String]">(struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("one"), used: 3 } }, struct.new "tuple//[i32, String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("two"), used: 3 } }, struct.new "tuple//[i32, String]" { 0: 3, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("three"), used: 5 } }), used: 3 };
+        __b = struct.new "core:prelude//Array<Tuple<i32,String>>" { repr: array.new_fixed<ref "tuple//[i32, String]">(multivalue_struct_new "tuple//[i32, String]"(1; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("one"), used: 3 }), multivalue_struct_new "tuple//[i32, String]"(2; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("two"), used: 3 }), multivalue_struct_new "tuple//[i32, String]"(3; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("three"), used: 5 })), used: 3 };
         break __seq_lit: __b;
         unreachable;
     };
@@ -453,7 +453,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_if_let"() with Stdout {
     let rx_60: i32;
     let tx_61: i32;
     let handle_62: i32;
-    opt = struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 };
+    opt = ref.as_non_null(multivalue_struct_new "tuple//[i32, i32]"(10; 20));
     if ref.is_null(opt) == 0 {
         __pattern_temp_1 = ref.as_non_null(opt);
         x_1 = __pattern_temp_1.0;
@@ -553,7 +553,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_matches"() with Stdout {
     let rx_35: i32;
     let tx_36: i32;
     let handle_37: i32;
-    pair = struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 };
+    pair = multivalue_struct_new "tuple//[i32, i32]"(10; 20);
     let __match_scrut_0: ref "tuple//[i32, i32]";
     __match_scrut_0 = pair;
     x_1 = __match_scrut_0.0;
@@ -593,7 +593,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_matches"() with Stdout {
         "core:cli/write_to_stream"(tx_30, message_28, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_31);
     }
-    opt = struct.new "tuple//[i32, i32]" { 0: 1, 1: 2 };
+    opt = ref.as_non_null(multivalue_struct_new "tuple//[i32, i32]"(1; 2));
     let __match_scrut_3: ref null "tuple//[i32, i32]";
     __match_scrut_3 = opt;
     if (if ref.is_null(__match_scrut_3) == 0 -> bool {
@@ -797,7 +797,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
     let rx_94: i32;
     let tx_95: i32;
     let handle_96: i32;
-    pair = struct.new "tuple//[i32, i32]" { 0: 42, 1: 10 };
+    pair = multivalue_struct_new "tuple//[i32, i32]"(42; 10);
     let __match_scrut_0: ref "tuple//[i32, i32]";
     __match_scrut_0 = pair;
     result = (if a = __match_scrut_0.0; __local_26 = __match_scrut_0.1; __local_26 == 10 -> ref "core:prelude/string.wado//String" {
@@ -816,7 +816,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
     handle_43 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_41);
     "core:cli/write_to_stream"(tx_42, result, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_43);
-    bpair = struct.new "tuple//[String, bool]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("yes"), used: 3 }, 1: 1 };
+    bpair = multivalue_struct_new "tuple//[String, bool]"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("yes"), used: 3 }; 1);
     let __match_scrut_1: ref "tuple//[String, bool]";
     __match_scrut_1 = bpair;
     result3 = (if s_4 = __match_scrut_1.0; __local_27 = __match_scrut_1.1; __local_27 == 1 -> ref "core:prelude/string.wado//String" {
@@ -844,7 +844,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
     handle_51 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_49);
     "core:cli/write_to_stream"(tx_50, result3, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_51);
-    cpair = struct.new "tuple//[i32, char]" { 0: 99, 1: 88 };
+    cpair = multivalue_struct_new "tuple//[i32, char]"(99; 88);
     let __match_scrut_2: ref "tuple//[i32, char]";
     __match_scrut_2 = cpair;
     result4 = (if n_8 = __match_scrut_2.0; __local_29 = __match_scrut_2.1; __local_29 == 88 -> ref "core:prelude/string.wado//String" {
@@ -863,7 +863,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
     handle_63 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_61);
     "core:cli/write_to_stream"(tx_62, result4, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_63);
-    spair = struct.new "tuple//[i32, String]" { 0: 7, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
+    spair = multivalue_struct_new "tuple//[i32, String]"(7; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
     let __match_scrut_3: ref "tuple//[i32, String]";
     __match_scrut_3 = spair;
     result5 = (if n_11 = __match_scrut_3.0; __local_30 = __match_scrut_3.1; __inline_String_Eq__eq_16: block -> bool {
@@ -902,7 +902,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
     handle_84 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_82);
     "core:cli/write_to_stream"(tx_83, message_81, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_84);
-    bpair2 = struct.new "tuple//[i32, bool]" { 0: 42, 1: 0 };
+    bpair2 = multivalue_struct_new "tuple//[i32, bool]"(42; 0);
     let __match_scrut_4: ref "tuple//[i32, bool]";
     __match_scrut_4 = bpair2;
     __local_33 = __match_scrut_4.1;
@@ -949,7 +949,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_match"() with Stdout {
     let rx_51: i32;
     let tx_52: i32;
     let handle_53: i32;
-    pair = struct.new "tuple//[i32, i32]" { 0: 5, 1: 10 };
+    pair = multivalue_struct_new "tuple//[i32, i32]"(5; 10);
     let __match_scrut_0: ref "tuple//[i32, i32]";
     __match_scrut_0 = pair;
     label = (if x_1 = __match_scrut_0.0; y_2 = __match_scrut_0.1; (x_1 + y_2) > 20 -> ref "core:prelude/string.wado//String" {
@@ -994,7 +994,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_match"() with Stdout {
     handle_41 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_39);
     "core:cli/write_to_stream"(tx_40, message_38, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_41);
-    opt = struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 };
+    opt = ref.as_non_null(multivalue_struct_new "tuple//[i32, i32]"(3; 4));
     let __match_scrut_2: ref null "tuple//[i32, i32]";
     __match_scrut_2 = opt;
     sum = (if ref.is_null(__match_scrut_2) == 0 -> i32 {
