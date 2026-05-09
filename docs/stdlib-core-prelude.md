@@ -2957,32 +2957,7 @@ body_tx.drop();
 let resp = task.wait();             // block for response
 ```
 
-#### `__cm_packed: i32`
-
-Raw CM subtask handle packed as `(subtask_handle << 4) | status`,
-as returned by `canon lower async`.
-
-#### `__cm_outptr: i32`
-
-Pointer to the linear-memory buffer holding the async result.
-
-#### `__cm_size: i32`
-
-Size of the result buffer (for realloc-based free).
-
-#### `__cm_align: i32`
-
-Alignment of the result buffer (for realloc-based free).
-
-#### `__cm_lift: fn(i32) -> T`
-
-Per-import lift function: reads the host-written CM-ABI bytes at
-`__cm_outptr` and materialises them as `T`. Populated by the
-synthesised `__cm_binding__<iface>_<method>` adapter for every CM
-`async func` import, with a body produced by the same
-`synthesize_lift` helper that handles sync imports — so async lifts
-are concrete TIR by the time monomorphize runs, not a generic
-intrinsic to expand later.
+_Fields are private._
 
 #### `pub fn wait(&self) -> T`
 

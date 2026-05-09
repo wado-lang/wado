@@ -268,12 +268,18 @@ fn build_doc_trait(t: &TraitDecl, comments: &CommentMap) -> DocTrait {
 }
 
 fn build_doc_struct(s: &StructDecl, impls: &[&ImplBlock], comments: &CommentMap) -> DocStruct {
-    let has_private_fields = s.fields.iter().any(|f| !f.is_pub);
+    // `__`-prefixed fields are an internal-naming convention (CM ABI
+    // plumbing on `AsyncCall<T>`, etc.). Treat them like private fields
+    // for documentation: hide the field row but still flag the struct
+    // as having hidden state via `has_private_fields` so the rendered
+    // signature gets a `..` placeholder.
+    let is_hidden = |f: &StructField| !f.is_pub || f.name.starts_with("__");
+    let has_private_fields = s.fields.iter().any(is_hidden);
 
     let fields: Vec<DocField> = s
         .fields
         .iter()
-        .filter(|f| f.is_pub)
+        .filter(|f| !is_hidden(f))
         .map(|f| DocField {
             name: f.name.clone(),
             ty: render_type(&f.ty),
@@ -670,8 +676,10 @@ fn render_struct_signature(s: &StructDecl) -> String {
     sig.push_str(&render_generic_params(&s.type_params));
     sig.push_str(" { ");
 
-    let has_private = s.fields.iter().any(|f| !f.is_pub);
-    let pub_fields: Vec<&StructField> = s.fields.iter().filter(|f| f.is_pub).collect();
+    // Mirror `build_doc_struct`: `__`-prefixed fields are hidden in docs.
+    let is_hidden = |f: &StructField| !f.is_pub || f.name.starts_with("__");
+    let has_private = s.fields.iter().any(is_hidden);
+    let pub_fields: Vec<&StructField> = s.fields.iter().filter(|f| !is_hidden(f)).collect();
 
     for (i, field) in pub_fields.iter().enumerate() {
         if i > 0 {
