@@ -413,9 +413,7 @@ fn validate_stmt(
             // If the RHS is a direct call (free function or method) to a
             // candidate, start tracking this local. The bind itself is the
             // only safe shape, so we do not recurse into the Call's args.
-            if !*is_mut
-                && let Some(candidate_idx) = candidate_call_idx(value, candidate_names)
-            {
+            if !*is_mut && let Some(candidate_idx) = candidate_call_idx(value, candidate_names) {
                 tracked.insert(*local_index, candidate_idx);
                 return;
             }
