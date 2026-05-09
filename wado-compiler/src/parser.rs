@@ -77,6 +77,17 @@ impl From<ParseError> for crate::compiler_host::Diagnostic {
 
 type ParseResult<T> = Result<T, ParseError>;
 
+/// Snapshot of [`Parser`] state captured by [`Parser::checkpoint`] for
+/// speculative parses that may need to backtrack. Restored via
+/// [`Parser::restore`].
+#[derive(Debug, Clone, Copy)]
+struct ParserCheckpoint {
+    pos: usize,
+    comment_cursor: usize,
+    next_ast_id: u32,
+    pending_gt: bool,
+}
+
 /// Groups of comparison operators for chain validation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ComparisonChainGroup {
@@ -186,6 +197,33 @@ impl Parser {
         let mut trivia = std::mem::take(&mut self.trivia);
         trivia.set_dangling(dangling);
         trivia
+    }
+
+    /// Snapshot enough parser state to roll back a speculative parse
+    /// without losing comments. `alloc_ast_id` advances `comment_cursor`
+    /// and writes leading trivia keyed by the freshly allocated id, so a
+    /// raw `self.pos = saved` style of backtrack would silently drop
+    /// every comment consumed during the discarded branch (the cursor
+    /// stays past them, the id they were attached to is never visited
+    /// by the unparser). [`Parser::restore`] also rolls back
+    /// `comment_cursor` and `next_ast_id`, and prunes any trivia entries
+    /// allocated in the discarded range, so the re-parse sees the
+    /// comment stream exactly as it was at the checkpoint.
+    fn checkpoint(&self) -> ParserCheckpoint {
+        ParserCheckpoint {
+            pos: self.pos,
+            comment_cursor: self.comment_cursor,
+            next_ast_id: self.next_ast_id,
+            pending_gt: self.pending_gt,
+        }
+    }
+
+    fn restore(&mut self, cp: ParserCheckpoint) {
+        self.pos = cp.pos;
+        self.comment_cursor = cp.comment_cursor;
+        self.trivia.discard_from(crate::ast::AstId(cp.next_ast_id));
+        self.next_ast_id = cp.next_ast_id;
+        self.pending_gt = cp.pending_gt;
     }
 
     /// Returns true if the parsed inner attributes include `#![TODO]`.
@@ -1913,8 +1951,9 @@ impl Parser {
 
         // Check for for-of syntax: `for let [mut] pattern of array { ... }`
         if self.check(&TokenKind::Let) {
-            // Save position for potential backtrack
-            let saved_pos = self.pos;
+            // Save full parser state for potential backtrack — `parse_pattern`
+            // allocates AstIds and may consume comments via `alloc_ast_id`.
+            let cp = self.checkpoint();
 
             self.advance(); // consume 'let'
 
@@ -1946,7 +1985,7 @@ impl Parser {
             }
 
             // Not a for-of loop, backtrack and parse as C-style for
-            self.pos = saved_pos;
+            self.restore(cp);
         }
 
         // Parentheses are optional for C-style for
@@ -2919,14 +2958,13 @@ impl Parser {
 
     /// Speculatively parse `Type::<Args>::method(...)` after `name::` was already
     /// consumed and `<` is the next token. On any speculative failure, restore the
-    /// position to `checkpoint` (just before the `::`) and produce a bare `Ident`.
+    /// parser to `cp` (just before the `::`) and produce a bare `Ident`.
     fn parse_generic_static_method_call_or_backtrack(
         &mut self,
         start_span: Span,
         name: String,
-        checkpoint: usize,
+        cp: ParserCheckpoint,
     ) -> ParseResult<Expr> {
-        let saved_pending_gt = self.pending_gt;
         self.advance(); // consume <
 
         let mut type_args = Vec::new();
@@ -2982,8 +3020,7 @@ impl Parser {
             })));
         }
 
-        self.pos = checkpoint;
-        self.pending_gt = saved_pending_gt;
+        self.restore(cp);
         Ok(Expr::Ident(IdentExpr {
             id: self.alloc_ast_id(),
             name,
@@ -3047,13 +3084,12 @@ impl Parser {
             self.advance();
             // Check for qualified name (Effect::function) or static method call
             if self.check(&TokenKind::ColonColon) {
-                let checkpoint = self.pos;
+                let cp = self.checkpoint();
                 self.advance(); // consume ::
 
                 if self.check(&TokenKind::Lt) {
-                    return self.parse_generic_static_method_call_or_backtrack(
-                        start_span, name, checkpoint,
-                    );
+                    return self
+                        .parse_generic_static_method_call_or_backtrack(start_span, name, cp);
                 }
                 return self.parse_qualified_path(start_span, name);
             } else if self.check(&TokenKind::Colon) && self.peek_nth(1).kind == TokenKind::LBrace {
@@ -3384,8 +3420,7 @@ impl Parser {
         // to commit to type parsing only if a `=>` follows; otherwise this is
         // a bundled handler whose expression starts with an identifier.
         if matches!(self.peek_kind(), TokenKind::Ident(_)) {
-            let checkpoint = self.pos;
-            let saved_pending_gt = self.pending_gt;
+            let cp = self.checkpoint();
             if let Ok(ty) = self.parse_type() {
                 if self.check(&TokenKind::FatArrow) {
                     self.advance(); // consume `=>`
@@ -3404,12 +3439,10 @@ impl Parser {
                 }
                 // Looked like a type but no `=` followed — fall back to
                 // bundled-handler parsing of the whole expression.
-                self.pos = checkpoint;
-                self.pending_gt = saved_pending_gt;
+                self.restore(cp);
             } else {
                 // parse_type rejected the prefix; treat as a bundled handler.
-                self.pos = checkpoint;
-                self.pending_gt = saved_pending_gt;
+                self.restore(cp);
             }
         }
 

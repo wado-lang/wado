@@ -230,6 +230,14 @@ impl TriviaMap {
     pub fn dangling(&self) -> &[Comment] {
         &self.dangling
     }
+
+    /// Drop every leading-trivia entry whose key is `>= threshold`.
+    /// Used by the parser when a speculative branch backtracks: the
+    /// AST ids it allocated are about to be re-issued, so any trivia
+    /// keyed by them must be cleared first.
+    pub fn discard_from(&mut self, threshold: AstId) {
+        self.leading.retain(|id, _| *id < threshold);
+    }
 }
 
 #[cfg(test)]

@@ -220,11 +220,22 @@ fn follow_set_from_array(arr: &Array<String>, closed: bool) -> FollowSet {
     return FollowSet { kinds, closed };
 }
 
-/// `O(|b| log |a|)` union via `TreeSet::insert` — `insert` short-
-/// circuits on duplicates, so the cost is bounded by the size of `b`
-/// times the lookup depth in `a`'s tree.
+/// `O((|a|+|b|) log(|a|+|b|))` union into a fresh `TreeSet`.
+///
+/// We deliberately do **not** start from `a.kinds` and insert `b`'s
+/// elements into it. `TreeSet`/`TreeMap` field copies are shallow —
+/// the underlying tree nodes (`root: Option<&mut TreeMapNode>`) are
+/// shared — so mutating a "copy" can also mutate the tree the caller
+/// still holds via `env[name]`. The fixed-point loop relies on
+/// `follow_eq(old, merged)` distinguishing the pre- and post-union
+/// values, so building the result in a fresh set is the only sound
+/// option until the underlying collection grows a deep clone or
+/// persistent semantics.
 fn follow_union(a: &FollowSet, b: &FollowSet) -> FollowSet {
-    let mut kinds = a.kinds;
+    let mut kinds = TreeSet::<String>::new();
+    for let k of &a.kinds {
+        kinds.insert(k);
+    }
     for let k of &b.kinds {
         kinds.insert(k);
     }
