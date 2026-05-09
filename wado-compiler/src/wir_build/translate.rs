@@ -872,6 +872,59 @@ impl FunctionTranslator<'_, '_> {
         WirInstr::StructNew { type_id, fields }
     }
 
+    /// Resolve the WIR tuple struct type and translate its non-unit field
+    /// initialisers, applying `cast_nonnull_fields` to honour non-nullable
+    /// field declarations. Shared between `TupleLiteral` (heap-resident)
+    /// and `MultiValueLiteral` (multi-value) lowering — only the wrapping
+    /// instruction differs (`struct.new` vs `MultiValueStructNew`).
+    fn tuple_constructor_args(
+        &mut self,
+        tuple_type_id: crate::tir::TypeId,
+        elements: &[TirExpr],
+    ) -> (WirTypeId, Vec<WirInstr>) {
+        let wir_type = self.ctx.type_id_to_wir_type(self.type_table, tuple_type_id);
+        let wir_type_id = match &wir_type {
+            WirType::Ref { type_id, .. } => Some(type_id.clone()),
+            _ if elements.len() >= 2 => {
+                // Tuple types created in CM binding synthesis may have TypeIds
+                // from a different module's type_table, causing
+                // `type_id_to_wir_type` to return I32 or AbstractRef instead
+                // of Ref. Fall back to matching by element WIR types.
+                self.ctx
+                    .find_tuple_type_for_elements(self.type_table, elements)
+                    .or_else(|| {
+                        self.ctx
+                            .define_tuple_struct_for_elements(self.type_table, elements)
+                    })
+            }
+            _ => None,
+        };
+        let Some(type_id) = wir_type_id else {
+            panic!(
+                "[WIR] tuple literal could not resolve a tuple struct type (expr type_id={tuple_type_id:?}, elements={})",
+                elements.len()
+            );
+        };
+        // Filter out unit-typed elements before borrowing self mutably to
+        // translate them; chaining the filter into the iterator below would
+        // double-borrow self.
+        let non_unit: Vec<&TirExpr> = elements
+            .iter()
+            .filter(|e| {
+                !matches!(
+                    self.ctx.type_id_to_wir_type(self.type_table, e.type_id),
+                    WirType::Unit
+                )
+            })
+            .collect();
+        let raw_fields: Vec<WirInstr> = non_unit
+            .into_iter()
+            .map(|e| self.translate_expr(e))
+            .collect();
+        let fields = self.cast_nonnull_fields(&type_id, raw_fields);
+        (type_id, fields)
+    }
+
     /// Build a `StructSet` instruction, wrapping the value with `RefAsNonNull`
     /// if the target field is a non-nullable reference.
     fn struct_set(
@@ -1855,50 +1908,32 @@ impl FunctionTranslator<'_, '_> {
                 index: index_expr,
             } => self.translate_index(array_expr, index_expr),
 
-            TirExprKind::TupleLiteral { elements }
-            | TirExprKind::MultiValueLiteral { elements } => {
-                // Phase 1: MultiValueLiteral materializes as a heap tuple struct,
-                // identical to TupleLiteral. Later phases (Phase 2's collapse pass
-                // and Phase 4's reify-on-escape) optimize the cases where the
-                // struct allocation can be elided.
-                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, expr.type_id);
-                let wir_type_id = match &wir_type {
-                    WirType::Ref { type_id, .. } => Some(type_id.clone()),
-                    _ if elements.len() >= 2 => {
-                        // Tuple types created in CM binding synthesis may have
-                        // TypeIds from a different module's type_table, causing
-                        // type_id_to_wir_type to return I32 or AbstractRef instead
-                        // of Ref. Fall back to matching by element WIR types.
-                        self.ctx
-                            .find_tuple_type_for_elements(self.type_table, elements)
-                            .or_else(|| {
-                                self.ctx
-                                    .define_tuple_struct_for_elements(self.type_table, elements)
-                            })
-                    }
-                    _ => None,
-                };
-                let Some(type_id) = wir_type_id else {
-                    panic!(
-                        "[WIR] tuple literal could not resolve a tuple struct type (expr type_id={:?}, elements={})",
-                        expr.type_id,
-                        elements.len()
-                    );
-                };
-                let non_unit_elements: Vec<_> = elements
-                    .iter()
-                    .filter(|e| {
-                        !matches!(
-                            self.ctx.type_id_to_wir_type(self.type_table, e.type_id),
-                            WirType::Unit
-                        )
-                    })
-                    .collect();
-                let field_instrs: Vec<WirInstr> = non_unit_elements
-                    .iter()
-                    .map(|e| self.translate_expr(e))
-                    .collect();
-                self.struct_new(type_id, field_instrs)
+            TirExprKind::TupleLiteral { elements } => {
+                // Heap-resident form: emit `struct.new` directly. Used when
+                // the tuple value escapes (stored in a struct field, captured
+                // by a closure, returned where the heap form is needed, …).
+                let (type_id, fields) = self.tuple_constructor_args(expr.type_id, elements);
+                WirInstr::StructNew { type_id, fields }
+            }
+
+            TirExprKind::MultiValueLiteral { elements } => {
+                // Multi-value form: emit `MultiValueStructNew` whose inner
+                // `Seq` evaluates the fields in order, leaving them on the
+                // operand stack as N values. When the destructure pattern
+                // is `LocalSet temp = MultiValueStructNew + StructGet × N`,
+                // `wir_optimize::peephole::elide_multi_value_structs`
+                // collapses it to `MultiValueLocalBind` — eliminating the
+                // heap allocation. When not destructured, codegen emits
+                // `<inner>; struct.new`, equivalent to `TupleLiteral`.
+                //
+                // At return position, `wir_optimize::sroa_return` recognises
+                // both `Return(StructNew)` and `Return(MultiValueStructNew)`
+                // and rewrites them to multi-value Wasm return.
+                let (type_id, fields) = self.tuple_constructor_args(expr.type_id, elements);
+                WirInstr::MultiValueStructNew {
+                    type_id,
+                    instr: Box::new(WirInstr::Seq(fields)),
+                }
             }
 
             TirExprKind::MultiValueProject { source, index } => {
