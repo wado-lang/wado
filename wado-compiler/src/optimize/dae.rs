@@ -165,11 +165,7 @@ fn is_eligible(func: &TirFunction, pinned: &IndexSet<FnKey>, is_closure_dae_rela
     //   the async ABI flattening (outptr / indirect params) only
     //   applies to WASI imports inside `wir_build`, not to user
     //   functions. The legacy WIR DAE did not check `is_async`.
-    if func.is_cm_export
-        || func.is_cm_binding
-        || func.is_dispatch_wrapper
-        || func.is_ambient
-    {
+    if func.is_cm_export || func.is_cm_binding || func.is_dispatch_wrapper || func.is_ambient {
         return false;
     }
     if !matches!(func.kind, FunctionKind::Regular) {
