@@ -668,8 +668,11 @@ fn fixup_expr_type(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) {
         expr.type_id = new_type;
     }
     match &mut expr.kind {
-        TirExprKind::TupleLiteral { .. } | TirExprKind::Call { .. } | TirExprKind::Local { .. } => {
-        }
+        TirExprKind::TupleLiteral { .. }
+        | TirExprKind::MultiValueLiteral { .. }
+        | TirExprKind::MultiValueProject { .. }
+        | TirExprKind::Call { .. }
+        | TirExprKind::Local { .. } => {}
         TirExprKind::VariantConstruct { variant_type, .. } => {
             if *variant_type == TypeTable::I32 || *variant_type == old_type {
                 *variant_type = new_type;

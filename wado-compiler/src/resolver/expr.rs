@@ -2375,8 +2375,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 // Track tuple literals whose coercion was deferred because the field
                 // type had unresolved type parameters. After type inference, we'll
-                // re-coerce with the concrete type.
-                if needs_deferred_coercion && matches!(value.kind, TirExprKind::TupleLiteral { .. })
+                // re-coerce with the concrete type. Both `TupleLiteral` and
+                // `MultiValueLiteral` are tuple-shaped — only the ABI form differs.
+                if needs_deferred_coercion
+                    && matches!(
+                        value.kind,
+                        TirExprKind::TupleLiteral { .. } | TirExprKind::MultiValueLiteral { .. }
+                    )
                 {
                     deferred_coercions.push((provided_idx, provided_idx));
                 }
@@ -2897,6 +2902,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         let tuple_type = self.type_table.borrow_mut().make_tuple(elem_types);
 
+        // The resolver always emits `TupleLiteral` (heap-resident form).
+        // The TIR `optimize::multi_value_promote` pass — running right
+        // before WIR build, after all transformation/optimisation phases —
+        // converts non-escaping tuples to `MultiValueLiteral` so the WIR
+        // peephole can elide the heap allocation when the destructure /
+        // field-access pattern allows it. Keeping the default `TupleLiteral`
+        // means existing passes (`sroa_return`, `synthesis::*`, monomorphize
+        // spread expansion, …) can continue to assume the heap form.
         let tuple_expr = TirExpr::new(
             TirExprKind::TupleLiteral { elements },
             tuple_type,

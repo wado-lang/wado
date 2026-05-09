@@ -1540,7 +1540,7 @@ impl Monomorphizer {
                             elements.push(elem);
                         }
                     }
-                    // Rebuild the tuple type from expanded element types
+                    // Rebuild the tuple type from expanded element types.
                     let new_elem_types: Vec<TypeId> = elements.iter().map(|e| e.type_id).collect();
                     expr.type_id = type_table.make_tuple(new_elem_types);
                 }
@@ -2888,7 +2888,10 @@ impl Monomorphizer {
         locals: &mut Vec<TirLocal>,
     ) {
         match &mut expr.kind {
-            TirExprKind::TupleLiteral { elements } if elements.len() > 1 => {
+            TirExprKind::TupleLiteral { elements }
+            | TirExprKind::MultiValueLiteral { elements }
+                if elements.len() > 1 =>
+            {
                 // Collect local definitions from each element.
                 // If multiple elements define the same local, allocate new locals.
                 let mut first_seen_locals: IndexSet<u32> = IndexSet::default();
@@ -3021,10 +3024,14 @@ impl Monomorphizer {
                     Self::collect_locals_in_expr(&arg.expr, locals);
                 }
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements }
+            | TirExprKind::MultiValueLiteral { elements } => {
                 for elem in elements {
                     Self::collect_locals_in_expr(elem, locals);
                 }
+            }
+            TirExprKind::MultiValueProject { source, .. } => {
+                Self::collect_locals_in_expr(source, locals);
             }
             TirExprKind::VariantConstruct {
                 payload: Some(p), ..
@@ -3149,13 +3156,17 @@ impl Monomorphizer {
                 }
                 None
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements }
+            | TirExprKind::MultiValueLiteral { elements } => {
                 for elem in elements {
                     if let Some(t) = Self::find_local_type_in_expr(elem, local_idx) {
                         return Some(t);
                     }
                 }
                 None
+            }
+            TirExprKind::MultiValueProject { source, .. } => {
+                Self::find_local_type_in_expr(source, local_idx)
             }
             TirExprKind::VariantConstruct {
                 payload: Some(p), ..

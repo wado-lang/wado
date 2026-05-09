@@ -436,7 +436,8 @@ fn collect_ref_locals_in_fields(expr: &TirExpr, stores_aliased: &mut IndexSet<u3
                 extract_ref_local(&field.value, stores_aliased);
             }
         }
-        TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. }
+        | TirExprKind::MultiValueLiteral { elements, .. } => {
             for elem in elements {
                 extract_ref_local(elem, stores_aliased);
             }
@@ -511,7 +512,8 @@ fn collect_candidates_in_stmt(
                         struct_name: struct_name.clone(),
                     });
                 }
-                TirExprKind::TupleLiteral { elements, .. } => {
+                TirExprKind::TupleLiteral { elements, .. }
+                | TirExprKind::MultiValueLiteral { elements, .. } => {
                     let field_info: Vec<(String, TypeId)> = elements
                         .iter()
                         .enumerate()
@@ -1164,7 +1166,8 @@ fn expand_struct_let(
                 ));
             }
         }
-        TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. }
+        | TirExprKind::MultiValueLiteral { elements, .. } => {
             for (i, mut elem) in elements.into_iter().enumerate() {
                 rewrite_expr(
                     &mut elem,
