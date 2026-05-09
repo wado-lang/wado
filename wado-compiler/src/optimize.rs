@@ -33,7 +33,10 @@ mod const_global_promotion;
 mod container_sroa;
 mod copy_prop;
 mod cse;
+mod dae;
 pub mod dce;
+mod drve;
+mod elide_local;
 mod field_scalarize;
 mod inline;
 mod labeled_block_fusion;
@@ -53,10 +56,13 @@ use const_global_promotion::promote_constant_globals;
 use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
 use cse::eliminate_common_subexprs;
+use dae::eliminate_dead_arguments;
 use dce::{
     analyze_project, filter_bytes_literals, remove_unreachable_closure_functors,
     remove_unreachable_functions, remove_unreachable_globals, remove_unreachable_types,
 };
+use drve::eliminate_dead_return_values;
+use elide_local::elide_write_only_locals;
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use labeled_block_fusion::fuse_labeled_blocks;
@@ -338,22 +344,25 @@ pub mod pass_dump {
 /// optimization loop re-run container SROA on newly-inlined code that
 /// exposes fresh `Array<Tuple<...>>` locals.
 ///
-/// 1. Container SROA (`container_sroa`)
-/// 2. Function inlining (`inline`)
-/// 3. Labeled block fusion (`labeled_block_fusion`)
-/// 4. Reference elimination (`ref_elim`)
-/// 5. Scalar Replacement of Aggregates (`sroa`)
-/// 6. Copy propagation (`copy_prop`)
-/// 7. Common Subexpression Elimination (`cse`)
-/// 8. Store-to-load forwarding (`store_load_forward`)
-/// 9. Constant propagation (`const_prop`)
-/// 10. Constant folding (`const_fold`)
-/// 11. Constant global promotion (`const_global_promotion`)
-/// 12. Constant branch pruning (`branch_prune`)
-/// 13. Loop-invariant code motion (`licm`)
-/// 14. Condition implication elimination (`condition_implication`)
-/// 15. Template buffer hoisting (`tmpl_hoist`)
-/// 16. Value-copy elision (`value_copy_elide`)
+///  1. Container SROA (`container_sroa`)
+///  2. Value-copy elision (`value_copy_elide`)
+///  3. Short `push_str` simplification (`string_push`)
+///  4. Function inlining (`inline`)
+///  5. Labeled block fusion (`labeled_block_fusion`)
+///  6. Reference elimination (`ref_elim`)
+///  7. Scalar Replacement of Aggregates (`sroa`)
+///  8. Copy propagation (`copy_prop`)
+///  9. Dead Argument Elimination (`dae`)
+/// 10. Dead Return Value Elimination (`drve`)
+/// 11. Write-only local elimination (`elide_local`)
+/// 12. Common Subexpression Elimination (`cse`)
+/// 13. Store-to-load forwarding (`store_load_forward`)
+/// 14. Constant folding (`const_fold`)
+/// 15. Constant global promotion (`const_global_promotion`)
+/// 16. Constant branch pruning (`branch_prune`)
+/// 17. Loop-invariant code motion (`licm`)
+/// 18. Condition implication elimination (`condition_implication`)
+/// 19. Template buffer hoisting (`tmpl_hoist`)
 ///
 /// The `config` parameter controls the number of iterations and inline threshold.
 /// More iterations can find more optimization opportunities but take longer.
@@ -422,6 +431,15 @@ fn run_optimization_passes(
         step!("tir/ref_elim", eliminate_unnecessary_refs);
         step!("tir/sroa", scalar_replace_aggregates);
         step!("tir/copy_prop", propagate_copies);
+        // DAE / DRVE / write-only local elimination after `copy_prop` shrinks
+        // signatures and discards unused let-bindings before `cse` /
+        // `const_fold` revisit the simplified body. Running here (rather
+        // than at WIR level) lets `inline` see the slimmer signatures on
+        // the next iteration and lets `dce` clean up the freshly dead
+        // computation in the same fixed-point loop.
+        step!("tir/dae", eliminate_dead_arguments);
+        step!("tir/drve", eliminate_dead_return_values);
+        step!("tir/elide_local", elide_write_only_locals);
         step!("tir/cse", eliminate_common_subexprs);
         step!("tir/store_load_forward", forward_stores_to_loads);
         // `field_forward`'s rewrite responsibilities are absorbed by

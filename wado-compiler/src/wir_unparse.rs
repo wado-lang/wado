@@ -559,6 +559,24 @@ impl<'a> WirUnparser<'a> {
             self.newline();
             return;
         }
+        // Special case: Drop with a Seq operand — expand the side effects as
+        // separate statements, then `drop(...)` only the final value. Without
+        // this, the inline `Seq` join collapses every preamble step into one
+        // unreadable line of `; `-separated instructions.
+        if let WirInstr::Drop(inner) = instr
+            && let WirInstr::Seq(instrs) = inner.as_ref()
+            && let Some((last_val, init)) = instrs.split_last()
+        {
+            for s in init {
+                self.unparse_instr(s);
+            }
+            self.write_indent();
+            self.write("drop(");
+            self.unparse_instr_inline(last_val);
+            self.write(");");
+            self.newline();
+            return;
+        }
         // Special case: If with a Seq condition — hoist preamble as separate statements
         // before the `if`, then render the actual condition (unwrapping bool-coercions).
         // This cleans up enum/variant pattern matching output.

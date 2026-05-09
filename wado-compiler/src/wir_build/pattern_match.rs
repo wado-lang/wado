@@ -317,9 +317,19 @@ impl FunctionTranslator<'_, '_> {
             let source_idx = arms.len() - 1 - reverse_idx;
             let if_nesting = if_depths[source_idx];
 
-            let body_instrs = {
-                // Push dummy label entries for the match's If nesting so that
-                // break/continue inside arm bodies compute correct br depths.
+            // Translate the body in two parts: the binding-emission instrs
+            // (which set up local slots referenced by the body and/or the
+            // guard) and the body-proper instr. Keeping them separate lets
+            // the guarded branches place each binding write at exactly one
+            // point — either in the condition `Seq` (so the guard can read
+            // it) or in the inner-if's `then_body`, never both. Emitting the
+            // bindings unconditionally inside both sites would leave a
+            // visibly redundant `_n = i; if guard { _n = i; … }` shape in
+            // the lowered output that no later pass cleans up: write-only
+            // local elimination only removes locals that are *never* read,
+            // not locals that get overwritten by a duplicate store.
+            let mut bindings = Vec::new();
+            let body = {
                 for _ in 0..if_nesting {
                     self.label_stack.push(LabelEntry {
                         label: None,
@@ -327,13 +337,11 @@ impl FunctionTranslator<'_, '_> {
                         is_loop_continue: false,
                     });
                 }
-                let mut instrs = Vec::new();
-                // Bind pattern variables
                 self.emit_pattern_bindings(
                     &arm.pattern,
                     &scrut_local_name,
                     scrutinee.type_id,
-                    &mut instrs,
+                    &mut bindings,
                 );
                 let body = if has_result {
                     self.translate_expr_as_value(&arm.body)
@@ -353,14 +361,18 @@ impl FunctionTranslator<'_, '_> {
                         instr
                     }
                 };
-                instrs.push(body);
                 // Note: `translate_expr` already appends `unreachable` for
                 // `never`-typed arm bodies, so no extra push is needed here.
                 for _ in 0..if_nesting {
                     self.label_stack.pop();
                 }
-                instrs
+                body
             };
+            let body_instrs: Vec<WirInstr> = bindings
+                .iter()
+                .cloned()
+                .chain(std::iter::once(body.clone()))
+                .collect();
 
             let condition = self.translate_pattern_condition(
                 &arm.pattern,
@@ -400,40 +412,35 @@ impl FunctionTranslator<'_, '_> {
                     // (Binding/Wildcard), these bindings are safe to emit unconditionally.
                     // We embed bindings into the condition via Seq so that the If is the
                     // top-level instruction (required for value-producing match expressions).
-                    let mut bind_instrs = Vec::new();
-                    self.emit_pattern_bindings(
-                        &arm.pattern,
-                        &scrut_local_name,
-                        scrutinee.type_id,
-                        &mut bind_instrs,
-                    );
                     let guard_expr = self.translate_expr(guard);
-                    let condition_with_bindings = if bind_instrs.is_empty() {
+                    let condition_with_bindings = if bindings.is_empty() {
                         guard_expr
                     } else {
-                        bind_instrs.push(guard_expr);
-                        WirInstr::Seq(bind_instrs)
+                        let mut seq = bindings.clone();
+                        seq.push(guard_expr);
+                        WirInstr::Seq(seq)
                     };
+                    // Bindings already live in the condition `Seq`, so the
+                    // arm body should not re-emit them. Use `body` alone.
                     result = WirInstr::If {
                         condition: Box::new(condition_with_bindings),
                         result: result_wir_type.clone(),
-                        then_body: body_instrs,
+                        then_body: vec![body.clone()],
                         else_body: Some(vec![result]),
                     };
                 } else {
-                    let mut inner_then = Vec::new();
-                    self.emit_pattern_bindings(
-                        &arm.pattern,
-                        &scrut_local_name,
-                        scrutinee.type_id,
-                        &mut inner_then,
-                    );
+                    let mut inner_then = bindings.clone();
                     let guard_expr = self.translate_expr(guard);
-                    // Inner if: check guard, run body or fall through to remaining arms
+                    // Bindings run once, before the guard, in the
+                    // `inner_then` prefix below — the guard may reference
+                    // them. The inner-if's `then_body` is the arm body
+                    // alone; re-emitting bindings inside it would produce
+                    // duplicate `_n = i; if guard { _n = i; … }` writes
+                    // that no later pass cleans up.
                     let inner_if = WirInstr::If {
                         condition: Box::new(guard_expr),
                         result: result_wir_type.clone(),
-                        then_body: body_instrs,
+                        then_body: vec![body.clone()],
                         else_body: Some(vec![result.clone()]),
                     };
                     inner_then.push(inner_if);

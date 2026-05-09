@@ -142,7 +142,7 @@ type "functype//wado-compiler/tests/fixtures/variadic_1.wado/__cm_export____test
 
 type "functype//wado-compiler/tests/fixtures/variadic_1.wado/__cm_export____test_13_nested_call_single" = fn();  // TypeId(47)
 
-type "functype//wado-compiler/tests/fixtures/variadic_1.wado/collect_for_of<Tuple<i32,String,bool>>" = fn(ref "tuple//[i32, String, bool]") -> ref "tuple//[i32, String, bool]";  // TypeId(48)
+type "functype//wado-compiler/tests/fixtures/variadic_1.wado/collect_for_of<Tuple<i32,String,bool>>" = fn(ref "tuple//[i32, String, bool]");  // TypeId(48)
 
 type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(49)
 
@@ -540,10 +540,8 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_3_append_to_pack"() {
     let f_43: ref "core:prelude/format.wado//Formatter";
     let f_48: ref "core:prelude/format.wado//Formatter";
     let __sroa_rest_0: ref "core:prelude/string.wado//String";
-    let __sroa_rest_1: bool;
     result = __inline_append_Tuple_String_bool__i32__0: block -> ref "tuple//[String, bool, i32]" {
         __sroa_rest_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-        __sroa_rest_1 = 1;
         break __inline_append_Tuple_String_bool__i32__0: struct.new "tuple//[String, bool, i32]" { 0: __sroa_rest_0, 1: 1, 2: 42 };
         unreachable;
     };
@@ -663,9 +661,7 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_4_append_single_element_
     let other: ref "core:prelude/string.wado//String";
     let len_a: i32;
     let f_32: ref "core:prelude/format.wado//Formatter";
-    let __sroa_rest_0: i32;
     single = __inline_append_Tuple_i32__String__0: block -> ref "tuple//[i32, String]" {
-        __sroa_rest_0 = 1;
         b = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("end"), used: 3 };
         break __inline_append_Tuple_i32__String__0: struct.new "tuple//[i32, String]" { 0: 1, 1: b };
         unreachable;
@@ -814,10 +810,8 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_6_prepend_mixed_params"(
     let f_43: ref "core:prelude/format.wado//Formatter";
     let f_48: ref "core:prelude/format.wado//Formatter";
     let __sroa_rest_0: ref "core:prelude/string.wado//String";
-    let __sroa_rest_1: bool;
     result = __inline_prepend_i32_Tuple_String_bool___0: block -> ref "tuple//[i32, String, bool]" {
         __sroa_rest_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-        __sroa_rest_1 = 1;
         break __inline_prepend_i32_Tuple_String_bool___0: struct.new "tuple//[i32, String, bool]" { 0: 42, 1: __sroa_rest_0, 2: 1 };
         unreachable;
     };
@@ -949,10 +943,8 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_9_surround_with_middle"(
     let f_59: ref "core:prelude/format.wado//Formatter";
     let f_64: ref "core:prelude/format.wado//Formatter";
     let __sroa_middle_0: ref "core:prelude/string.wado//String";
-    let __sroa_middle_1: bool;
     result = __inline_surround_i32_Tuple_String_bool__i32__0: block -> ref "tuple//[i32, String, bool, i32]" {
         __sroa_middle_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-        __sroa_middle_1 = 1;
         break __inline_surround_i32_Tuple_String_bool__i32__0: struct.new "tuple//[i32, String, bool, i32]" { 0: 1, 1: __sroa_middle_0, 2: 1, 3: 99 };
         unreachable;
     };
@@ -1430,7 +1422,7 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__cm_export____test_10_surround
 }
 
 fn "wado-compiler/tests/fixtures/variadic_1.wado/__cm_export____test_11_for_of_variadic"() {
-    drop("wado-compiler/tests/fixtures/variadic_1.wado/collect_for_of<Tuple<i32,String,bool>>"(struct.new "tuple//[i32, String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 }));
+    "wado-compiler/tests/fixtures/variadic_1.wado/collect_for_of<Tuple<i32,String,bool>>"(struct.new "tuple//[i32, String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 });
     "wasi/task-return"(0);
 }
 
@@ -1461,7 +1453,6 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/collect_for_of<Tuple<i32,String
     let __local_15: ref "core:prelude/format.wado//Formatter";
     let __local_16: ref "core:prelude/string.wado//String";
     let __local_17: ref "core:prelude/format.wado//Formatter";
-    let __tuple_3: ref "tuple//[i32, String, bool]";
     let item_19: i32;
     let item_20: ref "core:prelude/string.wado//String";
     let __local_21: ref "core:prelude/string.wado//String";
@@ -1483,8 +1474,7 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/collect_for_of<Tuple<i32,String
         break __seq_lit: __b;
         unreachable;
     };
-    __tuple_3 = items;
-    item_19 = __tuple_3.0;
+    item_19 = items.0;
     "core:prelude/array.wado/Array<String>::push"(result, __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
@@ -1492,7 +1482,7 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/collect_for_of<Tuple<i32,String
         break __tmpl: __local_10;
         unreachable;
     });
-    item_20 = __tuple_3.1;
+    item_20 = items.1;
     "core:prelude/array.wado/Array<String>::push"(result, __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_21 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_22 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
@@ -1500,7 +1490,7 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/collect_for_of<Tuple<i32,String
         break __tmpl: __local_21;
         unreachable;
     });
-    item_23 = __tuple_3.2;
+    item_23 = items.2;
     "core:prelude/array.wado/Array<String>::push"(result, __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_24 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_25 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
@@ -1641,7 +1631,7 @@ condition: result[2] == \"true\"
         });
         unreachable;
     }
-    return items;
+    return;
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {

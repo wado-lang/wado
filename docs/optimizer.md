@@ -30,20 +30,23 @@ The optimizer runs after lowering and before Wasm emission. `optimize.rs` orches
 2. Fixed-point iteration loop (skipped at `-O0`):
    1. Container SROA
    2. Value-Copy Elision
-   3. Function Inlining
-   4. LabeledBlock Fusion
-   5. Reference Elimination
-   6. SROA
-   7. Copy Propagation
-   8. Common Subexpression Elimination
-   9. Store-to-Load Forwarding
-   10. Constant Propagation
-   11. Constant Folding
-   12. Constant Global Promotion
-   13. Constant Branch Pruning
-   14. Loop-Invariant Code Motion
-   15. Condition Implication
-   16. Template String Buffer Hoisting
+   3. Short `push_str` Simplification
+   4. Function Inlining
+   5. LabeledBlock Fusion
+   6. Reference Elimination
+   7. SROA
+   8. Copy Propagation
+   9. Dead Argument Elimination
+   10. Dead Return Value Elimination
+   11. Write-Only Local Elimination
+   12. Common Subexpression Elimination
+   13. Store-to-Load Forwarding
+   14. Constant Folding
+   15. Constant Global Promotion
+   16. Constant Branch Pruning
+   17. Loop-Invariant Code Motion
+   18. Condition Implication
+   19. Template String Buffer Hoisting
 3. Hot Field Scalarization — runs once after the loop converges.
 4. Final DCE — clean up code made dead by optimizations.
 5. Select Lowering — post-optimization rewrite (all levels).
@@ -110,6 +113,37 @@ E2E: [opt_sroa.wado](../wado-compiler/tests/fixtures/opt_sroa.wado), [opt_sroa_i
 Eliminates trivial copy bindings (`let x = y`, `let x = 42`, `let x = true`) by propagating the source value to every use and dropping the dead binding.
 
 E2E: [opt_copy_prop_multi_field.wado](../wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado), [opt_copy_prop_while_let.wado](../wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado), [copy_prop_mutable_source.wado](../wado-compiler/tests/fixtures/copy_prop_mutable_source.wado).
+
+### Dead Argument Elimination (`dae.rs`)
+
+Removes parameters that the callee body never reads, together with the corresponding argument expression at every call site. Dropped arguments must be pure so removal cannot change observable behaviour.
+
+After shrinking the parameter list, the pass renumbers the function's `locals[]` so that `params[k].local_index == k` continues to hold — `wir_build/translate.rs` declares `locals[i for i >= params.len()]` as body locals, and a stale dead-param slot left in place would silently re-emit a duplicate WIR `DeclareLocal` with the same name as a live param. Body `Local`, pattern `Binding`, closure `outer_index`, and `VariadicForOf` `binding_local` all get the same remap.
+
+Pinning is conservative: CM bridges (`is_cm_export`, `is_cm_binding`, `is_dispatch_wrapper`), `is_ambient` functions, builtin / wasm-asset modules, trait methods (vtable-shaped), and any function whose pointer is taken via `FuncRef` are all skipped. `is_export` and `is_async` are _not_ pinned — every user `export fn` reaches the runtime through its synthesised `is_cm_export` wrapper (which is pinned), and `is_async` is just propagated source metadata that has no call-shape constraint after desugar lowers the body to `cm_raw_call task-return(...)`.
+A method whose `self` is dead is rewritten by the rewriter at every call site: `MethodCall(recv, name, args)` collapses to `Call(method_func, args)`. The validator gates this on receiver purity so dropping the receiver evaluation cannot strip an observable effect.
+
+E2E: [wir_optimize_dae.wado](../wado-compiler/tests/fixtures/wir_optimize_dae.wado).
+
+### Dead Return Value Elimination (`drve.rs`)
+
+Converts a non-void function whose return value is always dropped at every call site into a void-returning function. Every `Return { value: Some(_) }` becomes `Return { value: None }` once the value is verified pure, and the call sites stay structurally identical (the call expression now produces `Unit`).
+
+Conservative scope to avoid breaking fixture-asserted body shapes:
+
+- The return type must be heap-allocated (`Struct` / `Variant` / `BuiltinArray` / `GenericInstance`). Primitive-returning helpers like `fn f() -> i32 { return c.threshold + c.scale; }` save nothing from being voided and can break test fixtures that assert post-optimizer body shape.
+- The body must end in an explicit `Return { value: Some(_) }` so we never have to reason about an implicit trailing-value return path.
+- Every other `Return` in the body must also carry a pure value.
+- Every observed call site must appear as a top-level `Expr(Call(f, ...))` / `Expr(MethodCall(f, ...))`. Any nested or `Let`-bound use disqualifies the candidate.
+- At least one observed call site must exist (otherwise DCE would delete the function anyway).
+
+After conversion, the pass also rewrites `expr.type_id` on every call site of a converted function. Without this step, `Expr(Call(f))` in stmt position still claims the old return type and `wir_build/translate.rs` wraps the call in `Drop`, underflowing the Wasm stack.
+
+### Write-Only Local Elimination (`elide_local.rs`)
+
+Eliminates `let x = expr;` bindings where the local `x` is never read, never has its address taken, and never escapes via closure capture or a `stores`-aliased call. When `expr` is pure the entire statement is removed; otherwise the binding is replaced by `Expr(expr)` so the side effect still runs.
+
+Closure captures' `outer_index` are conservatively counted as reads, even though the closure body uses its own local-index namespace — the over-mark only suppresses elision and never produces a wrong transform.
 
 ### Common Subexpression Elimination (`cse.rs`)
 
@@ -256,11 +290,11 @@ Two complementary variants run in sequence:
 - Multi-field struct local elimination — substitutes `StructGet(LocalGet(x), field_k)` with the corresponding field expression when all fields are accessed exactly once.
 - Labeled-block copy propagation — flattens trivial labeled blocks holding only a copy. E2E: [wir_optimize_labeled_block_copy_prop.wado](../wado-compiler/tests/fixtures/wir_optimize_labeled_block_copy_prop.wado), [wir_optimize_labeled_block_copy_prop_safety.wado](../wado-compiler/tests/fixtures/wir_optimize_labeled_block_copy_prop_safety.wado).
 
-### Phase 6: Dead Value Elimination
+### Phase 6: Write-Only Local Elimination (WIR-synthesised locals)
 
-- Dead argument elimination (DAE) — removes unused function parameters and the corresponding arguments at every call site, when all dead-position arguments are side-effect-free. E2E: [wir_optimize_dae.wado](../wado-compiler/tests/fixtures/wir_optimize_dae.wado).
-- Dead return value elimination (DRVE) — converts functions whose return value is always dropped to void return.
-- Write-only local elimination — removes `LocalSet(x, expr)` when local `x` is never read; iterates to fixed point.
+DAE / DRVE were moved to TIR (`optimize::dae`, `optimize::drve`) so they can interact with `inline` / `copy_prop` / `const_fold` / `dce` inside the same fixed-point loop. The WIR-level copies are gone.
+
+Write-only-local elimination is split across both layers. The TIR pass (`optimize::elide_local`) handles locals that originate at TIR (user `let`, SROA / variant-lowering shadow temps). The WIR pass (`wir_optimize::elide_local`, kept here in Phase 6) handles locals that the WIR builder synthesises during lowering — `__match_scrut_N` for match scrutinee binding, `__pair_temp_N` for Future / Stream pair returns, multi-value temps — that no TIR pass can reach. Both passes are narrow: each rewrites `LocalSet(x, v)` to `Drop(v)` (or `Nop` when `v` is pure) only when `x` is never read.
 
 ### Phase 7: Global Cleanup
 

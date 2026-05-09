@@ -3526,6 +3526,20 @@ pub struct ClosureFunctor {
     pub call_method: Rc<RefCell<TirFunction>>,
     /// Captures from the original closure
     pub captures: Vec<TirCapture>,
+    /// Canonical user-declared (name, type) pairs of the closure literal —
+    /// `[]` for `|| ...`, `[("x", i32)]` for `|x: i32| ...`. Captured at
+    /// functor creation and never mutated. `wir_build`'s
+    /// `register_closure_wrappers` uses this list to choose the wrapper's
+    /// external signature: the function-table type the closure was coerced
+    /// to is `fn(env, canonical_user_params...) -> canonical_return`,
+    /// independent of any DAE shrinkage that happens later on
+    /// `call_method.params`. Without this snapshot, dropping a "dead" param
+    /// from `__call` would also shrink the wrapper signature and
+    /// desynchronise it from the typed-fn callers.
+    pub canonical_user_params: Vec<(String, TypeId)>,
+    /// Canonical return type of the closure literal. Same role as
+    /// `canonical_user_params` — drives the wrapper external signature.
+    pub canonical_return: TypeId,
 }
 
 /// External function import from Component Model canonical builtins.

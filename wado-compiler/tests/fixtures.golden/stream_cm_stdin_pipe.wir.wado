@@ -71,7 +71,13 @@ fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_export__run"() {
     multivalue_bind [__sroa___pattern_temp_0_0, __sroa___pattern_temp_0_1] = "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream"();
     stdin_stream = __sroa___pattern_temp_0_0;
     subtask = "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream"(stdin_stream);
-    drop(let __fr_handle_1: i32; let __fr_ptr_1: i32; let __fr_result_1: i32; __fr_handle_1 = subtask; __fr_ptr_1 = "mem/realloc"(0, 0, 8, 40); __fr_result_1 = "wasi/future-read:transmission-cli"(__fr_handle_1, __fr_ptr_1); if __fr_result_1 == -1 {
+    let __fr_handle_1: i32;
+    let __fr_ptr_1: i32;
+    let __fr_result_1: i32;
+    __fr_handle_1 = subtask;
+    __fr_ptr_1 = "mem/realloc"(0, 0, 8, 40);
+    __fr_result_1 = "wasi/future-read:transmission-cli"(__fr_handle_1, __fr_ptr_1);
+    if __fr_result_1 == -1 {
         let __fr_ws_1: i32;
         let __fr_evtptr_1: i32;
         __fr_ws_1 = "wasi/waitable-set-new"();
@@ -82,7 +88,9 @@ fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_export__run"() {
         "wasi/waitable-join"(__fr_handle_1, 0);
         "wasi/waitable-set-drop"(__fr_ws_1);
         __fr_result_1 = 0;
-    }; let __fr_opt_2: ref null "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>"; __fr_opt_2 = (if (__fr_result_1 & 15) == 0 -> ref null "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>" {
+    }
+    let __fr_opt_2: ref null "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>";
+    __fr_opt_2 = (if (__fr_result_1 & 15) == 0 -> ref null "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>" {
         ref.as_non_null((if builtin::load_i32(__fr_ptr_1) == 0 -> ref "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>" {
             struct.new "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>" { 0 };
         } else {
@@ -90,7 +98,9 @@ fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_export__run"() {
         }));
     } else {
         ref.null none;
-    }); drop("mem/realloc"(__fr_ptr_1, 40, 8, 0)); __fr_opt_2);
+    });
+    drop("mem/realloc"(__fr_ptr_1, 40, 8, 0));
+    drop(__fr_opt_2);
     "wasi/task-return"(0);
 }
 
