@@ -1835,11 +1835,8 @@ fn compute_reachable_types(project: &FlatPackage) -> IndexSet<TypeId> {
         // function just to build a lookup set. Pre-compute a hash set of
         // raw pointers so the per-functor check is O(1) instead of an
         // O(|functions|) linear scan per functor.
-        let surviving_ptrs: std::collections::HashSet<*const _> = project
-            .functions
-            .iter()
-            .map(|f| std::rc::Rc::as_ptr(f))
-            .collect();
+        let surviving_ptrs: std::collections::HashSet<*const _> =
+            project.functions.iter().map(std::rc::Rc::as_ptr).collect();
         for functor in &project.closure_functors {
             let cm_ptr = std::rc::Rc::as_ptr(&functor.call_method);
             if surviving_ptrs.contains(&cm_ptr) {
