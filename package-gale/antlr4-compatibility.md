@@ -530,12 +530,14 @@ require runtime ATN simulation. The decision to start with static
 repair is a cost-vs-coverage trade-off; we will revisit it once
 Phase 5 lands and the four catalogued static gaps are closed.
 
-### Phase 5 (planned) — LL FollowEnv redesign
+### Phase 5 (landed) — LL FollowEnv redesign
 
-Closes the four LL gaps catalogued in [`TODO.md`](./TODO.md):
-`ll_nullable_suffix`, `ll_multi_alt`, `ll_lr_atom`, `ll_ctx_follow`.
-A fifth gap (multi-token tail-greedy inner, no fixture yet) is out
-of scope for Phase 5; its data-model placeholder is also deferred.
+Closed the four LL gaps catalogued in [`TODO.md`](./TODO.md):
+`ll_ctx_follow`, `ll_nullable_suffix`, `ll_multi_alt`, `ll_lr_atom`.
+A fifth gap (multi-token tail-greedy inner, no fixture yet) was out
+of scope for this phase. Final state: 1067 → 1084 tests, 0 failed,
+TODO 7 → 3 (the three remaining are Stage C SemPred descriptors,
+unrelated to LL prediction).
 
 #### Why a redesign and not v1 extensions
 
@@ -585,22 +587,25 @@ Three phases, the first two strictly separated:
      LeftRecursive}`. Registration **does not reject** multi-alt or
      LR rules; it records the shape so Phase 2 can dispatch.
 
-2. **Phase 2 — Mask-aware unified codegen.** `gen_parse_fn`,
-   `gen_scan_function_named`, and the LR helpers (`gen_lr_*`,
-   `gen_scan_lr_*`) gain a `mask: Option<&FollowMask>` parameter.
-   `mask = null` is exact-equivalent to today's regular emit;
-   `mask = Some(m)` is the variant emit. The mask is consulted at
-   exactly one place: a new `tail_position_first_set(elem, mask)`
-   helper that subtracts the mask from tail-position
-   Optional/Star/Plus first-sets. The `current_follow_mask` and
-   `ruleref_call_follow` global-ish fields on `GenContext` are
-   retired; their information flows as function arguments.
+2. **Phase 2 — Mask-aware unified codegen.** `gen_parse_fn` (split
+   into `gen_parse_fn_named` so the variant pass can supply
+   `parse_<rule>__follow_<id>`) and the LR helpers (`gen_lr_*`,
+   `gen_scan_lr_*`) gained an explicit `fn_name: &String` parameter
+   that propagates through every helper-name template
+   (`{*fn_name}_atom`, `{*fn_name}_lr_<n>`, `{*fn_name}_bt_<n>`).
+   Self-recursive calls inside the LR suffix helpers route through
+   the same `fn_name`, so the mask stays alive across the LR chain.
    Function naming is unified through a single suffix rule
    (`__follow_<id>` / `__follow_<id>_atom` / `__follow_<id>_lr_N`).
-   _Closes `ll_multi_alt` (multi-alt variants reuse the regular
-   multi-alt path) and `ll_lr_atom` (LR variants reuse the regular
-   LR path)._ The shrunken-duplicate `gen_scan_follow_variant` and
-   `gen_parse_follow_variant` are deleted.
+   `current_follow_mask` and `current_outer_follow` remain in
+   `GenContext` for now (their threading via save/restore is
+   correct and the further refactor to retire them is parked as
+   future cleanup). _Closed `ll_multi_alt` (multi-alt variants reuse
+   the regular multi-alt path) and `ll_lr_atom` (LR variants reuse
+   the regular LR path)._ The shrunken-duplicate
+   `gen_scan_follow_variant` and `gen_parse_follow_variant` were
+   collapsed into a single `emit_follow_variant` helper that calls
+   `gen_scan_function_named` and `gen_parse_fn_named` directly.
 
 3. **Phase 3 — Variant fixed-point emit.** Phase 4's emission loop
    at the end of `gen_parser` is preserved, but the loop body
@@ -632,24 +637,37 @@ fixtures, with the full `tests/antlr4-compat/**` corpus and every
 curated driver test (sqlite, css3, html, antlrv4, rust, typescript)
 required to stay green at every step.
 
-- [ ] Phase 1 skeleton: `FollowEnv` data types, `tail_greedy_single`
-      lifted from `gen_context.wado` verbatim, no semantic change yet.
-- [ ] Phase 1 `rule_follow` fixed point. Closes `ll_ctx_follow`.
-- [ ] Phase 1 `call_site_follow` with nullable-suffix propagation.
-      Closes `ll_nullable_suffix`.
-- [ ] Phase 2 mask parameterisation of `gen_parse_fn` /
-      `gen_scan_function_named`; remove `current_follow_mask`. No
-      behavioural change at this step (mask is `null` everywhere).
-- [ ] Phase 2 multi-alt variant emit via the regular path. Closes
+- [x] Phase 1 skeleton: `FollowEnv` data types, `tail_greedy_single`
+      lifted from `gen_context.wado` verbatim, no semantic change.
+- [x] Phase 1 `rule_follow` fixed point + variant-mask propagation.
+      Closed `ll_ctx_follow`.
+- [x] Phase 1 `call_site_follow` with first-exact suffix follow +
+      `ll_match_length` sort key. Closed `ll_nullable_suffix`.
+- [x] Phase 2 mask parameterisation of `gen_parse_fn_named` (and
+      `gen_scan_function_named` already had it). No behaviour change.
+- [x] Phase 2 multi-alt variant emit via the regular path. Closed
       `ll_multi_alt`.
-- [ ] Phase 2 LR variant emit via the regular path; unified
-      `__follow_<id>{,_atom,_lr_N}` naming. Closes `ll_lr_atom`.
-- [ ] Delete `gen_scan_follow_variant` / `gen_parse_follow_variant`
-      and the `intern_follow_variant` walk-side call sites.
+- [x] Phase 2 LR variant emit via the regular path; unified
+      `__follow_<id>{,_atom,_lr_N}` naming. Closed `ll_lr_atom`.
+- [x] Collapsed `gen_scan_follow_variant` / `gen_parse_follow_variant`
+      into a single `emit_follow_variant` helper (delegates to the
+      unified `gen_*_function_named` body emitters).
 
-The fifth gap (multi-token tail-greedy inner) and any ATN-class
-grammars discovered en route remain out of scope; they will be
-re-scoped after Phase 5 lands.
+Out of scope for Phase 5, parked as future work:
+
+- The fifth gap (multi-token tail-greedy inner, no fixture yet) and
+  any ATN-class grammars discovered en route — to be re-scoped now
+  that the four catalogued static gaps are closed.
+- Moving variant registration from the codegen walk into a separate
+  pre-analysis pass on `FollowEnv` (the "delete walk-side
+  `intern_follow_variant` call sites" goal): the walk-side calls
+  remain because they happen to coincide with the natural place to
+  observe `(R, mask)` pairs. Lifting the discovery into a pure pass
+  is a clean refactor but does not move the LL coverage envelope.
+- Retiring `current_follow_mask` and `current_outer_follow` from
+  `GenContext` in favour of explicit function arguments. The save /
+  restore pattern is correct today; the cleanup is purely
+  ergonomic.
 
 ### Future work
 

@@ -39,41 +39,68 @@ Stage C (action/predicate execution) sits behind LL because the harder
 LL cases in real grammars depend on predicates as a tiebreaker, so the
 prediction story has to be settled first.
 
-### What works (v1, 2026-05)
+### What works (Phase 5, 2026-05)
 
-One-level static-analysis LL repair via `__follow_<id>` variants. At a
-`RuleRef R` call site whose immediate next sibling is **strictly
-required** (suffix not deep-nullable), Gale computes
-`FOLLOW(call) = first(suffix)`; if `tail_greedy_first(R) ∩ FOLLOW`
-is non-empty, an `intern_follow_variant`-registered variant
-`scan_R__follow_<id>` / `parse_R__follow_<id>` is generated that
-subtracts the mask from tail-position Optional/Star/Plus first-sets.
-The minimal reproducer `(a b | a) EOF; a : X Y?; b : Y` parses
-correctly: `tests/grammars/ll_basic.g4` plus
-`tests/antlr4-compat/.../ParserExec/PredictionMode_LL` are green.
+Two-level static-analysis LL repair via `__follow_<id>` variants
+routed through the unified `gen_parse_fn_named` /
+`gen_scan_function_named` body emitters. At a `RuleRef R` call site
+where `tail_greedy_first(R)` intersects either the immediate suffix's
+first set (when strictly required) or — for deep-nullable suffixes
+that are **first-exact** — the union of `first(suffix)` and the
+caller's `current_outer_follow`, an `intern_follow_variant`-registered
+variant `scan_R__follow_<id>` / `parse_R__follow_<id>` is generated
+that subtracts the mask from tail-position Optional/Star/Plus
+first-sets. The variant emitters reuse the regular emit path, so
+multi-alt rules get `_bt_<n>` helpers and LR rules get atom +
+`_lr_<n>` suffix helpers + precedence dispatcher under the variant
+namespace, all driven by an explicit `fn_name: &String` thread.
+
+Closed regression fixtures (formerly `#[TODO]`):
+
+- `tests/grammars/ll_basic.g4` — single-token tail-greedy with
+  required follow.
+- `tests/grammars/ll_ctx_follow.g4` — passthrough rule whose body's
+  inner `RuleRef` inherits the variant's mask via deep-nullable
+  propagation in variant-emit context.
+- `tests/grammars/ll_nullable_suffix.g4` — first-exact deep-nullable
+  trailing suffix (`b?` where `b : Y`) contributes its first set to
+  the preceding `RuleRef`'s caller-follow; `ll_match_length` ensures
+  the LL-correct alt sorts ahead of the bare-RuleRef catch-all.
+- `tests/grammars/ll_multi_alt.g4` — multi-alt callee
+  (`a : X Y? | Z`) variant emit reuses the regular multi-alt path.
+- `tests/grammars/ll_lr_atom.g4` — left-recursive callee variant
+  emit reuses the regular LR path; self-recursive calls inside the
+  suffix helpers route through `{*fn_name}` so the mask stays alive
+  across the chain.
+- `tests/antlr4-compat/.../ParserExec/PredictionMode_LL` — the
+  upstream descriptor that motivated Phase 4's first repair.
 
 Implementation references:
 
+- `package-gale/src/follow_env.wado` — pure analysis: `FollowSet`,
+  `FollowEnv`, `tail_greedy` snapshot, `rule_follow` worklist fixed
+  point.
 - `package-gale/src/gen_context.wado` — `tail_greedy_first_of_rule`,
-  `intern_follow_variant`, `FollowVariantEntry`.
-- `package-gale/src/parser_gen.wado` — `gen_scan_follow_variant`,
-  `gen_parse_follow_variant`, the `current_follow_mask` /
-  `ruleref_call_follow` threading, and
-  `sort_group_by_mandatory_count_desc` for LL-correct group dispatch.
+  `element_is_first_exact`, `deep_suffix_is_first_exact`,
+  `intern_follow_variant`, `FollowVariantEntry`,
+  `current_outer_follow`.
+- `package-gale/src/parser_gen.wado` — `compute_ruleref_call_follow`
+  (the per-position follow helper used by every alt walker),
+  `emit_follow_variant` (single dispatcher behind the fixed-point
+  loop), `gen_parse_fn_named`, `gen_scan_function_named`, plus the
+  LR helpers (`gen_lr_*` / `gen_scan_lr_*`) all parameterised by
+  `fn_name`. `ll_match_length` provides the LL-aware sort key for
+  group dispatches.
 
-### What does not work yet (v1 limitations)
+### What does not work yet (Phase 5 limitations)
 
 Each gap has a regression grammar under `tests/grammars/ll_*.g4` plus
 a `#[TODO]` driver test. Closing a gap means making the test pass
 without breaking the others.
 
-| Gap                           | Fixture                 | Why v1 punts                                                                                                                                                                                                                           |
-| ----------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Nullable next sibling         | `ll_nullable_suffix.g4` | `gen_alt_elements` skips variant registration when `is_suffix_nullable`. Closing requires CTX_FOLLOW propagation through the outer rule's follow.                                                                                      |
-| Multi-alt callee              | `ll_multi_alt.g4`       | `intern_follow_variant` rejects multi-alt rules. `gen_parse_follow_variant` only emits single-alt `gen_alt_body`; needs the multi-alt body / bt-helper duplication.                                                                    |
-| Left-recursive callee         | `ll_lr_atom.g4`         | `intern_follow_variant` rejects LR rules. Needs `scan_R__follow_<id>_atom` + per-LR-alt suffix helpers + a precedence-climbing variant dispatcher.                                                                                     |
-| Caller-of-caller follow       | `ll_ctx_follow.g4`      | `ruleref_call_follow` is computed from the immediate alt's siblings only. Needs a per-rule FOLLOW fixed point that propagates through nullable / passthrough rules.                                                                    |
-| Multi-token tail-greedy inner | (no fixture yet)        | `tail_greedy_first_of_element` only counts Repeats whose inner is a single token (TokenRef / Literal / Wildcard / Not / single-token RuleRef). Needed for `(A B)?` style tail-greedy patterns where the inner sequence is multi-token. |
+| Gap                           | Fixture          | Why Phase 5 punts                                                                                                                                                                                                                                                                                    |
+| ----------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Multi-token tail-greedy inner | (no fixture yet) | `tail_greedy_first_of_element` only counts Repeats whose inner is a single token (TokenRef / Literal / Wildcard / Not / single-token RuleRef / single-token Group). The first-exact discriminator excludes multi-element groups for the same reason. Needed for `(A B)?` style tail-greedy patterns. |
 
 ### Beyond v1: ANTLR4 oracle integration
 

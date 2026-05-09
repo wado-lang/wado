@@ -1060,69 +1060,35 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
         }
         for let mut idx = emitted_count; idx < entries.len(); idx += 1 {
             let entry = &entries[idx];
-            if entry.scan_used {
-                gen_scan_follow_variant(w, entry, ctx);
-            }
-            if entry.parse_used {
-                gen_parse_follow_variant(w, entry, ctx);
-            }
+            emit_follow_variant(w, entry, ctx);
         }
         emitted_count = entries.len();
     }
     gen_parse_entry(w, &grammar.parser_rules);
 }
 
-/// Emit a scan-side follow-aware variant. The body is the regular
-/// `scan_<rule>` body but with `current_follow_mask` set so tail-
-/// position `Optional` / `Star` / `Plus` first sets get `mask`
-/// subtracted before deciding whether to fire / iterate.
+/// Emit one follow-aware rule variant. Routes through the unified
+/// `gen_scan_function_named` / `gen_parse_fn_named` body emitters with
+/// the variant's mask installed in `ctx.current_follow_mask` and
+/// `ctx.current_outer_follow`. Saves and restores every `ctx` field
+/// the body emitters mutate so the trailing `gen_parse_entry` and any
+/// subsequent variant emit see clean state.
 ///
-/// The registry invariant (enforced by `intern_follow_variant`) is
-/// that registered rules exist and are non-LR; we panic on contract
-/// violation rather than silently `return` so a future relaxation in
-/// `intern_follow_variant` cannot leak dangling `__follow_<id>`
-/// references into generated source.
-fn gen_scan_follow_variant(w: &mut CodeWriter, entry: &FollowVariantEntry, ctx: &mut GenContext) {
+/// The unknown-rule branch panics on contract violation:
+/// `intern_follow_variant` already rejects unknown rules, so reaching
+/// the panic indicates a registry / emit mismatch — silently
+/// returning here would leak dangling `__follow_<id>` references into
+/// the generated source.
+fn emit_follow_variant(w: &mut CodeWriter, entry: &FollowVariantEntry, ctx: &mut GenContext) {
     let rule_opt = ctx.find_rule(&entry.rule_name);
     let rule = if let Some(r) = rule_opt {
         *r;
     } else {
         panic(
-            `gen_scan_follow_variant: rule '{entry.rule_name}' not found; intern_follow_variant should reject unknown rules`,
+            `emit_follow_variant: rule '{entry.rule_name}' not found; intern_follow_variant should reject unknown rules`,
         );
     };
-    let fn_name = `scan_{rule.snake_name}__follow_{entry.id}`;
-    let saved_mask = ctx.current_follow_mask;
-    let saved_outer = ctx.current_outer_follow;
-    ctx.current_follow_mask = entry.mask;
-    ctx.current_outer_follow = entry.mask;
-    gen_scan_function_named(w, &rule, ctx, &fn_name, true);
-    /*allow_lr_split=*/
-    ctx.current_follow_mask = saved_mask;
-    ctx.current_outer_follow = saved_outer;
-}
 
-/// Emit a parse-side follow-aware variant for non-LR single-alt
-/// rules. v1 only supports single-alt non-LR; the registry invariant
-/// (enforced by `intern_follow_variant`) is that registered rules
-/// satisfy both. We panic on contract violation rather than silently
-/// `return` so a future relaxation in `intern_follow_variant` cannot
-/// leak dangling `__follow_<id>` references into generated source.
-///
-/// All `ctx` fields the body sets (`current_rule_name`, `group_counter`,
-/// `alt_gc_starts`, `current_follow_mask`) are saved on entry and
-/// restored on exit so subsequent variant emits and the trailing
-/// `gen_parse_entry` see the same context they would without this
-/// detour.
-fn gen_parse_follow_variant(w: &mut CodeWriter, entry: &FollowVariantEntry, ctx: &mut GenContext) {
-    let rule_opt = ctx.find_rule(&entry.rule_name);
-    let rule = if let Some(r) = rule_opt {
-        *r;
-    } else {
-        panic(
-            `gen_parse_follow_variant: rule '{entry.rule_name}' not found; intern_follow_variant should reject unknown rules`,
-        );
-    };
     let saved_rule_name = ctx.current_rule_name;
     let saved_group_counter = ctx.group_counter;
     let saved_alt_gc_starts = ctx.alt_gc_starts;
@@ -1131,9 +1097,15 @@ fn gen_parse_follow_variant(w: &mut CodeWriter, entry: &FollowVariantEntry, ctx:
 
     ctx.current_follow_mask = entry.mask;
     ctx.current_outer_follow = entry.mask;
-    let fn_name = `parse_{rule.snake_name}__follow_{entry.id}`;
-    gen_parse_fn_named(w, &rule, ctx, &fn_name, false);
-    /*emit_visibility=*/
+
+    if entry.scan_used {
+        let scan_name = `scan_{rule.snake_name}__follow_{entry.id}`;
+        gen_scan_function_named(w, &rule, ctx, &scan_name, true);
+    }
+    if entry.parse_used {
+        let parse_name = `parse_{rule.snake_name}__follow_{entry.id}`;
+        gen_parse_fn_named(w, &rule, ctx, &parse_name, false);
+    }
 
     ctx.current_rule_name = saved_rule_name;
     ctx.group_counter = saved_group_counter;
