@@ -332,23 +332,27 @@ test "intern_follow_variant: multi-alt rule registers (Phase 5 step 5)" {
     assert variants[0].mask.len() == 1 && variants[0].mask[0] == "TK_Y";
 }
 
-test "intern_follow_variant: left-recursive rule rejected" {
-    // LR rules need a separate scan_X__follow_<id>_atom + LR-suffix
-    // helper split — variant emit doesn't mirror that yet, so reject
-    // up front and leave the call site at the regular `parse_<rule>(p)`.
-    let a = mk_rule("a", [alt([tk("X")]), alt([rr("a"), tk("PLUS"), rr("a")])]);
-    // base
-    // LR binary
-
+test "intern_follow_variant: left-recursive rule registers (Phase 5 step 6)" {
+    // Phase 5 step 6 lifted the LR restriction: `gen_parse_fn_named` /
+    // `gen_scan_function_named` propagate `fn_name` through the LR
+    // helpers (`{*fn_name}_atom`, `{*fn_name}_lr_<n>`), so the variant
+    // emit produces a complete LR set: atom (with mask), per-LR-alt
+    // suffix helpers, and a precedence-climbing main entry. Self-
+    // recursive calls inside the suffix helpers route through the
+    // variant's own main, so the mask propagates down the LR chain.
+    let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))]), alt([rr("a"), tk("PLUS"), rr("a")])]);
     let mut ctx = mk_ctx_with([a]);
     let follow: Array<String> = ["TK_Y"];
     let result = ctx.intern_follow_variant(&"a", &follow, true);
-    assert if let Some(_) = result {
-        false;
+    assert if let Some(id) = result {
+        id == 0;
     } else {
-        true;
-    }, "expected null for LR rule";
-    assert ctx.follow_variants().is_empty();
+        false;
+    }, "expected variant id 0 for LR rule";
+    let variants = ctx.follow_variants();
+    assert variants.len() == 1;
+    assert variants[0].rule_name == "a";
+    assert variants[0].mask.len() == 1 && variants[0].mask[0] == "TK_Y";
 }
 
 test "intern_follow_variant: empty caller_follow returns null" {

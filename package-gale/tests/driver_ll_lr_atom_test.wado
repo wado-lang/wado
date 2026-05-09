@@ -1,11 +1,4 @@
-use g from "./grammars/ll_lr_atom.g4"
-    with {
-        generator: {
-            module: "../src/generator.wado",
-            options: { highlight: false },
-            output_dir: "tests/generated/ll_lr_atom",
-        },
-    };
+use g from "./grammars/ll_lr_atom.g4" with { generator: { module: "../src/generator.wado", options: { highlight: false }, output_dir: "tests/generated/ll_lr_atom" } };
 use { normalize_tree } from "./grammars/ll_lr_atom.g4";
 
 fn assert_tree(input: &String, expected: &String) {
@@ -16,9 +9,6 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
 }
 
-#[TODO]
-// Gap: `intern_follow_variant` rejects LR callees. Needs LR-aware
-// variant emission — see TODO.md.
 test "tree: X Y picks (a b) when a is left-recursive" {
     assert_tree(&"X Y", &"
         (r (a X) (b Y))

@@ -785,18 +785,14 @@ impl GenContext {
     /// flags to decide whether to emit a scan-side body, parse-side
     /// body, or both.
     pub fn intern_follow_variant(&mut self, rule_name: &String, caller_follow: &Array<String>, is_scan: bool) -> Option<i32> {
-        // Phase 5 step 5: multi-alt rules are now supported via the
-        // unified `gen_parse_fn_named` body emit. LR rules remain
-        // out-of-scope for variant emit until step 6 lands the
-        // mask-aware atom + suffix helper naming.
+        // Phase 5 step 6: every rule shape — single-alt, multi-alt, and
+        // left-recursive — now routes variant emit through the unified
+        // `gen_parse_fn_named` / `gen_scan_function_named` path. The
+        // only remaining gate is the unknown-rule guard (which keeps
+        // the registry from referencing rules the emit pass cannot
+        // produce).
         let rule_opt = self.find_rule(rule_name);
-        if let Some(rule) = rule_opt {
-            for let alt of &rule.alternatives {
-                if rule_alt_is_left_recursive(alt, rule_name) {
-                    return null;
-                }
-            }
-        } else {
+        if rule_opt matches { None } {
             return null;
         }
         let mut visiting: Array<String> = [];
