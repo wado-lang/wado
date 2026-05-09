@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778219237335,
+  "lastUpdate": 1778322103564,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20449,6 +20449,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 514574,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fa644e0618fb6d14fc485d9d17b8521835de80c2",
+          "message": "Merge pull request #1024 from wado-lang/gfx/move_optimizer_to_tir_optimize\n\nperf(opt): move DAE / DRVE / write-only local elim from WIR to TIR",
+          "timestamp": "2026-05-09T19:12:31+09:00",
+          "tree_id": "30a66d3615e9599842883539fd44b6ab99bb22ad",
+          "url": "https://github.com/wado-lang/wado/commit/fa644e0618fb6d14fc485d9d17b8521835de80c2"
+        },
+        "date": 1778322103291,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 511983,
             "unit": "bytes"
           }
         ]
