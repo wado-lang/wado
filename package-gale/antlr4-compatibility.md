@@ -512,23 +512,144 @@ registry must not promise variants the emit pass cannot deliver.
 
 The catalogue of LL fixtures and their pass/`#[TODO]` state lives
 in [`TODO.md`](./TODO.md)'s LL section, exercised by
-`tests/grammars/ll_*.g4`. The architecture above admits the
-catalogued extensions (deeper follow propagation, multi-alt
-variant emit, LR variant emit) as incremental work behind the same
-`intern_follow_variant` / variant-emit contract. None of them
-require revising the design; they require lifting one of the
-soundness conditions by either extending the static analysis (e.g.
-compute `FOLLOW(R)` as a call-graph fixed point) or extending the
-variant emit to reproduce more body shapes (e.g. multi-alt body,
-LR atom + suffix helpers).
+`tests/grammars/ll_*.g4`. The four catalogued gaps (nullable next
+sibling, multi-alt callee, LR callee, caller-of-caller follow) are
+**not** addressable as incremental work behind the v1 contract: each
+gap targets a different axis of v1's coupling between FOLLOW analysis
+and codegen walk, and we attempted three over-broad patches in
+2026-05 (documented in `package-gale/CLAUDE.md`'s "Failed Approaches"
+section) that each broke real grammars. The path forward is the
+[Phase 5 redesign](#phase-5-planned--ll-followenv-redesign) below,
+which moves FOLLOW analysis into a separate pass and unifies variant
+emit on the regular rule-emit path.
 
 There exist grammars where static FOLLOW cannot decide the
 LL-correct alt — typically those where the decision depends on
 arbitrary lookahead through ambiguous prefixes. Those grammars
 require runtime ATN simulation. The decision to start with static
-repair is a cost-vs-coverage trade-off; we will revisit it if the
-catalogued static extensions don't reach the grammars we care
-about.
+repair is a cost-vs-coverage trade-off; we will revisit it once
+Phase 5 lands and the four catalogued static gaps are closed.
+
+### Phase 5 (planned) — LL FollowEnv redesign
+
+Closes the four LL gaps catalogued in [`TODO.md`](./TODO.md):
+`ll_nullable_suffix`, `ll_multi_alt`, `ll_lr_atom`, `ll_ctx_follow`.
+A fifth gap (multi-token tail-greedy inner, no fixture yet) is out
+of scope for Phase 5; its data-model placeholder is also deferred.
+
+#### Why a redesign and not v1 extensions
+
+Phase 4's `intern_follow_variant` / variant-emit contract conflates
+three concerns into one walk: (1) FOLLOW analysis is computed on the
+fly by reading siblings as `gen_*_element` walks past a `RuleRef`;
+(2) variant registration happens as a side effect of that walk; and
+(3) the variant body is emitted by a _shrunken duplicate_ of the
+regular rule-emit path (`gen_scan_follow_variant`,
+`gen_parse_follow_variant`), which is what forces the single-alt /
+non-LR rejection at the registry. Each of the four gaps targets a
+different axis of that coupling:
+
+| Gap                     | Axis                                   | Why v1 cannot extend                                                        |
+| ----------------------- | -------------------------------------- | --------------------------------------------------------------------------- |
+| Nullable next sibling   | (a) FOLLOW propagation depth           | Walk-local follow has no view past the immediate alt's siblings.            |
+| Caller-of-caller follow | (a) FOLLOW propagation depth           | Walk-local follow cannot fixed-point through nullable passthrough rules.    |
+| Multi-alt callee        | (b) callee rule shape                  | `gen_parse_follow_variant` emits `gen_alt_body` once; multi-alt body unfit. |
+| LR callee               | (b) callee rule shape + (d) emit shape | LR rules need atom + per-alt suffix helpers; the variant emit has neither.  |
+
+Lifting any one axis in place forces the others to bend with it
+(e.g. a multi-alt variant body must also know its FOLLOW). The
+redesign cuts the coupling instead.
+
+#### Architecture
+
+Three phases, the first two strictly separated:
+
+1. **Phase 1 — `FollowEnv` construction (pure analysis).** A new
+   module `src/follow_env.wado` takes the `Grammar` IR and produces
+   an immutable `FollowEnv`. No codegen state, no `CodeWriter`, no
+   side effects. Computes:
+   - `rule_follow[R]` — the classical ANTLR4 `FOLLOW(R)` set, via a
+     call-graph fixed point. EOF seeded at the start rule;
+     contributions from each call site `R` appears in propagate
+     transitively through nullable suffixes. _Closes
+     `ll_ctx_follow`._
+   - `call_site_follow[(R, alt, path)]` — local FOLLOW at a specific
+     `RuleRef R` site, equal to `first(suffix) ∪ FOLLOW(enclosing)`
+     when the suffix is deep-nullable (just `first(suffix)`
+     otherwise). _Closes `ll_nullable_suffix`._
+   - `tail_greedy_single[R]` — same definition as Phase 4's
+     `tail_greedy_first_of_rule`, with the same single-token-inner
+     guard preserved (Phase 4's regression on `htmlContent` is the
+     reason this guard is non-negotiable; see `package-gale/CLAUDE.md`).
+   - `variants[(R, mask)]` with `shape ∈ {SingleAlt, MultiAlt,
+     LeftRecursive}`. Registration **does not reject** multi-alt or
+     LR rules; it records the shape so Phase 2 can dispatch.
+
+2. **Phase 2 — Mask-aware unified codegen.** `gen_parse_fn`,
+   `gen_scan_function_named`, and the LR helpers (`gen_lr_*`,
+   `gen_scan_lr_*`) gain a `mask: Option<&FollowMask>` parameter.
+   `mask = null` is exact-equivalent to today's regular emit;
+   `mask = Some(m)` is the variant emit. The mask is consulted at
+   exactly one place: a new `tail_position_first_set(elem, mask)`
+   helper that subtracts the mask from tail-position
+   Optional/Star/Plus first-sets. The `current_follow_mask` and
+   `ruleref_call_follow` global-ish fields on `GenContext` are
+   retired; their information flows as function arguments.
+   Function naming is unified through a single suffix rule
+   (`__follow_<id>` / `__follow_<id>_atom` / `__follow_<id>_lr_N`).
+   _Closes `ll_multi_alt` (multi-alt variants reuse the regular
+   multi-alt path) and `ll_lr_atom` (LR variants reuse the regular
+   LR path)._ The shrunken-duplicate `gen_scan_follow_variant` and
+   `gen_parse_follow_variant` are deleted.
+
+3. **Phase 3 — Variant fixed-point emit.** Phase 4's emission loop
+   at the end of `gen_parser` is preserved, but the loop body
+   re-runs the relevant Phase 1 steps when a variant body's
+   `RuleRef` calls request a not-yet-registered `(R, mask)` pair.
+   Same termination argument as Phase 4 (the registry is monotone).
+
+#### Soundness conditions
+
+Phase 4's three conditions remain in force; the redesign does not
+weaken any of them, only widens the rule-shape envelope:
+
+1. Single-token tail-greedy inner — preserved exactly.
+2. Strictly required next sibling — generalised: a deep-nullable
+   suffix now contributes `FOLLOW(enclosing)` instead of `∅`, so
+   the condition becomes "strictly required _or_ enclosing follow
+   reachable." This is the formal statement of `ll_ctx_follow` /
+   `ll_nullable_suffix` closures.
+3. Variant emit can faithfully reproduce the callee body —
+   _strengthened_: by routing variant emit back through the
+   regular rule-emit path, the condition reduces to "the regular
+   path can emit it," which is true by construction for every rule
+   shape Gale supports.
+
+#### Implementation order
+
+Each step lands as red→green TDD on the existing `tests/grammars/ll_*.g4`
+fixtures, with the full `tests/antlr4-compat/**` corpus and every
+curated driver test (sqlite, css3, html, antlrv4, rust, typescript)
+required to stay green at every step.
+
+- [ ] Phase 1 skeleton: `FollowEnv` data types, `tail_greedy_single`
+      lifted from `gen_context.wado` verbatim, no semantic change yet.
+- [ ] Phase 1 `rule_follow` fixed point. Closes `ll_ctx_follow`.
+- [ ] Phase 1 `call_site_follow` with nullable-suffix propagation.
+      Closes `ll_nullable_suffix`.
+- [ ] Phase 2 mask parameterisation of `gen_parse_fn` /
+      `gen_scan_function_named`; remove `current_follow_mask`. No
+      behavioural change at this step (mask is `null` everywhere).
+- [ ] Phase 2 multi-alt variant emit via the regular path. Closes
+      `ll_multi_alt`.
+- [ ] Phase 2 LR variant emit via the regular path; unified
+      `__follow_<id>{,_atom,_lr_N}` naming. Closes `ll_lr_atom`.
+- [ ] Delete `gen_scan_follow_variant` / `gen_parse_follow_variant`
+      and the `intern_follow_variant` walk-side call sites.
+
+The fifth gap (multi-token tail-greedy inner) and any ATN-class
+grammars discovered en route remain out of scope; they will be
+re-scoped after Phase 5 lands.
 
 ### Future work
 
