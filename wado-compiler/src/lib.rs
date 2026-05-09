@@ -646,7 +646,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     };
 
     // Build comment map
-    let comment_map = comment::CommentMap::from_comments(comments, source);
+    let comment_map = comment::CommentMap::from_comments(&comments, source);
 
     // === Phase 2: Parser ===
     let ast = {
@@ -897,7 +897,7 @@ pub fn format(source: &str) -> Result<String, CompileError> {
     // (file-tail dangling, structural-position queries). The parser's
     // AstId-keyed `TriviaMap` carries the leading-comment attachments
     // that are now the primary mechanism for in-tree comments.
-    let comment_map = comment::CommentMap::from_comments(comments.clone(), source);
+    let comment_map = comment::CommentMap::from_comments(&comments, source);
 
     // Parser (with shebang, data section, and the comment stream so it
     // can attach leading comments to AST nodes as it allocates ids).
@@ -933,7 +933,7 @@ pub fn parse(source: &str) -> Result<ParseResult, CompileError> {
         filename: None,
     })?;
     let (data_section, comments, shebang) = lexer.into_parts();
-    let comment_map = comment::CommentMap::from_comments(comments, source);
+    let comment_map = comment::CommentMap::from_comments(&comments, source);
     let mut parser = Parser::with_metadata(tokens, shebang, data_section);
     let ast = parser.parse().map_err(|e| CompileError::Parser {
         message: e.message,

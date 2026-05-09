@@ -65,12 +65,16 @@ impl CommentMap {
         }
     }
 
-    /// Create a comment map from a list of comments
-    pub fn from_comments(comments: Vec<Comment>, source: &str) -> Self {
+    /// Create a comment map from a list of comments.
+    /// Takes `&[Comment]` so callers that also need to hand the same
+    /// comment stream to `Parser::with_trivia` (the formatter pipeline)
+    /// don't have to clone the `Vec` first; the per-comment clone into
+    /// the `BTreeMap` happens here either way.
+    pub fn from_comments(comments: &[Comment], source: &str) -> Self {
         let mut map = Self::new();
         map.build_line_starts(source);
         for comment in comments {
-            map.insert(comment);
+            map.insert(comment.clone());
         }
         map
     }
@@ -308,7 +312,7 @@ mod tests {
             make_comment(" comment 2", 24, 36, 2),
         ];
 
-        let map = CommentMap::from_comments(comments, source);
+        let map = CommentMap::from_comments(&comments, source);
         assert_eq!(map.len(), 2);
     }
 }

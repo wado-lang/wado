@@ -180,9 +180,8 @@ impl Parser {
     /// leading-comment attachments. Sets file-tail dangling comments to
     /// any unattached residue.
     pub fn take_trivia(&mut self) -> crate::comment::TriviaMap {
-        let dangling: Vec<crate::comment::Comment> =
-            self.comments.drain(self.comment_cursor..).collect();
-        self.comments.clear();
+        let mut comments = std::mem::take(&mut self.comments);
+        let dangling = comments.split_off(self.comment_cursor);
         self.comment_cursor = 0;
         let mut trivia = std::mem::take(&mut self.trivia);
         trivia.set_dangling(dangling);
