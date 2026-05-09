@@ -1100,11 +1100,11 @@ fn emit_follow_variant(w: &mut CodeWriter, entry: &FollowVariantEntry, ctx: &mut
 
     if entry.scan_used {
         let scan_name = `scan_{rule.snake_name}__follow_{entry.id}`;
-        gen_scan_function_named(w, &rule, ctx, &scan_name, true);
+        gen_scan_function_named(w, &rule, ctx, &scan_name, /*allow_lr_split=*/ true);
     }
     if entry.parse_used {
         let parse_name = `parse_{rule.snake_name}__follow_{entry.id}`;
-        gen_parse_fn_named(w, &rule, ctx, &parse_name, false);
+        gen_parse_fn_named(w, &rule, ctx, &parse_name, /*emit_visibility=*/ false);
     }
 
     ctx.current_rule_name = saved_rule_name;
@@ -2557,9 +2557,8 @@ fn is_lenient_group(alts: &Array<Alternative>) -> bool {
 
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
     let fn_name = `parse_{rule.snake_name}`;
-    gen_parse_fn_named(w, rule, ctx, &fn_name, true);
+    gen_parse_fn_named(w, rule, ctx, &fn_name, /*emit_visibility=*/ true);
 }
-/*emit_visibility=*/
 
 
 /// Body emitter shared by `gen_parse_fn` and the follow-aware variant
