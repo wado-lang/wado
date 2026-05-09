@@ -221,10 +221,14 @@ pub trait TirMutVisitor {
                     self.visit_expr(&mut field.value);
                 }
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements }
+            | TirExprKind::MultiValueLiteral { elements } => {
                 for elem in elements {
                     self.visit_expr(elem);
                 }
+            }
+            TirExprKind::MultiValueProject { source, .. } => {
+                self.visit_expr(source);
             }
             TirExprKind::Closure { body, .. } => {
                 self.visit_expr(body);
@@ -481,10 +485,14 @@ pub trait TirRefVisitor {
                     self.visit_expr(&field.value);
                 }
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements }
+            | TirExprKind::MultiValueLiteral { elements } => {
                 for elem in elements {
                     self.visit_expr(elem);
                 }
+            }
+            TirExprKind::MultiValueProject { source, .. } => {
+                self.visit_expr(source);
             }
             TirExprKind::Closure { body, .. } => {
                 self.visit_expr(body);
@@ -752,10 +760,13 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
                 changed |= visitor.visit_expr(&mut field.value);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for elem in elements {
                 changed |= visitor.visit_expr(elem);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            changed |= visitor.visit_expr(source);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
@@ -919,9 +930,10 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
         TirExprKind::VariantConstruct { payload, .. } => payload
             .as_ref()
             .is_some_and(|p| expr_has_break_to(label, p)),
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             elements.iter().any(|e| expr_has_break_to(label, e))
         }
+        TirExprKind::MultiValueProject { source, .. } => expr_has_break_to(label, source),
         TirExprKind::StructLiteral { fields, .. } => {
             fields.iter().any(|f| expr_has_break_to(label, &f.value))
         }

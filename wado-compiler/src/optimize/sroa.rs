@@ -384,10 +384,13 @@ fn mark_ref_fields_in_expr(
                 mark_ref_fields_in_expr(&field.value, decomposed, stores_aliased);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for elem in elements {
                 mark_ref_fields_in_expr(elem, decomposed, stores_aliased);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            mark_ref_fields_in_expr(source, decomposed, stores_aliased);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
@@ -1649,7 +1652,8 @@ fn rewrite_expr(
                 );
             }
         }
-        TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. }
+        | TirExprKind::MultiValueLiteral { elements, .. } => {
             for elem in elements {
                 rewrite_expr(
                     elem,
@@ -1660,6 +1664,16 @@ fn rewrite_expr(
                     reconstruct_info,
                 );
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            rewrite_expr(
+                source,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {

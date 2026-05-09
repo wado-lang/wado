@@ -39,7 +39,10 @@ fn count_expr(expr: &TirExpr) -> usize {
             call_expr: expr, ..
         } => count_expr(expr),
         TirExprKind::Index { expr, index, .. } => count_expr(expr) + count_expr(index),
-        TirExprKind::TupleLiteral { elements } => elements.iter().map(count_expr).sum(),
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+            elements.iter().map(count_expr).sum()
+        }
+        TirExprKind::MultiValueProject { source, .. } => count_expr(source),
         TirExprKind::StructLiteral { fields, .. } => {
             fields.iter().map(|f| count_expr(&f.value)).sum()
         }
@@ -301,10 +304,13 @@ fn collect_inner_labels_from_expr(expr: &TirExpr, labels: &mut IndexSet<String>)
                 collect_inner_labels_from_expr(&field.value, labels);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for elem in elements {
                 collect_inner_labels_from_expr(elem, labels);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            collect_inner_labels_from_expr(source, labels);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload) = payload {
@@ -604,10 +610,13 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
                 collect_callees_from_expr(&field.value, callees);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for elem in elements {
                 collect_callees_from_expr(elem, callees);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            collect_callees_from_expr(source, callees);
         }
         TirExprKind::Closure { body, .. } => {
             collect_callees_from_expr(body, callees);
@@ -1898,6 +1907,13 @@ fn remap_expr_inner(
         TirExprKind::TupleLiteral { elements } => TirExprKind::TupleLiteral {
             elements: elements.iter().map(&re).collect(),
         },
+        TirExprKind::MultiValueLiteral { elements } => TirExprKind::MultiValueLiteral {
+            elements: elements.iter().map(&re).collect(),
+        },
+        TirExprKind::MultiValueProject { source, index } => TirExprKind::MultiValueProject {
+            source: Box::new(re(source)),
+            index: *index,
+        },
         TirExprKind::Closure {
             params,
             body,
@@ -2421,7 +2437,7 @@ fn inline_calls_in_expr(
                 );
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for elem in elements {
                 inline_calls_in_expr(
                     elem,
@@ -2435,6 +2451,19 @@ fn inline_calls_in_expr(
                     inline_counter,
                 );
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            inline_calls_in_expr(
+                source,
+                candidates,
+                current_module,
+                local_count,
+                locals,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+                inline_counter,
+            );
         }
         TirExprKind::IndirectCall { callee, args } => {
             inline_calls_in_expr(

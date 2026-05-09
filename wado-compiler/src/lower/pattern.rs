@@ -3025,10 +3025,14 @@ impl<'a> PatternLowerer<'a> {
                     self.lower_expr(&mut field.value, type_table);
                 }
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements }
+            | TirExprKind::MultiValueLiteral { elements } => {
                 for elem in elements {
                     self.lower_expr(elem, type_table);
                 }
+            }
+            TirExprKind::MultiValueProject { source, .. } => {
+                self.lower_expr(source, type_table);
             }
             TirExprKind::IndirectCall { callee, args } => {
                 self.lower_expr(callee, type_table);

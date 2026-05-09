@@ -660,10 +660,14 @@ fn collect_unsafe_in_expr(expr: &TirExpr, unsafe_locals: &mut IndexSet<u32>) {
                 collect_unsafe_in_expr(&field.value, unsafe_locals);
             }
         }
-        TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. }
+        | TirExprKind::MultiValueLiteral { elements, .. } => {
             for elem in elements {
                 collect_unsafe_in_expr(elem, unsafe_locals);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            collect_unsafe_in_expr(source, unsafe_locals);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
@@ -1019,10 +1023,14 @@ fn forward_in_expr(
                     forward_in_expr(&mut field.value, known, unsafe_locals, type_table, cache);
             }
         }
-        TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. }
+        | TirExprKind::MultiValueLiteral { elements, .. } => {
             for elem in elements {
                 changed |= forward_in_expr(elem, known, unsafe_locals, type_table, cache);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            changed |= forward_in_expr(source, known, unsafe_locals, type_table, cache);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {

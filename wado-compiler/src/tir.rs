@@ -2457,6 +2457,28 @@ pub enum TirExprKind {
         elements: Vec<TirExpr>,
     },
 
+    /// Multi-value aggregate. Has no heap presence; lowers to Wasm multi-value
+    /// (or `struct.new` on materialization at WIR build). Type is
+    /// `Tuple<T0, T1, ...>` (same as `TupleLiteral`).
+    ///
+    /// Distinct from `TupleLiteral` only in ABI: `MultiValueLiteral` opts out
+    /// of heap allocation when escape analysis allows it. `TupleLiteral` is the
+    /// reify form used when the aggregate must be a single heap value.
+    MultiValueLiteral {
+        elements: Vec<TirExpr>,
+    },
+
+    /// Project the i-th component out of a multi-value source.
+    /// Type is the i-th element type of the source's tuple type.
+    ///
+    /// Used in place of `FieldAccess { field_name: i.to_string() }` for
+    /// destructuring multi-value tuples without forcing the source to
+    /// materialize as a heap struct.
+    MultiValueProject {
+        source: Box<TirExpr>,
+        index: u32,
+    },
+
     /// Spread a tuple expression into an enclosing `TupleLiteral`.
     /// Created by the resolver for `[..expr]` syntax. Expanded by monomorphization
     /// into individual `FieldAccess` elements once the concrete tuple arity is known.

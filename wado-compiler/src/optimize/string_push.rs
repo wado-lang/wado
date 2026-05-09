@@ -311,13 +311,14 @@ fn rewrite_expr(expr: &mut TirExpr, ctx: &Ctx) -> bool {
             }
             c
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             let mut c = false;
             for elem in elements {
                 c |= rewrite_expr(elem, ctx);
             }
             c
         }
+        TirExprKind::MultiValueProject { source, .. } => rewrite_expr(source, ctx),
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 rewrite_expr(p, ctx)

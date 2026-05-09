@@ -1565,6 +1565,26 @@ impl Monomorphizer {
             TirExprKind::FieldAccess { expr: inner, .. } => {
                 self.substitute_types_in_expr(inner, substitution, type_table, local_count, locals);
             }
+            TirExprKind::MultiValueLiteral { elements } => {
+                for elem in elements.iter_mut() {
+                    self.substitute_types_in_expr(
+                        elem,
+                        substitution,
+                        type_table,
+                        local_count,
+                        locals,
+                    );
+                }
+            }
+            TirExprKind::MultiValueProject { source, .. } => {
+                self.substitute_types_in_expr(
+                    source,
+                    substitution,
+                    type_table,
+                    local_count,
+                    locals,
+                );
+            }
             TirExprKind::TupleSpread { expr: inner } => {
                 self.substitute_types_in_expr(inner, substitution, type_table, local_count, locals);
             }

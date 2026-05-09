@@ -284,13 +284,14 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, locals: &mut Vec<TirL
             }
             changed
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             let mut changed = false;
             for e in elements {
                 changed |= fuse_in_expr(e, local_count, locals);
             }
             changed
         }
+        TirExprKind::MultiValueProject { source, .. } => fuse_in_expr(source, local_count, locals),
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 fuse_in_expr(p, local_count, locals)
@@ -767,10 +768,15 @@ fn count_local_uses_in_expr(expr: &TirExpr, local_idx: u32) -> usize {
             .iter()
             .map(|f| count_local_uses_in_expr(&f.value, local_idx))
             .sum(),
-        TirExprKind::TupleLiteral { elements } => elements
-            .iter()
-            .map(|e| count_local_uses_in_expr(e, local_idx))
-            .sum(),
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+            elements
+                .iter()
+                .map(|e| count_local_uses_in_expr(e, local_idx))
+                .sum()
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            count_local_uses_in_expr(source, local_idx)
+        }
         TirExprKind::VariantConstruct { payload, .. } => payload
             .as_ref()
             .map_or(0, |p| count_local_uses_in_expr(p, local_idx)),
@@ -958,10 +964,15 @@ fn count_variant_payload_uses_in_expr(expr: &TirExpr, local_idx: u32, case_index
             .iter()
             .map(|f| count_variant_payload_uses_in_expr(&f.value, local_idx, case_index))
             .sum(),
-        TirExprKind::TupleLiteral { elements } => elements
-            .iter()
-            .map(|e| count_variant_payload_uses_in_expr(e, local_idx, case_index))
-            .sum(),
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+            elements
+                .iter()
+                .map(|e| count_variant_payload_uses_in_expr(e, local_idx, case_index))
+                .sum()
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            count_variant_payload_uses_in_expr(source, local_idx, case_index)
+        }
         TirExprKind::VariantConstruct { payload, .. } => payload.as_ref().map_or(0, |p| {
             count_variant_payload_uses_in_expr(p, local_idx, case_index)
         }),
@@ -1648,6 +1659,8 @@ fn transform_lb_in_expr(
         | TirExprKind::IndirectCall { .. }
         | TirExprKind::StructLiteral { .. }
         | TirExprKind::TupleLiteral { .. }
+        | TirExprKind::MultiValueLiteral { .. }
+        | TirExprKind::MultiValueProject { .. }
         | TirExprKind::VariantConstruct { .. }
         | TirExprKind::VariantTag { .. }
         | TirExprKind::VariantTest { .. }
@@ -1848,10 +1861,13 @@ fn subst_variant_payload_in_expr(
                 subst_variant_payload_in_expr(&mut f.value, temp_local, case_index, payload_local);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for e in elements {
                 subst_variant_payload_in_expr(e, temp_local, case_index, payload_local);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            subst_variant_payload_in_expr(source, temp_local, case_index, payload_local);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
@@ -2095,9 +2111,14 @@ fn expr_has_free_unlabeled_loop_exit(expr: &TirExpr, loop_depth: u32) -> bool {
         TirExprKind::StructLiteral { fields, .. } => fields
             .iter()
             .any(|f| expr_has_free_unlabeled_loop_exit(&f.value, loop_depth)),
-        TirExprKind::TupleLiteral { elements } => elements
-            .iter()
-            .any(|e| expr_has_free_unlabeled_loop_exit(e, loop_depth)),
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+            elements
+                .iter()
+                .any(|e| expr_has_free_unlabeled_loop_exit(e, loop_depth))
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            expr_has_free_unlabeled_loop_exit(source, loop_depth)
+        }
         TirExprKind::VariantConstruct { payload, .. } => payload
             .as_deref()
             .is_some_and(|p| expr_has_free_unlabeled_loop_exit(p, loop_depth)),

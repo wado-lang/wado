@@ -1829,10 +1829,13 @@ fn walk_expr_mut(expr: &mut TirExpr, ctx: &RewriteCtx) {
                 rewrite_expr_inplace(&mut f.value, ctx);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for e in elements {
                 rewrite_expr_inplace(e, ctx);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            rewrite_expr_inplace(source, ctx);
         }
         TirExprKind::Closure { body, .. } => {
             rewrite_expr_inplace(body, ctx);

@@ -4003,6 +4003,15 @@ impl<'a> TirUnparser<'a> {
             TirExprKind::TupleLiteral { elements } => {
                 self.delimited("[", "]", elements, TirUnparser::unparse_expr);
             }
+            TirExprKind::MultiValueLiteral { elements } => {
+                self.output.push_str("mv");
+                self.delimited("[", "]", elements, TirUnparser::unparse_expr);
+            }
+            TirExprKind::MultiValueProject { source, index } => {
+                self.unparse_expr(source);
+                self.output.push_str(".mv.");
+                self.output.push_str(&index.to_string());
+            }
             TirExprKind::TupleSpread { expr } | TirExprKind::TupleZip { expr } => {
                 self.output.push_str("[..");
                 self.unparse_expr(expr);
@@ -4384,5 +4393,82 @@ mod tests {
     fn test_compound_op_str() {
         assert_eq!(compound_op_str(CompoundAssignOp::Add), "+=");
         assert_eq!(compound_op_str(CompoundAssignOp::Div), "/=");
+    }
+
+    #[test]
+    fn test_unparse_multi_value_literal() {
+        use crate::Span;
+        use crate::tir::{TirExpr, TirExprKind, TypeTable};
+
+        let mut type_table = TypeTable::new();
+        let elem_ty = TypeTable::I32;
+        let tuple_ty = type_table.make_tuple(vec![elem_ty, elem_ty]);
+        let elem = |v: u64| {
+            TirExpr::new(
+                TirExprKind::IntLiteral {
+                    repr: v.to_string(),
+                    value: v,
+                },
+                elem_ty,
+                Span::default(),
+            )
+        };
+        let mv = TirExpr::new(
+            TirExprKind::MultiValueLiteral {
+                elements: vec![elem(1), elem(2)],
+            },
+            tuple_ty,
+            Span::default(),
+        );
+
+        let mut unparser = TirUnparser::new(&type_table);
+        unparser.unparse_expr(&mv);
+        assert_eq!(unparser.output, "mv[1, 2]");
+    }
+
+    #[test]
+    fn test_unparse_multi_value_project() {
+        use crate::Span;
+        use crate::tir::{TirExpr, TirExprKind, TypeTable};
+
+        let mut type_table = TypeTable::new();
+        let elem_ty = TypeTable::I32;
+        let tuple_ty = type_table.make_tuple(vec![elem_ty, elem_ty]);
+        let mv = TirExpr::new(
+            TirExprKind::MultiValueLiteral {
+                elements: vec![
+                    TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            repr: "1".to_string(),
+                            value: 1,
+                        },
+                        elem_ty,
+                        Span::default(),
+                    ),
+                    TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            repr: "2".to_string(),
+                            value: 2,
+                        },
+                        elem_ty,
+                        Span::default(),
+                    ),
+                ],
+            },
+            tuple_ty,
+            Span::default(),
+        );
+        let project = TirExpr::new(
+            TirExprKind::MultiValueProject {
+                source: Box::new(mv),
+                index: 1,
+            },
+            elem_ty,
+            Span::default(),
+        );
+
+        let mut unparser = TirUnparser::new(&type_table);
+        unparser.unparse_expr(&project);
+        assert_eq!(unparser.output, "mv[1, 2].mv.1");
     }
 }

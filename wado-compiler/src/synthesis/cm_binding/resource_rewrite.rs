@@ -763,10 +763,13 @@ fn rewrite_cm_methods_in_expr(
                 rewrite_cm_methods_in_expr(&mut f.value, tt, entry_source, wasi_registry);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for e in elements {
                 rewrite_cm_methods_in_expr(e, tt, entry_source, wasi_registry);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            rewrite_cm_methods_in_expr(source, tt, entry_source, wasi_registry);
         }
         TirExprKind::FieldAccess { expr, .. } => {
             rewrite_cm_methods_in_expr(expr, tt, entry_source, wasi_registry);

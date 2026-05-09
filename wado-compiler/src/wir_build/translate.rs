@@ -1855,7 +1855,12 @@ impl FunctionTranslator<'_, '_> {
                 index: index_expr,
             } => self.translate_index(array_expr, index_expr),
 
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements }
+            | TirExprKind::MultiValueLiteral { elements } => {
+                // Phase 1: MultiValueLiteral materializes as a heap tuple struct,
+                // identical to TupleLiteral. Later phases (Phase 2's collapse pass
+                // and Phase 4's reify-on-escape) optimize the cases where the
+                // struct allocation can be elided.
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, expr.type_id);
                 let wir_type_id = match &wir_type {
                     WirType::Ref { type_id, .. } => Some(type_id.clone()),
@@ -1875,7 +1880,7 @@ impl FunctionTranslator<'_, '_> {
                 };
                 let Some(type_id) = wir_type_id else {
                     panic!(
-                        "[WIR] TupleLiteral could not resolve a tuple struct type (expr type_id={:?}, elements={})",
+                        "[WIR] tuple literal could not resolve a tuple struct type (expr type_id={:?}, elements={})",
                         expr.type_id,
                         elements.len()
                     );
@@ -1894,6 +1899,34 @@ impl FunctionTranslator<'_, '_> {
                     .map(|e| self.translate_expr(e))
                     .collect();
                 self.struct_new(type_id, field_instrs)
+            }
+
+            TirExprKind::MultiValueProject { source, index } => {
+                // Phase 1: project from the materialized tuple struct via StructGet.
+                // The field_name convention for tuples is the index as a string
+                // (see lower/pattern.rs and resolver/expr.rs spread expansion).
+                if expr.type_id == TypeTable::UNIT {
+                    let recv = self.translate_expr(source);
+                    return WirInstr::Seq(vec![WirInstr::Drop(Box::new(recv))]);
+                }
+                let recv = self.translate_expr(source);
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, source.type_id);
+                let WirType::Ref { type_id, .. } = wir_type else {
+                    panic!(
+                        "[WIR] MultiValueProject source expected Ref WirType, got {wir_type:?} (index={index}, type_id={:?})",
+                        source.type_id
+                    );
+                };
+                let field_name = index.to_string();
+                let result_ty = self.struct_field_wir_type(&type_id, &field_name);
+                WirInstr::StructGet {
+                    type_id,
+                    field_name,
+                    expr: Box::new(recv),
+                    result_ty,
+                }
             }
 
             TirExprKind::TupleSpread { .. }
