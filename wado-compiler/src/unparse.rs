@@ -1603,7 +1603,7 @@ impl<'a> Unparser<'a> {
 
     /// Emit `(arg1,\n arg2,\n ...)` with a trailing comma at the current indent.
     /// Same comment-attachment rule as the single-line variant: leading
-    /// block trivia for each arg's AstId is emitted on the wrapped line
+    /// block trivia for each arg's `AstId` is emitted on the wrapped line
     /// before the arg expression.
     fn emit_multiline_call_args(&mut self, args: &[Expr]) {
         self.output.push_str("(\n");

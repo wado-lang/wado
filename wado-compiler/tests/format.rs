@@ -402,7 +402,7 @@ fn test_format_trailing_comment_on_field() {
 /// integer literals. The formatter must keep the comment attached to the
 /// argument (not silently drop it nor strand it as a free-standing comment
 /// after the statement). Found 2026-05 while landing the package-gale
-/// Phase 5 LL FollowEnv work — see `package-gale/antlr4-compatibility.md`.
+/// Phase 5 LL `FollowEnv` work — see `package-gale/antlr4-compatibility.md`.
 #[test]
 fn test_format_preserves_inline_block_comment_in_call_args() {
     let source = r"fn caller() {
