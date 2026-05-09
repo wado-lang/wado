@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778335707495,
+  "lastUpdate": 1778338347777,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20561,6 +20561,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a5053c83186c755a5b8b4a2aded192f3aaf5d122"
         },
         "date": 1778335707128,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 511983,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4b00ec90466b332763baaa8110d68a772870c185",
+          "message": "Merge pull request #1030 from wado-lang/claude/fix-hello-tls-wado-lOFZa\n\nfeat: get example/hello_tls.wado working end-to-end",
+          "timestamp": "2026-05-09T23:43:23+09:00",
+          "tree_id": "e93db990e6ceffdadd69300f000c11faa3a3e5c0",
+          "url": "https://github.com/wado-lang/wado/commit/4b00ec90466b332763baaa8110d68a772870c185"
+        },
+        "date": 1778338347422,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
