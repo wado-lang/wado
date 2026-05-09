@@ -13,21 +13,33 @@
 //! Pinning rules — the pass conservatively skips:
 //!
 //! - Functions without a body (imports / extern declarations).
-//! - Functions exported at the world boundary (`is_export`, `is_cm_export`).
-//! - Synthesised CM bridges (`is_cm_binding`, `is_dispatch_wrapper`).
-//! - `is_ambient` / `is_async` functions (special call shapes).
+//! - Synthesised CM bridges (`is_cm_export`, `is_cm_binding`,
+//!   `is_dispatch_wrapper`). These sit on the world boundary; their
+//!   signatures are observed by the host runtime, not just by the
+//!   in-project call graph.
+//! - `is_ambient` functions (special call shapes — effect-handler
+//!   dispatch carries an implicit handler param the call sites assume).
 //! - Non-`Regular` `FunctionKind` entries (specialised stubs).
 //! - Builtin / wasm-asset modules (their signatures are part of the ABI).
 //! - Trait methods (`method_info.trait_name.is_some()`) — sibling impls and
 //!   the trait declaration share a signature contract.
 //! - Functions whose pointer is taken via `FuncRef` anywhere in the project.
-//! - Methods (`method_info.is_some()`) — for the receiver position only;
-//!   higher positions are still candidates because they map cleanly onto
-//!   `MethodCall.args`. The closure-functor `__call` exception lifts even
-//!   the receiver pin, since `wir_build` can adapt the wrapper and the
-//!   rewriter can collapse `MethodCall(g, __call, args)` to `Call(__call,
-//!   args)` when `g` is observation-free; see `collect_closure_call_keys`
-//!   and `apply_dae`.
+//!
+//! `is_export` is NOT a pin: every user `export fn` reaches the world
+//! boundary through a synthesised CM wrapper (`__cm_export__<name>`,
+//! `is_cm_export = true`). The wrapper is the boundary; the user
+//! function is internal — only the wrapper calls it — and the validator
+//! sees the call site, so DAE shrinks the user function safely. The
+//! wrapper's signature is held fixed by the `is_cm_export` pin above.
+//!
+//! Methods receive no special pin either. A method whose `self` is dead
+//! is rewritten by `apply_dae` from `MethodCall(recv, name, args)` to
+//! `Call(method_func, args)` at every call site, mirroring what was
+//! previously implemented for closure-functor `__call` only. The
+//! `closure_call_keys` set still exists for one purpose: to lift the
+//! `trait_name` pin on the closure-functor's `^Inspect` /
+//! `^InspectAlt` impls, where the matching wrapper adapts to the
+//! shrunken signature. Everything else flows through the general path.
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -54,7 +66,7 @@ pub fn eliminate_dead_arguments(project: &mut FlatPackage) -> bool {
         if !is_eligible(&func, &pinned, is_closure_dae_relaxed) {
             continue;
         }
-        let dead = find_dead_params(&func, is_closure_dae_relaxed);
+        let dead = find_dead_params(&func);
         if dead.iter().any(|&d| d) {
             candidates.insert(key, dead);
         }
@@ -65,13 +77,13 @@ pub fn eliminate_dead_arguments(project: &mut FlatPackage) -> bool {
 
     // Phase 2: validate every call site passes side-effect-free args at the
     // dead positions. A single offending site rejects the candidate entirely.
-    let confirmed = validate_call_sites(project, candidates, &closure_call_keys);
+    let confirmed = validate_call_sites(project, candidates);
     if confirmed.is_empty() {
         return false;
     }
 
     // Phase 3: rewrite signatures and call sites.
-    apply_dae(project, &confirmed, &closure_call_keys);
+    apply_dae(project, &confirmed);
     true
 }
 
@@ -135,12 +147,28 @@ fn is_eligible(func: &TirFunction, pinned: &IndexSet<FnKey>, is_closure_dae_rela
     if func.body.is_none() {
         return false;
     }
-    if func.is_export
-        || func.is_cm_export
+    // `is_export` and `is_async` are intentionally absent. Both flags
+    // describe the user's source-level intent (this is exported / this
+    // was originally `async`), not a real-call-shape constraint that
+    // DAE would have to honour:
+    //
+    // * Every `export fn` reaches the runtime through a synthesised
+    //   `is_cm_export` wrapper. The wrapper is the boundary; the user
+    //   function is internal-only, with the wrapper as its sole caller
+    //   — and the rewriter updates that call site. Pinning the user
+    //   function blocked DAE for arguments like an unused `request` on
+    //   `export async fn handle(request)`.
+    //
+    // * `is_async` propagates from desugar untouched, but the body is
+    //   already lowered to `cm_raw_call task-return(...)` and the call
+    //   shape from the `is_cm_export` wrapper is a regular `Call` —
+    //   the async ABI flattening (outptr / indirect params) only
+    //   applies to WASI imports inside `wir_build`, not to user
+    //   functions. The legacy WIR DAE did not check `is_async`.
+    if func.is_cm_export
         || func.is_cm_binding
         || func.is_dispatch_wrapper
         || func.is_ambient
-        || func.is_async
     {
         return false;
     }
@@ -174,14 +202,15 @@ fn is_eligible(func: &TirFunction, pinned: &IndexSet<FnKey>, is_closure_dae_rela
     true
 }
 
-/// Returns one bool per parameter: `true` means the parameter is unused and
-/// safe-to-remove. For methods the receiver position (index 0) is forced
-/// live so the rewriter never has to convert `MethodCall` → `Call`. The
-/// closure-functor `__call` exception (`is_closure_call == true`) honours
-/// receiver-position deadness, since the rewriter knows how to retarget
-/// closure call sites — see `apply_dae` and
-/// `wir_build::register_closure_wrappers`.
-fn find_dead_params(func: &TirFunction, is_closure_call: bool) -> Vec<bool> {
+/// Returns one bool per parameter: `true` means the parameter is unused
+/// and safe-to-remove. The receiver position (index 0 for methods) gets
+/// no special pin — `apply_dae` knows how to rewrite a method whose
+/// `self` is dead into a plain `Call(method_func, args)` at every call
+/// site (`MethodCall → Call` collapse, see `CallRewriter`). The
+/// validator (`CallSiteValidator`) gates this on receiver purity so
+/// that dropping the receiver evaluation cannot strip an observable
+/// effect.
+fn find_dead_params(func: &TirFunction) -> Vec<bool> {
     if func.params.is_empty() {
         return Vec::new();
     }
@@ -193,12 +222,7 @@ fn find_dead_params(func: &TirFunction, is_closure_call: bool) -> Vec<bool> {
     let stores_aliased = &func.stores_aliased_locals;
 
     let mut dead = Vec::with_capacity(func.params.len());
-    let receiver_is_self_pinned = func.method_info.is_some() && !is_closure_call;
-    for (i, p) in func.params.iter().enumerate() {
-        if i == 0 && receiver_is_self_pinned {
-            dead.push(false);
-            continue;
-        }
+    for p in &func.params {
         let is_read = reads.contains(&p.local_index);
         let is_kept = kept_locals.contains(&p.local_index);
         let is_aliased = stores_aliased.contains(&p.local_index);
@@ -262,11 +286,9 @@ impl TirRefVisitor for FuncRefCollector<'_> {
 fn validate_call_sites(
     project: &FlatPackage,
     mut candidates: IndexMap<FnKey, Vec<bool>>,
-    closure_call_keys: &IndexSet<FnKey>,
 ) -> IndexMap<FnKey, Vec<bool>> {
     let mut validator = CallSiteValidator {
         candidates: &candidates,
-        closure_call_keys,
         rejected: IndexSet::default(),
     };
     for func_rc in &project.functions {
@@ -286,7 +308,6 @@ fn validate_call_sites(
 
 struct CallSiteValidator<'a> {
     candidates: &'a IndexMap<FnKey, Vec<bool>>,
-    closure_call_keys: &'a IndexSet<FnKey>,
     rejected: IndexSet<FnKey>,
 }
 
@@ -326,12 +347,11 @@ impl TirRefVisitor for CallSiteValidator<'_> {
                 if let Some(dead) = self.candidates.get(&key)
                     && !self.rejected.contains(&key)
                 {
-                    let drops_receiver =
-                        self.closure_call_keys.contains(&key) && dead.first() == Some(&true);
-                    // If the rewriter is going to drop position 0 (closure
-                    // `__call` only), the MethodCall collapses to a `Call`
-                    // and the receiver expression is discarded — it must be
-                    // pure for that to be observation-free.
+                    // If the rewriter is going to drop the receiver, the
+                    // MethodCall collapses to a `Call` and the receiver
+                    // expression is discarded — it must be pure for that to
+                    // be observation-free.
+                    let drops_receiver = dead.first() == Some(&true);
                     if drops_receiver && !is_pure_expr(receiver) {
                         self.rejected.insert(key.clone());
                     } else {
@@ -360,11 +380,7 @@ impl TirRefVisitor for CallSiteValidator<'_> {
     }
 }
 
-fn apply_dae(
-    project: &mut FlatPackage,
-    confirmed: &IndexMap<FnKey, Vec<bool>>,
-    closure_call_keys: &IndexSet<FnKey>,
-) {
+fn apply_dae(project: &mut FlatPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) {
     // Phase 3a: shrink the parameter list of every confirmed callee, then
     // renumber locals so `params[k].local_index == k` continues to hold.
     // `wir_build/translate.rs` declares `locals[i] for i >= params.len()`
@@ -380,10 +396,7 @@ fn apply_dae(
     }
 
     // Phase 3b: rewrite every call site.
-    let mut rewriter = CallRewriter {
-        confirmed,
-        closure_call_keys,
-    };
+    let mut rewriter = CallRewriter { confirmed };
     let funcs = project.functions.clone();
     for func_rc in &funcs {
         let mut func = func_rc.borrow_mut();
@@ -398,7 +411,6 @@ fn apply_dae(
 
 struct CallRewriter<'a> {
     confirmed: &'a IndexMap<FnKey, Vec<bool>>,
-    closure_call_keys: &'a IndexSet<FnKey>,
 }
 
 impl TirMutVisitor for CallRewriter<'_> {
@@ -424,12 +436,11 @@ impl TirMutVisitor for CallRewriter<'_> {
                 let Some(dead) = self.confirmed.get(&key).cloned() else {
                     return;
                 };
-                let drops_receiver =
-                    self.closure_call_keys.contains(&key) && dead.first() == Some(&true);
+                let drops_receiver = dead.first() == Some(&true);
                 if drops_receiver {
-                    // Closure functor `__call` whose `self` (env) was DAE'd:
-                    // collapse `MethodCall(g, __call, args)` to a plain
-                    // `Call(__call, surviving_args)`. The receiver
+                    // The callee's receiver was DAE'd: collapse
+                    // `MethodCall(recv, name, args)` to a plain
+                    // `Call(method_func, surviving_args)`. The receiver
                     // expression has already been verified pure by
                     // `CallSiteValidator`; dropping it is safe.
                     let TirExprKind::MethodCall {
