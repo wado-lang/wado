@@ -60,6 +60,22 @@ pub(super) fn collect_local_gets_deep(instr: &WirInstr, names: &mut IndexSet<Str
     });
 }
 
+/// True if no node in `instr`'s sub-tree is observable. Pure loads
+/// (`StructGet`, `ArrayGet*`, memory loads, `LocalGet`, `GlobalGet`) and
+/// arithmetic / ref ops are treated as side-effect-free.
+pub(super) fn is_side_effect_free(instr: &WirInstr) -> bool {
+    if is_root_observable(instr) {
+        return false;
+    }
+    let mut ok = true;
+    instr.for_each_child(&mut |child| {
+        if ok && !is_side_effect_free(child) {
+            ok = false;
+        }
+    });
+    ok
+}
+
 /// True if the *root* of `instr` would change observable program behavior on
 /// its own. Covers explicit state mutation (heap / global / local / table),
 /// calls (potentially I/O), the explicit [`WirInstr::Unreachable`] trap, and
@@ -67,7 +83,8 @@ pub(super) fn collect_local_gets_deep(instr: &WirInstr, names: &mut IndexSet<Str
 /// implicit-trap ops (integer divide / remainder, float→int trunc, OOB heap
 /// reads / loads, null `ref.as_non_null` / `ref.cast`, etc.) as observable.
 ///
-/// Does not look at children; recurse manually for tree purity.
+/// Does not look at children; combine with recursion (see
+/// [`is_side_effect_free`]) for tree purity.
 pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
     matches!(
         instr,

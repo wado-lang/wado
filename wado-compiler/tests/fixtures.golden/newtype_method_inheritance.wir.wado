@@ -95,8 +95,6 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "wado-compiler/tests/fixtures/newtype_method_inheritance.wado/run"() with Stdout {
-    let loc1: ref "wado-compiler/tests/fixtures/newtype_method_inheritance.wado//Point";
-    let loc2: ref "wado-compiler/tests/fixtures/newtype_method_inheritance.wado//Point";
     let s: i32;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
@@ -115,12 +113,11 @@ fn "wado-compiler/tests/fixtures/newtype_method_inheritance.wado/run"() with Std
     let f_38: ref "core:prelude/format.wado//Formatter";
     let __sroa_loc3_x: i32;
     let __sroa_loc3_y: i32;
-    loc1 = __inline__value_copy_T20_2: block -> ref "wado-compiler/tests/fixtures/newtype_method_inheritance.wado//Point" {
+    drop(__inline__value_copy_T20_2: block -> ref "wado-compiler/tests/fixtures/newtype_method_inheritance.wado//Point" {
         v = struct.new "wado-compiler/tests/fixtures/newtype_method_inheritance.wado//Point" { x: 10, y: 20 };
         break __inline__value_copy_T20_2: struct.new "wado-compiler/tests/fixtures/newtype_method_inheritance.wado//Point" { x: 10, y: 20 };
         unreachable;
-    };
-    loc2 = struct.new "wado-compiler/tests/fixtures/newtype_method_inheritance.wado//Point" { x: 5, y: 5 };
+    });
     s = 10 + 20;
     message_11 = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };

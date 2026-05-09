@@ -31,12 +31,27 @@ fn elide_in_function(func: &mut TirFunction) -> bool {
     if func.body.is_none() {
         return false;
     }
-    // Collect locals that must NOT be elided: any read site, any address-taken
-    // local, and any local whose reference escapes via `stores`. Captures are
-    // recorded too — even though the closure body uses its own local-index
-    // namespace, the conservative over-mark only suppresses elision and
-    // never produces an incorrect transform.
-    let mut kept: IndexSet<u32> = func.address_taken_locals.clone();
+    // Collect locals that must NOT be elided. Three sources:
+    //
+    // 1. Every body read of `Local { index }`, including the inner `Local`
+    //    of `Unary { op: Ref / MutRef, expr: Local }` — `&local` and
+    //    `&mut local` count as reads, since their values can later be
+    //    dereferenced.
+    // 2. Closure captures' `outer_index` — over-mark relative to the
+    //    closure body's own local namespace, but always safe.
+    // 3. `stores_aliased_locals` — params whose reference escaped via a
+    //    callee's `stores` declaration. The callee may retain that
+    //    reference past its return, so writes through the local stay
+    //    observable via the alias.
+    //
+    // `address_taken_locals` is *not* used as a kept-set source. That
+    // field is set during `lower::boxing` and reflects a static "address
+    // ever taken" property of the source TIR. After `inline` /
+    // `ref_elim` strip away `&local` references, the field is stale —
+    // including it would re-pin locals whose address-taking sites are
+    // no longer in the body. Source 1 already catches every live
+    // `&local`, so the static record is redundant.
+    let mut kept: IndexSet<u32> = IndexSet::default();
     for &i in &func.stores_aliased_locals {
         kept.insert(i);
     }

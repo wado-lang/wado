@@ -95,8 +95,6 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "wado-compiler/tests/fixtures/newtype_chained_method.wado/run"() with Stdout {
-    let c1: ref "wado-compiler/tests/fixtures/newtype_chained_method.wado//Point";
-    let c2: ref "wado-compiler/tests/fixtures/newtype_chained_method.wado//Point";
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let v: ref "wado-compiler/tests/fixtures/newtype_chained_method.wado//Point";
@@ -108,12 +106,11 @@ fn "wado-compiler/tests/fixtures/newtype_chained_method.wado/run"() with Stdout 
     let f_22: ref "core:prelude/format.wado//Formatter";
     let __sroa_c3_x: i32;
     let __sroa_c3_y: i32;
-    c1 = __inline__value_copy_T22_2: block -> ref "wado-compiler/tests/fixtures/newtype_chained_method.wado//Point" {
+    drop(__inline__value_copy_T22_2: block -> ref "wado-compiler/tests/fixtures/newtype_chained_method.wado//Point" {
         v = struct.new "wado-compiler/tests/fixtures/newtype_chained_method.wado//Point" { x: 1, y: 2 };
         break __inline__value_copy_T22_2: struct.new "wado-compiler/tests/fixtures/newtype_chained_method.wado//Point" { x: 1, y: 2 };
         unreachable;
-    };
-    c2 = struct.new "wado-compiler/tests/fixtures/newtype_chained_method.wado//Point" { x: 3, y: 4 };
+    });
     __sroa_c3_x = 1 + 3;
     __sroa_c3_y = 2 + 4;
     message = __tmpl: block -> ref "core:prelude/string.wado//String" {

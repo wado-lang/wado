@@ -95,7 +95,6 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "wado-compiler/tests/fixtures/newtype_trait_method.wado/run"() with Stdout {
-    let loc: ref "wado-compiler/tests/fixtures/newtype_trait_method.wado//Point";
     let d: i32;
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
@@ -104,11 +103,11 @@ fn "wado-compiler/tests/fixtures/newtype_trait_method.wado/run"() with Stdout {
     let rx: i32;
     let tx: i32;
     let handle: i32;
-    loc = __inline__value_copy_T20_2: block -> ref "wado-compiler/tests/fixtures/newtype_trait_method.wado//Point" {
+    drop(__inline__value_copy_T20_2: block -> ref "wado-compiler/tests/fixtures/newtype_trait_method.wado//Point" {
         v = struct.new "wado-compiler/tests/fixtures/newtype_trait_method.wado//Point" { x: 10, y: 20 };
         break __inline__value_copy_T20_2: struct.new "wado-compiler/tests/fixtures/newtype_trait_method.wado//Point" { x: 10, y: 20 };
         unreachable;
-    };
+    });
     d = 10 + 20;
     message = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };

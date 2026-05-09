@@ -13,21 +13,28 @@
 //! | `array`           | Push collapse / data promotion / splitting  |
 //! | `const_forward`   | Struct field constant forwarding            |
 //! | `peephole`        | Constant folding, copy elision, MV elision  |
+//! | `elide_local`     | Write-only local elim for WIR-only locals  |
 //! | `cleanup`         | Nop/dead-code removal, normalization        |
 //! | `init_guard`      | Trivial init-guard global removal           |
 //! | `dce`             | Dead code / type / global elimination       |
 //!
-//! Dead-argument / dead-return-value / write-only-local elimination used to
-//! live here too. They were moved to TIR (`optimize::dae`, `optimize::drve`,
-//! `optimize::elide_local`) so they can interact with `inline` / `copy_prop`
-//! / `const_fold` / `dce` inside the same fixed-point loop. Disabling the
-//! WIR copies showed no test or benchmark regression — the patterns the WIR
-//! versions used to cover are now caught earlier at TIR.
+//! Dead-argument / dead-return-value elimination used to live here. They
+//! were moved to TIR (`optimize::dae`, `optimize::drve`) so they can
+//! interact with `inline` / `copy_prop` / `const_fold` / `dce` inside the
+//! same fixed-point loop.
+//!
+//! Write-only-local elimination is split across both layers:
+//! `optimize::elide_local` handles TIR locals (user `let`, SROA / variant
+//! shadow temps); `wir_optimize::elide_local` handles locals synthesised
+//! by `wir_build` (`__match_scrut_N`, multi-value temps, pair temps) that
+//! TIR cannot see. Both passes are narrow: they only elide locals that
+//! are never read.
 
 mod array;
 mod cleanup;
 mod const_forward;
 mod dce;
+mod elide_local;
 mod elide_struct;
 mod init_guard;
 mod nullable_ref;
@@ -47,6 +54,7 @@ use array::{
 };
 use cleanup::cleanup;
 use const_forward::forward_struct_field_constants;
+use elide_local::elide_write_only_locals;
 use elide_struct::{
     elide_adjacent_single_use_struct_locals, elide_multi_field_struct_locals,
     elide_single_field_struct_locals, flatten_seq_assignments,
@@ -176,8 +184,19 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     elide_multi_field_struct_locals(module);
     profiler.span_end("wir/phase5_peephole");
 
-    // Phase 6 (dead value elimination) used to live here. See module-level
-    // doc comment.
+    // Phase 6: Write-only local elimination for WIR-synthesised locals
+    //
+    // TIR's `optimize::elide_local` only sees TIR locals. The WIR builder
+    // synthesises locals during lowering — `__match_scrut_N` for match
+    // scrutinee binding, multi-value temps, `__pair_temp_N` for
+    // Future/Stream pair returns — that no TIR pass can reach. Once the
+    // surrounding lowering shape turns out not to need their value (e.g.
+    // every match arm uses wildcard / binding patterns), they sit as
+    // dead writes. Strip them here so codegen doesn't emit unreachable
+    // locals.
+    wir_pass("wir/elide_write_only_locals", module, profiler, |m| {
+        elide_write_only_locals(m);
+    });
 
     // Phase 7: Global cleanup
     //
