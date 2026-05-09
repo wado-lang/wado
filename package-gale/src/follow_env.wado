@@ -25,17 +25,17 @@ impl FollowSet {
 
 /// Pure analysis output: the FOLLOW environment of a grammar.
 ///
-/// Built once from the parser-rule IR via [`build`] and consumed by the
-/// codegen layer through read-only accessors. No codegen state, no
-/// `CodeWriter`. The mask-aware variant codegen (Phase 2) consults this
-/// to decide which `(rule, mask)` variants to emit and which call sites
-/// dispatch to them.
-///
-/// Phase 1 step 2 contents: per-rule `tail_greedy` snapshot plus
-/// `rule_follow` computed as the call-graph fixed point. The codegen
-/// path consumes only `tail_greedy` so far; `rule_follow` is verified
-/// by `follow_env_test.wado` and will become a codegen input in
-/// Phase 1 step 3 (`call_site_follow` with nullable-suffix propagation).
+/// Built once from the parser-rule IR via [`build`]. No codegen state,
+/// no `CodeWriter`. Today this is **standalone analysis surface** —
+/// the codegen path still computes the same information on the fly via
+/// `GenContext::tail_greedy_first_of_rule` and the per-position
+/// `compute_ruleref_call_follow` helper. `FollowEnv` exists as the
+/// pre-computed snapshot a future refactor (see
+/// `package-gale/TODO.md` "LL prediction — architecture cleanup")
+/// would have codegen consult instead, replacing the in-walker
+/// `intern_follow_variant` registration with a pure lookup. Until
+/// that refactor lands, the analysis is exercised end-to-end only by
+/// `follow_env_test.wado`.
 pub struct FollowEnv {
     /// Token kinds the rule may *greedily* consume at tail position
     /// (Optional/Star/Plus elements with no required successor in the

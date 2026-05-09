@@ -226,12 +226,6 @@ impl TriviaMap {
     pub fn dangling(&self) -> &[Comment] {
         &self.dangling
     }
-
-    /// Iterate every leading comment by `(AstId, &[Comment])`. Useful for
-    /// the unparser's emitted-set seeding and for diagnostic dumps.
-    pub fn iter_leading(&self) -> impl Iterator<Item = (AstId, &[Comment])> {
-        self.leading.iter().map(|(id, cs)| (*id, cs.as_slice()))
-    }
 }
 
 #[cfg(test)]

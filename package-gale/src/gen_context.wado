@@ -114,9 +114,8 @@ pub struct GenContext {
     /// FOLLOW set propagated from outside the alt currently being
     /// walked. Empty during regular `parse_X` / `scan_X` emission;
     /// set to the variant's mask while emitting a `__follow_<id>`
-    /// variant body (`gen_parse_follow_variant`,
-    /// `gen_scan_follow_variant`). Alt walkers consult it when the
-    /// immediate suffix at a `RuleRef` site is deep-nullable —
+    /// variant body (`emit_follow_variant`). Alt walkers consult it
+    /// when the immediate suffix at a `RuleRef` site is deep-nullable —
     /// without this propagation, a passthrough rule whose body is
     /// `a` alone would compute an empty FOLLOW for the inner `a`
     /// even when the variant's caller had already promised a
@@ -841,8 +840,8 @@ impl GenContext {
     }
 
     /// All registered follow variants in registration (= id) order.
-    /// Consumed by `gen_scan_follow_variants` and
-    /// `gen_parse_follow_variants`. O(n) — each `follow_variant_order`
+    /// Consumed by `emit_follow_variant` via the fixed-point loop in
+    /// `gen_parser`. O(n) — each `follow_variant_order`
     /// entry is the registry key, so we look up directly.
     pub fn follow_variants(&self) -> Array<FollowVariantEntry> {
         let mut out: Array<FollowVariantEntry> = [];
