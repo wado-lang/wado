@@ -462,24 +462,7 @@ impl FunctionTranslator<'_, '_> {
             }
         }
 
-        // Wrap everything: declare local, set, then the if-else chain.
-        //
-        // When *no* arm reads the scrutinee local — every pattern is a
-        // wildcard / binding-of-wildcard, or the scrut value was constant-
-        // folded into the arm conditions — the declare + set pair would
-        // become a pure write-only local in the lowered output. WIR
-        // write-only-local elimination used to mop these up; with that
-        // pass moved to TIR, we have to skip emitting them here. Pure
-        // scrutinee expressions (no side effects) are simply dropped;
-        // impure ones become a side-effect-only `Drop(scrut)` so any
-        // observable behaviour the user wrote (a panicking call, etc.) is
-        // preserved.
-        if !instr_references_local(&result, &scrut_local_name) {
-            if instr_is_pure(&scrut) {
-                return result;
-            }
-            return WirInstr::Seq(vec![WirInstr::Drop(Box::new(scrut)), result]);
-        }
+        // Wrap everything: declare local, set, then the if-else chain
         WirInstr::Seq(vec![
             WirInstr::DeclareLocal {
                 name: scrut_local_name.clone(),
@@ -1610,72 +1593,6 @@ impl FunctionTranslator<'_, '_> {
         // Fallback
         val
     }
-}
-
-/// True when any descendant of `instr` is `LocalGet { name == target }`.
-/// Used by `translate_match` to decide whether the scrutinee local needs to
-/// be materialised at all.
-fn instr_references_local(instr: &WirInstr, target: &str) -> bool {
-    if let WirInstr::LocalGet { name, .. } = instr
-        && name == target
-    {
-        return true;
-    }
-    let mut found = false;
-    instr.for_each_child(&mut |child| {
-        if !found && instr_references_local(child, target) {
-            found = true;
-        }
-    });
-    found
-}
-
-/// True when `instr` is observation-free: every node in its subtree is a
-/// pure read (`LocalGet`, `GlobalGet`, `StructGet`, arithmetic, etc.) and
-/// no node is a `Call` / `Set` / `Store` / `Trap` / control-flow exit.
-/// Conservative — when in doubt, return false. Mirrors
-/// `wir_optimize::util::is_root_observable`'s contract; duplicated here
-/// because the two `wir_*` crates do not share that helper publicly and
-/// this is the only `wir_build` site that needs the predicate.
-fn instr_is_pure(instr: &WirInstr) -> bool {
-    if matches!(
-        instr,
-        // Calls.
-        WirInstr::Call { .. }
-        | WirInstr::CallIndirect { .. }
-        | WirInstr::CallRef { .. }
-        // Local / global / struct / array / linear-memory writes.
-        | WirInstr::LocalSet { .. }
-        | WirInstr::LocalTee { .. }
-        | WirInstr::GlobalSet { .. }
-        | WirInstr::StructSet { .. }
-        | WirInstr::ArraySet { .. }
-        | WirInstr::ArrayCopy { .. }
-        | WirInstr::ArrayFill { .. }
-        | WirInstr::TableSet { .. }
-        | WirInstr::MultiValueLocalBind { .. }
-        | WirInstr::I32Store { .. }
-        | WirInstr::I32Store8 { .. }
-        | WirInstr::I32Store16 { .. }
-        | WirInstr::I64Store { .. }
-        | WirInstr::V128Store { .. }
-        | WirInstr::MemoryGrow(_)
-        | WirInstr::MemoryFill { .. }
-        | WirInstr::Unreachable
-        | WirInstr::Br { .. }
-        | WirInstr::BrIf { .. }
-        | WirInstr::BrTable { .. }
-        | WirInstr::Return { .. }
-    ) {
-        return false;
-    }
-    let mut pure = true;
-    instr.for_each_child(&mut |child| {
-        if pure && !instr_is_pure(child) {
-            pure = false;
-        }
-    });
-    pure
 }
 
 fn pattern_has_bindings(pattern: &TirPattern) -> bool {
