@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778447335133,
+  "lastUpdate": 1778447564402,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20913,6 +20913,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7903c8bc5386ecdb337eacf3d97c8d16d5000394"
         },
         "date": 1778447334774,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 512036,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "92f87e8bddfe272044c2eb7021c440f8d6838a15",
+          "message": "Merge pull request #1041 from wado-lang/claude/refactor-test-performance-9VRYR\n\nrefactor(test): tidy export-name parsing, error flow, and per-module Linker",
+          "timestamp": "2026-05-11T06:03:29+09:00",
+          "tree_id": "68480b9b1780fddbe50a645ca4c2ca999e75ed59",
+          "url": "https://github.com/wado-lang/wado/commit/92f87e8bddfe272044c2eb7021c440f8d6838a15"
+        },
+        "date": 1778447564229,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
