@@ -1961,16 +1961,13 @@ impl TypeTable {
     /// it encounters and the later one's case-struct payload to silently
     /// inherit the wrong representation.
     ///
-    /// `Struct` is now qualified here too. Without it, two same-named
-    /// structs declared in distinct modules collapse to a single
-    /// `Array<S>` / `Box<S>` / etc. at the WIR layer because both
-    /// instantiations produce the identical mangled fq string. The WIR
-    /// then registers a single `Array<S>` whose element field references
-    /// just one of the two structs, and an instruction constructing the
-    /// other struct ends up stored into an array of the first — emitting
-    /// `struct.new <wrong-id>` and failing Wasm GC validation
-    /// ("expected (ref null $T), found (ref (exact $S))"). See
-    /// regression fixture `cross_module_same_name_struct_iter.wado`.
+    /// `Struct` is intentionally *not* qualified here: same-named structs
+    /// from different modules already get distinct
+    /// `StructName(ModuleSource, name)` map keys at the WIR layer, and
+    /// the monomorphizer's `instantiation_name` builds names with the
+    /// unqualified mangle. Threading qualified `Struct` names through
+    /// would require a lockstep update of every struct-identity map and
+    /// is out of scope for the bug-2 fix.
     ///
     /// Standalone uses (e.g. `mangle_type_name(ErrorCode)` outside a
     /// generic instance, or method-dispatch `base_struct_name`) keep the
@@ -2005,17 +2002,12 @@ impl TypeTable {
                 name,
                 module_source,
                 ..
-            }
-            | ResolvedType::Struct {
-                name,
-                module_source,
-                ..
             } => format!("{module_source}/{name}"),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.mangle_type_arg_for_generic(*inner)
             }
-            // GenericInstance / primitives / arrays / functions delegate
-            // to `mangle_type_name`. For `GenericInstance`, that
+            // GenericInstance / Struct / primitives / arrays / functions
+            // delegate to `mangle_type_name`. For `GenericInstance`, that
             // already recursively qualifies *its* type arguments through
             // this same function — see `get_type_name_info`.
             _ => self.mangle_type_name(id),
