@@ -785,14 +785,16 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     /// is initialized from another immutable local.
     pub(super) immutable_locals: IndexSet<u32>,
     /// TIR locals that hold a multi-value-call result, mapped to the WIR
-    /// split locals they were unpacked into. When a `let __tmp = Call(f)`
-    /// targets a function with `ReturnAbi::MultiValue`, we emit
+    /// split locals they were unpacked into, keyed by source field name.
+    /// When a `let __tmp = Call(f)` targets a function with
+    /// `ReturnAbi::MultiValue { field_names, .. }`, we emit
     /// `MultiValueLocalBind [__tmp_0, __tmp_1, …] = Call(f)` and record
-    /// `local_index → ["__tmp_0", "__tmp_1", …]` here. Subsequent
-    /// `MultiValueProject(LocalGet(__tmp), i)` accesses read split[i]
-    /// directly instead of `StructGet(__tmp, "i")` (which would panic at
-    /// codegen since `__tmp` was never assigned a struct ref).
-    pub(super) multi_value_split_locals: IndexMap<u32, Vec<(String, WirType)>>,
+    /// `local_index → { field_name → (split_local_name, ty) }`.
+    /// Subsequent `FieldAccess(LocalGet(__tmp), name)` accesses read the
+    /// matching split local directly instead of `StructGet(__tmp, name)`
+    /// (which would panic at codegen since `__tmp` was never assigned a
+    /// struct ref).
+    pub(super) multi_value_split_locals: IndexMap<u32, IndexMap<String, (String, WirType)>>,
 }
 
 impl FunctionTranslator<'_, '_> {
@@ -882,64 +884,59 @@ impl FunctionTranslator<'_, '_> {
         WirInstr::StructNew { type_id, fields }
     }
 
-    /// Phase 5: detect `let local = Call(f)` (or `MethodCall(f)`) where
-    /// `f` has `ReturnAbi::MultiValue` and emit `MultiValueLocalBind` to
-    /// N split locals instead of a single `LocalSet`. Returns `Some` if
-    /// the rewrite fired (the caller should not emit the regular
-    /// `LocalSet`).
+    /// Detect `let local = Call(f)` (or `MethodCall(f)`) where `f` has
+    /// `ReturnAbi::MultiValue` and emit `MultiValueLocalBind` to N split
+    /// locals instead of a single `LocalSet`. Returns `Some` if the
+    /// rewrite fired (the caller should not emit the regular `LocalSet`).
     ///
-    /// The split locals use names `<base>_mv_<i>` where `<base>` is the
-    /// TIR local name. Subsequent `MultiValueProject(LocalGet(local), i)`
-    /// accesses read split[i] directly via `multi_value_split_locals`.
+    /// The split locals use names `<base>_mv_<field_name>` where `<base>`
+    /// is the TIR local name. Subsequent
+    /// `FieldAccess(LocalGet(local), name)` accesses read the matching
+    /// split local directly via `multi_value_split_locals`.
     fn try_emit_multi_value_let(&mut self, local_index: u32, value: &TirExpr) -> Option<WirInstr> {
         // Only fire on direct `Call(f)` / `MethodCall(f)` initialisers —
         // wrapped calls (e.g. inlined Block) should have been simplified
         // before this point. Wrapped calls would also break the
-        // `MultiValueLocalBind { instr: <Call>, … }` shape peephole /
-        // codegen expects. `MethodCall` lowers to a single `WirInstr::Call`
-        // after receiver / arg translation, so it's interchangeable with
-        // `Call` for the multi-value-bind purpose.
+        // `MultiValueLocalBind { instr: <Call>, … }` shape codegen
+        // expects. `MethodCall` lowers to a single `WirInstr::Call` after
+        // receiver / arg translation, so it's interchangeable with `Call`
+        // for the multi-value-bind purpose.
         let func = match &value.kind {
             TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => func,
             _ => return None,
         };
         let key = (func.name.clone(), func.module_source.clone());
-        if !self.ctx.multi_value_return_funcs.contains(&key) {
-            return None;
+        let (field_names, result_types) = self.ctx.multi_value_return_funcs.get(&key)?.clone();
+
+        // Build per-field split locals: `<base>_mv_<field_name>`.
+        let base = self.local_name(local_index);
+        let mut split: IndexMap<String, (String, WirType)> = IndexMap::default();
+        let mut order: Vec<(String, String, WirType)> = Vec::with_capacity(field_names.len());
+        for (field_name, &result_type) in field_names.iter().zip(result_types.iter()) {
+            let local_name = format!("{base}_mv_{field_name}");
+            let wir_ty = self.ctx.type_id_to_wir_type(self.type_table, result_type);
+            split.insert(field_name.clone(), (local_name.clone(), wir_ty.clone()));
+            order.push((field_name.clone(), local_name, wir_ty));
         }
-        // Look up the tuple result types.  The TIR pass already validated
-        // that the return type is a 2-4 element tuple; failure here would
-        // indicate a producer/consumer disagreement.
-        let result_types = self.type_table.as_tuple(value.type_id)?;
-        let split: Vec<(String, WirType)> = result_types
-            .iter()
-            .enumerate()
-            .map(|(i, &elem_type)| {
-                let base = self.local_name(local_index);
-                let name = format!("{base}_mv_{i}");
-                let wir_ty = self.ctx.type_id_to_wir_type(self.type_table, elem_type);
-                (name, wir_ty)
-            })
-            .collect();
 
         // Translate the call (after dropping any borrow on `value`'s expr).
         let call_instr = self.translate_expr(value);
 
         // Emit DeclareLocal for each split, plus the MultiValueLocalBind.
-        let mut instrs: Vec<WirInstr> = Vec::with_capacity(split.len() + 1);
-        for (name, ty) in &split {
+        let mut instrs: Vec<WirInstr> = Vec::with_capacity(order.len() + 1);
+        for (_, name, ty) in &order {
             instrs.push(WirInstr::DeclareLocal {
                 name: name.clone(),
                 ty: ty.clone(),
             });
         }
-        let locals = split.iter().map(|(n, _)| Some(n.clone())).collect();
+        let locals = order.iter().map(|(_, n, _)| Some(n.clone())).collect();
         instrs.push(WirInstr::MultiValueLocalBind {
             instr: Box::new(call_instr),
             locals,
         });
 
-        // Track for subsequent MultiValueProject lookups.
+        // Track for subsequent FieldAccess lookups.
         self.multi_value_split_locals.insert(local_index, split);
 
         Some(WirInstr::Seq(instrs))
@@ -1421,19 +1418,17 @@ impl FunctionTranslator<'_, '_> {
                 if let Some(expr) = value {
                     let value_instr = self.translate_expr(expr);
                     // For multi-value-ABI functions, unwrap a top-level
-                    // `MultiValueStructNew` so the return pushes the N
-                    // tuple elements directly onto the stack instead of
+                    // aggregate-construction so the return pushes the N
+                    // field values directly onto the stack instead of
                     // wrapping them in a heap struct. The Wasm function
                     // signature has `(result T0 T1 …)` slots that match
-                    // the inner `Seq` produced by Phase 4's
-                    // `MultiValueLiteral` lowering.
+                    // the inner field-producing sequence.
                     let value_instr = if matches!(
                         self.tir_func.return_abi,
                         crate::tir::ReturnAbi::MultiValue { .. }
-                    ) && let WirInstr::MultiValueStructNew { instr, .. } =
-                        value_instr
+                    ) && let WirInstr::StructNew { fields, .. } = value_instr
                     {
-                        *instr
+                        WirInstr::Seq(fields)
                     } else {
                         value_instr
                     };
@@ -1848,6 +1843,22 @@ impl FunctionTranslator<'_, '_> {
                 field_name,
                 ..
             } => {
+                // When the receiver is a TIR local that was bound from a
+                // multi-value-return Call, read the corresponding split
+                // local directly. The aggregate was never materialised
+                // as a struct ref — a `StructGet` here would read an
+                // uninitialised slot.
+                if let TirExprKind::Local {
+                    index: tir_local, ..
+                } = &receiver.kind
+                    && let Some(splits) = self.multi_value_split_locals.get(tir_local)
+                    && let Some((name, ty)) = splits.get(field_name)
+                {
+                    return WirInstr::LocalGet {
+                        name: name.clone(),
+                        result_ty: ty.clone(),
+                    };
+                }
                 // If the field's result type is unit, emit only the receiver
                 // for side effects and return Nop — unit has no Wasm representation.
                 if expr.type_id == TypeTable::UNIT {
@@ -2007,77 +2018,14 @@ impl FunctionTranslator<'_, '_> {
             } => self.translate_index(array_expr, index_expr),
 
             TirExprKind::TupleLiteral { elements } => {
-                // Heap-resident form: emit `struct.new` directly. Used when
-                // the tuple value escapes (stored in a struct field, captured
-                // by a closure, returned where the heap form is needed, …).
+                // Lower to `struct.new` of the tuple struct type. The
+                // multi-value-return Return-arm rewrite later unwraps
+                // this back into a `Seq` of field initialisers when the
+                // enclosing function has `ReturnAbi::MultiValue`. For
+                // call-site destructures the heap struct is elided by
+                // `wir_optimize::elide_struct::elide_multi_field_struct_locals`.
                 let (type_id, fields) = self.tuple_constructor_args(expr.type_id, elements);
                 WirInstr::StructNew { type_id, fields }
-            }
-
-            TirExprKind::MultiValueLiteral { elements } => {
-                // Multi-value form: emit `MultiValueStructNew` whose inner
-                // `Seq` evaluates the fields in order, leaving them on the
-                // operand stack as N values. When the destructure pattern
-                // is `LocalSet temp = MultiValueStructNew + StructGet × N`,
-                // `wir_optimize::peephole::elide_multi_value_structs`
-                // collapses it to `MultiValueLocalBind` — eliminating the
-                // heap allocation. When not destructured, codegen emits
-                // `<inner>; struct.new`, equivalent to `TupleLiteral`.
-                //
-                // At return position, `wir_optimize::sroa_return` recognises
-                // both `Return(StructNew)` and `Return(MultiValueStructNew)`
-                // and rewrites them to multi-value Wasm return.
-                let (type_id, fields) = self.tuple_constructor_args(expr.type_id, elements);
-                WirInstr::MultiValueStructNew {
-                    type_id,
-                    instr: Box::new(WirInstr::Seq(fields)),
-                }
-            }
-
-            TirExprKind::MultiValueProject { source, index } => {
-                // Phase 5: when the source is a TIR local that was bound
-                // from a multi-value-return Call, read the corresponding
-                // split WIR local directly. The tuple was never
-                // materialised as a struct ref — a `StructGet` here would
-                // read an uninitialised slot.
-                if let TirExprKind::Local {
-                    index: tir_local, ..
-                } = &source.kind
-                    && let Some(split) = self.multi_value_split_locals.get(tir_local)
-                    && let Some((name, ty)) = split.get(*index as usize)
-                {
-                    return WirInstr::LocalGet {
-                        name: name.clone(),
-                        result_ty: ty.clone(),
-                    };
-                }
-
-                // Default: project from the materialised tuple struct via
-                // `StructGet`. The field_name convention for tuples is the
-                // index as a string (see `lower/pattern.rs` and the
-                // resolver's spread-expansion path).
-                if expr.type_id == TypeTable::UNIT {
-                    let recv = self.translate_expr(source);
-                    return WirInstr::Seq(vec![WirInstr::Drop(Box::new(recv))]);
-                }
-                let recv = self.translate_expr(source);
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, source.type_id);
-                let WirType::Ref { type_id, .. } = wir_type else {
-                    panic!(
-                        "[WIR] MultiValueProject source expected Ref WirType, got {wir_type:?} (index={index}, type_id={:?})",
-                        source.type_id
-                    );
-                };
-                let field_name = index.to_string();
-                let result_ty = self.struct_field_wir_type(&type_id, &field_name);
-                WirInstr::StructGet {
-                    type_id,
-                    field_name,
-                    expr: Box::new(recv),
-                    result_ty,
-                }
             }
 
             TirExprKind::TupleSpread { .. }

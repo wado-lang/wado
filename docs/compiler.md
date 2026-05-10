@@ -141,7 +141,7 @@ Each helper module calls back into `translate.rs` for sub-expression translation
 
 ## WIR Optimize
 
-`wir_optimize/` runs Wasm-shape-specific passes that need WIR's lower-level view: peephole, multi-value SROA, init-guard removal, struct elision, array data promotion, parameter / return SROA, nullable-ref folding, constant forwarding, DCE, and final cleanup.
+`wir_optimize/` runs Wasm-shape-specific passes that need WIR's lower-level view: peephole, variant-return SROA, init-guard removal, struct elision, array data promotion, parameter SROA, nullable-ref folding, constant forwarding, DCE, and final cleanup. Tuple- and user-struct-return ABIs are decided by the TIR-level `optimize::multi_value_return` pass before WIR build.
 
 ## Codegen
 

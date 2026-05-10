@@ -64,10 +64,7 @@ pub(super) fn materialize_if_needed(
 ) -> TirExpr {
     if matches!(
         expr.kind,
-        TirExprKind::Local { .. }
-            | TirExprKind::Unit
-            | TirExprKind::TupleLiteral { .. }
-            | TirExprKind::MultiValueLiteral { .. }
+        TirExprKind::Local { .. } | TirExprKind::Unit | TirExprKind::TupleLiteral { .. }
     ) {
         // Local and Unit are already evaluated. Tuple-literal elements
         // (heap or multi-value form) are individually materialised in

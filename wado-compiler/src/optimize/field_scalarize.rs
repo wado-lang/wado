@@ -580,7 +580,7 @@ fn collect_param_field_usage_in_expr(
                 );
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 collect_param_field_usage_in_expr(
                     elem,
@@ -590,15 +590,6 @@ fn collect_param_field_usage_in_expr(
                     type_table,
                 );
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            collect_param_field_usage_in_expr(
-                source,
-                struct_params,
-                field_sets,
-                conservative_params,
-                type_table,
-            );
         }
         TirExprKind::TupleSpread { expr: inner }
         | TirExprKind::TupleZip { expr: inner }
@@ -1362,13 +1353,10 @@ fn visit_expr_for_alias(
                 visit_expr_for_alias(&field.value, false, type_table, out);
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 visit_expr_for_alias(elem, false, type_table, out);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            visit_expr_for_alias(source, false, type_table, out);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
@@ -1726,13 +1714,10 @@ fn count_field_accesses_in_expr(
                 count_field_accesses_in_expr(&field.value, counts, false, false, type_table);
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 count_field_accesses_in_expr(elem, counts, false, false, type_table);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            count_field_accesses_in_expr(source, counts, false, false, type_table);
         }
         TirExprKind::TupleSpread { expr: inner }
         | TirExprKind::TupleZip { expr: inner }
@@ -2768,13 +2753,10 @@ fn walk_other_expr_kinds(
                 walk_expr(&mut field.value, states, true, out, ctx);
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 walk_expr(elem, states, true, out, ctx);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            walk_expr(source, states, true, out, ctx);
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
             walk_expr(functor, states, true, out, ctx);

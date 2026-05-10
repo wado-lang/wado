@@ -190,7 +190,13 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_in_variant.wado/run"() wit
     } else {
         unreachable;
     });
-    multivalue_bind [rx_30, tx_31] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+    let __pair_temp_3: i64;
+    __pair_temp_3 = "wasi/stream-new"();
+    let __mv_lo_4: i32;
+    let __mv_hi_4: i32;
+    multivalue_bind [__mv_lo_4, __mv_hi_4] = builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+    rx_30 = __mv_lo_4;
+    tx_31 = __mv_hi_4;
     handle_32 = "wado-compiler/tests/fixtures/match_nested_variant_in_variant.wado/__cm_binding__Stdout_write_via_stream"(rx_30);
     "core:cli/write_to_stream"(tx_31, result, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_32);
@@ -199,9 +205,9 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_in_variant.wado/run"() wit
     let __match_scrut_1: ref null "core:prelude/types.wado//Option<i32>";
     __match_scrut_1 = outer_some;
     result2 = (if ref.is_null(__match_scrut_1) == 0 -> ref "core:prelude/string.wado//String" {
-        let __cast_5: ref null "core:prelude/types.wado//Option<i32>";
-        __cast_5 = ref.as_non_null(__match_scrut_1);
-        __local_18 = ref.as_non_null(__cast_5);
+        let __cast_6: ref null "core:prelude/types.wado//Option<i32>";
+        __cast_6 = ref.as_non_null(__match_scrut_1);
+        __local_18 = ref.as_non_null(__cast_6);
         if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_18) -> i32 {
             n_5 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__local_18).payload_0;
             1;
@@ -223,9 +229,9 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_in_variant.wado/run"() wit
                 unreachable;
             };
         } else if ref.is_null(__match_scrut_1) == 0 -> ref "core:prelude/string.wado//String" {
-            let __cast_4: ref null "core:prelude/types.wado//Option<i32>";
-            __cast_4 = ref.as_non_null(__match_scrut_1);
-            __local_19 = ref.as_non_null(__cast_4);
+            let __cast_5: ref null "core:prelude/types.wado//Option<i32>";
+            __cast_5 = ref.as_non_null(__match_scrut_1);
+            __local_19 = ref.as_non_null(__cast_5);
             if __local_19.discriminant == 1 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("some-none"), used: 9 };
             } else if ref.is_null(__match_scrut_1) -> ref "core:prelude/string.wado//String" {
@@ -239,9 +245,9 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_in_variant.wado/run"() wit
             unreachable;
         }
     } else if ref.is_null(__match_scrut_1) == 0 -> ref "core:prelude/string.wado//String" {
-        let __cast_4: ref null "core:prelude/types.wado//Option<i32>";
-        __cast_4 = ref.as_non_null(__match_scrut_1);
-        __local_19 = ref.as_non_null(__cast_4);
+        let __cast_5: ref null "core:prelude/types.wado//Option<i32>";
+        __cast_5 = ref.as_non_null(__match_scrut_1);
+        __local_19 = ref.as_non_null(__cast_5);
         if __local_19.discriminant == 1 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("some-none"), used: 9 };
         } else if ref.is_null(__match_scrut_1) -> ref "core:prelude/string.wado//String" {
@@ -254,7 +260,13 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_in_variant.wado/run"() wit
     } else {
         unreachable;
     });
-    multivalue_bind [rx_42, tx_43] = let __pair_temp_6: i64; __pair_temp_6 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
+    let __pair_temp_7: i64;
+    __pair_temp_7 = "wasi/stream-new"();
+    let __mv_lo_8: i32;
+    let __mv_hi_8: i32;
+    multivalue_bind [__mv_lo_8, __mv_hi_8] = builtin::i32_wrap_i64(__pair_temp_7); builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
+    rx_42 = __mv_lo_8;
+    tx_43 = __mv_hi_8;
     handle_44 = "wado-compiler/tests/fixtures/match_nested_variant_in_variant.wado/__cm_binding__Stdout_write_via_stream"(rx_42);
     "core:cli/write_to_stream"(tx_43, result2, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_44);
@@ -262,9 +274,9 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_in_variant.wado/run"() wit
     let __match_scrut_2: ref null "core:prelude/types.wado//Option<i32>";
     __match_scrut_2 = outer_none;
     result3 = (if ref.is_null(__match_scrut_2) == 0 -> ref "core:prelude/string.wado//String" {
-        let __cast_8: ref null "core:prelude/types.wado//Option<i32>";
-        __cast_8 = ref.as_non_null(__match_scrut_2);
-        __local_20 = ref.as_non_null(__cast_8);
+        let __cast_10: ref null "core:prelude/types.wado//Option<i32>";
+        __cast_10 = ref.as_non_null(__match_scrut_2);
+        __local_20 = ref.as_non_null(__cast_10);
         if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_20) -> i32 {
             n_8 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__local_20).payload_0;
             1;
@@ -286,9 +298,9 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_in_variant.wado/run"() wit
                 unreachable;
             };
         } else if ref.is_null(__match_scrut_2) == 0 -> ref "core:prelude/string.wado//String" {
-            let __cast_7: ref null "core:prelude/types.wado//Option<i32>";
-            __cast_7 = ref.as_non_null(__match_scrut_2);
-            __local_21 = ref.as_non_null(__cast_7);
+            let __cast_9: ref null "core:prelude/types.wado//Option<i32>";
+            __cast_9 = ref.as_non_null(__match_scrut_2);
+            __local_21 = ref.as_non_null(__cast_9);
             if __local_21.discriminant == 1 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("some-none"), used: 9 };
             } else if ref.is_null(__match_scrut_2) -> ref "core:prelude/string.wado//String" {
@@ -302,9 +314,9 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_in_variant.wado/run"() wit
             unreachable;
         }
     } else if ref.is_null(__match_scrut_2) == 0 -> ref "core:prelude/string.wado//String" {
-        let __cast_7: ref null "core:prelude/types.wado//Option<i32>";
-        __cast_7 = ref.as_non_null(__match_scrut_2);
-        __local_21 = ref.as_non_null(__cast_7);
+        let __cast_9: ref null "core:prelude/types.wado//Option<i32>";
+        __cast_9 = ref.as_non_null(__match_scrut_2);
+        __local_21 = ref.as_non_null(__cast_9);
         if __local_21.discriminant == 1 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("some-none"), used: 9 };
         } else if ref.is_null(__match_scrut_2) -> ref "core:prelude/string.wado//String" {
@@ -317,7 +329,13 @@ fn "wado-compiler/tests/fixtures/match_nested_variant_in_variant.wado/run"() wit
     } else {
         unreachable;
     });
-    multivalue_bind [rx_54, tx_55] = let __pair_temp_9: i64; __pair_temp_9 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_9); builtin::i32_wrap_i64(__pair_temp_9 >>u 32_i64);
+    let __pair_temp_11: i64;
+    __pair_temp_11 = "wasi/stream-new"();
+    let __mv_lo_12: i32;
+    let __mv_hi_12: i32;
+    multivalue_bind [__mv_lo_12, __mv_hi_12] = builtin::i32_wrap_i64(__pair_temp_11); builtin::i32_wrap_i64(__pair_temp_11 >>u 32_i64);
+    rx_54 = __mv_lo_12;
+    tx_55 = __mv_hi_12;
     handle_56 = "wado-compiler/tests/fixtures/match_nested_variant_in_variant.wado/__cm_binding__Stdout_write_via_stream"(rx_54);
     "core:cli/write_to_stream"(tx_55, result3, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_56);

@@ -82,33 +82,33 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(30)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(31)
+type "functype//core:prelude/int128.wado/u128^Add::add" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(31)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(32)
+type "functype//core:prelude/int128.wado/u128^Sub::sub" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(32)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(33)
+type "functype//core:prelude/int128.wado/u128^Mul::mul" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(33)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(34)
+type "functype//core:prelude/int128.wado/i128^Add::add" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> ref "core:prelude/int128.wado//i128";  // TypeId(34)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(35)
+type "functype//core:prelude/int128.wado/i128^Sub::sub" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> ref "core:prelude/int128.wado//i128";  // TypeId(35)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(36)
+type "functype//core:prelude/int128.wado/i128^Mul::mul" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> ref "core:prelude/int128.wado//i128";  // TypeId(36)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(37)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(37)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(38)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(38)
 
-type "functype//core:prelude/int128.wado/u128^Add::add" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/int128.wado//u128") -> [u64, u64];  // TypeId(39)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(39)
 
-type "functype//core:prelude/int128.wado/u128^Sub::sub" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/int128.wado//u128") -> [u64, u64];  // TypeId(40)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(40)
 
-type "functype//core:prelude/int128.wado/u128^Mul::mul" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/int128.wado//u128") -> [u64, u64];  // TypeId(41)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(41)
 
-type "functype//core:prelude/int128.wado/i128^Add::add" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> [u64, i64];  // TypeId(42)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
-type "functype//core:prelude/int128.wado/i128^Sub::sub" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> [u64, i64];  // TypeId(43)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
 
-type "functype//core:prelude/int128.wado/i128^Mul::mul" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> [u64, i64];  // TypeId(44)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(44)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(45)
 
@@ -167,7 +167,13 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_args"() wi
         break __tmpl: __local_4;
         unreachable;
     };
-    multivalue_bind [rx_17, tx_18] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_2: i32;
+    let __mv_hi_2: i32;
+    multivalue_bind [__mv_lo_2, __mv_hi_2] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    rx_17 = __mv_lo_2;
+    tx_18 = __mv_hi_2;
     handle_19 = "wado-compiler/tests/fixtures/coerce_int_1.wado/__cm_binding__Stdout_write_via_stream"(rx_17);
     "core:cli/write_to_stream"(tx_18, message_16, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_19);
@@ -183,7 +189,13 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_args"() wi
         break __tmpl: __local_6;
         unreachable;
     };
-    multivalue_bind [rx_29, tx_30] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    let __pair_temp_3: i64;
+    __pair_temp_3 = "wasi/stream-new"();
+    let __mv_lo_4: i32;
+    let __mv_hi_4: i32;
+    multivalue_bind [__mv_lo_4, __mv_hi_4] = builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+    rx_29 = __mv_lo_4;
+    tx_30 = __mv_hi_4;
     handle_31 = "wado-compiler/tests/fixtures/coerce_int_1.wado/__cm_binding__Stdout_write_via_stream"(rx_29);
     "core:cli/write_to_stream"(tx_30, message_28, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_31);
@@ -198,7 +210,13 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_args"() wi
         break __tmpl: __local_8;
         unreachable;
     };
-    multivalue_bind [rx_41, tx_42] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+    let __pair_temp_5: i64;
+    __pair_temp_5 = "wasi/stream-new"();
+    let __mv_lo_6: i32;
+    let __mv_hi_6: i32;
+    multivalue_bind [__mv_lo_6, __mv_hi_6] = builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+    rx_41 = __mv_lo_6;
+    tx_42 = __mv_hi_6;
     handle_43 = "wado-compiler/tests/fixtures/coerce_int_1.wado/__cm_binding__Stdout_write_via_stream"(rx_41);
     "core:cli/write_to_stream"(tx_42, message_40, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_43);
@@ -213,7 +231,13 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_args"() wi
         break __tmpl: __local_10;
         unreachable;
     };
-    multivalue_bind [rx_53, tx_54] = let __pair_temp_4: i64; __pair_temp_4 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+    let __pair_temp_7: i64;
+    __pair_temp_7 = "wasi/stream-new"();
+    let __mv_lo_8: i32;
+    let __mv_hi_8: i32;
+    multivalue_bind [__mv_lo_8, __mv_hi_8] = builtin::i32_wrap_i64(__pair_temp_7); builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
+    rx_53 = __mv_lo_8;
+    tx_54 = __mv_hi_8;
     handle_55 = "wado-compiler/tests/fixtures/coerce_int_1.wado/__cm_binding__Stdout_write_via_stream"(rx_53);
     "core:cli/write_to_stream"(tx_54, message_52, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_55);
@@ -252,7 +276,13 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary"() 
         break __tmpl: __local_22;
         unreachable;
     };
-    multivalue_bind [rx_75, tx_76] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_2: i32;
+    let __mv_hi_2: i32;
+    multivalue_bind [__mv_lo_2, __mv_hi_2] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    rx_75 = __mv_lo_2;
+    tx_76 = __mv_hi_2;
     handle_77 = "wado-compiler/tests/fixtures/coerce_int_1.wado/__cm_binding__Stdout_write_via_stream"(rx_75);
     "core:cli/write_to_stream"(tx_76, message_74, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_77);
@@ -264,7 +294,13 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary"() 
         break __tmpl: __local_24;
         unreachable;
     };
-    multivalue_bind [rx_87, tx_88] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    let __pair_temp_3: i64;
+    __pair_temp_3 = "wasi/stream-new"();
+    let __mv_lo_4: i32;
+    let __mv_hi_4: i32;
+    multivalue_bind [__mv_lo_4, __mv_hi_4] = builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+    rx_87 = __mv_lo_4;
+    tx_88 = __mv_hi_4;
     handle_89 = "wado-compiler/tests/fixtures/coerce_int_1.wado/__cm_binding__Stdout_write_via_stream"(rx_87);
     "core:cli/write_to_stream"(tx_88, message_86, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_89);
@@ -276,7 +312,13 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary"() 
         break __tmpl: __local_26;
         unreachable;
     };
-    multivalue_bind [rx_99, tx_100] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+    let __pair_temp_5: i64;
+    __pair_temp_5 = "wasi/stream-new"();
+    let __mv_lo_6: i32;
+    let __mv_hi_6: i32;
+    multivalue_bind [__mv_lo_6, __mv_hi_6] = builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+    rx_99 = __mv_lo_6;
+    tx_100 = __mv_hi_6;
     handle_101 = "wado-compiler/tests/fixtures/coerce_int_1.wado/__cm_binding__Stdout_write_via_stream"(rx_99);
     "core:cli/write_to_stream"(tx_100, message_98, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_101);
@@ -288,7 +330,13 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary"() 
         break __tmpl: __local_28;
         unreachable;
     };
-    multivalue_bind [rx_111, tx_112] = let __pair_temp_4: i64; __pair_temp_4 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+    let __pair_temp_7: i64;
+    __pair_temp_7 = "wasi/stream-new"();
+    let __mv_lo_8: i32;
+    let __mv_hi_8: i32;
+    multivalue_bind [__mv_lo_8, __mv_hi_8] = builtin::i32_wrap_i64(__pair_temp_7); builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
+    rx_111 = __mv_lo_8;
+    tx_112 = __mv_hi_8;
     handle_113 = "wado-compiler/tests/fixtures/coerce_int_1.wado/__cm_binding__Stdout_write_via_stream"(rx_111);
     "core:cli/write_to_stream"(tx_112, message_110, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_113);
@@ -297,55 +345,52 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary"() 
 fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i128"() with Stdout {
     let x_u128: ref "core:prelude/int128.wado//u128";
     let x_i128: ref "core:prelude/int128.wado//i128";
+    let a1: ref "core:prelude/int128.wado//u128";
+    let a2: ref "core:prelude/int128.wado//u128";
+    let a3: ref "core:prelude/int128.wado//i128";
+    let a4: ref "core:prelude/int128.wado//i128";
+    let b1: ref "core:prelude/int128.wado//u128";
+    let b2: ref "core:prelude/int128.wado//u128";
+    let b3: ref "core:prelude/int128.wado//i128";
+    let b4: ref "core:prelude/int128.wado//i128";
+    let c1: ref "core:prelude/int128.wado//u128";
+    let c2: ref "core:prelude/int128.wado//u128";
+    let c3: ref "core:prelude/int128.wado//i128";
+    let c4: ref "core:prelude/int128.wado//i128";
     let cond_18: bool;
     let label_19: ref "core:prelude/string.wado//String";
-    let other_21: ref "core:prelude/int128.wado//u128";
     let cond_24: bool;
     let label_25: ref "core:prelude/string.wado//String";
-    let other_27: ref "core:prelude/int128.wado//u128";
     let cond_31: bool;
     let label_32: ref "core:prelude/string.wado//String";
-    let other_34: ref "core:prelude/int128.wado//i128";
     let cond_39: bool;
     let label_40: ref "core:prelude/string.wado//String";
-    let other_42: ref "core:prelude/int128.wado//i128";
     let cond_46: bool;
     let label_47: ref "core:prelude/string.wado//String";
-    let other_49: ref "core:prelude/int128.wado//u128";
     let cond_52: bool;
     let label_53: ref "core:prelude/string.wado//String";
-    let other_55: ref "core:prelude/int128.wado//u128";
     let cond_59: bool;
     let label_60: ref "core:prelude/string.wado//String";
-    let other_62: ref "core:prelude/int128.wado//i128";
     let cond_67: bool;
     let label_68: ref "core:prelude/string.wado//String";
-    let other_70: ref "core:prelude/int128.wado//i128";
     let cond_74: bool;
     let label_75: ref "core:prelude/string.wado//String";
-    let other_77: ref "core:prelude/int128.wado//u128";
     let cond_80: bool;
     let label_81: ref "core:prelude/string.wado//String";
-    let other_83: ref "core:prelude/int128.wado//u128";
     let cond_87: bool;
     let label_88: ref "core:prelude/string.wado//String";
-    let other_90: ref "core:prelude/int128.wado//i128";
     let cond_95: bool;
     let label_96: ref "core:prelude/string.wado//String";
-    let other_98: ref "core:prelude/int128.wado//i128";
     let message: ref "core:prelude/string.wado//String";
     let rx: i32;
     let tx: i32;
     let handle: i32;
     x_u128 = struct.new "core:prelude/int128.wado//u128" { low: 1000_i64, high: 0_i64 };
     x_i128 = struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 };
-    let __sroa_a1_low: u64;
-    let __sroa_a1_high: u64;
-    multivalue_bind [__sroa_a1_low, __sroa_a1_high] = "core:prelude/int128.wado/u128^Add::add"(x_u128, struct.new "core:prelude/int128.wado//u128" { low: 42_i64, high: 0_i64 });
+    a1 = "core:prelude/int128.wado/u128^Add::add"(x_u128, struct.new "core:prelude/int128.wado//u128" { low: 42_i64, high: 0_i64 });
     cond_18 = __inline_u128_Eq__eq_4: block -> bool {
-        other_21 = struct.new "core:prelude/int128.wado//u128" { low: 1042_i64, high: 0_i64 };
-        if __sroa_a1_low == 1042_i64 -> i32 {
-            __sroa_a1_high == 0_i64;
+        if a1.low == 1042_i64 -> i32 {
+            a1.high == 0_i64;
         } else {
             0;
         }
@@ -357,13 +402,10 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_19);
         unreachable;
     }
-    let __sroa_a2_low: u64;
-    let __sroa_a2_high: u64;
-    multivalue_bind [__sroa_a2_low, __sroa_a2_high] = "core:prelude/int128.wado/u128^Add::add"(struct.new "core:prelude/int128.wado//u128" { low: 42_i64, high: 0_i64 }, x_u128);
+    a2 = "core:prelude/int128.wado/u128^Add::add"(struct.new "core:prelude/int128.wado//u128" { low: 42_i64, high: 0_i64 }, x_u128);
     cond_24 = __inline_u128_Eq__eq_8: block -> bool {
-        other_27 = struct.new "core:prelude/int128.wado//u128" { low: 1042_i64, high: 0_i64 };
-        if __sroa_a2_low == 1042_i64 -> i32 {
-            __sroa_a2_high == 0_i64;
+        if a2.low == 1042_i64 -> i32 {
+            a2.high == 0_i64;
         } else {
             0;
         }
@@ -375,13 +417,10 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_25);
         unreachable;
     }
-    let __sroa_a3_low: u64;
-    let __sroa_a3_high: i64;
-    multivalue_bind [__sroa_a3_low, __sroa_a3_high] = "core:prelude/int128.wado/i128^Add::add"(x_i128, struct.new "core:prelude/int128.wado//i128" { low: 100_i64, high: 0_i64 });
+    a3 = "core:prelude/int128.wado/i128^Add::add"(x_i128, struct.new "core:prelude/int128.wado//i128" { low: 100_i64, high: 0_i64 });
     cond_31 = __inline_i128_Eq__eq_12: block -> bool {
-        other_34 = struct.new "core:prelude/int128.wado//i128" { low: -400_i64, high: -1_i64 };
-        if __sroa_a3_low == -400_i64 -> i32 {
-            __sroa_a3_high == -1_i64;
+        if a3.low == -400_i64 -> i32 {
+            a3.high == -1_i64;
         } else {
             0;
         }
@@ -393,13 +432,10 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_32);
         unreachable;
     }
-    let __sroa_a4_low: u64;
-    let __sroa_a4_high: i64;
-    multivalue_bind [__sroa_a4_low, __sroa_a4_high] = "core:prelude/int128.wado/i128^Add::add"(struct.new "core:prelude/int128.wado//i128" { low: 100_i64, high: 0_i64 }, x_i128);
+    a4 = "core:prelude/int128.wado/i128^Add::add"(struct.new "core:prelude/int128.wado//i128" { low: 100_i64, high: 0_i64 }, x_i128);
     cond_39 = __inline_i128_Eq__eq_16: block -> bool {
-        other_42 = struct.new "core:prelude/int128.wado//i128" { low: -400_i64, high: -1_i64 };
-        if __sroa_a4_low == -400_i64 -> i32 {
-            __sroa_a4_high == -1_i64;
+        if a4.low == -400_i64 -> i32 {
+            a4.high == -1_i64;
         } else {
             0;
         }
@@ -411,13 +447,10 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_40);
         unreachable;
     }
-    let __sroa_b1_low: u64;
-    let __sroa_b1_high: u64;
-    multivalue_bind [__sroa_b1_low, __sroa_b1_high] = "core:prelude/int128.wado/u128^Sub::sub"(x_u128, struct.new "core:prelude/int128.wado//u128" { low: 100_i64, high: 0_i64 });
+    b1 = "core:prelude/int128.wado/u128^Sub::sub"(x_u128, struct.new "core:prelude/int128.wado//u128" { low: 100_i64, high: 0_i64 });
     cond_46 = __inline_u128_Eq__eq_20: block -> bool {
-        other_49 = struct.new "core:prelude/int128.wado//u128" { low: 900_i64, high: 0_i64 };
-        if __sroa_b1_low == 900_i64 -> i32 {
-            __sroa_b1_high == 0_i64;
+        if b1.low == 900_i64 -> i32 {
+            b1.high == 0_i64;
         } else {
             0;
         }
@@ -429,13 +462,10 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_47);
         unreachable;
     }
-    let __sroa_b2_low: u64;
-    let __sroa_b2_high: u64;
-    multivalue_bind [__sroa_b2_low, __sroa_b2_high] = "core:prelude/int128.wado/u128^Sub::sub"(struct.new "core:prelude/int128.wado//u128" { low: 2000_i64, high: 0_i64 }, x_u128);
+    b2 = "core:prelude/int128.wado/u128^Sub::sub"(struct.new "core:prelude/int128.wado//u128" { low: 2000_i64, high: 0_i64 }, x_u128);
     cond_52 = __inline_u128_Eq__eq_24: block -> bool {
-        other_55 = struct.new "core:prelude/int128.wado//u128" { low: 1000_i64, high: 0_i64 };
-        if __sroa_b2_low == 1000_i64 -> i32 {
-            __sroa_b2_high == 0_i64;
+        if b2.low == 1000_i64 -> i32 {
+            b2.high == 0_i64;
         } else {
             0;
         }
@@ -447,13 +477,10 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_53);
         unreachable;
     }
-    let __sroa_b3_low: u64;
-    let __sroa_b3_high: i64;
-    multivalue_bind [__sroa_b3_low, __sroa_b3_high] = "core:prelude/int128.wado/i128^Sub::sub"(x_i128, struct.new "core:prelude/int128.wado//i128" { low: 100_i64, high: 0_i64 });
+    b3 = "core:prelude/int128.wado/i128^Sub::sub"(x_i128, struct.new "core:prelude/int128.wado//i128" { low: 100_i64, high: 0_i64 });
     cond_59 = __inline_i128_Eq__eq_28: block -> bool {
-        other_62 = struct.new "core:prelude/int128.wado//i128" { low: -600_i64, high: -1_i64 };
-        if __sroa_b3_low == -600_i64 -> i32 {
-            __sroa_b3_high == -1_i64;
+        if b3.low == -600_i64 -> i32 {
+            b3.high == -1_i64;
         } else {
             0;
         }
@@ -465,13 +492,10 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_60);
         unreachable;
     }
-    let __sroa_b4_low: u64;
-    let __sroa_b4_high: i64;
-    multivalue_bind [__sroa_b4_low, __sroa_b4_high] = "core:prelude/int128.wado/i128^Sub::sub"(struct.new "core:prelude/int128.wado//i128" { low: 100_i64, high: 0_i64 }, x_i128);
+    b4 = "core:prelude/int128.wado/i128^Sub::sub"(struct.new "core:prelude/int128.wado//i128" { low: 100_i64, high: 0_i64 }, x_i128);
     cond_67 = __inline_i128_Eq__eq_32: block -> bool {
-        other_70 = struct.new "core:prelude/int128.wado//i128" { low: 600_i64, high: 0_i64 };
-        if __sroa_b4_low == 600_i64 -> i32 {
-            __sroa_b4_high == 0_i64;
+        if b4.low == 600_i64 -> i32 {
+            b4.high == 0_i64;
         } else {
             0;
         }
@@ -483,13 +507,10 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_68);
         unreachable;
     }
-    let __sroa_c1_low: u64;
-    let __sroa_c1_high: u64;
-    multivalue_bind [__sroa_c1_low, __sroa_c1_high] = "core:prelude/int128.wado/u128^Mul::mul"(x_u128, struct.new "core:prelude/int128.wado//u128" { low: 3_i64, high: 0_i64 });
+    c1 = "core:prelude/int128.wado/u128^Mul::mul"(x_u128, struct.new "core:prelude/int128.wado//u128" { low: 3_i64, high: 0_i64 });
     cond_74 = __inline_u128_Eq__eq_36: block -> bool {
-        other_77 = struct.new "core:prelude/int128.wado//u128" { low: 3000_i64, high: 0_i64 };
-        if __sroa_c1_low == 3000_i64 -> i32 {
-            __sroa_c1_high == 0_i64;
+        if c1.low == 3000_i64 -> i32 {
+            c1.high == 0_i64;
         } else {
             0;
         }
@@ -501,13 +522,10 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_75);
         unreachable;
     }
-    let __sroa_c2_low: u64;
-    let __sroa_c2_high: u64;
-    multivalue_bind [__sroa_c2_low, __sroa_c2_high] = "core:prelude/int128.wado/u128^Mul::mul"(struct.new "core:prelude/int128.wado//u128" { low: 3_i64, high: 0_i64 }, x_u128);
+    c2 = "core:prelude/int128.wado/u128^Mul::mul"(struct.new "core:prelude/int128.wado//u128" { low: 3_i64, high: 0_i64 }, x_u128);
     cond_80 = __inline_u128_Eq__eq_40: block -> bool {
-        other_83 = struct.new "core:prelude/int128.wado//u128" { low: 3000_i64, high: 0_i64 };
-        if __sroa_c2_low == 3000_i64 -> i32 {
-            __sroa_c2_high == 0_i64;
+        if c2.low == 3000_i64 -> i32 {
+            c2.high == 0_i64;
         } else {
             0;
         }
@@ -519,13 +537,10 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_81);
         unreachable;
     }
-    let __sroa_c3_low: u64;
-    let __sroa_c3_high: i64;
-    multivalue_bind [__sroa_c3_low, __sroa_c3_high] = "core:prelude/int128.wado/i128^Mul::mul"(x_i128, struct.new "core:prelude/int128.wado//i128" { low: 2_i64, high: 0_i64 });
+    c3 = "core:prelude/int128.wado/i128^Mul::mul"(x_i128, struct.new "core:prelude/int128.wado//i128" { low: 2_i64, high: 0_i64 });
     cond_87 = __inline_i128_Eq__eq_44: block -> bool {
-        other_90 = struct.new "core:prelude/int128.wado//i128" { low: -1000_i64, high: -1_i64 };
-        if __sroa_c3_low == -1000_i64 -> i32 {
-            __sroa_c3_high == -1_i64;
+        if c3.low == -1000_i64 -> i32 {
+            c3.high == -1_i64;
         } else {
             0;
         }
@@ -537,13 +552,10 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_88);
         unreachable;
     }
-    let __sroa_c4_low: u64;
-    let __sroa_c4_high: i64;
-    multivalue_bind [__sroa_c4_low, __sroa_c4_high] = "core:prelude/int128.wado/i128^Mul::mul"(struct.new "core:prelude/int128.wado//i128" { low: 2_i64, high: 0_i64 }, x_i128);
+    c4 = "core:prelude/int128.wado/i128^Mul::mul"(struct.new "core:prelude/int128.wado//i128" { low: 2_i64, high: 0_i64 }, x_i128);
     cond_95 = __inline_i128_Eq__eq_48: block -> bool {
-        other_98 = struct.new "core:prelude/int128.wado//i128" { low: -1000_i64, high: -1_i64 };
-        if __sroa_c4_low == -1000_i64 -> i32 {
-            __sroa_c4_high == -1_i64;
+        if c4.low == -1000_i64 -> i32 {
+            c4.high == -1_i64;
         } else {
             0;
         }
@@ -556,7 +568,13 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         unreachable;
     }
     message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
-    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_2: i32;
+    let __mv_hi_2: i32;
+    multivalue_bind [__mv_lo_2, __mv_hi_2] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    rx = __mv_lo_2;
+    tx = __mv_hi_2;
     handle = "wado-compiler/tests/fixtures/coerce_int_1.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -568,7 +586,13 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_bitwise"()
     let tx: i32;
     let handle: i32;
     message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
-    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_2: i32;
+    let __mv_hi_2: i32;
+    multivalue_bind [__mv_lo_2, __mv_hi_2] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    rx = __mv_lo_2;
+    tx = __mv_hi_2;
     handle = "wado-compiler/tests/fixtures/coerce_int_1.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -642,7 +666,13 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_2: i32;
+    let __mv_hi_2: i32;
+    multivalue_bind [__mv_lo_2, __mv_hi_2] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    rx = __mv_lo_2;
+    tx = __mv_hi_2;
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;
@@ -740,15 +770,23 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
 fn "core:prelude/int128.wado/u128^Add::add"(self, other) {
     let lo: i64;
     let hi: i64;
-    multivalue_bind [lo, hi] = i64.add128(self.low, self.high, other.low, other.high);
-    return lo, hi;
+    let __mv_lo_1: i64;
+    let __mv_hi_1: i64;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.add128(self.low, self.high, other.low, other.high);
+    lo = __mv_lo_1;
+    hi = __mv_hi_1;
+    return struct.new "core:prelude/int128.wado//u128" { low: lo, high: hi };
 }
 
 fn "core:prelude/int128.wado/u128^Sub::sub"(self, other) {
     let lo: i64;
     let hi: i64;
-    multivalue_bind [lo, hi] = i64.sub128(self.low, self.high, other.low, other.high);
-    return lo, hi;
+    let __mv_lo_1: i64;
+    let __mv_hi_1: i64;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.sub128(self.low, self.high, other.low, other.high);
+    lo = __mv_lo_1;
+    hi = __mv_hi_1;
+    return struct.new "core:prelude/int128.wado//u128" { low: lo, high: hi };
 }
 
 fn "core:prelude/int128.wado/u128^Mul::mul"(self, other) {
@@ -758,26 +796,38 @@ fn "core:prelude/int128.wado/u128^Mul::mul"(self, other) {
     let p0_high: u64;
     let p1_low: u64;
     let p2_low: u64;
-    multivalue_bind [p0_lo, p0_hi] = i64.mul_wide_u(self.low, other.low);
+    let __mv_lo_1: i64;
+    let __mv_hi_1: i64;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(self.low, other.low);
+    p0_lo = __mv_lo_1;
+    p0_hi = __mv_hi_1;
     p0_low = p0_lo;
     p0_high = p0_hi;
     p1_low = self.low * other.high;
     p2_low = self.high * other.low;
-    return p0_low, (p0_high + p1_low) + p2_low;
+    return struct.new "core:prelude/int128.wado//u128" { low: p0_low, high: (p0_high + p1_low) + p2_low };
 }
 
 fn "core:prelude/int128.wado/i128^Add::add"(self, other) {
     let lo: i64;
     let hi: i64;
-    multivalue_bind [lo, hi] = i64.add128(self.low, self.high, other.low, other.high);
-    return lo, hi;
+    let __mv_lo_1: i64;
+    let __mv_hi_1: i64;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.add128(self.low, self.high, other.low, other.high);
+    lo = __mv_lo_1;
+    hi = __mv_hi_1;
+    return struct.new "core:prelude/int128.wado//i128" { low: lo, high: hi };
 }
 
 fn "core:prelude/int128.wado/i128^Sub::sub"(self, other) {
     let lo: i64;
     let hi: i64;
-    multivalue_bind [lo, hi] = i64.sub128(self.low, self.high, other.low, other.high);
-    return lo, hi;
+    let __mv_lo_1: i64;
+    let __mv_hi_1: i64;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.sub128(self.low, self.high, other.low, other.high);
+    lo = __mv_lo_1;
+    hi = __mv_hi_1;
+    return struct.new "core:prelude/int128.wado//i128" { low: lo, high: hi };
 }
 
 fn "core:prelude/int128.wado/i128^Mul::mul"(self, other) {
@@ -787,12 +837,16 @@ fn "core:prelude/int128.wado/i128^Mul::mul"(self, other) {
     let p0_high: u64;
     let p1_low: u64;
     let p2_low: u64;
-    multivalue_bind [p0_lo, p0_hi] = i64.mul_wide_u(self.low, other.low);
+    let __mv_lo_1: i64;
+    let __mv_hi_1: i64;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(self.low, other.low);
+    p0_lo = __mv_lo_1;
+    p0_hi = __mv_hi_1;
     p0_low = p0_lo;
     p0_high = p0_hi;
     p1_low = self.low * other.high;
     p2_low = self.high * other.low;
-    return p0_low, (p0_high + p1_low) + p2_low;
+    return struct.new "core:prelude/int128.wado//i128" { low: p0_low, high: (p0_high + p1_low) + p2_low };
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {

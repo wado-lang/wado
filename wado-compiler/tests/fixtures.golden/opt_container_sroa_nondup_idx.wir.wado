@@ -180,9 +180,9 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/cross_push_w
         break __seq_lit: __b_2;
         unreachable;
     };
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(w, multivalue_struct_new "tuple//[i32, i32]"(10; 100));
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(w, multivalue_struct_new "tuple//[i32, i32]"(20; 200));
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(w, multivalue_struct_new "tuple//[i32, i32]"(30; 300));
+    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(w, struct.new "tuple//[i32, i32]" { 0: 10, 1: 100 });
+    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(w, struct.new "tuple//[i32, i32]" { 0: 20, 1: 200 });
+    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(w, struct.new "tuple//[i32, i32]" { 0: 30, 1: 300 });
     "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_6: block -> ref "tuple//[i32, i32]" {
         index_11 = "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/opaque_idx"(1);
         if index_11 >= w.used {
@@ -242,9 +242,9 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/slot_copy_wi
         break __seq_lit: __b;
         unreachable;
     };
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(1; 10));
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(2; 20));
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(3; 30));
+    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, struct.new "tuple//[i32, i32]" { 0: 1, 1: 10 });
+    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, struct.new "tuple//[i32, i32]" { 0: 2, 1: 20 });
+    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, struct.new "tuple//[i32, i32]" { 0: 3, 1: 30 });
     index_6 = "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/opaque_idx"(2);
     value = __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_4: block -> ref "tuple//[i32, i32]" {
         if 1 >= v.used {
@@ -314,9 +314,9 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/slot_copy_wi
         break __seq_lit: __b;
         unreachable;
     };
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(1; 10));
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(2; 20));
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(3; 30));
+    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, struct.new "tuple//[i32, i32]" { 0: 1, 1: 10 });
+    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, struct.new "tuple//[i32, i32]" { 0: 2, 1: 20 });
+    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, struct.new "tuple//[i32, i32]" { 0: 3, 1: 30 });
     value = __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_4: block -> ref "tuple//[i32, i32]" {
         index_9 = "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/opaque_idx"(2);
         if index_9 >= v.used {
@@ -622,7 +622,13 @@ condition: slot_copy_with_call_source_idx() == 3 + 30 + 2 + 20 + 3 + 30
         unreachable;
     }
     message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
-    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_2: i32;
+    let __mv_hi_2: i32;
+    multivalue_bind [__mv_lo_2, __mv_hi_2] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    rx = __mv_lo_2;
+    tx = __mv_hi_2;
     handle = "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -693,7 +699,13 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_2: i32;
+    let __mv_hi_2: i32;
+    multivalue_bind [__mv_lo_2, __mv_hi_2] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    rx = __mv_lo_2;
+    tx = __mv_hi_2;
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

@@ -240,13 +240,10 @@ fn analyze_uses_in_expr(expr: &TirExpr, refs: &mut IndexMap<u32, RefInfo>) {
                 analyze_uses_in_expr(&field.value, refs);
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 analyze_uses_in_expr(elem, refs);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            analyze_uses_in_expr(source, refs);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
@@ -456,13 +453,10 @@ fn transform_expr(expr: &mut TirExpr, eliminable: &IndexMap<u32, RefInfo>) {
                 transform_expr(&mut field.value, eliminable);
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 transform_expr(elem, eliminable);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            transform_expr(source, eliminable);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
@@ -541,9 +535,7 @@ fn collect_deref_only_refs_in_block(block: &TirBlock, refs: &mut IndexMap<u32, D
             && matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
             && matches!(
                 expr.kind,
-                TirExprKind::StructLiteral { .. }
-                    | TirExprKind::TupleLiteral { .. }
-                    | TirExprKind::MultiValueLiteral { .. }
+                TirExprKind::StructLiteral { .. } | TirExprKind::TupleLiteral { .. }
             )
         {
             refs.insert(
@@ -694,13 +686,10 @@ fn check_deref_only_uses_in_expr(expr: &TirExpr, refs: &mut IndexMap<u32, DerefO
                 check_deref_only_uses_in_expr(&field.value, refs);
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 check_deref_only_uses_in_expr(elem, refs);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            check_deref_only_uses_in_expr(source, refs);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
@@ -944,15 +933,12 @@ fn rewrite_deref_only_refs_in_expr(
             }
             changed
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             let mut changed = false;
             for elem in elements {
                 changed |= rewrite_deref_only_refs_in_expr(elem, eliminable);
             }
             changed
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            rewrite_deref_only_refs_in_expr(source, eliminable)
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {

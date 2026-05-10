@@ -232,14 +232,10 @@ fn expand_expr(expr: &mut TirExpr, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx
             }
             return;
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for e in elements {
                 expand_expr(e, alloc, ctx);
             }
-            return;
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            expand_expr(source, alloc, ctx);
             return;
         }
         TirExprKind::Closure { body, .. } => {

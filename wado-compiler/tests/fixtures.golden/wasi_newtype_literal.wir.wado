@@ -35,17 +35,17 @@ type "functype//wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_lift
 
 type "functype//wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_export____test_0_literal_coercion_to_duration_via_effect_fn" = fn();  // TypeId(11)
 
-type "functype//core:prelude/types.wado/AsyncCall<unit>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<unit>");  // TypeId(12)
+type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__Closure_2::__call" = fn(i32);  // TypeId(13)
+type "functype//core:prelude/types.wado/AsyncCall<unit>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<unit>");  // TypeId(13)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(14)
+type "functype//wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__Closure_2::__call" = fn(i32);  // TypeId(14)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(15)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(15)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(16)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(16)
 
-type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(17)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(17)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -102,11 +102,11 @@ fn "core:prelude/types.wado/AsyncCall<unit>::wait"(self) {
         });
         b1: block {
             l2: loop {
-                let __sroa_event_code: i32;
-                let __sroa_event_handle: i32;
-                let __sroa_event_payload: u32;
-                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
-                if __sroa_event_payload == 2 {
+                let event_mv_code: i32;
+                let event_mv_handle: i32;
+                let event_mv_payload: u32;
+                multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
+                if event_mv_payload == 2 {
                     break b1;
                 }
                 continue l2;

@@ -398,13 +398,12 @@ fn register_single_function(
     //
     // - `Single`: a single Wasm result whose type is the TIR return type
     //   (or empty for unit/never). This is the historical behaviour.
-    // - `MultiValue { result_types }`: a Wasm multi-value result with one
-    //   slot per tuple element. Set by `optimize::multi_value_return` for
-    //   tuple-returning functions whose every call site destructures the
-    //   result. WIR-level `sroa_return` would otherwise have to discover
-    //   this — we hand it the answer up front.
+    // - `MultiValue { result_types, .. }`: a Wasm multi-value result with
+    //   one slot per tuple element / struct field. Set by
+    //   `optimize::multi_value_return` for aggregate-returning functions
+    //   whose every call site destructures the result.
     let results: Vec<WirType> = match &tir_func.return_abi {
-        crate::tir::ReturnAbi::MultiValue { result_types } => result_types
+        crate::tir::ReturnAbi::MultiValue { result_types, .. } => result_types
             .iter()
             .map(|&t| ctx.type_id_to_wir_type(type_table, t))
             .filter(|t| !matches!(t, WirType::Unit))

@@ -68,7 +68,13 @@ fn "wado-compiler/tests/fixtures/pub_use_alias.wado/__cm_export__run"() {
     let tx_7: i32;
     let handle_8: i32;
     message_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("success"), used: 7 };
-    multivalue_bind [rx_6, tx_7] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_2: i32;
+    let __mv_hi_2: i32;
+    multivalue_bind [__mv_lo_2, __mv_hi_2] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    rx_6 = __mv_lo_2;
+    tx_7 = __mv_hi_2;
     handle_8 = "wado-compiler/tests/fixtures/pub_use_alias.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:cli/write_to_stream"(tx_7, message_5, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_8);

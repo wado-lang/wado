@@ -1884,14 +1884,6 @@ impl<'a> WirUnparser<'a> {
                 self.write(")");
             }
 
-            WirInstr::MultiValueStructNew { type_id, instr } => {
-                let tid = type_id.to_string();
-                self.write("multivalue_struct_new ");
-                self.write_name(&tid);
-                self.write("(");
-                self.unparse_instr_inline(instr);
-                self.write(")");
-            }
             WirInstr::MultiValueLocalBind { instr, locals } => {
                 let names: Vec<_> = locals.iter().map(|l| l.as_deref().unwrap_or("_")).collect();
                 self.write(&format!("multivalue_bind [{}] = ", names.join(", ")));

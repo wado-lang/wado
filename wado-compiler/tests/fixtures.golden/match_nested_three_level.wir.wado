@@ -115,7 +115,7 @@ fn "wado-compiler/tests/fixtures/match_nested_three_level.wado/run"() with Stdou
     let rx: i32;
     let tx: i32;
     let handle: i32;
-    data = ref.as_non_null(multivalue_struct_new "tuple//[Point, Point]"(struct.new "wado-compiler/tests/fixtures/match_nested_three_level.wado//Point" { x: 1, y: 2 }; struct.new "wado-compiler/tests/fixtures/match_nested_three_level.wado//Point" { x: 3, y: 4 }));
+    data = struct.new "tuple//[Point, Point]" { 0: struct.new "wado-compiler/tests/fixtures/match_nested_three_level.wado//Point" { x: 1, y: 2 }, 1: struct.new "wado-compiler/tests/fixtures/match_nested_three_level.wado//Point" { x: 3, y: 4 } };
     let __match_scrut_0: ref null "tuple//[Point, Point]";
     __match_scrut_0 = data;
     result = (if ref.is_null(__match_scrut_0) == 0 -> ref "core:prelude/string.wado//String" {
@@ -159,7 +159,13 @@ fn "wado-compiler/tests/fixtures/match_nested_three_level.wado/run"() with Stdou
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 };
     });
-    multivalue_bind [rx, tx] = let __pair_temp_5: i64; __pair_temp_5 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+    let __pair_temp_5: i64;
+    __pair_temp_5 = "wasi/stream-new"();
+    let __mv_lo_6: i32;
+    let __mv_hi_6: i32;
+    multivalue_bind [__mv_lo_6, __mv_hi_6] = builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+    rx = __mv_lo_6;
+    tx = __mv_hi_6;
     handle = "wado-compiler/tests/fixtures/match_nested_three_level.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, result, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);

@@ -270,8 +270,11 @@ fn elide_multi_field_struct_locals_one_pass(
     }
     let candidate_names: IndexSet<String> = candidates.keys().cloned().collect();
 
-    // Filter: same as single-field, plus each field accessed exactly once with the
-    // struct's declared field names.
+    // Filter: candidate is valid when each accessed field is read exactly
+    // once and every field initializer is pure. Unaccessed fields are
+    // permitted (the partial-use case from `let [_rx, tx] = …`): since
+    // every initializer is pure, the unread initialiser just gets dropped
+    // along with the eliminated `LocalSet`.
     let valid: IndexMap<String, IndexMap<String, WirInstr>> = candidates
         .into_iter()
         .filter_map(|(name, cand)| {
@@ -283,22 +286,33 @@ fn elide_multi_field_struct_locals_one_pass(
             if struct_field_names.len() != cand.fields.len() {
                 return None;
             }
-            if s.structget_uses as usize != cand.fields.len() {
-                return None;
-            }
+            // Every LocalGet(name) must be the source of a StructGet.
             if s.total_localgets != s.structget_uses {
                 return None;
             }
+            // Each ACCESSED field is read exactly once. Unaccessed fields
+            // (count == 0) are fine.
             for fname in struct_field_names {
-                if s.field_uses.get(fname).copied().unwrap_or(0) != 1 {
+                let n = s.field_uses.get(fname).copied().unwrap_or(0);
+                if n > 1 {
                     return None;
                 }
+            }
+            // The total number of StructGet uses matches the sum of
+            // per-field counts (sanity).
+            let accessed: u32 = struct_field_names
+                .iter()
+                .map(|f| s.field_uses.get(f).copied().unwrap_or(0))
+                .sum();
+            if s.structget_uses != accessed {
+                return None;
             }
             for inner in &cand.fields {
                 if inner_refs_any_candidate(inner, &candidate_names, &name) {
                     return None;
                 }
-                // Same safety check as the single-field pass.
+                // Initializers must be pure so unaccessed ones can be
+                // dropped without changing program semantics.
                 if !is_pure_for_elision(inner) {
                     return None;
                 }

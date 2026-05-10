@@ -294,7 +294,6 @@ condition: b == \"99\"
 }
 
 fn "wado-compiler/tests/fixtures/generic_method_merged.wado/__test_6_self_call"() {
-    let pair: ref "tuple//[i32, i32]";
     let __v0_4: i32;
     let __cond_5: bool;
     let __v0_6: i32;
@@ -308,12 +307,12 @@ fn "wado-compiler/tests/fixtures/generic_method_merged.wado/__test_6_self_call"(
     let f_40: ref "core:prelude/format.wado//Formatter";
     let f_46: ref "core:prelude/format.wado//Formatter";
     let f_51: ref "core:prelude/format.wado//Formatter";
-    pair = __inline_SelfCallWrapper_i32___get_twice_9: block -> ref "tuple//[i32, i32]" {
+    drop(__inline_SelfCallWrapper_i32___get_twice_9: block -> ref "tuple//[i32, i32]" {
         b = 42;
-        break __inline_SelfCallWrapper_i32___get_twice_9: multivalue_struct_new "tuple//[i32, i32]"(42; b);
+        break __inline_SelfCallWrapper_i32___get_twice_9: struct.new "tuple//[i32, i32]" { 0: 42, 1: b };
         unreachable;
-    };
-    __v0_4 = pair.0;
+    });
+    __v0_4 = 42;
     __cond_5 = __v0_4 == 42;
     if __cond_5 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -349,7 +348,7 @@ condition: pair.0 == 42
         });
         unreachable;
     }
-    __v0_6 = pair.1;
+    __v0_6 = b;
     __cond_7 = __v0_6 == 42;
     if __cond_7 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -589,7 +588,13 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_2: i32;
+    let __mv_hi_2: i32;
+    multivalue_bind [__mv_lo_2, __mv_hi_2] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    rx = __mv_lo_2;
+    tx = __mv_hi_2;
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

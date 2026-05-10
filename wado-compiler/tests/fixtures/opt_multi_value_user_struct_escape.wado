@@ -1,0 +1,38 @@
+// Negative test: a struct-returning function whose call site passes the
+// result by reference must NOT be classified as multi-value — the
+// reference take is an escape that disqualifies the candidate. The body
+// is the same fresh literal as the positive case; only the use pattern
+// differs.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+#[inline("never")]
+fn make_point(x: i32, y: i32) -> Point {
+    return Point { x, y };
+}
+
+#[inline("never")]
+fn measure(p: &Point) -> i32 {
+    return p.x + p.y;
+}
+
+#[inline("never")]
+fn ref_use() -> i32 {
+    let p = make_point(10, 20);
+    return measure(&p);
+}
+
+export fn run() {
+    assert ref_use() == 30;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": [
+        "(result i32 i32)"
+    ]
+}

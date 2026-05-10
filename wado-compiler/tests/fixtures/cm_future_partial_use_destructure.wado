@@ -1,18 +1,13 @@
 // Regression test for #1025: partial-use destructure of `Future::<T>::new()`
 // must not lift a heap tuple struct in WIR.
 //
-// PR #1024 moved DAE / DRVE / write-only-local elimination from WIR to TIR.
-// After that move, the unused half of `let [_rx, tx] = Future::<…>::new()`
-// was elided at TIR, but the `__pattern_temp` holding the canonical
-// `future-new` result kept a `struct.new tuple<…>` shape in WIR —
-// `wir_optimize::elide_multi_field_struct_locals` refused to fire because
-// not every field was accessed exactly once, and the existing peephole
-// only matched on `MultiValueStructNew`, not the wrapped-in-Seq shape
-// produced by `emit_stream_or_future_new`.
-//
-// Fix (Phase 3 of #1025): wrap the canonical-future i64-split sequence in
-// `MultiValueStructNew` so `wir_optimize::peephole::elide_multi_value_structs`
-// rewrites it to `multivalue_bind [_, tx] = …` even with one unbound field.
+// `wir_optimize::elide_multi_field_struct_locals` accepts partial-use
+// patterns when every field initializer is pure: the unread initializer
+// is dropped along with the eliminated `LocalSet`. The canonical
+// `emit_stream_or_future_new` lowering binds the i32 low / high halves
+// into named locals via `multivalue_bind`, then builds a `StructNew`
+// reading those locals. The pure-LocalGet fields make the elision pass
+// fire even when only one of `_rx` / `tx` is read.
 
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
@@ -37,6 +32,6 @@ __DATA__
         "struct.new \"tuple//[Future<i32>"
     ],
     "wir_expect:O2": [
-        "multivalue_bind [_, tx] ="
+        "multivalue_bind [__mv_lo"
     ]
 }
