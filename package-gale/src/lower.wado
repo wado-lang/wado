@@ -558,9 +558,10 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext) -> ScanElement {
     if rep.non_greedy {
         panic("TODO Phase 2.x.nongreedy: non-greedy Repeat needs follow-set analysis");
     }
-    if let Optional = rep.kind {
-        panic("TODO Phase 2.x.optional: Optional Repeat needs follow-set analysis");
-    }
+    // Optional / Star / Plus all use `Plain` strategy on the scan
+    // side — the scan twin of the Plain parse-side loop. Phase 2.6
+    // adds `WithFollowSubtraction` / `Suppressed` once the variant
+    // pre-pass produces follow masks.
     let body = lower_scan_element(&rep.element, ctx);
     return ScanElement::Repeat(ScanRepeatElem {
         kind: rep.kind,
@@ -1228,9 +1229,14 @@ fn lower_repeat_op(
     if rep.non_greedy {
         panic("TODO Phase 2.x.nongreedy: non-greedy Repeat needs follow-set analysis");
     }
-    if let Optional = rep.kind {
-        panic("TODO Phase 2.x.optional: Optional Repeat needs follow-set analysis");
-    }
+    // `?` / `*` / `+` all use the `Plain` strategy in the absence
+    // of a follow-aware variant context. `Plain` for `?` emits
+    // `if peek_kind ∈ first(inner) { ... }`; for `*` / `+` it's the
+    // standard `while peek ∈ first { ... }` (with `+`'s mandatory-
+    // first guard handled at emit time). The `WithFollowSubtraction`
+    // / `OptionalLookahead` / `OptionalScanGuard` strategies land in
+    // Phase 2.6 once the per-call-site follow-mask analysis runs.
+    //
     // Nested inner is allowed: `(... )*` / `(name=e)*`. The inner
     // op is a single `Op` (RepeatOp.body type), so any shape that
     // `lower_op` can produce is valid. The g4 grammar already

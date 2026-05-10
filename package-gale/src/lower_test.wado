@@ -1140,6 +1140,48 @@ test "lower Transparent Group wrapping Repeat" {
     }
 }
 
+test "lower Optional Repeat with TokenRef inner uses Plain strategy" {
+    // `r : INT? ;` — Optional Repeat. Without a follow-aware
+    // variant context, the Plain strategy is correct: emit fires
+    // `if peek_kind ∈ first(inner) { ... }`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Repeat(RepeatElement {
+            kind: RepeatKind::Optional,
+            element: Element::TokenRef(TokenRefElement::new("INT")),
+            non_greedy: false,
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let Optional = rep.kind {
+                assert true;
+            } else {
+                panic("expected RepeatKind::Optional");
+            }
+            if let Plain = rep.strategy {
+                assert true;
+            } else {
+                panic("expected RepeatStrategy::Plain");
+            }
+            if let Token(t) = &rep.body {
+                assert t.kind == "TK_INT";
+            } else {
+                panic("expected Token body");
+            }
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
 test "lower greedy Star Repeat with TokenRef inner" {
     // `tokens : INT* ;`
     let mut g = empty_grammar(&"T");
