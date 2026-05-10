@@ -35,9 +35,10 @@ use crate::runtime::{self, Preopens, WasiState};
 use wado_compiler::LogLevel;
 
 /// Default per-request timeout in seconds. A guest that fails to produce a
-/// response within this window has its epoch deadline expired (via
-/// `Store::set_epoch_deadline`), which causes a `Trap::Interrupt`, freeing
-/// the tokio task and letting the client see a 504.
+/// response within this window is cut short by one of the three layers
+/// documented on `handle_http_request`: an epoch-deadline trap on a
+/// runaway wasm loop, a wall-clock timeout on a stuck host `await`, or a
+/// first-byte timeout on a guest that never produces a head.
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
 /// Epoch ticker interval. Each tick is a unit of `set_epoch_deadline`, so
@@ -267,25 +268,31 @@ fn error_response(status: u16, msg: String) -> HyperResponse<StreamingBody> {
 /// the spawn task keeps producing them. Because the channel is bounded
 /// (capacity 8), a slow consumer naturally back-pressures the guest.
 ///
-/// The per-request timeout is enforced in two layered ways:
+/// The per-request timeout is enforced in three layered ways, because no
+/// single mechanism covers every kind of stall on its own:
 ///
 /// * `Store::set_epoch_deadline` plus the engine-wide ticker traps the
-///   guest if it stays inside wasm past the deadline. This bounds the
-///   total request lifetime — even a long-lived streaming response is
-///   cut off when the deadline expires, since the wasm side traps and
-///   the spawn task drops the body sender on the way out.
+///   guest if it spends more than the deadline *running wasm*. This is
+///   the only mechanism that can preempt a tight CPU loop inside the
+///   guest.
+/// * `tokio::time::timeout(timeout, run_concurrent(...))` wraps the
+///   spawn task itself. This bounds the wall-clock lifetime of the
+///   request even when the pump is stuck on a host `await` (e.g.
+///   `frame_tx.send` blocked on a slow client) — epoch interruption
+///   cannot preempt a host await, so without this layer a misbehaving
+///   downstream could pin the store and the spawn task indefinitely.
 /// * A first-byte `tokio::time::sleep(timeout)` raced against the head
 ///   oneshot returns 504 to the client if the guest never produces a
-///   response head — covering the case where the guest is stuck waiting
-///   on host I/O instead of running wasm code.
+///   response head — covering the case where the guest is stuck before
+///   any bytes have been put on the wire.
 ///
 /// Hang avoidance:
 ///
 /// * Hyper dropping the body causes `frame_tx.send` to fail, breaking the
 ///   pump loop; the spawn task then exits.
-/// * If the outer first-byte timeout fires, the spawn task is left to run,
-///   but the per-store epoch deadline guarantees it terminates within one
-///   tick interval of the configured timeout.
+/// * If the outer first-byte timeout fires, the spawn task is left to
+///   run, but the wall-clock timeout guarantees it terminates within
+///   `timeout` regardless of where it is stuck (wasm or host await).
 async fn handle_http_request(
     engine: &Engine,
     service_pre: &ServicePre<WasiState>,
@@ -349,8 +356,17 @@ async fn handle_http_request(
         let mut resp_tx = Some(resp_tx);
         let mut frame_rx_holder = Some(frame_rx);
 
-        let drive_result: Result<anyhow::Result<()>, wasmtime::Error> = store
-            .run_concurrent(async |store| -> anyhow::Result<()> {
+        // Wrap `run_concurrent` in a wall-clock timeout. The per-store
+        // `set_epoch_deadline` only traps the guest while it is *running
+        // wasm*; an epoch interrupt cannot preempt a host `await` such as
+        // `frame_tx.send(...).await` blocking on a slow or stuck consumer.
+        // Without the outer wall-clock bound, a client that stops draining
+        // the body would pin this task — and the `Store` it owns — alive
+        // forever. Letting the timeout fire here drops `frame_tx`, which
+        // hyper sees as EOF on the response body, and frees the store.
+        let drive_result = tokio::time::timeout(
+            timeout,
+            store.run_concurrent(async |store| -> anyhow::Result<()> {
                 let handler = pin!(async {
                     let res = match service.handle(store, wasi_req).await? {
                         Ok(res) => res,
@@ -423,23 +439,28 @@ async fn handle_http_request(
                     Either::Left((res, _io)) => res,
                     Either::Right((_io_res, handler)) => handler.await,
                 }
-            })
-            .await;
+            }),
+        )
+        .await;
 
         // Surface failures that prevented the handler from producing a head.
+        // After the head has already been sent, `resp_tx` is `None` here and
+        // we just exit — dropping `frame_tx` ends the body stream, which
+        // hyper translates into a normal (possibly truncated) response.
         if let Some(tx) = resp_tx {
             let outcome = match drive_result {
-                Ok(Ok(())) => HandlerOutcome::Trapped(
+                Ok(Ok(Ok(()))) => HandlerOutcome::Trapped(
                     "Handler returned without producing a response".to_string(),
                 ),
-                Ok(Err(e)) => HandlerOutcome::Trapped(format!("Handler error: {e:?}")),
-                Err(e) => {
+                Ok(Ok(Err(e))) => HandlerOutcome::Trapped(format!("Handler error: {e:?}")),
+                Ok(Err(e)) => {
                     if is_epoch_deadline_error(&e) {
                         HandlerOutcome::Timeout
                     } else {
                         HandlerOutcome::Trapped(format!("Handler trapped:\n{e:?}"))
                     }
                 }
+                Err(_elapsed) => HandlerOutcome::Timeout,
             };
             let _ = tx.send(outcome);
         }
