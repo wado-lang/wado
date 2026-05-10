@@ -1418,24 +1418,44 @@ impl FunctionTranslator<'_, '_> {
             TirStmtKind::Return { value } => {
                 if let Some(expr) = value {
                     let value_instr = self.translate_expr(expr);
-                    // For multi-value-ABI functions, unwrap a top-level
-                    // aggregate-construction so the return pushes the N
-                    // field values directly onto the stack instead of
-                    // wrapping them in a heap struct. The Wasm function
-                    // signature has `(result T0 T1 …)` slots that match
-                    // the inner field-producing sequence.
-                    let value_instr = if matches!(
+                    // For multi-value-ABI functions, unwrap leaf
+                    // `StructNew` aggregate-constructions inside the
+                    // return value so the function pushes the N field
+                    // values directly onto the stack instead of wrapping
+                    // them in a heap struct.
+                    if matches!(
                         self.tir_func.return_abi,
                         crate::tir::ReturnAbi::MultiValue { .. }
-                    ) && let WirInstr::StructNew { fields, .. } = value_instr
-                    {
-                        WirInstr::Seq(fields)
+                    ) {
+                        match value_instr {
+                            // Direct StructNew → Return { Seq(fields) }.
+                            WirInstr::StructNew { fields, .. } => Some(WirInstr::Return {
+                                value: Some(Box::new(WirInstr::Seq(fields))),
+                            }),
+                            // Nested control flow (`return match { … }`,
+                            // `return if … `): each branch's leaf
+                            // StructNew is rewritten into its own
+                            // `Return { Seq(fields) }`, and the outer
+                            // expression replaces the whole Return —
+                            // the inner Returns transfer control before
+                            // the outer one would, so leaving an outer
+                            // `Return` here would feed the validator
+                            // an empty stack.
+                            mut other @ (WirInstr::Seq(_)
+                            | WirInstr::Block { .. }
+                            | WirInstr::If { .. }) => {
+                                lift_struct_new_to_seq(&mut other);
+                                Some(other)
+                            }
+                            other => Some(WirInstr::Return {
+                                value: Some(Box::new(other)),
+                            }),
+                        }
                     } else {
-                        value_instr
-                    };
-                    Some(WirInstr::Return {
-                        value: Some(Box::new(value_instr)),
-                    })
+                        Some(WirInstr::Return {
+                            value: Some(Box::new(value_instr)),
+                        })
+                    }
                 } else {
                     Some(WirInstr::Return { value: None })
                 }
@@ -2222,5 +2242,176 @@ impl FunctionTranslator<'_, '_> {
         }
         // Fallback: depth 0 (should not happen with correct TIR)
         0
+    }
+}
+
+/// Recursively rewrite leaf `StructNew` nodes in the value of a `Return`
+/// statement to `Seq(fields)` so the function pushes its N fields onto the
+/// stack instead of constructing a heap struct. Only applied when the
+/// enclosing function has `ReturnAbi::MultiValue`. Handles:
+///
+/// - direct `StructNew` (the common `return Point { x, y }` case)
+/// - `Seq(items)` — recurse into the trailing item
+/// - `If` / typed `Block` produced by `return if …` / `return match …` —
+///   recurse into branch tails and clear the result type since the
+///   branches now produce N stack values via inner `Return`s rather than a
+///   single ref
+/// - typed `Block` containing `StructNew; Br depth` exit pairs
+///   (BrTable-lowered match) — convert each pair to `Return { Seq(fields) }`
+fn lift_struct_new_to_seq(expr: &mut WirInstr) {
+    match expr {
+        WirInstr::StructNew { .. } => {
+            if let WirInstr::StructNew { fields, .. } = std::mem::replace(expr, WirInstr::Nop) {
+                *expr = WirInstr::Seq(fields);
+            }
+        }
+        WirInstr::Seq(items) => {
+            if let Some(last) = items.last_mut() {
+                lift_struct_new_to_seq(last);
+            }
+        }
+        WirInstr::If {
+            then_body,
+            else_body,
+            result,
+            ..
+        } => {
+            // Branches now Return directly, so the If no longer produces a value.
+            *result = None;
+            if let Some(last) = then_body.last_mut() {
+                lift_branch_tail(last);
+            }
+            if let Some(eb) = else_body
+                && let Some(last) = eb.last_mut()
+            {
+                lift_branch_tail(last);
+            }
+        }
+        WirInstr::Block { body, result, .. } => {
+            if result.is_some() {
+                rewrite_struct_new_br_to_return(body, 0);
+                *result = None;
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Inside an If branch, the tail expression's value flows out as the If's
+/// value. For the multi-value-ABI return case we want each branch to emit
+/// `Return { Seq(fields) }` directly so no heap struct is constructed.
+fn lift_branch_tail(expr: &mut WirInstr) {
+    match expr {
+        WirInstr::StructNew { .. } => {
+            if let WirInstr::StructNew { fields, .. } = std::mem::replace(expr, WirInstr::Nop) {
+                *expr = WirInstr::Return {
+                    value: Some(Box::new(WirInstr::Seq(fields))),
+                };
+            }
+        }
+        WirInstr::Seq(items) => {
+            if let Some(last) = items.last_mut() {
+                lift_branch_tail(last);
+            }
+        }
+        WirInstr::If {
+            then_body,
+            else_body,
+            result,
+            ..
+        } => {
+            *result = None;
+            if let Some(last) = then_body.last_mut() {
+                lift_branch_tail(last);
+            }
+            if let Some(eb) = else_body
+                && let Some(last) = eb.last_mut()
+            {
+                lift_branch_tail(last);
+            }
+        }
+        WirInstr::Block { body, result, .. } => {
+            if result.is_some() {
+                rewrite_struct_new_br_to_return(body, 0);
+                *result = None;
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Rewrite `StructNew; Br { depth }` exit pairs and `Seq([…, StructNew, Br])`
+/// LabeledBlock-exit patterns inside a typed `Block` body into
+/// `Return { Seq(fields) }`. Walks nested `Block` / `If` bodies recursively
+/// (depth bumps by 1 on each level). The fallthrough (last instruction
+/// without an explicit `Br`) is also rewritten when it is a `StructNew`.
+fn rewrite_struct_new_br_to_return(instrs: &mut [WirInstr], target_depth: u32) {
+    let mut i = 0;
+    while i + 1 < instrs.len() {
+        if matches!(&instrs[i + 1], WirInstr::Br { depth } if *depth == target_depth) {
+            if matches!(&instrs[i], WirInstr::StructNew { .. })
+                && let WirInstr::StructNew { fields, .. } =
+                    std::mem::replace(&mut instrs[i], WirInstr::Nop)
+            {
+                instrs[i] = WirInstr::Return {
+                    value: Some(Box::new(WirInstr::Seq(fields))),
+                };
+                instrs[i + 1] = WirInstr::Nop;
+            }
+            i += 2;
+        } else {
+            // Seq([…, StructNew, Br(target_depth)]) — LabeledBlock exit form.
+            let is_seq_exit = if let WirInstr::Seq(seq) = &instrs[i] {
+                seq.last().is_some_and(
+                    |last| matches!(last, WirInstr::Br { depth } if *depth == target_depth),
+                ) && seq.len() >= 2
+                    && matches!(seq.get(seq.len() - 2), Some(WirInstr::StructNew { .. }))
+            } else {
+                false
+            };
+            if is_seq_exit {
+                if let WirInstr::Seq(mut seq) = std::mem::replace(&mut instrs[i], WirInstr::Nop) {
+                    seq.pop(); // remove Br
+                    if let Some(WirInstr::StructNew { fields, .. }) = seq.pop() {
+                        let ret = WirInstr::Return {
+                            value: Some(Box::new(WirInstr::Seq(fields))),
+                        };
+                        instrs[i] = if seq.is_empty() {
+                            ret
+                        } else {
+                            seq.push(ret);
+                            WirInstr::Seq(seq)
+                        };
+                    }
+                }
+            } else {
+                match &mut instrs[i] {
+                    WirInstr::Block { body, .. } => {
+                        rewrite_struct_new_br_to_return(body, target_depth + 1);
+                    }
+                    WirInstr::If {
+                        then_body,
+                        else_body,
+                        ..
+                    } => {
+                        rewrite_struct_new_br_to_return(then_body, target_depth + 1);
+                        if let Some(eb) = else_body {
+                            rewrite_struct_new_br_to_return(eb, target_depth + 1);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            i += 1;
+        }
+    }
+    // Fallthrough StructNew (no explicit Br at the end).
+    if let Some(last) = instrs.last_mut()
+        && matches!(last, WirInstr::StructNew { .. })
+        && let WirInstr::StructNew { fields, .. } = std::mem::replace(last, WirInstr::Nop)
+    {
+        *last = WirInstr::Return {
+            value: Some(Box::new(WirInstr::Seq(fields))),
+        };
     }
 }

@@ -420,18 +420,20 @@ fn nested_returns_in_expr_match(expr: &TirExpr, expected: &ExpectedShape) -> boo
 }
 
 /// Whether the value of a `Return` statement is a fresh aggregate literal
-/// of the expected shape and arity directly at the return position.
-///
-/// We deliberately reject Match/If/Switch/Block wrapping: WIR build's
-/// Return arm only unwraps a top-level `StructNew`, so a body of
-/// `return match { … => StructLiteral }` would leave the heap struct
-/// allocation intact in the inner arms while the function signature
-/// expects multi-value Wasm results — a type mismatch. Functions whose
-/// `return` is wrapped in control flow stay on the single-value (heap)
-/// ABI; this keeps the analysis sound at the cost of missing some
-/// optimization opportunities. (A future refinement could recursively
-/// rewrite leaf `StructNew`s to `Seq(fields)` at WIR build time.)
+/// of the expected shape and arity, possibly wrapped in control-flow
+/// constructs (Block, If, Match, Switch) whose tail expressions are
+/// themselves fresh literals. Wrapped forms are accepted because WIR
+/// build's Return arm recursively unwraps leaf `StructNew`s in nested
+/// blocks / conditionals when the function's `ReturnAbi::MultiValue` is
+/// set.
 fn expr_returns_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
+    // Diverging arms (`_ => unreachable()`, etc.) carry control flow away
+    // before the function-level Return is reached, so they don't need to
+    // produce a fresh aggregate. Accept them so e.g. `pow10_coarse`'s
+    // `_ => unreachable()` exhaustive-match branch isn't a disqualifier.
+    if expr.type_id == TypeTable::NEVER {
+        return true;
+    }
     match &expr.kind {
         TirExprKind::TupleLiteral { elements } => {
             expected.struct_type.is_none() && elements.len() == expected.arity
@@ -444,8 +446,55 @@ fn expr_returns_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
             Some(t) => *struct_type == t && fields.len() == expected.arity,
             None => false,
         },
-        // Anything else (control-flow wrappers, Call results, FieldAccess,
-        // etc.) at the return position prevents the fresh-literal unwrap.
+        TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } => {
+            // The block's tail value is its last `Break { value }` or its
+            // final expression statement. We rely on the type matching the
+            // function signature (already checked) and recurse into the
+            // block to validate any nested `Return` statements.
+            all_returns_match_shape(b, expected) && block_tail_returns_match(b, expected)
+        }
+        TirExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            all_returns_match_shape(then_branch, expected)
+                && block_tail_returns_match(then_branch, expected)
+                && else_branch.as_ref().is_none_or(|b| {
+                    all_returns_match_shape(b, expected) && block_tail_returns_match(b, expected)
+                })
+        }
+        TirExprKind::Match { arms, .. } => arms
+            .iter()
+            .all(|arm| expr_returns_match(&arm.body, expected)),
+        TirExprKind::Switch { arms, default, .. } => {
+            arms.iter().all(|arm| {
+                all_returns_match_shape(arm, expected) && block_tail_returns_match(arm, expected)
+            }) && all_returns_match_shape(default, expected)
+                && block_tail_returns_match(default, expected)
+        }
+        // Anything else (Call result, FieldAccess, etc.) at the return
+        // position would mean the function returns an opaque aggregate
+        // value rather than constructing a fresh one — not a candidate
+        // for the multi-value rewrite.
+        _ => false,
+    }
+}
+
+/// For a block reached at return / arm-tail position, the trailing
+/// expression (or break-value) must itself be a fresh aggregate literal
+/// (or further-nested control flow that ends in one). Statements before
+/// the tail are already validated by `all_returns_match_shape`.
+fn block_tail_returns_match(block: &TirBlock, expected: &ExpectedShape) -> bool {
+    let Some(last) = block.stmts.last() else {
+        return false;
+    };
+    match &last.kind {
+        TirStmtKind::Expr(e) => expr_returns_match(e, expected),
+        TirStmtKind::Break { value: Some(v), .. } => expr_returns_match(v, expected),
+        // An explicit Return at tail position is fine — `all_returns_match_shape`
+        // already validates its value.
+        TirStmtKind::Return { .. } => true,
         _ => false,
     }
 }
