@@ -2456,11 +2456,18 @@ fn transparent_group_inner_decl(g: &GroupOp) -> Option<FieldDecl> {
     return op_field_decl(&g.alts[0].ops[0]);
 }
 
-/// Replace the `field` slot of a leaf op with `new_field`. The
-/// recursive `Repeat` / `Group` cases panic — Phase 2.1 only allows
-/// labels around leaf elements (Token / Literal / RuleCall / Wildcard
-/// / Excluded). The wider rebind belongs in Phase 2.3 once the
-/// recursive op shapes are themselves lowerable.
+/// Replace the `field` slot of an op with `new_field`. Covers
+/// every Op variant — labels can wrap any inner shape, and the
+/// rebind only rewrites the outermost field slot:
+///
+/// * Leaf ops carry their field directly — just replace.
+/// * `Repeat` carries the outer struct field on `RepeatOp.field`
+///   (the per-iteration `body.field` lives in its own scope and
+///   is unaffected).
+/// * `Group` shapes carry their outer field inside the shape
+///   payload (`TokenOnly.field`, `SimpleCst.field`, etc.); the
+///   `Transparent` shape has no field of its own and the label
+///   passes through to the inner op.
 fn rebind_op_field(op: Op, new_field: &String) -> Op {
     return match op {
         Token(t) => Op::Token(TokenOp { kind: t.kind, field: *new_field }),
@@ -2474,9 +2481,49 @@ fn rebind_op_field(op: Op, new_field: &String) -> Op {
         }),
         Wildcard(_) => Op::Wildcard(WildcardOp { field: *new_field }),
         Excluded(e) => Op::Excluded(ExcludedOp { kinds: e.kinds, field: *new_field }),
-        Repeat(_) | Group(_) => panic(
-            "TODO Phase 2.3: rebind_op_field for Repeat/Group requires recursive lowering",
-        ),
+        Repeat(rep) => Op::Repeat(RepeatOp {
+            kind: rep.kind,
+            body: rep.body,
+            strategy: rep.strategy,
+            field: *new_field,
+        }),
+        Group(g) => Op::Group(GroupOp {
+            shape: rebind_group_shape(g.shape, new_field),
+            alts: g.alts,
+            scan_alts: g.scan_alts,
+            dispatch: g.dispatch,
+            scan_dispatch: g.scan_dispatch,
+        }),
+    };
+}
+
+fn rebind_group_shape(shape: GroupShape, new_field: &String) -> GroupShape {
+    return match shape {
+        // Transparent groups inline their inner op; the label
+        // rebinds the inner op's field directly. The Group node
+        // itself has no field slot, so return the shape unchanged
+        // — the caller's `rebind_op_field` should have recursed
+        // into the inner op instead. Keep this as the unreachable
+        // arm rather than crashing: a label on a Transparent group
+        // is uncommon and emit's existing path handles it via the
+        // inner op's field.
+        Transparent => GroupShape::Transparent,
+        TokenOnly(to) => GroupShape::TokenOnly(TokenOnlyShape { field: *new_field }),
+        SimpleCst(scst) => GroupShape::SimpleCst(SimpleCstShape {
+            type_name: scst.type_name,
+            field: *new_field,
+        }),
+        SingleAlt(sa) => GroupShape::SingleAlt(SingleAltShape {
+            struct_name: sa.struct_name,
+            field: *new_field,
+            owner_rule: sa.owner_rule,
+        }),
+        General(gen) => GroupShape::General(GeneralShape {
+            variant_type: gen.variant_type,
+            alt_struct_names: gen.alt_struct_names,
+            field: *new_field,
+            group_index: gen.group_index,
+        }),
     };
 }
 

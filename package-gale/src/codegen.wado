@@ -41,6 +41,8 @@ use { gen_visitor } from "./visitor_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
+use { lower } from "./lower.wado";
+use { LoweredGrammar } from "./gir.wado";
 
 pub struct GenerateOptions {
     pub highlight: bool,
@@ -60,6 +62,13 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> String {
     gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_cst_types(&mut w, &grammar.parser_rules);
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
+    // Phase 3 — run lower up front so any panic surfaces at the same
+    // place every grammar passes through. The `LoweredGrammar` is
+    // not yet consumed by emit (Phase 4 migrates the per-rule emit
+    // entries to read it); the call here is a structural commitment
+    // and a regression gate for the lowering pipeline.
+    let lowered = lower(grammar, &lit_tokens);
+    let _ = lowered;
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
     gen_lexer(&mut w, grammar, &lit_tokens);
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
