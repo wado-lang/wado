@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778398576115,
+  "lastUpdate": 1778400353258,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20781,6 +20781,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/836aad835ee331a6375b5b917010661af4cf81cd"
         },
         "date": 1778398575747,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 511983,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cbdce7858e2a67fe2022d56a8d02bc0eb5c71dcc",
+          "message": "Merge pull request #1037 from wado-lang/claude/review-wado-cli-tests-5nOKR\n\ntest(wado-cli): harden test harness, dedupe helpers, refactor LSP tests",
+          "timestamp": "2026-05-10T16:59:13+09:00",
+          "tree_id": "615a2836a2fc960a4d1a76e8e5b6972653f918d3",
+          "url": "https://github.com/wado-lang/wado/commit/cbdce7858e2a67fe2022d56a8d02bc0eb5c71dcc"
+        },
+        "date": 1778400353139,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
