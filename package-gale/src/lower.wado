@@ -1900,7 +1900,13 @@ fn lower_repeat_op(
             panic("repeat_inner_is_list_label returned true for non-Label");
         }
     } else {
-        let outer_base = repeat_outer_base_name(&rep.element, rep.kind);
+        // Speculative `group_counter` value the inner lowering
+        // will see: pass the current value verbatim. A General-
+        // Group inner uses this id for its `group_<idx>` field
+        // name; the increment happens during the inner-Op
+        // lowering below so the outer name and inner shape stay
+        // in lockstep.
+        let outer_base = repeat_outer_base_name(&rep.element, rep.kind, *group_counter);
         dedup_name(&outer_base, name_counts);
     };
 
@@ -2034,8 +2040,14 @@ fn repeat_inner_is_list_label(elem: &Element) -> bool {
 /// uses the inner base unchanged. Mirrors `parser_gen`'s
 /// `dedup_name(&"<inner>_list", ...)` / `dedup_name(&"<inner>", ...)`
 /// pattern at field-info call sites.
-fn repeat_outer_base_name(elem: &Element, kind: RepeatKind) -> String {
-    let base = repeat_inner_base_name(elem);
+///
+/// `gc_speculative` is the value `group_counter` will be sitting
+/// at when the inner is lowered. For a General-Group inner, the
+/// outer field name embeds this id (`group_<id>_list`); the
+/// subsequent inner lowering consumes the same id and increments
+/// the counter. Other shapes ignore this parameter.
+fn repeat_outer_base_name(elem: &Element, kind: RepeatKind, gc_speculative: i32) -> String {
+    let base = repeat_inner_base_name(elem, gc_speculative);
     return match kind {
         Optional => base,
         Star | Plus => `{base}_list`,
@@ -2044,7 +2056,7 @@ fn repeat_outer_base_name(elem: &Element, kind: RepeatKind) -> String {
 
 /// Inner element's base name, mirroring `gen_util::element_base_name`
 /// but inlined here so the lowering boundary stays self-contained.
-fn repeat_inner_base_name(elem: &Element) -> String {
+fn repeat_inner_base_name(elem: &Element, gc_speculative: i32) -> String {
     return match elem {
         TokenRef(t) => t.field_name,
         Literal(l) => literal_field_name(&l.text),
@@ -2052,20 +2064,24 @@ fn repeat_inner_base_name(elem: &Element) -> String {
         Wildcard(_) => "wildcard",
         Not(ne) => not_element_field_name(&ne.element),
         Label(lab) => lab.field_name,
-        Group(g) => repeat_inner_group_base_name(g),
+        Group(g) => repeat_inner_group_base_name(g, gc_speculative),
         Repeat(_) => panic("Nested Repeat (e**) is not valid g4 syntax"),
     };
 }
 
 /// Base name for a Group element when it appears as a Repeat's
 /// inner — selects the Group shape's field-base helper that
-/// matches the classifier.
-fn repeat_inner_group_base_name(g: &GroupElement) -> String {
+/// matches the classifier. For a General-Group inner, embeds the
+/// caller's speculative `group_counter` value (the same id the
+/// inner lowering will consume).
+fn repeat_inner_group_base_name(g: &GroupElement, gc_speculative: i32) -> String {
     let alts = &g.alternatives;
     if alts.len() == 1 {
         let alt = &alts[0];
         if alt.elements.len() == 1 {
-            return repeat_inner_base_name(&alt.elements[0]);
+            // Transparent (single-element single-alt) — peel through
+            // to the inner element and let it pick the name.
+            return repeat_inner_base_name(&alt.elements[0], gc_speculative);
         }
         return single_alt_group_field_name(alt);
     }
@@ -2076,12 +2092,13 @@ fn repeat_inner_group_base_name(g: &GroupElement) -> String {
         return group_field_base_name(alts);
     }
     if is_general_group(alts) {
-        // The general group's `group_<idx>` name uses the per-rule
-        // counter, but a nested Repeat over a general group is rare
-        // and would need its own group-counter slot. Until a
-        // committed grammar exercises it, panic here so the gap is
-        // surfaced rather than silently producing a colliding name.
-        panic("TODO: Repeat over General Group inner — needs group_counter coordination");
+        // The General group's CST type uses `group_<idx>` where
+        // `<idx>` is the per-rule `group_counter` value at the
+        // point the lowering visits it. The Repeat is the first
+        // visitor (computing its outer field name) but defers the
+        // actual increment to the subsequent inner-Op lowering, so
+        // we just embed the same speculative value here.
+        return general_group_field_name(gc_speculative);
     }
     panic("Group shape unrecognised by classifier (Repeat inner base name)");
 }

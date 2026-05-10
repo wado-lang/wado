@@ -2081,6 +2081,63 @@ test "lower variant_rules empty when no caller follow overlaps callee tail-greed
     assert lowered.variant_rules.is_empty();
 }
 
+test "lower Repeat over General Group inner uses speculative group_counter id" {
+    // `r : (stmt | INT INT)+ ; stmt : ID ;`
+    // The General Group inside the Repeat gets group_index = 0
+    // (the per-rule counter starts at 0 in alt 0). The Repeat's
+    // outer struct field is `group_0_list` (Plus → `_list` suffix
+    // on the General-Group base `group_<idx>`).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([Element::Repeat(RepeatElement {
+                kind: RepeatKind::Plus,
+                element: Element::Group(GroupElement::new([
+                    alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                    alt_of([
+                        Element::TokenRef(TokenRefElement::new("INT")),
+                        Element::TokenRef(TokenRefElement::new("INT")),
+                    ]),
+                ])),
+                non_greedy: false,
+            })])],
+        ),
+        ParserRule::new(
+            "stmt",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            // Outer field uses speculative counter id 0.
+            assert rep.field == "group_0_list", rep.field;
+            // The inner Op is the General-Group, with the SAME id
+            // (the inner lowering consumed the same counter value).
+            if let Group(go) = &rep.body {
+                if let General(gen) = &go.shape {
+                    assert gen.group_index == 0;
+                    assert gen.variant_type == "RGroup0";
+                } else {
+                    panic("expected nested General Group");
+                }
+            } else {
+                panic("expected Op::Group inside Repeat");
+            }
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
 test "lower Repeat with list-label inner uses label name as outer field" {
     // `r : (names+=ID)* ;` — `+=` inside a `*` Repeat. The Repeat
     // becomes the array; the label name `names` IS the outer
