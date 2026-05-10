@@ -156,8 +156,14 @@ impl NodeLookup {
         let mut by_end_line: BTreeMap<usize, Vec<(AstId, Span)>> = BTreeMap::new();
         let mut starts_by_line: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
         for (id, span) in nodes {
-            by_end_line.entry(span.end_line()).or_default().push((*id, *span));
-            starts_by_line.entry(span.line).or_default().push(span.start);
+            by_end_line
+                .entry(span.end_line())
+                .or_default()
+                .push((*id, *span));
+            starts_by_line
+                .entry(span.line)
+                .or_default()
+                .push(span.start);
         }
         for v in starts_by_line.values_mut() {
             v.sort_unstable();
