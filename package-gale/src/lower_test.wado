@@ -1999,6 +1999,88 @@ test "lower Tournament sorts longer alt first" {
     }
 }
 
+test "lower registers follow-aware variant when caller follow overlaps callee tail-greedy" {
+    // `r : a 'end' ; a : 'x'* ;`
+    // The call to `a` at position 0 has caller-follow = first('end'),
+    // which overlaps `a`'s tail-greedy first set (`'x'`)... actually
+    // `'x'` is not in `'end'`'s first, so no variant here. Use a
+    // case where they DO overlap: `r : a ; a : 'x'* ; ` — empty
+    // outer_follow, no variant. Need a real overlap.
+    //
+    // `r : a STRING ; a : 'x'* ;` — outer_follow at `a` is `{TK_STRING}`.
+    // tail_greedy_first(a) = first('x') = {TK_LIT_X}. No overlap.
+    //
+    // For an actual overlap, the callee's tail-greedy first must
+    // include a token in the caller's follow. Construct:
+    // `r : a X ; a : X* ;` — outer_follow = {TK_X}, tail-greedy = {TK_X}.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([
+                Element::RuleRef(RuleRefElement::new("a")),
+                Element::TokenRef(TokenRefElement::new("X")),
+            ])],
+        ),
+        ParserRule::new(
+            "a",
+            Visibility::Default,
+            [],
+            [alt_of([Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::TokenRef(TokenRefElement::new("X")),
+                non_greedy: false,
+            })])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    // Variant registered → variant_rules has one entry.
+    assert lowered.variant_rules.len() == 1, `expected 1 variant, got {lowered.variant_rules.len()}`;
+    // The RuleCall at r's first op carries the variant_id.
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let RuleCall(rc) = &s.body.ops[0] {
+            if let Some(id) = &rc.variant_id {
+                assert *id == 0;
+            } else {
+                panic("expected variant_id on RuleCall");
+            }
+        } else {
+            panic("expected RuleCall");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower variant_rules empty when no caller follow overlaps callee tail-greedy" {
+    // `r : a X ; a : Y ;` — no Repeat → tail_greedy_first(a) = {}.
+    // No variant registered.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([
+                Element::RuleRef(RuleRefElement::new("a")),
+                Element::TokenRef(TokenRefElement::new("X")),
+            ])],
+        ),
+        ParserRule::new(
+            "a",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("Y"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.variant_rules.is_empty();
+}
+
 test "lower Transparent Group contributes inner op's field" {
     // `r : (INT) ;` — Transparent group with single leaf inner.
     // The struct field is the inner Token's, not a wrapper.
