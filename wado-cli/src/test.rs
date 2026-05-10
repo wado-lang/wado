@@ -513,8 +513,14 @@ enum TestKind {
 
 /// Parsed test export name.
 ///
-/// Export names follow the format `test-(trap-|todo-)?(tm{N}-)?{index}(-{name})?`
-/// emitted by the compiler when targeting the `test` world.
+/// The compiler emits names of the shape
+/// `test-(trap-|todo-)?(tm{N}-)?{index}(-{name})?` when targeting the
+/// `test` world. The parser is intentionally tolerant of two edges so a
+/// stray name doesn't drop a test from the run:
+/// - a `tm…-` prefix that doesn't have a parseable `u64` (e.g. `tmfoo-…`)
+///   falls through into the index/name branch instead of being rejected;
+/// - a trailing dash with no name segment (`test-0-`) is treated as
+///   "no name provided" and rendered as `<test {index}>`.
 #[derive(Debug, PartialEq, Eq)]
 struct TestExportName {
     kind: TestKind,
@@ -542,7 +548,11 @@ fn parse_test_export(name: &str) -> Option<TestExportName> {
     let (timeout_ms, rest) = parse_timeout_segment(rest);
 
     let display = match rest.find('-') {
-        Some(idx) => rest[idx + 1..].replace('-', "_"),
+        Some(idx) if idx + 1 < rest.len() => rest[idx + 1..].replace('-', "_"),
+        // No `-` at all, or a trailing `-` with no name segment: fall
+        // back to the bare-index display so we never produce an empty
+        // string.
+        Some(idx) => format!("<test {}>", &rest[..idx]),
         None => format!("<test {rest}>"),
     };
 
@@ -631,15 +641,31 @@ async fn compile_one_file(
         }
     };
 
+    // Engine, Component, and Linker setup are grouped: the linker is
+    // built here (once per module) so WASI P3 import registration is
+    // not redone in every `run_single_test`, and the linker can be
+    // shared across all tests because `instantiate_async` only borrows
+    // it. A failure in any of the three is reported as a per-file
+    // `CompileFailure` instead of aborting the whole package run, so a
+    // single bad module doesn't prevent the rest from being tested.
     let load_start = Instant::now();
-    let engine = Arc::new(runtime::create_test_engine(flags.opt_level.to_wasmtime())?);
-    let component = Arc::new(Component::new(&engine, &compile_result.wasm)?);
-    // Build the linker once per module: WASI P3 import registration is
-    // non-trivial and would otherwise repeat for every `run_single_test`
-    // call. Sharing a single linker across all tests in this module is
-    // safe — `instantiate_async` only borrows the linker.
-    let linker = Arc::new(runtime::create_linker(&engine)?);
+    let load_result: Result<_> = (|| {
+        let engine = Arc::new(runtime::create_test_engine(flags.opt_level.to_wasmtime())?);
+        let component = Arc::new(Component::new(&engine, &compile_result.wasm)?);
+        let linker = Arc::new(runtime::create_linker(&engine)?);
+        Ok((engine, component, linker))
+    })();
     let load_duration = load_start.elapsed();
+
+    let (engine, component, linker) = match load_result {
+        Ok(t) => t,
+        Err(e) => {
+            let dur = format_duration(compile_duration);
+            let load_dur = format_duration(load_duration);
+            eprintln!("[{elapsed}] FAILED to load {path} ({dur}, load attempt {load_dur}): {e}");
+            return Ok(CompileTaskResult::CompileFailure(CompileFailure { path }));
+        }
+    };
 
     let dur = format_duration(compile_duration);
     let load_dur = format_duration(load_duration);
@@ -1336,5 +1362,14 @@ mod tests {
         let parsed = parse("test-tmfoo-0-x");
         assert_eq!(parsed.timeout_ms, None);
         assert_eq!(parsed.display, "0_x");
+    }
+
+    #[test]
+    fn trailing_dash_falls_back_to_index_form() {
+        // Empty post-dash segment shouldn't render as an empty display
+        // string — fall back to the bare-index form.
+        assert_eq!(parse("test-0-").display, "<test 0>");
+        assert_eq!(parse("test-trap-3-").display, "<test 3>");
+        assert_eq!(parse("test-tm2000-0-").display, "<test 0>");
     }
 }
