@@ -12,13 +12,13 @@ use lexopt::Arg::Value;
 use tokio::sync::mpsc;
 use wado_compiler::hashmap::IndexMap;
 use wasmtime::Engine;
-use wasmtime::component::Component;
+use wasmtime::component::{Component, Linker};
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags, OptLevel};
 use crate::discover;
 use crate::manifest as project_manifest;
-use crate::runtime;
+use crate::runtime::{self, WasiState};
 use wado_compiler::LogLevel;
 
 const DEFAULT_TIMEOUT_MS: u64 = 5000;
@@ -457,11 +457,16 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     })
 }
 
-/// A compiled test module ready for parallel execution
+/// A compiled test module ready for parallel execution.
+///
+/// The `Linker` is built once per engine alongside compilation; every test
+/// in the module instantiates against the same linker so the WASI binding
+/// registration (`p3::add_to_linker` × 4) is paid once instead of per-test.
 struct CompiledTestModule {
     path: String,
     engine: Arc<Engine>,
     component: Arc<Component>,
+    linker: Arc<Linker<WasiState>>,
 }
 
 /// A single test job to execute
@@ -583,6 +588,7 @@ enum CompileTaskResult {
         path: String,
         engine: Arc<Engine>,
         component: Arc<Component>,
+        linker: Arc<Linker<WasiState>>,
         tests: Vec<ParsedTest>,
     },
     TodoCompileError(TodoCompileError),
@@ -628,6 +634,11 @@ async fn compile_one_file(
     let load_start = Instant::now();
     let engine = Arc::new(runtime::create_test_engine(flags.opt_level.to_wasmtime())?);
     let component = Arc::new(Component::new(&engine, &compile_result.wasm)?);
+    // Build the linker once per module: WASI P3 import registration is
+    // non-trivial and would otherwise repeat for every `run_single_test`
+    // call. Sharing a single linker across all tests in this module is
+    // safe — `instantiate_async` only borrows the linker.
+    let linker = Arc::new(runtime::create_linker(&engine)?);
     let load_duration = load_start.elapsed();
 
     let dur = format_duration(compile_duration);
@@ -649,6 +660,7 @@ async fn compile_one_file(
         path,
         engine,
         component,
+        linker,
         tests,
     })
 }
@@ -711,6 +723,7 @@ async fn collect_test_jobs(
                 path,
                 engine,
                 component,
+                linker,
                 tests,
             } => {
                 let module_idx = modules.len();
@@ -732,6 +745,7 @@ async fn collect_test_jobs(
                     path,
                     engine,
                     component,
+                    linker,
                 }));
             }
             CompileTaskResult::TodoCompileError(e) => todo_compile_errors.push(e),
@@ -780,12 +794,8 @@ async fn run_single_test(
     let deadline_ticks = (job.timeout_ms / EPOCH_INTERVAL_MS).max(1);
     store.set_epoch_deadline(deadline_ticks);
 
-    let linker = match runtime::create_linker(&module.engine) {
-        Ok(l) => l,
-        Err(e) => return fail_result(module, job, format!("failed to set up linker: {e}"), start),
-    };
-
-    let instance = match linker
+    let instance = match module
+        .linker
         .instantiate_async(&mut store, &module.component)
         .await
     {
