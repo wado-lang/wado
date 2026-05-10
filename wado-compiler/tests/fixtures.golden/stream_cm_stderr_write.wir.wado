@@ -76,11 +76,11 @@ fn "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/run"() with Stderr 
     let data: ref "core:prelude//Array<u8>";
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
-    let __mv_lo_2: i32;
-    let __mv_hi_2: i32;
-    multivalue_bind [__mv_lo_2, __mv_hi_2] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    rx = __mv_lo_2;
-    tx = __mv_hi_2;
+    let __mv_lo_1: i32;
+    let __mv_hi_1: i32;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    rx = __mv_lo_1;
+    tx = __mv_hi_1;
     subtask = "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/__cm_binding__Stderr_write_via_stream"(rx);
     data = __seq_lit: block -> ref "core:prelude//Array<u8>" {
         __b_3 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(101, 114, 114, 32, 109, 115, 103, 10), used: 8 };
@@ -89,27 +89,27 @@ fn "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/run"() with Stderr 
     };
     "core:internal/cm_stream_write_u8"(tx, data);
     "wasi/stream-drop-writable"(tx);
-    let __fr_handle_3: i32;
-    let __fr_ptr_3: i32;
-    let __fr_result_3: i32;
-    __fr_handle_3 = subtask;
-    __fr_ptr_3 = "mem/realloc"(0, 0, 8, 40);
-    __fr_result_3 = "wasi/future-read:transmission-cli"(__fr_handle_3, __fr_ptr_3);
-    if __fr_result_3 == -1 {
-        let __fr_ws_3: i32;
-        let __fr_evtptr_3: i32;
-        __fr_ws_3 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(__fr_handle_3, __fr_ws_3);
-        __fr_evtptr_3 = "mem/realloc"(0, 0, 4, 8);
-        drop("wasi/waitable-set-wait"(__fr_ws_3, __fr_evtptr_3));
-        drop("mem/realloc"(__fr_evtptr_3, 8, 4, 0));
-        "wasi/waitable-join"(__fr_handle_3, 0);
-        "wasi/waitable-set-drop"(__fr_ws_3);
-        __fr_result_3 = 0;
+    let __fr_handle_2: i32;
+    let __fr_ptr_2: i32;
+    let __fr_result_2: i32;
+    __fr_handle_2 = subtask;
+    __fr_ptr_2 = "mem/realloc"(0, 0, 8, 40);
+    __fr_result_2 = "wasi/future-read:transmission-cli"(__fr_handle_2, __fr_ptr_2);
+    if __fr_result_2 == -1 {
+        let __fr_ws_2: i32;
+        let __fr_evtptr_2: i32;
+        __fr_ws_2 = "wasi/waitable-set-new"();
+        "wasi/waitable-join"(__fr_handle_2, __fr_ws_2);
+        __fr_evtptr_2 = "mem/realloc"(0, 0, 4, 8);
+        drop("wasi/waitable-set-wait"(__fr_ws_2, __fr_evtptr_2));
+        drop("mem/realloc"(__fr_evtptr_2, 8, 4, 0));
+        "wasi/waitable-join"(__fr_handle_2, 0);
+        "wasi/waitable-set-drop"(__fr_ws_2);
+        __fr_result_2 = 0;
     }
-    let __fr_opt_4: ref null "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>";
-    __fr_opt_4 = (if (__fr_result_3 & 15) == 0 -> ref null "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>" {
-        ref.as_non_null((if builtin::load_i32(__fr_ptr_3) == 0 -> ref "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>" {
+    let __fr_opt_3: ref null "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>";
+    __fr_opt_3 = (if (__fr_result_2 & 15) == 0 -> ref null "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>" {
+        ref.as_non_null((if builtin::load_i32(__fr_ptr_2) == 0 -> ref "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>" {
             struct.new "core:prelude/types.wado//Result<unit,wasi:cli/types.wado/ErrorCode>" { 0 };
         } else {
             unreachable;
@@ -117,8 +117,8 @@ fn "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/run"() with Stderr 
     } else {
         ref.null none;
     });
-    drop("mem/realloc"(__fr_ptr_3, 40, 8, 0));
-    drop(__fr_opt_4);
+    drop("mem/realloc"(__fr_ptr_2, 40, 8, 0));
+    drop(__fr_opt_3);
 }
 
 fn "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/__cm_binding__Stderr_write_via_stream"(data) with Stderr {

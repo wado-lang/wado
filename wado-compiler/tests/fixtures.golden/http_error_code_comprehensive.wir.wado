@@ -3019,18 +3019,18 @@ condition: roe3 matches { Other(_) }
     }
     let __pair_temp_6: i64;
     __pair_temp_6 = "wasi/future-new"();
+    let __mv_lo_6: i32;
+    let __mv_hi_6: i32;
+    multivalue_bind [__mv_lo_6, __mv_hi_6] = builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
+    trailers_future = __mv_lo_6;
+    trailers_tx = __mv_hi_6;
+    let __pair_temp_7: i64;
+    __pair_temp_7 = "wasi/stream-new"();
     let __mv_lo_7: i32;
     let __mv_hi_7: i32;
-    multivalue_bind [__mv_lo_7, __mv_hi_7] = builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
-    trailers_future = __mv_lo_7;
-    trailers_tx = __mv_hi_7;
-    let __pair_temp_8: i64;
-    __pair_temp_8 = "wasi/stream-new"();
-    let __mv_lo_9: i32;
-    let __mv_hi_9: i32;
-    multivalue_bind [__mv_lo_9, __mv_hi_9] = builtin::i32_wrap_i64(__pair_temp_8); builtin::i32_wrap_i64(__pair_temp_8 >>u 32_i64);
-    resp_rx = __mv_lo_9;
-    resp_tx = __mv_hi_9;
+    multivalue_bind [__mv_lo_7, __mv_hi_7] = builtin::i32_wrap_i64(__pair_temp_7); builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
+    resp_rx = __mv_lo_7;
+    resp_tx = __mv_hi_7;
     resp_headers = "wado-compiler/tests/fixtures/http_error_code_comprehensive.wado/__cm_binding__Fields_new"();
     __pattern_temp_8 = "wado-compiler/tests/fixtures/http_error_code_comprehensive.wado/__cm_binding__Response_new"(resp_headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: resp_rx }, trailers_future);
     response = __pattern_temp_8.0;
@@ -3342,26 +3342,26 @@ condition: roe3 matches { Other(_) }
         unreachable;
     });
     "wasi/stream-drop-writable"(resp_tx);
-    let __fw_write_ptr_10: i32;
-    let __fw_handle_10: i32;
-    let __fw_result_10: i32;
-    __fw_handle_10 = trailers_tx;
-    __fw_write_ptr_10 = "mem/realloc"(0, 0, 8, 40);
-    builtin::store_i64(__fw_write_ptr_10, 0_i64);
-    builtin::store_i64[8](__fw_write_ptr_10, 0_i64);
-    builtin::store_i64[16](__fw_write_ptr_10, 0_i64);
-    builtin::store_i64[24](__fw_write_ptr_10, 0_i64);
-    builtin::store_i64[32](__fw_write_ptr_10, 0_i64);
-    __fw_result_10 = "wasi/future-write"(__fw_handle_10, __fw_write_ptr_10);
-    if __fw_result_10 == -1 {
-        let __fw_evt_10: i32;
-        __fw_result_10 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(__fw_handle_10, __fw_result_10);
-        __fw_evt_10 = "mem/realloc"(0, 0, 4, 8);
-        drop("wasi/waitable-set-wait"(__fw_result_10, __fw_evt_10));
-        drop("mem/realloc"(__fw_evt_10, 8, 4, 0));
+    let __fw_write_ptr_8: i32;
+    let __fw_handle_8: i32;
+    let __fw_result_8: i32;
+    __fw_handle_8 = trailers_tx;
+    __fw_write_ptr_8 = "mem/realloc"(0, 0, 8, 40);
+    builtin::store_i64(__fw_write_ptr_8, 0_i64);
+    builtin::store_i64[8](__fw_write_ptr_8, 0_i64);
+    builtin::store_i64[16](__fw_write_ptr_8, 0_i64);
+    builtin::store_i64[24](__fw_write_ptr_8, 0_i64);
+    builtin::store_i64[32](__fw_write_ptr_8, 0_i64);
+    __fw_result_8 = "wasi/future-write"(__fw_handle_8, __fw_write_ptr_8);
+    if __fw_result_8 == -1 {
+        let __fw_evt_8: i32;
+        __fw_result_8 = "wasi/waitable-set-new"();
+        "wasi/waitable-join"(__fw_handle_8, __fw_result_8);
+        __fw_evt_8 = "mem/realloc"(0, 0, 4, 8);
+        drop("wasi/waitable-set-wait"(__fw_result_8, __fw_evt_8));
+        drop("mem/realloc"(__fw_evt_8, 8, 4, 0));
     }
-    drop("mem/realloc"(__fw_write_ptr_10, 40, 8, 0));
+    drop("mem/realloc"(__fw_write_ptr_8, 40, 8, 0));
 }
 
 fn "wado-compiler/tests/fixtures/http_error_code_comprehensive.wado/__cm_binding__Fields_new"() with Fields {
@@ -3432,11 +3432,11 @@ fn "core:internal/log_stderr"(message) {
     let future: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
-    let __mv_lo_2: i32;
-    let __mv_hi_2: i32;
-    multivalue_bind [__mv_lo_2, __mv_hi_2] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    rx = __mv_lo_2;
-    tx = __mv_hi_2;
+    let __mv_lo_1: i32;
+    let __mv_hi_1: i32;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    rx = __mv_lo_1;
+    tx = __mv_hi_1;
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

@@ -70,11 +70,11 @@ fn "wado-compiler/tests/fixtures/trait_bound_ord.wado/__cm_export__run"() {
     message_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("first is smaller"), used: 16 };
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
-    let __mv_lo_2: i32;
-    let __mv_hi_2: i32;
-    multivalue_bind [__mv_lo_2, __mv_hi_2] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    rx_4 = __mv_lo_2;
-    tx_5 = __mv_hi_2;
+    let __mv_lo_1: i32;
+    let __mv_hi_1: i32;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    rx_4 = __mv_lo_1;
+    tx_5 = __mv_hi_1;
     handle_6 = "wado-compiler/tests/fixtures/trait_bound_ord.wado/__cm_binding__Stdout_write_via_stream"(rx_4);
     "core:cli/write_to_stream"(tx_5, message_3, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_6);
