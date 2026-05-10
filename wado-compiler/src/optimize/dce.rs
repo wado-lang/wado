@@ -170,7 +170,7 @@ fn collect_array_clone_element_types(
     block: &crate::tir::TirBlock,
     out: &mut IndexSet<crate::tir::TypeId>,
 ) {
-    use crate::tir::{TirBlock, TirExpr, TirExprKind};
+    use crate::tir::{TirExpr, TirExprKind};
     use crate::tir_visitor::TirRefVisitor;
 
     struct Collector<'a> {
@@ -191,9 +191,6 @@ fn collect_array_clone_element_types(
     }
     let mut collector = Collector { out };
     collector.visit_block(block);
-    // Tie `block` lifetime to the lambda even though we don't use it
-    // directly above, to keep type inference unambiguous.
-    let _ = std::any::type_name::<TirBlock>();
 }
 
 /// Compute reachable functions from all entry points via call graph traversal.
