@@ -2580,7 +2580,35 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
 /// Emit a single-alternative rule. The body inlines the alt
 /// directly with no dispatch table — the simplest shape.
 fn gen_parse_fn_simple(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String) {
-    gen_parse_fn_named(w, rule, ctx, fn_name, scan_fn_name, /*emit_visibility=*/ true);
+    let _ = scan_fn_name;
+    gen_parse_fn_simple_named(w, rule, ctx, fn_name, /*emit_visibility=*/ true);
+}
+
+/// Body emitter for a single-alt rule, parameterised by function
+/// name so the follow-aware variant pass can reuse it with
+/// `parse_<rule>__follow_<id>`. No internal classification — the
+/// caller already committed to the Simple shape.
+fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext, fn_name: &String, emit_visibility: bool) {
+    ctx.current_rule_name = rule.name;
+    ctx.group_counter = 0;
+    let type_name = rule_type_name(&rule.name);
+    if emit_visibility {
+        gen_visibility_comment(w, &rule.visibility);
+    }
+
+    // Single-alt rules have exactly one alt, so the `alt_gc_starts`
+    // entry is `[0]`. Keep the field set for compatibility with any
+    // helpers that consult it.
+    ctx.alt_gc_starts = [0];
+
+    let mut f = FnSpec::new(fn_name);
+    f.add_param("p", "&mut Parser");
+    f.set_return_type(`Result<{type_name}, ParseError>`);
+    f.emit_begin(w);
+    w.line("let start = p.peek().span.start;");
+    gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], ctx);
+    w.end();
+    w.blank();
 }
 
 /// Emit a multi-alternative rule with no LR alts. Dispatch goes
@@ -2611,6 +2639,15 @@ fn gen_parse_fn_left_recursive(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut 
 /// `pub`/`export` doc comment on the variant function (variants are
 /// implementation details, not part of the rule's exposed surface).
 fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String, emit_visibility: bool) {
+    // Variant emission and the (legacy) single shared dispatch route
+    // through here. Single-alt rules are handled by the dedicated
+    // \`gen_parse_fn_simple_named\` so the heavy multi-alt + LR setup
+    // below doesn't run for the trivial shape.
+    if rule.alternatives.len() == 1 {
+        gen_parse_fn_simple_named(w, rule, ctx, fn_name, emit_visibility);
+        return;
+    }
+
     ctx.current_rule_name = rule.name;
     ctx.group_counter = 0;
     let type_name = rule_type_name(&rule.name);
@@ -2627,18 +2664,6 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContex
         gc_running += count_general_groups(&alt.elements);
     }
     ctx.alt_gc_starts = alt_gc_starts;
-
-    if rule.alternatives.len() == 1 {
-        let mut f = FnSpec::new(fn_name);
-        f.add_param("p", "&mut Parser");
-        f.set_return_type(`Result<{type_name}, ParseError>`);
-        f.emit_begin(w);
-        w.line("let start = p.peek().span.start;");
-        gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], ctx);
-        w.end();
-        w.blank();
-        return;
-    }
 
     let case_names = case_names_for_rule(&rule.alternatives);
 
