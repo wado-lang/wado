@@ -45,7 +45,7 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_break.wado/make_pair_call" = fn(i32, i32) -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_break.wado//Pair";  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_break.wado/make_pair_break" = fn(bool) -> [i32, i32];  // TypeId(14)
+type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_break.wado/make_pair_break" = fn(bool) -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_break.wado//Pair";  // TypeId(14)
 
 type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_break.wado/use_pair_break" = fn(bool) -> i32;  // TypeId(15)
 
@@ -107,19 +107,18 @@ fn "wado-compiler/tests/fixtures/opt_multi_value_user_struct_break.wado/make_pai
 }
 
 fn "wado-compiler/tests/fixtures/opt_multi_value_user_struct_break.wado/make_pair_break"(cond) {
-    mk: block {
+    return mk: block -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_break.wado//Pair" {
         if cond {
             break mk: "wado-compiler/tests/fixtures/opt_multi_value_user_struct_break.wado/make_pair_call"(1, 2);
         }
-        return 3, 4;
+        struct.new "wado-compiler/tests/fixtures/opt_multi_value_user_struct_break.wado//Pair" { a: 3, b: 4 };
     };
 }
 
 fn "wado-compiler/tests/fixtures/opt_multi_value_user_struct_break.wado/use_pair_break"(cond) {
-    let p_mv_a: i32;
-    let p_mv_b: i32;
-    multivalue_bind [p_mv_a, p_mv_b] = "wado-compiler/tests/fixtures/opt_multi_value_user_struct_break.wado/make_pair_break"(cond);
-    return p_mv_a + p_mv_b;
+    let p: ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_break.wado//Pair";
+    p = "wado-compiler/tests/fixtures/opt_multi_value_user_struct_break.wado/make_pair_break"(cond);
+    return p.a + p.b;
 }
 
 fn "wado-compiler/tests/fixtures/opt_multi_value_user_struct_break.wado/run"() {
