@@ -707,35 +707,44 @@ impl<'a> Unparser<'a> {
                 this.output.push_str(";\n");
             }
 
+            // Force one blank line between an associated-type / constant
+            // block and the first method, regardless of source spacing.
+            // After hand-emitting the blank, anchor `last_source_line`
+            // at the first method's `effective_start` (= leading-comment
+            // line or first-attribute line, falling back to the method
+            // line) so the methods loop's per-comment / per-attribute
+            // `emit_blank_lines_to` calls don't re-emit blanks on top.
             let has_declarations = !i.associated_types.is_empty() || !i.constants.is_empty();
-            if has_declarations && !i.methods.is_empty() {
+            if has_declarations && let Some(first) = i.methods.first() {
                 this.output.push('\n');
+                let first_effective_line =
+                    effective_start_line(&first.attrs, first.span.line);
+                this.last_source_line = this
+                    .leading_of(first.id)
+                    .first()
+                    .map_or(first_effective_line, |c| c.span.line);
             }
 
             for (idx, method) in i.methods.iter().enumerate() {
-                let leading_comments: Vec<Comment> = this.leading_of(method.id).to_vec();
-                let effective_start = leading_comments
+                // Subsequent methods are visually separated by at
+                // least one blank line, even if the source had none.
+                // The leading-comment helper would emit zero blanks
+                // when `blank_lines_between(...) == 0`, so force the
+                // gap and advance `last_source_line` to the helper's
+                // anchor in the same way as the assoc-method gap above.
+                let effective_line = effective_start_line(&method.attrs, method.span.line);
+                let effective_start = this
+                    .leading_of(method.id)
                     .first()
-                    .map_or(method.span.line, |c| c.span.line);
-
-                // Methods are visually separated by at least one blank line, even
-                // if the source had none.
-                if idx > 0 {
-                    let blank_lines =
-                        blank_lines_between(this.last_source_line, effective_start).max(1);
-                    for _ in 0..blank_lines {
-                        this.output.push('\n');
-                    }
+                    .map_or(effective_line, |c| c.span.line);
+                if idx > 0
+                    && blank_lines_between(this.last_source_line, effective_start) == 0
+                {
+                    this.output.push('\n');
+                    this.last_source_line = effective_start;
                 }
-
-                for comment in &leading_comments {
-                    if this.emitted_comments.insert(comment.span.start) {
-                        this.write_indent();
-                        this.emit_comment(comment);
-                        this.output.push('\n');
-                    }
-                }
-
+                this.emit_leading_for(method.id);
+                this.emit_blank_lines_to(effective_line);
                 this.unparse_function(method);
                 this.last_source_line = method.span.end_line();
             }
