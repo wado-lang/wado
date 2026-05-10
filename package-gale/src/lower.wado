@@ -32,12 +32,12 @@
 //! per-rule `group_counter` so the outer field name and the inner
 //! variant share the same id.
 //!
-//! `OptionalLookahead` and `OptionalScanGuard` are still stubs —
-//! every Optional Repeat picks `Plain` even when the inner is a
-//! lookahead-requiring Group. emit accepts this conservatively (the
-//! same way it does today for un-tagged `e?` constructs); the
-//! strategy enum is reserved for when those specialised emit paths
-//! land.
+//! Optional `?` Repeats now resolve to `OptionalLookahead` when
+//! the inner is a single-alt Group of ≥ 2 fixed tokens, or to
+//! `OptionalScanGuard` when the inner is a scannable Group /
+//! RuleRef without a usable fixed-token prefix. The mask-driven
+//! `Suppressed` decision still wins over both — if every iteration
+//! is claimed by the variant's follow mask, the loop never runs.
 //!
 //! Phase 3 swaps `codegen::generate` to call `lower` and feed the
 //! result through a thin emit adapter; until then this file is
@@ -109,6 +109,7 @@ use {
     RepeatStrategy,
     NonGreedyStrategy,
     WithFollowSubtractionStrategy,
+    OptionalLookaheadStrategy,
     GroupOp,
     GroupShape,
     SingleAltShape,
@@ -1916,10 +1917,42 @@ fn lower_repeat_op(
     let mut inner_visiting: Array<String> = [];
     let inner_first = ctx.first_of_element(&rep.element, &mut inner_visiting);
 
+    // Optional `?` has two specialised strategies that supersede
+    // the mask-aware decision when applicable:
+    //
+    // * `OptionalLookahead` — single-alt Group whose leading
+    //   elements are fixed tokens (≥ 2 of them). emit conjunctively
+    //   guards on the per-position kind checks.
+    // * `OptionalScanGuard` — any other Optional shape (Group with
+    //   non-token leading element, or scan-only mismatch) where the
+    //   inner is fully scannable. emit runs the scan helper as a
+    //   commit gate, then parses on success.
+    //
+    // Both kick in only outside a follow-mask suppression window;
+    // when the mask fully blocks the loop (`Suppressed`), the
+    // specialised strategies are unnecessary.
+    let mut opt_specialised: Option<RepeatStrategy> = null;
+    if !rep.non_greedy {
+        if let Optional = rep.kind {
+            let la = try_optional_lookahead(&rep.element);
+            if let Some(strat) = la {
+                opt_specialised = Option::<RepeatStrategy>::Some(strat);
+            } else {
+                opt_specialised = try_optional_scan_guard(&rep.element, ctx);
+            }
+        }
+    }
+
     let strategy = if rep.non_greedy {
         compute_non_greedy_strategy(&rep.element, outer_follow, ctx);
     } else {
-        choose_greedy_repeat_strategy(&inner_first, &ctx.current_follow_mask);
+        // Mask-driven `Suppressed` always wins — if every iteration's
+        // first token is in the variant mask, the loop never enters
+        // and any specialised guard would be unreachable. Otherwise
+        // prefer the specialised strategy when one is available;
+        // fall through to the mask-aware decision when not.
+        let mask_decision = choose_greedy_repeat_strategy(&inner_first, &ctx.current_follow_mask);
+        pick_greedy_strategy(mask_decision, opt_specialised);
     };
 
     // The inner body's `outer_follow` for nested constructs is the
@@ -1938,6 +1971,101 @@ fn lower_repeat_op(
         strategy: strategy,
         field: outer_field,
     });
+}
+
+/// Try to materialise an `OptionalLookahead` strategy for an
+/// `Optional` Repeat whose inner is a single-alt Group of fixed
+/// tokens. Returns `null` when the inner doesn't yield a usable
+/// signature; the caller then falls through to the mask-aware
+/// `Plain` / `WithFollowSubtraction` / `Suppressed` decision.
+///
+/// Mirrors `parser_gen::optional_lookahead_depth` /
+/// `optional_lookahead_tokens` — emit's
+/// `gen_optional_with_lookahead` consumes the signature as a
+/// conjunction of per-position kind checks. The strategy fires
+/// only when the depth is ≥ 2; single-token inners already get
+/// the right behaviour from `Plain`.
+fn try_optional_lookahead(inner: &Element) -> Option<RepeatStrategy> {
+    if let Group(g) = inner {
+        let alts = &g.alternatives;
+        if alts.len() != 1 {
+            return null;
+        }
+        let mut sig: Array<String> = [];
+        for let elem of &alts[0].elements {
+            if let TokenRef(t) = elem {
+                sig.push(`TK_{t.name}`);
+            } else if let Literal(l) = elem {
+                sig.push(literal_const_name(&l.text));
+            } else {
+                break;
+            }
+        }
+        if sig.len() < 2 {
+            return null;
+        }
+        // Wrap each token in its own per-position array (the GIR's
+        // `sigs` shape allows multi-shape inner alts; for the
+        // single-alt fixed-token case each position has exactly one
+        // valid kind).
+        let mut per_position: Array<Array<String>> = [];
+        for let tk of &sig {
+            per_position.push([*tk]);
+        }
+        return Option::<RepeatStrategy>::Some(RepeatStrategy::OptionalLookahead(
+            OptionalLookaheadStrategy { sigs: [per_position] },
+        ));
+    }
+    return null;
+}
+
+/// Combine the mask-aware decision with an optional specialised
+/// strategy: `Suppressed` always wins (the loop won't run at all);
+/// otherwise the specialised strategy is preferred when available.
+fn pick_greedy_strategy(
+    mask_decision: RepeatStrategy,
+    specialised: Option<RepeatStrategy>,
+) -> RepeatStrategy {
+    if let Suppressed = mask_decision {
+        return mask_decision;
+    }
+    if let Some(strat) = specialised {
+        return strat;
+    }
+    return mask_decision;
+}
+
+/// Try to materialise an `OptionalScanGuard` strategy for an
+/// `Optional` Repeat whose inner cannot be decided by k-token
+/// lookahead but IS fully scannable. emit's
+/// `gen_optional_with_scan_guard` runs the scan helper and only
+/// parses the body when the scan succeeds.
+///
+/// Returns `null` for:
+/// * leaf inners (Token / Literal / Wildcard / Not — `Plain`
+///   handles them without a scan probe);
+/// * unscannable inners (the runtime has no save-and-rewind path,
+///   so an unscannable `?` is a codegen-time error — surface that
+///   by leaving the decision to `Plain` so emit can panic with the
+///   "no backtracking" message);
+/// * RuleRef inners that are unscannable (same reason).
+fn try_optional_scan_guard(
+    inner: &Element,
+    ctx: &mut GenContext,
+) -> Option<RepeatStrategy> {
+    let needs_guard = match *inner {
+        Group(_) => true,
+        RuleRef(_) => true,
+        _ => false,
+    };
+    if !needs_guard {
+        return null;
+    }
+    let mut visiting: Array<String> = [];
+    if !ctx.is_element_scannable(inner, &mut visiting) {
+        return null;
+    }
+    return Option::<RepeatStrategy>::Some(RepeatStrategy::OptionalScanGuard);
 }
 
 /// Greedy Repeat strategy decision. Outside a follow-aware variant
