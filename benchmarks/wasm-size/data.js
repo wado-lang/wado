@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778338347777,
+  "lastUpdate": 1778372135415,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20605,6 +20605,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4b00ec90466b332763baaa8110d68a772870c185"
         },
         "date": 1778338347422,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 511983,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8c9129a868bf60acaa328b8cd2468fcfeb9c4036",
+          "message": "Merge pull request #1033 from wado-lang/gfx/tir_multi_value_return\n\nTIR: introduce first-class multi-value, drop heap-struct ABI for tuples (#1025)",
+          "timestamp": "2026-05-10T09:07:04+09:00",
+          "tree_id": "621f940bf03fb0313feae0a32206085dc54dea25",
+          "url": "https://github.com/wado-lang/wado/commit/8c9129a868bf60acaa328b8cd2468fcfeb9c4036"
+        },
+        "date": 1778372135219,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
