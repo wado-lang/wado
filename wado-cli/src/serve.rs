@@ -4,7 +4,6 @@ use std::net::SocketAddr;
 use std::pin::{Pin, pin};
 use std::process;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -407,9 +406,22 @@ async fn handle_http_request(
                     io.await
                         .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
                 });
+                // The handler is the source of truth for response progress;
+                // the io future only drives request-body delivery and
+                // typically resolves *later* than the handler (it waits for
+                // the request resource to be dropped, which happens when
+                // the guest function fully exits — well after `task return`).
+                //
+                // We must not cancel the handler the moment io resolves
+                // (would truncate streamed bodies), and we must not block
+                // forever on io after the handler is done (would hang
+                // indefinitely on guests that hold the request resource
+                // until function exit). The select-then-await pattern
+                // satisfies both: io is polled concurrently while we wait
+                // for the handler, but we never wait for io alone.
                 match select(handler, io_arm).await {
-                    Either::Left((res, _)) => res,
-                    Either::Right((res, _)) => res,
+                    Either::Left((res, _io)) => res,
+                    Either::Right((_io_res, handler)) => handler.await,
                 }
             })
             .await;
@@ -524,17 +536,30 @@ async fn run_http_server(
     let service_pre = Arc::new(service_pre);
     let preopens = Arc::new(preopens);
 
-    // Background ticker drives `Engine::increment_epoch` so the per-store
-    // `set_epoch_deadline` actually fires. Stopped via `epoch_stop` once
-    // the accept loop exits.
-    let epoch_stop = Arc::new(AtomicBool::new(false));
-    let epoch_thread = {
-        let stop = Arc::clone(&epoch_stop);
+    // Background tokio task drives `Engine::increment_epoch` so the
+    // per-store `set_epoch_deadline` actually fires. Implemented as a
+    // tokio task (rather than `std::thread`) so shutdown can wait for it
+    // without blocking the runtime: a `Notify` flips the loop to its exit
+    // arm, and we `await` the `JoinHandle` to be sure no further bumps
+    // are in flight.
+    let epoch_shutdown = Arc::new(tokio::sync::Notify::new());
+    let epoch_task = {
+        let shutdown = Arc::clone(&epoch_shutdown);
         let engine = Arc::clone(&engine);
-        std::thread::spawn(move || {
-            while !stop.load(Ordering::Relaxed) {
-                std::thread::sleep(Duration::from_millis(EPOCH_TICK_MS));
-                engine.increment_epoch();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(EPOCH_TICK_MS));
+            // The first `interval.tick()` fires immediately by default.
+            // Consume it so the first real bump happens one full
+            // `EPOCH_TICK_MS` after server startup, matching the previous
+            // `std::thread::sleep` behaviour.
+            interval.tick().await;
+            loop {
+                let tick = pin!(interval.tick());
+                let stop = pin!(shutdown.notified());
+                match select(tick, stop).await {
+                    Either::Left(_) => engine.increment_epoch(),
+                    Either::Right(_) => break,
+                }
             }
         })
     };
@@ -566,7 +591,13 @@ async fn run_http_server(
                 break;
             }
             Either::Left((Err(e), _shutdown)) => {
+                // A persistent failure (file descriptor exhaustion, listener
+                // gone) would otherwise turn the loop into a hot CPU/log
+                // spammer. A short sleep is a cheap circuit-breaker: it
+                // doesn't fix the underlying problem but it stops the
+                // server from making it worse.
                 eprintln!("accept error: {e}");
+                tokio::time::sleep(Duration::from_millis(50)).await;
             }
             Either::Left((Ok((stream, remote_addr)), _shutdown)) => {
                 let io = TokioIo::new(stream);
@@ -600,8 +631,12 @@ async fn run_http_server(
 
                 // Non-blockingly reap any connections that finished while
                 // we were accepting, so the JoinSet doesn't grow unboundedly
-                // on a long-running server.
-                while connections.try_join_next().is_some() {}
+                // on a long-running server. Surface task panics here too —
+                // dropping `try_join_next()`'s `Result` would silently lose
+                // them.
+                while let Some(res) = connections.try_join_next() {
+                    log_connection_join_error(res);
+                }
             }
         }
     }
@@ -609,7 +644,11 @@ async fn run_http_server(
     // Drain phase: stop accepting, give in-flight connections a bounded
     // window to finish. Anything still alive at the deadline gets aborted.
     let drain_deadline = timeout + Duration::from_secs(5);
-    let drain = async { while connections.join_next().await.is_some() {} };
+    let drain = async {
+        while let Some(res) = connections.join_next().await {
+            log_connection_join_error(res);
+        }
+    };
     if tokio::time::timeout(drain_deadline, drain).await.is_err() {
         eprintln!(
             "Drain timeout after {}s; aborting remaining connections",
@@ -618,12 +657,24 @@ async fn run_http_server(
         connections.shutdown().await;
     }
 
-    epoch_stop.store(true, Ordering::Relaxed);
-    // The ticker sleeps `EPOCH_TICK_MS` between checks, so the join wakes
-    // up within that window.
-    let _ = epoch_thread.join();
+    // Stop the epoch ticker. `await`-ing the JoinHandle is the async
+    // equivalent of `std::thread::JoinHandle::join` — but unlike the
+    // thread version it doesn't block the runtime: the ticker sees the
+    // notify within one `EPOCH_TICK_MS` and exits.
+    epoch_shutdown.notify_one();
+    let _ = epoch_task.await;
 
     Ok(())
+}
+
+/// Log connection task panics; ignore cancellation (which is the normal
+/// outcome when shutdown aborts in-flight tasks at the drain deadline).
+fn log_connection_join_error(res: Result<(), tokio::task::JoinError>) {
+    if let Err(e) = res
+        && !e.is_cancelled()
+    {
+        eprintln!("connection task panicked: {e}");
+    }
 }
 
 pub async fn run(opts: ServeOptions) {
