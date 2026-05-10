@@ -32,8 +32,9 @@ use crate::runtime::{self, Preopens, WasiState};
 use wado_compiler::LogLevel;
 
 /// Default per-request timeout in seconds. A guest that fails to produce a
-/// response within this window has its store traps via `epoch_deadline_trap`,
-/// freeing the tokio task and letting the client see a 504.
+/// response within this window has its epoch deadline expired (via
+/// `Store::set_epoch_deadline`), which causes a `Trap::Interrupt`, freeing
+/// the tokio task and letting the client see a 504.
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
 /// Epoch ticker interval. Each tick is a unit of `set_epoch_deadline`, so
@@ -134,7 +135,7 @@ fn parse_timeout_arg(parser: &mut lexopt::Parser) -> Result<u64, CliExit> {
     let s = args::require_string(parser)?;
     let n = s.parse::<u64>().map_err(|_| {
         CliExit::error(format!(
-            "--timeout requires a non-negative integer (seconds), got '{s}'"
+            "--timeout requires a positive integer (seconds), got '{s}'"
         ))
     })?;
     if n == 0 {
@@ -429,7 +430,10 @@ async fn run_http_server(
 
     eprintln!("HTTP server listening on http://{addr}/");
     eprintln!("Per-request timeout: {}s", timeout.as_secs());
+    #[cfg(unix)]
     eprintln!("Send SIGINT or SIGTERM to shut down");
+    #[cfg(not(unix))]
+    eprintln!("Send Ctrl+C to shut down");
 
     let mut connections: JoinSet<()> = JoinSet::new();
     let mut shutdown = pin!(shutdown_signal());
