@@ -328,13 +328,6 @@ fn populate_trailing_from_nodes(trivia: &mut TriviaMap, nodes: &[(AstId, Span)])
 mod tests {
     use super::*;
 
-    /// One-shot trailing-owner lookup used by the per-rule unit tests
-    /// in this module — the production path uses [`NodeLookup`]
-    /// directly so the index is reused across every comment.
-    fn trailing_owner(c: &Comment, nodes: &[(AstId, Span)]) -> Option<AstId> {
-        NodeLookup::build(nodes).trailing_owner(c)
-    }
-
     fn line_comment(text: &str, start: usize, end: usize, line: usize, column: usize) -> Comment {
         Comment {
             text: text.to_string(),
@@ -352,45 +345,60 @@ mod tests {
     }
 
     #[test]
-    fn trailing_owner_picks_largest_end_then_outermost() {
-        // Three nodes ending on the same line as a trailing comment:
+    fn populate_picks_outermost_when_nodes_tie_at_same_end() {
+        // Three nodes end on the same line as a trailing comment.
         //   A: 0..10  (outer)
-        //   B: 5..10  (inner, same end as A — outer should win on tiebreak)
-        //   C: 0..8   (smaller end — should not win)
+        //   B: 5..10  (inner, same end as A — outer wins on tiebreak)
+        //   C: 0..8   (smaller end — never wins)
+        // Without the (largest-end, smallest-start) rule the trailing
+        // comment would land on B and the unparser — which only emits
+        // trailing of stmt/item ids — would silently drop it.
         let nodes = vec![
             (AstId(0), one_line_span(0, 10, 1)),
             (AstId(1), one_line_span(5, 10, 1)),
             (AstId(2), one_line_span(0, 8, 1)),
         ];
-        let comment = line_comment(" tail", 12, 18, 1, 13);
-        assert_eq!(trailing_owner(&comment, &nodes), Some(AstId(0)));
+        let mut trivia = TriviaMap::new();
+        trivia.set_dangling(vec![line_comment(" tail", 12, 18, 1, 13)]);
+
+        populate_trailing_from_nodes(&mut trivia, &nodes);
+
+        assert_eq!(trivia.trailing_of(AstId(0)).len(), 1);
+        assert!(trivia.trailing_of(AstId(1)).is_empty());
+        assert!(trivia.trailing_of(AstId(2)).is_empty());
     }
 
     #[test]
-    fn trailing_owner_rejects_interior_block_comment_with_following_node() {
-        // `1, /*flag=*/true` shape: the `1` literal ends just before the
-        // block comment, and the `true` literal starts just after it on
-        // the same line. The comment is leading-of-`true`, never
-        // trailing-of-`1`.
+    fn populate_keeps_interior_block_comment_as_leading_of_next() {
+        // `1, /*flag=*/true` shape: the parser attaches the inline
+        // block comment as leading of `true`. Repatriating it as
+        // trailing of `1` would lose the named-argument hint, which
+        // is why the trailing rule disqualifies any comment with a
+        // following node on its end line. Pinned by the user-visible
+        // `test_format_preserves_inline_block_comment_in_call_args`
+        // formatter test as well; this is the algorithm-level guard.
         let one_lit = (AstId(0), Span::new(0, 1, 1, 1));
-        let comment = line_comment("flag=", 3, 12, 1, 4); // "/*flag=*/" at bytes 3..12
         let true_lit = (AstId(1), Span::new(12, 16, 1, 13));
         let nodes = vec![one_lit, true_lit];
-        assert!(
-            trailing_owner(&comment, &nodes).is_none(),
-            "block comment between two nodes on the same line is interior, not trailing",
-        );
-    }
+        let mut trivia = TriviaMap::new();
+        let inline = Comment {
+            text: "flag=".to_string(),
+            kind: CommentKind::Block,
+            span: Span::new(3, 12, 1, 4),
+        };
+        trivia.attach_leading(AstId(1), vec![inline]);
 
-    #[test]
-    fn trailing_owner_rejects_different_line_and_pre_end_comments() {
-        let nodes = vec![(AstId(0), one_line_span(0, 10, 1))];
-        // Comment on a later line — not a trailing of the line-1 node.
-        let next_line = line_comment(" next", 12, 18, 2, 1);
-        assert!(trailing_owner(&next_line, &nodes).is_none());
-        // Comment whose start is inside the node's span — not trailing.
-        let inside = line_comment(" in", 5, 8, 1, 6);
-        assert!(trailing_owner(&inside, &nodes).is_none());
+        populate_trailing_from_nodes(&mut trivia, &nodes);
+
+        assert!(
+            trivia.trailing_of(AstId(0)).is_empty(),
+            "interior block comment must not become trailing of the previous node",
+        );
+        assert_eq!(
+            trivia.leading_of(AstId(1)).len(),
+            1,
+            "interior block comment must remain leading of the following node",
+        );
     }
 
     #[test]
