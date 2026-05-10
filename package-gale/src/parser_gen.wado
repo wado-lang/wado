@@ -2564,15 +2564,38 @@ fn is_lenient_group(alts: &Array<Alternative>) -> bool {
 }
 
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
-    // `lowered_rule` is the GIR view of the same rule; today the
-    // body emitter still consumes surface IR but the classification
-    // (Simple / MultiAlt / LeftRecursive) and the per-alt field
-    // decisions can be read directly from GIR. Phase 4 splits this
-    // function along the variant axis.
-    let _ = lowered_rule;
+    // Phase 4 — dispatch on the GIR `Rule` variant. Each shape gets
+    // its own focused emit entry; the existing internal helpers
+    // (`gen_parse_fn_named`) carry the body emission but no longer
+    // need to re-classify the rule.
     let fn_name = `parse_{rule.snake_name}`;
     let scan_fn_name = `scan_{rule.snake_name}`;
-    gen_parse_fn_named(w, rule, ctx, &fn_name, &scan_fn_name, /*emit_visibility=*/ true);
+    match *lowered_rule {
+        Simple(_) => gen_parse_fn_simple(w, rule, ctx, &fn_name, &scan_fn_name),
+        MultiAlt(_) => gen_parse_fn_multi_alt(w, rule, ctx, &fn_name, &scan_fn_name),
+        LeftRecursive(_) => gen_parse_fn_left_recursive(w, rule, ctx, &fn_name, &scan_fn_name),
+    };
+}
+
+/// Emit a single-alternative rule. The body inlines the alt
+/// directly with no dispatch table — the simplest shape.
+fn gen_parse_fn_simple(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String) {
+    gen_parse_fn_named(w, rule, ctx, fn_name, scan_fn_name, /*emit_visibility=*/ true);
+}
+
+/// Emit a multi-alternative rule with no LR alts. Dispatch goes
+/// through `Direct` (disjoint first-sets) or `Tournament`
+/// (overlapping fully-scannable) based on what `lower` decided.
+fn gen_parse_fn_multi_alt(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String) {
+    gen_parse_fn_named(w, rule, ctx, fn_name, scan_fn_name, /*emit_visibility=*/ true);
+}
+
+/// Emit a directly-left-recursive rule (atom + lr_alts +
+/// precedence-climbing suffix loop). Mirrors ANTLR4's left-recursion
+/// rewrite. `lower` already split the alts into atom / LR groups
+/// and computed every precedence assignment.
+fn gen_parse_fn_left_recursive(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String) {
+    gen_parse_fn_named(w, rule, ctx, fn_name, scan_fn_name, /*emit_visibility=*/ true);
 }
 
 
