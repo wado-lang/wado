@@ -246,6 +246,19 @@ impl LspSession {
     }
 }
 
+impl Drop for LspSession {
+    fn drop(&mut self) {
+        // `std::process::Child::drop` is a documented no-op, so a test that
+        // panics — e.g. inside `read_message_within` on timeout — would leak
+        // the `wado lsp` subprocess and risk flaking the rest of the suite.
+        // Best-effort kill+wait covers that path. On the happy
+        // `shutdown_and_exit` / `exit_now` paths the child has already
+        // exited; both calls return ESRCH/ECHILD, which we ignore.
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
 // ===========================================================================
 // LSP tests
 // ===========================================================================
