@@ -1010,6 +1010,136 @@ test "lower General Group group_index is per-rule cumulative" {
     }
 }
 
+test "lower Repeat with nested SingleAlt Group inner" {
+    // `r : (a b)* ;` — Repeat over a multi-element single-alt Group.
+    // The Repeat body becomes a SingleAlt Group Op.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Repeat(RepeatElement {
+            kind: RepeatKind::Star,
+            element: Element::Group(GroupElement::new([
+                alt_of([
+                    Element::TokenRef(TokenRefElement::new("A")),
+                    Element::TokenRef(TokenRefElement::new("B")),
+                ]),
+            ])),
+            non_greedy: false,
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let Group(go) = &rep.body {
+                if let SingleAlt(_) = &go.shape {
+                    assert true;
+                } else {
+                    panic("expected nested SingleAlt Group");
+                }
+                assert go.alts[0].ops.len() == 2;
+            } else {
+                panic("expected Repeat body to be Group");
+            }
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower SingleAlt Group containing nested Group" {
+    // `r : (a (b c)) ;` — outer SingleAlt contains a nested
+    // SingleAlt as its second element. Nested ops carry through
+    // recursively.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Group(GroupElement::new([
+            alt_of([
+                Element::TokenRef(TokenRefElement::new("A")),
+                Element::Group(GroupElement::new([
+                    alt_of([
+                        Element::TokenRef(TokenRefElement::new("B")),
+                        Element::TokenRef(TokenRefElement::new("C")),
+                    ]),
+                ])),
+            ]),
+        ]))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Group(outer) = &s.body.ops[0] {
+            if let SingleAlt(_) = &outer.shape {
+                assert true;
+            } else {
+                panic("expected outer SingleAlt");
+            }
+            assert outer.alts[0].ops.len() == 2;
+            if let Group(inner) = &outer.alts[0].ops[1] {
+                if let SingleAlt(_) = &inner.shape {
+                    assert true;
+                } else {
+                    panic("expected inner SingleAlt");
+                }
+                assert inner.alts[0].ops.len() == 2;
+            } else {
+                panic("expected nested Op::Group");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Transparent Group wrapping Repeat" {
+    // `r : (a*) ;` — Transparent Group whose only inner element is
+    // a Repeat. The Op is a Repeat directly (no Group wrapper at
+    // emit time).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Group(GroupElement::new([
+            alt_of([Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::TokenRef(TokenRefElement::new("A")),
+                non_greedy: false,
+            })]),
+        ]))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Group(go) = &s.body.ops[0] {
+            if let Transparent = &go.shape {
+                assert true;
+            } else {
+                panic("expected Transparent shape");
+            }
+            assert go.alts[0].ops.len() == 1;
+            if let Repeat(_) = &go.alts[0].ops[0] {
+                assert true;
+            } else {
+                panic("expected inner Repeat");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
 test "lower greedy Star Repeat with TokenRef inner" {
     // `tokens : INT* ;`
     let mut g = empty_grammar(&"T");

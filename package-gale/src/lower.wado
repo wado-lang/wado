@@ -491,13 +491,11 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext) -> ScanElement {
             panic("Group with empty alt is not a valid scan-lowering input");
         }
         if alt.elements.len() == 1 {
-            let inner = &alt.elements[0];
-            require_leaf_element(inner, &"Group (transparent, scan side)");
-            return lower_scan_element(inner, ctx);
+            // Transparent (scan side) — nested inner allowed.
+            return lower_scan_element(&alt.elements[0], ctx);
         }
-        for let elem of &alt.elements {
-            require_leaf_element(elem, &"Group (single-alt, scan side)");
-        }
+        // Single-alt (scan side) — nested elements allowed; each
+        // is lowered through the standard scan-element recursion.
         let mut elements: Array<ScanElement> = [];
         for let elem of &alt.elements {
             elements.push(lower_scan_element(elem, ctx));
@@ -563,7 +561,6 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext) -> ScanElement {
     if let Optional = rep.kind {
         panic("TODO Phase 2.x.optional: Optional Repeat needs follow-set analysis");
     }
-    require_leaf_element(&rep.element, &"Repeat (scan side)");
     let body = lower_scan_element(&rep.element, ctx);
     return ScanElement::Repeat(ScanRepeatElem {
         kind: rep.kind,
@@ -789,7 +786,9 @@ fn lower_transparent_group(
     ctx: &mut GenContext,
     group_counter: &mut i32,
 ) -> Op {
-    require_leaf_element(inner, &"Group (transparent)");
+    // Nested inner is allowed: `((a))` / `(a*)` / `(name=a)`.
+    // The Op carries whatever shape `lower_op` produces; the
+    // surrounding emit-side Transparent path inlines it directly.
 
     let inner_op = lower_op(inner, name_counts, rule_name, ctx, group_counter);
     let body = AltBody {
@@ -838,9 +837,9 @@ fn lower_single_alt_group(
     ctx: &mut GenContext,
     group_counter: &mut i32,
 ) -> Op {
-    for let elem of &alt.elements {
-        require_leaf_element(elem, &"Group (single-alt)");
-    }
+    // Nested elements are allowed: `(a (b c))` / `(a*)` /
+    // `(name=a b)`. Each elem is lowered through the standard
+    // `lower_op` recursion.
 
     let struct_name = single_alt_group_type_name(alt);
     let field = dedup_name(&single_alt_group_field_name(alt), name_counts);
@@ -1232,7 +1231,10 @@ fn lower_repeat_op(
     if let Optional = rep.kind {
         panic("TODO Phase 2.x.optional: Optional Repeat needs follow-set analysis");
     }
-    require_leaf_element(&rep.element, &"Repeat");
+    // Nested inner is allowed: `(... )*` / `(name=e)*`. The inner
+    // op is a single `Op` (RepeatOp.body type), so any shape that
+    // `lower_op` can produce is valid. The g4 grammar already
+    // forbids `e**` / `e++`, so nested Repeat doesn't reach here.
 
     let mut inner_counts: Array<[String, i32]> = [];
     let body = lower_op(&rep.element, &mut inner_counts, rule_name, ctx, group_counter);
@@ -1241,20 +1243,6 @@ fn lower_repeat_op(
         body,
         strategy: RepeatStrategy::Plain,
     });
-}
-
-/// Phase 2.x.partial guard. Repeat's inner being a non-leaf element
-/// (nested `Repeat` / `Group` / `Label`) requires the matching
-/// lowerings — `lower_op` would otherwise recursively panic with
-/// less specific messages. Surfacing the failure here keeps the
-/// "what shape is unsupported?" diagnostic close to the entry point.
-fn require_leaf_element(elem: &Element, ctx: &String) {
-    match *elem {
-        TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => {},
-        Repeat(_) => panic(`TODO Phase 2.x.nested: {*ctx} with nested Repeat inner not implemented`),
-        Group(_) => panic(`TODO Phase 2.x.nested: {*ctx} with Group inner not implemented`),
-        Label(_) => panic(`TODO Phase 2.x.nested: {*ctx} with Label inner not implemented`),
-    }
 }
 
 /// Lower a `Label` element by recursively lowering its inner
