@@ -1,0 +1,24 @@
+// Regression test for cross-module variant-name namespacing.
+//
+// Two modules define `variant Element` with disjoint case sets.
+// Module A pattern-matches its own Element with `if let RuleRef(...)`.
+// The legacy lower-time `variant_case_map` was keyed by variant
+// name only, so loading both modules collapsed module B's Element
+// over module A's, panicking the pattern lowerer with
+// "Unknown case RuleRef for variant Element".
+//
+// The companion `cross_module_same_name_variant.wado` covers the
+// `match` form (which already worked because the type table guides
+// it differently). This test is the `if let` counterpart.
+
+use { make_rr, process } from "./sub/cross_module_same_name_variant_iflet_a.wado";
+use { make_lowered } from "./sub/cross_module_same_name_variant_iflet_b.wado";
+
+test "if let pattern with cross-module same-name variants" {
+    let r = make_rr(42);
+    assert process(r) == 42;
+    let _ = make_lowered();
+}
+
+__DATA__
+{"test": {}}

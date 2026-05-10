@@ -36,7 +36,7 @@ use wide_int::lower_wide_int_match_patterns;
 /// Run pre-boxing per-module lowering passes.
 fn lower_pre_boxing(
     module: &mut TirModule,
-    global_variant_map: &IndexMap<String, Vec<(String, u32)>>,
+    global_variant_map: &IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
 ) {
     // Phase 1: Lower i128/u128 match patterns to if-else chains
     lower_wide_int_match_patterns(module);
@@ -82,15 +82,26 @@ pub fn lower(flat: &mut FlatPackage) {
     temp_module.flags = std::mem::take(&mut flat.flags);
     temp_module.imports = std::mem::take(&mut flat.imports);
 
-    // Build global variant map from all variants
-    let mut global_variant_map: IndexMap<String, Vec<(String, u32)>> = IndexMap::default();
+    // Build global variant map from all variants. Keyed by
+    // (name, module_source) so two modules can each declare a
+    // variant with the same name without colliding — pattern
+    // lowering looks up by both axes via the resolved type's
+    // module_source. Keying by name only would silently overwrite
+    // one module's cases with the other's and break cross-module
+    // pattern lookups (regression test
+    // `cross_module_same_name_variant_iflet.wado`).
+    let mut global_variant_map: IndexMap<(String, ModuleSource), Vec<(String, u32)>> =
+        IndexMap::default();
     for variant in &temp_module.variants {
         let cases: Vec<(String, u32)> = variant
             .cases
             .iter()
             .map(|c| (c.name.clone(), c.index))
             .collect();
-        global_variant_map.insert(variant.name.clone(), cases);
+        global_variant_map.insert(
+            (variant.name.clone(), variant.module_source.clone()),
+            cases,
+        );
     }
 
     // Pre-boxing passes

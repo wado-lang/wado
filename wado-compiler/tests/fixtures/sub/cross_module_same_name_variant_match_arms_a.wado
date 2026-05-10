@@ -1,0 +1,26 @@
+// Module A — variant Status with cases (Active, Inactive). Pattern
+// matching here uses both arms so a silent fallback (lookup returns
+// None and the arm condition becomes always-true) would surface as
+// the wrong return value for the Inactive input.
+pub variant Status {
+    Active(i32),
+    Inactive,
+}
+
+pub fn make_active(n: i32) -> Status {
+    return Status::Active(n);
+}
+
+pub fn make_inactive() -> Status {
+    return Status::Inactive;
+}
+
+pub fn status_value(s: Status) -> i32 {
+    return match s {
+        Active(n) => n,
+        // Distinctive sentinel: any same-name-variant collision that
+        // makes the `Active` arm silently always-match would leak a
+        // garbage `n` from the `Inactive` payload instead of 999.
+        Inactive => 999,
+    };
+}
