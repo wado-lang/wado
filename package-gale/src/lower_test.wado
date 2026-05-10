@@ -25,6 +25,7 @@ use { lower } from "./lower.wado";
 use {
     Rule,
     Op,
+    ScanElement,
 } from "./gir.wado";
 
 fn empty_grammar(name: &String) -> Grammar {
@@ -216,6 +217,85 @@ test "lower dedupes same-name fields" {
             assert t.field == "int_2";
         } else {
             panic("expected second Token");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower simple rule produces scan body mirroring leaf ops" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "mix",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::TokenRef(TokenRefElement::new("ID")),
+            Element::Literal(LiteralElement::new("=")),
+            Element::RuleRef(RuleRefElement::new("expr")),
+            Element::Wildcard(WildcardElement::new()),
+            Element::Not(NotElement {
+                element: Element::TokenRef(TokenRefElement::new("INT")),
+            }),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.scan_body.elements.len() == 5;
+        if let Token(t) = &s.scan_body.elements[0] {
+            assert t.kind == "TK_ID";
+        } else {
+            panic("scan_body[0] != Token");
+        }
+        if let Token(t) = &s.scan_body.elements[1] {
+            assert t.kind == "TK_LIT_EQ";
+        } else {
+            panic("scan_body[1] != Token (literal)");
+        }
+        if let RuleCall(r) = &s.scan_body.elements[2] {
+            assert r.target_snake == "expr";
+            assert r.min_prec_arg == 0;
+            assert r.variant_id matches { None };
+        } else {
+            panic("scan_body[2] != RuleCall");
+        }
+        if let Wildcard = &s.scan_body.elements[3] {
+            assert true;
+        } else {
+            panic("scan_body[3] != Wildcard");
+        }
+        if let Excluded(e) = &s.scan_body.elements[4] {
+            assert e.kinds.len() == 1;
+            assert e.kinds[0] == "TK_INT";
+        } else {
+            panic("scan_body[4] != Excluded");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower scan element flattens scalar Label" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "labelled",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Label(LabelElement::new(
+            "lhs",
+            false,
+            Element::TokenRef(TokenRefElement::new("ID")),
+        ))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.scan_body.elements.len() == 1;
+        if let Token(t) = &s.scan_body.elements[0] {
+            assert t.kind == "TK_ID";
+        } else {
+            panic("expected Token in scan_body");
         }
     } else {
         panic("expected Rule::Simple");

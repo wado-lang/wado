@@ -59,6 +59,10 @@ use {
     RuleHeader,
     AltBody,
     ScanBody,
+    ScanElement,
+    ScanTokenElem,
+    ScanRuleCallElem,
+    ScanExcludedElem,
     Op,
     TokenOp,
     LiteralOp,
@@ -112,11 +116,54 @@ fn lower_rule(rule: &ParserRule) -> Rule {
 }
 
 fn lower_simple_rule(rule: &ParserRule) -> SimpleRule {
+    let body = lower_alt_body(&rule.alternatives[0], 0, rule);
+    let scan_body = lower_scan_body(&rule.alternatives[0]);
     return SimpleRule {
         header: lower_header(rule),
-        body: lower_alt_body(&rule.alternatives[0], 0, rule),
-        // Phase 2.5 — scan-side body lowering populates this.
-        scan_body: ScanBody { elements: [] },
+        body,
+        scan_body,
+    };
+}
+
+/// Lower the scan-side body for an alternative — the structural
+/// twin of `lower_alt_body` for the `scan_<rule>` predicate
+/// emission. Phase 2.5a covers the same leaf-op set as `lower_op`;
+/// `Repeat` / `Group` / `Label` mirror the parse-side gating with
+/// their own `panic("TODO Phase 2.x")`.
+///
+/// The scan side has no field bindings, no struct construction, and
+/// no name dedup — it only produces a token-stream walk that
+/// returns the new `pos`.
+fn lower_scan_body(alt: &Alternative) -> ScanBody {
+    let mut elements: Array<ScanElement> = [];
+    for let elem of &alt.elements {
+        elements.push(lower_scan_element(elem));
+    }
+    return ScanBody { elements };
+}
+
+fn lower_scan_element(elem: &Element) -> ScanElement {
+    return match *elem {
+        TokenRef(t) => ScanElement::Token(ScanTokenElem { kind: `TK_{t.name}` }),
+        Literal(l) => ScanElement::Token(ScanTokenElem {
+            kind: literal_const_name(&l.text),
+        }),
+        RuleRef(r) => ScanElement::RuleCall(ScanRuleCallElem {
+            target_snake: r.snake_name,
+            // Phase 2.6 — same follow-variant mapping as parse side.
+            variant_id: null,
+            // Phase 2.4 — `min_prec_arg = 0` is the scan-side default
+            // (`scan_<rule>` accepts an unused defaulted parameter
+            // regardless of LR-ness so the call site is uniform).
+            min_prec_arg: 0,
+        }),
+        Wildcard(_) => ScanElement::Wildcard,
+        Not(ne) => ScanElement::Excluded(ScanExcludedElem {
+            kinds: collect_excluded_kinds(&ne.element),
+        }),
+        Label(lab) => lower_scan_element(&lab.element),
+        Repeat(_) => panic("TODO Phase 2.3: lower_scan_element for Repeat not implemented"),
+        Group(_) => panic("TODO Phase 2.3: lower_scan_element for Group not implemented"),
     };
 }
 
