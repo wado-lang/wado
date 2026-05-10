@@ -164,18 +164,27 @@ pub fn mark_unreachable_defined_functions(module: &mut WirPackage) {
     // and fold them into each function's callee set; without this the
     // helper is dropped by DCE, then the codegen call site can't
     // resolve it and panics.
-    let mut name_to_idx: IndexMap<String, u32> = IndexMap::default();
-    for (i, func) in module.functions.iter().enumerate() {
-        name_to_idx.insert(func.name.fq.clone(), u32::try_from(i).unwrap());
-    }
-    let resolve_helper_name = |name_suffix: &str| -> Option<u32> {
-        for (fq, idx) in &name_to_idx {
-            if fq.ends_with(name_suffix) {
-                return Some(*idx);
-            }
-        }
-        None
-    };
+    // Build the suffix → array-index map once. Helper names always have
+    // the form `<module-prefix>/$value_copy$T<id>` and
+    // `element_copy_func` carries the bare `$value_copy$T<id>` (the
+    // last `/`-segment of `fq`), so an `O(1)` lookup is straightforward
+    // — the previous `ends_with` linear scan was `O(#ArrayClone × #funcs)`.
+    let helper_suffix_to_idx: IndexMap<String, u32> = module
+        .functions
+        .iter()
+        .enumerate()
+        .filter_map(|(i, func)| {
+            let suffix = func
+                .name
+                .fq
+                .rsplit('/')
+                .next()
+                .filter(|s| s.starts_with("$value_copy$"))?;
+            Some((suffix.to_string(), u32::try_from(i).ok()?))
+        })
+        .collect();
+    let resolve_helper_name =
+        |name_suffix: &str| -> Option<u32> { helper_suffix_to_idx.get(name_suffix).copied() };
 
     let mut callees_of: Vec<IndexSet<u32>> = Vec::with_capacity(module.functions.len());
     for func in &module.functions {

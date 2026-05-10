@@ -120,21 +120,80 @@ fn extend_reachable_for_optimizer_passes(
     // already covers; and (b) the per-element clone hidden inside
     // `array_clone::<T>(arr)` for value-typed `T`, which lowers to a
     // `WirInstr::ArrayClone { element_copy_func: Some("$value_copy$T<id>") }`
-    // — the helper name appears as a *string* in the WIR instr, not as
-    // a TIR call edge, so DCE wouldn't otherwise see it. Mark every
-    // `FunctionKind::ValueCopy` helper as a virtual root: keeping
-    // unused helpers around costs only a few extra struct-literal
-    // copies per type, while dropping a needed one would emit an
-    // invalid Wasm module that traps at runtime.
+    // — the helper name appears as a *string* in the WIR instr at
+    // codegen time, not as a TIR call edge, so DCE wouldn't otherwise
+    // see it.
+    //
+    // Walk every reachable function body and, for each
+    // `array_clone::<T>(...)` call where `T` is value-typed, mark the
+    // corresponding `$value_copy$T<id>` helper as a virtual root.
+    // Marking *every* `FunctionKind::ValueCopy` helper (the previous
+    // shape) is correct but wastes code size on programs that have
+    // many monomorphisations the array-clone path never visits.
+    let helpers_by_type_id: IndexMap<crate::tir::TypeId, FunctionId> = project
+        .functions
+        .iter()
+        .filter_map(|func_rc| {
+            let func = func_rc.borrow();
+            if let crate::tir::FunctionKind::ValueCopy { type_id } = func.kind {
+                Some((type_id, function_id_for(&func)))
+            } else {
+                None
+            }
+        })
+        .collect();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if matches!(func.kind, crate::tir::FunctionKind::ValueCopy { .. }) {
-            let func_id = function_id_for(&func);
-            if !reachable.contains(&func_id) {
-                reachable.extend(compute_reachable(call_graph, &func_id));
+        let func_id = function_id_for(&func);
+        if !reachable.contains(&func_id) {
+            continue;
+        }
+        if let Some(body) = &func.body {
+            let mut needed: IndexSet<crate::tir::TypeId> = IndexSet::default();
+            collect_array_clone_element_types(body, &mut needed);
+            for type_id in needed {
+                if let Some(helper_id) = helpers_by_type_id.get(&type_id)
+                    && !reachable.contains(helper_id)
+                {
+                    reachable.extend(compute_reachable(call_graph, helper_id));
+                }
             }
         }
     }
+}
+
+/// Walk `block`'s expression tree and collect every `T` such that
+/// `builtin::array_clone::<T>(...)` appears as a TIR call. The
+/// corresponding `$value_copy$T<id>` helper has to survive DCE because
+/// codegen will reach it by *name* at WIR time.
+fn collect_array_clone_element_types(
+    block: &crate::tir::TirBlock,
+    out: &mut IndexSet<crate::tir::TypeId>,
+) {
+    use crate::tir::{TirBlock, TirExpr, TirExprKind};
+    use crate::tir_visitor::TirRefVisitor;
+
+    struct Collector<'a> {
+        out: &'a mut IndexSet<crate::tir::TypeId>,
+    }
+    impl TirRefVisitor for Collector<'_> {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if let TirExprKind::Call { func, .. } = &expr.kind
+                && func.module_source.is_core_builtin()
+                && func.name == "array_clone"
+                && let Some(mi) = func.monomorph_info.as_ref()
+                && let Some(elem) = mi.impl_type_args.first().copied()
+            {
+                self.out.insert(elem);
+            }
+            self.walk_expr(expr);
+        }
+    }
+    let mut collector = Collector { out };
+    collector.visit_block(block);
+    // Tie `block` lifetime to the lambda even though we don't use it
+    // directly above, to keep type inference unambiguous.
+    let _ = std::any::type_name::<TirBlock>();
 }
 
 /// Compute reachable functions from all entry points via call graph traversal.

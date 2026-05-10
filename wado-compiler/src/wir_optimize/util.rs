@@ -42,20 +42,32 @@ pub(super) fn collect_pinned_func_ids(module: &WirPackage) -> IndexSet<u32> {
     // call expecting a single (ref T) while the rewritten helper now
     // returns multi-value. Pin every helper that any ArrayClone refers
     // to so the rewrites skip them.
-    let name_to_idx: IndexMap<String, u32> = module
+    //
+    // Build the suffix → id map once: helper names always have the
+    // form `<module-prefix>/$value_copy$T<id>` and `element_copy_func`
+    // carries the trailing portion (`$value_copy$T<id>`), so the
+    // last `/`-segment of `fq` is the lookup key. Linear-scanning
+    // `name_to_idx` per `ArrayClone` site would otherwise be O(N²).
+    let helper_suffix_to_idx: IndexMap<String, u32> = module
         .functions
         .iter()
         .enumerate()
-        .map(|(i, func)| {
-            (
-                func.name.fq.clone(),
+        .filter_map(|(i, func)| {
+            let suffix = func
+                .name
+                .fq
+                .rsplit('/')
+                .next()
+                .filter(|s| s.starts_with("$value_copy$"))?;
+            Some((
+                suffix.to_string(),
                 u32::try_from(i).expect("func index fits u32") + module.defined_func_base,
-            )
+            ))
         })
         .collect();
     for func in &module.functions {
         if let Some(body) = &func.body {
-            collect_array_clone_helpers(body, &name_to_idx, &mut pinned);
+            collect_array_clone_helpers(body, &helper_suffix_to_idx, &mut pinned);
         }
     }
 
@@ -64,33 +76,29 @@ pub(super) fn collect_pinned_func_ids(module: &WirPackage) -> IndexSet<u32> {
 
 fn collect_array_clone_helpers(
     instrs: &[WirInstr],
-    name_to_idx: &IndexMap<String, u32>,
+    helper_suffix_to_idx: &IndexMap<String, u32>,
     pinned: &mut IndexSet<u32>,
 ) {
     for instr in instrs {
-        collect_array_clone_helpers_instr(instr, name_to_idx, pinned);
+        collect_array_clone_helpers_instr(instr, helper_suffix_to_idx, pinned);
     }
 }
 
 fn collect_array_clone_helpers_instr(
     instr: &WirInstr,
-    name_to_idx: &IndexMap<String, u32>,
+    helper_suffix_to_idx: &IndexMap<String, u32>,
     pinned: &mut IndexSet<u32>,
 ) {
     if let WirInstr::ArrayClone {
         element_copy_func: Some(name_suffix),
         ..
     } = instr
+        && let Some(idx) = helper_suffix_to_idx.get(name_suffix.as_str())
     {
-        for (fq, idx) in name_to_idx {
-            if fq.ends_with(name_suffix.as_str()) {
-                pinned.insert(*idx);
-                break;
-            }
-        }
+        pinned.insert(*idx);
     }
     instr.for_each_child(&mut |child| {
-        collect_array_clone_helpers_instr(child, name_to_idx, pinned);
+        collect_array_clone_helpers_instr(child, helper_suffix_to_idx, pinned);
     });
 }
 
