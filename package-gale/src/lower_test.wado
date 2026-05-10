@@ -9,6 +9,8 @@
 use {
     Grammar,
     GrammarKind,
+    GrammarOption,
+    OptionValue,
     ParserRule,
     Alternative,
     Element,
@@ -1677,6 +1679,130 @@ test "lower Group field decls match shape's outer field/type" {
         assert s.body.fields[3].type_str == "ABItem", s.body.fields[3].type_str;
     } else {
         panic("expected Rule::Simple");
+    }
+}
+
+test "lower LR rule splits atom and lr_alts and assigns precedence" {
+    // `expr : INT | expr '+' expr | expr '*' expr ;`
+    // Two LR alts (`+` and `*`) plus one atom (`INT`). ANTLR4's
+    // precedence assignment: first LR alt = highest = total_lr,
+    // last = 1. So `+` (alt 1, lr_position 0) → own_prec = 2;
+    // `*` (alt 2, lr_position 1) → own_prec = 1.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "expr",
+        Visibility::Default,
+        [],
+        [
+            alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+            alt_of([
+                Element::RuleRef(RuleRefElement::new("expr")),
+                Element::Literal(LiteralElement::new("+")),
+                Element::RuleRef(RuleRefElement::new("expr")),
+            ]),
+            alt_of([
+                Element::RuleRef(RuleRefElement::new("expr")),
+                Element::Literal(LiteralElement::new("*")),
+                Element::RuleRef(RuleRefElement::new("expr")),
+            ]),
+        ],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let LeftRecursive(l) = &lowered.parser_rules[0] {
+        assert l.header.name == "expr";
+        // Atom: only the non-LR alt (alt_index 0).
+        assert l.atom.alts.len() == 1;
+        assert l.atom.alts[0].alt_index == 0;
+        // LR alts: alts 1 and 2, in source order.
+        assert l.lr_alts.len() == 2;
+        assert l.lr_alts[0].alt_index == 1;
+        assert l.lr_alts[0].own_prec == 2;
+        assert l.lr_alts[1].alt_index == 2;
+        assert l.lr_alts[1].own_prec == 1;
+        // Each suffix has 2 elements (the operator + trailing self-ref).
+        assert l.lr_alts[0].suffix.ops.len() == 2;
+        assert l.lr_alts[1].suffix.ops.len() == 2;
+        // Trailing self-ref at original-element index 2.
+        assert l.lr_alts[0].last_self_ref_idx == 2;
+        assert l.lr_alts[1].last_self_ref_idx == 2;
+        // Left-associative by default: conflict_min = own_prec + 1.
+        assert l.lr_alts[0].conflict_min == 3;
+        assert l.lr_alts[1].conflict_min == 2;
+        assert !l.lr_alts[0].right_associative;
+        // Suffix first sets are the operator tokens.
+        assert l.lr_alts[0].suffix_first.len() == 1;
+        assert l.lr_alts[1].suffix_first.len() == 1;
+        // Both LR alts have non-empty suffixes → both valid.
+        assert l.lr_dispatch.valid_lr_alts.len() == 2;
+        // Disjoint first sets → two singleton groups.
+        assert l.lr_dispatch.groups.len() == 2;
+    } else {
+        panic("expected Rule::LeftRecursive");
+    }
+}
+
+test "lower LR rule respects right-associative conflict_min" {
+    // `expr : INT | <assoc=right> expr '**' expr ;`
+    // Right-assoc: conflict_min = own_prec (not own_prec + 1).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "expr",
+        Visibility::Default,
+        [],
+        [
+            alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+            Alternative {
+                label: null,
+                options: [GrammarOption {
+                    name: "assoc",
+                    value: OptionValue::Ident("right"),
+                }],
+                elements: [
+                    Element::RuleRef(RuleRefElement::new("expr")),
+                    Element::Literal(LiteralElement::new("**")),
+                    Element::RuleRef(RuleRefElement::new("expr")),
+                ],
+            },
+        ],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let LeftRecursive(l) = &lowered.parser_rules[0] {
+        assert l.lr_alts.len() == 1;
+        assert l.lr_alts[0].right_associative;
+        assert l.lr_alts[0].own_prec == 1;
+        // Right-assoc floor: conflict_min == own_prec.
+        assert l.lr_alts[0].conflict_min == 1, `expected 1, got {l.lr_alts[0].conflict_min}`;
+    } else {
+        panic("expected Rule::LeftRecursive");
+    }
+}
+
+test "lower LR rule with no trailing self-ref records last_self_ref_idx -1" {
+    // `expr : INT | expr '++' ;` — the LR alt has no internal
+    // self-ref beyond the leading prefix.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "expr",
+        Visibility::Default,
+        [],
+        [
+            alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+            alt_of([
+                Element::RuleRef(RuleRefElement::new("expr")),
+                Element::Literal(LiteralElement::new("++")),
+            ]),
+        ],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let LeftRecursive(l) = &lowered.parser_rules[0] {
+        assert l.lr_alts.len() == 1;
+        assert l.lr_alts[0].last_self_ref_idx == -1;
+        assert l.lr_alts[0].suffix.ops.len() == 1;
+    } else {
+        panic("expected Rule::LeftRecursive");
     }
 }
 

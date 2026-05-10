@@ -75,6 +75,9 @@ use {
     Rule,
     SimpleRule,
     MultiAltRule,
+    LeftRecursiveRule,
+    LrAlt,
+    LrDispatchData,
     RuleHeader,
     AltBody,
     MultiAltDispatch,
@@ -185,10 +188,20 @@ fn walk_rule_for_kind_sets(
                 walk_alt_body_for_kind_sets(alt, registry, sets);
             }
         },
-        // Phase 2.4 — left-recursive rules walk both atom and lr_alts.
-        // Until that lowering exists we never see a LeftRecursive
-        // here (`lower_rule` panics earlier).
-        LeftRecursive(_) => panic("intern_kind_sets: LeftRecursive not yet reachable"),
+        LeftRecursive(l) => {
+            // Atom is a `MultiAltRule` — same dispatch + per-alt walk.
+            walk_dispatch_for_kind_sets(&l.atom.dispatch, registry, sets);
+            walk_dispatch_for_kind_sets(&l.atom.scan_dispatch, registry, sets);
+            for let alt of &l.atom.alts {
+                walk_alt_body_for_kind_sets(alt, registry, sets);
+            }
+            // LR suffix bodies. The LR loop dispatch is rebuilt at
+            // emit time from `lr_dispatch` + `lr_alts.suffix_first`,
+            // so no kind-set entries fall out of `lr_dispatch` itself.
+            for let lr of &l.lr_alts {
+                walk_alt_body_for_kind_sets(&lr.suffix, registry, sets);
+            }
+        },
     };
 }
 
@@ -301,7 +314,7 @@ fn lower_rule(rule: &ParserRule, ctx: &mut GenContext) -> Rule {
         return Rule::Simple(lower_simple_rule(rule, ctx));
     }
     if has_left_recursive_alt(rule) {
-        panic(`TODO Phase 2.4: left-recursive rule '{rule.name}' not implemented yet`);
+        return Rule::LeftRecursive(lower_lr_rule(rule, ctx));
     }
     return Rule::MultiAlt(lower_multi_alt_rule(rule, ctx));
 }
@@ -354,6 +367,423 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
         dispatch: clone_dispatch(&dispatch),
         scan_dispatch: dispatch,
     };
+}
+
+/// Lower a directly-left-recursive rule. ANTLR4 rewrites
+/// `expr : expr op expr | atom ;` into a precedence-climbing
+/// `parse_expr(min_prec)` whose body parses an atom and then runs
+/// a loop that dispatches on the next token to one of the LR
+/// suffix bodies. We mirror that structure in GIR:
+///
+/// * `atom: MultiAltRule` — the non-LR alternatives, lowered
+///   exactly as a regular multi-alt rule. When only one non-LR alt
+///   exists, this is still a `MultiAltRule` with a single-branch
+///   `Direct` dispatch — emit treats both cases uniformly.
+/// * `lr_alts: Array<LrAlt>` — per-LR-alt metadata: prefix-stripped
+///   suffix, precedence assignment, conflict-min-precedence, last
+///   internal self-ref index, suffix first-set, right-associativity.
+/// * `lr_dispatch: LrDispatchData` — the suffix-loop overlap groups
+///   and the indices of LR alts that have a non-empty suffix.
+///
+/// Phase 2.4 only handles the disjoint-suffix-first case (no overlap
+/// groups beyond singletons). Overlapping suffix first-sets need
+/// the scan-tournament dispatch from Phase 2.3c.
+fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
+    let header = lower_header(rule);
+
+    // Partition alts into atom (non-LR) and lr (LR). ANTLR4 requires
+    // at least one non-LR alt; we mirror the assertion so the GIR
+    // `atom: MultiAltRule` invariant (header derived from a non-empty
+    // alt set) is honoured.
+    let mut non_lr_indices: Array<i32> = [];
+    let mut lr_indices: Array<i32> = [];
+    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
+        if alt_is_left_recursive(&rule.alternatives[i], &rule.name) {
+            lr_indices.push(i);
+        } else {
+            non_lr_indices.push(i);
+        }
+    }
+    if non_lr_indices.is_empty() {
+        panic(`LR rule '{rule.name}' has no non-LR alt — ANTLR4 requires at least one atom alt`);
+    }
+    if lr_indices.is_empty() {
+        panic(`LR rule '{rule.name}' has no LR alt — should not have reached lower_lr_rule`);
+    }
+
+    let total_lr: i32 = lr_indices.len();
+    let atom = lower_lr_atom(rule, &non_lr_indices, ctx);
+
+    // Lower each LR alt's suffix and compute its precedence /
+    // metadata. `own_prec` follows ANTLR4's convention: first LR
+    // alt in source order gets the highest precedence (`total_lr`),
+    // last gets `1`.
+    let mut lr_alts: Array<LrAlt> = [];
+    let mut lr_position: i32 = 0;
+    for let lr_idx of &lr_indices {
+        let alt = &rule.alternatives[*lr_idx];
+        let own_prec = total_lr - lr_position;
+        let conflict_min = compute_lr_conflict_min_prec(
+            alt, own_prec, &lr_indices, rule, ctx, total_lr);
+        lr_alts.push(lower_lr_alt(rule, *lr_idx, own_prec, conflict_min, ctx));
+        lr_position += 1;
+    }
+
+    let lr_dispatch = compute_lr_dispatch_data(&lr_alts);
+
+    return LeftRecursiveRule {
+        header,
+        atom,
+        lr_alts,
+        lr_dispatch,
+    };
+}
+
+/// Lower the atom side of an LR rule — the non-LR alternatives only.
+/// Reuses `lower_multi_alt_rule`'s first-set + dispatch logic but
+/// projects through `non_lr_indices` so the output's `alt_index`,
+/// `case_name` / `struct_name` still match the ORIGINAL alt index in
+/// the surface `rule.alternatives` list. emit relies on that
+/// correspondence to look up case names from `header.case_names`.
+fn lower_lr_atom(
+    rule: &ParserRule,
+    non_lr_indices: &Array<i32>,
+    ctx: &mut GenContext,
+) -> MultiAltRule {
+    let header = lower_header(rule);
+
+    let mut first_sets: Array<Array<String>> = [];
+    for let idx of non_lr_indices {
+        let mut visiting: Array<String> = [];
+        first_sets.push(ctx.first_of_alt(&rule.alternatives[*idx], &mut visiting));
+    }
+    panic_if_any_atom_overlap(rule, non_lr_indices, &first_sets);
+
+    let mut alts: Array<AltBody> = [];
+    let mut scan_alts: Array<ScanBody> = [];
+    for let idx of non_lr_indices {
+        alts.push(lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx));
+        scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx));
+    }
+
+    let dispatch = build_direct_dispatch(&first_sets);
+    return MultiAltRule {
+        header,
+        alts,
+        scan_alts,
+        dispatch: clone_dispatch(&dispatch),
+        scan_dispatch: dispatch,
+    };
+}
+
+fn panic_if_any_atom_overlap(
+    rule: &ParserRule,
+    non_lr_indices: &Array<i32>,
+    first_sets: &Array<Array<String>>,
+) {
+    for let mut i = 0; i < first_sets.len(); i += 1 {
+        for let mut j = i + 1; j < first_sets.len(); j += 1 {
+            for let tk of &first_sets[i] {
+                if first_set_contains(&first_sets[j], tk) {
+                    let ai = non_lr_indices[i];
+                    let aj = non_lr_indices[j];
+                    panic(`TODO Phase 2.3b: LR rule '{rule.name}' atom alts ({ai}, {aj}) share token {*tk}`);
+                }
+            }
+        }
+    }
+}
+
+/// Lower a single LR alternative. Strips the leading self-ref and
+/// lowers everything after it as the alt's suffix body. The
+/// precedence (`own_prec`) and conflict floor (`conflict_min`) are
+/// computed by the caller and stored verbatim.
+fn lower_lr_alt(
+    rule: &ParserRule,
+    alt_idx: i32,
+    own_prec: i32,
+    conflict_min: i32,
+    ctx: &mut GenContext,
+) -> LrAlt {
+    let alt = &rule.alternatives[alt_idx];
+    if alt.elements.is_empty() {
+        panic(`LR alt {alt_idx} of '{rule.name}' is empty — should not be classified LR`);
+    }
+
+    // Build per-alt CST identifiers. `case_name` mirrors
+    // `case_names_for_rule`, and `struct_name` follows the
+    // `<RuleBase><CaseName>` convention the rest of `lower_alt_body`
+    // uses. We don't reuse `lower_alt_body` directly because we need
+    // the suffix elements (skipping the leading self-ref), not the
+    // whole alt.
+    let case_names = case_names_for_rule(&rule.alternatives);
+    let type_name = rule_type_name(&rule.name);
+    let base = strip_suffix(&type_name, &"Node");
+    let case_name = case_names[alt_idx];
+    let struct_name = `{base}{case_name}`;
+
+    // Compute `last_self_ref_idx` — the index (within the original
+    // alt's element list) of the LAST self-reference. -1 when the
+    // only self-ref is the leading one. This drives emit's
+    // "trailing self-ref drops back into the LR loop with the right
+    // precedence" handling.
+    let last_self_ref_idx = find_last_self_ref_idx(alt, &rule.name);
+
+    // Suffix first-set drives the LR loop's per-iteration dispatch.
+    let suffix_first = ctx.first_of_elements_from(&alt.elements, 1);
+
+    // Lower the suffix (elements[1..]) as an AltBody / ScanBody.
+    let suffix = lower_lr_alt_suffix(rule, alt_idx, &case_name, &struct_name, ctx);
+    let scan_suffix = lower_lr_alt_scan_suffix(rule, alt_idx, ctx);
+
+    return LrAlt {
+        alt_index: alt_idx,
+        case_name: case_name,
+        struct_name: struct_name,
+        suffix: suffix,
+        scan_suffix: scan_suffix,
+        own_prec: own_prec,
+        conflict_min: conflict_min,
+        last_self_ref_idx: last_self_ref_idx,
+        suffix_first: suffix_first,
+        right_associative: is_right_associative_alt(alt),
+    };
+}
+
+fn lower_lr_alt_suffix(
+    rule: &ParserRule,
+    alt_idx: i32,
+    case_name: &String,
+    struct_name: &String,
+    ctx: &mut GenContext,
+) -> AltBody {
+    let alt = &rule.alternatives[alt_idx];
+
+    // Per-alt counter starts at this alt's position in the rule's
+    // alt_gc_starts table — same as `lower_alt_body` does for the
+    // full-alt case. The suffix walk continues from there.
+    let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
+    let mut group_counter: i32 = alt_gc_starts[alt_idx];
+
+    let mut name_counts: Array<[String, i32]> = [];
+    let mut ops: Array<Op> = [];
+    for let mut i = 1; i < alt.elements.len(); i += 1 {
+        ops.push(lower_op(&alt.elements[i], &mut name_counts, &rule.name, ctx, &mut group_counter));
+    }
+
+    let fields = enumerate_alt_field_decls(&ops);
+
+    return AltBody {
+        alt_index: alt_idx,
+        case_name: *case_name,
+        struct_name: *struct_name,
+        ops: ops,
+        fields: fields,
+        group_index_start: alt_gc_starts[alt_idx],
+        prefix_self_ref_min_prec: 0,
+    };
+}
+
+fn lower_lr_alt_scan_suffix(
+    rule: &ParserRule,
+    alt_idx: i32,
+    ctx: &mut GenContext,
+) -> ScanBody {
+    let alt = &rule.alternatives[alt_idx];
+    let mut elements: Array<ScanElement> = [];
+    for let mut i = 1; i < alt.elements.len(); i += 1 {
+        elements.push(lower_scan_element(&alt.elements[i], ctx));
+    }
+    return ScanBody { elements };
+}
+
+/// Index (within `alt.elements`) of the LAST self-reference to
+/// `rule_name`. Returns `-1` when the leading-prefix self-ref is
+/// the ONLY self-ref. Mirrors what emit needs to know about
+/// trailing self-refs (`expr op expr` has a trailing one;
+/// `expr '++' ` does not).
+fn find_last_self_ref_idx(alt: &Alternative, rule_name: &String) -> i32 {
+    let mut last: i32 = -1;
+    // Index 0 is the leading prefix self-ref (already known to
+    // exist for an LR alt); we count any self-ref at i >= 1 as
+    // "internal".
+    for let mut i = 1; i < alt.elements.len(); i += 1 {
+        if element_is_self_ref(&alt.elements[i], rule_name) {
+            last = i;
+        }
+    }
+    return last;
+}
+
+/// True iff `alt` carries `<assoc=right>` in its options. Mirrors
+/// `parser_gen::is_right_associative`.
+fn is_right_associative_alt(alt: &Alternative) -> bool {
+    for let opt of &alt.options {
+        if opt.name != "assoc" {
+            continue;
+        }
+        if let Ident(v) = &opt.value {
+            if *v == "right" {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// Compute the conflict-floor `min_prec` for `alt`. Left-associative
+/// alts use `own_prec + 1` as the floor (rejecting same-precedence
+/// on the right operand); right-associative use `own_prec` (so
+/// same-precedence nests rightward). Then widen the floor when a
+/// strictly higher-precedence alt's suffix claims one of our suffix's
+/// fixed tokens — see `parser_gen::compute_lr_conflict_min_prec` for
+/// the rationale (essentially: avoid the higher-prec alt grabbing a
+/// shared delimiter at the wrong precedence).
+fn compute_lr_conflict_min_prec(
+    alt: &Alternative,
+    own_prec: i32,
+    lr_indices: &Array<i32>,
+    rule: &ParserRule,
+    ctx: &mut GenContext,
+    total_lr: i32,
+) -> i32 {
+    let mut min_prec: i32 = if is_right_associative_alt(alt) { own_prec } else { own_prec + 1 };
+
+    let mut fixed_tokens: Array<String> = [];
+    for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
+        let elem = &alt.elements[ei];
+        match *elem {
+            TokenRef(t) => fixed_tokens.push(`TK_{t.name}`),
+            Literal(l) => fixed_tokens.push(literal_const_name(&l.text)),
+            _ => {},
+        };
+    }
+    if fixed_tokens.is_empty() {
+        return min_prec;
+    }
+
+    let mut lr_pos: i32 = 0;
+    for let lr_idx of lr_indices {
+        let other = &rule.alternatives[*lr_idx];
+        if other.elements.len() <= 1 {
+            lr_pos += 1;
+            continue;
+        }
+        let other_prec = total_lr - lr_pos;
+        if other_prec <= own_prec {
+            lr_pos += 1;
+            continue;
+        }
+        let suffix_first = ctx.first_of_elements_from(&other.elements, 1);
+        for let ft of &fixed_tokens {
+            if first_set_contains(&suffix_first, ft) {
+                let candidate = other_prec + 1;
+                if candidate > min_prec {
+                    min_prec = candidate;
+                }
+            }
+        }
+        lr_pos += 1;
+    }
+    return min_prec;
+}
+
+/// Build the LR loop's dispatch metadata. `valid_lr_alts` lists the
+/// indices (into `lr_alts`) of alts whose suffix is non-empty —
+/// degenerate `expr : expr` alts are filtered out. `groups` is the
+/// overlap-group partition over those alts' `suffix_first` sets.
+///
+/// Phase 2.4 only handles the disjoint case (each group is a
+/// singleton). Overlap groups land in Phase 2.3c.
+fn compute_lr_dispatch_data(lr_alts: &Array<LrAlt>) -> LrDispatchData {
+    let mut valid_lr_alts: Array<i32> = [];
+    let mut suffix_first_sets: Array<Array<String>> = [];
+    for let mut i = 0; i < lr_alts.len(); i += 1 {
+        let lr = &lr_alts[i];
+        if lr.suffix_first.is_empty() {
+            continue;
+        }
+        valid_lr_alts.push(i);
+        suffix_first_sets.push(lr.suffix_first);
+    }
+
+    let groups = compute_overlap_groups(&suffix_first_sets);
+    panic_if_lr_overlap(lr_alts, &valid_lr_alts, &groups);
+
+    return LrDispatchData {
+        valid_lr_alts: valid_lr_alts,
+        groups: groups,
+    };
+}
+
+fn panic_if_lr_overlap(
+    lr_alts: &Array<LrAlt>,
+    valid_lr_alts: &Array<i32>,
+    groups: &Array<Array<i32>>,
+) {
+    for let group of groups {
+        if group.len() > 1 {
+            let lr_a = &lr_alts[valid_lr_alts[group[0]]];
+            let lr_b = &lr_alts[valid_lr_alts[group[1]]];
+            panic(`TODO Phase 2.3c: LR alts {lr_a.alt_index} and {lr_b.alt_index} have overlapping suffix first-sets`);
+        }
+    }
+}
+
+/// Union-find overlap grouping over per-alt first sets. Mirrors
+/// `parser_gen::compute_overlap_groups` — alts whose first sets
+/// share at least one token end up in the same group; disjoint
+/// alts get their own singleton group. The output's iteration order
+/// matches the input order (first occurrence wins as group root).
+fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<i32>> {
+    let n = first_sets.len();
+    let mut group_ids: Array<i32> = [];
+    for let mut i = 0; i < n; i += 1 {
+        group_ids.push(i);
+    }
+    for let mut i = 0; i < n; i += 1 {
+        for let mut j = i + 1; j < n; j += 1 {
+            if first_sets_overlap(&first_sets[i], &first_sets[j]) {
+                let gi = group_ids[i];
+                let gj = group_ids[j];
+                if gi != gj {
+                    for let mut k = 0; k < n; k += 1 {
+                        if group_ids[k] == gj {
+                            group_ids[k] = gi;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut seen_ids: Array<i32> = [];
+    let mut groups: Array<Array<i32>> = [];
+    for let mut i = 0; i < n; i += 1 {
+        let gid = group_ids[i];
+        let mut found: i32 = -1;
+        for let mut s = 0; s < seen_ids.len(); s += 1 {
+            if seen_ids[s] == gid {
+                found = s;
+                break;
+            }
+        }
+        if found >= 0 {
+            groups[found].push(i);
+        } else {
+            seen_ids.push(gid);
+            groups.push([i]);
+        }
+    }
+    return groups;
+}
+
+fn first_sets_overlap(a: &Array<String>, b: &Array<String>) -> bool {
+    for let tk of a {
+        if first_set_contains(b, tk) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /// Phase 2.3a guard: every alt's first set must be disjoint from
