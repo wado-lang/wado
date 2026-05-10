@@ -364,10 +364,13 @@ async fn shutdown_signal() {
                 return;
             }
         };
-        tokio::select! {
-            _ = tokio::signal::ctrl_c() => {}
-            _ = sigterm.recv() => {}
-        }
+        let ctrl_c = pin!(async {
+            let _ = tokio::signal::ctrl_c().await;
+        });
+        let term = pin!(async {
+            let _ = sigterm.recv().await;
+        });
+        let _ = select(ctrl_c, term).await;
     }
     #[cfg(not(unix))]
     {
@@ -429,65 +432,58 @@ async fn run_http_server(
     eprintln!("Send SIGINT or SIGTERM to shut down");
 
     let mut connections: JoinSet<()> = JoinSet::new();
-    let shutdown = pin!(shutdown_signal());
+    let mut shutdown = pin!(shutdown_signal());
 
     // Accept loop with graceful shutdown. On signal, stop accepting and
     // wait for in-flight connections to drain (with a hard cap so we don't
     // hang forever on misbehaving clients).
-    {
-        let mut shutdown = shutdown;
-        loop {
-            tokio::select! {
-                accepted = listener.accept() => {
-                    let (stream, remote_addr) = match accepted {
-                        Ok(v) => v,
-                        Err(e) => {
-                            eprintln!("accept error: {e}");
-                            continue;
-                        }
-                    };
-                    let io = TokioIo::new(stream);
+    loop {
+        let accept = pin!(listener.accept());
+        match select(accept, shutdown.as_mut()).await {
+            Either::Right(((), _accept)) => {
+                eprintln!(
+                    "Shutdown signal received; draining {} in-flight connection(s)…",
+                    connections.len()
+                );
+                break;
+            }
+            Either::Left((Err(e), _shutdown)) => {
+                eprintln!("accept error: {e}");
+            }
+            Either::Left((Ok((stream, remote_addr)), _shutdown)) => {
+                let io = TokioIo::new(stream);
 
-                    let engine = Arc::clone(&engine);
-                    let service_pre = Arc::clone(&service_pre);
-                    let preopens = Arc::clone(&preopens);
+                let engine = Arc::clone(&engine);
+                let service_pre = Arc::clone(&service_pre);
+                let preopens = Arc::clone(&preopens);
 
-                    connections.spawn(async move {
-                        let svc = service_fn(|req| {
-                            let engine = Arc::clone(&engine);
-                            let service_pre = Arc::clone(&service_pre);
-                            let preopens = Arc::clone(&preopens);
+                connections.spawn(async move {
+                    let svc = service_fn(|req| {
+                        let engine = Arc::clone(&engine);
+                        let service_pre = Arc::clone(&service_pre);
+                        let preopens = Arc::clone(&preopens);
 
-                            async move {
-                                handle_http_request(
-                                    &engine,
-                                    &service_pre,
-                                    &preopens,
-                                    timeout,
-                                    req,
-                                )
+                        async move {
+                            handle_http_request(&engine, &service_pre, &preopens, timeout, req)
                                 .await
-                            }
-                        });
-
-                        // Auto-detect HTTP/1.1 vs h2c (HTTP/2 cleartext, prior-knowledge)
-                        // by sniffing the connection preface. HTTP/1 callers see normal
-                        // behavior; h2c clients (e.g. `curl --http2-prior-knowledge`) get
-                        // trailers without needing the `TE: trailers` handshake hyper
-                        // requires on the HTTP/1 path.
-                        let builder = auto::Builder::new(TokioExecutor::new());
-                        if let Err(e) = builder.serve_connection(io, svc).await {
-                            eprintln!("Error serving {remote_addr}: {e}");
                         }
                     });
-                }
-                () = &mut shutdown => {
-                    eprintln!("Shutdown signal received; draining {} in-flight connection(s)…", connections.len());
-                    break;
-                }
-                // Reap finished connections so the JoinSet doesn't grow
-                // unboundedly on a long-running server.
-                Some(_res) = connections.join_next(), if !connections.is_empty() => {}
+
+                    // Auto-detect HTTP/1.1 vs h2c (HTTP/2 cleartext, prior-knowledge)
+                    // by sniffing the connection preface. HTTP/1 callers see normal
+                    // behavior; h2c clients (e.g. `curl --http2-prior-knowledge`) get
+                    // trailers without needing the `TE: trailers` handshake hyper
+                    // requires on the HTTP/1 path.
+                    let builder = auto::Builder::new(TokioExecutor::new());
+                    if let Err(e) = builder.serve_connection(io, svc).await {
+                        eprintln!("Error serving {remote_addr}: {e}");
+                    }
+                });
+
+                // Non-blockingly reap any connections that finished while
+                // we were accepting, so the JoinSet doesn't grow unboundedly
+                // on a long-running server.
+                while connections.try_join_next().is_some() {}
             }
         }
     }
