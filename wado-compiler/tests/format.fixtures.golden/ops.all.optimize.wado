@@ -12,6 +12,16 @@ global mut free_list: i32 = 0;
 
 global mut __modules_initialized: bool = false;
 
+pub struct u128 {
+    low: u64,
+    high: u64,
+}
+
+pub struct String {
+    repr: builtin::array<u8>,
+    used: i32,
+}
+
 fn grow_memory(new_offset: i32) {
     let current_bytes: i32 = (core::builtin::memory_size() * 65536);
     let deficit: i32 = (new_offset - current_bytes);
@@ -131,5 +141,21 @@ export fn __cm_export__run() {
         __modules_initialized = true;
     };
     cm_raw_call task-return(0);
+}
+
+fn "$value_copy$T278"(v: [i32, char]) -> [i32, char] {
+    return Tuple<i32,char> { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$T25"(v: String) -> String {
+    return String { repr: core::builtin::array_clone::<u8>(v.repr), used: v.used };
+}
+
+fn "$value_copy$T214"(v: [bool, i32]) -> [bool, i32] {
+    return Tuple<bool,i32> { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$T73"(v: u128) -> u128 {
+    return u128 { low: v.low, high: v.high };
 }
 

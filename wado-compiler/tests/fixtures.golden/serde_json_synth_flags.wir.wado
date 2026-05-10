@@ -2184,13 +2184,15 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Deserialize::
     let __local_7: ref "core:prelude/string.wado//String";
     let __qm_e: ref "core:serde//DeserializeError";
     let v_14: ref "core:json//JsonSeqAccess";
-    let v_15: ref "core:prelude/string.wado//String";
-    let other_17: ref "core:prelude/string.wado//String";
-    let len_a_18: i32;
-    let other_20: ref "core:prelude/string.wado//String";
-    let len_a_21: i32;
-    let other_23: ref "core:prelude/string.wado//String";
-    let len_a_24: i32;
+    let v_15: ref "core:json//JsonDeserializer";
+    let v_16: ref "core:prelude/string.wado//String";
+    let other_18: ref "core:prelude/string.wado//String";
+    let len_a_19: i32;
+    let other_21: ref "core:prelude/string.wado//String";
+    let len_a_22: i32;
+    let other_24: ref "core:prelude/string.wado//String";
+    let len_a_25: i32;
+    let v_28: ref "core:prelude/string.wado//String";
     __seq_r = __inline_JsonDeserializer_Deserializer__begin_seq_0: block -> ref "core:prelude/types.wado//Result<JsonSeqAccess,DeserializeError>" {
         let __match_scrut_0: ref null "core:serde//DeserializeError";
         __match_scrut_0 = "core:json/JsonDeserializer::expect_char"(d, 91);
@@ -2209,7 +2211,15 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Deserialize::
     if ref.test "core:prelude/types.wado//Result<JsonSeqAccess,DeserializeError>::Ok"(__seq_r) {
         seq = __inline__value_copy_T56_1: block -> ref "core:json//JsonSeqAccess" {
             v_14 = ref.cast "core:prelude/types.wado//Result<JsonSeqAccess,DeserializeError>::Ok"(__seq_r).payload_0;
-            break __inline__value_copy_T56_1: struct.new "core:json//JsonSeqAccess" { de: v_14.de, first: v_14.first };
+            break __inline__value_copy_T56_1: struct.new "core:json//JsonSeqAccess" { de: ref.as_non_null(__inline__value_copy_T25_2: block -> ref "core:json//JsonDeserializer" {
+                v_15 = v_14.de;
+                break __inline__value_copy_T25_2: struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(__inline__value_copy_T21_0: block -> ref "core:prelude/string.wado//String" {
+                    v_28 = v_15.input;
+                    break __inline__value_copy_T21_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_28.repr)), used: v_28.used };
+                    unreachable;
+                }), pos: v_15.pos };
+                unreachable;
+            }), first: v_14.first };
             unreachable;
         };
         bits = 0;
@@ -2222,42 +2232,42 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Deserialize::
                 if __sroa___elem_r_discriminant == 0 {
                     __elem = __sroa___elem_r_case0_payload_0;
                     if ref.is_null(__elem) == 0 {
-                        __name = __inline__value_copy_T21_2: block -> ref "core:prelude/string.wado//String" {
-                            v_15 = ref.as_non_null(__elem);
-                            break __inline__value_copy_T21_2: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_15.repr)), used: v_15.used };
+                        __name = __inline__value_copy_T21_3: block -> ref "core:prelude/string.wado//String" {
+                            v_16 = ref.as_non_null(__elem);
+                            break __inline__value_copy_T21_3: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_16.repr)), used: v_16.used };
                             unreachable;
                         };
-                        if __inline_String_Eq__eq_3: block -> bool {
-                            other_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Read"), used: 4 };
-                            len_a_18 = __name.used;
-                            if len_a_18 != other_17.used {
-                                break __inline_String_Eq__eq_3: 0;
+                        if __inline_String_Eq__eq_4: block -> bool {
+                            other_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Read"), used: 4 };
+                            len_a_19 = __name.used;
+                            if len_a_19 != other_18.used {
+                                break __inline_String_Eq__eq_4: 0;
                             }
-                            break __inline_String_Eq__eq_3: "core:prelude/string.wado/String^Eq::eq_bytes"(__name.repr, other_17.repr, len_a_18);
+                            break __inline_String_Eq__eq_4: "core:prelude/string.wado/String^Eq::eq_bytes"(__name.repr, other_18.repr, len_a_19);
                             unreachable;
                         } {
                             bits = bits | 1;
                             continue l206;
                         }
-                        if __inline_String_Eq__eq_4: block -> bool {
-                            other_20 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Write"), used: 5 };
-                            len_a_21 = __name.used;
-                            if len_a_21 != other_20.used {
-                                break __inline_String_Eq__eq_4: 0;
+                        if __inline_String_Eq__eq_5: block -> bool {
+                            other_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Write"), used: 5 };
+                            len_a_22 = __name.used;
+                            if len_a_22 != other_21.used {
+                                break __inline_String_Eq__eq_5: 0;
                             }
-                            break __inline_String_Eq__eq_4: "core:prelude/string.wado/String^Eq::eq_bytes"(__name.repr, other_20.repr, len_a_21);
+                            break __inline_String_Eq__eq_5: "core:prelude/string.wado/String^Eq::eq_bytes"(__name.repr, other_21.repr, len_a_22);
                             unreachable;
                         } {
                             bits = bits | 2;
                             continue l206;
                         }
-                        if __inline_String_Eq__eq_5: block -> bool {
-                            other_23 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Execute"), used: 7 };
-                            len_a_24 = __name.used;
-                            if len_a_24 != other_23.used {
-                                break __inline_String_Eq__eq_5: 0;
+                        if __inline_String_Eq__eq_6: block -> bool {
+                            other_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Execute"), used: 7 };
+                            len_a_25 = __name.used;
+                            if len_a_25 != other_24.used {
+                                break __inline_String_Eq__eq_6: 0;
                             }
-                            break __inline_String_Eq__eq_5: "core:prelude/string.wado/String^Eq::eq_bytes"(__name.repr, other_23.repr, len_a_24);
+                            break __inline_String_Eq__eq_6: "core:prelude/string.wado/String^Eq::eq_bytes"(__name.repr, other_24.repr, len_a_25);
                             unreachable;
                         } {
                             bits = bits | 4;

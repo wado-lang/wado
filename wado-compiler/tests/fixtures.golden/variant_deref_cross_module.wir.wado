@@ -171,11 +171,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(51)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(52)
 
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(53)
+type "functype//wado-compiler/tests/fixtures/variant_deref_cross_module.wado/$value_copy$T21" = fn(ref "./sub/variant_deref_helper.wado//Alt") -> [ref null "core:prelude/string.wado//String", ref "core:prelude//Array<Elem>"];  // TypeId(53)
 
-type "functype//wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process" = fn(ref "./sub/variant_deref_helper.wado//Elem", ref "core:prelude/string.wado//String");  // TypeId(54)
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(54)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(55)
+type "functype//wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process" = fn(ref "./sub/variant_deref_helper.wado//Elem", ref "core:prelude/string.wado//String");  // TypeId(55)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(56)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -235,7 +237,7 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(elem, 
     if ref.test "./sub/variant_deref_helper.wado//Elem::Group"(__pattern_temp_4) {
         alts = __inline__value_copy_T22_0: block -> ref "core:prelude//Array<Alt>" {
             v = ref.cast "./sub/variant_deref_helper.wado//Elem::Group"(__pattern_temp_4).payload_0;
-            break __inline__value_copy_T22_0: struct.new "core:prelude//Array<Alt>" { repr: ref.as_non_null(builtin::array_clone<ref "./sub/variant_deref_helper.wado//Alt">(v.repr)), used: v.used };
+            break __inline__value_copy_T22_0: struct.new "core:prelude//Array<Alt>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "./sub/variant_deref_helper.wado//Alt">(/*via $value_copy$T21*/ v.repr)), used: v.used };
             unreachable;
         };
         __iter_7 = struct.new "core:prelude/array.wado//ArrayIter<Alt>" { repr: alts.repr, used: alts.used, index: 0 };
@@ -346,6 +348,15 @@ condition: out == \"hello world\"
 fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/__cm_export____test_0_recursive_variant_deref_from_another_module"() {
     "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/__test_0_recursive_variant_deref_from_another_module"();
     "wasi/task-return"(0);
+}
+
+fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/$value_copy$T21"(v) {
+    let v_1: ref "core:prelude//Array<Elem>";
+    return v.label, ref.as_non_null(__inline__value_copy_T26_0: block -> ref "core:prelude//Array<Elem>" {
+        v_1 = v.elements;
+        break __inline__value_copy_T26_0: struct.new "core:prelude//Array<Elem>" { repr: ref.as_non_null(builtin::array_clone<ref "./sub/variant_deref_helper.wado//Elem">(v_1.repr)), used: v_1.used };
+        unreachable;
+    });
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {

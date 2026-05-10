@@ -3568,12 +3568,13 @@ fn "wado-compiler/tests/fixtures/default_field_serde_default.wado/Config^Deseria
     let __local_19: ref "core:prelude/types.wado//Result<String,DeserializeError>";
     let __local_20: ref "core:prelude/types.wado//Result<i32,DeserializeError>";
     let __local_21: ref "core:prelude/types.wado//Result<bool,DeserializeError>";
-    let d_24: ref "core:json//JsonDeserializer";
-    let d_26: ref "core:json//JsonDeserializer";
-    let d_28: ref "core:json//JsonDeserializer";
+    let d_25: ref "core:json//JsonDeserializer";
+    let d_27: ref "core:json//JsonDeserializer";
+    let d_29: ref "core:json//JsonDeserializer";
     let lookup: ref struct;
-    let __sroa___fused_payload_39_de: ref "core:json//JsonDeserializer";
-    let __sroa___fused_payload_39_lookup: ref struct;
+    let v_38: ref "core:prelude/string.wado//String";
+    let __sroa___fused_payload_41_de: ref "core:json//JsonDeserializer";
+    let __sroa___fused_payload_41_lookup: ref struct;
     lookup = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/default_field_serde_default.wado//__Closure_2" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/default_field_serde_default.wado/__closure_wrapper_0") };
     let __match_scrut_0: ref null "core:serde//DeserializeError";
     __match_scrut_0 = "core:json/JsonDeserializer::expect_char"(d, 123);
@@ -3583,9 +3584,13 @@ fn "wado-compiler/tests/fixtures/default_field_serde_default.wado/Config^Deseria
         unreachable;
         unreachable;
     }
-    __sroa___fused_payload_39_de = d;
-    __sroa___fused_payload_39_lookup = lookup;
-    sd = struct.new "core:json//JsonStructAccess" { de: __sroa___fused_payload_39_de, lookup: __sroa___fused_payload_39_lookup, first: 1 };
+    __sroa___fused_payload_41_de = d;
+    __sroa___fused_payload_41_lookup = lookup;
+    sd = struct.new "core:json//JsonStructAccess" { de: struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(__inline__value_copy_T19_1: block -> ref "core:prelude/string.wado//String" {
+        v_38 = __sroa___fused_payload_41_de.input;
+        break __inline__value_copy_T19_1: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_38.repr)), used: v_38.used };
+        unreachable;
+    }), pos: __sroa___fused_payload_41_de.pos }, lookup: __sroa___fused_payload_41_lookup, first: 1 };
     seen = 0;
     host = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     port = 8080;
@@ -3601,9 +3606,9 @@ fn "wado-compiler/tests/fixtures/default_field_serde_default.wado/Config^Deseria
                 if ref.test "core:prelude/types.wado//Option<i32>::Some"(__opt) {
                     __idx = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__opt).payload_0;
                     if __idx == 0 {
-                        __local_10 = __inline_String_Deserialize__deserialize_JsonDeserializer__3: block -> ref "core:prelude/types.wado//Result<String,DeserializeError>" {
-                            d_24 = sd.de;
-                            break __inline_String_Deserialize__deserialize_JsonDeserializer__3: "core:json/JsonDeserializer::read_json_string"(d_24);
+                        __local_10 = __inline_String_Deserialize__deserialize_JsonDeserializer__4: block -> ref "core:prelude/types.wado//Result<String,DeserializeError>" {
+                            d_25 = sd.de;
+                            break __inline_String_Deserialize__deserialize_JsonDeserializer__4: "core:json/JsonDeserializer::read_json_string"(d_25);
                             unreachable;
                         };
                         __local_19 = __local_10;
@@ -3615,9 +3620,9 @@ fn "wado-compiler/tests/fixtures/default_field_serde_default.wado/Config^Deseria
                             return struct.new "core:prelude/types.wado//Result<Config,DeserializeError>::Err" { discriminant: 1, payload_0: ref.cast "core:prelude/types.wado//Result<String,DeserializeError>::Err"(__local_10).payload_0 };
                         }
                     } else if __idx == 1 {
-                        __local_12 = __inline_i32_Deserialize__deserialize_JsonDeserializer__5: block -> ref "core:prelude/types.wado//Result<i32,DeserializeError>" {
-                            d_26 = sd.de;
-                            break __inline_i32_Deserialize__deserialize_JsonDeserializer__5: "core:json/JsonDeserializer::parse_i32_direct"(d_26);
+                        __local_12 = __inline_i32_Deserialize__deserialize_JsonDeserializer__6: block -> ref "core:prelude/types.wado//Result<i32,DeserializeError>" {
+                            d_27 = sd.de;
+                            break __inline_i32_Deserialize__deserialize_JsonDeserializer__6: "core:json/JsonDeserializer::parse_i32_direct"(d_27);
                             unreachable;
                         };
                         __local_20 = __local_12;
@@ -3629,9 +3634,9 @@ fn "wado-compiler/tests/fixtures/default_field_serde_default.wado/Config^Deseria
                             return struct.new "core:prelude/types.wado//Result<Config,DeserializeError>::Err" { discriminant: 1, payload_0: ref.cast "core:prelude/types.wado//Result<i32,DeserializeError>::Err"(__local_12).payload_0 };
                         }
                     } else if __idx == 2 {
-                        __local_14 = __inline_bool_Deserialize__deserialize_JsonDeserializer__7: block -> ref "core:prelude/types.wado//Result<bool,DeserializeError>" {
-                            d_28 = sd.de;
-                            break __inline_bool_Deserialize__deserialize_JsonDeserializer__7: "core:json/JsonDeserializer^Deserializer::deserialize_bool"(d_28);
+                        __local_14 = __inline_bool_Deserialize__deserialize_JsonDeserializer__8: block -> ref "core:prelude/types.wado//Result<bool,DeserializeError>" {
+                            d_29 = sd.de;
+                            break __inline_bool_Deserialize__deserialize_JsonDeserializer__8: "core:json/JsonDeserializer^Deserializer::deserialize_bool"(d_29);
                             unreachable;
                         };
                         __local_21 = __local_14;

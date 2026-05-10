@@ -28,121 +28,143 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
 
 array builtin::array<TreeMapEntry<String,i32>> (mut ref "core:collections//TreeMapEntry<String,i32>");  // TypeId(4)
 
-struct core:collections//TreeMap<String,i32> {  // TypeId(5)
-    mut root: ref null "core:collections//TreeMapNode<String>",
+array builtin::array<TreeMapNode<String>> (mut ref "core:collections//TreeMapNode<String>");  // TypeId(5)
+
+struct core:collections//TreeMap<String,i32> {  // TypeId(6)
+    mut root: ref "core:prelude/types.wado//Option<i32>",
+    mut nodes: ref "core:prelude//Array<TreeMapNode<String>>",
     mut entries: ref "core:prelude//Array<TreeMapEntry<String,i32>>",
     mut size: i32,
     mut deleted_count: i32,
 }
 
-struct core:collections//TreeMapEntry<String,i32> {  // TypeId(6)
+struct core:collections//TreeMapEntry<String,i32> {  // TypeId(7)
     mut key: ref "core:prelude/string.wado//String",
     mut value: i32,
     mut deleted: bool,
 }
 
-struct core:collections//TreeMapNode<String> {  // TypeId(7)
+struct core:collections//TreeMapNode<String> {  // TypeId(8)
     mut key: ref "core:prelude/string.wado//String",
     mut index: i32,
     mut level: i32,
-    mut left: ref null "core:collections//TreeMapNode<String>",
-    mut right: ref null "core:collections//TreeMapNode<String>",
+    mut left: ref "core:prelude/types.wado//Option<i32>",
+    mut right: ref "core:prelude/types.wado//Option<i32>",
 }
 
-struct core:prelude//Array<TreeMapEntry<String,i32>> {  // TypeId(8)
+variant core:prelude/types.wado//Option<i32> {  // TypeId(9)
+    Some(i32),
+    None,
+}
+
+struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(10)
+    discriminant: i32,
+    payload_0: i32,
+}
+
+struct core:prelude//Array<TreeMapNode<String>> {  // TypeId(11)
+    mut repr: ref builtin::array<TreeMapNode<String>>,
+    mut used: i32,
+}
+
+struct core:prelude//Array<TreeMapEntry<String,i32>> {  // TypeId(12)
     mut repr: ref builtin::array<TreeMapEntry<String,i32>>,
     mut used: i32,
 }
 
-enum core:prelude/traits.wado//enum:Ordering { Less = 0, Equal = 1, Greater = 2 };  // TypeId(9)
+enum core:prelude/traits.wado//enum:Ordering { Less = 0, Equal = 1, Greater = 2 };  // TypeId(13)
 
-enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(10)
+enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(14)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(11)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(15)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(12)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(13)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(14)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(18)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(15)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(16)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(20)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(17)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(21)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(22)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(23)
 
-type "functype//wado-compiler/tests/fixtures/treemap_literal_mutable.wado/run" = fn();  // TypeId(20)
+type "functype//wado-compiler/tests/fixtures/treemap_literal_mutable.wado/run" = fn();  // TypeId(24)
 
-type "functype//wado-compiler/tests/fixtures/treemap_literal_mutable.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//wado-compiler/tests/fixtures/treemap_literal_mutable.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(25)
 
-type "functype//wado-compiler/tests/fixtures/treemap_literal_mutable.wado/__cm_export__run" = fn();  // TypeId(22)
+type "functype//wado-compiler/tests/fixtures/treemap_literal_mutable.wado/__cm_export__run" = fn();  // TypeId(26)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(23)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(27)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(24)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(28)
 
-type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(25)
+type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(29)
 
-type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(26)
+type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(30)
 
-type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(27)
+type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(31)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(28)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(32)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(29)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(33)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(30)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(34)
 
-type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(31)
+type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(35)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(32)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(36)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(33)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(37)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(34)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(38)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(35)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(39)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(36)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(40)
 
-type "functype//core:prelude/string.wado/String^Ord::cmp" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(37)
+type "functype//core:prelude/string.wado/String^Ord::cmp" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(41)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(38)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(42)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(39)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(43)
 
-type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(40)
+type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(44)
 
-type "functype//core:collections/TreeMap<String,i32>^IndexValue<K>::index_value" = fn(ref "core:collections//TreeMap<String,i32>", ref "core:prelude/string.wado//String") -> i32;  // TypeId(41)
+type "functype//core:collections/TreeMap<String,i32>^IndexValue<K>::index_value" = fn(ref "core:collections//TreeMap<String,i32>", ref "core:prelude/string.wado//String") -> i32;  // TypeId(45)
 
-type "functype//core:collections/TreeMap<String,i32>::find_index" = fn(ref "core:collections//TreeMap<String,i32>", ref "core:prelude/string.wado//String") -> i32;  // TypeId(42)
+type "functype//core:collections/TreeMap<String,i32>::find_index" = fn(ref "core:collections//TreeMap<String,i32>", ref "core:prelude/string.wado//String") -> i32;  // TypeId(46)
 
-type "functype//core:collections/TreeMap<String,i32>::insert" = fn(ref "core:collections//TreeMap<String,i32>", ref "core:prelude/string.wado//String", i32);  // TypeId(43)
+type "functype//core:collections/TreeMap<String,i32>::insert" = fn(ref "core:collections//TreeMap<String,i32>", ref "core:prelude/string.wado//String", i32);  // TypeId(47)
 
-type "functype//core:collections/TreeMap<String,i32>::insert_node" = fn(ref "core:collections//TreeMap<String,i32>", ref null "core:collections//TreeMapNode<String>", ref "core:prelude/string.wado//String", i32) -> ref null "core:collections//TreeMapNode<String>";  // TypeId(44)
+type "functype//core:collections/TreeMap<String,i32>::insert_node" = fn(ref "core:collections//TreeMap<String,i32>", ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(48)
 
-type "functype//core:collections/TreeMap<String,i32>::split" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(45)
+type "functype//core:prelude/array.wado/Array<TreeMapNode<String>>::push" = fn(ref "core:prelude//Array<TreeMapNode<String>>", ref "core:collections//TreeMapNode<String>");  // TypeId(49)
 
-type "functype//core:collections/TreeMap<String,i32>::skew" = fn(ref null "core:collections//TreeMapNode<String>") -> ref null "core:collections//TreeMapNode<String>";  // TypeId(46)
+type "functype//core:prelude/array.wado/Array<TreeMapNode<String>>::grow" = fn(ref "core:prelude//Array<TreeMapNode<String>>");  // TypeId(50)
 
-type "functype//core:prelude/array.wado/Array<TreeMapEntry<String,i32>>::push" = fn(ref "core:prelude//Array<TreeMapEntry<String,i32>>", ref "core:collections//TreeMapEntry<String,i32>");  // TypeId(47)
+type "functype//core:collections/TreeMap<String,i32>::split" = fn(ref "core:collections//TreeMap<String,i32>", ref "core:prelude/types.wado//Option<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(51)
 
-type "functype//core:prelude/array.wado/Array<TreeMapEntry<String,i32>>::grow" = fn(ref "core:prelude//Array<TreeMapEntry<String,i32>>");  // TypeId(48)
+type "functype//core:collections/TreeMap<String,i32>::skew" = fn(ref "core:collections//TreeMap<String,i32>", ref "core:prelude/types.wado//Option<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(52)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(49)
+type "functype//core:prelude/array.wado/Array<TreeMapEntry<String,i32>>::push" = fn(ref "core:prelude//Array<TreeMapEntry<String,i32>>", ref "core:collections//TreeMapEntry<String,i32>");  // TypeId(53)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(50)
+type "functype//core:prelude/array.wado/Array<TreeMapEntry<String,i32>>::grow" = fn(ref "core:prelude//Array<TreeMapEntry<String,i32>>");  // TypeId(54)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(51)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(55)
 
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(52)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(56)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(53)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(57)
+
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(58)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(59)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -173,31 +195,36 @@ fn "wado-compiler/tests/fixtures/treemap_literal_mutable.wado/run"() with Stdout
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
-    let __b_16: ref "core:prelude//Array<TreeMapEntry<String,i32>>";
-    let key_18: ref "core:prelude/string.wado//String";
-    let key_21: ref "core:prelude/string.wado//String";
-    let f_28: ref "core:prelude/format.wado//Formatter";
-    let f_33: ref "core:prelude/format.wado//Formatter";
-    let key_37: ref "core:prelude/string.wado//String";
-    let f_43: ref "core:prelude/format.wado//Formatter";
-    let f_48: ref "core:prelude/format.wado//Formatter";
-    let key_52: ref "core:prelude/string.wado//String";
-    let f_57: ref "core:prelude/format.wado//Formatter";
-    let f_62: ref "core:prelude/format.wado//Formatter";
+    let __b_16: ref "core:prelude//Array<TreeMapNode<String>>";
+    let __b_17: ref "core:prelude//Array<TreeMapEntry<String,i32>>";
+    let key_19: ref "core:prelude/string.wado//String";
+    let key_22: ref "core:prelude/string.wado//String";
+    let f_29: ref "core:prelude/format.wado//Formatter";
+    let f_34: ref "core:prelude/format.wado//Formatter";
+    let key_38: ref "core:prelude/string.wado//String";
+    let f_44: ref "core:prelude/format.wado//Formatter";
+    let f_49: ref "core:prelude/format.wado//Formatter";
+    let key_53: ref "core:prelude/string.wado//String";
+    let f_58: ref "core:prelude/format.wado//Formatter";
+    let f_63: ref "core:prelude/format.wado//Formatter";
     let message: ref "core:prelude/string.wado//String";
     let rx: i32;
     let tx: i32;
     let handle: i32;
     m = __kv_lit: block -> ref "core:collections//TreeMap<String,i32>" {
-        __b_0 = struct.new "core:collections//TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_i32___new_3____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,i32>>" {
-            __b_16 = struct.new "core:prelude//Array<TreeMapEntry<String,i32>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,i32>">(0), used: 0 };
+        __b_0 = struct.new "core:collections//TreeMap<String,i32>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null(__inline_TreeMap_String_i32___new_3____seq_lit: block -> ref "core:prelude//Array<TreeMapNode<String>>" {
+            __b_16 = struct.new "core:prelude//Array<TreeMapNode<String>>" { repr: builtin::array_new<ref "core:collections//TreeMapNode<String>">(0), used: 0 };
             break __inline_TreeMap_String_i32___new_3____seq_lit: __b_16;
             unreachable;
+        }), entries: ref.as_non_null(__inline_TreeMap_String_i32___new_3____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,i32>>" {
+            __b_17 = struct.new "core:prelude//Array<TreeMapEntry<String,i32>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,i32>">(0), used: 0 };
+            break __inline_TreeMap_String_i32___new_3____seq_lit: __b_17;
+            unreachable;
         }), size: 0, deleted_count: 0 };
-        key_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 };
-        "core:collections/TreeMap<String,i32>::insert"(__b_0, key_18, 1);
-        key_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("y"), used: 1 };
-        "core:collections/TreeMap<String,i32>::insert"(__b_0, key_21, 2);
+        key_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 };
+        "core:collections/TreeMap<String,i32>::insert"(__b_0, key_19, 1);
+        key_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("y"), used: 1 };
+        "core:collections/TreeMap<String,i32>::insert"(__b_0, key_22, 2);
         break __kv_lit: __b_0;
         unreachable;
     };
@@ -217,23 +244,23 @@ fn "wado-compiler/tests/fixtures/treemap_literal_mutable.wado/run"() with Stdout
             "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap_literal_mutable.wado"), used: 57 });
             "core:prelude/string.wado/String::push"(__local_8, 58);
             __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
-            f_28 = __local_9;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(8, f_28);
+            f_29 = __local_9;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(8, f_29);
             "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: m.len() == 2
 "), used: 25 });
             "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("m.len(): "), used: 9 });
             __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
-            f_33 = __local_9;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_2, f_33);
+            f_34 = __local_9;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_2, f_34);
             "core:prelude/string.wado/String::push"(__local_8, 10);
             break __tmpl: __local_8;
             unreachable;
         });
         unreachable;
     }
-    key_37 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("z"), used: 1 };
-    "core:collections/TreeMap<String,i32>::insert"(m, key_37, 3);
+    key_38 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("z"), used: 1 };
+    "core:collections/TreeMap<String,i32>::insert"(m, key_38, 3);
     __v0_4 = m.size;
     __cond_5 = __v0_4 == 3;
     if __cond_5 == 0 {
@@ -250,23 +277,23 @@ condition: m.len() == 2
             "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap_literal_mutable.wado"), used: 57 });
             "core:prelude/string.wado/String::push"(__local_10, 58);
             __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
-            f_43 = __local_11;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(12, f_43);
+            f_44 = __local_11;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(12, f_44);
             "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: m.len() == 3
 "), used: 25 });
             "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("m.len(): "), used: 9 });
             __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
-            f_48 = __local_11;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_4, f_48);
+            f_49 = __local_11;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_4, f_49);
             "core:prelude/string.wado/String::push"(__local_10, 10);
             break __tmpl: __local_10;
             unreachable;
         });
         unreachable;
     }
-    key_52 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 };
-    "core:collections/TreeMap<String,i32>::insert"(m, key_52, 100);
+    key_53 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 };
+    "core:collections/TreeMap<String,i32>::insert"(m, key_53, 100);
     __v0_6 = "core:collections/TreeMap<String,i32>^IndexValue<K>::index_value"(m, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 });
     __cond_7 = __v0_6 == 100;
     if __cond_7 == 0 {
@@ -283,8 +310,8 @@ condition: m.len() == 3
             "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap_literal_mutable.wado"), used: 57 });
             "core:prelude/string.wado/String::push"(__local_12, 58);
             __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
-            f_57 = __local_13;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(16, f_57);
+            f_58 = __local_13;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(16, f_58);
             "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: m[\"x\"] == 100
 "), used: 26 });
@@ -297,8 +324,8 @@ condition: m[\"x\"] == 100
             "core:prelude/string.wado/String::push"(__local_12, 58);
             "core:prelude/string.wado/String::push"(__local_12, 32);
             __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
-            f_62 = __local_13;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_6, f_62);
+            f_63 = __local_13;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_6, f_63);
             "core:prelude/string.wado/String::push"(__local_12, 10);
             break __tmpl: __local_12;
             unreachable;
@@ -924,39 +951,54 @@ fn "core:collections/TreeMap<String,i32>^IndexValue<K>::index_value"(self, key) 
 }
 
 fn "core:collections/TreeMap<String,i32>::find_index"(self, key) {
-    let current: ref null "core:collections//TreeMapNode<String>";
+    let current: ref "core:prelude/types.wado//Option<i32>";
+    let n_idx: i32;
     let n: ref "core:collections//TreeMapNode<String>";
     let entry: ref "core:collections//TreeMapEntry<String,i32>";
     let other: ref "core:prelude/string.wado//String";
-    let index: i32;
-    let _licm_entries_11: ref "core:prelude//Array<TreeMapEntry<String,i32>>";
-    let _licm_used_12: i32;
-    let _licm_repr_13: ref builtin::array<TreeMapEntry<String,i32>>;
+    let index_13: i32;
+    let _licm_nodes_14: ref "core:prelude//Array<TreeMapNode<String>>";
+    let _licm_entries_15: ref "core:prelude//Array<TreeMapEntry<String,i32>>";
+    let _licm_used_16: i32;
+    let _licm_repr_17: ref builtin::array<TreeMapNode<String>>;
     let _licm_used_18: i32;
+    let _licm_repr_19: ref builtin::array<TreeMapEntry<String,i32>>;
+    let _licm_used_24: i32;
     current = self.root;
-    _licm_entries_11 = self.entries;
-    _licm_used_12 = _licm_entries_11.used;
-    _licm_repr_13 = _licm_entries_11.repr;
-    _licm_used_18 = key.used;
+    _licm_nodes_14 = self.nodes;
+    _licm_entries_15 = self.entries;
+    _licm_used_16 = _licm_nodes_14.used;
+    _licm_repr_17 = _licm_nodes_14.repr;
+    _licm_used_18 = _licm_entries_15.used;
+    _licm_repr_19 = _licm_entries_15.repr;
+    _licm_used_24 = key.used;
     b83: block {
         l84: loop {
-            if ref.is_null(current) == 0 {
-                n = ref.as_non_null(current);
-                if __inline_String_Eq__eq_0: block -> bool {
-                    other = n.key;
-                    if _licm_used_18 != other.used {
-                        break __inline_String_Eq__eq_0: 0;
+            if ref.test "core:prelude/types.wado//Option<i32>::Some"(current) {
+                n_idx = ref.cast "core:prelude/types.wado//Option<i32>::Some"(current).payload_0;
+                n = __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_0: block -> ref "core:collections//TreeMapNode<String>" {
+                    if n_idx >= _licm_used_16 {
+                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
                     }
-                    break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(key.repr, other.repr, _licm_used_18);
+                    break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_0: builtin::array_get<ref "core:collections//TreeMapNode<String>">(_licm_repr_17, n_idx);
+                    unreachable;
+                };
+                if __inline_String_Eq__eq_1: block -> bool {
+                    other = n.key;
+                    if _licm_used_24 != other.used {
+                        break __inline_String_Eq__eq_1: 0;
+                    }
+                    break __inline_String_Eq__eq_1: "core:prelude/string.wado/String^Eq::eq_bytes"(key.repr, other.repr, _licm_used_24);
                     unreachable;
                 } {
-                    entry = __inline_Array_TreeMapEntry_String_i32___IndexValue_i32___index_value_1: block -> ref "core:collections//TreeMapEntry<String,i32>" {
-                        index = n.index;
-                        if index >= _licm_used_12 {
+                    entry = __inline_Array_TreeMapEntry_String_i32___IndexValue_i32___index_value_2: block -> ref "core:collections//TreeMapEntry<String,i32>" {
+                        index_13 = n.index;
+                        if index_13 >= _licm_used_18 {
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         }
-                        break __inline_Array_TreeMapEntry_String_i32___IndexValue_i32___index_value_1: builtin::array_get<ref "core:collections//TreeMapEntry<String,i32>">(_licm_repr_13, index);
+                        break __inline_Array_TreeMapEntry_String_i32___IndexValue_i32___index_value_2: builtin::array_get<ref "core:collections//TreeMapEntry<String,i32>">(_licm_repr_19, index_13);
                         unreachable;
                     };
                     if entry.deleted {
@@ -1004,87 +1046,342 @@ fn "core:collections/TreeMap<String,i32>::insert"(self, key, value) {
     };
     entry = struct.new "core:collections//TreeMapEntry<String,i32>" { key: key, value: value, deleted: 0 };
     "core:prelude/array.wado/Array<TreeMapEntry<String,i32>>::push"(self.entries, entry);
-    self.root = "core:collections/TreeMap<String,i32>::insert_node"(self, self.root, key, new_index);
+    self.root = ref.as_non_null("core:collections/TreeMap<String,i32>::insert_node"(self, self.root, key, new_index));
     self.size = self.size + 1;
 }
 
 fn "core:collections/TreeMap<String,i32>::insert_node"(self, node, key, index) {
-    let n: ref "core:collections//TreeMapNode<String>";
-    let after_skew: ref null "core:collections//TreeMapNode<String>";
-    let new_node: ref "core:collections//TreeMapNode<String>";
+    let n_idx: i32;
+    let left: ref "core:prelude/types.wado//Option<i32>";
+    let new_left: ref "core:prelude/types.wado//Option<i32>";
+    let right: ref "core:prelude/types.wado//Option<i32>";
+    let new_right: ref "core:prelude/types.wado//Option<i32>";
+    let after_skew: ref "core:prelude/types.wado//Option<i32>";
+    let new_idx: i32;
+    let self_12: ref "core:prelude//Array<TreeMapNode<String>>";
     let other: ref "core:prelude/string.wado//String";
     let len_a: i32;
-    if ref.is_null(node) == 0 {
-        n = ref.as_non_null(node);
-        if __inline_String_Eq__eq_0: block -> bool {
-            other = n.key;
+    let self_17: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_19: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_21: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_23: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_25: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_27: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_29: ref "core:prelude//Array<TreeMapNode<String>>";
+    if ref.test "core:prelude/types.wado//Option<i32>::Some"(node) {
+        n_idx = ref.cast "core:prelude/types.wado//Option<i32>::Some"(node).payload_0;
+        if __inline_String_Eq__eq_1: block -> bool {
+            other = __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_0: block -> ref "core:collections//TreeMapNode<String>" {
+                self_12 = self.nodes;
+                if n_idx >= self_12.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    unreachable;
+                }
+                break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_0: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_12.repr, n_idx);
+                unreachable;
+            }.key;
             len_a = key.used;
             if len_a != other.used {
-                break __inline_String_Eq__eq_0: 0;
+                break __inline_String_Eq__eq_1: 0;
             }
-            break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(key.repr, other.repr, len_a);
+            break __inline_String_Eq__eq_1: "core:prelude/string.wado/String^Eq::eq_bytes"(key.repr, other.repr, len_a);
             unreachable;
         } {
-            n.index = index;
-            return n;
+            __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_2: block -> ref "core:collections//TreeMapNode<String>" {
+                self_17 = self.nodes;
+                if n_idx >= self_17.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    unreachable;
+                }
+                break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_2: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_17.repr, n_idx);
+                unreachable;
+            }.index = index;
+            return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n_idx };
         }
-        if "core:prelude/string.wado/String^Ord::cmp"(key, n.key) == 0 {
-            n.left = "core:collections/TreeMap<String,i32>::insert_node"(self, n.left, key, index);
+        if "core:prelude/string.wado/String^Ord::cmp"(key, __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_3: block -> ref "core:collections//TreeMapNode<String>" {
+            self_19 = self.nodes;
+            if n_idx >= self_19.used {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            }
+            break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_3: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_19.repr, n_idx);
+            unreachable;
+        }.key) == 0 {
+            left = __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_4: block -> ref "core:collections//TreeMapNode<String>" {
+                self_21 = self.nodes;
+                if n_idx >= self_21.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    unreachable;
+                }
+                break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_4: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_21.repr, n_idx);
+                unreachable;
+            }.left;
+            new_left = "core:collections/TreeMap<String,i32>::insert_node"(self, left, key, index);
+            __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_5: block -> ref "core:collections//TreeMapNode<String>" {
+                self_23 = self.nodes;
+                if n_idx >= self_23.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    unreachable;
+                }
+                break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_5: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_23.repr, n_idx);
+                unreachable;
+            }.left = new_left;
         } else {
-            n.right = "core:collections/TreeMap<String,i32>::insert_node"(self, n.right, key, index);
+            right = __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_6: block -> ref "core:collections//TreeMapNode<String>" {
+                self_25 = self.nodes;
+                if n_idx >= self_25.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    unreachable;
+                }
+                break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_6: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_25.repr, n_idx);
+                unreachable;
+            }.right;
+            new_right = "core:collections/TreeMap<String,i32>::insert_node"(self, right, key, index);
+            __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_7: block -> ref "core:collections//TreeMapNode<String>" {
+                self_27 = self.nodes;
+                if n_idx >= self_27.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    unreachable;
+                }
+                break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_7: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_27.repr, n_idx);
+                unreachable;
+            }.right = new_right;
         }
-        after_skew = "core:collections/TreeMap<String,i32>::skew"(n);
-        return "core:collections/TreeMap<String,i32>::split"(after_skew);
+        after_skew = "core:collections/TreeMap<String,i32>::skew"(self, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n_idx });
+        return "core:collections/TreeMap<String,i32>::split"(self, after_skew);
     }
-    new_node = struct.new "core:collections//TreeMapNode<String>" { key: key, index: index, level: 1, left: ref.null none, right: ref.null none };
-    return new_node;
+    new_idx = __inline_Array_TreeMapNode_String____len_8: block -> i32 {
+        self_29 = self.nodes;
+        break __inline_Array_TreeMapNode_String____len_8: self_29.used;
+        unreachable;
+    };
+    "core:prelude/array.wado/Array<TreeMapNode<String>>::push"(self.nodes, struct.new "core:collections//TreeMapNode<String>" { key: key, index: index, level: 1, left: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, right: struct.new "core:prelude/types.wado//Option<i32>" { 1 } });
+    return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: new_idx };
 }
 
-fn "core:collections/TreeMap<String,i32>::split"(node) {
-    let n: ref "core:collections//TreeMapNode<String>";
-    let right: ref "core:collections//TreeMapNode<String>";
-    let rr: ref "core:collections//TreeMapNode<String>";
-    let __pattern_temp_1: ref null "core:collections//TreeMapNode<String>";
-    let __pattern_temp_2: ref null "core:collections//TreeMapNode<String>";
-    if ref.is_null(node) == 0 {
-        n = ref.as_non_null(node);
-        __pattern_temp_1 = n.right;
-        if ref.is_null(__pattern_temp_1) == 0 {
-            right = ref.as_non_null(__pattern_temp_1);
-            __pattern_temp_2 = right.right;
-            if ref.is_null(__pattern_temp_2) == 0 {
-                rr = ref.as_non_null(__pattern_temp_2);
-                if rr.level == n.level {
-                    n.right = right.left;
-                    right.left = n;
-                    right.level = right.level + 1;
-                    return right;
+fn "core:prelude/array.wado/Array<TreeMapNode<String>>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<TreeMapNode<String>>::grow"(self);
+    }
+    builtin::array_set<ref "core:collections//TreeMapNode<String>">(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<TreeMapNode<String>>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<TreeMapNode<String>>;
+    let old_repr: ref builtin::array<TreeMapNode<String>>;
+    let used: i32;
+    let i: i32;
+    let a: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        a = capacity * 2;
+        break __inline_i32_max_0: select i32(a > 4, a, 4);
+        unreachable;
+    };
+    new_repr = builtin::array_new<ref "core:collections//TreeMapNode<String>">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l107: loop {
+                if i >= used {
+                    break __for_0;
+                }
+                builtin::array_set<ref "core:collections//TreeMapNode<String>">(new_repr, i, builtin::array_get<ref "core:collections//TreeMapNode<String>">(old_repr, i));
+                i = i + 1;
+                continue l107;
+            };
+        };
+    };
+    self.repr = new_repr;
+}
+
+fn "core:collections/TreeMap<String,i32>::split"(self, node) {
+    let n_idx: i32;
+    let right_idx: i32;
+    let rr_idx: i32;
+    let __pattern_temp_1: ref "core:prelude/types.wado//Option<i32>";
+    let __pattern_temp_2: ref "core:prelude/types.wado//Option<i32>";
+    let self_8: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_10: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_12: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_14: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_16: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_18: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_20: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_22: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_24: ref "core:prelude//Array<TreeMapNode<String>>";
+    if ref.test "core:prelude/types.wado//Option<i32>::Some"(node) {
+        n_idx = ref.cast "core:prelude/types.wado//Option<i32>::Some"(node).payload_0;
+        __pattern_temp_1 = __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_0: block -> ref "core:collections//TreeMapNode<String>" {
+            self_8 = self.nodes;
+            if n_idx >= self_8.used {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            }
+            break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_0: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_8.repr, n_idx);
+            unreachable;
+        }.right;
+        if ref.test "core:prelude/types.wado//Option<i32>::Some"(__pattern_temp_1) {
+            right_idx = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__pattern_temp_1).payload_0;
+            __pattern_temp_2 = __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_1: block -> ref "core:collections//TreeMapNode<String>" {
+                self_10 = self.nodes;
+                if right_idx >= self_10.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    unreachable;
+                }
+                break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_1: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_10.repr, right_idx);
+                unreachable;
+            }.right;
+            if ref.test "core:prelude/types.wado//Option<i32>::Some"(__pattern_temp_2) {
+                rr_idx = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__pattern_temp_2).payload_0;
+                if __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_2: block -> ref "core:collections//TreeMapNode<String>" {
+                    self_12 = self.nodes;
+                    if rr_idx >= self_12.used {
+                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    }
+                    break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_2: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_12.repr, rr_idx);
+                    unreachable;
+                }.level == __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_3: block -> ref "core:collections//TreeMapNode<String>" {
+                    self_14 = self.nodes;
+                    if n_idx >= self_14.used {
+                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    }
+                    break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_3: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_14.repr, n_idx);
+                    unreachable;
+                }.level {
+                    __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_4: block -> ref "core:collections//TreeMapNode<String>" {
+                        self_16 = self.nodes;
+                        if n_idx >= self_16.used {
+                            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                            unreachable;
+                        }
+                        break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_4: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_16.repr, n_idx);
+                        unreachable;
+                    }.right = __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_5: block -> ref "core:collections//TreeMapNode<String>" {
+                        self_18 = self.nodes;
+                        if right_idx >= self_18.used {
+                            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                            unreachable;
+                        }
+                        break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_5: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_18.repr, right_idx);
+                        unreachable;
+                    }.left;
+                    __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_6: block -> ref "core:collections//TreeMapNode<String>" {
+                        self_20 = self.nodes;
+                        if right_idx >= self_20.used {
+                            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                            unreachable;
+                        }
+                        break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_6: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_20.repr, right_idx);
+                        unreachable;
+                    }.left = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n_idx };
+                    __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_7: block -> ref "core:collections//TreeMapNode<String>" {
+                        self_22 = self.nodes;
+                        if right_idx >= self_22.used {
+                            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                            unreachable;
+                        }
+                        break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_7: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_22.repr, right_idx);
+                        unreachable;
+                    }.level = __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_8: block -> ref "core:collections//TreeMapNode<String>" {
+                        self_24 = self.nodes;
+                        if right_idx >= self_24.used {
+                            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                            unreachable;
+                        }
+                        break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_8: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_24.repr, right_idx);
+                        unreachable;
+                    }.level + 1;
+                    return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: right_idx };
                 }
             }
         }
-        return n;
+        return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n_idx };
     }
-    return ref.null none;
+    return struct.new "core:prelude/types.wado//Option<i32>" { 1 };
 }
 
-fn "core:collections/TreeMap<String,i32>::skew"(node) {
-    let n: ref "core:collections//TreeMapNode<String>";
-    let left: ref "core:collections//TreeMapNode<String>";
-    let __pattern_temp_1: ref null "core:collections//TreeMapNode<String>";
-    if ref.is_null(node) == 0 {
-        n = ref.as_non_null(node);
-        __pattern_temp_1 = n.left;
-        if ref.is_null(__pattern_temp_1) == 0 {
-            left = ref.as_non_null(__pattern_temp_1);
-            if left.level == n.level {
-                n.left = left.right;
-                left.right = n;
-                return left;
+fn "core:collections/TreeMap<String,i32>::skew"(self, node) {
+    let n_idx: i32;
+    let left_idx: i32;
+    let __pattern_temp_1: ref "core:prelude/types.wado//Option<i32>";
+    let self_6: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_8: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_10: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_12: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_14: ref "core:prelude//Array<TreeMapNode<String>>";
+    let self_16: ref "core:prelude//Array<TreeMapNode<String>>";
+    if ref.test "core:prelude/types.wado//Option<i32>::Some"(node) {
+        n_idx = ref.cast "core:prelude/types.wado//Option<i32>::Some"(node).payload_0;
+        __pattern_temp_1 = __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_0: block -> ref "core:collections//TreeMapNode<String>" {
+            self_6 = self.nodes;
+            if n_idx >= self_6.used {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            }
+            break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_0: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_6.repr, n_idx);
+            unreachable;
+        }.left;
+        if ref.test "core:prelude/types.wado//Option<i32>::Some"(__pattern_temp_1) {
+            left_idx = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__pattern_temp_1).payload_0;
+            if __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_1: block -> ref "core:collections//TreeMapNode<String>" {
+                self_8 = self.nodes;
+                if left_idx >= self_8.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    unreachable;
+                }
+                break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_1: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_8.repr, left_idx);
+                unreachable;
+            }.level == __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_2: block -> ref "core:collections//TreeMapNode<String>" {
+                self_10 = self.nodes;
+                if n_idx >= self_10.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    unreachable;
+                }
+                break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_2: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_10.repr, n_idx);
+                unreachable;
+            }.level {
+                __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_3: block -> ref "core:collections//TreeMapNode<String>" {
+                    self_12 = self.nodes;
+                    if n_idx >= self_12.used {
+                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    }
+                    break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_3: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_12.repr, n_idx);
+                    unreachable;
+                }.left = __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_4: block -> ref "core:collections//TreeMapNode<String>" {
+                    self_14 = self.nodes;
+                    if left_idx >= self_14.used {
+                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    }
+                    break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_4: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_14.repr, left_idx);
+                    unreachable;
+                }.right;
+                __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_5: block -> ref "core:collections//TreeMapNode<String>" {
+                    self_16 = self.nodes;
+                    if left_idx >= self_16.used {
+                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    }
+                    break __inline_Array_TreeMapNode_String___IndexValue_i32___index_value_5: builtin::array_get<ref "core:collections//TreeMapNode<String>">(self_16.repr, left_idx);
+                    unreachable;
+                }.right = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n_idx };
+                return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: left_idx };
             }
         }
-        return n;
+        return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n_idx };
     }
-    return ref.null none;
+    return struct.new "core:prelude/types.wado//Option<i32>" { 1 };
 }
 
 fn "core:prelude/array.wado/Array<TreeMapEntry<String,i32>>::push"(self, value) {
@@ -1117,13 +1414,13 @@ fn "core:prelude/array.wado/Array<TreeMapEntry<String,i32>>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l106: loop {
+            l133: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "core:collections//TreeMapEntry<String,i32>">(new_repr, i, builtin::array_get<ref "core:collections//TreeMapEntry<String,i32>">(old_repr, i));
                 i = i + 1;
-                continue l106;
+                continue l133;
             };
         };
     };

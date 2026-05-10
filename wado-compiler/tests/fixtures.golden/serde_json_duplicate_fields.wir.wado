@@ -4046,11 +4046,12 @@ fn "wado-compiler/tests/fixtures/serde_json_duplicate_fields.wado/Point^Deserial
     let __local_12: f64;
     let __local_16: ref "core:prelude/types.wado//Result<f64,DeserializeError>";
     let __local_17: ref "core:prelude/types.wado//Result<f64,DeserializeError>";
-    let d_20: ref "core:json//JsonDeserializer";
-    let d_22: ref "core:json//JsonDeserializer";
+    let d_21: ref "core:json//JsonDeserializer";
+    let d_23: ref "core:json//JsonDeserializer";
     let lookup: ref struct;
-    let __sroa___fused_payload_33_de: ref "core:json//JsonDeserializer";
-    let __sroa___fused_payload_33_lookup: ref struct;
+    let v_32: ref "core:prelude/string.wado//String";
+    let __sroa___fused_payload_35_de: ref "core:json//JsonDeserializer";
+    let __sroa___fused_payload_35_lookup: ref struct;
     lookup = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/serde_json_duplicate_fields.wado//__Closure_2" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/serde_json_duplicate_fields.wado/__closure_wrapper_0") };
     let __match_scrut_0: ref null "core:serde//DeserializeError";
     __match_scrut_0 = "core:json/JsonDeserializer::expect_char"(d, 123);
@@ -4060,9 +4061,13 @@ fn "wado-compiler/tests/fixtures/serde_json_duplicate_fields.wado/Point^Deserial
         unreachable;
         unreachable;
     }
-    __sroa___fused_payload_33_de = d;
-    __sroa___fused_payload_33_lookup = lookup;
-    sd = struct.new "core:json//JsonStructAccess" { de: __sroa___fused_payload_33_de, lookup: __sroa___fused_payload_33_lookup, first: 1 };
+    __sroa___fused_payload_35_de = d;
+    __sroa___fused_payload_35_lookup = lookup;
+    sd = struct.new "core:json//JsonStructAccess" { de: struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(__inline__value_copy_T20_1: block -> ref "core:prelude/string.wado//String" {
+        v_32 = __sroa___fused_payload_35_de.input;
+        break __inline__value_copy_T20_1: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_32.repr)), used: v_32.used };
+        unreachable;
+    }), pos: __sroa___fused_payload_35_de.pos }, lookup: __sroa___fused_payload_35_lookup, first: 1 };
     seen = 0;
     x = 0;
     y = 0;
@@ -4077,9 +4082,9 @@ fn "wado-compiler/tests/fixtures/serde_json_duplicate_fields.wado/Point^Deserial
                 if ref.test "core:prelude/types.wado//Option<i32>::Some"(__opt) {
                     __idx = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__opt).payload_0;
                     if __idx == 0 {
-                        __local_9 = __inline_f64_Deserialize__deserialize_JsonDeserializer__4: block -> ref "core:prelude/types.wado//Result<f64,DeserializeError>" {
-                            d_20 = sd.de;
-                            break __inline_f64_Deserialize__deserialize_JsonDeserializer__4: "core:json/JsonDeserializer::parse_f64_direct"(d_20);
+                        __local_9 = __inline_f64_Deserialize__deserialize_JsonDeserializer__5: block -> ref "core:prelude/types.wado//Result<f64,DeserializeError>" {
+                            d_21 = sd.de;
+                            break __inline_f64_Deserialize__deserialize_JsonDeserializer__5: "core:json/JsonDeserializer::parse_f64_direct"(d_21);
                             unreachable;
                         };
                         __local_16 = __local_9;
@@ -4091,9 +4096,9 @@ fn "wado-compiler/tests/fixtures/serde_json_duplicate_fields.wado/Point^Deserial
                             return struct.new "core:prelude/types.wado//Result<Point,DeserializeError>::Err" { discriminant: 1, payload_0: ref.cast "core:prelude/types.wado//Result<f64,DeserializeError>::Err"(__local_9).payload_0 };
                         }
                     } else if __idx == 1 {
-                        __local_11 = __inline_f64_Deserialize__deserialize_JsonDeserializer__6: block -> ref "core:prelude/types.wado//Result<f64,DeserializeError>" {
-                            d_22 = sd.de;
-                            break __inline_f64_Deserialize__deserialize_JsonDeserializer__6: "core:json/JsonDeserializer::parse_f64_direct"(d_22);
+                        __local_11 = __inline_f64_Deserialize__deserialize_JsonDeserializer__7: block -> ref "core:prelude/types.wado//Result<f64,DeserializeError>" {
+                            d_23 = sd.de;
+                            break __inline_f64_Deserialize__deserialize_JsonDeserializer__7: "core:json/JsonDeserializer::parse_f64_direct"(d_23);
                             unreachable;
                         };
                         __local_17 = __local_11;
