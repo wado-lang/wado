@@ -12,16 +12,6 @@ global mut free_list: i32 = 0;
 
 global mut __modules_initialized: bool = false;
 
-pub struct u128 {
-    low: u64,
-    high: u64,
-}
-
-pub struct String {
-    repr: builtin::array<u8>,
-    used: i32,
-}
-
 flags Access {
     Read,  // 0x1
     Write,  // 0x2
@@ -153,35 +143,5 @@ export fn __cm_export__run() {
         __modules_initialized = true;
     };
     cm_raw_call task-return(0);
-}
-
-fn "$value_copy$T658"(v: [[f64, f64], [f64, f64]]) -> [[f64, f64], [f64, f64]] {
-    return Tuple<Tuple<f64,f64>,Tuple<f64,f64>> { 0: __inline__value_copy_T19_0: {
-        let v: [f64, f64] = v.0;
-        break __inline__value_copy_T19_0: Tuple<f64,f64> { 0: v.0, 1: v.1 };
-    }, 1: __inline__value_copy_T19_1: {
-        let v: [f64, f64] = v.1;
-        break __inline__value_copy_T19_1: Tuple<f64,f64> { 0: v.0, 1: v.1 };
-    } };
-}
-
-fn "$value_copy$T19"(v: [f64, f64]) -> [f64, f64] {
-    return Tuple<f64,f64> { 0: v.0, 1: v.1 };
-}
-
-fn "$value_copy$T293"(v: [i32, char]) -> [i32, char] {
-    return Tuple<i32,char> { 0: v.0, 1: v.1 };
-}
-
-fn "$value_copy$T21"(v: String) -> String {
-    return String { repr: core::builtin::array_clone::<u8>(v.repr), used: v.used };
-}
-
-fn "$value_copy$T230"(v: [bool, i32]) -> [bool, i32] {
-    return Tuple<bool,i32> { 0: v.0, 1: v.1 };
-}
-
-fn "$value_copy$T86"(v: u128) -> u128 {
-    return u128 { low: v.low, high: v.high };
 }
 
