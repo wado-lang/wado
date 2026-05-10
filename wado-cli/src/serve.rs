@@ -441,7 +441,7 @@ async fn handle_http_request(
         Either::Left((Err(_recv), _)) => {
             HandlerOutcome::Trapped("Handler aborted without producing a response".to_string())
         }
-        Either::Right((_, _resp_rx)) => HandlerOutcome::Timeout,
+        Either::Right(((), _resp_rx)) => HandlerOutcome::Timeout,
     };
 
     Ok(match outcome {
