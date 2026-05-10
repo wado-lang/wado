@@ -25,9 +25,11 @@ use crate::tir::{
 use crate::tir_visitor::{TirOptVisitor, TirRefVisitor, opt_walk_block, opt_walk_expr};
 use crate::token::Span;
 
+use super::needs_value_copy;
+
 pub fn synthesize_value_copy_funcs(project: &mut FlatPackage) {
-    let copy_types = collect_copy_value_types(project);
-    if copy_types.is_empty() {
+    let initial = collect_copy_value_types(project);
+    if initial.is_empty() {
         return;
     }
 
@@ -40,8 +42,28 @@ pub fn synthesize_value_copy_funcs(project: &mut FlatPackage) {
     let mut name_for_type: IndexMap<TypeId, (ModuleSource, String)> = IndexMap::default();
     let mut new_funcs: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
 
-    for type_id in copy_types {
+    // Worklist over the transitive closure of types that need a
+    // `$value_copy$T` helper. `make_field_copy` emits
+    // `copy_value::<FieldT>(...)` for nested value-semantic fields, so
+    // generating one helper can surface new types whose own helpers we
+    // also need. Iterate until no new types appear.
+    let mut seen: IndexSet<TypeId> = initial.iter().copied().collect();
+    let mut worklist: Vec<TypeId> = initial.into_iter().collect();
+    while let Some(type_id) = worklist.pop() {
         let func = generate_copy_function(type_id, project, &type_table_rc, &helper_module);
+        if let Some(ref body) = func.body {
+            let tt = type_table_rc.borrow();
+            let mut sub = Collector {
+                out: IndexSet::default(),
+                type_table: &tt,
+            };
+            sub.visit_block(body);
+            for nested in sub.out {
+                if seen.insert(nested) {
+                    worklist.push(nested);
+                }
+            }
+        }
         name_for_type.insert(type_id, (func.module_source.clone(), func.name.clone()));
         new_funcs.push(Rc::new(RefCell::new(func)));
     }
@@ -55,13 +77,25 @@ pub fn synthesize_value_copy_funcs(project: &mut FlatPackage) {
             visitor.visit_block(body);
         }
     }
+    // Synthesized bodies also contain `copy_value::<NestedT>(...)`
+    // wrappers (emitted by `make_field_copy` for nested value-typed
+    // fields) — rewrite them to call the helpers we just registered
+    // for those types.
+    for func_rc in &new_funcs {
+        let mut func = func_rc.borrow_mut();
+        if let Some(ref mut body) = func.body {
+            visitor.visit_block(body);
+        }
+    }
 
     project.functions.extend(new_funcs);
 }
 
 fn collect_copy_value_types(project: &FlatPackage) -> IndexSet<TypeId> {
+    let type_table = project.type_table.borrow();
     let mut collector = Collector {
         out: IndexSet::default(),
+        type_table: &type_table,
     };
     for func_rc in &project.functions {
         let func = func_rc.borrow();
@@ -72,13 +106,26 @@ fn collect_copy_value_types(project: &FlatPackage) -> IndexSet<TypeId> {
     collector.out
 }
 
-struct Collector {
+struct Collector<'a> {
     out: IndexSet<TypeId>,
+    type_table: &'a TypeTable,
 }
 
-impl TirRefVisitor for Collector {
+impl<'a> TirRefVisitor for Collector<'a> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         if let Some(t) = copy_value_type_arg(expr) {
+            self.out.insert(t);
+        }
+        // `array_clone::<T>(arr)` lowers to a `WirInstr::ArrayClone`.
+        // When `T` is a value-typed struct, codegen emits a per-element
+        // `$value_copy$T<id>` call inside the clone loop so each
+        // destination element is a fresh struct rather than an aliased
+        // ref. The helper has to actually exist by then, so collect
+        // such element types into the worklist alongside direct
+        // `copy_value::<T>` callers.
+        if let Some(t) = array_clone_element_type_arg(expr)
+            && super::needs_value_copy(t, self.type_table)
+        {
             self.out.insert(t);
         }
         self.walk_expr(expr);
@@ -89,6 +136,19 @@ fn copy_value_type_arg(expr: &TirExpr) -> Option<TypeId> {
     if let TirExprKind::Call { func, .. } = &expr.kind
         && func.module_source.is_core_builtin()
         && func.name == "copy_value"
+    {
+        func.monomorph_info
+            .as_ref()
+            .and_then(|mi| mi.impl_type_args.first().copied())
+    } else {
+        None
+    }
+}
+
+fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
+    if let TirExprKind::Call { func, .. } = &expr.kind
+        && func.module_source.is_core_builtin()
+        && func.name == "array_clone"
     {
         func.monomorph_info
             .as_ref()
@@ -122,15 +182,17 @@ fn generate_copy_function(
         span,
     );
 
-    let return_value = build_copy_body(type_id, &resolved, &v_local, project, type_table, span);
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(return_value),
-            },
-            span,
-        )],
+    let mut extra_locals: Vec<TirLocal> = Vec::new();
+    let mut address_taken: IndexSet<u32> = IndexSet::default();
+    let body = build_copy_body(
+        type_id,
+        &resolved,
+        &v_local,
+        project,
+        type_table,
         span,
+        &mut extra_locals,
+        &mut address_taken,
     );
 
     let param = TirParam {
@@ -141,6 +203,14 @@ fn generate_copy_function(
         span,
         default_expr: None,
     };
+
+    let mut locals = vec![TirLocal {
+        name: "v".to_string(),
+        type_id,
+        is_mut: false,
+    }];
+    locals.extend(extra_locals);
+    let local_count = u32::try_from(locals.len()).expect("local count fits in u32");
 
     TirFunction {
         name,
@@ -159,13 +229,9 @@ fn generate_copy_function(
         stores: vec![],
         body: Some(body),
         span,
-        local_count: 1,
-        locals: vec![TirLocal {
-            name: "v".to_string(),
-            type_id,
-            is_mut: false,
-        }],
-        address_taken_locals: IndexSet::default(),
+        local_count,
+        locals,
+        address_taken_locals: address_taken,
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
         is_dispatch_wrapper: false,
@@ -186,25 +252,49 @@ fn build_copy_body(
     project: &FlatPackage,
     type_table: &Rc<RefCell<TypeTable>>,
     span: Span,
-) -> TirExpr {
+    extra_locals: &mut Vec<TirLocal>,
+    address_taken: &mut IndexSet<u32>,
+) -> TirBlock {
+    let return_expr = build_copy_return_expr(type_id, resolved, v_local, project, type_table, span);
+    if let Some(expr) = return_expr {
+        return single_return_block(expr, span);
+    }
+    // Variant payload deep-copy (`Option<T>` / `Result<T, E>` /
+    // user-defined variants) is intentionally not synthesized here —
+    // see `super::needs_value_copy` for why a non-identity match body
+    // hits a `(ref X) / (ref null X)` validation mismatch on null
+    // sources.
+    let _ = (extra_locals, address_taken, type_table);
+    single_return_block(v_local.clone(), span)
+}
+
+/// Identity / struct-literal helpers that produce a single expression
+/// to be returned. Returns `None` for the `Ref` / `MutRef` /
+/// `Option<T>` / `Result<T, E>` cases that need a richer body.
+fn build_copy_return_expr(
+    type_id: TypeId,
+    resolved: &ResolvedType,
+    v_local: &TirExpr,
+    project: &FlatPackage,
+    type_table: &Rc<RefCell<TypeTable>>,
+    span: Span,
+) -> Option<TirExpr> {
     if !matches!(
         resolved,
         ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. }
     ) {
-        return v_local.clone();
+        return None;
     }
     let mangled = type_table.borrow().mangle_type_name(type_id);
     if let Some(struct_def) = lookup_struct(project, &mangled) {
-        return build_struct_copy(type_id, &mangled, struct_def, v_local, type_table, span);
+        return Some(build_struct_copy(
+            type_id, &mangled, struct_def, v_local, type_table, span,
+        ));
     }
-    // GenericInstance whose monomorphized struct didn't get materialised in
-    // `project.structs` (e.g., types reachable only as type references):
-    // synthesize a body from the type-table-resolved field list. Fall back
-    // to identity for variants and other shapes that have no field metadata.
     if let ResolvedType::GenericInstance { type_args, .. } = resolved
         && let Some(generic_struct) = generic_template_for(resolved, project)
     {
-        return build_struct_copy_with_substitution(
+        return Some(build_struct_copy_with_substitution(
             type_id,
             &mangled,
             generic_struct,
@@ -212,28 +302,23 @@ fn build_copy_body(
             v_local,
             type_table,
             span,
-        );
+        ));
     }
-    // `Array<T>` wrapper structs are synthesized inside `wir_build` and never
-    // surface as `TirStruct` entries; reconstruct the well-known shape from
-    // the element type so we can still emit a deep-copy body for them.
     if let ResolvedType::GenericInstance {
         name, type_args, ..
     } = resolved
         && name == "Array"
         && type_args.len() == 1
     {
-        return build_array_wrapper_copy(
+        return Some(build_array_wrapper_copy(
             type_id,
             &mangled,
             type_args[0],
             v_local,
             type_table,
             span,
-        );
+        ));
     }
-    // Tuples are likewise synthesized at WIR build with positional fields
-    // `0`, `1`, …; reconstruct the body from the type-arg list.
     if let ResolvedType::GenericInstance {
         name,
         module_source,
@@ -241,9 +326,21 @@ fn build_copy_body(
     } = resolved
         && TypeTable::is_tuple_type(name, module_source)
     {
-        return build_tuple_copy(type_id, &mangled, type_args, v_local, type_table, span);
+        return Some(build_tuple_copy(
+            type_id, &mangled, type_args, v_local, type_table, span,
+        ));
     }
-    v_local.clone()
+    None
+}
+
+fn single_return_block(value: TirExpr, span: Span) -> TirBlock {
+    TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return { value: Some(value) },
+            span,
+        )],
+        span,
+    )
 }
 
 fn lookup_struct<'a>(project: &'a FlatPackage, mangled_name: &str) -> Option<&'a TirStruct> {
@@ -445,6 +542,32 @@ fn build_struct_copy(
     )
 }
 
+/// Wrap `expr` in `builtin::copy_value::<type_id>(expr)`. The wrapper
+/// gets resolved to the `$value_copy$T_<id>` helper by [`RewriteCalls`]
+/// in the same pass.
+fn wrap_copy_value(expr: TirExpr, type_id: TypeId, span: Span) -> TirExpr {
+    let func = FunctionRef {
+        module_source: ModuleSource::builtin(),
+        name: "copy_value".to_string(),
+        monomorph_info: Some(MonomorphInfo {
+            generic_name: "copy_value".to_string(),
+            impl_type_args: vec![type_id],
+            method_type_args: vec![],
+            is_blanket: false,
+        }),
+        method_info: None,
+    };
+    TirExpr::new(
+        TirExprKind::Call {
+            func,
+            type_args: vec![type_id],
+            args: vec![CallArg::new(expr, false)],
+        },
+        type_id,
+        span,
+    )
+}
+
 fn make_field_copy(
     receiver: TirExpr,
     field: &TirField,
@@ -460,11 +583,8 @@ fn make_field_copy(
         field.type_id,
         span,
     );
-    let elem_type_opt = match type_table.borrow().get(field.type_id) {
-        ResolvedType::BuiltinArray(elem) => Some(*elem),
-        _ => None,
-    };
-    if let Some(elem_type) = elem_type_opt {
+    let resolved = type_table.borrow().get(field.type_id).clone();
+    if let ResolvedType::BuiltinArray(elem_type) = resolved {
         let array_clone_ref = FunctionRef {
             module_source: ModuleSource::builtin(),
             name: "array_clone".to_string(),
@@ -476,7 +596,7 @@ fn make_field_copy(
             }),
             method_info: None,
         };
-        TirExpr::new(
+        return TirExpr::new(
             TirExprKind::Call {
                 func: array_clone_ref,
                 type_args: vec![elem_type],
@@ -484,10 +604,20 @@ fn make_field_copy(
             },
             field.type_id,
             span,
-        )
-    } else {
-        field_access
+        );
     }
+    // Nested value-semantic field (struct, Array<T>, tuple, Option<T>
+    // / Result<T, E> with deep-copy payload, MutRef<T>, etc.). Without
+    // this wrap the generated body would do a one-level shallow copy
+    // and the inner type's own deep-copy via its `$value_copy$T` helper
+    // would never run — mutations through the copy would alias the
+    // original. Emit `builtin::copy_value::<FieldT>(field)`;
+    // [`RewriteCalls`] resolves it to the helper
+    // [`generate_copy_function`] synthesizes for `FieldT`.
+    if needs_value_copy(field.type_id, &type_table.borrow()) {
+        return wrap_copy_value(field_access, field.type_id, span);
+    }
+    field_access
 }
 
 struct RewriteCalls<'a> {

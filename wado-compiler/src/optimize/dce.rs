@@ -113,6 +113,28 @@ fn extend_reachable_for_optimizer_passes(
     {
         reachable.extend(compute_reachable(call_graph, &char_id));
     }
+
+    // `$value_copy$T<id>` helpers synthesized by `lower::value_copy` are
+    // reached through two paths: (a) direct TIR-level
+    // `copy_value::<T>(...)` callers, which the regular call graph
+    // already covers; and (b) the per-element clone hidden inside
+    // `array_clone::<T>(arr)` for value-typed `T`, which lowers to a
+    // `WirInstr::ArrayClone { element_copy_func: Some("$value_copy$T<id>") }`
+    // — the helper name appears as a *string* in the WIR instr, not as
+    // a TIR call edge, so DCE wouldn't otherwise see it. Mark every
+    // `FunctionKind::ValueCopy` helper as a virtual root: keeping
+    // unused helpers around costs only a few extra struct-literal
+    // copies per type, while dropping a needed one would emit an
+    // invalid Wasm module that traps at runtime.
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        if matches!(func.kind, crate::tir::FunctionKind::ValueCopy { .. }) {
+            let func_id = function_id_for(&func);
+            if !reachable.contains(&func_id) {
+                reachable.extend(compute_reachable(call_graph, &func_id));
+            }
+        }
+    }
 }
 
 /// Compute reachable functions from all entry points via call graph traversal.

@@ -26,6 +26,41 @@ fn collect_func_refs_from_body(body: &[WirInstr], out: &mut IndexSet<u32>) {
     }
 }
 
+/// Walk `body` and, for every `WirInstr::ArrayClone` carrying an
+/// `element_copy_func` name suffix, resolve it through `resolve` and
+/// insert the resulting array-index into `out`. Used by
+/// [`mark_unreachable_defined_functions`] to root the per-element
+/// `$value_copy$T<id>` helper that codegen reaches via name lookup.
+fn collect_array_clone_helper_refs<F>(body: &[WirInstr], resolve: &F, out: &mut IndexSet<u32>)
+where
+    F: Fn(&str) -> Option<u32>,
+{
+    for instr in body {
+        collect_array_clone_helper_refs_recursive(instr, resolve, out);
+    }
+}
+
+fn collect_array_clone_helper_refs_recursive<F>(
+    instr: &WirInstr,
+    resolve: &F,
+    out: &mut IndexSet<u32>,
+) where
+    F: Fn(&str) -> Option<u32>,
+{
+    if let WirInstr::ArrayClone {
+        element_copy_func: Some(name),
+        ..
+    } = instr
+        && let Some(idx) = resolve(name)
+    {
+        out.insert(idx);
+    }
+    let mut clone = instr.clone();
+    clone.for_each_boxed_child_mut(&mut |child| {
+        collect_array_clone_helper_refs_recursive(child, resolve, out);
+    });
+}
+
 fn collect_func_refs_recursive(instr: &WirInstr, out: &mut IndexSet<u32>) {
     match instr {
         WirInstr::Call { func_id, args } => {
@@ -121,6 +156,28 @@ pub fn mark_unreachable_defined_functions(module: &mut WirPackage) {
     let to_array_idx =
         |abs_idx: u32| -> Option<u32> { abs_idx.checked_sub(base).filter(|i| *i < num_funcs) };
 
+    // `WirInstr::ArrayClone` references its per-element copy helper by
+    // *name* (the `$value_copy$T<id>` synthesized by
+    // `lower::value_copy::synthesize`), not by `WirFuncId`, so the
+    // generic body walker that follows `WirInstr::Call` / `RefFunc`
+    // can't see the edge. Pre-build a `name-suffix → array index` map
+    // so the per-instruction collector below can resolve those edges
+    // and fold them into each function's callee set; without this the
+    // helper is dropped by DCE, then the codegen call site can't
+    // resolve it and panics.
+    let mut name_to_idx: IndexMap<String, u32> = IndexMap::default();
+    for (i, func) in module.functions.iter().enumerate() {
+        name_to_idx.insert(func.name.fq.clone(), u32::try_from(i).unwrap());
+    }
+    let resolve_helper_name = |name_suffix: &str| -> Option<u32> {
+        for (fq, idx) in &name_to_idx {
+            if fq.ends_with(name_suffix) {
+                return Some(*idx);
+            }
+        }
+        None
+    };
+
     let mut callees_of: Vec<IndexSet<u32>> = Vec::with_capacity(module.functions.len());
     for func in &module.functions {
         let mut callees: IndexSet<u32> = IndexSet::default();
@@ -132,6 +189,7 @@ pub fn mark_unreachable_defined_functions(module: &mut WirPackage) {
                     callees.insert(arr_idx);
                 }
             }
+            collect_array_clone_helper_refs(body, &resolve_helper_name, &mut callees);
         }
         callees_of.push(callees);
     }

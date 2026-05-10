@@ -117,6 +117,24 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Translate a builtin intrinsic call to a WIR instruction.
+    /// For `builtin::array_clone::<T>(arr)` whose `arr` is typed as
+    /// `BuiltinArray(elem)`, return the helper-name suffix to invoke on
+    /// every element when `elem` is itself a value-typed struct (i.e.
+    /// has a `$value_copy$T<id>` synthesized for it). Returns `None`
+    /// for primitive elements where Wasm GC's plain `array.set` is
+    /// already a deep copy.
+    fn array_element_copy_func(&self, src_type_id: TypeId) -> Option<String> {
+        use crate::tir::ResolvedType;
+        let elem = match self.type_table.get(src_type_id) {
+            ResolvedType::BuiltinArray(elem) => *elem,
+            _ => return None,
+        };
+        if !crate::lower::value_copy::needs_value_copy(elem, self.type_table) {
+            return None;
+        }
+        Some(format!("$value_copy$T{}", elem.0))
+    }
+
     ///
     /// Returns `Some(instr)` for instruction-builtins (Wasm instructions),
     /// `None` for import-builtins (handled as regular function calls).
@@ -331,9 +349,11 @@ impl FunctionTranslator<'_, '_> {
                     .ctx
                     .type_id_to_wir_type(self.type_table, src_expr.type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
+                    let element_copy_func = self.array_element_copy_func(src_expr.type_id);
                     Some(WirInstr::ArrayClone {
                         type_id,
                         src: Box::new(src),
+                        element_copy_func,
                     })
                 } else {
                     None

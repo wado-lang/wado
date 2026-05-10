@@ -1529,9 +1529,20 @@ pub enum WirInstr {
     /// length as `src` and copies every element. Emitted by codegen as the
     /// same JIT-compiled loop that previously lived inside `emit_value_copy`
     /// for raw array struct fields.
+    ///
+    /// `element_copy_func` is set when `T` is a value-typed struct that
+    /// needs its own deep copy on every element. Without it the loop
+    /// would just `array.set(dst, i, array.get(src, i))`, which on Wasm
+    /// GC stores the *same* element ref into both arrays — fine for
+    /// primitives, but unsound for struct elements (every clone would
+    /// share the underlying struct with the source). When set, the
+    /// loop calls the named `$value_copy$T_<id>` helper between
+    /// `array.get` and `array.set` so each destination element is a
+    /// fresh struct.
     ArrayClone {
         type_id: WirTypeId,
         src: Box<WirInstr>,
+        element_copy_func: Option<String>,
     },
 
     // === GC: Reference ===

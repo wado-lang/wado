@@ -18,7 +18,7 @@ mod cm_intrinsics;
 mod globals;
 mod pattern;
 mod string;
-mod value_copy;
+pub(crate) mod value_copy;
 mod wide_int;
 
 use crate::flat_package::FlatPackage;
