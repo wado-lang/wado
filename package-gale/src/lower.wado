@@ -83,6 +83,7 @@ use {
     MultiAltDispatch,
     DirectDispatch,
     DispatchBranch,
+    TournamentDispatch,
     ScanBody,
     ScanElement,
     ScanTokenElem,
@@ -347,24 +348,25 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
         let mut visiting: Array<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
     }
-    panic_if_any_overlap(rule, &first_sets);
 
     let mut alts: Array<AltBody> = [];
     let mut scan_alts: Array<ScanBody> = [];
+    let mut all_indices: Array<i32> = [];
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
         alts.push(lower_alt_body(&rule.alternatives[i], i, rule, ctx));
         scan_alts.push(lower_scan_body(&rule.alternatives[i], ctx));
+        all_indices.push(i);
     }
 
-    let dispatch = build_direct_dispatch(&first_sets);
+    let ctx_label = `rule '{rule.name}'`;
+    let dispatch = build_overlap_dispatch(&ctx_label, &rule.alternatives, &all_indices, &first_sets, ctx);
     return MultiAltRule {
         header,
         alts,
         scan_alts,
-        // Scan side and parse side share the same dispatch shape
-        // when first-sets are disjoint — both branches are token-led.
-        // Phase 2.3c will compute the scan-side dispatch separately
-        // (e.g. tournament for full-scannable overlapping alts).
+        // Scan side and parse side share the same dispatch — for
+        // both Direct and Tournament shapes, the same selection
+        // logic applies to both halves of the codegen.
         dispatch: clone_dispatch(&dispatch),
         scan_dispatch: dispatch,
     };
@@ -458,7 +460,6 @@ fn lower_lr_atom(
         let mut visiting: Array<String> = [];
         first_sets.push(ctx.first_of_alt(&rule.alternatives[*idx], &mut visiting));
     }
-    panic_if_any_atom_overlap(rule, non_lr_indices, &first_sets);
 
     let mut alts: Array<AltBody> = [];
     let mut scan_alts: Array<ScanBody> = [];
@@ -467,7 +468,8 @@ fn lower_lr_atom(
         scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx));
     }
 
-    let dispatch = build_direct_dispatch(&first_sets);
+    let ctx_label = `LR rule '{rule.name}' atom`;
+    let dispatch = build_overlap_dispatch(&ctx_label, &rule.alternatives, non_lr_indices, &first_sets, ctx);
     return MultiAltRule {
         header,
         alts,
@@ -475,24 +477,6 @@ fn lower_lr_atom(
         dispatch: clone_dispatch(&dispatch),
         scan_dispatch: dispatch,
     };
-}
-
-fn panic_if_any_atom_overlap(
-    rule: &ParserRule,
-    non_lr_indices: &Array<i32>,
-    first_sets: &Array<Array<String>>,
-) {
-    for let mut i = 0; i < first_sets.len(); i += 1 {
-        for let mut j = i + 1; j < first_sets.len(); j += 1 {
-            for let tk of &first_sets[i] {
-                if first_set_contains(&first_sets[j], tk) {
-                    let ai = non_lr_indices[i];
-                    let aj = non_lr_indices[j];
-                    panic(`TODO Phase 2.3b: LR rule '{rule.name}' atom alts ({ai}, {aj}) share token {*tk}`);
-                }
-            }
-        }
-    }
 }
 
 /// Lower a single LR alternative. Strips the leading self-ref and
@@ -718,27 +702,18 @@ fn compute_lr_dispatch_data(lr_alts: &Array<LrAlt>) -> LrDispatchData {
         suffix_first_sets.push(lr.suffix_first);
     }
 
+    // Overlap groups are tolerated here: emit's LR-suffix loop
+    // resolves multi-alt groups via scan-dispatch on the suffix
+    // (same scan-tournament pattern as the top-level `Tournament`
+    // dispatch). The GIR carries the groups as-is; correctness
+    // falls out of emit treating `group.len() > 1` as the cue to
+    // generate a scan-and-commit cascade across the group's alts.
     let groups = compute_overlap_groups(&suffix_first_sets);
-    panic_if_lr_overlap(lr_alts, &valid_lr_alts, &groups);
 
     return LrDispatchData {
         valid_lr_alts: valid_lr_alts,
         groups: groups,
     };
-}
-
-fn panic_if_lr_overlap(
-    lr_alts: &Array<LrAlt>,
-    valid_lr_alts: &Array<i32>,
-    groups: &Array<Array<i32>>,
-) {
-    for let group of groups {
-        if group.len() > 1 {
-            let lr_a = &lr_alts[valid_lr_alts[group[0]]];
-            let lr_b = &lr_alts[valid_lr_alts[group[1]]];
-            panic(`TODO Phase 2.3c: LR alts {lr_a.alt_index} and {lr_b.alt_index} have overlapping suffix first-sets`);
-        }
-    }
 }
 
 /// Union-find overlap grouping over per-alt first sets. Mirrors
@@ -797,23 +772,6 @@ fn first_sets_overlap(a: &Array<String>, b: &Array<String>) -> bool {
     return false;
 }
 
-/// Phase 2.3a guard: every alt's first set must be disjoint from
-/// every other's. Overlapping first-sets need the Phase 2.3b
-/// `Predict` dispatch with a prediction tree, which is not yet
-/// implemented. Panicking here keeps lower from silently producing
-/// a `Direct` dispatch whose branches don't actually disambiguate.
-fn panic_if_any_overlap(rule: &ParserRule, first_sets: &Array<Array<String>>) {
-    for let mut i = 0; i < first_sets.len(); i += 1 {
-        for let mut j = i + 1; j < first_sets.len(); j += 1 {
-            for let tk of &first_sets[i] {
-                if first_set_contains(&first_sets[j], tk) {
-                    panic(`TODO Phase 2.3b: rule '{rule.name}' has overlapping alts ({i}, {j}) sharing token {*tk}`);
-                }
-            }
-        }
-    }
-}
-
 fn first_set_contains(set: &Array<String>, token: &String) -> bool {
     for let t of set {
         if *t == *token {
@@ -840,10 +798,115 @@ fn build_direct_dispatch(first_sets: &Array<Array<String>>) -> MultiAltDispatch 
 fn clone_dispatch(d: &MultiAltDispatch) -> MultiAltDispatch {
     return match d {
         Direct(dd) => MultiAltDispatch::Direct(DirectDispatch { branches: dd.branches }),
-        // Phase 2.3a only produces `Direct`; the other variants are
-        // built fresh per-side once their lowerings exist.
-        _ => panic("clone_dispatch: only Direct supported in Phase 2.3a"),
+        Tournament(td) => MultiAltDispatch::Tournament(TournamentDispatch { alts: td.alts }),
+        // `Predict` / `PartialScan` / `SaveRewind` need their own
+        // clone arms once those dispatches are produced by lower.
+        _ => panic("clone_dispatch: unsupported variant"),
     };
+}
+
+/// Choose a dispatch for a set of alternatives. When the per-alt
+/// first sets are pairwise disjoint, falls through to a token-led
+/// `Direct` dispatch. Otherwise (any two alts share a first token),
+/// requires every alt to be fully scannable and falls back to a
+/// scan-side `Tournament` dispatch sorted by element count
+/// descending — emit runs each scan helper and commits to the
+/// longest match. ANTLR4's longest-match LL choice, no backtracking.
+///
+/// `ctx_name` is the human-readable owner used in the panic message
+/// for unscannable alts (`"rule 'expr'"`, `"SimpleCst group"`, …).
+/// `alts` is the underlying surface alternative list; `indices`
+/// selects which alts participate in this dispatch.
+fn build_overlap_dispatch(
+    ctx_name: &String,
+    alts: &Array<Alternative>,
+    indices: &Array<i32>,
+    first_sets: &Array<Array<String>>,
+    ctx: &mut GenContext,
+) -> MultiAltDispatch {
+    if !any_overlap(first_sets) {
+        let mut branches: Array<DispatchBranch> = [];
+        for let mut k = 0; k < indices.len(); k += 1 {
+            branches.push(DispatchBranch {
+                tokens: first_sets[k],
+                alt_index: indices[k],
+            });
+        }
+        return MultiAltDispatch::Direct(DirectDispatch { branches });
+    }
+
+    for let idx of indices {
+        let mut visiting: Array<String> = [];
+        if !ctx.is_alt_scannable(&alts[*idx].elements, &mut visiting) {
+            panic(`{*ctx_name}: alt {*idx} is not fully scannable; Tournament dispatch needs all alts scannable`);
+        }
+    }
+
+    let mut sorted: Array<i32> = [];
+    for let idx of indices {
+        sorted.push(*idx);
+    }
+    sort_alts_by_element_count(&mut sorted, alts);
+    return MultiAltDispatch::Tournament(TournamentDispatch { alts: sorted });
+}
+
+/// True iff any pair of first-sets shares at least one token.
+fn any_overlap(first_sets: &Array<Array<String>>) -> bool {
+    for let mut i = 0; i < first_sets.len(); i += 1 {
+        for let mut j = i + 1; j < first_sets.len(); j += 1 {
+            if first_sets_overlap(&first_sets[i], &first_sets[j]) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// Sort `indices` by descending number of MANDATORY-leading-elements,
+/// with ties broken by `alt_sort_priority` and finally source order.
+/// Mirrors `parser_gen::sort_group_by_element_count` for the
+/// tournament-style dispatch.
+fn sort_alts_by_element_count(indices: &mut Array<i32>, alts: &Array<Alternative>) {
+    for let mut i = 0; i < indices.len(); i += 1 {
+        for let mut j = i + 1; j < indices.len(); j += 1 {
+            let pi = alt_sort_priority(&alts[indices[i]]);
+            let pj = alt_sort_priority(&alts[indices[j]]);
+            let mut swap = false;
+            if pj > pi {
+                swap = true;
+            } else if pj == pi {
+                if alts[indices[j]].elements.len() > alts[indices[i]].elements.len() {
+                    swap = true;
+                }
+            }
+            if swap {
+                let tmp = indices[i];
+                indices[i] = indices[j];
+                indices[j] = tmp;
+            }
+        }
+    }
+}
+
+/// Per-alt sorting priority, mirroring `parser_gen::alt_sort_priority`.
+/// Higher = preferred at dispatch time. Single-element alts whose
+/// only element is a `RuleRef` get a higher tier than multi-element
+/// `RuleRef`-led alts so SQLite-style `tor (',' tor)* | join_clause`
+/// groupings still pick the rule-ref catch-all on tie.
+fn alt_sort_priority(alt: &Alternative) -> i32 {
+    if alt.elements.len() == 1 {
+        if let RuleRef(_) = alt.elements[0] {
+            return 3;
+        }
+        return 1;
+    }
+    for let elem of &alt.elements {
+        match *elem {
+            TokenRef(_) | Literal(_) => return 4,
+            _ => return 2,
+        };
+    }
+    return 2;
 }
 
 /// Whether the rule has at least one directly-left-recursive
@@ -989,7 +1052,9 @@ fn lower_general_scan_group(
 ) -> ScanElement {
     let mut bodies: Array<ScanBody> = [];
     let mut first_sets: Array<Array<String>> = [];
-    for let alt of alts {
+    let mut all_indices: Array<i32> = [];
+    for let mut ai = 0; ai < alts.len(); ai += 1 {
+        let alt = &alts[ai];
         let mut elements: Array<ScanElement> = [];
         for let mut i = 0; i < alt.elements.len(); i += 1 {
             let elem_follow = inner_follow_at(&alt.elements, i, outer_follow, ctx);
@@ -998,11 +1063,12 @@ fn lower_general_scan_group(
         bodies.push(ScanBody { elements });
         let mut visiting: Array<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
+        all_indices.push(ai);
     }
-    panic_if_general_group_overlap(&"<scan>", 0, &first_sets);
+    let dispatch = build_overlap_dispatch(&"General group (scan)", alts, &all_indices, &first_sets, ctx);
     return ScanElement::Group(ScanGroupElem {
         alts: bodies,
-        dispatch: build_direct_dispatch(&first_sets),
+        dispatch: dispatch,
         lenient: false,
     });
 }
@@ -1501,11 +1567,11 @@ fn lower_simple_cst_group(
         let mut visiting: Array<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
     }
-    panic_if_simple_cst_overlap(alts, &first_sets);
 
     let mut bodies: Array<AltBody> = [];
     let mut scan_bodies: Array<ScanBody> = [];
     let mut inner_counts: Array<[String, i32]> = [];
+    let mut all_indices: Array<i32> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
         let alt = &alts[i];
         let elem = &alt.elements[0];
@@ -1528,8 +1594,9 @@ fn lower_simple_cst_group(
         // callee's concern via Phase 2.6 variants).
         let empty_follow: Array<String> = [];
         scan_bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, &empty_follow)] });
+        all_indices.push(i);
     }
-    let dispatch = build_direct_dispatch(&first_sets);
+    let dispatch = build_overlap_dispatch(&"SimpleCst group", alts, &all_indices, &first_sets, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::SimpleCst(SimpleCstShape {
             type_name: type_name,
@@ -1537,8 +1604,8 @@ fn lower_simple_cst_group(
         }),
         alts: bodies,
         scan_alts: scan_bodies,
-        dispatch: dispatch,
-        scan_dispatch: clone_dispatch(&dispatch),
+        dispatch: clone_dispatch(&dispatch),
+        scan_dispatch: dispatch,
     });
 }
 
@@ -1549,16 +1616,19 @@ fn lower_simple_cst_scan_group(
 ) -> ScanElement {
     let mut bodies: Array<ScanBody> = [];
     let mut first_sets: Array<Array<String>> = [];
-    for let alt of alts {
+    let mut all_indices: Array<i32> = [];
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let alt = &alts[i];
         let elem = &alt.elements[0];
         bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, outer_follow)] });
         let mut visiting: Array<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
+        all_indices.push(i);
     }
-    panic_if_simple_cst_overlap(alts, &first_sets);
+    let dispatch = build_overlap_dispatch(&"SimpleCst group (scan)", alts, &all_indices, &first_sets, ctx);
     return ScanElement::Group(ScanGroupElem {
         alts: bodies,
-        dispatch: build_direct_dispatch(&first_sets),
+        dispatch: dispatch,
         lenient: false,
     });
 }
@@ -1579,29 +1649,6 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut Array<[String, i32]>) 
         });
     }
     panic("lower_simple_cst_alt_call: classifier permitted non-RuleRef leaf");
-}
-
-/// SimpleCst groups need disjoint per-alt first sets to be lowered
-/// with a `Direct` dispatch. Overlapping rule-ref alts (e.g. two
-/// callees that both start with `IDENT`) need the scan-tournament
-/// dispatch from Phase 2.3c. Panicking here keeps lower from
-/// silently producing a `Direct` dispatch whose branches don't
-/// actually disambiguate.
-fn panic_if_simple_cst_overlap(
-    alts: &Array<Alternative>,
-    first_sets: &Array<Array<String>>,
-) {
-    for let mut i = 0; i < first_sets.len(); i += 1 {
-        for let mut j = i + 1; j < first_sets.len(); j += 1 {
-            for let tk of &first_sets[i] {
-                if first_set_contains(&first_sets[j], tk) {
-                    let n_i = simple_cst_alt_target_name(&alts[i]);
-                    let n_j = simple_cst_alt_target_name(&alts[j]);
-                    panic(`TODO Phase 2.3c: SimpleCst group alts '{n_i}' and '{n_j}' share token {*tk}`);
-                }
-            }
-        }
-    }
 }
 
 fn simple_cst_alt_target_name(alt: &Alternative) -> String {
@@ -1653,14 +1700,15 @@ fn lower_general_group(
         let mut visiting: Array<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
     }
-    panic_if_general_group_overlap(rule_name, group_index, &first_sets);
 
     let mut bodies: Array<AltBody> = [];
     let mut scan_bodies: Array<ScanBody> = [];
     let mut alt_struct_names: Array<String> = [];
+    let mut all_indices: Array<i32> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
         let alt = &alts[i];
         let alt_struct = general_group_alt_struct_name(rule_name, group_index, i);
+        all_indices.push(i);
         alt_struct_names.push(alt_struct);
 
         // Inner alts get a fresh name table (the group struct is
@@ -1691,7 +1739,8 @@ fn lower_general_group(
         });
         scan_bodies.push(ScanBody { elements: scan_elements });
     }
-    let dispatch = build_direct_dispatch(&first_sets);
+    let ctx_label = `General group {*rule_name}Group{group_index}`;
+    let dispatch = build_overlap_dispatch(&ctx_label, alts, &all_indices, &first_sets, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::General(GeneralShape {
             variant_type: variant_type,
@@ -1701,25 +1750,9 @@ fn lower_general_group(
         }),
         alts: bodies,
         scan_alts: scan_bodies,
-        dispatch: dispatch,
-        scan_dispatch: clone_dispatch(&dispatch),
+        dispatch: clone_dispatch(&dispatch),
+        scan_dispatch: dispatch,
     });
-}
-
-fn panic_if_general_group_overlap(
-    rule_name: &String,
-    group_index: i32,
-    first_sets: &Array<Array<String>>,
-) {
-    for let mut i = 0; i < first_sets.len(); i += 1 {
-        for let mut j = i + 1; j < first_sets.len(); j += 1 {
-            for let tk of &first_sets[i] {
-                if first_set_contains(&first_sets[j], tk) {
-                    panic(`TODO Phase 2.3c: General group {*rule_name}Group{group_index} alts ({i}, {j}) share token {*tk}`);
-                }
-            }
-        }
-    }
 }
 
 /// Lower a `Repeat` element (`e?` / `e*` / `e+`). Phase 2.x.partial

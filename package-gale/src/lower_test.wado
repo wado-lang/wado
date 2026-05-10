@@ -1924,6 +1924,81 @@ test "lower non-greedy Group Repeat fills exit_second from inner suffix" {
     }
 }
 
+test "lower multi-alt rule with overlapping first sets emits Tournament dispatch" {
+    // `r : ID INT | ID STRING ;` — both alts start with ID, so
+    // overlap. Both are fully scannable → Tournament dispatch.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [
+            alt_of([
+                Element::TokenRef(TokenRefElement::new("ID")),
+                Element::TokenRef(TokenRefElement::new("INT")),
+            ]),
+            alt_of([
+                Element::TokenRef(TokenRefElement::new("ID")),
+                Element::TokenRef(TokenRefElement::new("STRING")),
+            ]),
+        ],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let MultiAlt(m) = &lowered.parser_rules[0] {
+        if let Tournament(td) = &m.dispatch {
+            assert td.alts.len() == 2;
+            // Both alts have 2 elements; tie-break is source order.
+            assert td.alts[0] == 0 || td.alts[0] == 1;
+        } else {
+            panic("expected MultiAltDispatch::Tournament");
+        }
+        if let Tournament(_) = &m.scan_dispatch {
+            assert true;
+        } else {
+            panic("expected scan_dispatch Tournament");
+        }
+    } else {
+        panic("expected Rule::MultiAlt");
+    }
+}
+
+test "lower Tournament sorts longer alt first" {
+    // `r : ID INT STRING | ID INT ;` — both start with ID, but the
+    // 3-element alt is "more specific" and sorts before the 2-elem
+    // alt (longest-match wins).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [
+            alt_of([
+                Element::TokenRef(TokenRefElement::new("ID")),
+                Element::TokenRef(TokenRefElement::new("INT")),
+                Element::TokenRef(TokenRefElement::new("STRING")),
+            ]),
+            alt_of([
+                Element::TokenRef(TokenRefElement::new("ID")),
+                Element::TokenRef(TokenRefElement::new("INT")),
+            ]),
+        ],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let MultiAlt(m) = &lowered.parser_rules[0] {
+        if let Tournament(td) = &m.dispatch {
+            // alt 0 has 3 elements, alt 1 has 2; alt 0 sorts first.
+            assert td.alts[0] == 0, `expected alt 0 first, got {td.alts[0]}`;
+            assert td.alts[1] == 1;
+        } else {
+            panic("expected MultiAltDispatch::Tournament");
+        }
+    } else {
+        panic("expected Rule::MultiAlt");
+    }
+}
+
 test "lower Transparent Group contributes inner op's field" {
     // `r : (INT) ;` — Transparent group with single leaf inner.
     // The struct field is the inner Token's, not a wrapper.
