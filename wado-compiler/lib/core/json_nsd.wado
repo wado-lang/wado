@@ -37,28 +37,34 @@ use {
 
 use { write_escaped_string, JsonDeserializer } from "core:json";
 
+// Sub-serializers hold `&mut String` so writes flow back to the
+// outer buffer the caller still owns. A value-typed `String` field
+// would deep-copy on construction (Wado value semantics deep-copy
+// `String`'s `repr`), and the previous `self.buf = ser.buf` save-
+// back trick (still in older revisions) doesn't recover the bytes
+// the sub-serializer wrote to its own copy.
 struct NsdSeqSerializer {
-    buf: String,
+    buf: &mut String,
     count: i32,
 }
 
 struct NsdMapSerializer {
-    buf: String,
+    buf: &mut String,
     count: i32,
     need_value: bool,
 }
 
 struct NsdStructSerializer {
-    buf: String,
+    buf: &mut String,
     count: i32,
 }
 
 struct NsdVariantSerializer {
-    buf: String,
+    buf: &mut String,
 }
 
 pub struct NsdSerializer {
-    buf: String,
+    buf: &mut String,
 }
 
 impl SerializeSeq for NsdSeqSerializer {
@@ -68,7 +74,6 @@ impl SerializeSeq for NsdSeqSerializer {
         }
         let mut ser = NsdSerializer { buf: self.buf };
         let r = value.serialize::<NsdSerializer>(&mut ser);
-        self.buf = ser.buf;
         self.count += 1;
         return r;
     }
@@ -86,7 +91,6 @@ impl SerializeMap for NsdMapSerializer {
         }
         let mut ser = NsdSerializer { buf: self.buf };
         let r = key.serialize::<NsdSerializer>(&mut ser);
-        self.buf = ser.buf;
         self.buf.push_str(":");
         self.need_value = true;
         return r;
@@ -95,7 +99,6 @@ impl SerializeMap for NsdMapSerializer {
     fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = NsdSerializer { buf: self.buf };
         let r = value.serialize::<NsdSerializer>(&mut ser);
-        self.buf = ser.buf;
         self.count += 1;
         self.need_value = false;
         return r;
@@ -115,7 +118,6 @@ impl SerializeStruct for NsdStructSerializer {
         // NSD: omit field name, write value only
         let mut ser = NsdSerializer { buf: self.buf };
         let r = value.serialize::<NsdSerializer>(&mut ser);
-        self.buf = ser.buf;
         self.count += 1;
         return r;
     }
@@ -131,7 +133,6 @@ impl SerializeVariant for NsdVariantSerializer {
         self.buf.push_str(",");
         let mut ser = NsdSerializer { buf: self.buf };
         let r = value.serialize::<NsdSerializer>(&mut ser);
-        self.buf = ser.buf;
         return r;
     }
 
@@ -230,12 +231,12 @@ impl Serializer for NsdSerializer {
 
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
         let s = `{v}`;
-        write_escaped_string(&mut self.buf, &s);
+        write_escaped_string(self.buf,&s);
         return Result::Ok(());
     }
 
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
-        write_escaped_string(&mut self.buf, v);
+        write_escaped_string(self.buf,v);
         return Result::Ok(());
     }
 
@@ -244,7 +245,7 @@ impl Serializer for NsdSerializer {
         return Result::Ok(());
     }
 
-    fn begin_seq(&mut self, len: i32) -> Result<NsdSeqSerializer, SerializeError> {
+    fn begin_seq(&mut self, len: i32) -> Result<NsdSeqSerializer, SerializeError> with stores[self] {
         self.buf.push_str("[");
         return Result::Ok(NsdSeqSerializer {
             buf: self.buf,
@@ -252,7 +253,7 @@ impl Serializer for NsdSerializer {
         });
     }
 
-    fn begin_map(&mut self, len: i32) -> Result<NsdMapSerializer, SerializeError> {
+    fn begin_map(&mut self, len: i32) -> Result<NsdMapSerializer, SerializeError> with stores[self] {
         self.buf.push_str("{");
         return Result::Ok(NsdMapSerializer {
             buf: self.buf,
@@ -261,7 +262,7 @@ impl Serializer for NsdSerializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<NsdStructSerializer, SerializeError> {
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<NsdStructSerializer, SerializeError> with stores[self] {
         // NSD: struct as array
         self.buf.push_str("[");
         return Result::Ok(NsdStructSerializer {
@@ -276,7 +277,7 @@ impl Serializer for NsdSerializer {
         return Result::Ok(());
     }
 
-    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<NsdVariantSerializer, SerializeError> {
+    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<NsdVariantSerializer, SerializeError> with stores[self] {
         // NSD: [disc, payload]
         self.buf.push_str(`[{disc}`);
         return Result::Ok(NsdVariantSerializer {
@@ -286,24 +287,24 @@ impl Serializer for NsdSerializer {
 }
 
 struct NsdSeqAccess {
-    de: JsonDeserializer,
+    de: &mut JsonDeserializer,
     first: bool,
 }
 
 struct NsdMapAccess {
-    de: JsonDeserializer,
+    de: &mut JsonDeserializer,
     first: bool,
 }
 
 struct NsdStructAccess {
-    de: JsonDeserializer,
+    de: &mut JsonDeserializer,
     index: i32,
     num_fields: i32,
     first: bool,
 }
 
 struct NsdVariantAccess {
-    de: JsonDeserializer,
+    de: &mut JsonDeserializer,
     disc: i32,
     is_unit: bool,
 }
@@ -443,7 +444,7 @@ impl DeserializeVariant for NsdVariantAccess {
 }
 
 pub struct NsdDeserializer {
-    de: JsonDeserializer,
+    de: &mut JsonDeserializer,
 }
 
 impl Deserializer for NsdDeserializer {
@@ -500,7 +501,7 @@ impl Deserializer for NsdDeserializer {
         return self.de.is_null();
     }
 
-    fn begin_seq(&mut self) -> Result<NsdSeqAccess, DeserializeError> {
+    fn begin_seq(&mut self) -> Result<NsdSeqAccess, DeserializeError> with stores[self] {
         let r = self.de.expect_char('[' as i32);
         if let Err(e) = r {
             return Result::Err(e);
@@ -511,7 +512,7 @@ impl Deserializer for NsdDeserializer {
         });
     }
 
-    fn begin_map(&mut self) -> Result<NsdMapAccess, DeserializeError> {
+    fn begin_map(&mut self) -> Result<NsdMapAccess, DeserializeError> with stores[self] {
         let r = self.de.expect_char('{' as i32);
         if let Err(e) = r {
             return Result::Err(e);
@@ -522,7 +523,7 @@ impl Deserializer for NsdDeserializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn(&String, i32, i32) -> Option<i32>) -> Result<NsdStructAccess, DeserializeError> {
+    fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn(&String, i32, i32) -> Option<i32>) -> Result<NsdStructAccess, DeserializeError> with stores[self] {
         // NSD: struct encoded as array
         let r = self.de.expect_char('[' as i32);
         if let Err(e) = r {
@@ -536,7 +537,7 @@ impl Deserializer for NsdDeserializer {
         });
     }
 
-    fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<NsdVariantAccess, DeserializeError> {
+    fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<NsdVariantAccess, DeserializeError> with stores[self] {
         self.de.skip_whitespace();
         if self.de.pos >= self.de.input.len() {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
@@ -584,22 +585,24 @@ impl Deserializer for NsdDeserializer {
 
 /// Serializes a value to a JSON NSD string.
 pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError> {
-    let mut ser = NsdSerializer { buf: "" };
+    let mut buf: String = "";
+    let mut ser = NsdSerializer { buf: &mut buf };
     let r = value.serialize::<NsdSerializer>(&mut ser);
     if let Err(e) = r {
         return Result::Err(e);
     }
-    return Result::Ok(ser.buf);
+    return Result::Ok(buf);
 }
 
 /// Deserializes a value from a JSON NSD string.
 pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError> {
-    let mut nsd = NsdDeserializer { de: JsonDeserializer { input, pos: 0 } };
+    let mut de = JsonDeserializer { input, pos: 0 };
+    let mut nsd = NsdDeserializer { de: &mut de };
     let r = T::deserialize(&mut nsd);
     if let Ok(v) = r {
-        nsd.de.skip_whitespace();
-        if nsd.de.pos < nsd.de.input.len() {
-            return Result::Err(DeserializeError::trailing(nsd.de.pos as i64));
+        de.skip_whitespace();
+        if de.pos < de.input.len() {
+            return Result::Err(DeserializeError::trailing(de.pos as i64));
         }
         return Result::Ok(v);
     }

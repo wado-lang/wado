@@ -954,17 +954,17 @@ fn "wado-compiler/tests/fixtures/inspect_1.wado/__test_3_tuple"() {
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let self_7: ref "core:prelude/string.wado//String";
+    let self_8: ref "core:prelude/string.wado//String";
     let other: ref "core:prelude/string.wado//String";
     let len_a: i32;
     let __sroa_v_1: ref "core:prelude/string.wado//String";
-    t = __inline__value_copy_T404_0: block -> ref "tuple//[i32, String, bool]" {
+    t = __inline__value_copy_T402_0: block -> ref "tuple//[i32, String, bool]" {
         __sroa_v_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-        break __inline__value_copy_T404_0: struct.new "tuple//[i32, String, bool]" { 0: 1, 1: __sroa_v_1, 2: 1 };
+        break __inline__value_copy_T402_0: struct.new "tuple//[i32, String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(__sroa_v_1.repr)), used: 5 }, 2: 1 };
         unreachable;
     };
-    __cond = __inline_String_Eq__eq_1: block -> bool {
-        self_7 = __tmpl: block -> ref "core:prelude/string.wado//String" {
+    __cond = __inline_String_Eq__eq_2: block -> bool {
+        self_8 = __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
             __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
             "core:prelude/tuple.wado/Tuple<i32,String,bool>^Inspect::inspect"(t, __local_3);
@@ -972,11 +972,11 @@ fn "wado-compiler/tests/fixtures/inspect_1.wado/__test_3_tuple"() {
             unreachable;
         };
         other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("[1, \"hello\", true]"), used: 18 };
-        len_a = self_7.used;
+        len_a = self_8.used;
         if len_a != other.used {
-            break __inline_String_Eq__eq_1: 0;
+            break __inline_String_Eq__eq_2: 0;
         }
-        break __inline_String_Eq__eq_1: "core:prelude/string.wado/String^Eq::eq_bytes"(self_7.repr, other.repr, len_a);
+        break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_8.repr, other.repr, len_a);
         unreachable;
     };
     if __cond == 0 {

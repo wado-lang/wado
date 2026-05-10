@@ -1,0 +1,92 @@
+// Wado has value semantics: `let b = a` for any value-typed `a` produces
+// a deep, independent copy. The only reference type that aliases on
+// assignment is the raw `builtin::array<T>`; its holders (`Array<T>`,
+// `String`) deep-copy by emitting `array_clone` on their `repr` field.
+//
+// Three previously-buggy regressions in the value-copy machinery are
+// pinned here, each through a different layer:
+//
+// 1. **Nested value-semantic struct field** (`Holder { items: Array<i32> }`).
+//    A struct field whose type is itself value-semantic used to get a
+//    one-level shallow copy — the synthesized helper emitted
+//    `return Holder { items: v.items };` and the inner `Array<i32>`'s
+//    own deep-copy via `$value_copy$Array$i32` never fired. Fix: in
+//    `synthesize::make_field_copy`, fields whose type is
+//    value-semantic are wrapped in `builtin::copy_value::<FieldT>(...)`
+//    so `RewriteCalls` routes through the appropriate
+//    `$value_copy$T<id>` helper, and `collect_copy_value_types`
+//    computes the transitive closure so every reachable nested type
+//    gets its own helper.
+//
+// 2. **Two levels of nested value-semantic structs**
+//    (`Outer { mid: Mid { inner: Array<i32> } }`). Same defect, but
+//    the inner struct is itself a custom struct rather than an
+//    `Array<...>`. Pinned separately because the fix is only correct
+//    if the helper-synthesis closure terminates — this case
+//    exercises three helper synthesizations in one chain.
+//
+// 3. **Array of struct elements**
+//    (`ArrayHolder { cells: Array<Inner> }`). When `T` in `Array<T>`
+//    is itself a value-typed struct, Wasm GC's plain
+//    `array.set(dst, i, array.get(src, i))` still stores the *same*
+//    struct ref into both arrays — unsound for a deep copy.
+//    `WirInstr::ArrayClone` now carries an `element_copy_func` field
+//    that codegen calls between `array.get` and `array.set` so each
+//    destination element is a fresh struct, and the synthesizer's
+//    `Collector` adds `array_clone::<T>` element types to the helper
+//    worklist alongside direct `copy_value::<T>` callers so the
+//    helper exists by the time codegen looks it up.
+//
+// All structs and arrays referenced here are user-defined or live in
+// the core prelude; the fixture deliberately does not import any
+// stdlib container so the test surface is exactly the language-level
+// value-copy contract.
+
+struct Holder {
+    items: Array<i32>,
+}
+
+struct Inner {
+    boxed: Array<i32>,
+}
+
+struct ArrayHolder {
+    cells: Array<Inner>,
+}
+
+export fn run() {
+    let mut a = Holder { items: [] };
+    a.items.push(1);
+    let mut b = a;
+    b.items.push(2);
+    assert a.items.len() == 1, "outer-struct copy did not deep-copy the inner Array";
+    assert b.items.len() == 2, "b lost its push";
+
+    // Two levels deep: `Outer { mid: Mid { inner: Array<i32> } }`.
+    let mut o = Outer { mid: Mid { inner: [] } };
+    o.mid.inner.push(10);
+    let mut o2 = o;
+    o2.mid.inner.push(20);
+    assert o.mid.inner.len() == 1, "two-level nested vcopy didn't recurse";
+    assert o2.mid.inner.len() == 2;
+
+    // Array of structs: each element of `cells` is itself
+    // value-semantic and must be deep-copied so that mutating
+    // `h2.cells[0].boxed` does not alias `h.cells[0].boxed`.
+    let mut h = ArrayHolder { cells: [Inner { boxed: [100] }] };
+    let mut h2 = h;
+    h2.cells[0].boxed.push(200);
+    assert h.cells[0].boxed.len() == 1, "array-of-struct vcopy aliased element";
+    assert h2.cells[0].boxed.len() == 2;
+}
+
+struct Mid {
+    inner: Array<i32>,
+}
+
+struct Outer {
+    mid: Mid,
+}
+
+__DATA__
+{}

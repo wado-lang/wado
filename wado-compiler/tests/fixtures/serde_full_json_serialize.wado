@@ -48,17 +48,24 @@ impl JsonWriter {
     }
 }
 
+// `w: &mut JsonWriter` so writes from sub-serializers flow back to the
+// outer instance. A value-typed `w: JsonWriter` field would deep-copy
+// on construction, and the previous `self.w = ser.w` save-back trick
+// (still in older revisions of this fixture) doesn't recover what
+// happens between `let mut ser = ... { w: self.w }` and the
+// re-assignment because the `String` inside the copy is itself a
+// fresh allocation.
 struct JsonSerializer {
-    w: JsonWriter,
+    w: &mut JsonWriter,
 }
 
 struct JsonSeqSerializer {
-    w: JsonWriter,
+    w: &mut JsonWriter,
     count: i32,
 }
 
 struct JsonStructSerializer {
-    w: JsonWriter,
+    w: &mut JsonWriter,
     count: i32,
 }
 
@@ -95,7 +102,7 @@ impl Serializer for JsonSerializer {
         return Result::<(), SerializeError>::Ok(());
     }
 
-    fn begin_seq(&mut self, len: i32) -> Result<JsonSeqSerializer, SerializeError> {
+    fn begin_seq(&mut self, len: i32) -> Result<JsonSeqSerializer, SerializeError> with stores[self] {
         self.w.write(&"[");
         return Result::<JsonSeqSerializer, SerializeError>::Ok(JsonSeqSerializer {
             w: self.w,
@@ -103,7 +110,7 @@ impl Serializer for JsonSerializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<JsonStructSerializer, SerializeError> {
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<JsonStructSerializer, SerializeError> with stores[self] {
         self.w.write(&"{");
         return Result::<JsonStructSerializer, SerializeError>::Ok(JsonStructSerializer {
             w: self.w,
@@ -119,7 +126,6 @@ impl SerializeSeq for JsonSeqSerializer {
         }
         let mut ser = JsonSerializer { w: self.w };
         value.serialize::<JsonSerializer>(&mut ser);
-        self.w = ser.w;
         self.count += 1;
         return Result::<(), SerializeError>::Ok(());
     }
@@ -138,7 +144,6 @@ impl SerializeStruct for JsonStructSerializer {
         self.w.write(&`"{*name}":`);
         let mut ser = JsonSerializer { w: self.w };
         value.serialize::<JsonSerializer>(&mut ser);
-        self.w = ser.w;
         self.count += 1;
         return Result::<(), SerializeError>::Ok(());
     }
@@ -241,9 +246,10 @@ impl Serialize for User {
 
 // Helper: serialize to JSON string
 fn to_json<T: Serialize>(value: &T) -> String {
-    let mut ser = JsonSerializer { w: JsonWriter { buf: "" } };
+    let mut writer = JsonWriter { buf: "" };
+    let mut ser = JsonSerializer { w: &mut writer };
     value.serialize::<JsonSerializer>(&mut ser);
-    return ser.w.buf;
+    return writer.buf;
 }
 
 export fn run() with Stdout {

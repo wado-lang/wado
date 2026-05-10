@@ -1509,9 +1509,19 @@ impl<'a> WirUnparser<'a> {
                 self.unparse_instr_inline(len);
                 self.write(")");
             }
-            WirInstr::ArrayClone { type_id, src } => {
+            WirInstr::ArrayClone {
+                type_id,
+                src,
+                element_copy_func,
+            } => {
                 let elem = self.array_elem_type_str(type_id);
-                self.write(&format!("builtin::array_clone<{elem}>("));
+                if let Some(func) = element_copy_func {
+                    self.write(&format!(
+                        "builtin::array_clone_deep<{elem}>(/*via {func}*/ "
+                    ));
+                } else {
+                    self.write(&format!("builtin::array_clone<{elem}>("));
+                }
                 self.unparse_instr_inline(src);
                 self.write(")");
             }

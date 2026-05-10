@@ -34,17 +34,20 @@ trait Serializer {
 }
 
 // Mock text serializer
+// Sub-serializer holds `&mut TextSerializer` so writes flow back to
+// the outer instance — see serde_serialize_struct.wado for the
+// rationale.
 struct TextSerializer {
     buf: String,
 }
 
 struct TextSeqSerializer {
-    parent: TextSerializer,
+    parent: &mut TextSerializer,
     count: i32,
 }
 
 struct TextStructSerializer {
-    parent: TextSerializer,
+    parent: &mut TextSerializer,
     count: i32,
 }
 
@@ -62,18 +65,18 @@ impl Serializer for TextSerializer {
         return Result::<(), SerializeError>::Ok(());
     }
 
-    fn begin_seq(&mut self, len: i32) -> Result<TextSeqSerializer, SerializeError> {
+    fn begin_seq(&mut self, len: i32) -> Result<TextSeqSerializer, SerializeError> with stores[self] {
         self.buf.push_str("[");
         return Result::<TextSeqSerializer, SerializeError>::Ok(TextSeqSerializer {
-            parent: *self,
+            parent: self,
             count: 0,
         });
     }
 
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<TextStructSerializer, SerializeError> {
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<TextStructSerializer, SerializeError> with stores[self] {
         self.buf.push_str("{");
         return Result::<TextStructSerializer, SerializeError>::Ok(TextStructSerializer {
-            parent: *self,
+            parent: self,
             count: 0,
         });
     }
@@ -84,7 +87,7 @@ impl SerializeSeq for TextSeqSerializer {
         if self.count > 0 {
             self.parent.buf.push_str(",");
         }
-        value.serialize::<TextSerializer>(&mut self.parent);
+        value.serialize::<TextSerializer>(self.parent);
         self.count += 1;
         return Result::<(), SerializeError>::Ok(());
     }
@@ -101,7 +104,7 @@ impl SerializeStruct for TextStructSerializer {
             self.parent.buf.push_str(",");
         }
         self.parent.buf.push_str(`"{*name}":`);
-        value.serialize::<TextSerializer>(&mut self.parent);
+        value.serialize::<TextSerializer>(self.parent);
         self.count += 1;
         return Result::<(), SerializeError>::Ok(());
     }

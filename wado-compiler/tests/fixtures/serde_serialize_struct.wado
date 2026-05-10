@@ -21,16 +21,21 @@ trait Serializer {
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>;
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError>;
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError>;
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError> with stores[self];
 }
 
-// Mock JSON-like serializer
+// Mock JSON-like serializer. Sub-serializers hold `&mut JsonSerializer`
+// so writes to the buffer flow back to the outer instance the caller
+// still owns. A value-typed `JsonSerializer` field would deep-copy on
+// construction (per Wado value semantics — `String` deep-copies its
+// `repr`), and `field` / `end` would mutate a *separate* buffer the
+// caller never sees.
 struct JsonSerializer {
     buf: String,
 }
 
 struct JsonStructSerializer {
-    ser: JsonSerializer,
+    ser: &mut JsonSerializer,
     count: i32,
 }
 
@@ -56,10 +61,10 @@ impl Serializer for JsonSerializer {
         return Result::<(), SerializeError>::Ok(());
     }
 
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<JsonStructSerializer, SerializeError> {
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<JsonStructSerializer, SerializeError> with stores[self] {
         self.buf.push_str("{");
         return Result::<JsonStructSerializer, SerializeError>::Ok(JsonStructSerializer {
-            ser: *self,
+            ser: self,
             count: 0,
         });
     }
@@ -71,7 +76,7 @@ impl SerializeStruct for JsonStructSerializer {
             self.ser.buf.push_str(",");
         }
         self.ser.buf.push_str(`"{*name}":`);
-        value.serialize::<JsonSerializer>(&mut self.ser);
+        value.serialize::<JsonSerializer>(self.ser);
         self.count += 1;
         return Result::<(), SerializeError>::Ok(());
     }

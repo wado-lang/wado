@@ -293,7 +293,7 @@ type "functype//core:json/core/json/from_string<Result<i32,String>>" = fn(ref "c
 
 type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(91)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_result.wado/$value_copy$T48" = fn(ref "core:prelude/string.wado//String") -> ref "core:json//JsonVariantSerializer";  // TypeId(92)
+type "functype//wado-compiler/tests/fixtures/serde_json_result.wado/$value_copy$T49" = fn(ref "core:prelude/string.wado//String") -> ref "core:json//JsonVariantSerializer";  // TypeId(92)
 
 type "functype//core:json/core/json/to_string<Result<i32,String>>" = fn(ref "core:prelude/types.wado//Result<i32,String>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(93)
 
@@ -618,7 +618,7 @@ fn "wado-compiler/tests/fixtures/serde_json_result.wado/__cm_export____test_3_re
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/serde_json_result.wado/$value_copy$T48"(v) {
+fn "wado-compiler/tests/fixtures/serde_json_result.wado/$value_copy$T49"(v) {
     return struct.new "core:json//JsonVariantSerializer" { buf: v };
 }
 
@@ -2754,13 +2754,14 @@ fn "wado-compiler/tests/fixtures/serde_json_result.wado/Result<i32,String>^Deser
     let __local_17: ref "core:prelude/string.wado//String";
     let v_18: ref "core:json//JsonVariantAccess";
     let v_19: ref "core:prelude/string.wado//String";
-    let other_22: ref "core:prelude/string.wado//String";
-    let len_a_23: i32;
-    let other_27: ref "core:prelude/string.wado//String";
-    let len_a_28: i32;
-    let d_36: ref "core:json//JsonDeserializer";
-    let d_42: ref "core:json//JsonDeserializer";
-    va = __inline__value_copy_T58_0: block -> ref "core:json//JsonVariantAccess" {
+    let v_20: ref "core:prelude/string.wado//String";
+    let other_23: ref "core:prelude/string.wado//String";
+    let len_a_24: i32;
+    let other_28: ref "core:prelude/string.wado//String";
+    let len_a_29: i32;
+    let d_37: ref "core:json//JsonDeserializer";
+    let d_43: ref "core:json//JsonDeserializer";
+    va = __inline__value_copy_T59_0: block -> ref "core:json//JsonVariantAccess" {
         let __match_scrut_0: ref "core:prelude/types.wado//Result<JsonVariantAccess,DeserializeError>";
         __match_scrut_0 = "core:json/JsonDeserializer^Deserializer::begin_variant"(d, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result"), used: 6 }, 2);
         v_18 = (if ref.test "core:prelude/types.wado//Result<JsonVariantAccess,DeserializeError>::Ok"(__match_scrut_0) -> ref "core:json//JsonVariantAccess" {
@@ -2776,13 +2777,17 @@ fn "wado-compiler/tests/fixtures/serde_json_result.wado/Result<i32,String>^Deser
             unreachable;
             unreachable;
         });
-        break __inline__value_copy_T58_0: struct.new "core:json//JsonVariantAccess" { de: v_18.de, variant: v_18.variant, is_object: v_18.is_object };
+        break __inline__value_copy_T59_0: struct.new "core:json//JsonVariantAccess" { de: v_18.de, variant: ref.as_non_null(__inline__value_copy_T20_1: block -> ref "core:prelude/string.wado//String" {
+            v_19 = v_18.variant;
+            break __inline__value_copy_T20_1: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_19.repr)), used: v_19.used };
+            unreachable;
+        }), is_object: v_18.is_object };
         unreachable;
     };
-    name = __inline__value_copy_T20_1: block -> ref "core:prelude/string.wado//String" {
+    name = __inline__value_copy_T20_2: block -> ref "core:prelude/string.wado//String" {
         let __match_scrut_1: ref "core:prelude/types.wado//Result<String,DeserializeError>";
         __match_scrut_1 = struct.new "core:prelude/types.wado//Result<String,DeserializeError>::Ok" { discriminant: 0, payload_0: va.variant };
-        v_19 = (if ref.test "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__match_scrut_1) -> ref "core:prelude/string.wado//String" {
+        v_20 = (if ref.test "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__match_scrut_1) -> ref "core:prelude/string.wado//String" {
             let __cast_4: ref "core:prelude/types.wado//Result<String,DeserializeError>::Ok";
             __cast_4 = ref.cast "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__match_scrut_1);
             __qm_v_4 = __cast_4.payload_0;
@@ -2795,22 +2800,22 @@ fn "wado-compiler/tests/fixtures/serde_json_result.wado/Result<i32,String>^Deser
             unreachable;
             unreachable;
         });
-        break __inline__value_copy_T20_1: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_19.repr)), used: v_19.used };
+        break __inline__value_copy_T20_2: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_20.repr)), used: v_20.used };
         unreachable;
     };
-    if __inline_String_Eq__eq_3: block -> bool {
-        other_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Ok"), used: 2 };
-        len_a_23 = name.used;
-        if len_a_23 != other_22.used {
-            break __inline_String_Eq__eq_3: 0;
+    if __inline_String_Eq__eq_4: block -> bool {
+        other_23 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Ok"), used: 2 };
+        len_a_24 = name.used;
+        if len_a_24 != other_23.used {
+            break __inline_String_Eq__eq_4: 0;
         }
-        break __inline_String_Eq__eq_3: "core:prelude/string.wado/String^Eq::eq_bytes"(name.repr, other_22.repr, len_a_23);
+        break __inline_String_Eq__eq_4: "core:prelude/string.wado/String^Eq::eq_bytes"(name.repr, other_23.repr, len_a_24);
         unreachable;
     } {
         let __match_scrut_2: ref "core:prelude/types.wado//Result<i32,DeserializeError>";
         __match_scrut_2 = __inline_i32_Deserialize__deserialize_JsonDeserializer__4: block -> ref "core:prelude/types.wado//Result<i32,DeserializeError>" {
-            d_36 = va.de;
-            break __inline_i32_Deserialize__deserialize_JsonDeserializer__4: "core:json/JsonDeserializer::parse_i32_direct"(d_36);
+            d_37 = va.de;
+            break __inline_i32_Deserialize__deserialize_JsonDeserializer__4: "core:json/JsonDeserializer::parse_i32_direct"(d_37);
             unreachable;
         };
         val_9 = (if ref.test "core:prelude/types.wado//Result<i32,DeserializeError>::Ok"(__match_scrut_2) -> i32 {
@@ -2827,11 +2832,11 @@ fn "wado-compiler/tests/fixtures/serde_json_result.wado/Result<i32,String>^Deser
             unreachable;
         });
         let __match_scrut_3: ref null "core:serde//DeserializeError";
-        __match_scrut_3 = __inline_JsonVariantAccess_DeserializeVariant__end_5: block -> ref null "core:serde//DeserializeError" {
+        __match_scrut_3 = __inline_JsonVariantAccess_DeserializeVariant__end_6: block -> ref null "core:serde//DeserializeError" {
             if va.is_object {
-                break __inline_JsonVariantAccess_DeserializeVariant__end_5: "core:json/JsonDeserializer::expect_char"(va.de, 125);
+                break __inline_JsonVariantAccess_DeserializeVariant__end_6: "core:json/JsonDeserializer::expect_char"(va.de, 125);
             }
-            break __inline_JsonVariantAccess_DeserializeVariant__end_5: ref.null none;
+            break __inline_JsonVariantAccess_DeserializeVariant__end_6: ref.null none;
             unreachable;
         };
         if ref.is_null(__match_scrut_3) {
@@ -2844,19 +2849,19 @@ fn "wado-compiler/tests/fixtures/serde_json_result.wado/Result<i32,String>^Deser
             unreachable;
         }
         return struct.new "core:prelude/types.wado//Result<Result<i32,String>,DeserializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Result<i32,String>::Ok" { discriminant: 0, payload_0: val_9 } };
-    } else if __inline_String_Eq__eq_6: block -> bool {
-        other_27 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Err"), used: 3 };
-        len_a_28 = name.used;
-        if len_a_28 != other_27.used {
-            break __inline_String_Eq__eq_6: 0;
+    } else if __inline_String_Eq__eq_7: block -> bool {
+        other_28 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Err"), used: 3 };
+        len_a_29 = name.used;
+        if len_a_29 != other_28.used {
+            break __inline_String_Eq__eq_7: 0;
         }
-        break __inline_String_Eq__eq_6: "core:prelude/string.wado/String^Eq::eq_bytes"(name.repr, other_27.repr, len_a_28);
+        break __inline_String_Eq__eq_7: "core:prelude/string.wado/String^Eq::eq_bytes"(name.repr, other_28.repr, len_a_29);
         unreachable;
     } {
         let __match_scrut_4: ref "core:prelude/types.wado//Result<String,DeserializeError>";
         __match_scrut_4 = __inline_String_Deserialize__deserialize_JsonDeserializer__9: block -> ref "core:prelude/types.wado//Result<String,DeserializeError>" {
-            d_42 = va.de;
-            break __inline_String_Deserialize__deserialize_JsonDeserializer__9: "core:json/JsonDeserializer::read_json_string"(d_42);
+            d_43 = va.de;
+            break __inline_String_Deserialize__deserialize_JsonDeserializer__9: "core:json/JsonDeserializer::read_json_string"(d_43);
             unreachable;
         };
         val_14 = (if ref.test "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__match_scrut_4) -> ref "core:prelude/string.wado//String" {
@@ -2873,11 +2878,11 @@ fn "wado-compiler/tests/fixtures/serde_json_result.wado/Result<i32,String>^Deser
             unreachable;
         });
         let __match_scrut_5: ref null "core:serde//DeserializeError";
-        __match_scrut_5 = __inline_JsonVariantAccess_DeserializeVariant__end_8: block -> ref null "core:serde//DeserializeError" {
+        __match_scrut_5 = __inline_JsonVariantAccess_DeserializeVariant__end_9: block -> ref null "core:serde//DeserializeError" {
             if va.is_object {
-                break __inline_JsonVariantAccess_DeserializeVariant__end_8: "core:json/JsonDeserializer::expect_char"(va.de, 125);
+                break __inline_JsonVariantAccess_DeserializeVariant__end_9: "core:json/JsonDeserializer::expect_char"(va.de, 125);
             }
-            break __inline_JsonVariantAccess_DeserializeVariant__end_8: ref.null none;
+            break __inline_JsonVariantAccess_DeserializeVariant__end_9: ref.null none;
             unreachable;
         };
         if ref.is_null(__match_scrut_5) {
@@ -2921,7 +2926,7 @@ fn "core:prelude/types.wado/Result<i32,String>^Serialize::serialize<JsonSerializ
         let __cast_5: ref "core:prelude/types.wado//Result<i32,String>::Ok";
         __cast_5 = ref.cast "core:prelude/types.wado//Result<i32,String>::Ok"(__match_scrut_0);
         v_2 = struct.new "core:prelude/types.wado//Box<i32>" { value: __cast_5.payload_0 };
-        var_5 = "wado-compiler/tests/fixtures/serde_json_result.wado/$value_copy$T48"(let __match_scrut_3: ref "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>"; __match_scrut_3 = "core:json/JsonSerializer^Serializer::begin_variant"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result"), used: 6 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Ok"), used: 2 }, 0); (if ref.test "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>::Ok"(__match_scrut_3) -> ref "core:json//JsonVariantSerializer" {
+        var_5 = "wado-compiler/tests/fixtures/serde_json_result.wado/$value_copy$T49"(let __match_scrut_3: ref "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>"; __match_scrut_3 = "core:json/JsonSerializer^Serializer::begin_variant"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result"), used: 6 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Ok"), used: 2 }, 0); (if ref.test "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>::Ok"(__match_scrut_3) -> ref "core:json//JsonVariantSerializer" {
             let __cast_7: ref "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>::Ok";
             __cast_7 = ref.cast "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>::Ok"(__match_scrut_3);
             __qm_v_3 = __cast_7.payload_0;
@@ -2962,7 +2967,7 @@ fn "core:prelude/types.wado/Result<i32,String>^Serialize::serialize<JsonSerializ
         let __cast_1: ref "core:prelude/types.wado//Result<i32,String>::Err";
         __cast_1 = ref.cast "core:prelude/types.wado//Result<i32,String>::Err"(__match_scrut_0);
         v_8 = __cast_1.payload_0;
-        var_11 = "wado-compiler/tests/fixtures/serde_json_result.wado/$value_copy$T48"(let __match_scrut_1: ref "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>"; __match_scrut_1 = "core:json/JsonSerializer^Serializer::begin_variant"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result"), used: 6 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Err"), used: 3 }, 1); (if ref.test "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>::Ok"(__match_scrut_1) -> ref "core:json//JsonVariantSerializer" {
+        var_11 = "wado-compiler/tests/fixtures/serde_json_result.wado/$value_copy$T49"(let __match_scrut_1: ref "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>"; __match_scrut_1 = "core:json/JsonSerializer^Serializer::begin_variant"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result"), used: 6 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Err"), used: 3 }, 1); (if ref.test "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>::Ok"(__match_scrut_1) -> ref "core:json//JsonVariantSerializer" {
             let __cast_3: ref "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>::Ok";
             __cast_3 = ref.cast "core:prelude/types.wado//Result<JsonVariantSerializer,SerializeError>::Ok"(__match_scrut_1);
             __qm_v_9 = __cast_3.payload_0;

@@ -19,8 +19,16 @@ use {
 // 1. A self-balancing binary search tree (AA tree) for O(log n) key lookups
 // 2. A dense array (entries) for O(1) insertion-order iteration
 //
-// The tree nodes store indices pointing into the entries array, allowing
-// fast key-based lookups while maintaining insertion order for iteration.
+// Both the tree nodes and the entries array are owned by the `TreeMap`
+// directly — tree pointers (`root`, `left`, `right`) are `Option<i32>`
+// indices into `nodes`, not `&mut` references. This keeps the entire
+// data structure value-semantic: a single Wado `let b = a;` produces a
+// fully independent copy via the synthesized `$value_copy$TreeMap` —
+// every shared `&mut` would be aliased on copy, which would break the
+// `b.insert(...)` ⇏ `a.contains(...)` invariant. Index-based pointers
+// also have no rotation-time aliasing concerns: every `self.nodes[i]`
+// access goes through the same array and Wado has no borrow checker
+// to refuse two concurrent mutable handles to it.
 
 // An entry in the map (key-value pair with deletion flag)
 struct TreeMapEntry<K, V> {
@@ -29,13 +37,14 @@ struct TreeMapEntry<K, V> {
     deleted: bool,
 }
 
-// A node in the tree (stores key and index into entries array)
+// A node in the tree. `left` / `right` are `Option<i32>` indices into
+// the parent `TreeMap`'s `nodes` array; `index` is into `entries`.
 struct TreeMapNode<K> {
     key: K,
     index: i32,
     level: i32,
-    left: Option<&mut TreeMapNode<K>>,
-    right: Option<&mut TreeMapNode<K>>,
+    left: Option<i32>,
+    right: Option<i32>,
 }
 
 /// A map that iterates in insertion order.
@@ -46,7 +55,8 @@ struct TreeMapNode<K> {
 /// This is similar to Rust's `indexmap::IndexMap` but uses a tree instead
 /// of a hash table for key lookups.
 pub struct TreeMap<K, V> {
-    root: Option<&mut TreeMapNode<K>>,
+    root: Option<i32>,
+    nodes: Array<TreeMapNode<K>>,
     entries: Array<TreeMapEntry<K, V>>,
     size: i32,
     deleted_count: i32,
@@ -57,6 +67,7 @@ impl<K: Ord> TreeMap<K, V> {
     pub fn new() -> TreeMap<K, V> {
         return TreeMap {
             root: null,
+            nodes: [],
             entries: [],
             size: 0,
             deleted_count: 0,
@@ -73,45 +84,48 @@ impl<K: Ord> TreeMap<K, V> {
         return self.size == 0;
     }
 
-    // Skew: right rotation to fix left horizontal link
-    fn skew(&mut self, node: Option<&mut TreeMapNode<K>>) -> Option<&mut TreeMapNode<K>> {
-        if let Some(n) = node {
-            if let Some(left) = n.left {
-                if left.level == n.level {
-                    n.left = left.right;
-                    left.right = Option::Some(n);
-                    return Option::Some(left);
+    // Skew: right rotation to fix left horizontal link.
+    // Reads through `self.nodes[...]` so rotations stay inside the
+    // single owning array — see the module-level comment for why.
+    fn skew(&mut self, node: Option<i32>) -> Option<i32> {
+        if let Some(n_idx) = node {
+            if let Some(left_idx) = self.nodes[n_idx].left {
+                if self.nodes[left_idx].level == self.nodes[n_idx].level {
+                    self.nodes[n_idx].left = self.nodes[left_idx].right;
+                    self.nodes[left_idx].right = Option::Some(n_idx);
+                    return Option::Some(left_idx);
                 }
             }
-            return Option::Some(n);
+            return Option::Some(n_idx);
         }
         return null;
     }
 
-    // Split: left rotation to fix consecutive right horizontal links
-    fn split(&mut self, node: Option<&mut TreeMapNode<K>>) -> Option<&mut TreeMapNode<K>> {
-        if let Some(n) = node {
-            if let Some(right) = n.right {
-                if let Some(rr) = right.right {
-                    if rr.level == n.level {
-                        n.right = right.left;
-                        right.left = Option::Some(n);
-                        right.level = right.level + 1;
-                        return Option::Some(right);
+    // Split: left rotation to fix consecutive right horizontal links.
+    fn split(&mut self, node: Option<i32>) -> Option<i32> {
+        if let Some(n_idx) = node {
+            if let Some(right_idx) = self.nodes[n_idx].right {
+                if let Some(rr_idx) = self.nodes[right_idx].right {
+                    if self.nodes[rr_idx].level == self.nodes[n_idx].level {
+                        self.nodes[n_idx].right = self.nodes[right_idx].left;
+                        self.nodes[right_idx].left = Option::Some(n_idx);
+                        self.nodes[right_idx].level = self.nodes[right_idx].level + 1;
+                        return Option::Some(right_idx);
                     }
                 }
             }
-            return Option::Some(n);
+            return Option::Some(n_idx);
         }
         return null;
     }
 
-    // Find node in tree and return its index, or -1 if not found
+    // Find node in tree and return its `entries` index, or -1 if the
+    // key is missing or its entry is tomb-stoned.
     fn find_index(&self, key: K) -> i32 {
         let mut current = self.root;
-        while let Some(n) = current {
+        while let Some(n_idx) = current {
+            let n = &self.nodes[n_idx];
             if key == n.key {
-                // Check if the entry is deleted
                 let entry = &self.entries[n.index];
                 if entry.deleted {
                     return -1;
@@ -127,48 +141,40 @@ impl<K: Ord> TreeMap<K, V> {
         return -1;
     }
 
-    // Find node in tree and return mutable reference to it
-    fn find_node_mut(&mut self, key: K) -> Option<&mut TreeMapNode<K>> {
-        let mut current = self.root;
-        while let Some(n) = current {
-            if key == n.key {
-                return Option::Some(n);
+    // Recursive AA-tree insert. Returns the (possibly rotated) subtree
+    // root index. Allocates a fresh entry in `self.nodes` when the key
+    // is not yet present in the subtree.
+    fn insert_node(&mut self, node: Option<i32>, key: K, index: i32) -> Option<i32> {
+        if let Some(n_idx) = node {
+            if key == self.nodes[n_idx].key {
+                // Key already exists, just update the entries index.
+                self.nodes[n_idx].index = index;
+                return Option::Some(n_idx);
             }
-            if key < n.key {
-                current = n.left;
+
+            if key < self.nodes[n_idx].key {
+                let left = self.nodes[n_idx].left;
+                let new_left = self.insert_node(left, key, index);
+                self.nodes[n_idx].left = new_left;
             } else {
-                current = n.right;
-            }
-        }
-        return null;
-    }
-
-    fn insert_node(&mut self, node: Option<&mut TreeMapNode<K>>, key: K, index: i32) -> Option<&mut TreeMapNode<K>> {
-        if let Some(n) = node {
-            if key == n.key {
-                // Key already exists, just update the index
-                n.index = index;
-                return Option::Some(n);
+                let right = self.nodes[n_idx].right;
+                let new_right = self.insert_node(right, key, index);
+                self.nodes[n_idx].right = new_right;
             }
 
-            if key < n.key {
-                n.left = self.insert_node(n.left, key, index);
-            } else {
-                n.right = self.insert_node(n.right, key, index);
-            }
-
-            let after_skew = self.skew(Option::Some(n));
+            let after_skew = self.skew(Option::Some(n_idx));
             return self.split(after_skew);
         }
 
-        let mut new_node: TreeMapNode<K> = TreeMapNode {
+        let new_idx = self.nodes.len();
+        self.nodes.push(TreeMapNode {
             key,
             index,
             level: 1,
             left: null,
             right: null,
-        };
-        return Option::Some(&mut new_node);
+        });
+        return Option::Some(new_idx);
     }
 
     /// Inserts a key-value pair into the map.
@@ -249,8 +255,11 @@ impl<K: Ord> TreeMap<K, V> {
             }
         }
 
-        // Rebuild tree with new indices
+        // Rebuild tree with new indices. Both `nodes` and `entries`
+        // get fresh empty arrays; `insert_node` repopulates `nodes`
+        // as it inserts each key.
         self.root = null;
+        self.nodes = [];
         self.entries = new_entries;
         self.deleted_count = 0;
 
@@ -296,6 +305,7 @@ impl<K: Ord> TreeMap<K, V> {
     /// Removes all key-value pairs from the map.
     pub fn clear(&mut self) {
         self.root = null;
+        self.nodes = [];
         self.entries = [];
         self.size = 0;
         self.deleted_count = 0;

@@ -44,6 +44,17 @@ pub struct Parser {
     /// parse order so that re-parsing the same source produces the same id
     /// sequence.
     next_ast_id: u32,
+    /// Comments collected by the lexer, ordered by source position. The
+    /// parser consumes them in lockstep with token consumption: at every
+    /// `alloc_ast_id`, all still-unattached comments whose `span.start`
+    /// precedes the next-to-consume token's start are attached to the new
+    /// id's leading trivia. See [`crate::comment::TriviaMap`].
+    comments: Vec<crate::comment::Comment>,
+    /// Index of the next unattached comment in `comments`.
+    comment_cursor: usize,
+    /// Trivia attached to AST nodes during parsing. Exposed via
+    /// [`Parser::take_trivia`] for the formatter pipeline.
+    trivia: crate::comment::TriviaMap,
 }
 
 #[derive(Debug)]
@@ -66,6 +77,17 @@ impl From<ParseError> for crate::compiler_host::Diagnostic {
 
 type ParseResult<T> = Result<T, ParseError>;
 
+/// Snapshot of [`Parser`] state captured by [`Parser::checkpoint`] for
+/// speculative parses that may need to backtrack. Restored via
+/// [`Parser::restore`].
+#[derive(Debug, Clone, Copy)]
+struct ParserCheckpoint {
+    pos: usize,
+    comment_cursor: usize,
+    next_ast_id: u32,
+    pending_gt: bool,
+}
+
 /// Groups of comparison operators for chain validation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ComparisonChainGroup {
@@ -81,17 +103,7 @@ enum ComparisonChainGroup {
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self {
-            tokens,
-            pos: 0,
-            pending_gt: false,
-            restrict_struct_literals: false,
-            shebang: None,
-            data_section: None,
-            include_paths: crate::hashmap::IndexSet::default(),
-            parsed_inner_attributes: Vec::new(),
-            next_ast_id: 0,
-        }
+        Self::build(tokens, None, None, Vec::new())
     }
 
     /// Creates a new parser with the given tokens, shebang, and data section.
@@ -99,6 +111,28 @@ impl Parser {
         tokens: Vec<Token>,
         shebang: Option<String>,
         data_section: Option<String>,
+    ) -> Self {
+        Self::build(tokens, shebang, data_section, Vec::new())
+    }
+
+    /// Creates a new parser with full lexer output, including the comment
+    /// stream so leading comments can be attached to AST nodes as they are
+    /// allocated. Use this on the formatter path; the comment stream is
+    /// otherwise harmless when omitted.
+    pub fn with_trivia(
+        tokens: Vec<Token>,
+        shebang: Option<String>,
+        data_section: Option<String>,
+        comments: Vec<crate::comment::Comment>,
+    ) -> Self {
+        Self::build(tokens, shebang, data_section, comments)
+    }
+
+    fn build(
+        tokens: Vec<Token>,
+        shebang: Option<String>,
+        data_section: Option<String>,
+        comments: Vec<crate::comment::Comment>,
     ) -> Self {
         Self {
             tokens,
@@ -110,15 +144,86 @@ impl Parser {
             include_paths: crate::hashmap::IndexSet::default(),
             parsed_inner_attributes: Vec::new(),
             next_ast_id: 0,
+            comments,
+            comment_cursor: 0,
+            trivia: crate::comment::TriviaMap::new(),
         }
     }
 
     /// Allocate a fresh [`AstId`] for an AST node currently being constructed.
     /// Ids are dense in `0..next_ast_id` and assigned in parse order.
+    ///
+    /// Side effect: every comment in `self.comments` whose `span.start`
+    /// precedes the next-to-consume token's start and has not already been
+    /// attached is attached to the returned id as leading trivia. The
+    /// outermost AST node being constructed at a given source position
+    /// allocates first (DFS parse order), so the comment naturally lands
+    /// on the AST node it semantically belongs to.
     fn alloc_ast_id(&mut self) -> crate::ast::AstId {
         let id = crate::ast::AstId(self.next_ast_id);
         self.next_ast_id += 1;
+        // Comment-stream lockstep: pure tokenisations skip the Vec
+        // allocation entirely. Most AST nodes have no preceding
+        // comments, so the empty-cursor check happens on the parser
+        // hot path.
+        if self.comment_cursor < self.comments.len() {
+            let next_token_start = self
+                .tokens
+                .get(self.pos)
+                .map(|t| t.span.start)
+                .unwrap_or(usize::MAX);
+            if self.comments[self.comment_cursor].span.start < next_token_start {
+                let mut leading: Vec<crate::comment::Comment> = Vec::new();
+                while self.comment_cursor < self.comments.len()
+                    && self.comments[self.comment_cursor].span.start < next_token_start
+                {
+                    leading.push(self.comments[self.comment_cursor].clone());
+                    self.comment_cursor += 1;
+                }
+                self.trivia.attach_leading(id, leading);
+            }
+        }
         id
+    }
+
+    /// Consume and return the parser's accumulated trivia. Call this once
+    /// after `parse()` returns Ok so the formatter pipeline can read
+    /// leading-comment attachments. Sets file-tail dangling comments to
+    /// any unattached residue.
+    pub fn take_trivia(&mut self) -> crate::comment::TriviaMap {
+        let mut comments = std::mem::take(&mut self.comments);
+        let dangling = comments.split_off(self.comment_cursor);
+        self.comment_cursor = 0;
+        let mut trivia = std::mem::take(&mut self.trivia);
+        trivia.set_dangling(dangling);
+        trivia
+    }
+
+    /// Snapshot enough parser state to roll back a speculative parse
+    /// without losing comments. `alloc_ast_id` advances `comment_cursor`
+    /// and writes leading trivia keyed by the freshly allocated id, so a
+    /// raw `self.pos = saved` style of backtrack would silently drop
+    /// every comment consumed during the discarded branch (the cursor
+    /// stays past them, the id they were attached to is never visited
+    /// by the unparser). [`Parser::restore`] also rolls back
+    /// `comment_cursor` and `next_ast_id`, and prunes any trivia entries
+    /// allocated in the discarded range, so the re-parse sees the
+    /// comment stream exactly as it was at the checkpoint.
+    fn checkpoint(&self) -> ParserCheckpoint {
+        ParserCheckpoint {
+            pos: self.pos,
+            comment_cursor: self.comment_cursor,
+            next_ast_id: self.next_ast_id,
+            pending_gt: self.pending_gt,
+        }
+    }
+
+    fn restore(&mut self, cp: ParserCheckpoint) {
+        self.pos = cp.pos;
+        self.comment_cursor = cp.comment_cursor;
+        self.trivia.discard_from(crate::ast::AstId(cp.next_ast_id));
+        self.next_ast_id = cp.next_ast_id;
+        self.pending_gt = cp.pending_gt;
     }
 
     /// Returns true if the parsed inner attributes include `#![TODO]`.
@@ -1846,8 +1951,9 @@ impl Parser {
 
         // Check for for-of syntax: `for let [mut] pattern of array { ... }`
         if self.check(&TokenKind::Let) {
-            // Save position for potential backtrack
-            let saved_pos = self.pos;
+            // Save full parser state for potential backtrack — `parse_pattern`
+            // allocates AstIds and may consume comments via `alloc_ast_id`.
+            let cp = self.checkpoint();
 
             self.advance(); // consume 'let'
 
@@ -1879,7 +1985,7 @@ impl Parser {
             }
 
             // Not a for-of loop, backtrack and parse as C-style for
-            self.pos = saved_pos;
+            self.restore(cp);
         }
 
         // Parentheses are optional for C-style for
@@ -2852,14 +2958,13 @@ impl Parser {
 
     /// Speculatively parse `Type::<Args>::method(...)` after `name::` was already
     /// consumed and `<` is the next token. On any speculative failure, restore the
-    /// position to `checkpoint` (just before the `::`) and produce a bare `Ident`.
+    /// parser to `cp` (just before the `::`) and produce a bare `Ident`.
     fn parse_generic_static_method_call_or_backtrack(
         &mut self,
         start_span: Span,
         name: String,
-        checkpoint: usize,
+        cp: ParserCheckpoint,
     ) -> ParseResult<Expr> {
-        let saved_pending_gt = self.pending_gt;
         self.advance(); // consume <
 
         let mut type_args = Vec::new();
@@ -2915,8 +3020,7 @@ impl Parser {
             })));
         }
 
-        self.pos = checkpoint;
-        self.pending_gt = saved_pending_gt;
+        self.restore(cp);
         Ok(Expr::Ident(IdentExpr {
             id: self.alloc_ast_id(),
             name,
@@ -2980,13 +3084,12 @@ impl Parser {
             self.advance();
             // Check for qualified name (Effect::function) or static method call
             if self.check(&TokenKind::ColonColon) {
-                let checkpoint = self.pos;
+                let cp = self.checkpoint();
                 self.advance(); // consume ::
 
                 if self.check(&TokenKind::Lt) {
-                    return self.parse_generic_static_method_call_or_backtrack(
-                        start_span, name, checkpoint,
-                    );
+                    return self
+                        .parse_generic_static_method_call_or_backtrack(start_span, name, cp);
                 }
                 return self.parse_qualified_path(start_span, name);
             } else if self.check(&TokenKind::Colon) && self.peek_nth(1).kind == TokenKind::LBrace {
@@ -3317,8 +3420,7 @@ impl Parser {
         // to commit to type parsing only if a `=>` follows; otherwise this is
         // a bundled handler whose expression starts with an identifier.
         if matches!(self.peek_kind(), TokenKind::Ident(_)) {
-            let checkpoint = self.pos;
-            let saved_pending_gt = self.pending_gt;
+            let cp = self.checkpoint();
             if let Ok(ty) = self.parse_type() {
                 if self.check(&TokenKind::FatArrow) {
                     self.advance(); // consume `=>`
@@ -3337,12 +3439,10 @@ impl Parser {
                 }
                 // Looked like a type but no `=` followed — fall back to
                 // bundled-handler parsing of the whole expression.
-                self.pos = checkpoint;
-                self.pending_gt = saved_pending_gt;
+                self.restore(cp);
             } else {
                 // parse_type rejected the prefix; treat as a bundled handler.
-                self.pos = checkpoint;
-                self.pending_gt = saved_pending_gt;
+                self.restore(cp);
             }
         }
 

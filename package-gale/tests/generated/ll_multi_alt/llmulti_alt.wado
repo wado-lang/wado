@@ -743,7 +743,7 @@ fn scan_r(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         sg_0: {
             pos = gp_0;
             sg_0_0: {
-                pos = scan_a(tokens, pos, 0);
+                pos = scan_a__follow_0(tokens, pos, 0);
                 if pos < 0 { break sg_0_0; }
                 pos = scan_b(tokens, pos, 0);
                 if pos < 0 { break sg_0_0; }
@@ -814,7 +814,7 @@ fn parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
             gd_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                pos = scan_a(tokens, pos, 0);
+                pos = scan_a__follow_0(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
                 pos = scan_b(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
@@ -823,7 +823,7 @@ fn parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
             }
         }
         if gd_winner == 0 {
-            let a = parse_a(p)?;
+            let a = parse_a__follow_0(p)?;
             let b = parse_b(p)?;
             group_0_inner = Option::<RGroup0>::Some(RGroup0::Alt0(RGroup0Alt0 {
                 a,
@@ -883,6 +883,60 @@ fn parse_b(p: &mut Parser) -> Result<BNode, ParseError> {
         span: Span::new(start, i32::max(start, p.last_end())),
         y,
     });
+}
+
+fn scan_a__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let start = pos;
+    let mut pos = pos;
+    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    scan_alts: {
+        if alt_kind == TK_X {
+            pos = start;
+            try_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_X { break try_0; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
+        } else if alt_kind == TK_Z {
+            pos = start;
+            try_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_Z { break try_1; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
+        } else {
+            return -1;
+        }
+    }
+    return pos;
+}
+
+fn parse_a__follow_0(p: &mut Parser) -> Result<ANode, ParseError> {
+    let start = p.peek().span.start;
+    let kind = p.peek_kind();
+    if kind == TK_X {
+        let x = p.expect(TK_X)?;
+        let y: Option<Token> = null;
+        return Result::<ANode, ParseError>::Ok(ANode::Alt0(AAlt0 {
+            span: Span::new(start, i32::max(start, p.last_end())),
+            x,
+            y,
+        }));
+    }
+    if kind == TK_Z {
+        let z = p.expect(TK_Z)?;
+        return Result::<ANode, ParseError>::Ok(ANode::Alt1(AAlt1 {
+            span: Span::new(start, i32::max(start, p.last_end())),
+            z,
+        }));
+    }
+    return Result::<ANode, ParseError>::Err(ParseError::new(
+        "expected a",
+        p.peek().span,
+        ["TK_X", "TK_Z"],
+    ));
 }
 
 pub fn parse(input: &String) -> Result<RNode, ParseError> {

@@ -1,0 +1,215 @@
+use {
+    ParserRule,
+    Alternative,
+    Element,
+    RuleRefElement,
+    TokenRefElement,
+    RepeatElement,
+    RepeatKind,
+    GroupElement,
+    Visibility,
+} from "./ir.wado";
+use { GenContext } from "./gen_context.wado";
+use { LitToken } from "./lexer_gen.wado";
+use { FollowEnv, FollowSet, build } from "./follow_env.wado";
+
+fn tk(name: String) -> Element {
+    return Element::TokenRef(TokenRefElement::new(name));
+}
+
+fn rr(name: String) -> Element {
+    return Element::RuleRef(RuleRefElement::new(name));
+}
+
+fn opt(elem: Element) -> Element {
+    return Element::Repeat(RepeatElement {
+        kind: RepeatKind::Optional,
+        element: elem,
+        non_greedy: false,
+    });
+}
+
+fn group(alts: Array<Alternative>) -> Element {
+    return Element::Group(GroupElement::new(alts));
+}
+
+fn alt(elements: Array<Element>) -> Alternative {
+    return Alternative::new(elements);
+}
+
+fn mk_rule(name: String, alts: Array<Alternative>) -> ParserRule {
+    return ParserRule::new(name, Visibility::Private, [], alts);
+}
+
+fn mk_ctx(rules: &Array<ParserRule>) -> GenContext {
+    let toks: Array<LitToken> = [];
+    return GenContext::new(rules, &toks);
+}
+
+fn no_start() -> String {
+    return "";
+}
+
+test "FollowEnv::empty has no rules" {
+    let env = FollowEnv::empty();
+    let rule_name = "anything";
+    assert env.tail_greedy(&rule_name).is_empty();
+    let fs = env.rule_follow(&rule_name);
+    assert fs.kinds.is_empty();
+    assert !fs.closed;
+}
+
+test "build: empty grammar produces empty env" {
+    let rules: Array<ParserRule> = [];
+    let mut ctx = mk_ctx(&rules);
+    let start = no_start();
+    let env = build(&rules, &mut ctx, &start);
+    let unknown = "no_such_rule";
+    assert env.tail_greedy(&unknown).is_empty();
+}
+
+test "build: rule with tail-greedy Y? has TK_Y in tail_greedy" {
+    let rules: Array<ParserRule> = [mk_rule("a", [alt([tk("X"), opt(tk("Y"))])])];
+    let mut ctx = mk_ctx(&rules);
+    let start = no_start();
+    let env = build(&rules, &mut ctx, &start);
+    let name = "a";
+    let tg = env.tail_greedy(&name);
+    assert tg.len() == 1;
+    assert tg[0] == "TK_Y";
+}
+
+test "build: rule with mandatory tail has empty tail_greedy" {
+    let rules: Array<ParserRule> = [mk_rule("b", [alt([tk("X"), tk("Y")])])];
+    let mut ctx = mk_ctx(&rules);
+    let start = no_start();
+    let env = build(&rules, &mut ctx, &start);
+    let name = "b";
+    assert env.tail_greedy(&name).is_empty();
+}
+
+test "build: tail-greedy unions across alts" {
+    let rules: Array<ParserRule> = [mk_rule("c", [alt([tk("X"), opt(tk("Y"))]), alt([tk("Z"), opt(tk("W"))])])];
+    let mut ctx = mk_ctx(&rules);
+    let start = no_start();
+    let env = build(&rules, &mut ctx, &start);
+    let name = "c";
+    let tg = env.tail_greedy(&name);
+    let mut sorted = tg;
+    sorted.sort();
+    assert sorted.len() == 2 && sorted[0] == "TK_W" && sorted[1] == "TK_Y";
+}
+
+test "build: transitive tail-greedy through RuleRef" {
+    let rules: Array<ParserRule> = [mk_rule("d", [alt([rr("a")])]), mk_rule("a", [alt([tk("X"), opt(tk("Y"))])])];
+    let mut ctx = mk_ctx(&rules);
+    let start = no_start();
+    let env = build(&rules, &mut ctx, &start);
+    let d = "d";
+    let a = "a";
+    assert env.tail_greedy(&a).len() == 1 && env.tail_greedy(&a)[0] == "TK_Y";
+    assert env.tail_greedy(&d).len() == 1 && env.tail_greedy(&d)[0] == "TK_Y";
+}
+
+test "build: left-recursive rule does not infinitely recurse" {
+    let rules: Array<ParserRule> = [mk_rule("e", [alt([rr("e"), tk("PLUS"), rr("e")]), alt([tk("X")])])];
+    let mut ctx = mk_ctx(&rules);
+    let start = no_start();
+    let env = build(&rules, &mut ctx, &start);
+    let name = "e";
+    let _tg = env.tail_greedy(&name);
+}
+
+test "rule_follow: start rule seeded with EOF when named" {
+    let rules: Array<ParserRule> = [mk_rule("r", [alt([tk("X")])])];
+    let mut ctx = mk_ctx(&rules);
+    let start = "r";
+    let env = build(&rules, &mut ctx, &start);
+    let r = "r";
+    let fs = env.rule_follow(&r);
+    assert fs.closed, "start rule's FOLLOW must be closed";
+    assert fs.kinds.contains("TK_EOF"), "start rule's FOLLOW must contain TK_EOF";
+}
+
+test "rule_follow: callee gets first(suffix) of caller alt" {
+    // r : a B ;
+    let rules: Array<ParserRule> = [mk_rule("r", [alt([rr("a"), tk("B")])]), mk_rule("a", [alt([tk("X")])])];
+    let mut ctx = mk_ctx(&rules);
+    let start = "r";
+    let env = build(&rules, &mut ctx, &start);
+    let a = "a";
+    let fs_a = env.rule_follow(&a);
+    assert fs_a.kinds.contains("TK_B"), `expected TK_B in FOLLOW(a), got {fs_a.kinds.len()} entries`;
+}
+
+test "rule_follow: callee at deep-nullable suffix inherits caller's FOLLOW" {
+    // r : a ;        // a is at deep-nullable suffix (nothing follows in r)
+    // a : X ;
+    // FOLLOW(r) = {EOF}, so FOLLOW(a) ⊇ {EOF}.
+    let rules: Array<ParserRule> = [mk_rule("r", [alt([rr("a")])]), mk_rule("a", [alt([tk("X")])])];
+    let mut ctx = mk_ctx(&rules);
+    let start = "r";
+    let env = build(&rules, &mut ctx, &start);
+    let a = "a";
+    let fs_a = env.rule_follow(&a);
+    assert fs_a.kinds.contains("TK_EOF"), "FOLLOW(a) must include TK_EOF transitively from FOLLOW(r)";
+}
+
+test "rule_follow: ll_ctx_follow grammar yields FOLLOW(a) = {TK_Y, TK_EOF}" {
+    // r : (wrapper b | wrapper) EOF ;
+    // wrapper : a ;
+    // a : X Y? ;
+    // b : Y ;
+    let rules: Array<ParserRule> = [
+        mk_rule("r", [alt([group([alt([rr("wrapper"), rr("b")]), alt([rr("wrapper")])]), tk("EOF")])]),
+        mk_rule("wrapper", [alt([rr("a")])]),
+        mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]),
+        mk_rule("b", [alt([tk("Y")])]),
+    ];
+    let mut ctx = mk_ctx(&rules);
+    let start = "r";
+    let env = build(&rules, &mut ctx, &start);
+    let a = "a";
+    let wrapper = "wrapper";
+    let b = "b";
+    let fs_a = env.rule_follow(&a);
+    let fs_w = env.rule_follow(&wrapper);
+    let fs_b = env.rule_follow(&b);
+    assert fs_a.kinds.contains("TK_Y"), `expected TK_Y in FOLLOW(a) (via wrapper b), got {fs_a.kinds.len()} entries`;
+    assert fs_a.kinds.contains("TK_EOF"), "expected TK_EOF in FOLLOW(a) (via wrapper alone in alt 1)";
+    assert fs_w.kinds.contains("TK_Y"), "expected TK_Y in FOLLOW(wrapper) (via wrapper b in r alt 0)";
+    assert fs_w.kinds.contains("TK_EOF"), "expected TK_EOF in FOLLOW(wrapper) (via wrapper alone in r alt 1)";
+    assert fs_b.kinds.contains("TK_EOF"), "expected TK_EOF in FOLLOW(b) (via outer EOF after group in r)";
+}
+
+test "rule_follow: nullable suffix propagates FOLLOW through Optional" {
+    // r : a b? EOF ;
+    // a : X Y? ;
+    // b : Y ;
+    // FOLLOW(a) ⊇ first(b? EOF) = {Y, EOF}.
+    let rules: Array<ParserRule> = [
+        mk_rule("r", [alt([rr("a"), opt(rr("b")), tk("EOF")])]),
+        mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]),
+        mk_rule("b", [alt([tk("Y")])]),
+    ];
+    let mut ctx = mk_ctx(&rules);
+    let start = "r";
+    let env = build(&rules, &mut ctx, &start);
+    let a = "a";
+    let fs_a = env.rule_follow(&a);
+    assert fs_a.kinds.contains("TK_Y"), "FOLLOW(a) must include TK_Y from b?";
+    assert fs_a.kinds.contains("TK_EOF"), "FOLLOW(a) must include TK_EOF since b? is nullable";
+}
+
+test "rule_follow: terminates on left recursion" {
+    // e : e PLUS e | X ;
+    let rules: Array<ParserRule> = [mk_rule("e", [alt([rr("e"), tk("PLUS"), rr("e")]), alt([tk("X")])])];
+    let mut ctx = mk_ctx(&rules);
+    let start = "e";
+    let env = build(&rules, &mut ctx, &start);
+    let e = "e";
+    let fs_e = env.rule_follow(&e);
+    // FOLLOW(e) at least includes EOF (start) and TK_PLUS (recursive caller's suffix).
+    assert fs_e.kinds.contains("TK_EOF");
+    assert fs_e.kinds.contains("TK_PLUS");
+}

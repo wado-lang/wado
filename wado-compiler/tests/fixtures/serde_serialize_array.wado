@@ -20,15 +20,17 @@ trait Serializer {
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>;
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
-    fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError>;
+    fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError> with stores[self];
 }
 
+// Sub-serializer holds `&mut JsonSerializer` so writes flow back to the
+// outer instance — see serde_serialize_struct.wado for the rationale.
 struct JsonSerializer {
     buf: String,
 }
 
 struct JsonSeqSerializer {
-    ser: JsonSerializer,
+    ser: &mut JsonSerializer,
     count: i32,
 }
 
@@ -45,10 +47,10 @@ impl Serializer for JsonSerializer {
         return Result::<(), SerializeError>::Ok(());
     }
 
-    fn begin_seq(&mut self, len: i32) -> Result<JsonSeqSerializer, SerializeError> {
+    fn begin_seq(&mut self, len: i32) -> Result<JsonSeqSerializer, SerializeError> with stores[self] {
         self.buf.push_str("[");
         return Result::<JsonSeqSerializer, SerializeError>::Ok(JsonSeqSerializer {
-            ser: *self,
+            ser: self,
             count: 0,
         });
     }
@@ -59,7 +61,7 @@ impl SerializeSeq for JsonSeqSerializer {
         if self.count > 0 {
             self.ser.buf.push_str(",");
         }
-        value.serialize::<JsonSerializer>(&mut self.ser);
+        value.serialize::<JsonSerializer>(self.ser);
         self.count += 1;
         return Result::<(), SerializeError>::Ok(());
     }

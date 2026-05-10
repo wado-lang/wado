@@ -92,6 +92,13 @@ fn contains_call(expr: &Expr) -> bool {
 
 pub struct Unparser<'a> {
     comments: &'a CommentMap,
+    /// AstId-keyed leading-trivia store, populated by the parser. When
+    /// present, expression and statement emit paths consult
+    /// `trivia.leading_of(node.id)` immediately before writing the node
+    /// so inline `/*name=*/` comments land attached to the node they
+    /// semantically belong to. The `comments` map is still consulted by
+    /// the residual position-based paths (file-tail dangling, etc.).
+    trivia: Option<&'a crate::comment::TriviaMap>,
     output: String,
     indent_level: usize,
     emitted_comments: IndexSet<usize>,
@@ -102,10 +109,78 @@ impl<'a> Unparser<'a> {
     pub fn new(comments: &'a CommentMap) -> Self {
         Self {
             comments,
+            trivia: None,
             output: String::new(),
             indent_level: 0,
             emitted_comments: IndexSet::default(),
             last_source_line: 0,
+        }
+    }
+
+    /// Attach a parser-populated [`TriviaMap`] for AstId-keyed leading
+    /// comments. Builder-style so existing callers (`Unparser::new(...)`)
+    /// keep working without trivia, and the formatter pipeline opts in
+    /// with `Unparser::new(...).with_trivia(&trivia)`.
+    pub fn with_trivia(mut self, trivia: &'a crate::comment::TriviaMap) -> Self {
+        self.trivia = Some(trivia);
+        self
+    }
+
+    /// Leading trivia for `id`, or an empty slice when no trivia map is
+    /// attached or the id has no recorded leading comments.
+    fn leading_of(&self, id: crate::ast::AstId) -> &'a [crate::comment::Comment] {
+        self.trivia.map(|t| t.leading_of(id)).unwrap_or(&[])
+    }
+
+    /// Emit any leading block-trivia comments for `id` inline at the
+    /// current cursor, each followed by a single space. Used by
+    /// delimited-list emit (`emit_inline_arg_leading`,
+    /// `emit_multiline_arg_leading`) so `foo(/*x=*/1, /*y=*/2)` round-
+    /// trips. `Line` / `DocLine` / `ModuleDoc` comments would force a
+    /// newline mid-expression and are skipped here — those kinds are
+    /// not legal in inline position anyway.
+    fn emit_inline_leading_for(&mut self, id: crate::ast::AstId) {
+        // Collect into a local Vec to satisfy the borrow checker — the
+        // immutable borrow of `self.trivia` cannot live across the
+        // mutable `self.output` / `self.emitted_comments` writes below.
+        let comments: Vec<crate::comment::Comment> = self.leading_of(id).to_vec();
+        for comment in comments {
+            if !matches!(comment.kind, crate::comment::CommentKind::Block) {
+                continue;
+            }
+            if self.emitted_comments.insert(comment.span.start) {
+                self.emit_comment(&comment);
+                self.output.push(' ');
+            }
+        }
+    }
+
+    /// Emit leading trivia for an AST node that is about to be written
+    /// on its own line (e.g. inside a multiline call-args block where
+    /// each arg has been pre-indented). Block comments stay inline with
+    /// a trailing space — same as [`Self::emit_inline_leading_for`] —
+    /// while line / doc / module-doc comments get their own line with
+    /// matching indent so the textual position they had in the source
+    /// is preserved.
+    fn emit_multiline_leading_for(&mut self, id: crate::ast::AstId) {
+        let comments: Vec<crate::comment::Comment> = self.leading_of(id).to_vec();
+        for comment in comments {
+            if !self.emitted_comments.insert(comment.span.start) {
+                continue;
+            }
+            match comment.kind {
+                crate::comment::CommentKind::Block => {
+                    self.emit_comment(&comment);
+                    self.output.push(' ');
+                }
+                crate::comment::CommentKind::Line
+                | crate::comment::CommentKind::DocLine
+                | crate::comment::CommentKind::ModuleDoc => {
+                    self.emit_comment(&comment);
+                    self.output.push('\n');
+                    self.write_indent();
+                }
+            }
         }
     }
 
@@ -1531,7 +1606,7 @@ impl<'a> Unparser<'a> {
         // in that case we skip the single-line attempt entirely.
         if !has_trailing_comma || args.is_empty() {
             let snap = self.snapshot();
-            self.delimited("(", ")", args, Unparser::unparse_expr);
+            self.emit_inline_call_args(args);
             if !self.exceeds_width_since(snap) {
                 return;
             }
@@ -1540,12 +1615,35 @@ impl<'a> Unparser<'a> {
         self.emit_multiline_call_args(args);
     }
 
+    /// Single-line `(arg1, arg2, ...)` form. Each argument's
+    /// AstId-keyed leading block trivia is emitted inline immediately
+    /// before its expression so `foo(/*x=*/1, /*y=*/2)` round-trips.
+    fn emit_inline_call_args(&mut self, args: &[Expr]) {
+        self.output.push('(');
+        for (i, arg) in args.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.emit_inline_leading_for(arg.id());
+            self.unparse_expr(arg);
+        }
+        self.output.push(')');
+    }
+
     /// Emit `(arg1,\n arg2,\n ...)` with a trailing comma at the current indent.
+    /// Same comment-attachment rule as the single-line variant: leading
+    /// block trivia for each arg's `AstId` is emitted on the wrapped line
+    /// before the arg expression.
     fn emit_multiline_call_args(&mut self, args: &[Expr]) {
         self.output.push_str("(\n");
         self.indent_level += 1;
         for arg in args {
             self.write_indent();
+            // Multiline form: line / doc comments must stay on their
+            // own line + indent (block comments stay inline with a
+            // trailing space). The single-line `inline_leading_for`
+            // would silently drop them.
+            self.emit_multiline_leading_for(arg.id());
             self.unparse_expr(arg);
             self.output.push_str(",\n");
         }

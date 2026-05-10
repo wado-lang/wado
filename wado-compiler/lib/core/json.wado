@@ -1572,24 +1572,31 @@ impl JsonDeserializer {
 
 // --- Sub-deserializer implementations ---
 
+// Sub-deserializers hold `&mut JsonDeserializer` so position advances
+// inside the sub-access flow back to the outer `JsonDeserializer` the
+// caller still owns. A value-typed `JsonDeserializer` field would
+// deep-copy on construction (per Wado value semantics), and the
+// caller's `pos` would never see the bytes the sub-access consumed —
+// `from_string`'s post-deserialize "trailing data after value" check
+// would fire on every map / struct / seq.
 struct JsonSeqAccess {
-    de: JsonDeserializer,
+    de: &mut JsonDeserializer,
     first: bool,
 }
 
 struct JsonMapAccess {
-    de: JsonDeserializer,
+    de: &mut JsonDeserializer,
     first: bool,
 }
 
 struct JsonStructAccess {
-    de: JsonDeserializer,
+    de: &mut JsonDeserializer,
     lookup: fn(&String, i32, i32) -> Option<i32>,
     first: bool,
 }
 
 struct JsonVariantAccess {
-    de: JsonDeserializer,
+    de: &mut JsonDeserializer,
     variant: String,
     is_object: bool,
 }
@@ -1973,32 +1980,32 @@ impl Deserializer for JsonDeserializer {
         return Result::Ok(false);
     }
 
-    fn begin_seq(&mut self) -> Result<JsonSeqAccess, DeserializeError> {
+    fn begin_seq(&mut self) -> Result<JsonSeqAccess, DeserializeError> with stores[self] {
         self.expect_char('[' as i32)?;
         return Result::Ok(JsonSeqAccess {
-            de: *self,
+            de: self,
             first: true,
         });
     }
 
-    fn begin_map(&mut self) -> Result<JsonMapAccess, DeserializeError> {
+    fn begin_map(&mut self) -> Result<JsonMapAccess, DeserializeError> with stores[self] {
         self.expect_char('{' as i32)?;
         return Result::Ok(JsonMapAccess {
-            de: *self,
+            de: self,
             first: true,
         });
     }
 
-    fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn(&String, i32, i32) -> Option<i32>) -> Result<JsonStructAccess, DeserializeError> {
+    fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn(&String, i32, i32) -> Option<i32>) -> Result<JsonStructAccess, DeserializeError> with stores[self] {
         self.expect_char('{' as i32)?;
         return Result::Ok(JsonStructAccess {
-            de: *self,
+            de: self,
             lookup,
             first: true,
         });
     }
 
-    fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<JsonVariantAccess, DeserializeError> {
+    fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<JsonVariantAccess, DeserializeError> with stores[self] {
         self.skip_whitespace();
         if self.pos >= self.input.len() {
             return Result::Err(DeserializeError::eof(self.pos as i64));
@@ -2008,7 +2015,7 @@ impl Deserializer for JsonDeserializer {
             '"' => {
                 let name = self.read_json_string()?;
                 return Result::Ok(JsonVariantAccess {
-                    de: *self,
+                    de: self,
                     variant: name,
                     is_object: false,
                 });
@@ -2018,7 +2025,7 @@ impl Deserializer for JsonDeserializer {
                 let name = self.read_json_string()?;
                 self.expect_char(':' as i32)?;
                 return Result::Ok(JsonVariantAccess {
-                    de: *self,
+                    de: self,
                     variant: name,
                     is_object: true,
                 });

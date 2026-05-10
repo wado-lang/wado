@@ -397,6 +397,47 @@ fn test_format_trailing_comment_on_field() {
     assert_eq!(formatted, formatted2, "should be idempotent");
 }
 
+/// Inline `/*name=*/` comments before a function-call argument are common
+/// as ad-hoc named-argument hints when calling a function with bare bool /
+/// integer literals. The formatter must keep the comment attached to the
+/// argument (not silently drop it nor strand it as a free-standing comment
+/// after the statement). Found 2026-05 while landing the package-gale
+/// Phase 5 LL `FollowEnv` work — see `package-gale/antlr4-compatibility.md`.
+#[test]
+fn test_format_preserves_inline_block_comment_in_call_args() {
+    let source = r"fn caller() {
+    foo(1, /*flag=*/true);
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("/*flag=*/"),
+        "inline `/*flag=*/` comment must survive formatting: {formatted}"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
+#[test]
+fn test_format_inline_call_arg_comment_does_not_strand() {
+    let source = r"fn caller() {
+    very_long_function_name(some_long_argument, another_long_argument, /*flag=*/false);
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    for line in formatted.lines() {
+        let trimmed = line.trim();
+        assert!(
+            trimmed != "/*flag=*/",
+            "inline `/*flag=*/` must not become a stranded standalone comment: {formatted}"
+        );
+    }
+    assert!(
+        formatted.contains("/*flag=*/"),
+        "inline `/*flag=*/` comment must survive formatting: {formatted}"
+    );
+}
+
 #[test]
 fn test_format_comment_blank_line_preservation() {
     let source = r"// Top comment

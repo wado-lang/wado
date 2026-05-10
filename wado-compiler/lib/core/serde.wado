@@ -169,11 +169,11 @@ pub trait Serializer {
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>;
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
     fn serialize_null(&mut self) -> Result<(), SerializeError>;
-    fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError>;
-    fn begin_map(&mut self, len: i32) -> Result<Self::MapSerializer, SerializeError>;
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError>;
+    fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError> with stores[self];
+    fn begin_map(&mut self, len: i32) -> Result<Self::MapSerializer, SerializeError> with stores[self];
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError> with stores[self];
     fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>;
-    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<Self::VariantSerializer, SerializeError>;
+    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<Self::VariantSerializer, SerializeError> with stores[self];
 }
 
 
@@ -239,10 +239,10 @@ pub trait Deserializer {
     fn deserialize_char(&mut self) -> Result<char, DeserializeError>;
     fn deserialize_string(&mut self) -> Result<String, DeserializeError>;
     fn is_null(&mut self) -> Result<bool, DeserializeError>;
-    fn begin_seq(&mut self) -> Result<Self::SeqAccess, DeserializeError>;
-    fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError>;
-    fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn(&String, i32, i32) -> Option<i32>) -> Result<Self::StructAccess, DeserializeError>;
-    fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError>;
+    fn begin_seq(&mut self) -> Result<Self::SeqAccess, DeserializeError> with stores[self];
+    fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError> with stores[self];
+    fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn(&String, i32, i32) -> Option<i32>) -> Result<Self::StructAccess, DeserializeError> with stores[self];
+    fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError> with stores[self];
     fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>;
 }
 

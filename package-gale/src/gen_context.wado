@@ -111,6 +111,19 @@ pub struct GenContext {
     /// `intern_follow_variant` to choose between the regular function
     /// and a `__follow_<id>` variant.
     pub ruleref_call_follow: Array<String>,
+    /// FOLLOW set propagated from outside the alt currently being
+    /// walked. Empty during regular `parse_X` / `scan_X` emission;
+    /// set to the variant's mask while emitting a `__follow_<id>`
+    /// variant body (`emit_follow_variant`). Alt walkers consult it
+    /// when the immediate suffix at a `RuleRef` site is deep-nullable —
+    /// without this propagation, a passthrough rule whose body is
+    /// `a` alone would compute an empty FOLLOW for the inner `a`
+    /// even when the variant's caller had already promised a
+    /// non-empty follow. See `package-gale/CLAUDE.md` "Failed
+    /// Approaches" for why this propagation is restricted to
+    /// variant emit (using it in regular emit over-approximates and
+    /// breaks css3 / htmlContent).
+    pub current_outer_follow: Array<String>,
 }
 
 impl GenContext {
@@ -140,6 +153,7 @@ impl GenContext {
             follow_variant_order: [],
             current_follow_mask: [],
             ruleref_call_follow: [],
+            current_outer_follow: [],
         };
     }
 
@@ -396,6 +410,64 @@ impl GenContext {
             Group(_) => false,
             Repeat(_) => false,
         };
+    }
+
+    /// True if this element's `first` set is an *exact* predictor: i.e.
+    /// "the first-set token is present at the input position" implies
+    /// "this element will successfully consume that token (and only
+    /// that token) when it matches". The criterion underlying LL repair
+    /// for nullable suffixes (Phase 5 step 3): a deep-nullable suffix
+    /// can contribute its first set to a `RuleRef`'s caller-follow only
+    /// when every walked element is first-exact. Otherwise the
+    /// suffix's first might be a multi-element alt's leading token
+    /// whose suppression at the preceding `RuleRef` would leave the
+    /// runtime stranded — this is the css3 selector / HTMLParser
+    /// htmlContent hazard documented in `package-gale/CLAUDE.md`.
+    ///
+    /// Single-token elements are trivially first-exact. A `Repeat`
+    /// inherits first-exactness from its inner: `b?` where `b : Y` has
+    /// a single-token inner so its first is exactly `{Y}`. A `Group`
+    /// is first-exact only when every alt is a single first-exact
+    /// element — anything more complex risks the multi-element alt
+    /// hazard.
+    pub fn element_is_first_exact(&mut self, elem: &Element) -> bool {
+        return match elem {
+            TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => true,
+            RuleRef(r) => {
+                let mut visiting: Array<String> = [];
+                self.rule_is_single_token(&r.name, &mut visiting);
+            },
+            Label(lab) => self.element_is_first_exact(&lab.element),
+            Repeat(rep) => self.element_is_first_exact(&rep.element),
+            Group(g) => {
+                let mut all_exact = true;
+                for let alt of &g.alternatives {
+                    if alt.elements.len() != 1 {
+                        all_exact = false;
+                        break;
+                    }
+                    if !self.element_is_first_exact(&alt.elements[0]) {
+                        all_exact = false;
+                        break;
+                    }
+                }
+                all_exact;
+            },
+        };
+    }
+
+    /// True if every element of `elements[start..]` is first-exact —
+    /// the precondition for unioning the suffix's first set into a
+    /// preceding `RuleRef`'s caller-follow when the suffix is
+    /// deep-nullable. See `element_is_first_exact` for the semantic
+    /// argument.
+    pub fn deep_suffix_is_first_exact(&mut self, elements: &Array<Element>, start: i32) -> bool {
+        for let mut i = start; i < elements.len(); i += 1 {
+            if !self.element_is_first_exact(&elements[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     pub fn rule_is_single_token(&mut self, name: &String, visiting: &mut Array<String>) -> bool {
@@ -678,10 +750,10 @@ impl GenContext {
                 let mut stv: Array<String> = [];
                 let single = self.element_is_single_token(&rep.element, &mut stv);
                 let result: Array<String> = if !single {
-                    []
+                    [];
                 } else {
                     let mut fv: Array<String> = [];
-                    self.first_of_element(&rep.element, &mut fv)
+                    self.first_of_element(&rep.element, &mut fv);
                 };
                 result;
             },
@@ -712,22 +784,14 @@ impl GenContext {
     /// flags to decide whether to emit a scan-side body, parse-side
     /// body, or both.
     pub fn intern_follow_variant(&mut self, rule_name: &String, caller_follow: &Array<String>, is_scan: bool) -> Option<i32> {
-        // v1 limitation: variant emit only handles non-LR, single-alt
-        // rules. Refusing registration here keeps call sites pointing
-        // at the regular function so the generated parser stays
-        // well-formed (multi-alt and LR variant emit are deferred —
-        // see TODO.md).
+        // Phase 5 step 6: every rule shape — single-alt, multi-alt, and
+        // left-recursive — now routes variant emit through the unified
+        // `gen_parse_fn_named` / `gen_scan_function_named` path. The
+        // only remaining gate is the unknown-rule guard (which keeps
+        // the registry from referencing rules the emit pass cannot
+        // produce).
         let rule_opt = self.find_rule(rule_name);
-        if let Some(rule) = rule_opt {
-            if rule.alternatives.len() != 1 {
-                return null;
-            }
-            for let alt of &rule.alternatives {
-                if rule_alt_is_left_recursive(alt, rule_name) {
-                    return null;
-                }
-            }
-        } else {
+        if rule_opt matches { None } {
             return null;
         }
         let mut visiting: Array<String> = [];
@@ -748,9 +812,9 @@ impl GenContext {
         let canonical = canonical_kind_set(&intersection);
         let key = `{*rule_name}:{join_pipe(&canonical)}`;
         let existing_id: Option<i32> = if let Some(entry) = self.follow_variant_registry.get(key) {
-            Option::<i32>::Some(entry.id)
+            Option::<i32>::Some(entry.id);
         } else {
-            null
+            null;
         };
         if let Some(id) = existing_id {
             let mut entry = self.follow_variant_registry[key];
@@ -776,8 +840,8 @@ impl GenContext {
     }
 
     /// All registered follow variants in registration (= id) order.
-    /// Consumed by `gen_scan_follow_variants` and
-    /// `gen_parse_follow_variants`. O(n) — each `follow_variant_order`
+    /// Consumed by `emit_follow_variant` via the fixed-point loop in
+    /// `gen_parser`. O(n) — each `follow_variant_order`
     /// entry is the registry key, so we look up directly.
     pub fn follow_variants(&self) -> Array<FollowVariantEntry> {
         let mut out: Array<FollowVariantEntry> = [];

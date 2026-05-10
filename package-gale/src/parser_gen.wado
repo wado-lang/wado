@@ -1060,106 +1060,57 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
         }
         for let mut idx = emitted_count; idx < entries.len(); idx += 1 {
             let entry = &entries[idx];
-            if entry.scan_used {
-                gen_scan_follow_variant(w, entry, ctx);
-            }
-            if entry.parse_used {
-                gen_parse_follow_variant(w, entry, ctx);
-            }
+            emit_follow_variant(w, entry, ctx);
         }
         emitted_count = entries.len();
     }
     gen_parse_entry(w, &grammar.parser_rules);
 }
 
-/// Emit a scan-side follow-aware variant. The body is the regular
-/// `scan_<rule>` body but with `current_follow_mask` set so tail-
-/// position `Optional` / `Star` / `Plus` first sets get `mask`
-/// subtracted before deciding whether to fire / iterate.
+/// Emit one follow-aware rule variant. Routes through the unified
+/// `gen_scan_function_named` / `gen_parse_fn_named` body emitters with
+/// the variant's mask installed in `ctx.current_follow_mask` and
+/// `ctx.current_outer_follow`. Saves and restores every `ctx` field
+/// the body emitters mutate so the trailing `gen_parse_entry` and any
+/// subsequent variant emit see clean state.
 ///
-/// The registry invariant (enforced by `intern_follow_variant`) is
-/// that registered rules exist and are non-LR; we panic on contract
-/// violation rather than silently `return` so a future relaxation in
-/// `intern_follow_variant` cannot leak dangling `__follow_<id>`
-/// references into generated source.
-fn gen_scan_follow_variant(w: &mut CodeWriter, entry: &FollowVariantEntry, ctx: &mut GenContext) {
-    let rule_opt = ctx.find_rule(&entry.rule_name);
-    let rule = if let Some(r) = rule_opt {
-        *r
+/// The unknown-rule branch panics on contract violation:
+/// `intern_follow_variant` already rejects unknown rules, so reaching
+/// the panic indicates a registry / emit mismatch — silently
+/// returning here would leak dangling `__follow_<id>` references into
+/// the generated source.
+fn emit_follow_variant(w: &mut CodeWriter, entry: &FollowVariantEntry, ctx: &mut GenContext) {
+    let rule = if let Some(r) = ctx.find_rule(&entry.rule_name) {
+        r;
     } else {
-        panic(`gen_scan_follow_variant: rule '{entry.rule_name}' not found; intern_follow_variant should reject unknown rules`)
+        panic(
+            `emit_follow_variant: rule '{entry.rule_name}' not found; intern_follow_variant should reject unknown rules`,
+        );
     };
-    for let alt of &rule.alternatives {
-        if is_left_recursive(alt, &rule.name) {
-            panic(`gen_scan_follow_variant: rule '{entry.rule_name}' is left-recursive; intern_follow_variant should reject LR rules`);
-        }
-    }
-    let fn_name = `scan_{rule.snake_name}__follow_{entry.id}`;
-    let saved_mask = ctx.current_follow_mask;
-    ctx.current_follow_mask = entry.mask;
-    gen_scan_function_named(w, &rule, ctx, &fn_name, false);
-    ctx.current_follow_mask = saved_mask;
-}
-
-/// Emit a parse-side follow-aware variant for non-LR single-alt
-/// rules. v1 only supports single-alt non-LR; the registry invariant
-/// (enforced by `intern_follow_variant`) is that registered rules
-/// satisfy both. We panic on contract violation rather than silently
-/// `return` so a future relaxation in `intern_follow_variant` cannot
-/// leak dangling `__follow_<id>` references into generated source.
-///
-/// All `ctx` fields the body sets (`current_rule_name`, `group_counter`,
-/// `alt_gc_starts`, `current_follow_mask`) are saved on entry and
-/// restored on exit so subsequent variant emits and the trailing
-/// `gen_parse_entry` see the same context they would without this
-/// detour.
-fn gen_parse_follow_variant(w: &mut CodeWriter, entry: &FollowVariantEntry, ctx: &mut GenContext) {
-    let rule_opt = ctx.find_rule(&entry.rule_name);
-    let rule = if let Some(r) = rule_opt {
-        *r
-    } else {
-        panic(`gen_parse_follow_variant: rule '{entry.rule_name}' not found; intern_follow_variant should reject unknown rules`)
-    };
-    for let alt of &rule.alternatives {
-        if is_left_recursive(alt, &rule.name) {
-            panic(`gen_parse_follow_variant: rule '{entry.rule_name}' is left-recursive; intern_follow_variant should reject LR rules`);
-        }
-    }
-    if rule.alternatives.len() != 1 {
-        panic(`gen_parse_follow_variant: rule '{entry.rule_name}' has {rule.alternatives.len()} alts; intern_follow_variant should reject multi-alt rules`);
-    }
 
     let saved_rule_name = ctx.current_rule_name;
     let saved_group_counter = ctx.group_counter;
     let saved_alt_gc_starts = ctx.alt_gc_starts;
     let saved_mask = ctx.current_follow_mask;
+    let saved_outer = ctx.current_outer_follow;
 
-    ctx.current_rule_name = rule.name;
-    ctx.group_counter = 0;
-    let type_name = rule_type_name(&rule.name);
-    let fn_name = `parse_{rule.snake_name}__follow_{entry.id}`;
-    let mut alt_gc_starts: Array<i32> = [];
-    let mut gc_running: i32 = 0;
-    for let alt of &rule.alternatives {
-        alt_gc_starts.push(gc_running);
-        gc_running += count_general_groups(&alt.elements);
-    }
-    ctx.alt_gc_starts = alt_gc_starts;
     ctx.current_follow_mask = entry.mask;
+    ctx.current_outer_follow = entry.mask;
 
-    let mut f = FnSpec::new(&fn_name);
-    f.add_param("p", "&mut Parser");
-    f.set_return_type(`Result<{type_name}, ParseError>`);
-    f.emit_begin(w);
-    w.line("let start = p.peek().span.start;");
-    gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], ctx);
-    w.end();
-    w.blank();
+    let scan_name = `scan_{rule.snake_name}__follow_{entry.id}`;
+    let parse_name = `parse_{rule.snake_name}__follow_{entry.id}`;
+    if entry.scan_used {
+        gen_scan_function_named(w, rule, ctx, &scan_name, /*allow_lr_split=*/ true);
+    }
+    if entry.parse_used {
+        gen_parse_fn_named(w, rule, ctx, &parse_name, &scan_name, /*emit_visibility=*/ false);
+    }
 
     ctx.current_rule_name = saved_rule_name;
     ctx.group_counter = saved_group_counter;
     ctx.alt_gc_starts = saved_alt_gc_starts;
     ctx.current_follow_mask = saved_mask;
+    ctx.current_outer_follow = saved_outer;
 }
 
 fn gen_parser_struct(w: &mut CodeWriter) {
@@ -1412,7 +1363,7 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenC
     }
 
     if lr_indices.len() > 0 && allow_lr_split {
-        gen_scan_lr_functions(w, rule, &lr_indices, &non_lr_indices, ctx);
+        gen_scan_lr_functions(w, rule, &lr_indices, &non_lr_indices, ctx, fn_name);
         return;
     }
 
@@ -1508,9 +1459,8 @@ fn single_token_first(elem: &Element) -> String {
 ///   - scan_X(tokens, pos, min_prec = 0): atom + precedence-aware LR-suffix
 ///     loop with token-kind dispatch and second-token overlap resolution.
 ///     Callers without a precedence context omit min_prec and get 0.
-fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, non_lr_indices: &Array<i32>, ctx: &mut GenContext) {
-    let fn_name = `scan_{rule.snake_name}`;
-    let atom_name = `{fn_name}_atom`;
+fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, non_lr_indices: &Array<i32>, ctx: &mut GenContext, fn_name: &String) {
+    let atom_name = `{*fn_name}_atom`;
 
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
     let mut fa = FnSpec::new(&atom_name);
@@ -1536,10 +1486,10 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Arr
     w.blank();
 
     // scan_X_lr_N for each valid LR alt (suffix helper, mirrors parse_X_lr_N).
-    gen_scan_lr_suffix_helpers(w, rule, lr_indices, ctx);
+    gen_scan_lr_suffix_helpers(w, rule, lr_indices, ctx, fn_name);
 
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
-    let mut f2 = FnSpec::new(&fn_name);
+    let mut f2 = FnSpec::new(fn_name);
     f2.add_param("tokens", "&Array<Token>");
     f2.add_param("pos", "i32");
     f2.add_param_spec(ParamSpec {
@@ -1551,7 +1501,7 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Arr
     f2.emit_begin(w);
     w.line(`let mut pos = {atom_name}(tokens, pos);`);
     w.line("if pos < 0 { return -1; }");
-    gen_scan_lr_suffix_dispatch(w, rule, lr_indices, ctx);
+    gen_scan_lr_suffix_dispatch(w, rule, lr_indices, ctx, fn_name);
     w.line("return pos;");
     w.end();
     w.blank();
@@ -1561,8 +1511,7 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Arr
 /// for each valid LR alternative, scanning its suffix (elements[1..]). Self-
 /// recursive calls compile to `scan_X(tokens, pos, prec)` with the same
 /// precedence value the parse side uses (via `compute_lr_self_ref_prec`).
-fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, ctx: &mut GenContext) {
-    let fn_name = `scan_{rule.snake_name}`;
+fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, ctx: &mut GenContext, fn_name: &String) {
     let total_lr = lr_indices.len();
     let lr_suffix_first_tokens = collect_lr_suffix_first_tokens(rule, lr_indices, ctx);
 
@@ -1575,7 +1524,7 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_indices:
             continue;
         }
         let own_prec = total_lr - lr_pos;
-        let suffix_fn = `{fn_name}_lr_{lr_idx}`;
+        let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
         let inner_min_prec = compute_lr_conflict_min_prec(
             alt,
             own_prec,
@@ -1604,7 +1553,7 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_indices:
                         inner_min_prec,
                         &lr_suffix_first_tokens,
                     );
-                    w.line(`pos = {fn_name}(tokens, pos, {prec});`);
+                    w.line(`pos = {*fn_name}(tokens, pos, {prec});`);
                     w.line("if pos < 0 { return -1; }");
                     continue;
                 }
@@ -1632,8 +1581,7 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_indices:
 /// side, with p.peek_kind() replaced by an inline bounds-checked read into
 /// `suffix_kind` and `result = fn(p, ...)?` replaced by `pos = fn(tokens, pos);
 /// if pos < 0 { return -1; }`.
-fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, ctx: &mut GenContext) {
-    let fn_name = `scan_{rule.snake_name}`;
+fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, ctx: &mut GenContext, fn_name: &String) {
     let d = compute_lr_dispatch_data(rule, lr_indices, ctx);
 
     w.begin("loop");
@@ -1659,12 +1607,12 @@ fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_indices
         if group.len() == 1 {
             let lr_idx = d.valid_lr_indices[group[0]];
             let prec = d.lr_precs[group[0]];
-            let suffix_fn = `{fn_name}_lr_{lr_idx}`;
+            let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
             gen_scan_lr_call_with_prec(w, &suffix_fn, prec);
         } else {
             gen_scan_lr_overlap_dispatch(
                 w,
-                &fn_name,
+                fn_name,
                 rule,
                 group,
                 &d.valid_lr_indices,
@@ -2048,9 +1996,9 @@ fn gen_scan_repeat_optional_with_follow(w: &mut CodeWriter, rep: &RepeatElement,
     let mut visiting: Array<String> = [];
     let raw_first = ctx.first_of_element(inner, &mut visiting);
     let combined_follow = if ctx.current_follow_mask.is_empty() {
-        *follow_first
+        *follow_first;
     } else {
-        union_sets(follow_first, &ctx.current_follow_mask)
+        union_sets(follow_first, &ctx.current_follow_mask);
     };
     let first = subtract_sets(&raw_first, &combined_follow);
 
@@ -2080,11 +2028,7 @@ fn gen_scan_elements(w: &mut CodeWriter, elements: &Array<Element>, start: i32, 
         // (those whose right siblings are deep-nullable). Non-tail
         // elements emit unchanged: e.g. `Y? Z` should not skip Y? when
         // Z is required next, even if the caller's follow contains Y.
-        ctx.current_follow_mask = if ctx.tail_is_nullable_deep(elements, i + 1) {
-            saved_mask
-        } else {
-            []
-        };
+        ctx.current_follow_mask = if ctx.tail_is_nullable_deep(elements, i + 1) { saved_mask } else { [] };
         // Caller-side FOLLOW for variant selection: only register a
         // follow-aware variant when the immediate next sibling is
         // strictly required. When the suffix is deep-nullable, its
@@ -2094,11 +2038,7 @@ fn gen_scan_elements(w: &mut CodeWriter, elements: &Array<Element>, start: i32, 
         // ...)*` is the canonical hazard: Space is in both `ws`'s
         // tail-greedy and combinator's first set, but `ws` should still
         // consume Space when there is no combinator to follow).
-        ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(elements, i + 1) {
-            []
-        } else {
-            ctx.first_of_elements_from(elements, i + 1)
-        };
+        ctx.ruleref_call_follow = compute_ruleref_call_follow(elements, i, ctx);
         let elem = &elements[i];
         if let Repeat(rep) = elem {
             if let Optional = rep.kind {
@@ -2153,16 +2093,8 @@ fn gen_scan_elements_in_block(w: &mut CodeWriter, elements: &Array<Element>, sta
     let saved_mask = ctx.current_follow_mask;
     let saved_call_follow = ctx.ruleref_call_follow;
     for let mut i = start; i < end; i += 1 {
-        ctx.current_follow_mask = if ctx.tail_is_nullable_deep(elements, i + 1) {
-            saved_mask
-        } else {
-            []
-        };
-        ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(elements, i + 1) {
-            []
-        } else {
-            ctx.first_of_elements_from(elements, i + 1)
-        };
+        ctx.current_follow_mask = if ctx.tail_is_nullable_deep(elements, i + 1) { saved_mask } else { [] };
+        ctx.ruleref_call_follow = compute_ruleref_call_follow(elements, i, ctx);
         let elem = &elements[i];
         if let Repeat(rep) = elem {
             if let Optional = rep.kind {
@@ -2204,9 +2136,9 @@ fn gen_scan_repeat_body(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenCo
     // claims do not get greedily consumed here. For Plus the
     // mandatory first iteration is unaffected (Plus must consume ≥1).
     let loop_first = if ctx.current_follow_mask.is_empty() {
-        inner_first
+        inner_first;
     } else {
-        subtract_sets(&inner_first, &ctx.current_follow_mask)
+        subtract_sets(&inner_first, &ctx.current_follow_mask);
     };
 
     if let Optional = rep.kind {
@@ -2371,15 +2303,11 @@ fn gen_scan_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, fa
         // bt-scan sets `ctx.scan_ruleref_min_prec` to `i32::MAX` so any LR
         // suffix loop in the target rule short-circuits.
         let follow = ctx.ruleref_call_follow;
-        let variant_id = if follow.is_empty() {
-            null
-        } else {
-            ctx.intern_follow_variant(&r.name, &follow, true)
-        };
+        let variant_id = if follow.is_empty() { null } else { ctx.intern_follow_variant(&r.name, &follow, true) };
         let call = if let Some(id) = variant_id {
-            `scan_{r.snake_name}__follow_{id}(tokens, pos, {ctx.scan_ruleref_min_prec})`
+            `scan_{r.snake_name}__follow_{id}(tokens, pos, {ctx.scan_ruleref_min_prec})`;
         } else {
-            `scan_{r.snake_name}(tokens, pos, {ctx.scan_ruleref_min_prec})`
+            `scan_{r.snake_name}(tokens, pos, {ctx.scan_ruleref_min_prec})`;
         };
         w.line(`pos = {call};`);
         w.line(`if pos < 0 \{ {*fail_stmt} \}`);
@@ -2627,11 +2555,30 @@ fn is_lenient_group(alts: &Array<Alternative>) -> bool {
 }
 
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
+    let fn_name = `parse_{rule.snake_name}`;
+    let scan_fn_name = `scan_{rule.snake_name}`;
+    gen_parse_fn_named(w, rule, ctx, &fn_name, &scan_fn_name, /*emit_visibility=*/ true);
+}
+
+
+/// Body emitter shared by `gen_parse_fn` and the follow-aware variant
+/// pass. The variant pass calls this with `fn_name = parse_<rule>__follow_<id>`
+/// after setting `ctx.current_follow_mask` and `ctx.current_outer_follow`
+/// to the variant's mask, so the regular emit path produces the variant's
+/// body unmodified — the mask drives tail-greedy suppression in
+/// `gen_*_repeat` and the outer follow drives variant selection at inner
+/// `RuleRef` sites without any duplicate code.
+///
+/// `emit_visibility` is `false` for variant emission to suppress the
+/// `pub`/`export` doc comment on the variant function (variants are
+/// implementation details, not part of the rule's exposed surface).
+fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String, emit_visibility: bool) {
     ctx.current_rule_name = rule.name;
     ctx.group_counter = 0;
     let type_name = rule_type_name(&rule.name);
-    let fn_name = `parse_{rule.snake_name}`;
-    gen_visibility_comment(w, &rule.visibility);
+    if emit_visibility {
+        gen_visibility_comment(w, &rule.visibility);
+    }
 
     // Precompute the starting group counter for each alternative.
     // This matches the type gen which processes alts in index order.
@@ -2644,7 +2591,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
     ctx.alt_gc_starts = alt_gc_starts;
 
     if rule.alternatives.len() == 1 {
-        let mut f = FnSpec::new(&fn_name);
+        let mut f = FnSpec::new(fn_name);
         f.add_param("p", "&mut Parser");
         f.set_return_type(`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
@@ -2701,7 +2648,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
                     let alt_idx = non_lr_indices[gi];
                     let alt = &rule.alternatives[alt_idx];
                     let sname = `{strip_suffix(&type_name, "Node")}{case_names[alt_idx]}`;
-                    let helper_name = `{fn_name}_bt_{alt_idx}`;
+                    let helper_name = `{*fn_name}_bt_{alt_idx}`;
 
                     let mut f = FnSpec::new(&helper_name);
                     f.add_param("p", "&mut Parser");
@@ -2726,7 +2673,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
                     // Generate scan helper for this alternative if it has a
                     // scannable prefix (at least one scannable element before
                     // the first unscannable one).
-                    gen_bt_scan_if_possible(w, alt, &fn_name, alt_idx, ctx);
+                    gen_bt_scan_if_possible(w, alt, fn_name, alt_idx, ctx);
                 }
             }
         }
@@ -2741,7 +2688,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
     let has_lr = lr_indices.len() > 0;
 
     if has_lr {
-        let atom_name = `{fn_name}_atom`;
+        let atom_name = `{*fn_name}_atom`;
         let mut f = FnSpec::new(&atom_name);
         f.add_param("p", "&mut Parser");
         f.set_return_type(`Result<{type_name}, ParseError>`);
@@ -2755,11 +2702,11 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
         w.end();
         w.blank();
 
-        gen_lr_suffix_helpers(w, rule, &type_name, &lr_indices, ctx);
+        gen_lr_suffix_helpers(w, rule, &type_name, &lr_indices, ctx, fn_name);
 
         // Generate parse_rule(p, min_prec = 0) — precedence-aware parser.
         // Callers without a precedence context omit min_prec and get 0.
-        let mut f2 = FnSpec::new(&fn_name);
+        let mut f2 = FnSpec::new(fn_name);
         f2.add_param("p", "&mut Parser");
         f2.add_param_spec(ParamSpec {
             name: "min_prec",
@@ -2769,13 +2716,13 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
         f2.set_return_type(`Result<{type_name}, ParseError>`);
         f2.emit_begin(w);
         w.line("let start = p.peek().span.start;");
-        w.line(`let mut result = {fn_name}_atom(p)?;`);
-        gen_lr_suffix_dispatch(w, rule, &type_name, &lr_indices, ctx, true);
+        w.line(`let mut result = {*fn_name}_atom(p)?;`);
+        gen_lr_suffix_dispatch(w, rule, &type_name, &lr_indices, ctx, true, fn_name, scan_fn_name);
         w.line(`return Result::<{type_name}, ParseError>::Ok(result);`);
         w.end();
         w.blank();
     } else {
-        let mut f = FnSpec::new(&fn_name);
+        let mut f = FnSpec::new(fn_name);
         f.add_param("p", "&mut Parser");
         f.set_return_type(`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
@@ -2790,6 +2737,15 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
     }
 }
 
+/// Emit the `span:` field for a constructed AST node. The end is
+/// clamped at `start` so a zero-token alt (every element nullable
+/// and absent) doesn't synthesise a reversed span when `last_end()`
+/// reflects the previous token. Used at every parse-side
+/// rule/variant emit site.
+fn emit_clamped_span_field(w: &mut CodeWriter) {
+    w.line("span: Span::new(start, i32::max(start, p.last_end())),");
+}
+
 fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<String>, struct_name: Option<String>, alt: &Alternative, ctx: &mut GenContext) {
     let gc_start = ctx.group_counter;
     gen_alt_elements(w, &alt.elements, ctx);
@@ -2799,14 +2755,14 @@ fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<Str
         let sname = struct_name.unwrap();
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
         w.indent();
-        w.line("span: Span::new(start, i32::max(start, p.last_end())),");
+        emit_clamped_span_field(w);
         gen_field_assignments(w, &alt.elements, ctx);
         w.dedent();
         w.line("}));");
     } else {
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
         w.indent();
-        w.line("span: Span::new(start, i32::max(start, p.last_end())),");
+        emit_clamped_span_field(w);
         gen_field_assignments(w, &alt.elements, ctx);
         w.dedent();
         w.line("});");
@@ -2821,13 +2777,21 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
     for let mut i = 0; i < skip; i += 1 {
         replay_element_names(&alt.elements[i], &mut name_counts, ctx);
     }
+    let saved_mask = ctx.current_follow_mask;
     let saved_call_follow = ctx.ruleref_call_follow;
     for let mut i = skip; i < alt.elements.len(); i += 1 {
-        ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(&alt.elements, i + 1) {
-            []
+        // Same per-position threading as `gen_alt_elements`: the
+        // variant mask flows down into a tail-position element only
+        // when this position itself is the alt's tail (i.e. every
+        // sibling after it is deep-nullable). Otherwise the mask is
+        // cleared so a non-tail `Repeat` here does not accidentally
+        // suppress on the variant's caller-follow.
+        ctx.current_follow_mask = if ctx.tail_is_nullable_deep(&alt.elements, i + 1) {
+            saved_mask
         } else {
-            ctx.first_of_elements_from(&alt.elements, i + 1)
+            []
         };
+        ctx.ruleref_call_follow = compute_ruleref_call_follow(&alt.elements, i, ctx);
         let elem = &alt.elements[i];
         if let Repeat(rep) = elem {
             if let Optional = rep.kind {
@@ -2851,6 +2815,7 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
         }
         ctx.ruleref_call_follow = [];
     }
+    ctx.current_follow_mask = saved_mask;
     ctx.ruleref_call_follow = saved_call_follow;
 
     ctx.group_counter = gc_start;
@@ -2858,14 +2823,14 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
         let sname = struct_name.unwrap();
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
         w.indent();
-        w.line("span: Span::new(start, i32::max(start, p.last_end())),");
+        emit_clamped_span_field(w);
         gen_field_assignments(w, &alt.elements, ctx);
         w.dedent();
         w.line("}));");
     } else {
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
         w.indent();
-        w.line("span: Span::new(start, i32::max(start, p.last_end())),");
+        emit_clamped_span_field(w);
         gen_field_assignments(w, &alt.elements, ctx);
         w.dedent();
         w.line("});");
@@ -2922,16 +2887,8 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut Gen
     let saved_call_follow = ctx.ruleref_call_follow;
     let mut name_counts: Array<[String, i32]> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
-        ctx.current_follow_mask = if ctx.tail_is_nullable_deep(elements, i + 1) {
-            saved_mask
-        } else {
-            []
-        };
-        ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(elements, i + 1) {
-            []
-        } else {
-            ctx.first_of_elements_from(elements, i + 1)
-        };
+        ctx.current_follow_mask = if ctx.tail_is_nullable_deep(elements, i + 1) { saved_mask } else { [] };
+        ctx.ruleref_call_follow = compute_ruleref_call_follow(elements, i, ctx);
         let elem = &elements[i];
         if let Repeat(rep) = elem {
             if let Optional = rep.kind {
@@ -2962,16 +2919,12 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut Gen
 fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
     let saved_call_follow = ctx.ruleref_call_follow;
     for let mut i = 0; i < elements.len(); i += 1 {
-        // Per-position threading: only register a follow-aware variant
-        // when the immediate next sibling is strictly required (suffix
-        // not deep-nullable). Nullable suffixes keep `ruleref_call_follow`
-        // empty so the regular function is called — see
-        // `gen_scan_elements` for the rationale.
-        ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(elements, i + 1) {
-            []
-        } else {
-            ctx.first_of_elements_from(elements, i + 1)
-        };
+        // Per-position threading. The exact policy (immediate suffix's
+        // first set, or — for first-exact deep-nullable suffixes —
+        // unioned with `current_outer_follow`) lives in
+        // `compute_ruleref_call_follow`; see its doc-comment for the
+        // soundness argument.
+        ctx.ruleref_call_follow = compute_ruleref_call_follow(elements, i, ctx);
         let elem = &elements[i];
         if let Repeat(rep) = elem {
             if rep.non_greedy {
@@ -3029,14 +2982,14 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         // emission only handles non-LR rules.
         let use_prec = ctx.prefix_self_ref_min_prec > 0 && r.name == ctx.current_rule_name;
         let variant_id = if !use_prec && !follow.is_empty() {
-            ctx.intern_follow_variant(&r.name, &follow, false)
+            ctx.intern_follow_variant(&r.name, &follow, false);
         } else {
-            null
+            null;
         };
         let fn_name = if let Some(id) = variant_id {
-            `parse_{r.snake_name}__follow_{id}`
+            `parse_{r.snake_name}__follow_{id}`;
         } else {
-            `parse_{r.snake_name}`
+            `parse_{r.snake_name}`;
         };
         if use_prec {
             w.line(`let {field_name} = {fn_name}(p, {ctx.prefix_self_ref_min_prec})?;`);
@@ -3142,9 +3095,9 @@ fn gen_repeat_body(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext
     // caller claims do not get greedily consumed here. For Plus the
     // first iteration is mandatory; the mask only narrows the loop.
     let loop_first = if ctx.current_follow_mask.is_empty() {
-        first
+        first;
     } else {
-        subtract_sets(&first, &ctx.current_follow_mask)
+        subtract_sets(&first, &ctx.current_follow_mask);
     };
     let mask_active = !ctx.current_follow_mask.is_empty() && loop_first.len() != first.len();
 
@@ -3500,6 +3453,40 @@ fn gen_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenC
     }
 }
 
+/// Per-position caller-side FOLLOW used by alt walkers to decide
+/// whether to register a `__follow_<id>` variant for a `RuleRef` at
+/// position `i` in `elements`.
+///
+/// - When the immediate suffix `elements[i+1..]` is strictly required
+///   (not deep-nullable), use its `first` set verbatim.
+/// - When the suffix is deep-nullable AND first-exact (every walked
+///   element's first uniquely predicts that element matching, see
+///   `GenContext::element_is_first_exact`), union the suffix's first
+///   with the outer follow. This closes `ll_nullable_suffix`'s gap:
+///   `b?` where `b : Y` is first-exact, so `Y` legitimately enters
+///   the preceding `RuleRef`'s follow.
+/// - When the suffix is deep-nullable but NOT first-exact (e.g. a
+///   `Star` over a multi-element Group like CSS3 `(combinator sss
+///   ws)*`), drop the suffix's first and propagate only the outer
+///   follow. This is the "first-exact deep-nullable suffix"
+///   soundness invariant from `antlr4-compatibility.md`'s
+///   "LL prediction → Soundness invariants" section: `combinator`'s
+///   first contains `Space` but `combinator` requires `Space sss`
+///   together, so suppressing `Space` at the preceding `ws` would
+///   leave the runtime stranded on a lone `Space`. See also
+///   `package-gale/CLAUDE.md` "Failed Approaches" #3 for the
+///   historical narrative of how this guard was narrowed back.
+fn compute_ruleref_call_follow(elements: &Array<Element>, i: i32, ctx: &mut GenContext) -> Array<String> {
+    let first = ctx.first_of_elements_from(elements, i + 1);
+    if !ctx.tail_is_nullable_deep(elements, i + 1) {
+        return first;
+    }
+    if ctx.deep_suffix_is_first_exact(elements, i + 1) {
+        return union_sets(&first, &ctx.current_outer_follow);
+    }
+    return ctx.current_outer_follow;
+}
+
 fn union_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
     let mut result: Array<String> = [];
     let mut seen = TreeSet::<String>::new();
@@ -3535,9 +3522,9 @@ fn gen_repeat_with_follow(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut Gen
     // mask so the subtracted set reflects both same-alt siblings and
     // outer-rule follow when emitting a follow-aware variant body.
     let combined_follow = if ctx.current_follow_mask.is_empty() {
-        *follow_first
+        *follow_first;
     } else {
-        union_sets(follow_first, &ctx.current_follow_mask)
+        union_sets(follow_first, &ctx.current_follow_mask);
     };
     let first = subtract_sets(&raw_first, &combined_follow);
 
@@ -3880,7 +3867,9 @@ fn gen_optional_with_scan_guard(w: &mut CodeWriter, inner: &Element, ctx: &mut G
     // codegen-time error.
     let mut visiting: Array<String> = [];
     if !ctx.is_element_scannable(inner, &mut visiting) {
-        panic("gen_optional_with_scan_guard: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
+        panic(
+            "gen_optional_with_scan_guard: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')",
+        );
     }
     let scan_pos_var = emit_opt_scan_guard(w, inner, ctx, name_counts);
     w.begin(`if {scan_pos_var} >= 0`);
@@ -4062,7 +4051,9 @@ fn gen_storable_optional_with_scan_guard(w: &mut CodeWriter, inner: &Element, ct
     // been removed; an unscannable inner is a codegen-time error.
     let mut visiting: Array<String> = [];
     if !ctx.is_element_scannable(inner, &mut visiting) {
-        panic("gen_storable_optional_with_scan_guard: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
+        panic(
+            "gen_storable_optional_with_scan_guard: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')",
+        );
     }
     let scan_pos_var = emit_opt_scan_guard(w, inner, ctx, name_counts);
     w.begin(`let {opt_name}: Option<{type_str}> = if {scan_pos_var} >= 0`);
@@ -4188,12 +4179,8 @@ fn list_label_info(elem: &Element, ctx: &mut GenContext) -> Option<[String, Stri
     if let Label(lab) = elem {
         if lab.list {
             let inner = element_field_info(&lab.element, ctx);
-            return Option::<[String, String, String, String]>::Some([
-                lab.field_name,
-                `Array<{inner.1}>`,
-                inner.1,
-                inner.0,
-            ]);
+            return Option::<[String, String, String, String]>::Some([lab.field_name, `Array<{inner.1}>`, inner.1,
+                inner.0]);
         }
     }
     return null;
@@ -4520,7 +4507,9 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
                 sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
 
                 if !rule_ref_group_all_scannable(&sorted_group, alts, ctx) {
-                    panic("rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
+                    panic(
+                        "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')",
+                    );
                 }
                 gen_rule_ref_group_scan_dispatch(w, &sorted_group, alts, &opt_var, type_name, ctx, name_counts);
             }
@@ -4657,7 +4646,9 @@ fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
             sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
 
             if !rule_ref_group_all_scannable(&sorted_group, alts, ctx) {
-                panic("rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
+                panic(
+                    "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')",
+                );
             }
             gen_rule_ref_group_scan_dispatch(w, &sorted_group, alts, &inner_var, type_name, ctx, name_counts);
         }
@@ -4895,7 +4886,9 @@ fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, alt_
 /// unscannable alt is a codegen-time error.
 fn gen_general_group_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
     if !general_group_all_scannable(sorted_group, alts, ctx) {
-        panic("general group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
+        panic(
+            "general group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')",
+        );
     }
     gen_general_group_scan_dispatch(w, alts, sorted_group, type_name, inner_var, ctx, name_counts, group_index);
 }
@@ -5066,7 +5059,9 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
         // Every alt's remaining elements must be fully scannable. Backtracking
         // has been removed; an unscannable suffix is a codegen-time error.
         if !ambiguous_node_all_scannable(&sorted, alts, ctx, skip) {
-            panic("prediction Ambiguous node has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')");
+            panic(
+                "prediction Ambiguous node has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')",
+            );
         }
         gen_group_scan_dispatch(w, &sorted, alts, ctx, name_counts, skip);
         return;
@@ -5136,19 +5131,25 @@ fn gen_group_scan_dispatch(w: &mut CodeWriter, sorted: &Array<i32>, alts: &Array
             w.else_begin(`else if {winner_var} == {k}`);
         }
         let mut nc: Array<[String, i32]> = [];
+        let saved_mask = ctx.current_follow_mask;
         let saved_call_follow = ctx.ruleref_call_follow;
         for let mut i = skip; i < alt.elements.len(); i += 1 {
-            // Same per-position follow threading that `gen_alt_elements`
-            // does, but only register a variant when the next sibling is
-            // strictly required (see `gen_scan_elements`).
-            ctx.ruleref_call_follow = if ctx.tail_is_nullable_deep(&alt.elements, i + 1) {
-                []
+            // Same per-position threading as `gen_alt_elements`. Mask
+            // propagates only into tail-position elements; cleared
+            // otherwise so a `Repeat` here does not accidentally
+            // suppress on the variant's caller-follow. See
+            // `compute_ruleref_call_follow` for the variant-selection
+            // policy on the call-follow side.
+            ctx.current_follow_mask = if ctx.tail_is_nullable_deep(&alt.elements, i + 1) {
+                saved_mask
             } else {
-                ctx.first_of_elements_from(&alt.elements, i + 1)
+                []
             };
+            ctx.ruleref_call_follow = compute_ruleref_call_follow(&alt.elements, i, ctx);
             gen_element(w, &alt.elements[i], ctx, &mut nc);
             ctx.ruleref_call_follow = [];
         }
+        ctx.current_follow_mask = saved_mask;
         ctx.ruleref_call_follow = saved_call_follow;
     }
     w.end();
@@ -5285,8 +5286,7 @@ fn compute_lr_self_ref_prec(alt: &Alternative, ei: i32, last_self_ref_idx: i32, 
     return prec;
 }
 
-fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, ctx: &mut GenContext) {
-    let fn_name = `parse_{rule.snake_name}`;
+fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, ctx: &mut GenContext, fn_name: &String) {
     let case_names = case_names_for_rule(&rule.alternatives);
     let total_lr = lr_indices.len();
     let lr_suffix_first_tokens = collect_lr_suffix_first_tokens(rule, lr_indices, ctx);
@@ -5302,7 +5302,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         let own_prec = total_lr - lr_pos;
 
         let sname = `{strip_suffix(type_name, "Node")}{case_names[lr_idx]}`;
-        let suffix_fn = `{fn_name}_lr_{lr_idx}`;
+        let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
 
         // Compute min_prec for self-recursive calls in this helper
         let inner_min_prec = compute_lr_conflict_min_prec(
@@ -5329,14 +5329,14 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         // resulting struct field has type `Array<T>` rather than `T` —
         // the helper must build `[left]` so the literal matches the field.
         let first_binding = if let Label(lab) = &alt.elements[0] {
-            lab.field_name
+            lab.field_name;
         } else {
-            rule.field_name
+            rule.field_name;
         };
         let first_is_list_label = if let Label(lab) = &alt.elements[0] {
-            lab.list
+            lab.list;
         } else {
-            false
+            false;
         };
         dedup_name(&first_binding, &mut name_counts);
 
@@ -5357,7 +5357,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                         inner_min_prec,
                         &lr_suffix_first_tokens,
                     );
-                    w.line(`let {field_name} = {fn_name}(p, {prec})?;`);
+                    w.line(`let {field_name} = {*fn_name}(p, {prec})?;`);
                 } else {
                     let elem_fn = `parse_{rr.snake_name}`;
                     let field_name = dedup_name(&rr.field_name, &mut name_counts);
@@ -5379,7 +5379,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                             inner_min_prec,
                             &lr_suffix_first_tokens,
                         );
-                        w.line(`let {inner_name} = {fn_name}(p, {prec})?;`);
+                        w.line(`let {inner_name} = {*fn_name}(p, {prec})?;`);
                         if lab.list {
                             // Type-annotate the local so `[inner]` parses as
                             // `Array<T>` rather than a 1-tuple `[T]`.
@@ -5411,7 +5411,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         let first_field = first_binding;
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case_names[lr_idx]}({sname} \{`);
         w.indent();
-        w.line("span: Span::new(start, i32::max(start, p.last_end())),");
+        emit_clamped_span_field(w);
         if first_is_list_label {
             // Cast so `[left]` matches the `Array<T>` field type rather
             // than the inferred 1-tuple `[T]`.
@@ -5484,7 +5484,7 @@ fn compute_lr_second_token(shared_token: &String, elements: &Array<Element>, ctx
     return [];
 }
 
-fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32, use_prec: bool) {
+fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, scan_suffix_fn: &String, prec: i32, use_prec: bool) {
     // First-token dispatch alone can mis-predict an LR continuation when the
     // suffix's first token is shared with the atom (e.g.
     // `statement: letterA | statement letterA 'b'`). In that case the suffix
@@ -5492,10 +5492,9 @@ fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32, use_
     // mid-suffix and corrupting any enclosing repetition driver. Consult the
     // scan twin first — it has no side effects — and only commit to the
     // (mutating) parse when the scan confirms the suffix would succeed.
-    let scan_fn = `scan_{strip_parse_prefix(suffix_fn)}`;
     if use_prec {
         w.begin(`if {prec} >= min_prec`);
-        w.begin(`if {scan_fn}(&p.tokens, p.pos) < 0`);
+        w.begin(`if {*scan_suffix_fn}(&p.tokens, p.pos) < 0`);
         w.line("break;");
         w.end();
         w.line(`result = {*suffix_fn}(p, result, start)?;`);
@@ -5503,30 +5502,14 @@ fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32, use_
         w.line("break;");
         w.end();
     } else {
-        w.begin(`if {scan_fn}(&p.tokens, p.pos) < 0`);
+        w.begin(`if {*scan_suffix_fn}(&p.tokens, p.pos) < 0`);
         w.line("break;");
         w.end();
         w.line(`result = {*suffix_fn}(p, result, start)?;`);
     }
 }
 
-fn strip_parse_prefix(parse_fn: &String) -> String {
-    // `suffix_fn` is generated as `parse_<rule>_lr_<idx>`; the scan twin is
-    // `scan_<rule>_lr_<idx>`. Drop the leading `parse_` so the caller can
-    // prepend `scan_`.
-    let prefix = "parse_";
-    if parse_fn.len() < prefix.len() {
-        panic("strip_parse_prefix: input does not start with `parse_`");
-    }
-    for let mut i = 0; i < prefix.len(); i += 1 {
-        if parse_fn.get_byte(i) != prefix.get_byte(i) {
-            panic("strip_parse_prefix: input does not start with `parse_`");
-        }
-    }
-    return parse_fn.substr_bytes(prefix.len(), parse_fn.len());
-}
-
-fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRule, group: &Array<i32>, valid_lr_indices: &Array<i32>, lr_precs: &Array<i32>, suffix_first_sets: &Array<Array<String>>, ctx: &mut GenContext, use_prec: bool) {
+fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &String, rule: &ParserRule, group: &Array<i32>, valid_lr_indices: &Array<i32>, lr_precs: &Array<i32>, suffix_first_sets: &Array<Array<String>>, ctx: &mut GenContext, use_prec: bool) {
     // Pre-convert suffix_first_sets to TreeSets for efficient lookup.
     let mut suffix_sets: Array<TreeSet<String>> = [];
     for let sfs of suffix_first_sets {
@@ -5559,13 +5542,14 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRu
                 let lr_idx = valid_lr_indices[group[k]];
                 let prec = lr_precs[group[k]];
                 let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
+                let scan_suffix_fn = `{*scan_fn_name}_lr_{lr_idx}`;
                 if first_branch {
                     w.begin(`if suffix_kind == {*tk}`);
                     first_branch = false;
                 } else {
                     w.else_begin(`else if suffix_kind == {*tk}`);
                 }
-                gen_lr_call_with_prec(w, &suffix_fn, prec, use_prec);
+                gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec);
                 emitted.insert(*tk);
             }
         }
@@ -5610,12 +5594,13 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRu
             let prec = lr_precs[group[k]];
             let alt = &rule.alternatives[lr_idx];
             let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
+            let scan_suffix_fn = `{*scan_fn_name}_lr_{lr_idx}`;
             if k == last_k {
                 if sub_first {
-                    gen_lr_call_with_prec(w, &suffix_fn, prec, use_prec);
+                    gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec);
                 } else {
                     w.else_begin("else");
-                    gen_lr_call_with_prec(w, &suffix_fn, prec, use_prec);
+                    gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec);
                     w.end();
                 }
             } else {
@@ -5627,7 +5612,7 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRu
                 } else {
                     w.else_begin(`else if {sub_cond}`);
                 }
-                gen_lr_call_with_prec(w, &suffix_fn, prec, use_prec);
+                gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec);
             }
         }
         emitted.insert(*shared_tk);
@@ -5688,8 +5673,7 @@ fn compute_lr_dispatch_data(rule: &ParserRule, lr_indices: &Array<i32>, ctx: &mu
     };
 }
 
-fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, ctx: &mut GenContext, use_prec: bool) {
-    let fn_name = `parse_{rule.snake_name}`;
+fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, ctx: &mut GenContext, use_prec: bool, fn_name: &String, scan_fn_name: &String) {
     let d = compute_lr_dispatch_data(rule, lr_indices, ctx);
 
     w.begin("loop");
@@ -5715,12 +5699,14 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
         if group.len() == 1 {
             let lr_idx = d.valid_lr_indices[group[0]];
             let prec = d.lr_precs[group[0]];
-            let suffix_fn = `{fn_name}_lr_{lr_idx}`;
-            gen_lr_call_with_prec(w, &suffix_fn, prec, use_prec);
+            let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
+            let scan_suffix_fn = `{*scan_fn_name}_lr_{lr_idx}`;
+            gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec);
         } else {
             gen_lr_overlap_dispatch(
                 w,
-                &fn_name,
+                fn_name,
+                scan_fn_name,
                 rule,
                 group,
                 &d.valid_lr_indices,
@@ -6388,8 +6374,8 @@ fn alt_sort_priority(alt: &Alternative) -> i32 {
 fn sort_group_by_mandatory_count_desc(group: &mut Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext) {
     for let mut i = 0; i < group.len(); i += 1 {
         for let mut j = i + 1; j < group.len(); j += 1 {
-            let li = mandatory_element_count(&alts[group[i]], ctx);
-            let lj = mandatory_element_count(&alts[group[j]], ctx);
+            let li = ll_match_length(&alts[group[i]], ctx);
+            let lj = ll_match_length(&alts[group[j]], ctx);
             let mut swap = false;
             if lj > li {
                 swap = true;
@@ -6413,20 +6399,41 @@ fn sort_group_by_mandatory_count_desc(group: &mut Array<i32>, alts: &Array<Alter
     }
 }
 
-/// Count of MANDATORY top-level elements in `alt` — i.e. those that
-/// always consume at least one input token. A `Repeat (Optional|Star)`
-/// is nullable. A `RuleRef` to a deeply-nullable rule (e.g. `r : ;`
-/// or `r : a*` where `a` itself is nullable) is also nullable —
-/// shallow `is_nullable` would over-count it. Used by
-/// `sort_group_by_mandatory_count_desc` to detect when one alt's
-/// "extra" elements are mandatory vs. nullable, so SQLite-shaped
-/// `( x (',' x)* | y )` ties on mandatory length but LL-style
-/// `( a b | a )` (mandatory `b`) does not.
-fn mandatory_element_count(alt: &Alternative, ctx: &mut GenContext) -> i32 {
+/// LL-aware "match length" for `alt`, used to sort group alternatives so
+/// the more specific LL alt wins on overlap-prefix ties. Counts every
+/// mandatory top-level element plus every *trailing* deep-nullable
+/// element that is first-exact (single-token-derived; see
+/// `GenContext::element_is_first_exact`).
+///
+/// Why this is the right key: a first-exact nullable trailing element
+/// like `b?` (where `b : Y`) is "1 token whose presence is decisive" —
+/// when `Y` is in the input, alt 0 of `(a b? | a)` is the LL-correct
+/// pick because `b?` will fire and consume `Y`. Counting it as a
+/// pseudo-mandatory token sorts alt 0 ahead of the bare-RuleRef
+/// catch-all alt 1, mirroring ANTLR4's full-context LL preference for
+/// the longer meaningful match. Multi-element nullable structures
+/// (SQLite's `(',' tor)*` Star) stay at the original count because
+/// their first set is not first-exact, preserving the join-clause
+/// catch-all behaviour their grammars depend on.
+///
+/// The `seen_mandatory` gate restricts the trailing-nullable bonus to
+/// nullables that follow a committed token. A *leading* nullable like
+/// `b?` in `( b? a c | a c )` cannot disambiguate length: the runtime
+/// has not yet committed to either alt at that position, so claiming
+/// "alt 0 has 3 tokens" is no better signal than "alt 1 has 2" —
+/// either alt's `a c` will match. Counting only post-mandatory
+/// nullables means the bonus fires exactly when it can shorten the
+/// LL decision: after a shared prefix has committed, a tail-position
+/// `b?` whose presence is decisive elects the longer alt.
+fn ll_match_length(alt: &Alternative, ctx: &mut GenContext) -> i32 {
     let mut count: i32 = 0;
+    let mut seen_mandatory: bool = false;
     for let elem of &alt.elements {
         let mut visiting: Array<String> = [];
         if !ctx.element_is_nullable_deep(elem, &mut visiting) {
+            count += 1;
+            seen_mandatory = true;
+        } else if seen_mandatory && ctx.element_is_first_exact(elem) {
             count += 1;
         }
     }
