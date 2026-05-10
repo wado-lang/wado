@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778391901494,
+  "lastUpdate": 1778398576115,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20737,6 +20737,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2ffd547805bdbabaa8d193e0e1df17794871b66c"
         },
         "date": 1778391901265,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 511983,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "836aad835ee331a6375b5b917010661af4cf81cd",
+          "message": "Merge pull request #1031 from wado-lang/claude/antlr4-compatibility-review-DXKuF\n\nfeat(gale): close 4 LL prediction gaps via FollowEnv redesign + value-copy fixes",
+          "timestamp": "2026-05-10T16:29:48+09:00",
+          "tree_id": "270f46b0a03f61559e56d0512d3e1930e6cd84fd",
+          "url": "https://github.com/wado-lang/wado/commit/836aad835ee331a6375b5b917010661af4cf81cd"
+        },
+        "date": 1778398575747,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
