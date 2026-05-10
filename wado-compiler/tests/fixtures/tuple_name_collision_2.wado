@@ -1,18 +1,16 @@
-// TODO: user-defined generic struct "Tuple<T>" should coexist with built-in tuples.
-// Currently ICEs due to mangled name collision (both mangle to "Tuple<i32>").
-// Fix requires including module_source in mangled names for GenericInstance types.
-#![TODO]
+// A user-defined generic struct `Tuple<T>` must coexist with the built-in
+// tuple type. Previously the two mangled to the same Wasm GC type name
+// (`Tuple<i32>` for both shapes); name mangling now incorporates the
+// owning module's source so the instances stay distinct.
 
 struct Tuple<T> {
     value: T,
 }
 
 test "user Tuple<T> and built-in tuple coexist" {
-    // User-defined Tuple<i32>
     let t = Tuple { value: 42 };
     assert t.value == 42;
 
-    // Built-in tuple [i32, i32]
     let pair = [10, 20];
     assert pair.0 == 10;
     assert pair.1 == 20;
