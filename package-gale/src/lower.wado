@@ -57,6 +57,7 @@ use {
 use { LitToken } from "./lexer_gen.wado";
 use { GenContext } from "./gen_context.wado";
 use { strip_suffix } from "./gen_util.wado";
+use { TreeMap } from "core:collections";
 use {
     LoweredGrammar,
     Rule,
@@ -86,6 +87,7 @@ use {
     GroupShape,
     FieldDecl,
     FieldKind,
+    KindSet,
 } from "./gir.wado";
 
 /// Lower a `Grammar` to `LoweredGrammar`. The returned value is the
@@ -108,6 +110,12 @@ pub fn lower(grammar: &Grammar, lit_tokens: &Array<LitToken>) -> LoweredGrammar 
     for let rule of &grammar.parser_rules {
         parser_rules.push(lower_rule(rule, &mut ctx));
     }
+    // Phase 2.7 — pre-intern multi-element token-kind sets that
+    // surface in dispatch branches and `Op::Excluded` kinds. The
+    // resulting registry is the source of truth for `_gale_kind_set_<id>`
+    // helper-function emission; emit consults it in lockstep with
+    // the dispatch / op walk it does anyway.
+    let kind_sets = intern_kind_sets(&parser_rules);
     return LoweredGrammar {
         name: grammar.name,
         source_files: grammar.source_files,
@@ -120,9 +128,149 @@ pub fn lower(grammar: &Grammar, lit_tokens: &Array<LitToken>) -> LoweredGrammar 
         parser_rules,
         // Phase 2.6 — follow-variant pre-pass populates this.
         variant_rules: [],
-        // Phase 2.7 — kind-set pre-interning populates this.
-        kind_sets: [],
+        kind_sets,
     };
+}
+
+/// Walk every lowered `Rule` and intern every multi-element
+/// token-kind set into a single `KindSet` registry. The resulting
+/// `Array<KindSet>` is keyed by registration order — single-token
+/// sets are not interned (emit renders those as `<expr> == TK_X`
+/// directly), and identical sets share a single `id` so the
+/// generated `_gale_kind_set_<id>` helper is shared.
+///
+/// Phase 2.7 covers dispatch shapes lowered by Phase 2.3a (`Direct`)
+/// and `Op::Excluded.kinds`. Other dispatches (`Predict` /
+/// `Tournament` / `PartialScan` / `SaveRewind`) and other
+/// token-set fields (`WithFollowSubtraction.effective_first`,
+/// `NonGreedy.exit_*`, `OptionalLookahead.sigs`) get their own
+/// arms once their lowerings exist.
+fn intern_kind_sets(parser_rules: &Array<Rule>) -> Array<KindSet> {
+    let mut registry: TreeMap<String, i32> = TreeMap::<String, i32>::new();
+    let mut sets: Array<KindSet> = [];
+    for let rule of parser_rules {
+        walk_rule_for_kind_sets(rule, &mut registry, &mut sets);
+    }
+    return sets;
+}
+
+fn walk_rule_for_kind_sets(
+    rule: &Rule,
+    registry: &mut TreeMap<String, i32>,
+    sets: &mut Array<KindSet>,
+) {
+    match *rule {
+        Simple(s) => walk_alt_body_for_kind_sets(&s.body, registry, sets),
+        MultiAlt(m) => {
+            walk_dispatch_for_kind_sets(&m.dispatch, registry, sets);
+            walk_dispatch_for_kind_sets(&m.scan_dispatch, registry, sets);
+            for let alt of &m.alts {
+                walk_alt_body_for_kind_sets(alt, registry, sets);
+            }
+        },
+        // Phase 2.4 — left-recursive rules walk both atom and lr_alts.
+        // Until that lowering exists we never see a LeftRecursive
+        // here (`lower_rule` panics earlier).
+        LeftRecursive(_) => panic("intern_kind_sets: LeftRecursive not yet reachable"),
+    };
+}
+
+fn walk_dispatch_for_kind_sets(
+    d: &MultiAltDispatch,
+    registry: &mut TreeMap<String, i32>,
+    sets: &mut Array<KindSet>,
+) {
+    match *d {
+        Direct(dd) => {
+            for let branch of &dd.branches {
+                if branch.tokens.len() >= 2 {
+                    intern_kind_set(&branch.tokens, registry, sets);
+                }
+            }
+        },
+        // Phase 2.3b/c — Predict/Tournament/PartialScan/SaveRewind
+        // are not yet produced by `lower`; once they are, this match
+        // grows arms that mine their token-set fields.
+        Predict(_) | Tournament(_) | PartialScan(_) | SaveRewind(_) => {},
+    };
+}
+
+fn walk_alt_body_for_kind_sets(
+    alt: &AltBody,
+    registry: &mut TreeMap<String, i32>,
+    sets: &mut Array<KindSet>,
+) {
+    for let op of &alt.ops {
+        walk_op_for_kind_sets(op, registry, sets);
+    }
+}
+
+fn walk_op_for_kind_sets(
+    op: &Op,
+    registry: &mut TreeMap<String, i32>,
+    sets: &mut Array<KindSet>,
+) {
+    match *op {
+        Excluded(e) => {
+            if e.kinds.len() >= 2 {
+                intern_kind_set(&e.kinds, registry, sets);
+            }
+        },
+        Repeat(r) => walk_op_for_kind_sets(&r.body, registry, sets),
+        Group(go) => {
+            walk_dispatch_for_kind_sets(&go.dispatch, registry, sets);
+            walk_dispatch_for_kind_sets(&go.scan_dispatch, registry, sets);
+            for let inner_alt of &go.alts {
+                walk_alt_body_for_kind_sets(inner_alt, registry, sets);
+            }
+        },
+        // Token / Literal / RuleCall / Wildcard contribute no kind
+        // sets of their own — single-token checks render as a direct
+        // `<expr> == TK_X` and don't warrant a helper function.
+        Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) => {},
+    };
+}
+
+/// Intern a multi-element kind set. Equal sets (regardless of input
+/// order or duplicates) collapse to a single `id`; the canonical
+/// (sorted, unique) representation drives the registry key. New IDs
+/// are assigned in registration order.
+fn intern_kind_set(
+    tokens: &Array<String>,
+    registry: &mut TreeMap<String, i32>,
+    sets: &mut Array<KindSet>,
+) {
+    let canonical = canonical_kind_set(tokens);
+    let key = join_pipe(&canonical);
+    if registry.contains_key(key) {
+        return;
+    }
+    let id = sets.len();
+    registry.insert(key, id);
+    sets.push(KindSet { id, tokens: canonical });
+}
+
+fn canonical_kind_set(tokens: &Array<String>) -> Array<String> {
+    let mut sorted = *tokens;
+    sorted.sort();
+    let mut out: Array<String> = [];
+    for let mut i = 0; i < sorted.len(); i += 1 {
+        if i == 0 || sorted[i] != sorted[i - 1] {
+            out.push(sorted[i]);
+        }
+    }
+    return out;
+}
+
+fn join_pipe(tokens: &Array<String>) -> String {
+    let mut s = String::with_capacity(64);
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if i > 0 {
+            s.push('|');
+        }
+        s.push_str(tokens[i]);
+    }
+    return s;
 }
 
 /// Classify a parser rule by shape and dispatch to the matching

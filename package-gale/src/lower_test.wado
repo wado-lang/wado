@@ -300,6 +300,107 @@ test "lower multi-alt rule with labeled alts uses label as case name" {
     }
 }
 
+test "lower interns multi-element first set from Direct dispatch branch" {
+    // `expr : num | STRING ;`
+    // `num  : INT | FLOAT ;`
+    //
+    // `num`'s first set is `{TK_INT, TK_FLOAT}` (multi-alt,
+    // disjoint), so when `expr`'s `RuleRef(num)` alt computes its
+    // own first set the result is `{TK_INT, TK_FLOAT}` — a
+    // two-element `DispatchBranch.tokens` that Phase 2.7 should
+    // intern as a single `KindSet`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "expr",
+            Visibility::Default,
+            [],
+            [
+                alt_of([Element::RuleRef(RuleRefElement::new("num"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("STRING"))]),
+            ],
+        ),
+        ParserRule::new(
+            "num",
+            Visibility::Default,
+            [],
+            [
+                alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("FLOAT"))]),
+            ],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.kind_sets.len() == 1;
+    let ks = &lowered.kind_sets[0];
+    assert ks.id == 0;
+    // Canonical form: sorted alphabetically.
+    assert ks.tokens.len() == 2;
+    assert ks.tokens[0] == "TK_FLOAT";
+    assert ks.tokens[1] == "TK_INT";
+}
+
+test "lower kind set registry collapses identical sets to one id" {
+    // Two rules whose alts share the same multi-token first set
+    // should produce only ONE entry in `kind_sets`. Both `expr`
+    // and `lit` reference `num`, so the dispatch branch covering
+    // alt 0 in each rule has the same `{TK_FLOAT, TK_INT}` set.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "expr",
+            Visibility::Default,
+            [],
+            [
+                alt_of([Element::RuleRef(RuleRefElement::new("num"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("STRING"))]),
+            ],
+        ),
+        ParserRule::new(
+            "lit",
+            Visibility::Default,
+            [],
+            [
+                alt_of([Element::RuleRef(RuleRefElement::new("num"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("BYTES"))]),
+            ],
+        ),
+        ParserRule::new(
+            "num",
+            Visibility::Default,
+            [],
+            [
+                alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("FLOAT"))]),
+            ],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.kind_sets.len() == 1;
+    assert lowered.kind_sets[0].id == 0;
+}
+
+test "lower produces empty kind_sets when every dispatch branch is single-token" {
+    // Two-alt rule where each alt's first set is a single token.
+    // Direct dispatch yields two single-token branches — neither
+    // contributes to `kind_sets`, so the registry stays empty.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "expr",
+        Visibility::Default,
+        [],
+        [
+            alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+            alt_of([Element::TokenRef(TokenRefElement::new("STRING"))]),
+        ],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.kind_sets.is_empty();
+}
+
 test "lower transparent Group wraps single leaf element" {
     // `wrapped : (INT) ;` — a syntactic wrapper with no struct of
     // its own. The GroupOp carries `Transparent` shape and the
