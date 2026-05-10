@@ -47,7 +47,7 @@ use { GenContext, KindSetEntry, is_nullable, sets_overlap, is_simple_token_group
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
 use { log_stderr } from "core:cli";
 use { TreeSet } from "core:collections";
-use { LoweredGrammar, Rule, SimpleRule, MultiAltRule, LeftRecursiveRule } from "./gir.wado";
+use { LoweredGrammar, Rule, SimpleRule, MultiAltRule, LeftRecursiveRule, rule_header } from "./gir.wado";
 use {
     is_left_recursive,
     is_prefix_alt,
@@ -1089,7 +1089,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
         }
         emitted_count = cur;
     }
-    gen_parse_entry(w, &grammar.parser_rules);
+    gen_parse_entry(w, lowered);
 }
 
 /// Emit one follow-aware rule variant from its lowered `Rule`. The
@@ -6146,17 +6146,24 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
     gen_error_fallback(w, rule, type_name, ctx);
 }
 
-fn gen_parse_entry(w: &mut CodeWriter, parser_rules: &Array<ParserRule>) {
-    if parser_rules.len() == 0 {
+/// Emit the public `parse(input)` entry function that dispatches
+/// into the first rule's parser. Read entirely from
+/// `lowered.parser_rules[0].header` — `RuleHeader` carries the
+/// pre-computed `type_name` and `snake_name` so this fn doesn't
+/// re-run `rule_type_name` or recompute the function name. A
+/// mismatch between lower's header and emit's expectations would
+/// surface here as a wrong fn name reference at the top of the
+/// generated source.
+fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar) {
+    if lowered.parser_rules.len() == 0 {
         return;
     }
-    let root = &parser_rules[0];
-    let type_name = rule_type_name(&root.name);
-    let fn_name = `parse_{root.snake_name}`;
+    let header = rule_header(&lowered.parser_rules[0]);
+    let fn_name = `parse_{header.snake_name}`;
     let mut f = FnSpec::new("parse");
     f.set_pub();
     f.add_param("input", "&String");
-    f.set_return_type(`Result<{type_name}, ParseError>`);
+    f.set_return_type(`Result<{header.type_name}, ParseError>`);
     f.emit_begin(w);
     w.line("let tokens = tokenize(input);");
     w.line("let mut parser = Parser::new(tokens);");
