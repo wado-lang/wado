@@ -48,6 +48,13 @@ use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wad
 use { log_stderr } from "core:cli";
 use { TreeSet } from "core:collections";
 use { LoweredGrammar, Rule, SimpleRule, MultiAltRule, LeftRecursiveRule } from "./gir.wado";
+use {
+    is_left_recursive,
+    is_prefix_alt,
+    is_self_ref_element,
+    unwrap_label,
+    compute_prefix_self_ref_min_prec,
+} from "./lr_util.wado";
 
 fn first_contains(first: &Array<String>, token: &String) -> bool {
     for let item of first {
@@ -6018,12 +6025,9 @@ fn elements_match(consumed: &Element, expected: &Element) -> bool {
     return false;
 }
 
-fn unwrap_label(elem: &Element) -> &Element with stores[elem] {
-    if let Label(lab) = elem {
-        return &lab.element;
-    }
-    return elem;
-}
+// `unwrap_label`, `is_left_recursive`, `is_prefix_alt`,
+// `is_self_ref_element`, `compute_prefix_self_ref_min_prec`
+// have moved to `lr_util.wado`.
 
 fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, ctx: &mut GenContext, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>) {
     let case_names = case_names_for_rule(&rule.alternatives);
@@ -6232,88 +6236,8 @@ fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
 /// `a=e` at the start of an alt as left-recursive too (per
 /// `vendor/antlr4/doc/left-recursion.md`), so `is_self_ref_element`
 /// unwraps one `Label`.
-fn is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
-    if alt.elements.len() == 0 {
-        return false;
-    }
-    return is_self_ref_element(&alt.elements[0], rule_name);
-}
-
-/// True iff the alternative matches ANTLR4's `prefix` shape from
-/// `LeftRecursiveRuleWalker.g`:
-///   prefix : ALT element+ recurse epsilonElement* ;
-/// i.e. the alt does NOT start with a self-reference but its LAST
-/// element IS a self-reference. Examples: `'-' e`, `('~'|'!') e`,
-/// `'(' typespec ')' e`. Counter-examples that look superficially
-/// similar but are NOT prefix alts in ANTLR4's classification:
-///   - `'(' e ')'` — last elem is `')'`, not self-ref → "other" alt
-///   - `'new' T ( ... e ... )` — last elem is a Group → "other" alt
-/// "Other" alts (`otherAlt`) are NOT given a precedence rewrite in
-/// ANTLR4: their inner self-refs run with `_p = 0`, accepting all
-/// LR operators inside.
-///
-/// Gale's IR has already stripped action bodies and semantic predicates,
-/// so the upstream `epsilonElement*` tail collapses to the empty case.
-fn is_prefix_alt(alt: &Alternative, rule_name: &String) -> bool {
-    if is_left_recursive(alt, rule_name) {
-        return false;
-    }
-    if alt.elements.len() == 0 {
-        return false;
-    }
-    let last_idx = alt.elements.len() - 1;
-    return is_self_ref_element(&alt.elements[last_idx], rule_name);
-}
-
-/// True iff the element is a direct RuleRef to `rule_name` (possibly
-/// wrapped in a single `Label`). Mirrors `is_left_recursive`'s use of
-/// `unwrap_label` so labeled self-refs at the alt tail (e.g. `b=e`)
-/// are still recognised.
-fn is_self_ref_element(elem: &Element, rule_name: &String) -> bool {
-    if let RuleRef(r) = unwrap_label(elem) {
-        return r.name == *rule_name;
-    }
-    return false;
-}
-
-/// Compute the `min_prec` value to pass into self-recursive RuleRef calls
-/// inside a prefix alt. ANTLR4's left-recursion transform calls the inner
-/// `e` of a prefix alt with the alt's own precedence (`e[precedence(alt)]`),
-/// so any LR suffix below the prefix alt in source order is excluded.
-///
-/// Returns 0 if the alt is not a prefix alt, or if the rule has no LR alts
-/// (in which case `parse_<rule>` has no `min_prec` parameter and the
-/// override would not be valid).
-///
-/// Formula: count the LR alts at positions strictly greater than `alt_idx`
-/// in `rule.alternatives`. Their `own_prec` values are 1..N (N = the count),
-/// so setting `min_prec = N + 1` rejects all of them while still admitting
-/// LR alts that come before this prefix.
-fn compute_prefix_self_ref_min_prec(rule: &ParserRule, alt_idx: i32) -> i32 {
-    let alts = &rule.alternatives;
-    let rule_name = &rule.name;
-    if alt_idx < 0 || alt_idx >= alts.len() {
-        return 0;
-    }
-    let alt = &alts[alt_idx];
-    if !is_prefix_alt(alt, rule_name) {
-        return 0;
-    }
-    let mut lr_after = 0;
-    let mut has_any_lr = false;
-    for let mut i = 0; i < alts.len(); i += 1 {
-        if is_left_recursive(&alts[i], rule_name) {
-            has_any_lr = true;
-            if i > alt_idx {
-                lr_after += 1;
-            }
-        }
-    }
-    if !has_any_lr {
-        return 0;
-    }
-    return lr_after + 1;
-}
+// `is_left_recursive` / `is_prefix_alt` / `is_self_ref_element` /
+// `compute_prefix_self_ref_min_prec` have moved to `lr_util.wado`.
 
 fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<i32>> {
     let n = first_sets.len();
