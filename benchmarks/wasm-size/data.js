@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778400353258,
+  "lastUpdate": 1778411428046,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20825,6 +20825,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cbdce7858e2a67fe2022d56a8d02bc0eb5c71dcc"
         },
         "date": 1778400353139,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 511983,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0f1e28a210c159ed1f82a6f827ab8cb9516a96b3",
+          "message": "Merge pull request #1038 from wado-lang/claude/commentmap-retirement-prep-qyoT3\n\nrefactor(formatter): retire CommentMap in favour of AstId-keyed TriviaMap",
+          "timestamp": "2026-05-10T20:03:46+09:00",
+          "tree_id": "289f9388994c43f65d26aec304b42ce3a4bb2f58",
+          "url": "https://github.com/wado-lang/wado/commit/0f1e28a210c159ed1f82a6f827ab8cb9516a96b3"
+        },
+        "date": 1778411427680,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
