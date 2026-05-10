@@ -637,16 +637,7 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
         ops.push(lower_op(elem, &mut name_counts, &rule.name, ctx, &mut group_counter));
     }
 
-    // Phase 2.9 — full `FieldDecl` enumeration. Today we record only
-    // the leading `span` field; struct emission still consults the
-    // surface IR for the rest.
-    let fields: Array<FieldDecl> = [
-        FieldDecl {
-            name: "span",
-            type_str: "Span",
-            kind: FieldKind::Span,
-        },
-    ];
+    let fields = enumerate_alt_field_decls(&ops);
 
     return AltBody {
         alt_index: idx,
@@ -1221,7 +1212,7 @@ fn panic_if_general_group_overlap(
 /// independent of the inner binding).
 fn lower_repeat_op(
     rep: &RepeatElement,
-    _name_counts: &mut Array<[String, i32]>,
+    name_counts: &mut Array<[String, i32]>,
     rule_name: &String,
     ctx: &mut GenContext,
     group_counter: &mut i32,
@@ -1242,13 +1233,80 @@ fn lower_repeat_op(
     // `lower_op` can produce is valid. The g4 grammar already
     // forbids `e**` / `e++`, so nested Repeat doesn't reach here.
 
+    // Outer struct field name for the alt that contains this
+    // Repeat. For `Star` / `Plus` it's `<inner_base>_list` (the
+    // struct holds an `Array<...>`); for `Optional` it's just the
+    // inner base name (the struct holds an `Option<...>`). Dedup
+    // against the surrounding alt's name table — the inner body
+    // op's field lives in a fresh scope and does not collide.
+    let outer_base = repeat_outer_base_name(&rep.element, rep.kind);
+    let outer_field = dedup_name(&outer_base, name_counts);
+
     let mut inner_counts: Array<[String, i32]> = [];
     let body = lower_op(&rep.element, &mut inner_counts, rule_name, ctx, group_counter);
     return Op::Repeat(RepeatOp {
         kind: rep.kind,
         body,
         strategy: RepeatStrategy::Plain,
+        field: outer_field,
     });
+}
+
+/// Outer struct field base name for a Repeat. `Star` / `Plus`
+/// take a `_list` suffix on the inner element's base; `Optional`
+/// uses the inner base unchanged. Mirrors `parser_gen`'s
+/// `dedup_name(&"<inner>_list", ...)` / `dedup_name(&"<inner>", ...)`
+/// pattern at field-info call sites.
+fn repeat_outer_base_name(elem: &Element, kind: RepeatKind) -> String {
+    let base = repeat_inner_base_name(elem);
+    return match kind {
+        Optional => base,
+        Star | Plus => `{base}_list`,
+    };
+}
+
+/// Inner element's base name, mirroring `gen_util::element_base_name`
+/// but inlined here so the lowering boundary stays self-contained.
+fn repeat_inner_base_name(elem: &Element) -> String {
+    return match elem {
+        TokenRef(t) => t.field_name,
+        Literal(l) => literal_field_name(&l.text),
+        RuleRef(r) => r.field_name,
+        Wildcard(_) => "wildcard",
+        Not(ne) => not_element_field_name(&ne.element),
+        Label(lab) => lab.field_name,
+        Group(g) => repeat_inner_group_base_name(g),
+        Repeat(_) => panic("Nested Repeat (e**) is not valid g4 syntax"),
+    };
+}
+
+/// Base name for a Group element when it appears as a Repeat's
+/// inner — selects the Group shape's field-base helper that
+/// matches the classifier.
+fn repeat_inner_group_base_name(g: &GroupElement) -> String {
+    let alts = &g.alternatives;
+    if alts.len() == 1 {
+        let alt = &alts[0];
+        if alt.elements.len() == 1 {
+            return repeat_inner_base_name(&alt.elements[0]);
+        }
+        return single_alt_group_field_name(alt);
+    }
+    if is_token_only_group(alts) {
+        return token_group_field_name(alts);
+    }
+    if is_simple_cst_group(alts) {
+        return group_field_base_name(alts);
+    }
+    if is_general_group(alts) {
+        // The general group's `group_<idx>` name uses the per-rule
+        // counter, but a nested Repeat over a general group is rare
+        // and would need its own group-counter slot. Until a
+        // committed grammar exercises it, panic here so the gap is
+        // surfaced rather than silently producing a colliding name.
+        panic("TODO: Repeat over General Group inner — needs group_counter coordination");
+    }
+    panic("Group shape unrecognised by classifier (Repeat inner base name)");
 }
 
 /// Lower a `Label` element by recursively lowering its inner
@@ -1281,6 +1339,130 @@ fn lower_label_op(
     let mut inner_counts: Array<[String, i32]> = [];
     let inner_op = lower_op(&lab.element, &mut inner_counts, rule_name, ctx, group_counter);
     return rebind_op_field(inner_op, &label_field);
+}
+
+/// Enumerate the CST struct fields for an alt's `ops` list. The
+/// leading `span: Span` is always present; the rest map 1:1 from
+/// the lowered op list. Transparent `Group` ops contribute their
+/// inner op's field instead (the group itself has no struct slot).
+///
+/// Mirrors what `parser_gen::element_field_info` computed at emit
+/// time, but consumes the lowered IR so the field name and type
+/// agree with whatever shape the lowering chose. emit reads this
+/// list directly to lay out the struct.
+fn enumerate_alt_field_decls(ops: &Array<Op>) -> Array<FieldDecl> {
+    let mut fields: Array<FieldDecl> = [
+        FieldDecl {
+            name: "span",
+            type_str: "Span",
+            kind: FieldKind::Span,
+        },
+    ];
+    for let op of ops {
+        if let Some(decl) = op_field_decl(op) {
+            fields.push(decl);
+        }
+    }
+    return fields;
+}
+
+/// Single-op field decl. Returns `None` when the op contributes no
+/// struct field (Transparent groups inline their inner; Repeats
+/// over zero-field inners would do the same once supported).
+fn op_field_decl(op: &Op) -> Option<FieldDecl> {
+    return match op {
+        Token(t) => Option::<FieldDecl>::Some(FieldDecl {
+            name: t.field,
+            type_str: "Token",
+            kind: FieldKind::Plain,
+        }),
+        Literal(l) => Option::<FieldDecl>::Some(FieldDecl {
+            name: l.field,
+            type_str: "Token",
+            kind: FieldKind::Plain,
+        }),
+        RuleCall(r) => Option::<FieldDecl>::Some(FieldDecl {
+            name: r.field,
+            type_str: rule_type_name(&r.target_name),
+            kind: FieldKind::Plain,
+        }),
+        Wildcard(w) => Option::<FieldDecl>::Some(FieldDecl {
+            name: w.field,
+            type_str: "Token",
+            kind: FieldKind::Plain,
+        }),
+        Excluded(e) => Option::<FieldDecl>::Some(FieldDecl {
+            name: e.field,
+            type_str: "Token",
+            kind: FieldKind::Plain,
+        }),
+        Repeat(rep) => repeat_field_decl(rep),
+        Group(g) => group_field_decl(g),
+    };
+}
+
+fn repeat_field_decl(rep: &RepeatOp) -> Option<FieldDecl> {
+    let inner_decl = op_field_decl(&rep.body);
+    let inner_type = match &inner_decl {
+        Some(d) => d.type_str,
+        // No-field inner (e.g. transparent group with no leaf type
+        // resolution). The Repeat then has no struct field either —
+        // emit doesn't allocate storage for it.
+        null => return null,
+    };
+    return match rep.kind {
+        Optional => Option::<FieldDecl>::Some(FieldDecl {
+            name: rep.field,
+            type_str: `Option<{inner_type}>`,
+            kind: FieldKind::Optional,
+        }),
+        Star | Plus => Option::<FieldDecl>::Some(FieldDecl {
+            name: rep.field,
+            type_str: `Array<{inner_type}>`,
+            kind: FieldKind::List,
+        }),
+    };
+}
+
+fn group_field_decl(g: &GroupOp) -> Option<FieldDecl> {
+    return match &g.shape {
+        // Transparent groups inline their single inner op; there
+        // is no group-level field. The inner op's decl was already
+        // pushed by the surrounding `enumerate_alt_field_decls`
+        // — except… it wasn't, because the Group op IS the only
+        // entry in the alt's op list at that position. We need to
+        // hand back the inner's decl directly.
+        Transparent => transparent_group_inner_decl(g),
+        TokenOnly(to) => Option::<FieldDecl>::Some(FieldDecl {
+            name: to.field,
+            type_str: "Token",
+            kind: FieldKind::Plain,
+        }),
+        SimpleCst(scst) => Option::<FieldDecl>::Some(FieldDecl {
+            name: scst.field,
+            type_str: scst.type_name,
+            kind: FieldKind::Plain,
+        }),
+        SingleAlt(sa) => Option::<FieldDecl>::Some(FieldDecl {
+            name: sa.field,
+            type_str: sa.struct_name,
+            kind: FieldKind::Plain,
+        }),
+        General(gen) => Option::<FieldDecl>::Some(FieldDecl {
+            name: gen.field,
+            type_str: gen.variant_type,
+            kind: FieldKind::Plain,
+        }),
+    };
+}
+
+/// Transparent groups have exactly one alt whose body is one op.
+/// That inner op's decl is the field this group contributes.
+fn transparent_group_inner_decl(g: &GroupOp) -> Option<FieldDecl> {
+    if g.alts.len() != 1 || g.alts[0].ops.len() != 1 {
+        panic("Transparent Group must have exactly one alt with one inner op");
+    }
+    return op_field_decl(&g.alts[0].ops[0]);
 }
 
 /// Replace the `field` slot of a leaf op with `new_field`. The

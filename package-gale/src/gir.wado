@@ -553,6 +553,12 @@ pub struct RepeatOp {
     /// payload struct.
     pub body: Op,
     pub strategy: RepeatStrategy,
+    /// Outer struct field name. For `e*` / `e+` this is
+    /// `<inner_base>_list`; for `e?` it's the inner element's base
+    /// name. Deduped against the surrounding alt's name table at
+    /// lower time. Distinct from `body.field` (the per-iteration
+    /// binding inside the loop, which lives in its own fresh scope).
+    pub field: String,
 }
 
 pub struct GroupOp {

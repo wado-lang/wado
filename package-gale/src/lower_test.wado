@@ -31,6 +31,8 @@ use {
     ScanElement,
     MultiAltDispatch,
     GroupShape,
+    FieldDecl,
+    FieldKind,
 } from "./gir.wado";
 
 fn empty_grammar(name: &String) -> Grammar {
@@ -1483,6 +1485,220 @@ test "lower carries every leaf op in order" {
         if let Literal(_) = &s.body.ops[1] { assert true; } else { panic("ops[1] != Literal"); }
         if let RuleCall(_) = &s.body.ops[2] { assert true; } else { panic("ops[2] != RuleCall"); }
         if let Wildcard(_) = &s.body.ops[3] { assert true; } else { panic("ops[3] != Wildcard"); }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower enumerates leaf field decls with span and Plain kinds" {
+    // `mix : ID ':' expr ;` — leaf ops produce a 4-field struct
+    // (span + id + colon + expr), all `Plain` kind.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "mix",
+            Visibility::Default,
+            [],
+            [alt_of([
+                Element::TokenRef(TokenRefElement::new("ID")),
+                Element::Literal(LiteralElement::new(":")),
+                Element::RuleRef(RuleRefElement::new("expr")),
+            ])],
+        ),
+        ParserRule::new(
+            "expr",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.fields.len() == 4, `expected 4 fields, got {s.body.fields.len()}`;
+        assert s.body.fields[0].name == "span";
+        if let Span = &s.body.fields[0].kind {
+            assert true;
+        } else {
+            panic("expected Span kind for leading field");
+        }
+        assert s.body.fields[1].name == "id";
+        assert s.body.fields[1].type_str == "Token";
+        assert s.body.fields[2].name == "colon";
+        assert s.body.fields[2].type_str == "Token";
+        assert s.body.fields[3].name == "expr";
+        assert s.body.fields[3].type_str == "ExprNode", s.body.fields[3].type_str;
+        if let Plain = &s.body.fields[3].kind {
+            assert true;
+        } else {
+            panic("expected Plain kind for RuleCall field");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower enumerates Repeat field decls with List/Optional kinds" {
+    // `r : INT* INT? ;` — Star produces `int_list: Array<Token>`,
+    // Optional produces `int: Option<Token>`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::TokenRef(TokenRefElement::new("INT")),
+                non_greedy: false,
+            }),
+            Element::Repeat(RepeatElement {
+                kind: RepeatKind::Optional,
+                element: Element::TokenRef(TokenRefElement::new("INT")),
+                non_greedy: false,
+            }),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        // [span, int_list, int]
+        assert s.body.fields.len() == 3, `expected 3 fields, got {s.body.fields.len()}`;
+        assert s.body.fields[1].name == "int_list";
+        assert s.body.fields[1].type_str == "Array<Token>";
+        if let List = &s.body.fields[1].kind {
+            assert true;
+        } else {
+            panic("expected List kind for Star Repeat");
+        }
+        assert s.body.fields[2].name == "int";
+        assert s.body.fields[2].type_str == "Option<Token>";
+        if let Optional = &s.body.fields[2].kind {
+            assert true;
+        } else {
+            panic("expected Optional kind for Optional Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Repeat field name dedupes against outer scope" {
+    // `r : int_list=ID INT* ;` — outer label takes `int_list`,
+    // the unlabeled `INT*` dedups its outer struct field to
+    // `int_list_2`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::Label(LabelElement::new(
+                "int_list",
+                false,
+                Element::TokenRef(TokenRefElement::new("ID")),
+            )),
+            Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::TokenRef(TokenRefElement::new("INT")),
+                non_greedy: false,
+            }),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        // [span, int_list (label), int_list_2 (Repeat dedup)]
+        assert s.body.fields.len() == 3;
+        assert s.body.fields[1].name == "int_list";
+        assert s.body.fields[2].name == "int_list_2", s.body.fields[2].name;
+        // Op.field on the Repeat carries the same deduped name.
+        if let Repeat(rep) = &s.body.ops[1] {
+            assert rep.field == "int_list_2", rep.field;
+        } else {
+            panic("expected Op::Repeat at index 1");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Group field decls match shape's outer field/type" {
+    // `r : (K_A | K_B) (stmt | expr) (a b) ;`
+    // `stmt : ID ; expr : INT ;`
+    // — TokenOnly, SimpleCst, SingleAlt shapes each produce one
+    // field on the outer struct.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([
+                Element::Group(GroupElement::new([
+                    alt_of([Element::TokenRef(TokenRefElement::new("K_A"))]),
+                    alt_of([Element::TokenRef(TokenRefElement::new("K_B"))]),
+                ])),
+                Element::Group(GroupElement::new([
+                    alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                    alt_of([Element::RuleRef(RuleRefElement::new("expr"))]),
+                ])),
+                Element::Group(GroupElement::new([
+                    alt_of([
+                        Element::TokenRef(TokenRefElement::new("A")),
+                        Element::TokenRef(TokenRefElement::new("B")),
+                    ]),
+                ])),
+            ])],
+        ),
+        ParserRule::new(
+            "stmt",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+        ),
+        ParserRule::new(
+            "expr",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        // [span, k_a_or_k_b: Token, stmt_or_expr: StmtOrExprGroup, a_b: ABItem]
+        assert s.body.fields.len() == 4, `expected 4 fields, got {s.body.fields.len()}`;
+        assert s.body.fields[1].name == "k_a_or_k_b";
+        assert s.body.fields[1].type_str == "Token";
+        assert s.body.fields[2].name == "stmt_or_expr";
+        assert s.body.fields[2].type_str == "StmtOrExprGroup";
+        assert s.body.fields[3].name == "a_b";
+        assert s.body.fields[3].type_str == "ABItem", s.body.fields[3].type_str;
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Transparent Group contributes inner op's field" {
+    // `r : (INT) ;` — Transparent group with single leaf inner.
+    // The struct field is the inner Token's, not a wrapper.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Group(GroupElement::new([
+            alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+        ]))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        // [span, int (from Transparent passthrough)]
+        assert s.body.fields.len() == 2, `expected 2 fields, got {s.body.fields.len()}`;
+        assert s.body.fields[1].name == "int";
+        assert s.body.fields[1].type_str == "Token";
     } else {
         panic("expected Rule::Simple");
     }
