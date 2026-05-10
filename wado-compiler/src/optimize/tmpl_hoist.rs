@@ -382,15 +382,11 @@ fn collect_escaping_in_expr(expr: &TirExpr, escaping: &mut IndexSet<u32>) {
                 collect_escaping_in_expr(arg, escaping);
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 collect_local_refs(elem, escaping);
                 collect_escaping_in_expr(elem, escaping);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            collect_local_refs(source, escaping);
-            collect_escaping_in_expr(source, escaping);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {

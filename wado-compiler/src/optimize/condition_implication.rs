@@ -549,13 +549,10 @@ fn record_defs_from_expr(expr: &TirExpr, defs: &mut DefMap) {
                 record_defs_from_expr(&f.value, defs);
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for e in elements {
                 record_defs_from_expr(e, defs);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            record_defs_from_expr(source, defs);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(inner) = payload {

@@ -1,0 +1,51 @@
+// `return mk: { ... }` (labelled block at return position) is conservatively
+// rejected by the multi-value classifier when any inner `break mk: expr`
+// carries a non-literal value: without label tracking we can't tell which
+// break targets the outer label, and an opaque break value would feed the
+// multi-value-return signature an unwrapped `ref Pair` and produce invalid
+// Wasm.
+//
+// This fixture documents that the labelled-block return is never classified
+// (no `[i32, i32]` signature emitted at the call site) regardless of whether
+// the inner break carries a literal or a call result. The functional
+// behaviour is unchanged — `make_pair_break` still returns a `Pair` via the
+// heap-struct ABI.
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+#[inline("never")]
+fn make_pair_call(a: i32, b: i32) -> Pair {
+    return Pair { a, b };
+}
+
+#[inline("never")]
+fn make_pair_break(cond: bool) -> Pair {
+    return mk: {
+        if cond {
+            break mk: make_pair_call(1, 2);
+        }
+        Pair { a: 3, b: 4 }
+    };
+}
+
+#[inline("never")]
+fn use_pair_break(cond: bool) -> i32 {
+    let p = make_pair_break(cond);
+    return p.a + p.b;
+}
+
+export fn run() {
+    assert use_pair_break(true) == 3;
+    assert use_pair_break(false) == 7;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": [
+        "make_pair_break\" = fn(bool) -> [i32, i32]"
+    ]
+}

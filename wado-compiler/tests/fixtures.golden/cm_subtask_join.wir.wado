@@ -141,100 +141,105 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(20)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-variant core:prelude/types.wado//Option<u16> {  // TypeId(21)
+struct tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>] {  // TypeId(21)
+    mut 0: i32,
+    mut 1: i32,
+}
+
+variant core:prelude/types.wado//Option<u16> {  // TypeId(22)
     Some(u16),
     None,
 }
 
-struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(22)
+struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(23)
     discriminant: i32,
     payload_0: u16,
 }
 
-variant core:prelude/types.wado//Option<u8> {  // TypeId(23)
+variant core:prelude/types.wado//Option<u8> {  // TypeId(24)
     Some(u8),
     None,
 }
 
-struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(24)
+struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(25)
     discriminant: i32,
     payload_0: u8,
 }
 
-variant core:prelude/types.wado//Option<u32> {  // TypeId(25)
+variant core:prelude/types.wado//Option<u32> {  // TypeId(26)
     Some(u32),
     None,
 }
 
-struct core:prelude/types.wado//Option<u32>::Some {  // TypeId(26)
+struct core:prelude/types.wado//Option<u32>::Some {  // TypeId(27)
     discriminant: i32,
     payload_0: u32,
 }
 
-variant core:prelude/types.wado//Option<u64> {  // TypeId(27)
+variant core:prelude/types.wado//Option<u64> {  // TypeId(28)
     Some(u64),
     None,
 }
 
-struct core:prelude/types.wado//Option<u64>::Some {  // TypeId(28)
+struct core:prelude/types.wado//Option<u64>::Some {  // TypeId(29)
     discriminant: i32,
     payload_0: u64,
 }
 
-variant core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode> {  // TypeId(29)
+variant core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode> {  // TypeId(30)
     Ok(i32),
     Err(ref "wasi:http/types.wado//ErrorCode"),
 }
 
-struct core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok {  // TypeId(30)
+struct core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok {  // TypeId(31)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err {  // TypeId(31)
+struct core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err {  // TypeId(32)
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado//ErrorCode",
 }
 
-variant core:prelude/types.wado//Option<Stream<u8>> {  // TypeId(32)
+variant core:prelude/types.wado//Option<Stream<u8>> {  // TypeId(33)
     Some(i32),
     None,
 }
 
-struct core:prelude/types.wado//Option<Stream<u8>>::Some {  // TypeId(33)
+struct core:prelude/types.wado//Option<Stream<u8>>::Some {  // TypeId(34)
     discriminant: i32,
     payload_0: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(34)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(35)
 
-type "functype//wasi/task-return" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(35)
+type "functype//wasi/task-return" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(36)
 
-type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(36)
+type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(37)
 
-type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(37)
+type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(38)
 
-type "functype//wado-compiler/tests/fixtures/cm_subtask_join.wado/handle" = fn();  // TypeId(38)
+type "functype//wado-compiler/tests/fixtures/cm_subtask_join.wado/handle" = fn();  // TypeId(39)
 
-type "functype//wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(39)
+type "functype//wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(40)
 
-type "functype//wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_export__handle" = fn(i32);  // TypeId(40)
+type "functype//wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]";  // TypeId(41)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(41)
+type "functype//wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_export__handle" = fn(i32);  // TypeId(42)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(42)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(43)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(43)
+type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(44)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(44)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(45)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(45)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(46)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(46)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(47)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(47)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(48)
 
-type "functype//wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(48)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(49)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -386,12 +391,17 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"() {
     let __packed_153: i64;
     let __ptr_154: i32;
     let __len_155: i32;
-    multivalue_bind [trailers_future, trailers_tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/future-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pattern_temp_1: ref "tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]";
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/future-new"();
+    let __mv_lo_1: i32;
+    let __mv_hi_1: i32;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
+    trailers_future = __mv_lo_1;
+    trailers_tx = __mv_hi_1;
     headers = "wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Fields_new"();
-    let __sroa___pattern_temp_1_0: i32;
-    let __sroa___pattern_temp_1_1: i32;
-    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = "wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future);
-    response = __sroa___pattern_temp_1_0;
+    __pattern_temp_1 = "wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future);
+    response = __pattern_temp_1.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
     __tv_2 = 0;
@@ -736,7 +746,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Response_new
     __lifted_result_7 = builtin::load_i32(__outptr + 0);
     __lifted_result_8 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_7, __lifted_result_8;
+    return struct.new "tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_7, 1: __lifted_result_8 };
 }
 
 fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_export__handle"(request) {

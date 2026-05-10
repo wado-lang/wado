@@ -6,13 +6,13 @@
 //!
 //! | Module            | Pass                                       |
 //! |-------------------|--------------------------------------------|
-//! | `nullable_ref`    | Null-niche variant representation           |
-//! | `sroa_return`     | Multi-value return SROA (structs + variants)|
-//! | `sroa_param`      | Single-field parameter SROA                |
-//! | `elide_struct`    | Struct local elimination (single + multi)   |
-//! | `array`           | Push collapse / data promotion / splitting  |
-//! | `const_forward`   | Struct field constant forwarding            |
-//! | `peephole`        | Constant folding, copy elision, MV elision  |
+//! | `nullable_ref`        | Null-niche variant representation           |
+//! | `sroa_variant_return` | Multi-value return SROA (variants)          |
+//! | `sroa_param`          | Single-field parameter SROA                 |
+//! | `elide_struct`        | Struct local elimination (single + multi)   |
+//! | `array`               | Push collapse / data promotion / splitting  |
+//! | `const_forward`       | Struct field constant forwarding            |
+//! | `peephole`            | Constant folding, copy elision              |
 //! | `elide_local`     | Write-only local elim for WIR-only locals  |
 //! | `cleanup`         | Nop/dead-code removal, normalization        |
 //! | `init_guard`      | Trivial init-guard global removal           |
@@ -40,7 +40,7 @@ mod init_guard;
 mod nullable_ref;
 mod peephole;
 mod sroa_param;
-mod sroa_return;
+mod sroa_variant_return;
 mod util;
 
 use crate::compiler_host::SpanEmitter;
@@ -63,7 +63,7 @@ use init_guard::remove_trivial_init_globals;
 use nullable_ref::optimize_nullable_refs;
 use peephole::run_peephole;
 use sroa_param::sroa_single_field_parameters;
-use sroa_return::sroa_multi_value_returns;
+use sroa_variant_return::sroa_variant_returns;
 
 /// Run a single WIR optimization pass with profiling.
 ///
@@ -117,8 +117,8 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     wir_pass("wir/propagate_trivial_copies", module, profiler, |m| {
         peephole::propagate_trivial_copies(m);
     });
-    wir_pass("wir/sroa_multi_value_returns", module, profiler, |m| {
-        sroa_multi_value_returns(m);
+    wir_pass("wir/sroa_variant_returns", module, profiler, |m| {
+        sroa_variant_returns(m);
     });
     wir_pass("wir/sroa_single_field_parameters", module, profiler, |m| {
         sroa_single_field_parameters(m);

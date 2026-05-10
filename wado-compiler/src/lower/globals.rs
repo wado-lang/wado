@@ -290,14 +290,10 @@ fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<String>) {
                 collect_global_refs(&field.value, refs);
             }
         }
-        TirExprKind::TupleLiteral { elements, .. }
-        | TirExprKind::MultiValueLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 collect_global_refs(elem, refs);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            collect_global_refs(source, refs);
         }
         TirExprKind::If {
             condition,
@@ -502,13 +498,10 @@ fn renumber_locals_in_expr(expr: &mut TirExpr, offset: u32) {
                 renumber_locals_in_expr(&mut field.value, offset);
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 renumber_locals_in_expr(elem, offset);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            renumber_locals_in_expr(source, offset);
         }
         TirExprKind::TupleSpread { expr } => {
             renumber_locals_in_expr(expr, offset);

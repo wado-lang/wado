@@ -25,103 +25,108 @@ struct tuple//[i64, i32] {  // TypeId(3)
     mut 1: i32,
 }
 
-struct wado-compiler/tests/fixtures/inline_merged.wado//InlineItem {  // TypeId(4)
+struct wado-compiler/tests/fixtures/inline_merged.wado//InlineS {  // TypeId(4)
+    mut a: i64,
+    mut b: i64,
+}
+
+struct wado-compiler/tests/fixtures/inline_merged.wado//InlineItem {  // TypeId(5)
     mut value: i32,
 }
 
-array builtin::array<i32> (mut i32);  // TypeId(5)
+array builtin::array<i32> (mut i32);  // TypeId(6)
 
-array builtin::array<InlineItem> (mut ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem");  // TypeId(6)
+array builtin::array<InlineItem> (mut ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem");  // TypeId(7)
 
-struct core:prelude//Array<i32> {  // TypeId(7)
+struct core:prelude//Array<i32> {  // TypeId(8)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
 
-struct core:prelude//Array<InlineItem> {  // TypeId(8)
+struct core:prelude//Array<InlineItem> {  // TypeId(9)
     mut repr: ref builtin::array<InlineItem>,
     mut used: i32,
 }
 
-enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(9)
+enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(10)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(10)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(11)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(12)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(13)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(13)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(14)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(14)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(15)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(15)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(16)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(16)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/inline_merged.wado/test_array_append_minimal" = fn();  // TypeId(19)
+type "functype//wado-compiler/tests/fixtures/inline_merged.wado/test_array_append_minimal" = fn();  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/inline_merged.wado/test_early_return" = fn();  // TypeId(20)
+type "functype//wado-compiler/tests/fixtures/inline_merged.wado/test_early_return" = fn();  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/inline_merged.wado/test_generic_nested_ref" = fn();  // TypeId(21)
+type "functype//wado-compiler/tests/fixtures/inline_merged.wado/test_generic_nested_ref" = fn();  // TypeId(22)
 
-type "functype//wado-compiler/tests/fixtures/inline_merged.wado/inline_outer" = fn(i32) -> i64;  // TypeId(22)
+type "functype//wado-compiler/tests/fixtures/inline_merged.wado/inline_big_match" = fn(i32) -> ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineS";  // TypeId(23)
 
-type "functype//wado-compiler/tests/fixtures/inline_merged.wado/test_method_minimal" = fn();  // TypeId(23)
+type "functype//wado-compiler/tests/fixtures/inline_merged.wado/inline_outer" = fn(i32) -> i64;  // TypeId(24)
 
-type "functype//wado-compiler/tests/fixtures/inline_merged.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//wado-compiler/tests/fixtures/inline_merged.wado/test_method_minimal" = fn();  // TypeId(25)
 
-type "functype//wado-compiler/tests/fixtures/inline_merged.wado/__cm_export__run" = fn();  // TypeId(25)
+type "functype//wado-compiler/tests/fixtures/inline_merged.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(26)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(26)
+type "functype//wado-compiler/tests/fixtures/inline_merged.wado/__cm_export__run" = fn();  // TypeId(27)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(27)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(28)
 
-type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(28)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(29)
 
-type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(29)
+type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(30)
 
-type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(30)
+type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(31)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(31)
+type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(32)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(32)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(33)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(33)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(34)
 
-type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(34)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(35)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(35)
+type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(36)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(36)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(37)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(37)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(38)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(38)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(39)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(39)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(40)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(40)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(41)
 
-type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(41)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(42)
 
-type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(42)
+type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(43)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(43)
+type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(44)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(44)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(45)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(46)
 
-type "functype//wado-compiler/tests/fixtures/inline_merged.wado/inline_big_match" = fn(i32) -> [i64, i64];  // TypeId(46)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(47)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(47)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(48)
 
-type "functype//core:prelude/primitive.wado/i64::fmt_decimal" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(48)
+type "functype//core:prelude/primitive.wado/i64::fmt_decimal" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(49)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -176,7 +181,13 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_array_append_minimal"()
         break __tmpl: __local_3;
         unreachable;
     };
-    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_1: i32;
+    let __mv_hi_1: i32;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
+    rx = __mv_lo_1;
+    tx = __mv_hi_1;
     handle = "wado-compiler/tests/fixtures/inline_merged.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -212,7 +223,13 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_early_return"() with St
         break __inline_inline_classify_1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("positive"), used: 8 };
         unreachable;
     };
-    multivalue_bind [rx_5, tx_6] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_1: i32;
+    let __mv_hi_1: i32;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
+    rx_5 = __mv_lo_1;
+    tx_6 = __mv_hi_1;
     handle_7 = "wado-compiler/tests/fixtures/inline_merged.wado/__cm_binding__Stdout_write_via_stream"(rx_5);
     "core:cli/write_to_stream"(tx_6, message_4, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_7);
@@ -221,12 +238,24 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_early_return"() with St
         break __inline_inline_classify_4: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("positive"), used: 8 };
         unreachable;
     };
-    multivalue_bind [rx_12, tx_13] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    let __pair_temp_2: i64;
+    __pair_temp_2 = "wasi/stream-new"();
+    let __mv_lo_2: i32;
+    let __mv_hi_2: i32;
+    multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
+    rx_12 = __mv_lo_2;
+    tx_13 = __mv_hi_2;
     handle_14 = "wado-compiler/tests/fixtures/inline_merged.wado/__cm_binding__Stdout_write_via_stream"(rx_12);
     "core:cli/write_to_stream"(tx_13, message_11, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_14);
     message_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("positive"), used: 8 };
-    multivalue_bind [rx_19, tx_20] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+    let __pair_temp_3: i64;
+    __pair_temp_3 = "wasi/stream-new"();
+    let __mv_lo_3: i32;
+    let __mv_hi_3: i32;
+    multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
+    rx_19 = __mv_lo_3;
+    tx_20 = __mv_hi_3;
     handle_21 = "wado-compiler/tests/fixtures/inline_merged.wado/__cm_binding__Stdout_write_via_stream"(rx_19);
     "core:cli/write_to_stream"(tx_20, message_18, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_21);
@@ -241,7 +270,13 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_early_return"() with St
         break __tmpl: __local_0;
         unreachable;
     };
-    multivalue_bind [rx_26, tx_27] = let __pair_temp_4: i64; __pair_temp_4 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+    let __pair_temp_4: i64;
+    __pair_temp_4 = "wasi/stream-new"();
+    let __mv_lo_4: i32;
+    let __mv_hi_4: i32;
+    multivalue_bind [__mv_lo_4, __mv_hi_4] = (builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64));
+    rx_26 = __mv_lo_4;
+    tx_27 = __mv_hi_4;
     handle_28 = "wado-compiler/tests/fixtures/inline_merged.wado/__cm_binding__Stdout_write_via_stream"(rx_26);
     "core:cli/write_to_stream"(tx_27, message_25, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_28);
@@ -252,7 +287,13 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_early_return"() with St
         break __tmpl: __local_2;
         unreachable;
     };
-    multivalue_bind [rx_39, tx_40] = let __pair_temp_5: i64; __pair_temp_5 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+    let __pair_temp_5: i64;
+    __pair_temp_5 = "wasi/stream-new"();
+    let __mv_lo_5: i32;
+    let __mv_hi_5: i32;
+    multivalue_bind [__mv_lo_5, __mv_hi_5] = (builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64));
+    rx_39 = __mv_lo_5;
+    tx_40 = __mv_hi_5;
     handle_41 = "wado-compiler/tests/fixtures/inline_merged.wado/__cm_binding__Stdout_write_via_stream"(rx_39);
     "core:cli/write_to_stream"(tx_40, message_38, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_41);
@@ -295,7 +336,13 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_generic_nested_ref"() w
                     break __tmpl: __local_5;
                     unreachable;
                 };
-                multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+                let __pair_temp_1: i64;
+                __pair_temp_1 = "wasi/stream-new"();
+                let __mv_lo_1: i32;
+                let __mv_hi_1: i32;
+                multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
+                rx = __mv_lo_1;
+                tx = __mv_hi_1;
                 handle = "wado-compiler/tests/fixtures/inline_merged.wado/__cm_binding__Stdout_write_via_stream"(rx);
                 "core:cli/write_to_stream"(tx, message, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);
@@ -307,7 +354,7 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_generic_nested_ref"() w
 }
 
 fn "wado-compiler/tests/fixtures/inline_merged.wado/inline_big_match"(idx) {
-    block {
+    return b6: block -> ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" {
         b7: block {
             b8: block {
                 b9: block {
@@ -321,33 +368,44 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/inline_big_match"(idx) {
                                                 b17: block {
                                                     br_table idx [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] default=0;
                                                 };
-                                                return 99_i64, 99_i64;
+                                                struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 99_i64, b: 99_i64 };
+                                                break b6;
                                             };
-                                            return 0_i64, 0_i64;
+                                            struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 0_i64, b: 0_i64 };
+                                            break b6;
                                         };
-                                        return 1_i64, 1_i64;
+                                        struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 1_i64, b: 1_i64 };
+                                        break b6;
                                     };
-                                    return 2_i64, 2_i64;
+                                    struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 2_i64, b: 2_i64 };
+                                    break b6;
                                 };
-                                return 3_i64, 3_i64;
+                                struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 3_i64, b: 3_i64 };
+                                break b6;
                             };
-                            return 4_i64, 4_i64;
+                            struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 4_i64, b: 4_i64 };
+                            break b6;
                         };
-                        return 5_i64, 5_i64;
+                        struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 5_i64, b: 5_i64 };
+                        break b6;
                     };
-                    return 6_i64, 6_i64;
+                    struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 6_i64, b: 6_i64 };
+                    break b6;
                 };
-                return 7_i64, 7_i64;
+                struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 7_i64, b: 7_i64 };
+                break b6;
             };
-            return 8_i64, 8_i64;
+            struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 8_i64, b: 8_i64 };
+            break b6;
         };
-        return 9_i64, 9_i64;
+        struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 9_i64, b: 9_i64 };
     };
 }
 
 fn "wado-compiler/tests/fixtures/inline_merged.wado/inline_outer"(e) {
     let z: i32;
     let p_3: i32;
+    let pm: ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineS";
     let val: i64;
     let __pattern_temp_0: ref "tuple//[i64, i32]";
     let idx: i32;
@@ -362,13 +420,14 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/inline_outer"(e) {
         }
         p_3 = 0 - z;
     }
-    let __sroa_pm_a: i64;
-    let __sroa_pm_b: i64;
-    idx = p_3 - -50;
-    multivalue_bind [__sroa_pm_a, __sroa_pm_b] = "wado-compiler/tests/fixtures/inline_merged.wado/inline_big_match"(idx);
+    pm = __inline_inline_get_val_0: block -> ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" {
+        idx = p_3 - -50;
+        break __inline_inline_get_val_0: "wado-compiler/tests/fixtures/inline_merged.wado/inline_big_match"(idx);
+        unreachable;
+    };
     __pattern_temp_0 = __inline_inline_tuple_fn_2: block -> ref "tuple//[i64, i32]" {
-        x = __sroa_pm_a;
-        break __inline_inline_tuple_fn_2: multivalue_struct_new "tuple//[i64, i32]"(x * 2_i64; 42);
+        x = pm.a;
+        break __inline_inline_tuple_fn_2: struct.new "tuple//[i64, i32]" { 0: x * 2_i64, 1: 42 };
         unreachable;
     };
     val = __pattern_temp_0.0;
@@ -440,7 +499,13 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_method_minimal"() with 
         break __tmpl: __local_6;
         unreachable;
     };
-    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_1: i32;
+    let __mv_hi_1: i32;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
+    rx = __mv_lo_1;
+    tx = __mv_hi_1;
     handle = "wado-compiler/tests/fixtures/inline_merged.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -469,7 +534,13 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/__cm_export__run"() {
         break __inline_test_match_tuple_5____tmpl: __local_1;
         unreachable;
     };
-    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_1: i32;
+    let __mv_hi_1: i32;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
+    rx = __mv_lo_1;
+    tx = __mv_hi_1;
     handle = "wado-compiler/tests/fixtures/inline_merged.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -533,7 +604,13 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_1: i32;
+    let __mv_hi_1: i32;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
+    rx = __mv_lo_1;
+    tx = __mv_hi_1;
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

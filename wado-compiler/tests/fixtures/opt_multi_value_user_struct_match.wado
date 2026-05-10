@@ -1,0 +1,118 @@
+// Multi-value return ABI for `return match` / `return if` / `return switch`
+// patterns. The TIR classifier accepts these wrappers when every arm tail
+// is a fresh `StructLiteral` / `TupleLiteral` (or a diverging
+// `unreachable()`); WIR build's Return arm recursively rewrites each leaf
+// `StructNew` into `Return { Seq(fields) }`, dropping the outer Return
+// wrapper so the per-branch returns transfer control directly.
+//
+// Each function uses `#[inline("never")]` so the call sites survive the
+// inliner and the multi-value ABI is observable in the WIR.
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+struct HiLo {
+    hi: u64,
+    lo: u64,
+}
+
+#[inline("never")]
+fn return_match_small(x: i32) -> Pair {
+    return match x {
+        0 => Pair { a: 10, b: 20 },
+        1 => Pair { a: 30, b: 40 },
+        _ => Pair { a: 50, b: 60 },
+    };
+}
+
+#[inline("never")]
+fn return_match_large(i: i32) -> HiLo {
+    return match i {
+        0 => HiLo { hi: 100, lo: 200 },
+        1 => HiLo { hi: 300, lo: 400 },
+        2 => HiLo { hi: 500, lo: 600 },
+        3 => HiLo { hi: 700, lo: 800 },
+        4 => HiLo { hi: 900, lo: 1000 },
+        5 => HiLo { hi: 1100, lo: 1200 },
+        6 => HiLo { hi: 1300, lo: 1400 },
+        _ => HiLo { hi: 0, lo: 0 },
+    };
+}
+
+// `_ => unreachable()` arms must not disqualify the candidate — they
+// transfer control before the function-level Return is reached.
+#[inline("never")]
+fn return_match_with_unreachable(x: i32) -> Pair {
+    return match x {
+        0 => Pair { a: 1, b: 2 },
+        1 => Pair { a: 3, b: 4 },
+        _ => unreachable(),
+    };
+}
+
+#[inline("never")]
+fn return_if(cond: bool) -> Pair {
+    return if cond {
+        Pair { a: 100, b: 200 }
+    } else {
+        Pair { a: 300, b: 400 }
+    };
+}
+
+#[inline("never")]
+fn use_match_small(x: i32) -> i32 {
+    let p = return_match_small(x);
+    return p.a + p.b;
+}
+
+#[inline("never")]
+fn use_match_large(i: i32) -> u64 {
+    let hl = return_match_large(i);
+    return hl.hi + hl.lo;
+}
+
+#[inline("never")]
+fn use_match_unreachable(x: i32) -> i32 {
+    let p = return_match_with_unreachable(x);
+    return p.a + p.b;
+}
+
+#[inline("never")]
+fn use_if(cond: bool) -> i32 {
+    let p = return_if(cond);
+    return p.a + p.b;
+}
+
+export fn run() {
+    assert use_match_small(0) == 30;
+    assert use_match_small(1) == 70;
+    assert use_match_small(2) == 110;
+
+    assert use_match_large(0) == 300;
+    assert use_match_large(3) == 1500;
+    assert use_match_large(99) == 0;
+
+    assert use_match_unreachable(0) == 3;
+    assert use_match_unreachable(1) == 7;
+
+    assert use_if(true) == 300;
+    assert use_if(false) == 700;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "return_match_small\" = fn(i32) -> [i32, i32]",
+        "return_match_large\" = fn(i32) -> [u64, u64]",
+        "return_match_with_unreachable\" = fn(i32) -> [i32, i32]",
+        "return_if\" = fn(bool) -> [i32, i32]",
+        "multivalue_bind ["
+    ],
+    "wir_not_expect:O2": [
+        "struct.new \"opt_multi_value_user_struct_match.wado//Pair\"",
+        "struct.new \"opt_multi_value_user_struct_match.wado//HiLo\""
+    ]
+}

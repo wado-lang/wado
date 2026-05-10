@@ -1138,8 +1138,8 @@ impl<'a> PatternLowerer<'a> {
                 for (i, sub) in sub_patterns.iter().enumerate().rev() {
                     let elem_type = elem_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
                     let project = TirExpr::new(
-                        TirExprKind::MultiValueProject {
-                            source: Box::new(TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(TirExpr::new(
                                 TirExprKind::Local {
                                     index: temp_index,
                                     name: temp_name.clone(),
@@ -1147,7 +1147,8 @@ impl<'a> PatternLowerer<'a> {
                                 pattern_type,
                                 span,
                             )),
-                            index: i as u32,
+                            field_index: i as u32,
+                            field_name: i.to_string(),
                         },
                         elem_type,
                         span,
@@ -1605,17 +1606,16 @@ impl<'a> PatternLowerer<'a> {
                     .as_tuple(type_table.get_local_type(tuple_temp_index, &self.locals))
                     .unwrap_or_else(|| vec![TypeTable::UNKNOWN; sub_patterns.len()]);
 
-                // Create Let for each element via MultiValueProject. The
-                // multi-value form lets later passes (SROA / multi_value
-                // collapse) elide the temp + struct.new when the temp doesn't
-                // escape — without forcing all tuple destructures through a
-                // heap allocation.
+                // Project each element via FieldAccess. SROA / DCE later
+                // elide the temp + struct.new when the temp doesn't escape,
+                // so we don't force tuple destructures through a heap
+                // allocation.
                 for (i, (sub_pattern, elem_type)) in
                     sub_patterns.iter().zip(elem_types.iter()).enumerate()
                 {
                     let project = TirExpr::new(
-                        TirExprKind::MultiValueProject {
-                            source: Box::new(TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(TirExpr::new(
                                 TirExprKind::Local {
                                     index: tuple_temp_index,
                                     name: tuple_temp_name.clone(),
@@ -1623,7 +1623,8 @@ impl<'a> PatternLowerer<'a> {
                                 type_table.get_local_type(tuple_temp_index, &self.locals),
                                 span,
                             )),
-                            index: i as u32,
+                            field_index: i as u32,
+                            field_name: i.to_string(),
                         },
                         *elem_type,
                         span,
@@ -1907,8 +1908,8 @@ impl<'a> PatternLowerer<'a> {
                     sub_patterns.iter().zip(elem_types.iter()).enumerate()
                 {
                     let project = TirExpr::new(
-                        TirExprKind::MultiValueProject {
-                            source: Box::new(TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(TirExpr::new(
                                 TirExprKind::Local {
                                     index: tuple_temp_index,
                                     name: tuple_temp_name.clone(),
@@ -1916,7 +1917,8 @@ impl<'a> PatternLowerer<'a> {
                                 type_table.get_local_type(tuple_temp_index, &self.locals),
                                 span,
                             )),
-                            index: i as u32,
+                            field_index: i as u32,
+                            field_name: i.to_string(),
                         },
                         *elem_type,
                         span,
@@ -2615,8 +2617,8 @@ impl<'a> PatternLowerer<'a> {
                 for (i, sub) in sub_patterns.iter().enumerate() {
                     let elem_type = element_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
                     let project = TirExpr::new(
-                        TirExprKind::MultiValueProject {
-                            source: Box::new(TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(TirExpr::new(
                                 TirExprKind::Local {
                                     index: tuple_temp_index,
                                     name: tuple_temp_name.clone(),
@@ -2624,7 +2626,8 @@ impl<'a> PatternLowerer<'a> {
                                 scrutinee_type_id,
                                 span,
                             )),
-                            index: i as u32,
+                            field_index: i as u32,
+                            field_name: i.to_string(),
                         },
                         elem_type,
                         span,
@@ -3005,14 +3008,10 @@ impl<'a> PatternLowerer<'a> {
                     self.lower_expr(&mut field.value, type_table);
                 }
             }
-            TirExprKind::TupleLiteral { elements }
-            | TirExprKind::MultiValueLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.lower_expr(elem, type_table);
                 }
-            }
-            TirExprKind::MultiValueProject { source, .. } => {
-                self.lower_expr(source, type_table);
             }
             TirExprKind::IndirectCall { callee, args } => {
                 self.lower_expr(callee, type_table);

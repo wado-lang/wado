@@ -210,16 +210,17 @@ pub fn optimize(
     select_lowering::select_lowering(&mut project);
     profiler.span_end("tir/select_lowering");
 
-    // Multi-value return ABI classification: marks tuple-returning user
-    // functions whose every return site is `MultiValueLiteral` and whose
-    // every call site destructures via `MultiValueProject`. WIR build
+    // Multi-value return ABI classification: marks tuple- or
+    // user-struct-returning functions whose every return site is a fresh
+    // `TupleLiteral` / `StructLiteral` and whose every call site
+    // destructures via `FieldAccess` on the bound temp. WIR build
     // (`wir_build::translate::try_emit_multi_value_let`) reads the marker
     // to emit the multi-value Wasm signature on the function definition
     // and to rewrite call-site `let __tmp = Call(f)` into
     // `MultiValueLocalBind [__tmp_0, …] = Call(f)` with subsequent
-    // `MultiValueProject` reads going to the split locals directly.
-    // Runs after every other transformation so the analysis sees the
-    // final TIR shape.
+    // `FieldAccess` reads going to the split locals directly. Runs after
+    // every other transformation so the analysis sees the final TIR
+    // shape.
     profiler.span_start("tir/multi_value_return");
     multi_value_return::classify_multi_value_returns(&mut project);
     profiler.span_end("tir/multi_value_return");

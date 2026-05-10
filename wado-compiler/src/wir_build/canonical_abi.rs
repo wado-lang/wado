@@ -15,22 +15,57 @@ use super::translate::FunctionTranslator;
 
 impl FunctionTranslator<'_, '_> {
     /// Wrap a multi-value [i64, i64] instruction in a tuple struct.
-    /// The Wasm instruction pushes two i64s on the stack; we wrap them
-    /// in a `StructNew` for the result tuple type [i64, i64].
-    pub(super) fn wrap_multivalue_i64(&self, instr: WirInstr, result_type_id: TypeId) -> WirInstr {
+    /// The Wasm instruction pushes two i64s on the stack; we capture them
+    /// into freshly declared locals via `MultiValueLocalBind`, then build
+    /// a `StructNew` reading the locals back as the struct fields.
+    /// Subsequent destructure patterns at the call site are collapsed by
+    /// `wir_optimize::elide_struct::elide_multi_field_struct_locals`,
+    /// which recognises `LocalSet temp = StructNew { fields: [LocalGet, LocalGet] }`
+    /// followed by `StructGet × N` and substitutes each field access
+    /// directly — eliminating the heap allocation.
+    pub(super) fn wrap_multivalue_i64(
+        &mut self,
+        instr: WirInstr,
+        result_type_id: TypeId,
+    ) -> WirInstr {
         let wir_type = self
             .ctx
             .type_id_to_wir_type(self.type_table, result_type_id);
-        if let WirType::Ref { type_id, .. } = wir_type {
-            // The multi-value instr pushes two i64s, then StructNew wraps them
-            WirInstr::MultiValueStructNew {
-                type_id,
+        let WirType::Ref { type_id, .. } = wir_type else {
+            // Fallback: just emit the instruction (shouldn't happen).
+            return instr;
+        };
+        self.local_counter += 1;
+        let n = self.local_counter;
+        let lo = format!("__mv_lo_{n}");
+        let hi = format!("__mv_hi_{n}");
+        WirInstr::Seq(vec![
+            WirInstr::DeclareLocal {
+                name: lo.clone(),
+                ty: WirType::I64,
+            },
+            WirInstr::DeclareLocal {
+                name: hi.clone(),
+                ty: WirType::I64,
+            },
+            WirInstr::MultiValueLocalBind {
                 instr: Box::new(instr),
-            }
-        } else {
-            // Fallback: just emit the instruction (shouldn't happen)
-            instr
-        }
+                locals: vec![Some(lo.clone()), Some(hi.clone())],
+            },
+            WirInstr::StructNew {
+                type_id,
+                fields: vec![
+                    WirInstr::LocalGet {
+                        name: lo,
+                        result_ty: WirType::I64,
+                    },
+                    WirInstr::LocalGet {
+                        name: hi,
+                        result_ty: WirType::I64,
+                    },
+                ],
+            },
+        ])
     }
 
     // =========================================================================
@@ -232,21 +267,16 @@ impl FunctionTranslator<'_, '_> {
 
     /// Emit `stream-new()` or `future-new()` → split i64 into [`rx_i32`, `tx_i32`] tuple.
     ///
-    /// Wrapped in `MultiValueStructNew` so the WIR `peephole` pass can elide
-    /// the struct allocation when the result is destructured immediately
-    /// (the typical case: `let [rx, tx] = Future::<T>::new();`). The peephole
-    /// pattern is:
-    ///
-    /// ```text
-    /// LocalSet __tmp = MultiValueStructNew { instr: <push low; push high>, type_id }
-    /// LocalSet rx = StructGet(__tmp, "0")
-    /// LocalSet tx = StructGet(__tmp, "1")
-    /// ```
-    ///
-    /// rewritten to `MultiValueLocalBind { instr, locals: [rx, tx] }`. When
-    /// only one of rx/tx is read (e.g. `let [rx, _tx] = ...`), the pass still
-    /// fires and drops the unused stack value — closing the regression where
-    /// PR #1024's TIR-only DCE could not reach the WIR struct.new.
+    /// Captures the two i32s into freshly declared locals, then builds a
+    /// plain `StructNew` reading those locals. When the result is
+    /// destructured at the call site (the typical case:
+    /// `let [rx, tx] = Future::<T>::new();`),
+    /// `wir_optimize::elide_struct::elide_multi_field_struct_locals`
+    /// recognises `LocalSet __tmp = StructNew { fields: [LocalGet, LocalGet] }`
+    /// followed by `StructGet × N` and substitutes each field access
+    /// directly — eliminating the heap allocation. When only one of
+    /// rx/tx is read, the same pass still fires and drops the unused
+    /// `LocalGet`.
     fn emit_stream_or_future_new(
         &mut self,
         is_future: bool,
@@ -262,8 +292,7 @@ impl FunctionTranslator<'_, '_> {
             .ctx
             .ensure_canonical(intrinsic, vec![], vec![WirType::I64]);
 
-        // Resolve the result tuple type for StructNew (or its multi-value
-        // elision target: a struct of two i32 fields).
+        // Resolve the result tuple type for StructNew.
         let wir_type = self
             .ctx
             .type_id_to_wir_type(self.type_table, result_type_id);
@@ -274,11 +303,15 @@ impl FunctionTranslator<'_, '_> {
             ),
         };
 
-        // Declare a temp local, call import → i64, then push low/high i32 onto
-        // the stack as the multi-value producer for `MultiValueStructNew`.
+        // Declare a temp i64 local, call import → i64, then push low/high
+        // i32 onto the stack as the multi-value producer for the
+        // MultiValueLocalBind below.
         self.local_counter += 1;
-        let temp = format!("__pair_temp_{}", self.local_counter);
-        let declare = WirInstr::DeclareLocal {
+        let n = self.local_counter;
+        let temp = format!("__pair_temp_{n}");
+        let lo = format!("__mv_lo_{n}");
+        let hi = format!("__mv_hi_{n}");
+        let declare_temp = WirInstr::DeclareLocal {
             name: temp.clone(),
             ty: WirType::I64,
         };
@@ -302,13 +335,35 @@ impl FunctionTranslator<'_, '_> {
             Box::new(WirInstr::I64Const(32)),
         )));
 
-        // The Seq leaves [low, high] on the stack; MultiValueStructNew either
-        // wraps them in a struct (no elision) or is consumed by peephole's
-        // multi-value-bind rewrite (elision).
-        WirInstr::MultiValueStructNew {
-            type_id,
-            instr: Box::new(WirInstr::Seq(vec![declare, set_temp, get_low, get_high])),
-        }
+        WirInstr::Seq(vec![
+            declare_temp,
+            set_temp,
+            WirInstr::DeclareLocal {
+                name: lo.clone(),
+                ty: WirType::I32,
+            },
+            WirInstr::DeclareLocal {
+                name: hi.clone(),
+                ty: WirType::I32,
+            },
+            WirInstr::MultiValueLocalBind {
+                instr: Box::new(WirInstr::Seq(vec![get_low, get_high])),
+                locals: vec![Some(lo.clone()), Some(hi.clone())],
+            },
+            WirInstr::StructNew {
+                type_id,
+                fields: vec![
+                    WirInstr::LocalGet {
+                        name: lo,
+                        result_ty: WirType::I32,
+                    },
+                    WirInstr::LocalGet {
+                        name: hi,
+                        result_ty: WirType::I32,
+                    },
+                ],
+            },
+        ])
     }
 
     /// Emit `future-read(handle)` → `Option<T>`.

@@ -165,29 +165,29 @@ type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//A
 
 type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(43)
 
-type "functype//core:prelude/Array<Tuple<wasi:filesystem/types.wado/Descriptor,String>>::push" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>", ref "tuple//[Descriptor, String]");  // TypeId(44)
+type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(44)
 
-type "functype//core:prelude/array.wado/Array<Tuple<wasi:filesystem/types.wado/Descriptor,String>>::grow" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>");  // TypeId(45)
+type "functype//core:prelude/Array<Tuple<wasi:filesystem/types.wado/Descriptor,String>>::push" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>", ref "tuple//[Descriptor, String]");  // TypeId(45)
 
-type "functype//core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(46)
+type "functype//core:prelude/array.wado/Array<Tuple<wasi:filesystem/types.wado/Descriptor,String>>::grow" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>");  // TypeId(46)
 
-type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(47)
+type "functype//core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(47)
 
-type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(48)
+type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(48)
 
-type "functype//wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(49)
+type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(49)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(50)
+type "functype//wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(50)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(51)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(51)
 
-type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(52)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(52)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(53)
+type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(53)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(54)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(54)
 
-type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(55)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(55)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -255,7 +255,13 @@ fn "wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado/write_h
             break __inline_StrUtf8ByteIter_Iterator__collect_0: result;
             unreachable;
         };
-        multivalue_bind [rx, tx] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+        let __pair_temp_2: i64;
+        __pair_temp_2 = "wasi/stream-new"();
+        let __mv_lo_2: i32;
+        let __mv_hi_2: i32;
+        multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
+        rx = __mv_lo_2;
+        tx = __mv_hi_2;
         sub = "wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado/__cm_binding__Descriptor_write_via_stream"(file, rx, 0_i64);
         "core:internal/cm_stream_write_u8"(tx, bytes);
         "wasi/stream-drop-writable"(tx);
@@ -527,7 +533,13 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_1: i32;
+    let __mv_hi_1: i32;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
+    rx = __mv_lo_1;
+    tx = __mv_hi_1;
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;
@@ -682,11 +694,11 @@ fn "core:prelude/types.wado/AsyncCall<Result<wasi:filesystem/types.wado/Descript
         });
         b63: block {
             l64: loop {
-                let __sroa_event_code: i32;
-                let __sroa_event_handle: i32;
-                let __sroa_event_payload: u32;
-                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
-                if __sroa_event_payload == 2 {
+                let event_mv_code: i32;
+                let event_mv_handle: i32;
+                let event_mv_payload: u32;
+                multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
+                if event_mv_payload == 2 {
                     break b63;
                 }
                 continue l64;

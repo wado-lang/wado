@@ -399,14 +399,10 @@ fn analyze_expr(
                 analyze_expr(&field.value, result, type_table, first_param_types);
             }
         }
-        TirExprKind::TupleLiteral { elements, .. }
-        | TirExprKind::MultiValueLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 analyze_expr(elem, result, type_table, first_param_types);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            analyze_expr(source, result, type_table, first_param_types);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
@@ -844,14 +840,10 @@ fn apply_in_expr(
                 apply_in_expr(&mut field.value, substitutions, dead_locals);
             }
         }
-        TirExprKind::TupleLiteral { elements, .. }
-        | TirExprKind::MultiValueLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 apply_in_expr(elem, substitutions, dead_locals);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            apply_in_expr(source, substitutions, dead_locals);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {

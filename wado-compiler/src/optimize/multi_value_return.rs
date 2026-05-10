@@ -1,63 +1,80 @@
 //! Multi-value return ABI classification (TIR-level).
 //!
-//! Decides which tuple-returning user functions should use the multi-value
-//! Wasm return ABI (each tuple element a separate result) instead of the
-//! default heap-struct ABI. The decision is recorded on
-//! [`TirFunction.return_abi`] and consumed by `wir_build`:
+//! Decides which aggregate-returning user functions should use the
+//! multi-value Wasm return ABI (each tuple element / struct field a
+//! separate Wasm result) instead of the default heap-struct ABI. The
+//! decision is recorded on [`TirFunction.return_abi`] and consumed by
+//! `wir_build`:
 //! - `wir_build::functions` emits the multi-value Wasm signature on the
 //!   function definition.
 //! - `wir_build::translate::FunctionTranslator::try_emit_multi_value_let`
 //!   rewrites a call site's `let __tmp = Call(f)` into
 //!   `MultiValueLocalBind [__tmp_0, …] = Call(f)` with subsequent
-//!   `MultiValueProject` reads going to the split WIR locals directly.
+//!   `FieldAccess` reads going to the split WIR locals directly.
 //! - `wir_build::translate`'s `Return` arm unwraps the body's
-//!   `MultiValueStructNew` so the function's return pushes N values
-//!   instead of wrapping them in a heap struct.
+//!   `StructNew` so the function's return pushes N values instead of
+//!   wrapping them in a heap struct.
 //!
-//! Historically this work lived in `wir_optimize::sroa_return`, which
-//! pattern-matched on WIR `StructNew` returns and `StructGet` call-site
-//! reads. Moving the decision to TIR has three benefits:
+//! Historically this work lived in `wir_optimize::sroa_variant_return`
+//! (then named `sroa_return`), which pattern-matched on WIR `StructNew`
+//! returns and `StructGet` call-site reads. Moving the decision to TIR
+//! has three benefits:
 //!
-//! 1. **Better visibility**: TIR analysis sees `MultiValueLiteral` /
-//!    `MultiValueProject` directly — high-level intent — rather than
-//!    re-deriving it from low-level WIR shapes that may have already been
-//!    rewritten by intermediate passes.
-//! 2. **Cross-function context**: function ABI is a TIR-level concept, so
-//!    inliner / DCE can use the marker (e.g. an inlined multi-value call
-//!    can be fused without first guessing the ABI).
-//! 3. **Foundation for Stage 2**: stack-only types and tuple parameters
-//!    (Phase 5 follow-up) need TIR-level ABI awareness; this pass lays
-//!    the framework.
+//! 1. **Better visibility**: TIR analysis sees `TupleLiteral` /
+//!    `StructLiteral` / `FieldAccess` directly — high-level intent —
+//!    rather than re-deriving it from low-level WIR shapes that may
+//!    have already been rewritten by intermediate passes.
+//! 2. **Cross-function context**: function ABI is a TIR-level concept,
+//!    so inliner / DCE can use the marker (e.g. an inlined multi-value
+//!    call can be fused without first guessing the ABI).
+//! 3. **Foundation for stack-only types**: the TIR multi-value
+//!    framework lays groundwork for further ABI work.
 //!
 //! ## Eligibility
 //!
 //! A function `f` is a candidate when **all** of the following hold:
 //!
 //! - `f` is not pinned (not exported, not used as `RefFunc`, not in an
-//!   element table). Pinned functions have observable ABIs we can't change.
-//! - `f`'s return type is `Tuple<T_0, …, T_n>` with `2 ≤ n ≤ 4`, and every
-//!   `T_i` is an eligible scalar / non-nullable ref (matching
-//!   `wir_optimize::sroa_return`'s rules — i.e. anything Wasm multi-value
-//!   can carry on the stack).
-//! - Every `Return` statement in `f`'s body produces a `MultiValueLiteral`
-//!   of arity `n`. Variant returns are *not* candidates here (the WIR
-//!   `sroa_return` variant path handles those).
+//!   element table). Pinned functions have observable ABIs we can't
+//!   change.
+//! - `f`'s return type is one of:
+//!   - `Tuple<T_0, …, T_n>` with `2 ≤ n ≤ 4`, every `T_i` eligible.
+//!   - A user-defined struct with 2-4 fields, every field type
+//!     eligible. Variant returns are *not* candidates here (the WIR
+//!     `sroa_variant_return` pass handles those).
+//! - Every `Return` statement in `f`'s body produces a fresh aggregate
+//!   literal of the right shape (`TupleLiteral` for tuple returns,
+//!   `StructLiteral` whose `struct_type` matches the return type for
+//!   struct returns) with matching arity.
 //! - Every call site of `f` is `let __tmp = Call(f); …` where the only
-//!   uses of `__tmp` are `MultiValueProject(LocalGet(__tmp), i)`. Bare
-//!   references, address-take, closure capture, and field assignment all
-//!   disqualify the candidate.
+//!   uses of `__tmp` are `FieldAccess(LocalGet(__tmp), name)` (with
+//!   `name` matching one of the aggregate's field names). Bare
+//!   references, address-take, closure capture, and field assignment
+//!   all disqualify the candidate.
 //!
 //! Candidates that survive both checks have their `return_abi` set to
-//! `MultiValue { result_types }` carrying the tuple element types.
+//! `MultiValue { result_types, field_names }` carrying the per-field
+//! TIR types and names.
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
 use crate::tir::{
     FunctionKind, ResolvedType, ReturnAbi, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt,
-    TirStmtKind, TypeId, TypeTable,
+    TirStmtKind, TirStruct, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
+
+/// Per-candidate body-only info: the per-field TIR types and field names
+/// (in declaration order). For tuples, `field_names` is `["0", "1", ...]`.
+/// For user structs, the struct's actual field names.
+#[derive(Clone, Debug)]
+struct CandidateInfo {
+    result_types: Vec<TypeId>,
+    field_names: Vec<String>,
+    /// Set of `field_names` for O(1) safe-pattern membership checks.
+    field_name_set: IndexSet<String>,
+}
 
 /// If `expr` is a direct `Call(f)` or `MethodCall(f)` whose callee `f` is
 /// a candidate in `candidate_names`, return that candidate's index.
@@ -79,17 +96,46 @@ fn candidate_call_idx(
         .copied()
 }
 
-/// Classify tuple-returning functions and set `return_abi` on those whose
-/// every return statement and every call site permit the multi-value ABI.
+/// Walk the argument expressions of a (Method)Call so any tracked-local
+/// escapes inside the args invalidate the right candidate. The call's
+/// own ABI is already accepted by the caller (it's the safe `let __tmp =
+/// Call` shape) — only the args need recursive validation.
+fn walk_call_args_for_uses(
+    expr: &TirExpr,
+    candidate_names: &IndexMap<(String, ModuleSource), usize>,
+    candidates: &IndexMap<usize, CandidateInfo>,
+    invalid: &mut IndexSet<usize>,
+    tracked: &IndexMap<u32, usize>,
+) {
+    match &expr.kind {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                walk_expr_for_uses(&arg.expr, candidate_names, candidates, invalid, tracked);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            walk_expr_for_uses(receiver, candidate_names, candidates, invalid, tracked);
+            for arg in args {
+                walk_expr_for_uses(&arg.expr, candidate_names, candidates, invalid, tracked);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Classify aggregate-returning functions and set `return_abi` on those
+/// whose every return statement and every call site permit the
+/// multi-value ABI.
 pub fn classify_multi_value_returns(project: &mut FlatPackage) {
     let type_table = project.type_table.borrow();
+    let structs = &project.structs;
 
     // Phase 1: candidate identification — body-only checks.
-    let mut candidates: IndexMap<usize, Vec<TypeId>> = IndexMap::default();
+    let mut candidates: IndexMap<usize, CandidateInfo> = IndexMap::default();
     for (idx, func_rc) in project.functions.iter().enumerate() {
         let func = func_rc.borrow();
-        if let Some(result_types) = candidate_result_types(&func, &type_table) {
-            candidates.insert(idx, result_types);
+        if let Some(info) = candidate_info(&func, &type_table, structs) {
+            candidates.insert(idx, info);
         }
     }
     if candidates.is_empty() {
@@ -100,7 +146,7 @@ pub fn classify_multi_value_returns(project: &mut FlatPackage) {
     // body, including the candidates themselves (a candidate calling
     // another candidate is fine). The check in `validate_uses_in_block`
     // disqualifies a candidate when even one of its call sites uses the
-    // result outside the `MultiValueProject(local)` pattern.
+    // result outside the `FieldAccess(local, name)` pattern.
     //
     // Keyed by `(name, module_source)` — plain names collide across
     // modules (e.g. two `make_pair` in different `.wado` files would
@@ -118,23 +164,31 @@ pub fn classify_multi_value_returns(project: &mut FlatPackage) {
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let Some(body) = &func.body else { continue };
-        validate_uses_in_block(body, &candidate_names, &mut invalid);
+        validate_uses_in_block(body, &candidate_names, &candidates, &mut invalid);
     }
 
     // Phase 3: apply. Drop disqualified candidates, set ReturnAbi on the rest.
     drop(type_table);
-    for (idx, result_types) in candidates {
+    for (idx, info) in candidates {
         if invalid.contains(&idx) {
             continue;
         }
         let mut func = project.functions[idx].borrow_mut();
-        func.return_abi = ReturnAbi::MultiValue { result_types };
+        func.return_abi = ReturnAbi::MultiValue {
+            result_types: info.result_types,
+            field_names: info.field_names,
+        };
     }
 }
 
-/// Body-only candidate check. Returns `Some(result_types)` if the function
-/// is body-eligible (return type and every return statement match).
-fn candidate_result_types(func: &TirFunction, type_table: &TypeTable) -> Option<Vec<TypeId>> {
+/// Body-only candidate check. Returns `Some(info)` if the function is
+/// body-eligible (return type is tuple-or-struct, arity 2-4, all fields
+/// eligible, every return statement matches the shape).
+fn candidate_info(
+    func: &TirFunction,
+    type_table: &TypeTable,
+    structs: &[TirStruct],
+) -> Option<CandidateInfo> {
     // Restrict to ordinary (Regular) functions. Synthesised stubs
     // (`ValueCopy`, `FnCanonicalDispatch`) and the dispatch wrappers used
     // by effect handlers all have ABIs that are pinned by their callers,
@@ -162,57 +216,89 @@ fn candidate_result_types(func: &TirFunction, type_table: &TypeTable) -> Option<
     if func.has_real_type_params() || !func.impl_type_params.is_empty() {
         return None;
     }
-    // Methods on regular `impl` blocks are eligible alongside free
-    // functions: after monomorphisation a method call is a static
-    // `MethodCall { func, .. }` whose `func` resolves the same way a
-    // free-function `Call` does, and the call-site validation below
-    // catches every shape that prevents rewriting (bare local references,
-    // address-take, escape via call argument, etc.).
-    //
-    // Trait methods (`impl Trait for T`) and synthesized closure functor
-    // `__call` methods are excluded: they participate in dispatch
-    // infrastructure (effect handlers, closure functors via the `Fn<…>`
-    // traits, vtable indirect calls) whose canonical Wasm signature is a
-    // single-value `(ref T)` baked into the dispatch type. Reshaping the
-    // impl method to return multi-value would skew the signature against
-    // the vtable slot it's installed into.
-    //
-    // Closure functor `__call` methods are inherent methods syntactically
-    // (`trait_name` is `None`) but are dispatched indirectly via the
-    // `Fn<arity, ret>` canonical type, so `is_trait_method()` alone is not
-    // enough — `is_closure_call()` filters them explicitly.
-    //
-    // A future refinement could detect "trait method whose every caller
-    // is a static `MethodCall`, never an indirect dispatch" and let
-    // those through, but the current bright line keeps the analysis
-    // sound by construction.
+    // Trait methods and synthesized closure functor `__call` methods are
+    // excluded: they participate in dispatch infrastructure (effect
+    // handlers, closure functors via the `Fn<…>` traits, vtable
+    // indirect calls) whose canonical Wasm signature is a single-value
+    // `(ref T)` baked into the dispatch type. Reshaping the impl method
+    // to return multi-value would skew the signature against the vtable
+    // slot it's installed into.
     if func.is_trait_method() || func.is_closure_call() {
         return None;
     }
 
     let body = func.body.as_ref()?;
+    let return_type = func.return_type;
 
-    // Return type must be a built-in tuple of 2-4 elements.
-    let result_types = type_table.as_tuple(func.return_type)?;
+    // Determine the aggregate shape and per-field info.
+    let (result_types, field_names, is_struct_shape) =
+        aggregate_field_info(return_type, type_table, structs)?;
     if !(2..=4).contains(&result_types.len()) {
         return None;
     }
-    // Every element type must be eligible for Wasm multi-value carriage.
     for &t in &result_types {
         if !is_eligible_field_type(t, type_table) {
             return None;
         }
     }
 
-    // Every Return statement's value must be a `MultiValueLiteral` of the
-    // matching arity. Implicit tail-expression returns are normalised to
-    // explicit `Return` by the lowering, so a body without any `Return`
-    // is fine — it returns unit (already excluded by the tuple check).
-    if !all_returns_are_multi_value_literal(body, result_types.len()) {
+    // Every Return statement's value must be a fresh aggregate literal of
+    // the right shape and matching arity. Implicit tail-expression
+    // returns are normalised to explicit `Return` by the lowering, so a
+    // body without any `Return` is fine — it returns unit (already
+    // excluded by the aggregate check).
+    let expected = ExpectedShape {
+        arity: result_types.len(),
+        struct_type: if is_struct_shape {
+            Some(return_type)
+        } else {
+            None
+        },
+    };
+    if !all_returns_match_shape(body, &expected) {
         return None;
     }
 
-    Some(result_types)
+    let field_name_set: IndexSet<String> = field_names.iter().cloned().collect();
+    Some(CandidateInfo {
+        result_types,
+        field_names,
+        field_name_set,
+    })
+}
+
+/// Inspect `return_type` and return per-field info if the return is a
+/// tuple or a user-defined struct with 2..=4 fields. Third tuple element
+/// indicates whether this is a struct (vs tuple).
+fn aggregate_field_info(
+    return_type: TypeId,
+    type_table: &TypeTable,
+    structs: &[TirStruct],
+) -> Option<(Vec<TypeId>, Vec<String>, bool)> {
+    if let Some(elems) = type_table.as_tuple(return_type) {
+        let names: Vec<String> = (0..elems.len()).map(|i| i.to_string()).collect();
+        return Some((elems, names, false));
+    }
+    // User-defined struct?
+    let resolved = type_table.get(return_type);
+    if let ResolvedType::Struct {
+        name,
+        module_source,
+        ..
+    } = resolved
+    {
+        let s = structs
+            .iter()
+            .find(|s| s.name == *name && s.module_source == *module_source)?;
+        // Skip generic / template structs that shouldn't be in optimised TIR.
+        if !s.type_params.is_empty() {
+            return None;
+        }
+        let result_types: Vec<TypeId> = s.fields.iter().map(|f| f.type_id).collect();
+        let field_names: Vec<String> = s.fields.iter().map(|f| f.name.clone()).collect();
+        return Some((result_types, field_names, true));
+    }
+    None
 }
 
 /// Whether a TIR type can occupy a slot of a multi-value Wasm result.
@@ -249,51 +335,60 @@ fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     }
 }
 
+/// Per-candidate expected-shape info threaded through the body validator.
+#[derive(Clone, Copy)]
+struct ExpectedShape {
+    arity: usize,
+    /// `Some(struct_type_id)` when the candidate's return type is a user
+    /// struct. `None` for tuple returns (which use `TupleLiteral`).
+    struct_type: Option<TypeId>,
+}
+
 /// Check that every `return` statement in `block` (recursively, through
-/// nested blocks) carries a `MultiValueLiteral` of `expected_arity`.
-fn all_returns_are_multi_value_literal(block: &TirBlock, expected_arity: usize) -> bool {
+/// nested blocks) carries a fresh aggregate literal of the expected shape.
+fn all_returns_match_shape(block: &TirBlock, expected: &ExpectedShape) -> bool {
     block
         .stmts
         .iter()
-        .all(|stmt| stmt_returns_match(stmt, expected_arity))
+        .all(|stmt| stmt_returns_match(stmt, expected))
 }
 
-fn stmt_returns_match(stmt: &TirStmt, expected_arity: usize) -> bool {
+fn stmt_returns_match(stmt: &TirStmt, expected: &ExpectedShape) -> bool {
     match &stmt.kind {
-        TirStmtKind::Return { value: None } => false, // void return on a tuple-return fn
-        TirStmtKind::Return { value: Some(v) } => expr_returns_multi_value(v, expected_arity),
+        TirStmtKind::Return { value: None } => false, // void return on aggregate-return fn
+        TirStmtKind::Return { value: Some(v) } => expr_returns_match(v, expected),
         TirStmtKind::If {
             then_block,
             else_block,
             ..
         } => {
-            all_returns_are_multi_value_literal(then_block, expected_arity)
+            all_returns_match_shape(then_block, expected)
                 && else_block
                     .as_ref()
-                    .is_none_or(|b| all_returns_are_multi_value_literal(b, expected_arity))
+                    .is_none_or(|b| all_returns_match_shape(b, expected))
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            all_returns_are_multi_value_literal(body, expected_arity)
+            all_returns_match_shape(body, expected)
         }
         TirStmtKind::IfLet {
             then_block,
             else_block,
             ..
         } => {
-            all_returns_are_multi_value_literal(then_block, expected_arity)
+            all_returns_match_shape(then_block, expected)
                 && else_block
                     .as_ref()
-                    .is_none_or(|b| all_returns_are_multi_value_literal(b, expected_arity))
+                    .is_none_or(|b| all_returns_match_shape(b, expected))
         }
         // Let / Expr / Break / Continue / TaskReturn / VariadicForOf — no
         // explicit Return; recurse into nested blocks via expression walks.
         TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
-            nested_returns_in_expr_match(value, expected_arity)
+            nested_returns_in_expr_match(value, expected)
         }
-        TirStmtKind::Expr(e) => nested_returns_in_expr_match(e, expected_arity),
+        TirStmtKind::Expr(e) => nested_returns_in_expr_match(e, expected),
         TirStmtKind::Break { value, .. } => value
             .as_ref()
-            .is_none_or(|v| nested_returns_in_expr_match(v, expected_arity)),
+            .is_none_or(|v| nested_returns_in_expr_match(v, expected)),
         TirStmtKind::Continue => true,
         TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => true,
     }
@@ -301,96 +396,221 @@ fn stmt_returns_match(stmt: &TirStmt, expected_arity: usize) -> bool {
 
 /// Walk an expression tree, asserting every nested explicit `Return`
 /// (e.g. inside a labelled block / match arm) carries a matching
-/// `MultiValueLiteral`.
-fn nested_returns_in_expr_match(expr: &TirExpr, expected_arity: usize) -> bool {
-    struct Walker {
-        expected_arity: usize,
+/// aggregate literal.
+fn nested_returns_in_expr_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
+    struct Walker<'a> {
+        expected: &'a ExpectedShape,
         ok: bool,
     }
-    impl TirRefVisitor for Walker {
+    impl TirRefVisitor for Walker<'_> {
         fn visit_stmt(&mut self, stmt: &TirStmt) {
             if !self.ok {
                 return;
             }
-            if !stmt_returns_match(stmt, self.expected_arity) {
+            if !stmt_returns_match(stmt, self.expected) {
                 self.ok = false;
                 return;
             }
             self.walk_stmt(stmt);
         }
     }
-    let mut w = Walker {
-        expected_arity,
-        ok: true,
-    };
+    let mut w = Walker { expected, ok: true };
     w.visit_expr(expr);
     w.ok
 }
 
-/// Whether the value of a `Return` statement is a tuple-shaped
-/// `MultiValueLiteral` of the expected arity. Permits the value to be
-/// wrapped in a labelled-block break-value position (matched by the
-/// resolver for `[..spread]` rewrites and synthesis temps), since the
-/// final result still flows out as the same expression.
-fn expr_returns_multi_value(expr: &TirExpr, expected_arity: usize) -> bool {
+/// Whether the value of a `Return` statement is a fresh aggregate literal
+/// of the expected shape and arity, possibly wrapped in control-flow
+/// constructs (Block, If, Match, Switch) whose tail expressions are
+/// themselves fresh literals. Wrapped forms are accepted because WIR
+/// build's Return arm recursively unwraps leaf `StructNew`s in nested
+/// blocks / conditionals when the function's `ReturnAbi::MultiValue` is
+/// set.
+fn expr_returns_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
+    // Diverging arms (`_ => unreachable()`, etc.) carry control flow away
+    // before the function-level Return is reached, so they don't need to
+    // produce a fresh aggregate. Accept them so e.g. `pow10_coarse`'s
+    // `_ => unreachable()` exhaustive-match branch isn't a disqualifier.
+    if expr.type_id == TypeTable::NEVER {
+        return true;
+    }
     match &expr.kind {
-        TirExprKind::MultiValueLiteral { elements } => elements.len() == expected_arity,
-        TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } => {
-            // The block's tail value is its last `Break { value }` or its
-            // final expression statement — for our purposes it's enough that
-            // *every* explicit Return inside still matches and that the
-            // block's outer expression type is the tuple. We rely on the
-            // type matching the function signature (already checked) and
-            // recurse into the block to validate any nested Returns.
-            all_returns_are_multi_value_literal(b, expected_arity)
+        TirExprKind::TupleLiteral { elements } => {
+            expected.struct_type.is_none() && elements.len() == expected.arity
+        }
+        TirExprKind::StructLiteral {
+            struct_type,
+            fields,
+            ..
+        } => match expected.struct_type {
+            Some(t) => *struct_type == t && fields.len() == expected.arity,
+            None => false,
+        },
+        TirExprKind::Block(b) => {
+            // Plain block: only the tail expression flows out (no
+            // `break` can target an unlabelled block from outside).
+            all_returns_match_shape(b, expected) && block_tail_returns_match(b, expected)
+        }
+        TirExprKind::LabeledBlock { block: b, .. } => {
+            // Labelled block: tail expression *and* every `break`
+            // targeting this label flow out as the function's return
+            // value. Without label-tracking we can't tell which inner
+            // breaks target this block versus an outer one, so we
+            // require *every* break-with-value inside the block to
+            // carry a matching fresh literal — conservative but the
+            // alternative is invalid Wasm at return-side unwrap time
+            // when a non-literal break value flows past the
+            // multi-value signature.
+            all_returns_match_shape(b, expected)
+                && block_tail_returns_match(b, expected)
+                && all_break_values_match_shape(b, expected)
         }
         TirExprKind::If {
             then_branch,
             else_branch,
             ..
         } => {
-            all_returns_are_multi_value_literal(then_branch, expected_arity)
-                && else_branch
-                    .as_ref()
-                    .is_none_or(|b| all_returns_are_multi_value_literal(b, expected_arity))
+            all_returns_match_shape(then_branch, expected)
+                && block_tail_returns_match(then_branch, expected)
+                && else_branch.as_ref().is_none_or(|b| {
+                    all_returns_match_shape(b, expected) && block_tail_returns_match(b, expected)
+                })
         }
-        // `return match { … }`: every arm body's tail expression must
-        // produce a `MultiValueLiteral` of matching arity. We approximate
-        // by requiring every `Return` inside each arm body matches; the
-        // arm's final tail expression is checked structurally (each arm
-        // body is itself an expression).
         TirExprKind::Match { arms, .. } => arms
             .iter()
-            .all(|arm| expr_returns_multi_value(&arm.body, expected_arity)),
-        // `return switch { … }`: same idea as `Match`, but scrutinee
-        // dispatch goes through indexed `Switch` arms (each a block).
+            .all(|arm| expr_returns_match(&arm.body, expected)),
         TirExprKind::Switch { arms, default, .. } => {
-            arms.iter()
-                .all(|arm| all_returns_are_multi_value_literal(arm, expected_arity))
-                && all_returns_are_multi_value_literal(default, expected_arity)
+            arms.iter().all(|arm| {
+                all_returns_match_shape(arm, expected) && block_tail_returns_match(arm, expected)
+            }) && all_returns_match_shape(default, expected)
+                && block_tail_returns_match(default, expected)
         }
         // Anything else (Call result, FieldAccess, etc.) at the return
-        // position would mean the function returns an opaque tuple value
-        // rather than constructing a fresh one — not a candidate for the
-        // multi-value rewrite (the value escapes the function as a single
-        // ref through whatever computed it).
+        // position would mean the function returns an opaque aggregate
+        // value rather than constructing a fresh one — not a candidate
+        // for the multi-value rewrite.
+        _ => false,
+    }
+}
+
+/// For a labelled block reached at return position, walk every nested
+/// `Break { value: Some(v) }` (recursively, through inner blocks /
+/// ifs / matches / switches / loops) and require `v` to match the
+/// expected fresh-literal shape. Without label tracking we can't tell
+/// which inner breaks target the outer labelled block versus an inner
+/// loop / labelled block, so we conservatively require literal values
+/// for every break. Functions whose inner breaks carry computed values
+/// stay on the heap-struct ABI; that's the same trade-off as rejecting
+/// `return match { … }` arms whose tail isn't a literal.
+fn all_break_values_match_shape(block: &TirBlock, expected: &ExpectedShape) -> bool {
+    block
+        .stmts
+        .iter()
+        .all(|stmt| stmt_break_values_match(stmt, expected))
+}
+
+fn stmt_break_values_match(stmt: &TirStmt, expected: &ExpectedShape) -> bool {
+    match &stmt.kind {
+        TirStmtKind::Break { value: Some(v), .. } => {
+            // The break value flows out as the labelled block's value.
+            // It must itself be a fresh aggregate literal matching the
+            // expected shape, AND its sub-expressions must not contain
+            // further breaks with non-literal values.
+            expr_returns_match(v, expected) && expr_break_values_match(v, expected)
+        }
+        TirStmtKind::Break { value: None, .. } | TirStmtKind::Continue => true,
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            expr_break_values_match(condition, expected)
+                && all_break_values_match_shape(then_block, expected)
+                && else_block
+                    .as_ref()
+                    .is_none_or(|b| all_break_values_match_shape(b, expected))
+        }
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            expr_break_values_match(scrutinee, expected)
+                && all_break_values_match_shape(then_block, expected)
+                && else_block
+                    .as_ref()
+                    .is_none_or(|b| all_break_values_match_shape(b, expected))
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            all_break_values_match_shape(body, expected)
+        }
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+            expr_break_values_match(value, expected)
+        }
+        TirStmtKind::Expr(e) | TirStmtKind::Return { value: Some(e) } => {
+            expr_break_values_match(e, expected)
+        }
+        TirStmtKind::Return { value: None }
+        | TirStmtKind::TaskReturn { .. }
+        | TirStmtKind::VariadicForOf { .. } => true,
+    }
+}
+
+fn expr_break_values_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
+    struct Walker<'a> {
+        expected: &'a ExpectedShape,
+        ok: bool,
+    }
+    impl TirRefVisitor for Walker<'_> {
+        fn visit_stmt(&mut self, stmt: &TirStmt) {
+            if !self.ok {
+                return;
+            }
+            if !stmt_break_values_match(stmt, self.expected) {
+                self.ok = false;
+                return;
+            }
+            self.walk_stmt(stmt);
+        }
+    }
+    let mut w = Walker { expected, ok: true };
+    w.visit_expr(expr);
+    w.ok
+}
+
+/// For a block reached at return / arm-tail position, the trailing
+/// expression (or break-value) must itself be a fresh aggregate literal
+/// (or further-nested control flow that ends in one). Statements before
+/// the tail are already validated by `all_returns_match_shape`.
+fn block_tail_returns_match(block: &TirBlock, expected: &ExpectedShape) -> bool {
+    let Some(last) = block.stmts.last() else {
+        return false;
+    };
+    match &last.kind {
+        TirStmtKind::Expr(e) => expr_returns_match(e, expected),
+        TirStmtKind::Break { value: Some(v), .. } => expr_returns_match(v, expected),
+        // An explicit Return at tail position is fine — `all_returns_match_shape`
+        // already validates its value.
+        TirStmtKind::Return { .. } => true,
         _ => false,
     }
 }
 
 /// Visitor that disqualifies candidate functions whose call sites use the
 /// result in any way other than `let __tmp = Call(f); …
-/// MultiValueProject(LocalGet(__tmp), i) …`.
+/// FieldAccess(LocalGet(__tmp), name) …`.
 fn validate_uses_in_block(
     block: &TirBlock,
     candidate_names: &IndexMap<(String, ModuleSource), usize>,
+    candidates: &IndexMap<usize, CandidateInfo>,
     invalid: &mut IndexSet<usize>,
 ) {
     // Track local indices that are bound to a candidate-call result in
     // the current scope. The scope ends at block exit.
     let mut tracked: IndexMap<u32, usize> = IndexMap::default();
     for stmt in &block.stmts {
-        validate_stmt(stmt, candidate_names, invalid, &mut tracked);
+        validate_stmt(stmt, candidate_names, candidates, invalid, &mut tracked);
     }
     // Block exit: any tracked locals that the visitor never confirmed
     // safe (via uses) are still considered safe — their absence of use
@@ -400,6 +620,7 @@ fn validate_uses_in_block(
 fn validate_stmt(
     stmt: &TirStmt,
     candidate_names: &IndexMap<(String, ModuleSource), usize>,
+    candidates: &IndexMap<usize, CandidateInfo>,
     invalid: &mut IndexSet<usize>,
     tracked: &mut IndexMap<u32, usize>,
 ) {
@@ -411,31 +632,30 @@ fn validate_stmt(
             ..
         } => {
             // If the RHS is a direct call (free function or method) to a
-            // candidate, start tracking this local. The bind itself is the
-            // only safe shape, so we do not recurse into the Call's args.
+            // candidate, start tracking this local. The call shape itself
+            // is safe, but its arguments may still reference other tracked
+            // locals — recurse into the args so any escapes there are
+            // counted.
             if !*is_mut && let Some(candidate_idx) = candidate_call_idx(value, candidate_names) {
                 tracked.insert(*local_index, candidate_idx);
+                walk_call_args_for_uses(value, candidate_names, candidates, invalid, tracked);
                 return;
             }
             // Any other RHS — walk it for both (a) nested candidate calls
             // in non-bind positions (the call's result flows somewhere we
-            // can't rewrite) and (b) bare references to tracked locals
-            // (e.g. `let v = a.0` where `a` was bound from a candidate
-            // earlier in the scope: the FieldAccess reads `a` as a single
-            // ref, not as a multi-value tuple, so the candidate must
-            // remain heap-resident).
-            walk_expr_for_uses(value, candidate_names, invalid, tracked);
+            // can't rewrite) and (b) bare references to tracked locals.
+            walk_expr_for_uses(value, candidate_names, candidates, invalid, tracked);
         }
         TirStmtKind::LetDestructure { value, .. } => {
-            walk_expr_for_uses(value, candidate_names, invalid, tracked);
+            walk_expr_for_uses(value, candidate_names, candidates, invalid, tracked);
         }
         TirStmtKind::Expr(e) | TirStmtKind::Return { value: Some(e) } => {
-            walk_expr_for_uses(e, candidate_names, invalid, tracked);
+            walk_expr_for_uses(e, candidate_names, candidates, invalid, tracked);
         }
         TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                walk_expr_for_uses(v, candidate_names, invalid, tracked);
+                walk_expr_for_uses(v, candidate_names, candidates, invalid, tracked);
             }
         }
         TirStmtKind::If {
@@ -443,26 +663,24 @@ fn validate_stmt(
             then_block,
             else_block,
         } => {
-            walk_expr_for_uses(condition, candidate_names, invalid, tracked);
+            walk_expr_for_uses(condition, candidate_names, candidates, invalid, tracked);
             // Tracked locals propagate into nested blocks (lexical scope).
-            // We clone the map so inner-block re-bindings don't leak out;
-            // semantically tracked is about "this local at this point is
-            // known to hold a candidate result".
+            // We clone the map so inner-block re-bindings don't leak out.
             let mut inner = tracked.clone();
             for stmt in &then_block.stmts {
-                validate_stmt(stmt, candidate_names, invalid, &mut inner);
+                validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
             }
             if let Some(eb) = else_block {
                 let mut inner = tracked.clone();
                 for stmt in &eb.stmts {
-                    validate_stmt(stmt, candidate_names, invalid, &mut inner);
+                    validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
                 }
             }
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             let mut inner = tracked.clone();
             for stmt in &body.stmts {
-                validate_stmt(stmt, candidate_names, invalid, &mut inner);
+                validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
             }
         }
         TirStmtKind::IfLet {
@@ -471,15 +689,15 @@ fn validate_stmt(
             else_block,
             ..
         } => {
-            walk_expr_for_uses(scrutinee, candidate_names, invalid, tracked);
+            walk_expr_for_uses(scrutinee, candidate_names, candidates, invalid, tracked);
             let mut inner = tracked.clone();
             for stmt in &then_block.stmts {
-                validate_stmt(stmt, candidate_names, invalid, &mut inner);
+                validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
             }
             if let Some(eb) = else_block {
                 let mut inner = tracked.clone();
                 for stmt in &eb.stmts {
-                    validate_stmt(stmt, candidate_names, invalid, &mut inner);
+                    validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
                 }
             }
         }
@@ -489,24 +707,33 @@ fn validate_stmt(
 
 /// Walk an expression tree, validating any uses of tracked candidate-call
 /// locals. A use disqualifies the candidate unless it's a
-/// `MultiValueProject(LocalGet(tracked))` access.
+/// `FieldAccess(LocalGet(tracked), name)` access where `name` is one of
+/// the candidate's known field names.
 fn walk_expr_for_uses(
     expr: &TirExpr,
     candidate_names: &IndexMap<(String, ModuleSource), usize>,
+    candidates: &IndexMap<usize, CandidateInfo>,
     invalid: &mut IndexSet<usize>,
     tracked: &IndexMap<u32, usize>,
 ) {
     match &expr.kind {
-        // Safe access pattern: `MultiValueProject(LocalGet(tracked), …)`.
-        // Don't recurse into the inner Local — that would mark it as a
+        // Safe access pattern: `FieldAccess(LocalGet(tracked), name)`
+        // where `name` is one of the candidate's field names. Don't
+        // recurse into the inner Local — that would mark it as a
         // bare reference.
-        TirExprKind::MultiValueProject { source, .. } => {
-            if matches!(&source.kind, TirExprKind::Local { index, .. }
-                if tracked.contains_key(index))
+        TirExprKind::FieldAccess {
+            expr: source,
+            field_name,
+            ..
+        } => {
+            if let TirExprKind::Local { index, .. } = &source.kind
+                && let Some(&candidate_idx) = tracked.get(index)
+                && let Some(info) = candidates.get(&candidate_idx)
+                && info.field_name_set.contains(field_name)
             {
                 return;
             }
-            walk_expr_for_uses(source, candidate_names, invalid, tracked);
+            walk_expr_for_uses(source, candidate_names, candidates, invalid, tracked);
         }
         // Bare local reference of a tracked candidate result → escape.
         TirExprKind::Local { index, .. } => {
@@ -525,7 +752,7 @@ fn walk_expr_for_uses(
                 invalid.insert(candidate_idx);
             }
             for arg in args {
-                walk_expr_for_uses(&arg.expr, candidate_names, invalid, tracked);
+                walk_expr_for_uses(&arg.expr, candidate_names, candidates, invalid, tracked);
             }
         }
         TirExprKind::MethodCall {
@@ -539,26 +766,26 @@ fn walk_expr_for_uses(
             {
                 invalid.insert(candidate_idx);
             }
-            walk_expr_for_uses(receiver, candidate_names, invalid, tracked);
+            walk_expr_for_uses(receiver, candidate_names, candidates, invalid, tracked);
             for arg in args {
-                walk_expr_for_uses(&arg.expr, candidate_names, invalid, tracked);
+                walk_expr_for_uses(&arg.expr, candidate_names, candidates, invalid, tracked);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                walk_expr_for_uses(arg, candidate_names, invalid, tracked);
+                walk_expr_for_uses(arg, candidate_names, candidates, invalid, tracked);
             }
         }
         TirExprKind::IndirectCall { callee, args } => {
-            walk_expr_for_uses(callee, candidate_names, invalid, tracked);
+            walk_expr_for_uses(callee, candidate_names, candidates, invalid, tracked);
             for arg in args {
-                walk_expr_for_uses(arg, candidate_names, invalid, tracked);
+                walk_expr_for_uses(arg, candidate_names, candidates, invalid, tracked);
             }
         }
         TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } => {
             let mut inner = tracked.clone();
             for stmt in &b.stmts {
-                validate_stmt(stmt, candidate_names, invalid, &mut inner);
+                validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
             }
         }
         TirExprKind::If {
@@ -566,25 +793,25 @@ fn walk_expr_for_uses(
             then_branch,
             else_branch,
         } => {
-            walk_expr_for_uses(condition, candidate_names, invalid, tracked);
+            walk_expr_for_uses(condition, candidate_names, candidates, invalid, tracked);
             let mut inner = tracked.clone();
             for stmt in &then_branch.stmts {
-                validate_stmt(stmt, candidate_names, invalid, &mut inner);
+                validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
             }
             if let Some(eb) = else_branch {
                 let mut inner = tracked.clone();
                 for stmt in &eb.stmts {
-                    validate_stmt(stmt, candidate_names, invalid, &mut inner);
+                    validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
                 }
             }
         }
         TirExprKind::Match { expr: scrut, arms } => {
-            walk_expr_for_uses(scrut, candidate_names, invalid, tracked);
+            walk_expr_for_uses(scrut, candidate_names, candidates, invalid, tracked);
             for arm in arms {
                 if let Some(g) = &arm.guard {
-                    walk_expr_for_uses(g, candidate_names, invalid, tracked);
+                    walk_expr_for_uses(g, candidate_names, candidates, invalid, tracked);
                 }
-                walk_expr_for_uses(&arm.body, candidate_names, invalid, tracked);
+                walk_expr_for_uses(&arm.body, candidate_names, candidates, invalid, tracked);
             }
         }
         TirExprKind::Switch {
@@ -593,16 +820,16 @@ fn walk_expr_for_uses(
             default,
             ..
         } => {
-            walk_expr_for_uses(scrutinee, candidate_names, invalid, tracked);
+            walk_expr_for_uses(scrutinee, candidate_names, candidates, invalid, tracked);
             for arm in arms {
                 let mut inner = tracked.clone();
                 for stmt in &arm.stmts {
-                    validate_stmt(stmt, candidate_names, invalid, &mut inner);
+                    validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
                 }
             }
             let mut inner = tracked.clone();
             for stmt in &default.stmts {
-                validate_stmt(stmt, candidate_names, invalid, &mut inner);
+                validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
             }
         }
         TirExprKind::Closure { body, .. } => {
@@ -610,36 +837,31 @@ fn walk_expr_for_uses(
             // through a `Local` arm — captures use `Capture { index }`.
             // But a closure body that itself calls a candidate must still
             // be walked for invalid call positions.
-            walk_expr_for_uses(body, candidate_names, invalid, tracked);
+            walk_expr_for_uses(body, candidate_names, candidates, invalid, tracked);
         }
-        // For all other expressions (binary, unary, assign, FieldAccess,
-        // struct/tuple literals, etc.), walk every child with the same
-        // tracker so that nested `LocalGet(p)` references are observed by
-        // the bare-Local arm above and disqualify the candidate.
-        // `FieldAccess { expr: LocalGet(p), .. }` is the most common form
-        // — the user wrote `p.0` directly without destructuring, so the
-        // tuple value flows out as a single struct ref.
-        _ => recurse_children(expr, candidate_names, invalid, tracked),
+        // For all other expressions (binary, unary, assign, struct/tuple
+        // literals, etc.), walk every child with the same tracker so that
+        // nested `LocalGet(p)` references are observed by the bare-Local
+        // arm above and disqualify the candidate.
+        _ => recurse_children(expr, candidate_names, candidates, invalid, tracked),
     }
 }
 
 /// Visit every direct child expression of `expr` with `walk_expr_for_uses`.
-/// Mirrors `tir_visitor::TirRefVisitor::walk_expr` but threads our
-/// candidate / tracked state through.
 fn recurse_children(
     expr: &TirExpr,
     candidate_names: &IndexMap<(String, ModuleSource), usize>,
+    candidates: &IndexMap<usize, CandidateInfo>,
     invalid: &mut IndexSet<usize>,
     tracked: &IndexMap<u32, usize>,
 ) {
     match &expr.kind {
         TirExprKind::Binary { left, right, .. } => {
-            walk_expr_for_uses(left, candidate_names, invalid, tracked);
-            walk_expr_for_uses(right, candidate_names, invalid, tracked);
+            walk_expr_for_uses(left, candidate_names, candidates, invalid, tracked);
+            walk_expr_for_uses(right, candidate_names, candidates, invalid, tracked);
         }
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
         | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
@@ -649,51 +871,51 @@ fn recurse_children(
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. }
         | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
-            walk_expr_for_uses(inner, candidate_names, invalid, tracked);
+            walk_expr_for_uses(inner, candidate_names, candidates, invalid, tracked);
         }
         TirExprKind::Assign { target, value }
         | TirExprKind::Index {
             expr: target,
             index: value,
         } => {
-            walk_expr_for_uses(target, candidate_names, invalid, tracked);
-            walk_expr_for_uses(value, candidate_names, invalid, tracked);
+            walk_expr_for_uses(target, candidate_names, candidates, invalid, tracked);
+            walk_expr_for_uses(value, candidate_names, candidates, invalid, tracked);
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                walk_expr_for_uses(&field.value, candidate_names, invalid, tracked);
+                walk_expr_for_uses(&field.value, candidate_names, candidates, invalid, tracked);
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
-                walk_expr_for_uses(elem, candidate_names, invalid, tracked);
+                walk_expr_for_uses(elem, candidate_names, candidates, invalid, tracked);
             }
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                walk_expr_for_uses(p, candidate_names, invalid, tracked);
+                walk_expr_for_uses(p, candidate_names, candidates, invalid, tracked);
             }
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            walk_expr_for_uses(value, candidate_names, invalid, tracked);
+            walk_expr_for_uses(value, candidate_names, candidates, invalid, tracked);
         }
         TirExprKind::TemplateString { parts } => {
             for part in parts {
                 if let crate::tir::TirTemplatePart::Interpolation { expr: e, .. } = part {
-                    walk_expr_for_uses(e, candidate_names, invalid, tracked);
+                    walk_expr_for_uses(e, candidate_names, candidates, invalid, tracked);
                 }
             }
         }
         TirExprKind::Resume { value } => {
-            walk_expr_for_uses(value, candidate_names, invalid, tracked);
+            walk_expr_for_uses(value, candidate_names, candidates, invalid, tracked);
         }
         TirExprKind::WithHandler { bindings, body, .. } => {
             for b in bindings {
-                walk_expr_for_uses(&b.handler, candidate_names, invalid, tracked);
+                walk_expr_for_uses(&b.handler, candidate_names, candidates, invalid, tracked);
             }
             let mut inner = tracked.clone();
             for stmt in &body.stmts {
-                validate_stmt(stmt, candidate_names, invalid, &mut inner);
+                validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
             }
         }
         // Leaf nodes — no nested expressions.
@@ -711,7 +933,7 @@ fn recurse_children(
         | TirExprKind::Unit
         | TirExprKind::EnumConstruct { .. } => {}
         // Already handled in `walk_expr_for_uses` outer match.
-        TirExprKind::MultiValueProject { .. }
+        TirExprKind::FieldAccess { .. }
         | TirExprKind::Call { .. }
         | TirExprKind::MethodCall { .. }
         | TirExprKind::CmRawCall { .. }
