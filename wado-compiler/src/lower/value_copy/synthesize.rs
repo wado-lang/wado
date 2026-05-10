@@ -111,7 +111,7 @@ struct Collector<'a> {
     type_table: &'a TypeTable,
 }
 
-impl<'a> TirRefVisitor for Collector<'a> {
+impl TirRefVisitor for Collector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         if let Some(t) = copy_value_type_arg(expr) {
             self.out.insert(t);

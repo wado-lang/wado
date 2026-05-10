@@ -55,8 +55,7 @@ fn collect_array_clone_helper_refs_recursive<F>(
     {
         out.insert(idx);
     }
-    let mut clone = instr.clone();
-    clone.for_each_boxed_child_mut(&mut |child| {
+    instr.for_each_child(&mut |child| {
         collect_array_clone_helper_refs_recursive(child, resolve, out);
     });
 }

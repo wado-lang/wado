@@ -19,15 +19,17 @@ trait Serializer {
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError>;
     fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>;
-    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<Self::VariantSerializer, SerializeError>;
+    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<Self::VariantSerializer, SerializeError> with stores[self];
 }
 
+// Sub-serializer holds `&mut JsonSerializer` so writes flow back to the
+// outer instance — see serde_serialize_struct.wado for the rationale.
 struct JsonSerializer {
     buf: String,
 }
 
 struct JsonVariantSerializer {
-    ser: JsonSerializer,
+    ser: &mut JsonSerializer,
 }
 
 impl Serializer for JsonSerializer {
@@ -43,17 +45,17 @@ impl Serializer for JsonSerializer {
         return Result::<(), SerializeError>::Ok(());
     }
 
-    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<JsonVariantSerializer, SerializeError> {
+    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<JsonVariantSerializer, SerializeError> with stores[self] {
         self.buf.push_str(String::concat(String::concat(String::concat("{\"", *variant_name), "\""), ":"));
         return Result::<JsonVariantSerializer, SerializeError>::Ok(JsonVariantSerializer {
-            ser: *self,
+            ser: self,
         });
     }
 }
 
 impl SerializeVariant for JsonVariantSerializer {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        return value.serialize::<JsonSerializer>(&mut self.ser);
+        return value.serialize::<JsonSerializer>(self.ser);
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {

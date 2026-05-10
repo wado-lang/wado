@@ -1,10 +1,11 @@
 //! Shared utility functions for WIR optimization passes.
 
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirExportDesc, WirInstr, WirPackage};
 
 /// Collect all `func_ids` that must NOT be SROA'd or otherwise transformed
-/// (exports, element tables, `RefFunc` references).
+/// (exports, element tables, `RefFunc` references, and helpers referenced
+/// only by name from `WirInstr::ArrayClone::element_copy_func`).
 pub(super) fn collect_pinned_func_ids(module: &WirPackage) -> IndexSet<u32> {
     let mut pinned = IndexSet::default();
 
@@ -34,7 +35,63 @@ pub(super) fn collect_pinned_func_ids(module: &WirPackage) -> IndexSet<u32> {
         collect_ref_funcs_instr(&global.init, &mut pinned);
     }
 
+    // `WirInstr::ArrayClone::element_copy_func` references its helper by
+    // *name* — codegen looks the name up at emit time and emits a plain
+    // `Call(func_idx)`. SROA-style return rewrites would change the
+    // helper's signature without touching that emit path, leaving the
+    // call expecting a single (ref T) while the rewritten helper now
+    // returns multi-value. Pin every helper that any ArrayClone refers
+    // to so the rewrites skip them.
+    let name_to_idx: IndexMap<String, u32> = module
+        .functions
+        .iter()
+        .enumerate()
+        .map(|(i, func)| {
+            (
+                func.name.fq.clone(),
+                u32::try_from(i).expect("func index fits u32") + module.defined_func_base,
+            )
+        })
+        .collect();
+    for func in &module.functions {
+        if let Some(body) = &func.body {
+            collect_array_clone_helpers(body, &name_to_idx, &mut pinned);
+        }
+    }
+
     pinned
+}
+
+fn collect_array_clone_helpers(
+    instrs: &[WirInstr],
+    name_to_idx: &IndexMap<String, u32>,
+    pinned: &mut IndexSet<u32>,
+) {
+    for instr in instrs {
+        collect_array_clone_helpers_instr(instr, name_to_idx, pinned);
+    }
+}
+
+fn collect_array_clone_helpers_instr(
+    instr: &WirInstr,
+    name_to_idx: &IndexMap<String, u32>,
+    pinned: &mut IndexSet<u32>,
+) {
+    if let WirInstr::ArrayClone {
+        element_copy_func: Some(name_suffix),
+        ..
+    } = instr
+    {
+        for (fq, idx) in name_to_idx {
+            if fq.ends_with(name_suffix.as_str()) {
+                pinned.insert(*idx);
+                break;
+            }
+        }
+    }
+    instr.for_each_child(&mut |child| {
+        collect_array_clone_helpers_instr(child, name_to_idx, pinned);
+    });
 }
 
 fn collect_ref_funcs(instrs: &[WirInstr], pinned: &mut IndexSet<u32>) {

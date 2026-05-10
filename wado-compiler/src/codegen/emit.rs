@@ -2205,7 +2205,7 @@ impl<'a> WirEmitter<'a> {
                     let func_idx = self
                         .resolve_function_index_by_suffix(func_name)
                         .unwrap_or_else(|| {
-                            panic!("WirInstr::ArrayClone references unknown helper {func_name}",)
+                            panic!("WirInstr::ArrayClone references unknown helper {func_name}")
                         });
                     // Wasm GC `array.get` produces `(ref null T)`; the
                     // synthesized `$value_copy$T<id>` expects a
@@ -2506,7 +2506,7 @@ impl<'a> WirEmitter<'a> {
             .unwrap_or(wir_func_idx) // fallback: use as-is (for imports)
     }
 
-    /// Look up the (nullable) element ValType of a WIR array type by
+    /// Look up the (nullable) element `ValType` of a WIR array type by
     /// its WIR index. Returns `None` for non-array types or unsupported
     /// element shapes. Used by `WirInstr::ArrayClone`'s
     /// `element_copy_func` plumbing to size the per-element scratch
