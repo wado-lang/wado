@@ -1,27 +1,23 @@
 //! Integration tests for `wado lsp` and `wado query` subcommands.
 
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Command, Stdio};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
 use predicates::prelude::*;
 use serde_json::{Value, json};
 
-fn wado_bin() -> std::path::PathBuf {
-    assert_cmd::cargo::cargo_bin!("wado").into()
-}
+mod common;
+use common::{project_root, wado, wado_bin};
 
-fn project_root() -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .to_path_buf()
-}
-
-fn wado() -> assert_cmd::Command {
-    let mut cmd = Command::new(wado_bin());
-    cmd.current_dir(project_root());
-    cmd.into()
-}
+/// Cap on `read_message` so a regression that stops the LSP from
+/// responding fails the test in seconds rather than hanging until the
+/// outer cargo timeout (often minutes). Generous enough for cold starts
+/// and the bundled-stdlib parse on the first request.
+const READ_TIMEOUT: Duration = Duration::from_secs(30);
 
 // ---------------------------------------------------------------------------
 // JSON-RPC helpers
@@ -32,18 +28,57 @@ fn encode_message(msg: &Value) -> Vec<u8> {
     format!("Content-Length: {}\r\n\r\n{}", body.len(), body).into_bytes()
 }
 
+/// Read one Content-Length-framed JSON-RPC message from `reader`. Returns
+/// `Err` on EOF or a malformed frame; the caller is responsible for
+/// surfacing the error (typically as a channel close).
+fn read_framed<R: Read>(reader: &mut R) -> std::io::Result<Value> {
+    let mut header_buf = Vec::new();
+    let mut byte = [0u8; 1];
+    loop {
+        reader.read_exact(&mut byte)?;
+        header_buf.push(byte[0]);
+        if header_buf.ends_with(b"\r\n\r\n") {
+            break;
+        }
+    }
+    let header = std::str::from_utf8(&header_buf)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    let length: usize = header
+        .lines()
+        .find_map(|l| l.strip_prefix("Content-Length: "))
+        .ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "missing Content-Length")
+        })?
+        .trim()
+        .parse()
+        .map_err(|e: std::num::ParseIntError| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+        })?;
+    let mut body = vec![0u8; length];
+    reader.read_exact(&mut body)?;
+    serde_json::from_slice(&body)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+}
+
 // ---------------------------------------------------------------------------
 // LSP session helper
 // ---------------------------------------------------------------------------
 
+/// Drives a `wado lsp` child process from a sync test thread. The child's
+/// stdout is parsed on a background thread and queued onto an mpsc channel
+/// so `read_message` can apply a timeout — without the channel, a regressed
+/// server that simply stops emitting frames would hang the whole test
+/// binary on a blocking `read_exact`.
 struct LspSession {
     child: std::process::Child,
     next_id: i64,
+    rx: Receiver<Value>,
+    stderr_buf: Arc<Mutex<String>>,
 }
 
 impl LspSession {
     fn start() -> Self {
-        let child = Command::new(wado_bin())
+        let mut child = Command::new(wado_bin())
             .args(["lsp"])
             .current_dir(project_root())
             .stdin(Stdio::piped())
@@ -51,7 +86,42 @@ impl LspSession {
             .stderr(Stdio::piped())
             .spawn()
             .expect("failed to spawn wado lsp");
-        Self { child, next_id: 1 }
+
+        let mut stdout = child.stdout.take().unwrap();
+        let stderr = child.stderr.take().unwrap();
+
+        let (tx, rx) = mpsc::channel::<Value>();
+        thread::spawn(move || {
+            // EOF / parse errors silently terminate the reader; the test
+            // thread sees `Disconnected` from `recv_timeout` and panics
+            // with the captured stderr.
+            while let Ok(msg) = read_framed(&mut stdout) {
+                if tx.send(msg).is_err() {
+                    return;
+                }
+            }
+        });
+
+        let stderr_buf: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
+        {
+            let buf = Arc::clone(&stderr_buf);
+            thread::spawn(move || {
+                let reader = BufReader::new(stderr);
+                for line in reader.lines() {
+                    let Ok(line) = line else { return };
+                    let mut g = buf.lock().unwrap();
+                    g.push_str(&line);
+                    g.push('\n');
+                }
+            });
+        }
+
+        Self {
+            child,
+            next_id: 1,
+            rx,
+            stderr_buf,
+        }
     }
 
     fn send(&mut self, msg: &Value) {
@@ -124,33 +194,39 @@ impl LspSession {
         }));
     }
 
-    /// Read one message from stdout with a timeout.
+    /// Read one message from the server with a timeout. Panics with the
+    /// captured stderr if the server fails to respond — this turns a
+    /// hung-server regression from a multi-minute cargo timeout into a
+    /// fast, diagnosable test failure.
     fn read_message(&mut self) -> Value {
-        let stdout = self.child.stdout.as_mut().unwrap();
+        self.read_message_within(READ_TIMEOUT)
+    }
 
-        // Read headers
-        let mut header_buf = Vec::new();
-        let mut byte = [0u8; 1];
-        loop {
-            stdout.read_exact(&mut byte).expect("read failed");
-            header_buf.push(byte[0]);
-            if header_buf.ends_with(b"\r\n\r\n") {
-                break;
+    fn read_message_within(&mut self, timeout: Duration) -> Value {
+        match self.rx.recv_timeout(timeout) {
+            Ok(v) => v,
+            Err(RecvTimeoutError::Timeout) => {
+                let stderr = self.stderr_buf.lock().unwrap().clone();
+                panic!(
+                    "wado lsp did not emit a framed response within {timeout:?}.\nstderr:\n{stderr}"
+                );
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                // Reader thread exited (server closed stdout, or framing
+                // error). Surface stderr so the failure is diagnosable.
+                let stderr = self.stderr_buf.lock().unwrap().clone();
+                panic!("wado lsp closed stdout before emitting a response.\nstderr:\n{stderr}");
             }
         }
+    }
 
-        let header = std::str::from_utf8(&header_buf).unwrap();
-        let length: usize = header
-            .lines()
-            .find_map(|l| l.strip_prefix("Content-Length: "))
-            .expect("missing Content-Length")
-            .trim()
-            .parse()
-            .unwrap();
-
-        let mut body = vec![0u8; length];
-        stdout.read_exact(&mut body).expect("read body failed");
-        serde_json::from_slice(&body).unwrap()
+    /// Send `exit` (with no preceding `shutdown`), close stdin, and wait.
+    /// Returns the process exit code. For the happy-path `shutdown` →
+    /// `exit` flow, use [`shutdown_and_exit`] instead.
+    fn exit_now(mut self) -> i32 {
+        self.send_notification("exit", Value::Null);
+        drop(self.child.stdin.take());
+        self.child.wait().unwrap().code().unwrap_or(-1)
     }
 
     fn shutdown_and_exit(mut self) -> i32 {
@@ -167,6 +243,19 @@ impl LspSession {
         drop(self.child.stdin.take());
 
         self.child.wait().unwrap().code().unwrap_or(-1)
+    }
+}
+
+impl Drop for LspSession {
+    fn drop(&mut self) {
+        // `std::process::Child::drop` is a documented no-op, so a test that
+        // panics — e.g. inside `read_message_within` on timeout — would leak
+        // the `wado lsp` subprocess and risk flaking the rest of the suite.
+        // Best-effort kill+wait covers that path. On the happy
+        // `shutdown_and_exit` / `exit_now` paths the child has already
+        // exited; both calls return ESRCH/ECHILD, which we ignore.
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 
@@ -250,24 +339,13 @@ fn lsp_workspace_text_document_content_rejects_unknown_uri() {
 fn lsp_diagnostics_on_did_open_valid() {
     let mut session = LspSession::start();
 
-    session.send_request("initialize", json!({ "capabilities": {} }));
-    let _init_resp = session.read_message();
-    session.send_notification("initialized", json!({}));
+    session.initialize();
 
     // Open a valid document
-    session.send_notification(
-        "textDocument/didOpen",
-        json!({
-            "textDocument": {
-                "uri": "file:///tmp/lsp_test_valid.wado",
-                "languageId": "wado",
-                "version": 1,
-                "text": "use { println, Stdout } from \"core:cli\";\n\nexport fn run() with Stdout {\n    println(\"hello\");\n}\n"
-            }
-        }),
+    let notif = session.open_doc(
+        "file:///tmp/lsp_test_valid.wado",
+        "use { println, Stdout } from \"core:cli\";\n\nexport fn run() with Stdout {\n    println(\"hello\");\n}\n",
     );
-
-    let notif = session.read_message();
     assert_eq!(notif["method"], "textDocument/publishDiagnostics");
     assert_eq!(notif["params"]["uri"], "file:///tmp/lsp_test_valid.wado");
 
@@ -284,24 +362,13 @@ fn lsp_diagnostics_on_did_open_valid() {
 fn lsp_diagnostics_on_did_open_invalid() {
     let mut session = LspSession::start();
 
-    session.send_request("initialize", json!({ "capabilities": {} }));
-    let _init_resp = session.read_message();
-    session.send_notification("initialized", json!({}));
+    session.initialize();
 
     // Open a document with a type error
-    session.send_notification(
-        "textDocument/didOpen",
-        json!({
-            "textDocument": {
-                "uri": "file:///tmp/lsp_test_invalid.wado",
-                "languageId": "wado",
-                "version": 1,
-                "text": "export fn run() {\n    let x: i32 = \"oops\";\n}\n"
-            }
-        }),
+    let notif = session.open_doc(
+        "file:///tmp/lsp_test_invalid.wado",
+        "export fn run() {\n    let x: i32 = \"oops\";\n}\n",
     );
-
-    let notif = session.read_message();
     assert_eq!(notif["method"], "textDocument/publishDiagnostics");
 
     let diags = notif["params"]["diagnostics"].as_array().unwrap();
@@ -327,24 +394,13 @@ fn lsp_diagnostics_on_did_open_invalid() {
 fn lsp_diagnostics_update_on_did_change() {
     let mut session = LspSession::start();
 
-    session.send_request("initialize", json!({ "capabilities": {} }));
-    let _init_resp = session.read_message();
-    session.send_notification("initialized", json!({}));
+    session.initialize();
 
     // Open with errors
-    session.send_notification(
-        "textDocument/didOpen",
-        json!({
-            "textDocument": {
-                "uri": "file:///tmp/lsp_test_change.wado",
-                "languageId": "wado",
-                "version": 1,
-                "text": "export fn run() {\n    let x: i32 = \"oops\";\n}\n"
-            }
-        }),
+    let notif1 = session.open_doc(
+        "file:///tmp/lsp_test_change.wado",
+        "export fn run() {\n    let x: i32 = \"oops\";\n}\n",
     );
-
-    let notif1 = session.read_message();
     let diags1 = notif1["params"]["diagnostics"].as_array().unwrap();
     assert!(!diags1.is_empty(), "should have errors initially");
 
@@ -376,24 +432,10 @@ fn lsp_diagnostics_update_on_did_change() {
 fn lsp_did_close_clears_diagnostics() {
     let mut session = LspSession::start();
 
-    session.send_request("initialize", json!({ "capabilities": {} }));
-    let _init_resp = session.read_message();
-    session.send_notification("initialized", json!({}));
+    session.initialize();
 
-    // Open with errors
-    session.send_notification(
-        "textDocument/didOpen",
-        json!({
-            "textDocument": {
-                "uri": "file:///tmp/lsp_test_close.wado",
-                "languageId": "wado",
-                "version": 1,
-                "text": "invalid syntax here ???"
-            }
-        }),
-    );
-
-    let _notif1 = session.read_message(); // diagnostics with errors
+    // Open with errors — drop the initial `publishDiagnostics`.
+    session.open_doc("file:///tmp/lsp_test_close.wado", "invalid syntax here ???");
 
     // Close the document
     session.send_notification(
@@ -417,24 +459,11 @@ fn lsp_did_close_clears_diagnostics() {
 fn lsp_definition_same_file() {
     let mut session = LspSession::start();
 
-    session.send_request("initialize", json!({ "capabilities": {} }));
-    let _init_resp = session.read_message();
-    session.send_notification("initialized", json!({}));
+    session.initialize();
 
     let source =
         "fn helper() -> i32 {\n    return 42;\n}\n\nexport fn run() {\n    let _ = helper();\n}\n";
-    session.send_notification(
-        "textDocument/didOpen",
-        json!({
-            "textDocument": {
-                "uri": "file:///tmp/lsp_def_same.wado",
-                "languageId": "wado",
-                "version": 1,
-                "text": source,
-            }
-        }),
-    );
-    let _diag = session.read_message();
+    session.open_doc("file:///tmp/lsp_def_same.wado", source);
 
     let id = session.send_request(
         "textDocument/definition",
@@ -478,23 +507,10 @@ fn lsp_definition_cross_file() {
     let main_uri = format!("file://{}", main_path.display());
 
     let mut session = LspSession::start();
-    session.send_request("initialize", json!({ "capabilities": {} }));
-    let _init_resp = session.read_message();
-    session.send_notification("initialized", json!({}));
+    session.initialize();
 
     let source = std::fs::read_to_string(&main_path).unwrap();
-    session.send_notification(
-        "textDocument/didOpen",
-        json!({
-            "textDocument": {
-                "uri": main_uri,
-                "languageId": "wado",
-                "version": 1,
-                "text": source,
-            }
-        }),
-    );
-    let _diag = session.read_message();
+    session.open_doc(&main_uri, &source);
 
     let id = session.send_request(
         "textDocument/definition",
@@ -521,23 +537,10 @@ fn lsp_definition_cross_file() {
 fn lsp_hover_function_signature() {
     let mut session = LspSession::start();
 
-    session.send_request("initialize", json!({ "capabilities": {} }));
-    let _init_resp = session.read_message();
-    session.send_notification("initialized", json!({}));
+    session.initialize();
 
     let source = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n\nexport fn run() {\n    let _ = add(1, 2);\n}\n";
-    session.send_notification(
-        "textDocument/didOpen",
-        json!({
-            "textDocument": {
-                "uri": "file:///tmp/lsp_hover.wado",
-                "languageId": "wado",
-                "version": 1,
-                "text": source,
-            }
-        }),
-    );
-    let _diag = session.read_message();
+    session.open_doc("file:///tmp/lsp_hover.wado", source);
 
     let id = session.send_request(
         "textDocument/hover",
@@ -564,23 +567,10 @@ fn lsp_hover_function_signature() {
 fn lsp_references_includes_call_sites() {
     let mut session = LspSession::start();
 
-    session.send_request("initialize", json!({ "capabilities": {} }));
-    let _init_resp = session.read_message();
-    session.send_notification("initialized", json!({}));
+    session.initialize();
 
     let source = "fn helper() -> i32 {\n    return 1;\n}\n\nexport fn run() {\n    let _ = helper();\n    let _ = helper();\n}\n";
-    session.send_notification(
-        "textDocument/didOpen",
-        json!({
-            "textDocument": {
-                "uri": "file:///tmp/lsp_refs.wado",
-                "languageId": "wado",
-                "version": 1,
-                "text": source,
-            }
-        }),
-    );
-    let _diag = session.read_message();
+    session.open_doc("file:///tmp/lsp_refs.wado", source);
 
     let id = session.send_request(
         "textDocument/references",
@@ -612,23 +602,10 @@ fn lsp_references_includes_call_sites() {
 fn lsp_document_highlight_classifies_read_write() {
     let mut session = LspSession::start();
 
-    session.send_request("initialize", json!({ "capabilities": {} }));
-    let _init_resp = session.read_message();
-    session.send_notification("initialized", json!({}));
+    session.initialize();
 
     let source = "fn f() -> i32 {\n    let mut x = 0;\n    x = 1;\n    return x;\n}\n";
-    session.send_notification(
-        "textDocument/didOpen",
-        json!({
-            "textDocument": {
-                "uri": "file:///tmp/lsp_highlight.wado",
-                "languageId": "wado",
-                "version": 1,
-                "text": source,
-            }
-        }),
-    );
-    let _diag = session.read_message();
+    session.open_doc("file:///tmp/lsp_highlight.wado", source);
 
     let id = session.send_request(
         "textDocument/documentHighlight",
@@ -657,9 +634,7 @@ fn lsp_document_highlight_classifies_read_write() {
 #[test]
 fn lsp_unknown_method_returns_error() {
     let mut session = LspSession::start();
-
-    session.send_request("initialize", json!({ "capabilities": {} }));
-    let _init_resp = session.read_message();
+    session.initialize();
 
     let id = session.send_request(
         "textDocument/unknownMethod",
@@ -679,9 +654,7 @@ fn lsp_unknown_method_returns_error() {
 #[test]
 fn lsp_invalid_params_returns_error() {
     let mut session = LspSession::start();
-
-    session.send_request("initialize", json!({ "capabilities": {} }));
-    let _init_resp = session.read_message();
+    session.initialize();
 
     // Send a well-formed request with malformed params (missing required fields).
     let id = session.send_request("textDocument/hover", json!({ "bogus": true }));
@@ -695,58 +668,13 @@ fn lsp_invalid_params_returns_error() {
 
 #[test]
 fn lsp_exit_without_shutdown_returns_nonzero() {
-    let mut child = Command::new(wado_bin())
-        .args(["lsp"])
-        .current_dir(project_root())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-
-    let stdin = child.stdin.as_mut().unwrap();
-
-    // Send initialize
-    let init_msg = encode_message(&json!({
-        "jsonrpc": "2.0", "id": 1, "method": "initialize",
-        "params": { "capabilities": {} }
-    }));
-    stdin.write_all(&init_msg).unwrap();
-    stdin.flush().unwrap();
-
-    // Read initialize response (consume it)
-    let stdout = child.stdout.as_mut().unwrap();
-    let mut header_buf = Vec::new();
-    let mut byte = [0u8; 1];
-    loop {
-        stdout.read_exact(&mut byte).unwrap();
-        header_buf.push(byte[0]);
-        if header_buf.ends_with(b"\r\n\r\n") {
-            break;
-        }
-    }
-    let header = std::str::from_utf8(&header_buf).unwrap();
-    let length: usize = header
-        .lines()
-        .find_map(|l| l.strip_prefix("Content-Length: "))
-        .unwrap()
-        .trim()
-        .parse()
-        .unwrap();
-    let mut body = vec![0u8; length];
-    stdout.read_exact(&mut body).unwrap();
-
-    // Send exit without shutdown
-    let exit_msg = encode_message(&json!({
-        "jsonrpc": "2.0", "method": "exit", "params": null
-    }));
-    stdin.write_all(&exit_msg).unwrap();
-    stdin.flush().unwrap();
-
-    drop(child.stdin.take());
-    let status = child.wait().unwrap();
+    // Per LSP 3.18 §exit: an `exit` notification without a preceding
+    // `shutdown` request must terminate the server with a non-zero code.
+    let mut session = LspSession::start();
+    session.send_request("initialize", json!({ "capabilities": {} }));
+    let _init = session.read_message();
     assert_eq!(
-        status.code().unwrap(),
+        session.exit_now(),
         1,
         "exit without shutdown should return 1"
     );
@@ -822,9 +750,7 @@ fn lsp_initialized_notification_is_accepted() {
     let resp = session.read_message();
     assert_eq!(resp["id"], id);
     assert_eq!(resp["result"], Value::Null);
-    session.send_notification("exit", Value::Null);
-    drop(session.child.stdin.take());
-    assert_eq!(session.child.wait().unwrap().code().unwrap(), 0);
+    assert_eq!(session.exit_now(), 0);
 }
 
 #[test]
@@ -840,9 +766,7 @@ fn lsp_dollar_notification_is_silently_ignored() {
     let resp = session.read_message();
     assert_eq!(resp["id"], id);
     assert_eq!(resp["result"], Value::Null);
-    session.send_notification("exit", Value::Null);
-    drop(session.child.stdin.take());
-    assert_eq!(session.child.wait().unwrap().code().unwrap(), 0);
+    assert_eq!(session.exit_now(), 0);
 }
 
 #[test]
@@ -870,9 +794,7 @@ fn lsp_unknown_notification_is_silently_ignored() {
     let id = session.send_request("shutdown", Value::Null);
     let resp = session.read_message();
     assert_eq!(resp["id"], id);
-    session.send_notification("exit", Value::Null);
-    drop(session.child.stdin.take());
-    assert_eq!(session.child.wait().unwrap().code().unwrap(), 0);
+    assert_eq!(session.exit_now(), 0);
 }
 
 #[test]
@@ -957,9 +879,7 @@ fn lsp_shutdown_returns_null_result() {
     // Spec §shutdown: the response result is `null`.
     assert_eq!(resp["result"], Value::Null);
     // Exit with shutdown flag set → exit code 0.
-    session.send_notification("exit", Value::Null);
-    drop(session.child.stdin.take());
-    assert_eq!(session.child.wait().unwrap().code().unwrap(), 0);
+    assert_eq!(session.exit_now(), 0);
 }
 
 #[test]
@@ -1027,9 +947,7 @@ fn lsp_did_change_empty_content_changes_is_noop() {
     let id = session.send_request("shutdown", Value::Null);
     let resp = session.read_message();
     assert_eq!(resp["id"], id);
-    session.send_notification("exit", Value::Null);
-    drop(session.child.stdin.take());
-    assert_eq!(session.child.wait().unwrap().code().unwrap(), 0);
+    assert_eq!(session.exit_now(), 0);
 }
 
 #[test]
@@ -1298,9 +1216,7 @@ fn lsp_request_before_initialize_returns_server_not_initialized() {
     // Cannot `shutdown` gracefully here — that would also be rejected with
     // ServerNotInitialized. Send `exit` directly; per spec this is allowed
     // before `initialize` and must exit non-zero when no shutdown was seen.
-    session.send_notification("exit", Value::Null);
-    drop(session.child.stdin.take());
-    assert_eq!(session.child.wait().unwrap().code().unwrap(), 1);
+    assert_eq!(session.exit_now(), 1);
 }
 
 #[test]
@@ -1398,9 +1314,7 @@ fn lsp_notification_after_shutdown_is_silently_dropped() {
     assert_eq!(resp["error"]["code"], -32600);
     let _ = id_shut;
 
-    session.send_notification("exit", Value::Null);
-    drop(session.child.stdin.take());
-    assert_eq!(session.child.wait().unwrap().code().unwrap(), 0);
+    assert_eq!(session.exit_now(), 0);
 }
 
 #[test]

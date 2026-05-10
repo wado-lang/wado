@@ -2,13 +2,9 @@
 
 use predicates::prelude::*;
 use std::fs;
-use std::process::Command;
 
-fn wado_in(dir: &std::path::Path) -> assert_cmd::Command {
-    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("wado"));
-    cmd.current_dir(dir);
-    cmd.into()
-}
+mod common;
+use common::wado_in;
 
 #[test]
 fn test_init_creates_manifest() {

@@ -20,6 +20,9 @@ use wado_cli::kiln_driver::{GeneratorProvider, ProviderError};
 use wado_cli::kiln_provider::{CACHE_DIR, CliGeneratorProvider};
 use wado_compiler::kiln::{GeneratorModule, InvocationPath};
 
+mod common;
+use common::runtime;
+
 const MINIMAL_GENERATOR: &str = r#"
 use { RawRequest, Response, Error, bind_request } from "core:kiln";
 
@@ -55,13 +58,6 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     return Result::Ok(Response { files: [] });
 }
 "#;
-
-fn runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-}
 
 fn unique_tmp(label: &str) -> PathBuf {
     std::env::temp_dir().join(format!("wado-{label}-{}", std::process::id()))

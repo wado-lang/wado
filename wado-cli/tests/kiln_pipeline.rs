@@ -20,6 +20,9 @@ use wado_compiler::compiler_host::{
 use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
 use wado_manifest::Manifest;
 
+mod common;
+use common::runtime;
+
 struct StubProvider {
     bytes: Vec<u8>,
     calls: Mutex<u32>,
@@ -105,13 +108,6 @@ impl CompilerHost for StubHost {
             ))
         })
     }
-}
-
-fn runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap()
 }
 
 fn empty_manifest() -> Manifest {

@@ -5,22 +5,9 @@
 
 use predicates::prelude::*;
 use std::fs;
-use std::path::PathBuf;
-use std::process::Command;
 
-/// Get the project root directory (parent of wado-cli)
-fn project_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .to_path_buf()
-}
-
-fn wado() -> assert_cmd::Command {
-    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("wado"));
-    cmd.current_dir(project_root());
-    cmd.into()
-}
+mod common;
+use common::wado;
 
 #[test]
 fn test_help() {
@@ -93,11 +80,8 @@ fn test_compile_file_not_found() {
 
 #[test]
 fn test_compile_output_wasm() {
-    let temp_dir = std::env::temp_dir();
-    let output_path = temp_dir.join("test_compile_output.wasm");
-
-    // Clean up before test
-    let _ = fs::remove_file(&output_path);
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = dir.path().join("out.wasm");
 
     wado()
         .args([
@@ -110,25 +94,15 @@ fn test_compile_output_wasm() {
         .success()
         .stderr(predicate::str::contains("Generated:"));
 
-    // Verify file was created
-    assert!(output_path.exists(), "Output file should exist");
-
-    // Verify it's a valid Wasm file (starts with magic bytes)
     let content = fs::read(&output_path).unwrap();
+    // Component model starts with \0asm but version differs from core wasm.
     assert!(content.len() > 4, "Wasm file should have content");
-    // Component model starts with \0asm but version differs from core wasm
-
-    // Clean up
-    let _ = fs::remove_file(&output_path);
 }
 
 #[test]
 fn test_compile_output_wat() {
-    let temp_dir = std::env::temp_dir();
-    let output_path = temp_dir.join("test_compile_output.wat");
-
-    // Clean up before test
-    let _ = fs::remove_file(&output_path);
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = dir.path().join("out.wat");
 
     wado()
         .args([
@@ -141,24 +115,18 @@ fn test_compile_output_wat() {
         .success()
         .stderr(predicate::str::contains("Generated:"));
 
-    // Verify file was created with WAT content
     let content = fs::read_to_string(&output_path).unwrap();
     assert!(
         content.contains("(component"),
         "WAT file should contain component"
     );
-
-    // Clean up
-    let _ = fs::remove_file(&output_path);
 }
 
 #[test]
 fn test_compile_format_wat() {
-    let temp_dir = std::env::temp_dir();
-    let output_path = temp_dir.join("test_compile_format.txt");
-
-    // Clean up before test
-    let _ = fs::remove_file(&output_path);
+    // Non-`.wat` extension forces format selection by `--format`, not by suffix.
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = dir.path().join("out.txt");
 
     wado()
         .args([
@@ -172,24 +140,17 @@ fn test_compile_format_wat() {
         .assert()
         .success();
 
-    // Verify WAT content even with non-standard extension
     let content = fs::read_to_string(&output_path).unwrap();
     assert!(
         content.contains("(component"),
         "Should be WAT format regardless of extension"
     );
-
-    // Clean up
-    let _ = fs::remove_file(&output_path);
 }
 
 #[test]
 fn test_compile_format_wasm() {
-    let temp_dir = std::env::temp_dir();
-    let output_path = temp_dir.join("test_compile_format.bin");
-
-    // Clean up before test
-    let _ = fs::remove_file(&output_path);
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = dir.path().join("out.bin");
 
     wado()
         .args([
@@ -203,12 +164,8 @@ fn test_compile_format_wasm() {
         .assert()
         .success();
 
-    // Verify binary content even with non-standard extension
     let content = fs::read(&output_path).unwrap();
     assert!(content.len() > 4, "Wasm file should have content");
-
-    // Clean up
-    let _ = fs::remove_file(&output_path);
 }
 
 #[test]

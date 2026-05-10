@@ -55,6 +55,10 @@ pub fn add_to_linker<T: 'static>(linker: &mut Linker<T>) -> Result<()> {
 #[cfg(unix)]
 fn local_offset_nanos(secs: i64) -> Option<i64> {
     use std::mem::MaybeUninit;
+    // `time_t` is `i64` on glibc/x86_64 (the conversion is a no-op there) but
+    // `i32` on 32-bit Unix targets without `_TIME_BITS=64`. Keep `try_into`
+    // for portability and silence the lint on the platforms where it's a no-op.
+    #[allow(clippy::useless_conversion)]
     let t: libc::time_t = secs.try_into().ok()?;
     let mut tm: MaybeUninit<libc::tm> = MaybeUninit::uninit();
     let ret = unsafe { libc::localtime_r(&raw const t, tm.as_mut_ptr()) };
