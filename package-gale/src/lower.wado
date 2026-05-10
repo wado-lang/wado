@@ -1,0 +1,293 @@
+//! `lower(Grammar) -> LoweredGrammar` — translate the surface IR
+//! to GIR for parser code generation.
+//!
+//! This is the planning phase of the pipeline:
+//!
+//! ```text
+//! .g4 source ──parse──► Grammar (surface IR, ir.wado)
+//!                ──lower──► LoweredGrammar (gir.wado)
+//!                ──emit──► Wado source
+//! ```
+//!
+//! Every codegen-time decision (rule shape, multi-alt dispatch, LR
+//! precedence, follow variants, group shape, repeat strategy, field
+//! deduplication, scan/parse symmetry) is committed here so the emit
+//! layer can translate structurally without consulting the surface IR.
+//!
+//! ## Phase status
+//!
+//! Phase 2 is implemented incrementally; this file currently covers
+//! only Phase 2.1 (single-alternative rules with trivial leaf
+//! elements). Unimplemented shapes panic with a `TODO Phase 2.x`
+//! marker so codegen does not silently consume a half-lowered IR.
+//! Each follow-up sub-phase fills in one of:
+//!
+//! * Phase 2.2 — `Repeat` / `Group` / `Label` element lowering
+//! * Phase 2.3 — `MultiAlt` rule shape + dispatch decision
+//! * Phase 2.4 — `LeftRecursive` rule shape (`atom` + `lr_alts`)
+//! * Phase 2.5 — Scan-side body lowering (today returns empty stub)
+//! * Phase 2.6 — Follow-variant pre-pass (today empty)
+//! * Phase 2.7 — Kind-set pre-interning (today empty)
+//! * Phase 2.8 — Prediction-tree construction
+//! * Phase 2.9 — CST `FieldDecl` enumeration (today only the leading
+//!   `span` field is recorded)
+//!
+//! Phase 3 swaps `codegen::generate` to call `lower` and feed the
+//! result through a thin emit adapter; until then this file is
+//! exercised only by `lower_test.wado`.
+
+use {
+    Grammar,
+    ParserRule,
+    Alternative,
+    Element,
+} from "./ir.wado";
+use {
+    rule_type_name,
+    literal_const_name,
+    literal_field_name,
+    not_element_field_name,
+    case_names_for_rule,
+    count_general_groups,
+} from "./gen_util.wado";
+use { LitToken } from "./lexer_gen.wado";
+use {
+    LoweredGrammar,
+    Rule,
+    SimpleRule,
+    RuleHeader,
+    AltBody,
+    ScanBody,
+    Op,
+    TokenOp,
+    LiteralOp,
+    RuleCallOp,
+    WildcardOp,
+    ExcludedOp,
+    FieldDecl,
+    FieldKind,
+} from "./gir.wado";
+
+/// Lower a `Grammar` to `LoweredGrammar`. The returned value is the
+/// only input parser-side codegen needs; lexer / visitor / highlight
+/// emission still consume `Grammar` directly in v1 (their data is
+/// also mirrored here for forward compatibility).
+///
+/// `lit_tokens` is computed by `lexer_gen::collect_literal_tokens`
+/// before lowering and threaded in so a single literal-collection
+/// pass serves both the lexer and parser sides.
+pub fn lower(grammar: &Grammar, lit_tokens: &Array<LitToken>) -> LoweredGrammar {
+    let mut parser_rules: Array<Rule> = [];
+    for let rule of &grammar.parser_rules {
+        parser_rules.push(lower_rule(rule));
+    }
+    return LoweredGrammar {
+        name: grammar.name,
+        source_files: grammar.source_files,
+        options: grammar.options,
+        named_actions: grammar.named_actions,
+        lexer_rules: grammar.lexer_rules,
+        mode_names: grammar.mode_names,
+        channels: grammar.channels,
+        lit_tokens: *lit_tokens,
+        parser_rules,
+        // Phase 2.6 — follow-variant pre-pass populates this.
+        variant_rules: [],
+        // Phase 2.7 — kind-set pre-interning populates this.
+        kind_sets: [],
+    };
+}
+
+/// Classify a parser rule by shape and dispatch to the matching
+/// lowering. Phase 2.1 only handles single-alt rules; the multi-alt
+/// and left-recursive paths are gated behind `panic("TODO Phase
+/// 2.x")` so a partial implementation never feeds bad data into
+/// downstream emit.
+fn lower_rule(rule: &ParserRule) -> Rule {
+    if rule.alternatives.len() == 1 {
+        return Rule::Simple(lower_simple_rule(rule));
+    }
+    panic(`TODO Phase 2.3: lower_rule for multi-alt rule '{rule.name}' not implemented yet`);
+}
+
+fn lower_simple_rule(rule: &ParserRule) -> SimpleRule {
+    return SimpleRule {
+        header: lower_header(rule),
+        body: lower_alt_body(&rule.alternatives[0], 0, rule),
+        // Phase 2.5 — scan-side body lowering populates this.
+        scan_body: ScanBody { elements: [] },
+    };
+}
+
+/// Build the `RuleHeader` shared by every `Rule` variant. The cached
+/// snake/field names on `ParserRule` are reused so we don't recompute
+/// `to_snake_case`. `case_names` and `alt_gc_starts` are derived
+/// from the alternative list with the same helpers the legacy
+/// `parser_gen.wado` uses, so the result is observationally
+/// identical.
+fn lower_header(rule: &ParserRule) -> RuleHeader {
+    return RuleHeader {
+        name: rule.name,
+        snake_name: rule.snake_name,
+        field_name: rule.field_name,
+        type_name: rule_type_name(&rule.name),
+        visibility: rule.visibility,
+        // Regular rules have no follow mask; variants set this in
+        // the Phase 2.6 pre-pass.
+        variant_of: null,
+        case_names: case_names_for_rule(&rule.alternatives),
+        alt_gc_starts: compute_alt_gc_starts(&rule.alternatives),
+    };
+}
+
+/// Cumulative `general_group` counter starts per alternative.
+/// Mirrors `parser_gen::gen_parse_fn_named`'s `alt_gc_starts`
+/// computation: each alt records the running counter at its start,
+/// then `count_general_groups(&alt.elements)` advances it for the
+/// next alt.
+fn compute_alt_gc_starts(alternatives: &Array<Alternative>) -> Array<i32> {
+    let mut starts: Array<i32> = [];
+    let mut running: i32 = 0;
+    for let alt of alternatives {
+        starts.push(running);
+        running += count_general_groups(&alt.elements);
+    }
+    return starts;
+}
+
+/// Lower one alternative body. For a `Simple` rule (one alternative)
+/// the rule's own struct is the alt's struct, so `case_name` is
+/// empty and `struct_name` is the rule's CST type name.
+fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule) -> AltBody {
+    let case_name: String = if rule.alternatives.len() == 1 {
+        "";
+    } else {
+        // Phase 2.3 will compute the per-alt case name from
+        // `case_names_for_rule`. Single-alt path doesn't need it.
+        panic("TODO Phase 2.3: per-alt case_name not implemented");
+    };
+    let struct_name: String = if rule.alternatives.len() == 1 {
+        rule_type_name(&rule.name);
+    } else {
+        panic("TODO Phase 2.3: per-alt struct_name not implemented");
+    };
+
+    let mut name_counts: Array<[String, i32]> = [];
+    let mut ops: Array<Op> = [];
+    for let elem of &alt.elements {
+        ops.push(lower_op(elem, &mut name_counts));
+    }
+
+    // Phase 2.9 — full `FieldDecl` enumeration. Today we record only
+    // the leading `span` field; struct emission still consults the
+    // surface IR for the rest.
+    let fields: Array<FieldDecl> = [
+        FieldDecl {
+            name: "span",
+            type_str: "Span",
+            kind: FieldKind::Span,
+        },
+    ];
+
+    return AltBody {
+        alt_index: idx,
+        case_name,
+        struct_name,
+        ops,
+        fields,
+        // Phase 2.3 — cumulative counter at this alt's start.
+        // Single-alt rules always start at 0.
+        group_index_start: 0,
+        // Phase 2.4 — prefix-LR alt precedence. Non-LR alts get 0.
+        prefix_self_ref_min_prec: 0,
+    };
+}
+
+/// Lower a single surface `Element` to a GIR `Op`. Phase 2.1 covers
+/// the trivial leaf elements; `Repeat` / `Group` / `Label` are gated
+/// behind `panic("TODO Phase 2.2")` so a half-lowered alt body can't
+/// quietly reach codegen.
+fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>) -> Op {
+    return match *elem {
+        TokenRef(t) => Op::Token(TokenOp {
+            kind: `TK_{t.name}`,
+            field: dedup_name(&t.field_name, name_counts),
+        }),
+        Literal(l) => Op::Literal(LiteralOp {
+            kind: literal_const_name(&l.text),
+            field: dedup_name(&literal_field_name(&l.text), name_counts),
+        }),
+        RuleRef(r) => Op::RuleCall(RuleCallOp {
+            target_name: r.name,
+            target_snake: r.snake_name,
+            // Phase 2.6 — follow-variant pre-pass interns the variant
+            // and stores the resolved id here.
+            variant_id: null,
+            // Phase 2.4 — prefix-LR self-ref alts pass `min_prec` to
+            // their callee; non-LR call sites get the default `0`
+            // via the callee's defaulted parameter.
+            min_prec_arg: null,
+            field: dedup_name(&r.field_name, name_counts),
+        }),
+        Wildcard(_) => Op::Wildcard(WildcardOp {
+            field: dedup_name(&"wildcard", name_counts),
+        }),
+        Not(ne) => Op::Excluded(ExcludedOp {
+            kinds: collect_excluded_kinds(&ne.element),
+            field: dedup_name(&not_element_field_name(&ne.element), name_counts),
+        }),
+        Repeat(_) => panic("TODO Phase 2.2: lower_op for Repeat not implemented"),
+        Group(_) => panic("TODO Phase 2.2: lower_op for Group not implemented"),
+        Label(_) => panic("TODO Phase 2.2: lower_op for Label not implemented"),
+    };
+}
+
+/// Resolve the exclusion set for a `~ X` element. Phase 2.1 handles
+/// the simple cases (single `TokenRef` / `Literal`); the multi-alt
+/// `~ (A | B | C)` form lands in Phase 2.2 alongside the rest of
+/// `Group` lowering.
+fn collect_excluded_kinds(inner: &Element) -> Array<String> {
+    return match *inner {
+        TokenRef(t) => [`TK_{t.name}`],
+        Literal(l) => [literal_const_name(&l.text)],
+        _ => panic("TODO Phase 2.2: collect_excluded_kinds for non-trivial Not inner not implemented"),
+    };
+}
+
+/// Field-name deduplication mirroring `parser_gen::dedup_name`. The
+/// first occurrence keeps the base name; subsequent occurrences get
+/// `<base>_<n>` for `n = 2, 3, ...`.
+///
+/// Re-implemented here (not imported from `parser_gen.wado`) because
+/// Phase 4's split will move every emit-side helper out of
+/// `parser_gen.wado`; sharing utilities cross-file before the split
+/// would just create import churn for a few lines of straightforward
+/// counting.
+fn dedup_name(base: &String, counts: &mut Array<[String, i32]>) -> String {
+    let count = get_count(counts, base);
+    increment_count(counts, base);
+    if count > 0 {
+        return `{*base}_{count + 1}`;
+    }
+    return *base;
+}
+
+fn get_count(counts: &Array<[String, i32]>, name: &String) -> i32 {
+    for let entry of counts {
+        if entry.0 == *name {
+            return entry.1;
+        }
+    }
+    return 0;
+}
+
+fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
+    for let mut i = 0; i < counts.len(); i += 1 {
+        if counts[i].0 == *name {
+            let prev = counts[i].1;
+            counts[i] = [*name, prev + 1];
+            return;
+        }
+    }
+    counts.push([*name, 1]);
+}

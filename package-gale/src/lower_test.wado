@@ -1,0 +1,248 @@
+//! Smoke tests for `lower(Grammar) -> LoweredGrammar`.
+//!
+//! Phase 2.1 covers single-alternative rules with leaf elements
+//! (TokenRef / Literal / RuleRef / Wildcard / Not). Tests build a
+//! minimal `Grammar` directly via struct-literal syntax (no g4
+//! parser) so the lowering invariants are exercised in isolation
+//! from the front end.
+
+use {
+    Grammar,
+    GrammarKind,
+    ParserRule,
+    Alternative,
+    Element,
+    RuleRefElement,
+    TokenRefElement,
+    LiteralElement,
+    WildcardElement,
+    NotElement,
+    Visibility,
+} from "./ir.wado";
+use { LitToken } from "./lexer_gen.wado";
+use { lower } from "./lower.wado";
+use {
+    Rule,
+    Op,
+} from "./gir.wado";
+
+fn empty_grammar(name: &String) -> Grammar {
+    return Grammar {
+        name: *name,
+        kind: GrammarKind::Combined,
+        parser_rules: [],
+        lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+        pending_refs: [],
+        source_files: [],
+    };
+}
+
+fn no_lit_tokens() -> Array<LitToken> {
+    return [];
+}
+
+fn alt_of(elements: Array<Element>) -> Alternative {
+    return Alternative {
+        label: null,
+        options: [],
+        elements,
+    };
+}
+
+test "lower passes through grammar metadata" {
+    let mut g = empty_grammar(&"JSON");
+    g.source_files = ["JSON.g4"];
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.name == "JSON";
+    assert lowered.source_files.len() == 1;
+    assert lowered.source_files[0] == "JSON.g4";
+    assert lowered.parser_rules.is_empty();
+    assert lowered.variant_rules.is_empty();
+    assert lowered.kind_sets.is_empty();
+    assert lowered.mode_names.len() == 1;
+}
+
+test "lower simple rule with single TokenRef" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "value",
+        Visibility::Default,
+        [],
+        [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.parser_rules.len() == 1;
+    let rule = &lowered.parser_rules[0];
+
+    if let Simple(s) = rule {
+        assert s.header.name == "value";
+        assert s.header.snake_name == "value";
+        assert s.header.type_name == "ValueNode";
+        assert s.body.alt_index == 0;
+        assert s.body.case_name == "";
+        assert s.body.struct_name == "ValueNode";
+        assert s.body.ops.len() == 1;
+        if let Token(t) = &s.body.ops[0] {
+            assert t.kind == "TK_INT";
+            assert t.field == "int";
+        } else {
+            panic("expected Op::Token");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower simple rule with Literal" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "punc",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Literal(LiteralElement::new("+"))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Literal(l) = &s.body.ops[0] {
+            assert l.kind == "TK_LIT_PLUS";
+            assert l.field == "plus";
+        } else {
+            panic("expected Op::Literal");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower simple rule with RuleRef" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "stmt",
+        Visibility::Default,
+        [],
+        [alt_of([Element::RuleRef(RuleRefElement::new("expr"))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let RuleCall(r) = &s.body.ops[0] {
+            assert r.target_name == "expr";
+            assert r.target_snake == "expr";
+            assert r.field == "expr";
+            assert r.variant_id matches { None };
+            assert r.min_prec_arg matches { None };
+        } else {
+            panic("expected Op::RuleCall");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower simple rule with Wildcard" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "any",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Wildcard(WildcardElement::new())])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Wildcard(w) = &s.body.ops[0] {
+            assert w.field == "wildcard";
+        } else {
+            panic("expected Op::Wildcard");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower simple rule with Not" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "no_int",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Not(NotElement {
+            element: Element::TokenRef(TokenRefElement::new("INT")),
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Excluded(e) = &s.body.ops[0] {
+            assert e.kinds.len() == 1;
+            assert e.kinds[0] == "TK_INT";
+            assert e.field == "not_int";
+        } else {
+            panic("expected Op::Excluded");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower dedupes same-name fields" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "two_ints",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::TokenRef(TokenRefElement::new("INT")),
+            Element::TokenRef(TokenRefElement::new("INT")),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 2;
+        if let Token(t) = &s.body.ops[0] {
+            assert t.field == "int";
+        } else {
+            panic("expected first Token");
+        }
+        if let Token(t) = &s.body.ops[1] {
+            assert t.field == "int_2";
+        } else {
+            panic("expected second Token");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower carries every leaf op in order" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "mix",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::TokenRef(TokenRefElement::new("ID")),
+            Element::Literal(LiteralElement::new(":")),
+            Element::RuleRef(RuleRefElement::new("expr")),
+            Element::Wildcard(WildcardElement::new()),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 4;
+        if let Token(_) = &s.body.ops[0] { assert true; } else { panic("ops[0] != Token"); }
+        if let Literal(_) = &s.body.ops[1] { assert true; } else { panic("ops[1] != Literal"); }
+        if let RuleCall(_) = &s.body.ops[2] { assert true; } else { panic("ops[2] != RuleCall"); }
+        if let Wildcard(_) = &s.body.ops[3] { assert true; } else { panic("ops[3] != Wildcard"); }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
