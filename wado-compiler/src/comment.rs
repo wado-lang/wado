@@ -207,10 +207,7 @@ fn collect_block_ranges(module: &Module) -> Vec<(AstId, usize, usize)> {
     struct Collector(Vec<(AstId, usize, usize)>);
     impl AstVisitor for Collector {
         fn visit_block(&mut self, b: &Block) {
-            let after = b
-                .stmts
-                .last()
-                .map_or(b.span.start, |last| last.span().end);
+            let after = b.stmts.last().map_or(b.span.start, |last| last.span().end);
             self.0.push((b.id, after, b.span.end));
             walk_block(self, b);
         }
@@ -239,10 +236,7 @@ pub fn populate_inner_tail(trivia: &mut TriviaMap, module: &Module) {
 
 /// AST-shape-free core of [`populate_inner_tail`]. Exposed for unit
 /// tests that construct synthetic block tables.
-fn populate_inner_tail_from_blocks(
-    trivia: &mut TriviaMap,
-    blocks: &[(AstId, usize, usize)],
-) {
+fn populate_inner_tail_from_blocks(trivia: &mut TriviaMap, blocks: &[(AstId, usize, usize)]) {
     let leading_ids: Vec<AstId> = trivia.leading.keys().copied().collect();
     for id in leading_ids {
         let comments = trivia.leading.remove(&id).expect("key was just listed");
@@ -463,10 +457,18 @@ mod tests {
         trivia.set_dangling(vec![line_comment(" tail", 30, 38, 3, 5)]);
 
         populate_inner_tail_from_blocks(&mut trivia, &blocks);
-        let after_first: Vec<_> = trivia.inner_tail_of(AstId(0)).iter().map(|c| c.text.clone()).collect();
+        let after_first: Vec<_> = trivia
+            .inner_tail_of(AstId(0))
+            .iter()
+            .map(|c| c.text.clone())
+            .collect();
 
         populate_inner_tail_from_blocks(&mut trivia, &blocks);
-        let after_second: Vec<_> = trivia.inner_tail_of(AstId(0)).iter().map(|c| c.text.clone()).collect();
+        let after_second: Vec<_> = trivia
+            .inner_tail_of(AstId(0))
+            .iter()
+            .map(|c| c.text.clone())
+            .collect();
 
         assert_eq!(after_first, after_second);
         assert_eq!(after_first.len(), 1);
