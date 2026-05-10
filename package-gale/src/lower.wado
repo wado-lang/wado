@@ -25,17 +25,19 @@
 //! multi-token Group), and scalar / list (`+=`) Labels. Dispatch
 //! falls into `Direct` for disjoint first-sets or `Tournament` for
 //! overlapping fully-scannable alts. Follow-aware variants are
-//! registered per call site and re-lowered per `(rule, mask)` pair.
-//! Full `FieldDecl` enumeration produces the CST struct layout.
+//! registered per call site and re-lowered per `(rule, mask)` pair;
+//! variant-body Repeats pick `Suppressed` / `WithFollowSubtraction`
+//! / `Plain` based on how the mask intersects the loop's inner
+//! first set. Repeats over General-Group inners coordinate the
+//! per-rule `group_counter` so the outer field name and the inner
+//! variant share the same id.
 //!
-//! The remaining edge case — Repeat over a General-Group inner —
-//! still panics; no committed grammar exercises it and the
-//! group-counter coordination requires its own sub-phase. The
-//! `WithFollowSubtraction` / `OptionalLookahead` /
-//! `OptionalScanGuard` / `Suppressed` Repeat strategies are stubs
-//! (lower returns `Plain` even inside a `current_follow_mask`
-//! variant context); they will land when a committed grammar needs
-//! them at emit time.
+//! `OptionalLookahead` and `OptionalScanGuard` are still stubs —
+//! every Optional Repeat picks `Plain` even when the inner is a
+//! lookahead-requiring Group. emit accepts this conservatively (the
+//! same way it does today for un-tagged `e?` constructs); the
+//! strategy enum is reserved for when those specialised emit paths
+//! land.
 //!
 //! Phase 3 swaps `codegen::generate` to call `lower` and feed the
 //! result through a thin emit adapter; until then this file is
@@ -106,6 +108,7 @@ use {
     RepeatOp,
     RepeatStrategy,
     NonGreedyStrategy,
+    WithFollowSubtractionStrategy,
     GroupOp,
     GroupShape,
     SingleAltShape,
@@ -1178,18 +1181,15 @@ fn lower_scan_repeat(
     ctx: &mut GenContext,
     outer_follow: &Array<String>,
 ) -> ScanElement {
+    let mut inner_visiting: Array<String> = [];
+    let inner_first = ctx.first_of_element(&rep.element, &mut inner_visiting);
+
     let strategy = if rep.non_greedy {
         compute_non_greedy_scan_strategy(&rep.element, outer_follow, ctx);
     } else {
-        // Optional / Star / Plus use `Plain` strategy on the scan
-        // side — the scan twin of the Plain parse-side loop. Phase
-        // 2.6 adds `WithFollowSubtraction` / `Suppressed` once the
-        // variant pre-pass produces follow masks.
-        ScanRepeatStrategy::Plain;
+        choose_greedy_scan_repeat_strategy(&inner_first, &ctx.current_follow_mask);
     };
 
-    let mut inner_visiting: Array<String> = [];
-    let inner_first = ctx.first_of_element(&rep.element, &mut inner_visiting);
     let iter_follow = union_arrays(&inner_first, outer_follow);
 
     let body = lower_scan_element(&rep.element, ctx, &iter_follow);
@@ -1910,29 +1910,24 @@ fn lower_repeat_op(
         dedup_name(&outer_base, name_counts);
     };
 
+    // Pre-compute the inner's first set; used both by the strategy
+    // decision (mask subtraction / suppression) and by the
+    // iter-follow propagation for nested constructs.
+    let mut inner_visiting: Array<String> = [];
+    let inner_first = ctx.first_of_element(&rep.element, &mut inner_visiting);
+
     let strategy = if rep.non_greedy {
         compute_non_greedy_strategy(&rep.element, outer_follow, ctx);
     } else {
-        // `?` / `*` / `+` use the `Plain` strategy in the absence of
-        // a follow-aware variant context. `Plain` for `?` emits
-        // `if peek_kind ∈ first(inner) { ... }`; for `*` / `+` it's
-        // the standard `while peek ∈ first { ... }` (with `+`'s
-        // mandatory-first guard handled at emit time). The
-        // `WithFollowSubtraction` / `OptionalLookahead` /
-        // `OptionalScanGuard` strategies land in Phase 2.6 once the
-        // per-call-site follow-mask analysis runs.
-        RepeatStrategy::Plain;
+        choose_greedy_repeat_strategy(&inner_first, &ctx.current_follow_mask);
     };
 
     // The inner body's `outer_follow` for nested constructs is the
     // iter-follow of this repeat: `first(inner) ∪ outer_follow`,
     // because after the inner finishes the loop either restarts
     // (consuming a `first(inner)` token) or exits (the surrounding
-    // `outer_follow`). Phase 2.6 will refine for follow-aware
-    // variants; today this propagation is only consumed by nested
-    // non-greedy Repeats.
-    let mut inner_visiting: Array<String> = [];
-    let inner_first = ctx.first_of_element(&rep.element, &mut inner_visiting);
+    // `outer_follow`). Today this propagation is only consumed by
+    // nested non-greedy Repeats.
     let iter_follow = union_arrays(&inner_first, outer_follow);
 
     let mut inner_counts: Array<[String, i32]> = [];
@@ -1943,6 +1938,74 @@ fn lower_repeat_op(
         strategy: strategy,
         field: outer_field,
     });
+}
+
+/// Greedy Repeat strategy decision. Outside a follow-aware variant
+/// (`current_follow_mask` empty) the strategy is `Plain`. Inside a
+/// variant we apply the mask to the inner's first set:
+///
+/// * `effective_first` is empty → every iteration's first token is
+///   in the mask, so the loop should never enter — emit it
+///   `Suppressed` and the runtime skips the storage allocation
+///   entirely.
+/// * `effective_first` is shorter than `inner_first` (some overlap
+///   between the loop's first set and the mask) → emit guards on
+///   the subtracted set with `WithFollowSubtraction`.
+/// * No overlap at all → `Plain` (the mask doesn't intersect this
+///   loop's iteration condition, so emit walks the standard
+///   `while peek ∈ first` path).
+fn choose_greedy_repeat_strategy(
+    inner_first: &Array<String>,
+    mask: &Array<String>,
+) -> RepeatStrategy {
+    if mask.is_empty() {
+        return RepeatStrategy::Plain;
+    }
+    let effective = subtract_first(inner_first, mask);
+    if effective.is_empty() {
+        return RepeatStrategy::Suppressed;
+    }
+    if effective.len() == inner_first.len() {
+        return RepeatStrategy::Plain;
+    }
+    return RepeatStrategy::WithFollowSubtraction(WithFollowSubtractionStrategy {
+        effective_first: effective,
+    });
+}
+
+/// Scan-side twin of `choose_greedy_repeat_strategy`. Different
+/// enum (`ScanRepeatStrategy` lacks `OptionalLookahead` /
+/// `OptionalScanGuard`) but otherwise identical decision tree.
+fn choose_greedy_scan_repeat_strategy(
+    inner_first: &Array<String>,
+    mask: &Array<String>,
+) -> ScanRepeatStrategy {
+    if mask.is_empty() {
+        return ScanRepeatStrategy::Plain;
+    }
+    let effective = subtract_first(inner_first, mask);
+    if effective.is_empty() {
+        return ScanRepeatStrategy::Suppressed;
+    }
+    if effective.len() == inner_first.len() {
+        return ScanRepeatStrategy::Plain;
+    }
+    return ScanRepeatStrategy::WithFollowSubtraction(WithFollowSubtractionStrategy {
+        effective_first: effective,
+    });
+}
+
+/// Token-by-token subtraction of `b` from `a`, preserving `a`'s
+/// order. Linear scan; kind-set sizes here are small (≤ a few
+/// dozen) so a linear `first_set_contains` is fine.
+fn subtract_first(a: &Array<String>, b: &Array<String>) -> Array<String> {
+    let mut result: Array<String> = [];
+    for let tk of a {
+        if !first_set_contains(b, tk) {
+            result.push(*tk);
+        }
+    }
+    return result;
 }
 
 /// Compute the `NonGreedy` strategy for a non-greedy Repeat (`e*?` /

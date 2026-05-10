@@ -2081,6 +2081,125 @@ test "lower variant_rules empty when no caller follow overlaps callee tail-greed
     assert lowered.variant_rules.is_empty();
 }
 
+test "lower variant body suppresses Repeat when first set is fully in follow mask" {
+    // `r : a X ; a : X* ;`
+    // At the call site `a X`, caller_follow = {TK_X}. `a`'s
+    // tail-greedy first = {TK_X}. The variant `a__follow_0`
+    // installs mask = {TK_X}; lowering `X*` then sees
+    // first(X*) = {TK_X} ⊆ mask → Suppressed.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([
+                Element::RuleRef(RuleRefElement::new("a")),
+                Element::TokenRef(TokenRefElement::new("X")),
+            ])],
+        ),
+        ParserRule::new(
+            "a",
+            Visibility::Default,
+            [],
+            [alt_of([Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::TokenRef(TokenRefElement::new("X")),
+                non_greedy: false,
+            })])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.variant_rules.len() == 1;
+    if let Simple(s) = &lowered.variant_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let Suppressed = &rep.strategy {
+                assert true;
+            } else {
+                panic("expected RepeatStrategy::Suppressed in variant body");
+            }
+        } else {
+            panic("expected Op::Repeat in variant body");
+        }
+    } else {
+        panic("expected Rule::Simple for variant body");
+    }
+    // The base (non-variant) rule still uses Plain.
+    if let Simple(s) = &lowered.parser_rules[1] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let Plain = &rep.strategy {
+                assert true;
+            } else {
+                panic("expected RepeatStrategy::Plain in base rule");
+            }
+        } else {
+            panic("expected Op::Repeat in base rule");
+        }
+    } else {
+        panic("expected Rule::Simple for base rule 'a'");
+    }
+}
+
+test "lower variant body uses WithFollowSubtraction when mask partially overlaps inner first" {
+    // `t : X | Y ;` — single-token rule whose first set is {X, Y}.
+    // `a : t* ;` — the Repeat's inner is `t`, which IS a single-token
+    //   element (its callee always consumes exactly one token), so
+    //   tail_greedy_first_of_rule(a) = first(t) = {X, Y}.
+    // `r : a X ;` — caller follow at `a` is {X}; mask = {X}.
+    // Variant body re-lowers `a`'s `t*` with mask = {X}; the inner
+    // first = {X, Y}, subtract mask → effective = {Y}.
+    // → WithFollowSubtraction(effective_first = [Y]).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([
+                Element::RuleRef(RuleRefElement::new("a")),
+                Element::TokenRef(TokenRefElement::new("X")),
+            ])],
+        ),
+        ParserRule::new(
+            "a",
+            Visibility::Default,
+            [],
+            [alt_of([Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::RuleRef(RuleRefElement::new("t")),
+                non_greedy: false,
+            })])],
+        ),
+        ParserRule::new(
+            "t",
+            Visibility::Default,
+            [],
+            [
+                alt_of([Element::TokenRef(TokenRefElement::new("X"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("Y"))]),
+            ],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.variant_rules.len() == 1, `expected 1 variant, got {lowered.variant_rules.len()}`;
+    if let Simple(s) = &lowered.variant_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let WithFollowSubtraction(wfs) = &rep.strategy {
+                assert wfs.effective_first.len() == 1;
+                assert wfs.effective_first[0] == "TK_Y", wfs.effective_first[0];
+            } else {
+                panic("expected RepeatStrategy::WithFollowSubtraction");
+            }
+        } else {
+            panic("expected Op::Repeat in variant body");
+        }
+    } else {
+        panic("expected Rule::Simple for variant body");
+    }
+}
+
 test "lower Repeat over General Group inner uses speculative group_counter id" {
     // `r : (stmt | INT INT)+ ; stmt : ID ;`
     // The General Group inside the Repeat gets group_index = 0
