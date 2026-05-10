@@ -42,6 +42,8 @@ use {
     Alternative,
     Element,
     LabelElement,
+    RepeatElement,
+    RepeatKind,
 } from "./ir.wado";
 use {
     rule_type_name,
@@ -69,12 +71,16 @@ use {
     ScanTokenElem,
     ScanRuleCallElem,
     ScanExcludedElem,
+    ScanRepeatElem,
+    ScanRepeatStrategy,
     Op,
     TokenOp,
     LiteralOp,
     RuleCallOp,
     WildcardOp,
     ExcludedOp,
+    RepeatOp,
+    RepeatStrategy,
     FieldDecl,
     FieldKind,
 } from "./gir.wado";
@@ -296,9 +302,27 @@ fn lower_scan_element(elem: &Element) -> ScanElement {
             kinds: collect_excluded_kinds(&ne.element),
         }),
         Label(lab) => lower_scan_element(&lab.element),
-        Repeat(_) => panic("TODO Phase 2.3: lower_scan_element for Repeat not implemented"),
-        Group(_) => panic("TODO Phase 2.3: lower_scan_element for Group not implemented"),
+        Repeat(rep) => lower_scan_repeat(rep),
+        Group(_) => panic("TODO Phase 2.x.group: lower_scan_element for Group not implemented"),
     };
+}
+
+/// Scan-side twin of `lower_repeat_op`. Same restrictions: greedy
+/// `Star` / `Plus` with a leaf inner only.
+fn lower_scan_repeat(rep: &RepeatElement) -> ScanElement {
+    if rep.non_greedy {
+        panic("TODO Phase 2.x.nongreedy: non-greedy Repeat needs follow-set analysis");
+    }
+    if let Optional = rep.kind {
+        panic("TODO Phase 2.x.optional: Optional Repeat needs follow-set analysis");
+    }
+    require_leaf_element(&rep.element, &"Repeat (scan side)");
+    let body = lower_scan_element(&rep.element);
+    return ScanElement::Repeat(ScanRepeatElem {
+        kind: rep.kind,
+        body,
+        strategy: ScanRepeatStrategy::Plain,
+    });
 }
 
 /// Build the `RuleHeader` shared by every `Rule` variant. The cached
@@ -435,10 +459,63 @@ fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>) -> Op {
             kinds: collect_excluded_kinds(&ne.element),
             field: dedup_name(&not_element_field_name(&ne.element), name_counts),
         }),
-        Repeat(_) => panic("TODO Phase 2.3: lower_op for Repeat not implemented"),
-        Group(_) => panic("TODO Phase 2.3: lower_op for Group not implemented"),
+        Repeat(rep) => lower_repeat_op(rep, name_counts),
+        Group(_) => panic("TODO Phase 2.x.group: lower_op for Group not implemented"),
         Label(lab) => lower_label_op(lab, name_counts),
     };
+}
+
+/// Lower a `Repeat` element (`e?` / `e*` / `e+`). Phase 2.x.partial
+/// only handles greedy `Star` / `Plus` whose inner is a leaf
+/// element (no nested `Repeat` / `Group` / `Label`). The remaining
+/// shapes panic with their own `TODO` markers so a half-lowered
+/// `Repeat` cannot quietly reach codegen.
+///
+/// Strategy is `Plain`: emit produces `while peek_kind ∈ first_of_inner
+/// { … push body }` for `Star` and `Plus` (with `+`'s mandatory-first
+/// guard handled at emit time, not in the strategy enum). Phase
+/// 2.6 will introduce `WithFollowSubtraction` / `OptionalLookahead`
+/// / `OptionalScanGuard` once the per-call-site follow analysis
+/// runs as a pre-pass.
+///
+/// The inner Op uses a fresh `name_counts` because the binding name
+/// inside a loop body is a local to that iteration — it does not
+/// shadow or dedup against the surrounding alt's bindings (the
+/// outer alt's list-typed field comes from `FieldDecl` in Phase 2.9,
+/// independent of the inner binding).
+fn lower_repeat_op(
+    rep: &RepeatElement,
+    _name_counts: &mut Array<[String, i32]>,
+) -> Op {
+    if rep.non_greedy {
+        panic("TODO Phase 2.x.nongreedy: non-greedy Repeat needs follow-set analysis");
+    }
+    if let Optional = rep.kind {
+        panic("TODO Phase 2.x.optional: Optional Repeat needs follow-set analysis");
+    }
+    require_leaf_element(&rep.element, &"Repeat");
+
+    let mut inner_counts: Array<[String, i32]> = [];
+    let body = lower_op(&rep.element, &mut inner_counts);
+    return Op::Repeat(RepeatOp {
+        kind: rep.kind,
+        body,
+        strategy: RepeatStrategy::Plain,
+    });
+}
+
+/// Phase 2.x.partial guard. Repeat's inner being a non-leaf element
+/// (nested `Repeat` / `Group` / `Label`) requires the matching
+/// lowerings — `lower_op` would otherwise recursively panic with
+/// less specific messages. Surfacing the failure here keeps the
+/// "what shape is unsupported?" diagnostic close to the entry point.
+fn require_leaf_element(elem: &Element, ctx: &String) {
+    match *elem {
+        TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => {},
+        Repeat(_) => panic(`TODO Phase 2.x.nested: {*ctx} with nested Repeat inner not implemented`),
+        Group(_) => panic(`TODO Phase 2.x.nested: {*ctx} with Group inner not implemented`),
+        Label(_) => panic(`TODO Phase 2.x.nested: {*ctx} with Label inner not implemented`),
+    }
 }
 
 /// Lower a `Label` element by recursively lowering its inner

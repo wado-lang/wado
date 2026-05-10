@@ -18,6 +18,8 @@ use {
     WildcardElement,
     NotElement,
     LabelElement,
+    RepeatElement,
+    RepeatKind,
     Visibility,
 } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
@@ -294,6 +296,110 @@ test "lower multi-alt rule with labeled alts uses label as case name" {
         assert m.alts[1].struct_name == "ExprStrLit";
     } else {
         panic("expected Rule::MultiAlt");
+    }
+}
+
+test "lower greedy Star Repeat with TokenRef inner" {
+    // `tokens : INT* ;`
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "tokens",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Repeat(RepeatElement {
+            kind: RepeatKind::Star,
+            element: Element::TokenRef(TokenRefElement::new("INT")),
+            non_greedy: false,
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 1;
+        if let Repeat(r) = &s.body.ops[0] {
+            // RepeatKind round-trips from surface IR to GIR.
+            if let Star = r.kind { assert true; } else { panic("expected Star"); }
+            // Strategy is Plain at Phase 2.x.partial.
+            if let Plain = &r.strategy { assert true; } else { panic("expected Plain"); }
+            // Inner Op is the leaf Token, with its own (fresh) field
+            // — the binding name inside the loop body, not the
+            // surrounding alt's list-typed field.
+            if let Token(t) = &r.body {
+                assert t.kind == "TK_INT";
+                assert t.field == "int";
+            } else {
+                panic("expected inner Token");
+            }
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower greedy Plus Repeat with RuleRef inner" {
+    // `exprs : expr+ ;`
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "exprs",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Repeat(RepeatElement {
+            kind: RepeatKind::Plus,
+            element: Element::RuleRef(RuleRefElement::new("expr")),
+            non_greedy: false,
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(r) = &s.body.ops[0] {
+            if let Plus = r.kind { assert true; } else { panic("expected Plus"); }
+            if let RuleCall(c) = &r.body {
+                assert c.target_name == "expr";
+                assert c.field == "expr";
+            } else {
+                panic("expected inner RuleCall");
+            }
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Repeat scan body mirrors parse body" {
+    // Scan side gets its own ScanElement::Repeat with the same kind
+    // and inner shape, no field bindings, ScanRepeatStrategy::Plain.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "tokens",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Repeat(RepeatElement {
+            kind: RepeatKind::Star,
+            element: Element::TokenRef(TokenRefElement::new("INT")),
+            non_greedy: false,
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(r) = &s.scan_body.elements[0] {
+            if let Star = r.kind { assert true; } else { panic("expected Star (scan)"); }
+            if let Plain = &r.strategy { assert true; } else { panic("expected Plain (scan)"); }
+            if let Token(t) = &r.body {
+                assert t.kind == "TK_INT";
+            } else {
+                panic("expected inner ScanElement::Token");
+            }
+        } else {
+            panic("expected ScanElement::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
     }
 }
 
