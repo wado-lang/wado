@@ -717,8 +717,7 @@ impl<'a> Unparser<'a> {
             let has_declarations = !i.associated_types.is_empty() || !i.constants.is_empty();
             if has_declarations && let Some(first) = i.methods.first() {
                 this.output.push('\n');
-                let first_effective_line =
-                    effective_start_line(&first.attrs, first.span.line);
+                let first_effective_line = effective_start_line(&first.attrs, first.span.line);
                 this.last_source_line = this
                     .leading_of(first.id)
                     .first()
@@ -737,9 +736,7 @@ impl<'a> Unparser<'a> {
                     .leading_of(method.id)
                     .first()
                     .map_or(effective_line, |c| c.span.line);
-                if idx > 0
-                    && blank_lines_between(this.last_source_line, effective_start) == 0
-                {
+                if idx > 0 && blank_lines_between(this.last_source_line, effective_start) == 0 {
                     this.output.push('\n');
                     this.last_source_line = effective_start;
                 }
