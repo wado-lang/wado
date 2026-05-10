@@ -1,0 +1,13 @@
+use { Request, Response, ErrorCode, Fields, Trailers, StatusCode } from "wasi:http";
+
+export async fn handle(_request: Request) -> Result<Response, ErrorCode> {
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, Option::<Stream<u8>>::Some(body_rx), trailers_future);
+    response.set_status_code(200);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    body_tx.write("Hello\n".bytes().collect());
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}

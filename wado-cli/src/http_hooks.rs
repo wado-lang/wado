@@ -5,7 +5,7 @@
 //! not sufficient when the host sits behind a TLS-inspecting proxy that signs
 //! outgoing HTTPS with a private CA (e.g. a sandboxed dev environment).
 
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use bytes::Bytes;
@@ -30,14 +30,29 @@ pub struct WadoHttpHooks {
     client_config: Arc<rustls::ClientConfig>,
 }
 
-impl WadoHttpHooks {
-    pub fn new() -> Self {
+/// Process-wide `rustls::ClientConfig` shared by every `WadoHttpHooks`.
+///
+/// `wado serve` builds a fresh `WasiState` per request and used to call
+/// `WadoHttpHooks::new()` from the per-request constructor, which in turn
+/// ran `build_root_cert_store()` — a function that reads CA bundles from
+/// disk via `SSL_CERT_FILE`/`SSL_CERT_DIR`. Doing that I/O on every request
+/// is wasted work; the configuration is immutable after process startup,
+/// so cache it in a `LazyLock` and clone the `Arc` per request.
+fn shared_client_config() -> Arc<rustls::ClientConfig> {
+    static CONFIG: LazyLock<Arc<rustls::ClientConfig>> = LazyLock::new(|| {
         install_default_crypto_provider();
-        let client_config = rustls::ClientConfig::builder()
+        let config = rustls::ClientConfig::builder()
             .with_root_certificates(build_root_cert_store())
             .with_no_client_auth();
+        Arc::new(config)
+    });
+    Arc::clone(&CONFIG)
+}
+
+impl WadoHttpHooks {
+    pub fn new() -> Self {
         Self {
-            client_config: Arc::new(client_config),
+            client_config: shared_client_config(),
         }
     }
 }

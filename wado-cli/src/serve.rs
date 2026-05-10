@@ -1,33 +1,50 @@
 use std::convert::Infallible;
 use std::fmt::Write as _;
 use std::net::SocketAddr;
-use std::pin::pin;
+use std::pin::{Pin, pin};
 use std::process;
 use std::sync::Arc;
+use std::task::{Context, Poll};
+use std::time::Duration;
 
 use anyhow::Result;
 use bytes::Bytes;
-use futures::future::{Either, select};
-use http_body_util::combinators::BoxBody;
-use http_body_util::{BodyExt, Collected, Full};
+use futures::future::{Either, poll_fn, select};
+use http_body::{Body as _, Frame};
+use http_body_util::BodyExt as _;
+use http_body_util::Full;
+use http_body_util::combinators::UnsyncBoxBody;
 use hyper::service::service_fn;
 use hyper::{Request as HyperRequest, Response as HyperResponse};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto;
 use lexopt::Arg::Value;
 use tokio::net::TcpListener;
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, oneshot};
+use tokio::task::JoinSet;
 use wasmtime::Engine;
 use wasmtime::Store;
-use wasmtime::component::{Component, Linker};
+use wasmtime::component::Component;
 use wasmtime_wasi_http::p3::Request as WasiRequest;
-use wasmtime_wasi_http::p3::bindings::Service;
+use wasmtime_wasi_http::p3::bindings::{Service, ServicePre};
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags, OptLevel};
 use crate::manifest;
 use crate::runtime::{self, Preopens, WasiState};
 use wado_compiler::LogLevel;
+
+/// Default per-request timeout in seconds. A guest that fails to produce a
+/// response within this window is cut short by one of the three layers
+/// documented on `handle_http_request`: an epoch-deadline trap on a
+/// runaway wasm loop, a wall-clock timeout on a stuck host `await`, or a
+/// first-byte timeout on a guest that never produces a head.
+const DEFAULT_TIMEOUT_SECS: u64 = 30;
+
+/// Epoch ticker interval. Each tick is a unit of `set_epoch_deadline`, so
+/// a 1s tick + a deadline of `timeout_secs` ticks yields second-granularity
+/// timeout enforcement — sufficient for the 30s default.
+const EPOCH_TICK_MS: u64 = 1000;
 
 pub struct ServeOptions {
     pub input: String,
@@ -41,6 +58,8 @@ pub struct ServeOptions {
     /// default — services rarely need filesystem access, so unlike `wado run`
     /// we do NOT preopen the cwd unless the user passes `--dir`.
     pub preopened_dirs: Vec<(String, String)>,
+    /// Per-request timeout in seconds.
+    pub timeout_secs: u64,
 }
 
 #[derive(Clone, Copy)]
@@ -52,8 +71,16 @@ enum Opt {
     OptIterations,
     LogLevel,
     Allocator,
+    Timeout,
     Help,
 }
+
+const TIMEOUT_SPEC: args::OptSpec = args::OptSpec {
+    long: Some("timeout"),
+    short: None,
+    value: Some("<seconds>"),
+    desc: "Per-request timeout in seconds (default: 30)",
+};
 
 impl Opt {
     const ALL: &[Self] = &[
@@ -64,6 +91,7 @@ impl Opt {
         Self::OptIterations,
         Self::LogLevel,
         Self::Allocator,
+        Self::Timeout,
         Self::Help,
     ];
 
@@ -86,6 +114,7 @@ impl Opt {
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
             Self::LogLevel => args::LOG_LEVEL_SPEC,
             Self::Allocator => args::ALLOCATOR_SPEC,
+            Self::Timeout => TIMEOUT_SPEC,
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -106,6 +135,19 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
+fn parse_timeout_arg(parser: &mut lexopt::Parser) -> Result<u64, CliExit> {
+    let s = args::require_string(parser)?;
+    let n = s.parse::<u64>().map_err(|_| {
+        CliExit::error(format!(
+            "--timeout requires a positive integer (seconds), got '{s}'"
+        ))
+    })?;
+    if n == 0 {
+        return Err(CliExit::error("--timeout must be > 0"));
+    }
+    Ok(n)
+}
+
 /// Parse command-line arguments for the `serve` subcommand.
 ///
 /// # Errors
@@ -121,6 +163,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut opt_iterations: Option<u32> = None;
     let mut allocator: Option<String> = None;
     let mut preopened_dirs: Vec<(String, String)> = Vec::new();
+    let mut timeout_secs: u64 = DEFAULT_TIMEOUT_SECS;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -142,6 +185,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                 }
                 Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
                 Opt::Allocator => allocator = Some(args::require_string(&mut parser)?),
+                Opt::Timeout => timeout_secs = parse_timeout_arg(&mut parser)?,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -161,34 +205,101 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         opt_iterations,
         allocator,
         preopened_dirs,
+        timeout_secs,
     })
 }
 
-/// Handle a single HTTP request using the Wasm component.
+/// Outcome the spawned handler task delivers to the request entry point.
 ///
-/// Mirrors the wasmtime p3 reference and wado-compiler e2e harness pattern:
-/// both the guest handler and the response-body collection run inside
-/// `run_concurrent`, so the guest's post-`task-return` continuation keeps
-/// getting polled until it finishes writing the body and trailers. Collecting
-/// outside `run_concurrent` deadlocks because the store stops polling as soon
-/// as the closure future resolves.
+/// `Streaming` is the success path: response head plus a `Receiver` that
+/// will yield each body frame as the guest produces it. The other variants
+/// are terminal failure modes that have to be rendered as a synthetic 5xx
+/// because no part of the response has been put on the wire yet.
+enum HandlerOutcome {
+    Streaming(http::response::Parts, mpsc::Receiver<Frame<Bytes>>),
+    GuestError(wasmtime_wasi_http::p3::bindings::http::types::ErrorCode),
+    Trapped(String),
+    Timeout,
+}
+
+/// `http_body::Body` implementation backed by a tokio `mpsc::Receiver` of
+/// frames. Used to stream the guest's response body to hyper one frame at
+/// a time without buffering the full body in memory.
 ///
-/// The handler arm and the request-body I/O arm are raced via `futures::future::select`
-/// — handler completing first is the normal case (a guest may never consume
-/// the request body, in which case the I/O future only resolves when the
-/// request resource is dropped).
+/// Trailers travel through the same channel as `Frame::trailers(...)`.
+struct ChannelBody {
+    rx: mpsc::Receiver<Frame<Bytes>>,
+}
+
+impl http_body::Body for ChannelBody {
+    type Data = Bytes;
+    type Error = Infallible;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        match self.rx.poll_recv(cx) {
+            Poll::Ready(Some(frame)) => Poll::Ready(Some(Ok(frame))),
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+type StreamingBody = UnsyncBoxBody<Bytes, Infallible>;
+
+fn error_response(status: u16, msg: String) -> HyperResponse<StreamingBody> {
+    let body: Full<Bytes> = Full::new(Bytes::from(msg));
+    HyperResponse::builder()
+        .status(status)
+        .body(UnsyncBoxBody::new(body))
+        .expect("static status code should always build successfully")
+}
+
+/// Handle a single HTTP request using the Wasm component, **streaming** the
+/// response body frame-by-frame.
 ///
-/// The success body is returned as a `Collected<Bytes>` (boxed) rather than
-/// `Full<Bytes>` so that response trailers written by the guest survive the
-/// hop into hyper. `Full<Bytes>` carries no trailer frames, which would silently
-/// strip e.g. `Server-Timing` written via `trailers_tx.write(Some(...))`.
+/// The store is moved into a spawned task that drives `run_concurrent` for
+/// the entire lifetime of the response, including the guest's post-`task
+/// return` continuation. As soon as the head is available the spawn task
+/// hands the response head plus a body channel back here via a oneshot;
+/// from then on hyper drains body frames directly from that channel while
+/// the spawn task keeps producing them. Because the channel is bounded
+/// (capacity 8), a slow consumer naturally back-pressures the guest.
+///
+/// The per-request timeout is enforced in three layered ways, because no
+/// single mechanism covers every kind of stall on its own:
+///
+/// * `Store::set_epoch_deadline` plus the engine-wide ticker traps the
+///   guest if it spends more than the deadline *running wasm*. This is
+///   the only mechanism that can preempt a tight CPU loop inside the
+///   guest.
+/// * `tokio::time::timeout(timeout, run_concurrent(...))` wraps the
+///   spawn task itself. This bounds the wall-clock lifetime of the
+///   request even when the pump is stuck on a host `await` (e.g.
+///   `frame_tx.send` blocked on a slow client) — epoch interruption
+///   cannot preempt a host await, so without this layer a misbehaving
+///   downstream could pin the store and the spawn task indefinitely.
+/// * A first-byte `tokio::time::sleep(timeout)` raced against the head
+///   oneshot returns 504 to the client if the guest never produces a
+///   response head — covering the case where the guest is stuck before
+///   any bytes have been put on the wire.
+///
+/// Hang avoidance:
+///
+/// * Hyper dropping the body causes `frame_tx.send` to fail, breaking the
+///   pump loop; the spawn task then exits.
+/// * If the outer first-byte timeout fires, the spawn task is left to
+///   run, but the wall-clock timeout guarantees it terminates within
+///   `timeout` regardless of where it is stuck (wasm or host await).
 async fn handle_http_request(
     engine: &Engine,
-    component: &Component,
-    linker: &Linker<WasiState>,
+    service_pre: &ServicePre<WasiState>,
     preopens: &Preopens,
+    timeout: Duration,
     req: HyperRequest<hyper::body::Incoming>,
-) -> Result<HyperResponse<BoxBody<Bytes, Infallible>>> {
+) -> Result<HyperResponse<StreamingBody>> {
     type HttpErrorCode = wasmtime_wasi_http::p3::bindings::http::types::ErrorCode;
 
     // Each request gets a fresh WASI state — the WASI ctx is scoped
@@ -201,76 +312,218 @@ async fn handle_http_request(
     // inherited stdio.
     let state = WasiState::new_no_inherit_env_with_preopens(preopens, &[]);
     let mut store = Store::new(engine, state);
+    let timeout_secs = timeout.as_secs().max(1);
+    // The engine-wide ticker bumps the epoch every `EPOCH_TICK_MS`, so
+    // setting `deadline_ticks = timeout_secs` gives second-granularity
+    // enforcement on the configured `timeout`.
+    store.set_epoch_deadline(timeout_secs);
 
-    let service = Service::instantiate_async(&mut store, component, linker).await?;
+    // Instantiation runs synchronously up to the first guest yield point and
+    // could in principle spin; bound it with the same overall timeout.
+    let service: Service =
+        match tokio::time::timeout(timeout, service_pre.instantiate_async(&mut store)).await {
+            Ok(Ok(s)) => s,
+            Ok(Err(e)) => {
+                eprintln!("Instantiation failed: {e:?}");
+                return Ok(error_response(500, format!("Instantiation failed:\n{e:?}")));
+            }
+            Err(_) => {
+                eprintln!("Instantiation timed out after {timeout_secs}s");
+                return Ok(error_response(
+                    504,
+                    format!("Instantiation timed out after {timeout_secs}s"),
+                ));
+            }
+        };
 
     let (parts, body) = req.into_parts();
     let body = body.map_err(HttpErrorCode::from_hyper_request_error);
     let http_req = http::Request::from_parts(parts, body);
     let (wasi_req, io) = WasiRequest::from_http(http_req);
 
-    let result =
-        store
-            .run_concurrent(
-                async |store| -> Result<
-                    Result<http::Response<Collected<Bytes>>, Option<HttpErrorCode>>,
-                > {
-                    let handler = pin!(async {
-                        let res = match service.handle(store, wasi_req).await? {
-                            Ok(res) => res,
-                            Err(err) => return anyhow::Ok(Err(Some(err))),
-                        };
-                        let res = store.with(|store| res.into_http(store, async { Ok(()) }))?;
-                        let (parts, body) = res.into_parts();
-                        let collected = BodyExt::collect(body)
-                            .await
-                            .map_err(|e| anyhow::anyhow!("failed to collect response body: {e}"))?;
-                        anyhow::Ok(Ok(http::Response::from_parts(parts, collected)))
-                    });
-                    let io = pin!(async {
-                        io.await
-                            .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
-                    });
-                    match select(handler, io).await {
-                        Either::Left((result, _)) => result,
-                        Either::Right((result, _)) => result.map(|()| Err(None)),
-                    }
-                },
-            )
-            .await;
+    let (resp_tx, resp_rx) = oneshot::channel::<HandlerOutcome>();
+    let (frame_tx, frame_rx) = mpsc::channel::<Frame<Bytes>>(8);
 
-    let result = match result {
-        Ok(Ok(inner)) => inner,
-        Ok(Err(e)) => {
-            eprintln!("Handler trapped: {e:?}");
-            return Ok(HyperResponse::builder()
-                .status(500)
-                .body(error_body(format!("Handler trapped:\n{e:?}")))?);
+    // The spawn task owns `store`, `service`, and `frame_tx`. Dropping
+    // `frame_tx` (which happens automatically when the closure exits)
+    // closes the body stream from hyper's point of view.
+    tokio::spawn(async move {
+        // Both `resp_tx` and `frame_rx` are taken at most once: when the
+        // handler produces head frames it moves the receiver into the
+        // outcome and releases the sender. After `run_concurrent` returns,
+        // a still-`Some` `resp_tx` means we never produced a head and need
+        // to surface the failure synthetically.
+        let mut resp_tx = Some(resp_tx);
+        let mut frame_rx_holder = Some(frame_rx);
+
+        // Wrap `run_concurrent` in a wall-clock timeout. The per-store
+        // `set_epoch_deadline` only traps the guest while it is *running
+        // wasm*; an epoch interrupt cannot preempt a host `await` such as
+        // `frame_tx.send(...).await` blocking on a slow or stuck consumer.
+        // Without the outer wall-clock bound, a client that stops draining
+        // the body would pin this task — and the `Store` it owns — alive
+        // forever. Letting the timeout fire here drops `frame_tx`, which
+        // hyper sees as EOF on the response body, and frees the store.
+        let drive_result = tokio::time::timeout(
+            timeout,
+            store.run_concurrent(async |store| -> anyhow::Result<()> {
+                let handler = pin!(async {
+                    let res = match service.handle(store, wasi_req).await? {
+                        Ok(res) => res,
+                        Err(err) => {
+                            if let Some(tx) = resp_tx.take() {
+                                let _ = tx.send(HandlerOutcome::GuestError(err));
+                            }
+                            return anyhow::Ok(());
+                        }
+                    };
+                    let res = store.with(|store| res.into_http(store, async { Ok(()) }))?;
+                    let (parts, body) = res.into_parts();
+
+                    // Hand the response head plus the receiver to the outer
+                    // task so hyper can start writing the response while we
+                    // keep producing frames here.
+                    if let Some(tx) = resp_tx.take() {
+                        let rx = frame_rx_holder
+                            .take()
+                            .expect("frame_rx is taken at most once");
+                        if tx.send(HandlerOutcome::Streaming(parts, rx)).is_err() {
+                            // Outer side gave up before the head landed
+                            // (e.g. first-byte timeout fired). Stop here;
+                            // the body will be discarded.
+                            return anyhow::Ok(());
+                        }
+                    }
+
+                    // Pump frames until EOF, body error, or hyper drops the
+                    // body. `frame_tx.send().await` blocks on a full channel,
+                    // so a slow consumer back-pressures into the guest.
+                    let mut body = pin!(body);
+                    loop {
+                        let frame = poll_fn(|cx| body.as_mut().poll_frame(cx)).await;
+                        match frame {
+                            Some(Ok(frame)) => {
+                                if frame_tx.send(frame).await.is_err() {
+                                    // Hyper dropped the body; abandon the
+                                    // rest of the stream.
+                                    break;
+                                }
+                            }
+                            // Body read error: close the stream by exiting
+                            // the loop. `frame_tx` is dropped on return,
+                            // which surfaces as EOF on the hyper side.
+                            Some(Err(_)) => break,
+                            None => break,
+                        }
+                    }
+                    anyhow::Ok(())
+                });
+                let io_arm = pin!(async {
+                    io.await
+                        .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
+                });
+                // The handler is the source of truth for response progress;
+                // the io future only drives request-body delivery and
+                // typically resolves *later* than the handler (it waits for
+                // the request resource to be dropped, which happens when
+                // the guest function fully exits — well after `task return`).
+                //
+                // We must not cancel the handler the moment io resolves
+                // (would truncate streamed bodies), and we must not block
+                // forever on io after the handler is done (would hang
+                // indefinitely on guests that hold the request resource
+                // until function exit). The select-then-await pattern
+                // satisfies both: io is polled concurrently while we wait
+                // for the handler, but we never wait for io alone.
+                match select(handler, io_arm).await {
+                    Either::Left((res, _io)) => res,
+                    Either::Right((_io_res, handler)) => handler.await,
+                }
+            }),
+        )
+        .await;
+
+        // Surface failures that prevented the handler from producing a head.
+        // After the head has already been sent, `resp_tx` is `None` here and
+        // we just exit — dropping `frame_tx` ends the body stream, which
+        // hyper translates into a normal (possibly truncated) response.
+        if let Some(tx) = resp_tx {
+            let outcome = match drive_result {
+                Ok(Ok(Ok(()))) => HandlerOutcome::Trapped(
+                    "Handler returned without producing a response".to_string(),
+                ),
+                Ok(Ok(Err(e))) => HandlerOutcome::Trapped(format!("Handler error: {e:?}")),
+                Ok(Err(e)) => {
+                    if is_epoch_deadline_error(&e) {
+                        HandlerOutcome::Timeout
+                    } else {
+                        HandlerOutcome::Trapped(format!("Handler trapped:\n{e:?}"))
+                    }
+                }
+                Err(_elapsed) => HandlerOutcome::Timeout,
+            };
+            let _ = tx.send(outcome);
         }
-        Err(e) => {
-            eprintln!("Handler trapped: {e:?}");
-            return Ok(HyperResponse::builder()
-                .status(500)
-                .body(error_body(format!("Handler trapped:\n{e:?}")))?);
+    });
+
+    // First-byte timeout. After the head arrives, the body stream is
+    // bounded by the per-store epoch deadline rather than by this sleep.
+    let timeout_fut = pin!(tokio::time::sleep(timeout));
+    let outcome = match select(pin!(resp_rx), timeout_fut).await {
+        Either::Left((Ok(outcome), _)) => outcome,
+        Either::Left((Err(_recv), _)) => {
+            HandlerOutcome::Trapped("Handler aborted without producing a response".to_string())
         }
+        Either::Right(((), _resp_rx)) => HandlerOutcome::Timeout,
     };
 
-    match result {
-        Ok(res) => {
-            let (parts, body) = res.into_parts();
-            Ok(HyperResponse::from_parts(parts, BoxBody::new(body)))
+    Ok(match outcome {
+        HandlerOutcome::Streaming(parts, frame_rx) => {
+            let body = ChannelBody { rx: frame_rx };
+            HyperResponse::from_parts(parts, UnsyncBoxBody::new(body))
         }
-        Err(Some(error_code)) => Ok(HyperResponse::builder()
-            .status(500)
-            .body(error_body(format!("{error_code:?}")))?),
-        Err(None) => Ok(HyperResponse::builder()
-            .status(500)
-            .body(error_body("Handler returned error".to_string()))?),
-    }
+        HandlerOutcome::GuestError(err) => error_response(500, format!("{err:?}")),
+        HandlerOutcome::Trapped(msg) => {
+            eprintln!("{msg}");
+            error_response(500, msg)
+        }
+        HandlerOutcome::Timeout => {
+            eprintln!("Handler timed out after {timeout_secs}s");
+            error_response(504, format!("Handler timed out after {timeout_secs}s"))
+        }
+    })
 }
 
-fn error_body(msg: String) -> BoxBody<Bytes, Infallible> {
-    BoxBody::new(Full::new(Bytes::from(msg)))
+fn is_epoch_deadline_error(err: &wasmtime::Error) -> bool {
+    err.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::Interrupt)
+}
+
+/// Wait for a shutdown signal (SIGINT or, on Unix, SIGTERM). Resolves on
+/// the first signal received.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        let mut sigterm = match signal(SignalKind::terminate()) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("warning: failed to install SIGTERM handler: {e}");
+                let _ = tokio::signal::ctrl_c().await;
+                return;
+            }
+        };
+        let ctrl_c = pin!(async {
+            let _ = tokio::signal::ctrl_c().await;
+        });
+        let term = pin!(async {
+            let _ = sigterm.recv().await;
+        });
+        let _ = select(ctrl_c, term).await;
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
 }
 
 async fn run_http_server(
@@ -278,8 +531,9 @@ async fn run_http_server(
     addr: &str,
     cranelift_opt: wasmtime::OptLevel,
     preopened_dirs: Vec<(String, String)>,
+    timeout: Duration,
 ) -> Result<()> {
-    let engine = runtime::create_engine(cranelift_opt, &runtime::ProfileMode::None)?;
+    let engine = runtime::create_serve_engine(cranelift_opt)?;
     let component = Component::new(&engine, &wasm)?;
     let linker = runtime::create_linker(&engine)?;
     // Open preopens once here, then share across requests. Each request
@@ -287,51 +541,160 @@ async fn run_http_server(
     // which clones the underlying `Arc<cap_std::fs::Dir>` rather than
     // re-running `openat` per request.
     let preopens = Preopens::open(&preopened_dirs)?;
+    // Pre-link the component once. This front-loads the per-export string
+    // lookups that `Service::instantiate_async` would otherwise repeat on
+    // every request.
+    let instance_pre = linker.instantiate_pre(&component)?;
+    let service_pre = ServicePre::<WasiState>::new(instance_pre)?;
 
-    // Wrap in Arc for sharing across connections
+    // Drop the linker — the `InstancePre` already captured everything we
+    // need, and keeping the linker around would force every request to
+    // share it (the linker is `&self`, but holding it serves no purpose).
+    drop(linker);
+    drop(component);
+
     let engine = Arc::new(engine);
-    let component = Arc::new(component);
-    let linker = Arc::new(Mutex::new(linker));
+    let service_pre = Arc::new(service_pre);
     let preopens = Arc::new(preopens);
+
+    // Background tokio task drives `Engine::increment_epoch` so the
+    // per-store `set_epoch_deadline` actually fires. Implemented as a
+    // tokio task (rather than `std::thread`) so shutdown can wait for it
+    // without blocking the runtime: a `Notify` flips the loop to its exit
+    // arm, and we `await` the `JoinHandle` to be sure no further bumps
+    // are in flight.
+    let epoch_shutdown = Arc::new(tokio::sync::Notify::new());
+    let epoch_task = {
+        let shutdown = Arc::clone(&epoch_shutdown);
+        let engine = Arc::clone(&engine);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(EPOCH_TICK_MS));
+            // The first `interval.tick()` fires immediately by default.
+            // Consume it so the first real bump happens one full
+            // `EPOCH_TICK_MS` after server startup, matching the previous
+            // `std::thread::sleep` behaviour.
+            interval.tick().await;
+            loop {
+                let tick = pin!(interval.tick());
+                let stop = pin!(shutdown.notified());
+                match select(tick, stop).await {
+                    Either::Left(_) => engine.increment_epoch(),
+                    Either::Right(_) => break,
+                }
+            }
+        })
+    };
 
     let addr: SocketAddr = addr.parse()?;
     let listener = TcpListener::bind(addr).await?;
 
     eprintln!("HTTP server listening on http://{addr}/");
-    eprintln!("Press Ctrl+C to stop");
+    eprintln!("Per-request timeout: {}s", timeout.as_secs());
+    #[cfg(unix)]
+    eprintln!("Send SIGINT or SIGTERM to shut down");
+    #[cfg(not(unix))]
+    eprintln!("Send Ctrl+C to shut down");
 
+    let mut connections: JoinSet<()> = JoinSet::new();
+    let mut shutdown = pin!(shutdown_signal());
+
+    // Accept loop with graceful shutdown. On signal, stop accepting and
+    // wait for in-flight connections to drain (with a hard cap so we don't
+    // hang forever on misbehaving clients).
     loop {
-        let (stream, remote_addr) = listener.accept().await?;
-        let io = TokioIo::new(stream);
+        let accept = pin!(listener.accept());
+        match select(accept, shutdown.as_mut()).await {
+            Either::Right(((), _accept)) => {
+                eprintln!(
+                    "Shutdown signal received; draining {} in-flight connection(s)…",
+                    connections.len()
+                );
+                break;
+            }
+            Either::Left((Err(e), _shutdown)) => {
+                // A persistent failure (file descriptor exhaustion, listener
+                // gone) would otherwise turn the loop into a hot CPU/log
+                // spammer. A short sleep is a cheap circuit-breaker: it
+                // doesn't fix the underlying problem but it stops the
+                // server from making it worse.
+                eprintln!("accept error: {e}");
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            Either::Left((Ok((stream, remote_addr)), _shutdown)) => {
+                let io = TokioIo::new(stream);
 
-        let engine = Arc::clone(&engine);
-        let component = Arc::clone(&component);
-        let linker = Arc::clone(&linker);
-        let preopens = Arc::clone(&preopens);
-
-        tokio::spawn(async move {
-            let service = service_fn(|req| {
                 let engine = Arc::clone(&engine);
-                let component = Arc::clone(&component);
-                let linker = Arc::clone(&linker);
+                let service_pre = Arc::clone(&service_pre);
                 let preopens = Arc::clone(&preopens);
 
-                async move {
-                    let linker = linker.lock().await;
-                    handle_http_request(&engine, &component, &linker, &preopens, req).await
-                }
-            });
+                connections.spawn(async move {
+                    let svc = service_fn(|req| {
+                        let engine = Arc::clone(&engine);
+                        let service_pre = Arc::clone(&service_pre);
+                        let preopens = Arc::clone(&preopens);
 
-            // Auto-detect HTTP/1.1 vs h2c (HTTP/2 cleartext, prior-knowledge)
-            // by sniffing the connection preface. HTTP/1 callers see normal
-            // behavior; h2c clients (e.g. `curl --http2-prior-knowledge`) get
-            // trailers without needing the `TE: trailers` handshake hyper
-            // requires on the HTTP/1 path.
-            let builder = auto::Builder::new(TokioExecutor::new());
-            if let Err(e) = builder.serve_connection(io, service).await {
-                eprintln!("Error serving {remote_addr}: {e}");
+                        async move {
+                            handle_http_request(&engine, &service_pre, &preopens, timeout, req)
+                                .await
+                        }
+                    });
+
+                    // Auto-detect HTTP/1.1 vs h2c (HTTP/2 cleartext, prior-knowledge)
+                    // by sniffing the connection preface. HTTP/1 callers see normal
+                    // behavior; h2c clients (e.g. `curl --http2-prior-knowledge`) get
+                    // trailers without needing the `TE: trailers` handshake hyper
+                    // requires on the HTTP/1 path.
+                    let builder = auto::Builder::new(TokioExecutor::new());
+                    if let Err(e) = builder.serve_connection(io, svc).await {
+                        eprintln!("Error serving {remote_addr}: {e}");
+                    }
+                });
+
+                // Non-blockingly reap any connections that finished while
+                // we were accepting, so the JoinSet doesn't grow unboundedly
+                // on a long-running server. Surface task panics here too —
+                // dropping `try_join_next()`'s `Result` would silently lose
+                // them.
+                while let Some(res) = connections.try_join_next() {
+                    log_connection_join_error(res);
+                }
             }
-        });
+        }
+    }
+
+    // Drain phase: stop accepting, give in-flight connections a bounded
+    // window to finish. Anything still alive at the deadline gets aborted.
+    let drain_deadline = timeout + Duration::from_secs(5);
+    let drain = async {
+        while let Some(res) = connections.join_next().await {
+            log_connection_join_error(res);
+        }
+    };
+    if tokio::time::timeout(drain_deadline, drain).await.is_err() {
+        eprintln!(
+            "Drain timeout after {}s; aborting remaining connections",
+            drain_deadline.as_secs()
+        );
+        connections.shutdown().await;
+    }
+
+    // Stop the epoch ticker. `await`-ing the JoinHandle is the async
+    // equivalent of `std::thread::JoinHandle::join` — but unlike the
+    // thread version it doesn't block the runtime: the ticker sees the
+    // notify within one `EPOCH_TICK_MS` and exits.
+    epoch_shutdown.notify_one();
+    let _ = epoch_task.await;
+
+    Ok(())
+}
+
+/// Log connection task panics; ignore cancellation (which is the normal
+/// outcome when shutdown aborts in-flight tasks at the drain deadline).
+fn log_connection_join_error(res: Result<(), tokio::task::JoinError>) {
+    if let Err(e) = res
+        && !e.is_cancelled()
+    {
+        eprintln!("connection task panicked: {e}");
     }
 }
 
@@ -348,7 +711,16 @@ pub async fn run(opts: ServeOptions) {
     let cranelift_opt = opts.opt_level.to_wasmtime();
     let wasm = compile::compile(&opts.input, &flags).await;
 
-    if let Err(e) = run_http_server(wasm, &opts.addr, cranelift_opt, opts.preopened_dirs).await {
+    let timeout = Duration::from_secs(opts.timeout_secs);
+    if let Err(e) = run_http_server(
+        wasm,
+        &opts.addr,
+        cranelift_opt,
+        opts.preopened_dirs,
+        timeout,
+    )
+    .await
+    {
         eprintln!("Server error: {e}");
         process::exit(1);
     }
