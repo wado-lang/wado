@@ -259,12 +259,12 @@ fn attach_variant_header(rule: &mut Rule, v: FollowVariant) {
 /// directly), and identical sets share a single `id` so the
 /// generated `_gale_kind_set_<id>` helper is shared.
 ///
-/// Phase 2.7 covers dispatch shapes lowered by Phase 2.3a (`Direct`)
-/// and `Op::Excluded.kinds`. Other dispatches (`Predict` /
-/// `Tournament` / `PartialScan` / `SaveRewind`) and other
-/// token-set fields (`WithFollowSubtraction.effective_first`,
-/// `NonGreedy.exit_*`, `OptionalLookahead.sigs`) get their own
-/// arms once their lowerings exist.
+/// Covers the `Direct` dispatch (multi-token branch.tokens) and
+/// `Op::Excluded.kinds`. `Tournament` carries only alt indices and
+/// has no kind set to intern. Strategy-internal token sets
+/// (`WithFollowSubtraction.effective_first`, `NonGreedy.exit_*`,
+/// `OptionalLookahead.sigs`) are consumed inline by emit and don't
+/// need helper-function interning.
 fn intern_kind_sets(parser_rules: &Array<Rule>) -> Array<KindSet> {
     let mut registry: TreeMap<String, i32> = TreeMap::<String, i32>::new();
     let mut sets: Array<KindSet> = [];
@@ -318,10 +318,11 @@ fn walk_dispatch_for_kind_sets(
                 }
             }
         },
-        // Phase 2.3b/c — Predict/Tournament/PartialScan/SaveRewind
-        // are not yet produced by `lower`; once they are, this match
-        // grows arms that mine their token-set fields.
-        Predict(_) | Tournament(_) | PartialScan(_) | SaveRewind(_) => {},
+        // `Tournament` carries only alt indices — no token-kind sets
+        // to intern. emit derives the per-alt scan calls from the
+        // matching `scan_alts` body, which already had its kind
+        // sets walked via the `AltBody` recursion.
+        Tournament(_) => {},
     };
 }
 
@@ -432,9 +433,7 @@ fn lower_simple_rule(rule: &ParserRule, ctx: &mut GenContext) -> SimpleRule {
 /// Lower a multi-alt rule (no LR alts). Phase 2.3a only handles the
 /// case where every pair of alts has disjoint first-sets — the
 /// dispatch is a single token-led `if / else if` chain (`Direct`).
-/// Overlapping first-sets land in Phase 2.3b (`Predict`) and the
-/// scan-tournament / partial-scan / save-rewind variants land in
-/// Phase 2.3c.
+/// Overlapping first-sets land in `Tournament` (scan-and-commit).
 fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule {
     let header = lower_header(rule);
 
@@ -897,9 +896,6 @@ fn clone_dispatch(d: &MultiAltDispatch) -> MultiAltDispatch {
     return match d {
         Direct(dd) => MultiAltDispatch::Direct(DirectDispatch { branches: dd.branches }),
         Tournament(td) => MultiAltDispatch::Tournament(TournamentDispatch { alts: td.alts }),
-        // `Predict` / `PartialScan` / `SaveRewind` need their own
-        // clone arms once those dispatches are produced by lower.
-        _ => panic("clone_dispatch: unsupported variant"),
     };
 }
 

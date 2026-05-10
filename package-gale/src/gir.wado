@@ -318,24 +318,10 @@ pub variant MultiAltDispatch {
     /// chain followed by an error fallback. Used by the bulk of
     /// "normal" rules.
     Direct(DirectDispatch),
-    /// Two or more alts share a first-token but their LL prefixes
-    /// disambiguate within bounded lookahead. Each overlap group
-    /// carries a `PredictionNode` that emit translates into an
-    /// `if (peek) { ... } else if (peek_at(1)) { ... }` cascade.
-    Predict(PredictDispatch),
     /// All non-last alts have full scan helpers (cover the entire
     /// alternative). Emit runs every scan, picks the longest, parses
     /// the winner. Equivalent to ANTLR4's longest-match LL choice.
     Tournament(TournamentDispatch),
-    /// Mixed scannability — some alts have full scans, some partial,
-    /// some none. Emit cascades through them in
-    /// `sort_group_by_element_count` order, using whatever predicate
-    /// each alt provides.
-    PartialScan(PartialScanDispatch),
-    /// No alt has a scan helper. Emit save-and-rewinds the parser
-    /// position for each alt in turn. Last fallback in lowering's
-    /// dispatch decision.
-    SaveRewind(SaveRewindDispatch),
 }
 
 /// Token-led dispatch for non-overlapping alts.
@@ -343,7 +329,7 @@ pub struct DirectDispatch {
     /// One branch per alt, in the order emit should test them.
     /// `tokens` is the alt's first-set; `alt_index` is the original
     /// alt position. Branches with overlapping `tokens` are not
-    /// permitted — those land in `Predict` instead.
+    /// permitted — those land in `Tournament` instead.
     pub branches: Array<DispatchBranch>,
 }
 
@@ -352,65 +338,11 @@ pub struct DispatchBranch {
     pub alt_index: i32,
 }
 
-/// Prediction-tree dispatch for overlapping alt prefixes.
-pub struct PredictDispatch {
-    /// Overlap groups in their dispatch order. Each group whose
-    /// `alts.len() == 1` is a degenerate single-alt entry; multi-alt
-    /// groups carry a non-empty `prediction` tree.
-    pub groups: Array<DispatchGroup>,
-}
-
-pub struct DispatchGroup {
-    /// Union of the alts' first-sets in this group. emit uses this
-    /// as the outer guard before descending into the prediction
-    /// tree.
-    pub union_first: Array<String>,
-    /// Original alt indices contained in this group, sorted by the
-    /// dispatch ordering picked at lower time
-    /// (`sort_group_by_specificity` for parse,
-    /// `sort_group_by_element_count` for scan).
-    pub alts: Array<i32>,
-    /// Pre-built prediction tree resolving the group. Empty
-    /// (`PredictionNode::Leaf` of the single alt) when `alts.len()
-    /// == 1`; non-trivial otherwise.
-    pub prediction: PredictionNode,
-}
-
 /// Scan tournament dispatch.
 pub struct TournamentDispatch {
     /// Original alt indices in dispatch order
     /// (`sort_group_by_element_count`). The longest-match scan
     /// winner triggers the corresponding `parse_<rule>_bt_<idx>`.
-    pub alts: Array<i32>,
-}
-
-/// Mixed-scannability cascade.
-pub struct PartialScanDispatch {
-    pub alts: Array<PartialScanAlt>,
-}
-
-pub struct PartialScanAlt {
-    pub alt_index: i32,
-    pub scan_kind: ScanKind,
-}
-
-pub variant ScanKind {
-    /// No scan helper. Emit speculatively parses with save-and-
-    /// rewind on failure.
-    None,
-    /// Scan helper exists but covers only a prefix of the alt.
-    /// Success is a hint, not a guarantee.
-    Partial,
-    /// Scan helper covers the entire alt. Success implies parse
-    /// success.
-    Full,
-}
-
-/// Save-rewind cascade — no alt has a scan helper.
-pub struct SaveRewindDispatch {
-    /// Alt indices in fall-through order. The last entry is the
-    /// terminal alt whose error message is emitted on total
-    /// failure.
     pub alts: Array<i32>,
 }
 
@@ -756,54 +688,6 @@ pub struct ScanGroupElem {
 pub struct ScanOptionalLookaheadElem {
     pub sigs: Array<Array<Array<String>>>,
     pub body: ScanBody,
-}
-
-// ==========================================================================
-// Prediction tree
-// ==========================================================================
-
-/// A pre-built prediction tree for an overlapping group. The shape is
-/// the same one `parser_gen.wado::PredictionNode` carries today; it
-/// has been hoisted into GIR because lower owns the analysis (SLL
-/// closure / advance / dedup) and emit translates 1:1.
-pub variant PredictionNode {
-    /// All paths that reach here have collapsed onto a single alt;
-    /// emit jumps to that alt's bt-helper.
-    Leaf(i32),
-    /// Token-led split — `peek_at(depth)` selects a sub-tree.
-    Dispatch(PredictionDispatch),
-    /// Common prefix consumed before the next decision. emit emits
-    /// `p.expect(<element>.kind)?;` (or the `RuleCall` analog) and
-    /// recurses with `skip += 1`. Stripped by `strip_dead_consume`
-    /// when the descendant is itself ambiguous.
-    Consume(ConsumeNode),
-    /// No further bounded lookahead can disambiguate; emit falls
-    /// back to the scan tournament / save-and-rewind cascade
-    /// determined by the surrounding `MultiAltDispatch`. Carries
-    /// the unresolved alt set so the caller's fallback knows which
-    /// alts to enumerate.
-    Ambiguous(Array<i32>),
-}
-
-pub struct ConsumeNode {
-    /// Op to consume before the descendant decision. Today's emit
-    /// recovers the surface `Element` here; in GIR we carry the
-    /// lowered form so emit needs no surface IR.
-    pub op: Op,
-    pub child: PredictionNode,
-}
-
-pub struct PredictionDispatch {
-    /// Lookahead depth of the dispatch, matching the existing
-    /// `peek_at(depth)` emission.
-    pub depth: i32,
-    pub branches: Array<PredictionBranch>,
-}
-
-pub struct PredictionBranch {
-    /// Token-kind set this branch matches.
-    pub tokens: Array<String>,
-    pub child: PredictionNode,
 }
 
 // ==========================================================================
