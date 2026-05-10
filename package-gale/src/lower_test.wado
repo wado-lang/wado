@@ -198,6 +198,37 @@ test "lower simple rule with Not" {
     }
 }
 
+test "lower simple rule with Not over multi-token Group" {
+    // `r : ~ ( INT | FLOAT ) ;` — Not over a Group whose alts are
+    // each a single token. The kinds array carries both
+    // alternative kinds.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "no_num",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Not(NotElement {
+            element: Element::Group(GroupElement::new([
+                alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("FLOAT"))]),
+            ])),
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Excluded(e) = &s.body.ops[0] {
+            assert e.kinds.len() == 2;
+            assert e.kinds[0] == "TK_INT";
+            assert e.kinds[1] == "TK_FLOAT";
+        } else {
+            panic("expected Op::Excluded");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
 test "lower dedupes same-name fields" {
     let mut g = empty_grammar(&"T");
     g.parser_rules = [ParserRule::new(

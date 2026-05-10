@@ -1307,16 +1307,38 @@ fn rebind_op_field(op: Op, new_field: &String) -> Op {
     };
 }
 
-/// Resolve the exclusion set for a `~ X` element. Phase 2.1 handles
-/// the simple cases (single `TokenRef` / `Literal`); the multi-alt
-/// `~ (A | B | C)` form lands in Phase 2.2 alongside the rest of
-/// `Group` lowering.
+/// Resolve the exclusion set for a `~ X` element.
+///
+/// * `~ TOKEN` / `~ 'lit'` — single-token complement, the simple case.
+/// * `~ ( A | B | C )` — multi-token complement; each alt must be a
+///   single `TokenRef` or `Literal` (mirrors `parser_gen::collect_not_set_tokens`).
+///
+/// Other inner shapes (`~ rule`, `~ ( a b )`) are not supported by
+/// the runtime helpers (`p.match_not([...])`) and aren't expected
+/// in committed grammars.
 fn collect_excluded_kinds(inner: &Element) -> Array<String> {
     return match *inner {
         TokenRef(t) => [`TK_{t.name}`],
         Literal(l) => [literal_const_name(&l.text)],
-        _ => panic("TODO Phase 2.2: collect_excluded_kinds for non-trivial Not inner not implemented"),
+        Group(g) => collect_excluded_kinds_from_group(&g),
+        _ => panic("collect_excluded_kinds: unsupported inner shape (only TokenRef / Literal / single-token-alts Group are valid)"),
     };
+}
+
+fn collect_excluded_kinds_from_group(g: &GroupElement) -> Array<String> {
+    let mut kinds: Array<String> = [];
+    for let alt of &g.alternatives {
+        if alt.elements.len() != 1 {
+            panic("collect_excluded_kinds: ~ Group alt must be a single token / literal");
+        }
+        let elem = &alt.elements[0];
+        match *elem {
+            TokenRef(t) => kinds.push(`TK_{t.name}`),
+            Literal(l) => kinds.push(literal_const_name(&l.text)),
+            _ => panic("collect_excluded_kinds: ~ Group alt must be a single token / literal"),
+        }
+    }
+    return kinds;
 }
 
 /// Field-name deduplication mirroring `parser_gen::dedup_name`. The
