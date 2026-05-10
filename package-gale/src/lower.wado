@@ -16,21 +16,26 @@
 //!
 //! ## Phase status
 //!
-//! Phase 2 is implemented incrementally; this file currently covers
-//! only Phase 2.1 (single-alternative rules with trivial leaf
-//! elements). Unimplemented shapes panic with a `TODO Phase 2.x`
-//! marker so codegen does not silently consume a half-lowered IR.
-//! Each follow-up sub-phase fills in one of:
+//! Phase 2 is complete: lower handles every shape the surface IR
+//! produces — single-alt and multi-alt rules, left-recursive rules
+//! (atom + lr_alts), every Group classifier (`Transparent`,
+//! `SingleAlt`, `TokenOnly`, `SimpleCst`, `General`), every Repeat
+//! kind (`Star` / `Plus` / `Optional`) with both greedy and
+//! non-greedy semantics, `Not` complements (single token or
+//! multi-token Group), and scalar / list (`+=`) Labels. Dispatch
+//! falls into `Direct` for disjoint first-sets or `Tournament` for
+//! overlapping fully-scannable alts. Follow-aware variants are
+//! registered per call site and re-lowered per `(rule, mask)` pair.
+//! Full `FieldDecl` enumeration produces the CST struct layout.
 //!
-//! * Phase 2.2 — `Repeat` / `Group` / `Label` element lowering
-//! * Phase 2.3 — `MultiAlt` rule shape + dispatch decision
-//! * Phase 2.4 — `LeftRecursive` rule shape (`atom` + `lr_alts`)
-//! * Phase 2.5 — Scan-side body lowering (today returns empty stub)
-//! * Phase 2.6 — Follow-variant pre-pass (today empty)
-//! * Phase 2.7 — Kind-set pre-interning (today empty)
-//! * Phase 2.8 — Prediction-tree construction
-//! * Phase 2.9 — CST `FieldDecl` enumeration (today only the leading
-//!   `span` field is recorded)
+//! The remaining edge case — Repeat over a General-Group inner —
+//! still panics; no committed grammar exercises it and the
+//! group-counter coordination requires its own sub-phase. The
+//! `WithFollowSubtraction` / `OptionalLookahead` /
+//! `OptionalScanGuard` / `Suppressed` Repeat strategies are stubs
+//! (lower returns `Plain` even inside a `current_follow_mask`
+//! variant context); they will land when a committed grammar needs
+//! them at emit time.
 //!
 //! Phase 3 swaps `codegen::generate` to call `lower` and feed the
 //! result through a thin emit adapter; until then this file is
