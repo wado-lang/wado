@@ -53,6 +53,8 @@ use {
     not_element_field_name,
     case_names_for_rule,
     count_general_groups,
+    single_alt_group_type_name,
+    single_alt_group_field_name,
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { GenContext } from "./gen_context.wado";
@@ -75,6 +77,7 @@ use {
     ScanExcludedElem,
     ScanRepeatElem,
     ScanRepeatStrategy,
+    ScanGroupElem,
     Op,
     TokenOp,
     LiteralOp,
@@ -85,6 +88,7 @@ use {
     RepeatStrategy,
     GroupOp,
     GroupShape,
+    SingleAltShape,
     FieldDecl,
     FieldKind,
     KindSet,
@@ -458,19 +462,42 @@ fn lower_scan_element(elem: &Element) -> ScanElement {
     };
 }
 
-/// Scan-side twin of `lower_group_op`'s Transparent path. Same
-/// restriction: single alt with one leaf element. Returns the
-/// inner element directly — the scan side has no struct
-/// construction, so a Transparent group reduces to its inner
-/// element with no wrapper instruction.
+/// Scan-side twin of `lower_group_op`. Single-element transparent
+/// groups reduce to the inner element directly (no wrapper —
+/// scan-side has no struct construction). Multi-element single-alt
+/// groups (`SingleAlt` parse shape) become a `ScanGroupElem` with
+/// one alt holding the inner sequence; emit walks the elements
+/// in order with no dispatch.
 fn lower_scan_group(g: &GroupElement) -> ScanElement {
     let alts = &g.alternatives;
-    if alts.len() != 1 || alts[0].elements.len() != 1 {
-        panic("TODO Phase 2.x.group: non-trivial Group shape (scan side) not implemented yet");
+    if alts.len() != 1 {
+        panic("TODO Phase 2.x.group: multi-alt Group shape (scan side) not implemented yet");
     }
-    let inner = &alts[0].elements[0];
-    require_leaf_element(inner, &"Group (transparent, scan side)");
-    return lower_scan_element(inner);
+    let alt = &alts[0];
+    if alt.elements.len() == 0 {
+        panic("Group with empty alt is not a valid scan-lowering input");
+    }
+    if alt.elements.len() == 1 {
+        let inner = &alt.elements[0];
+        require_leaf_element(inner, &"Group (transparent, scan side)");
+        return lower_scan_element(inner);
+    }
+
+    // SingleAlt: scan the body's elements in order, wrapped in a
+    // `ScanGroupElem` so the surrounding scan walk can treat the
+    // group as a single step.
+    for let elem of &alt.elements {
+        require_leaf_element(elem, &"Group (single-alt, scan side)");
+    }
+    let mut elements: Array<ScanElement> = [];
+    for let elem of &alt.elements {
+        elements.push(lower_scan_element(elem));
+    }
+    return ScanElement::Group(ScanGroupElem {
+        alts: [ScanBody { elements }],
+        dispatch: empty_direct_dispatch(),
+        lenient: false,
+    });
 }
 
 /// Scan-side twin of `lower_repeat_op`. Same restrictions: greedy
@@ -548,7 +575,7 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule) -> AltBody {
     let mut name_counts: Array<[String, i32]> = [];
     let mut ops: Array<Op> = [];
     for let elem of &alt.elements {
-        ops.push(lower_op(elem, &mut name_counts));
+        ops.push(lower_op(elem, &mut name_counts, &rule.name));
     }
 
     // Phase 2.9 — full `FieldDecl` enumeration. Today we record only
@@ -592,11 +619,18 @@ fn cumulative_group_index_start(rule: &ParserRule, idx: i32) -> i32 {
     return running;
 }
 
-/// Lower a single surface `Element` to a GIR `Op`. Phase 2.1 covers
-/// the trivial leaf elements; `Repeat` / `Group` / `Label` are gated
-/// behind `panic("TODO Phase 2.2")` so a half-lowered alt body can't
-/// quietly reach codegen.
-fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>) -> Op {
+/// Lower a single surface `Element` to a GIR `Op`. `rule_name` is
+/// the enclosing rule's name, threaded through so nested
+/// `SingleAlt` / `General` groups can fill in their `owner_rule`
+/// slot (the rule whose monomorph table the group's struct names
+/// live under). Phase 2.1 covers the trivial leaf elements; the
+/// remaining shapes panic with their own `TODO Phase 2.x` markers
+/// so a half-lowered alt body can't quietly reach codegen.
+fn lower_op(
+    elem: &Element,
+    name_counts: &mut Array<[String, i32]>,
+    rule_name: &String,
+) -> Op {
     return match *elem {
         TokenRef(t) => Op::Token(TokenOp {
             kind: `TK_{t.name}`,
@@ -625,9 +659,9 @@ fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>) -> Op {
             kinds: collect_excluded_kinds(&ne.element),
             field: dedup_name(&not_element_field_name(&ne.element), name_counts),
         }),
-        Repeat(rep) => lower_repeat_op(rep, name_counts),
-        Group(g) => lower_group_op(g, name_counts),
-        Label(lab) => lower_label_op(lab, name_counts),
+        Repeat(rep) => lower_repeat_op(rep, name_counts, rule_name),
+        Group(g) => lower_group_op(g, name_counts, rule_name),
+        Label(lab) => lower_label_op(lab, name_counts, rule_name),
     };
 }
 
@@ -653,17 +687,32 @@ fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>) -> Op {
 fn lower_group_op(
     g: &GroupElement,
     name_counts: &mut Array<[String, i32]>,
+    rule_name: &String,
 ) -> Op {
     let alts = &g.alternatives;
-    if alts.len() != 1 || alts[0].elements.len() != 1 {
-        panic("TODO Phase 2.x.group: non-trivial Group shape not implemented yet");
+    if alts.len() != 1 {
+        panic("TODO Phase 2.x.group: multi-alt Group shape not implemented yet");
     }
-    let inner = &alts[0].elements[0];
+    let alt = &alts[0];
+    if alt.elements.len() == 0 {
+        panic("Group with empty alt is not a valid lowering input");
+    }
+    if alt.elements.len() == 1 {
+        return lower_transparent_group(&alt.elements[0], name_counts, rule_name);
+    }
+    return lower_single_alt_group(alt, name_counts, rule_name);
+}
+
+/// Single-element single-alt: `(e)` lowers to `e` with no struct of
+/// its own. The binding nests in the surrounding alt's name table.
+fn lower_transparent_group(
+    inner: &Element,
+    name_counts: &mut Array<[String, i32]>,
+    rule_name: &String,
+) -> Op {
     require_leaf_element(inner, &"Group (transparent)");
 
-    // Transparent: lower the inner element with the surrounding
-    // alt's `name_counts` so the binding nests in the outer scope.
-    let inner_op = lower_op(inner, name_counts);
+    let inner_op = lower_op(inner, name_counts, rule_name);
     let body = AltBody {
         alt_index: 0,
         // Transparent groups produce no struct of their own; case /
@@ -688,6 +737,69 @@ fn lower_group_op(
         shape: GroupShape::Transparent,
         alts: [body],
         scan_alts: [scan_body],
+        dispatch: empty_direct_dispatch(),
+        scan_dispatch: empty_direct_dispatch(),
+    });
+}
+
+/// Single-alt with ≥ 2 elements: `(name=ID '=' expr)` lowers to a
+/// struct of its own (`NameIdEqualsExprItem`) bound under a single
+/// field in the outer alt. The struct's element bindings live in a
+/// fresh name scope — they don't pollute the outer alt's counts.
+///
+/// `owner_rule` records the surrounding rule's name so a future
+/// nested `General` group inside this body can resolve its
+/// monomorph table key (`<RuleName>Group<idx>`). For Phase
+/// 2.x.singlealt the inner ops are leaves only; nested groups land
+/// in Phase 2.x.nested.
+fn lower_single_alt_group(
+    alt: &Alternative,
+    name_counts: &mut Array<[String, i32]>,
+    rule_name: &String,
+) -> Op {
+    for let elem of &alt.elements {
+        require_leaf_element(elem, &"Group (single-alt)");
+    }
+
+    let struct_name = single_alt_group_type_name(alt);
+    let field = dedup_name(&single_alt_group_field_name(alt), name_counts);
+
+    // Inner ops use a fresh name table — bindings inside the
+    // group's struct don't dedup against the outer alt.
+    let mut inner_counts: Array<[String, i32]> = [];
+    let mut ops: Array<Op> = [];
+    let mut scan_elements: Array<ScanElement> = [];
+    for let elem of &alt.elements {
+        ops.push(lower_op(elem, &mut inner_counts, rule_name));
+        scan_elements.push(lower_scan_element(elem));
+    }
+
+    let body = AltBody {
+        alt_index: 0,
+        // Case name is unused for SingleAlt (no enum dispatch); the
+        // struct name is the single shape.
+        case_name: "",
+        struct_name: struct_name,
+        ops: ops,
+        // Phase 2.9 will enumerate `FieldDecl`s for the struct's
+        // own fields. Today emit-side code still walks `ops` to
+        // synthesise them, so leaving this empty matches the
+        // existing parser_gen behaviour.
+        fields: [],
+        group_index_start: 0,
+        prefix_self_ref_min_prec: 0,
+    };
+    let scan_body = ScanBody { elements: scan_elements };
+    return Op::Group(GroupOp {
+        shape: GroupShape::SingleAlt(SingleAltShape {
+            struct_name: struct_name,
+            field: field,
+            owner_rule: *rule_name,
+        }),
+        alts: [body],
+        scan_alts: [scan_body],
+        // Single-alt groups have no dispatch — emit recognises the
+        // shape and runs the body unconditionally.
         dispatch: empty_direct_dispatch(),
         scan_dispatch: empty_direct_dispatch(),
     });
@@ -719,6 +831,7 @@ fn empty_direct_dispatch() -> MultiAltDispatch {
 fn lower_repeat_op(
     rep: &RepeatElement,
     _name_counts: &mut Array<[String, i32]>,
+    rule_name: &String,
 ) -> Op {
     if rep.non_greedy {
         panic("TODO Phase 2.x.nongreedy: non-greedy Repeat needs follow-set analysis");
@@ -729,7 +842,7 @@ fn lower_repeat_op(
     require_leaf_element(&rep.element, &"Repeat");
 
     let mut inner_counts: Array<[String, i32]> = [];
-    let body = lower_op(&rep.element, &mut inner_counts);
+    let body = lower_op(&rep.element, &mut inner_counts, rule_name);
     return Op::Repeat(RepeatOp {
         kind: rep.kind,
         body,
@@ -766,6 +879,7 @@ fn require_leaf_element(elem: &Element, ctx: &String) {
 fn lower_label_op(
     lab: &LabelElement,
     name_counts: &mut Array<[String, i32]>,
+    rule_name: &String,
 ) -> Op {
     if lab.list {
         panic("TODO Phase 2.9: list-label (`+=`) lowering requires Array-typed FieldDecl");
@@ -776,7 +890,7 @@ fn lower_label_op(
     // we'll throw away the inner field name and use `label_field`
     // instead.
     let mut inner_counts: Array<[String, i32]> = [];
-    let inner_op = lower_op(&lab.element, &mut inner_counts);
+    let inner_op = lower_op(&lab.element, &mut inner_counts, rule_name);
     return rebind_op_field(inner_op, &label_field);
 }
 

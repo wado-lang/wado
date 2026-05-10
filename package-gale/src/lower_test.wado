@@ -30,6 +30,7 @@ use {
     Op,
     ScanElement,
     MultiAltDispatch,
+    GroupShape,
 } from "./gir.wado";
 
 fn empty_grammar(name: &String) -> Grammar {
@@ -481,6 +482,146 @@ test "lower transparent Group dedupes against surrounding scope" {
                 assert t.field == "int_2";
             } else {
                 panic("expected Token inside Group");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower single-alt Group with two leaves produces SingleAlt shape" {
+    // `assignment : (name=ID '=' INT) ;` — a single alt with 3
+    // elements lowers to `GroupShape::SingleAlt`. The struct gets
+    // its own name table; the surrounding alt sees a single field.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "assignment",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Group(GroupElement::new([
+            alt_of([
+                Element::TokenRef(TokenRefElement::new("ID")),
+                Element::Literal(LiteralElement::new("=")),
+                Element::TokenRef(TokenRefElement::new("INT")),
+            ]),
+        ]))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 1;
+        if let Group(go) = &s.body.ops[0] {
+            if let SingleAlt(sa) = &go.shape {
+                // Struct name comes from `single_alt_group_type_name`.
+                // `=` lowers to `eq` (per `symbol_char_names`).
+                assert sa.struct_name == "IdEqIntItem", sa.struct_name;
+                // Field name comes from `single_alt_group_field_name`.
+                assert sa.field == "id_eq_int", sa.field;
+                // owner_rule threads the surrounding rule through.
+                assert sa.owner_rule == "assignment", sa.owner_rule;
+            } else {
+                panic("expected GroupShape::SingleAlt");
+            }
+            assert go.alts.len() == 1;
+            assert go.alts[0].ops.len() == 3;
+            assert go.alts[0].struct_name == "IdEqIntItem";
+            assert go.scan_alts.len() == 1;
+            assert go.scan_alts[0].elements.len() == 3;
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower single-alt Group uses fresh name table for inner ops" {
+    // `pair : ID (ID INT) ;` — the outer ID dedups under `id`.
+    // The inner Group is a SingleAlt, so its first ID gets the
+    // base name `id` again (fresh table inside the struct).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "pair",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::TokenRef(TokenRefElement::new("ID")),
+            Element::Group(GroupElement::new([
+                alt_of([
+                    Element::TokenRef(TokenRefElement::new("ID")),
+                    Element::TokenRef(TokenRefElement::new("INT")),
+                ]),
+            ])),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Token(t) = &s.body.ops[0] {
+            assert t.field == "id";
+        } else {
+            panic("expected first Token");
+        }
+        if let Group(go) = &s.body.ops[1] {
+            if let SingleAlt(_) = &go.shape {
+                assert true;
+            } else {
+                panic("expected GroupShape::SingleAlt");
+            }
+            // Inner ops live in a fresh name table — the inner ID
+            // is `id` not `id_2`.
+            if let Token(t) = &go.alts[0].ops[0] {
+                assert t.field == "id", t.field;
+            } else {
+                panic("expected inner Token ID");
+            }
+            if let Token(t) = &go.alts[0].ops[1] {
+                assert t.field == "int", t.field;
+            } else {
+                panic("expected inner Token INT");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower single-alt Group field name dedupes against outer scope" {
+    // `r : id_int (ID INT) ;` — the outer field name `id_int`
+    // collides with the inner group's `single_alt_group_field_name`,
+    // which is also `id_int`. The outer name table dedupes the
+    // group's field to `id_int_2`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::Label(LabelElement::new(
+                "id_int",
+                false,
+                Element::TokenRef(TokenRefElement::new("ID")),
+            )),
+            Element::Group(GroupElement::new([
+                alt_of([
+                    Element::TokenRef(TokenRefElement::new("ID")),
+                    Element::TokenRef(TokenRefElement::new("INT")),
+                ]),
+            ])),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Group(go) = &s.body.ops[1] {
+            if let SingleAlt(sa) = &go.shape {
+                assert sa.field == "id_int_2", sa.field;
+            } else {
+                panic("expected GroupShape::SingleAlt");
             }
         } else {
             panic("expected Op::Group");
