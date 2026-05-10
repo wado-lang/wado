@@ -1,23 +1,27 @@
 use std::convert::Infallible;
 use std::fmt::Write as _;
 use std::net::SocketAddr;
-use std::pin::pin;
+use std::pin::{Pin, pin};
 use std::process;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use anyhow::Result;
 use bytes::Bytes;
-use futures::future::{Either, select};
-use http_body_util::combinators::BoxBody;
-use http_body_util::{BodyExt, Collected, Full};
+use futures::future::{Either, poll_fn, select};
+use http_body::{Body as _, Frame};
+use http_body_util::BodyExt as _;
+use http_body_util::Full;
+use http_body_util::combinators::UnsyncBoxBody;
 use hyper::service::service_fn;
 use hyper::{Request as HyperRequest, Response as HyperResponse};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto;
 use lexopt::Arg::Value;
 use tokio::net::TcpListener;
+use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinSet;
 use wasmtime::Engine;
 use wasmtime::Store;
@@ -205,37 +209,91 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     })
 }
 
-/// Handle a single HTTP request using the Wasm component.
+/// Outcome the spawned handler task delivers to the request entry point.
 ///
-/// Mirrors the wasmtime p3 reference and wado-compiler e2e harness pattern:
-/// both the guest handler and the response-body collection run inside
-/// `run_concurrent`, so the guest's post-`task-return` continuation keeps
-/// getting polled until it finishes writing the body and trailers. Collecting
-/// outside `run_concurrent` deadlocks because the store stops polling as soon
-/// as the closure future resolves.
+/// `Streaming` is the success path: response head plus a `Receiver` that
+/// will yield each body frame as the guest produces it. The other variants
+/// are terminal failure modes that have to be rendered as a synthetic 5xx
+/// because no part of the response has been put on the wire yet.
+enum HandlerOutcome {
+    Streaming(http::response::Parts, mpsc::Receiver<Frame<Bytes>>),
+    GuestError(wasmtime_wasi_http::p3::bindings::http::types::ErrorCode),
+    Trapped(String),
+    Timeout,
+}
+
+/// `http_body::Body` implementation backed by a tokio `mpsc::Receiver` of
+/// frames. Used to stream the guest's response body to hyper one frame at
+/// a time without buffering the full body in memory.
 ///
-/// The handler arm and the request-body I/O arm are raced via `futures::future::select`
-/// — handler completing first is the normal case (a guest may never consume
-/// the request body, in which case the I/O future only resolves when the
-/// request resource is dropped).
+/// Trailers travel through the same channel as `Frame::trailers(...)`.
+struct ChannelBody {
+    rx: mpsc::Receiver<Frame<Bytes>>,
+}
+
+impl http_body::Body for ChannelBody {
+    type Data = Bytes;
+    type Error = Infallible;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        match self.rx.poll_recv(cx) {
+            Poll::Ready(Some(frame)) => Poll::Ready(Some(Ok(frame))),
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+type StreamingBody = UnsyncBoxBody<Bytes, Infallible>;
+
+fn error_response(status: u16, msg: String) -> HyperResponse<StreamingBody> {
+    let body: Full<Bytes> = Full::new(Bytes::from(msg));
+    HyperResponse::builder()
+        .status(status)
+        .body(UnsyncBoxBody::new(body))
+        .expect("static status code should always build successfully")
+}
+
+/// Handle a single HTTP request using the Wasm component, **streaming** the
+/// response body frame-by-frame.
 ///
-/// The success body is returned as a `Collected<Bytes>` (boxed) rather than
-/// `Full<Bytes>` so that response trailers written by the guest survive the
-/// hop into hyper. `Full<Bytes>` carries no trailer frames, which would silently
-/// strip e.g. `Server-Timing` written via `trailers_tx.write(Some(...))`.
+/// The store is moved into a spawned task that drives `run_concurrent` for
+/// the entire lifetime of the response, including the guest's post-`task
+/// return` continuation. As soon as the head is available the spawn task
+/// hands the response head plus a body channel back here via a oneshot;
+/// from then on hyper drains body frames directly from that channel while
+/// the spawn task keeps producing them. Because the channel is bounded
+/// (capacity 8), a slow consumer naturally back-pressures the guest.
 ///
-/// Per-request timeout is enforced two ways: `set_epoch_deadline` traps the
-/// guest if it stays inside wasm past the deadline (handles tight CPU loops
-/// that never await), and `tokio::time::timeout` cancels the future at the
-/// async boundary (handles host I/O hangs). The combination ensures a hung
-/// request never holds a tokio task longer than `timeout`.
+/// The per-request timeout is enforced in two layered ways:
+///
+/// * `Store::set_epoch_deadline` plus the engine-wide ticker traps the
+///   guest if it stays inside wasm past the deadline. This bounds the
+///   total request lifetime — even a long-lived streaming response is
+///   cut off when the deadline expires, since the wasm side traps and
+///   the spawn task drops the body sender on the way out.
+/// * A first-byte `tokio::time::sleep(timeout)` raced against the head
+///   oneshot returns 504 to the client if the guest never produces a
+///   response head — covering the case where the guest is stuck waiting
+///   on host I/O instead of running wasm code.
+///
+/// Hang avoidance:
+///
+/// * Hyper dropping the body causes `frame_tx.send` to fail, breaking the
+///   pump loop; the spawn task then exits.
+/// * If the outer first-byte timeout fires, the spawn task is left to run,
+///   but the per-store epoch deadline guarantees it terminates within one
+///   tick interval of the configured timeout.
 async fn handle_http_request(
     engine: &Engine,
     service_pre: &ServicePre<WasiState>,
     preopens: &Preopens,
     timeout: Duration,
     req: HyperRequest<hyper::body::Incoming>,
-) -> Result<HyperResponse<BoxBody<Bytes, Infallible>>> {
+) -> Result<HyperResponse<StreamingBody>> {
     type HttpErrorCode = wasmtime_wasi_http::p3::bindings::http::types::ErrorCode;
 
     // Each request gets a fresh WASI state — the WASI ctx is scoped
@@ -248,107 +306,163 @@ async fn handle_http_request(
     // inherited stdio.
     let state = WasiState::new_no_inherit_env_with_preopens(preopens, &[]);
     let mut store = Store::new(engine, state);
-    // Set the epoch deadline so a guest stuck in pure wasm traps after
-    // `timeout` ticks (the engine is incremented every `EPOCH_TICK_MS`).
-    let deadline_ticks = timeout.as_secs().max(1);
-    store.set_epoch_deadline(deadline_ticks);
+    let timeout_secs = timeout.as_secs().max(1);
+    // The engine-wide ticker bumps the epoch every `EPOCH_TICK_MS`, so
+    // setting `deadline_ticks = timeout_secs` gives second-granularity
+    // enforcement on the configured `timeout`.
+    store.set_epoch_deadline(timeout_secs);
 
-    let timeout_result = tokio::time::timeout(timeout, async {
-        let service: Service = service_pre.instantiate_async(&mut store).await?;
-
-        let (parts, body) = req.into_parts();
-        let body = body.map_err(HttpErrorCode::from_hyper_request_error);
-        let http_req = http::Request::from_parts(parts, body);
-        let (wasi_req, io) = WasiRequest::from_http(http_req);
-
-        store
-            .run_concurrent(
-                async |store| -> Result<
-                    Result<http::Response<Collected<Bytes>>, Option<HttpErrorCode>>,
-                > {
-                    let handler = pin!(async {
-                        let res = match service.handle(store, wasi_req).await? {
-                            Ok(res) => res,
-                            Err(err) => return anyhow::Ok(Err(Some(err))),
-                        };
-                        let res = store.with(|store| res.into_http(store, async { Ok(()) }))?;
-                        let (parts, body) = res.into_parts();
-                        let collected = BodyExt::collect(body)
-                            .await
-                            .map_err(|e| anyhow::anyhow!("failed to collect response body: {e}"))?;
-                        anyhow::Ok(Ok(http::Response::from_parts(parts, collected)))
-                    });
-                    let io = pin!(async {
-                        io.await
-                            .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
-                    });
-                    match select(handler, io).await {
-                        Either::Left((result, _)) => result,
-                        Either::Right((result, _)) => result.map(|()| Err(None)),
-                    }
-                },
-            )
-            .await
-    })
-    .await;
-
-    let result = match timeout_result {
-        Ok(Ok(Ok(inner))) => inner,
-        Ok(Ok(Err(e))) => {
-            eprintln!("Handler trapped: {e:?}");
-            return Ok(HyperResponse::builder()
-                .status(500)
-                .body(error_body(format!("Handler trapped:\n{e:?}")))?);
-        }
-        Ok(Err(e)) => {
-            // run_concurrent returned Err — most commonly an epoch trap from
-            // a guest that exceeded the deadline while inside wasm.
-            if is_epoch_deadline_error(&e) {
-                eprintln!("Handler timed out after {}s", timeout.as_secs());
-                return Ok(HyperResponse::builder()
-                    .status(504)
-                    .body(error_body(format!(
-                        "Handler timed out after {}s",
-                        timeout.as_secs()
-                    )))?);
+    // Instantiation runs synchronously up to the first guest yield point and
+    // could in principle spin; bound it with the same overall timeout.
+    let service: Service =
+        match tokio::time::timeout(timeout, service_pre.instantiate_async(&mut store)).await {
+            Ok(Ok(s)) => s,
+            Ok(Err(e)) => {
+                eprintln!("Instantiation failed: {e:?}");
+                return Ok(error_response(500, format!("Instantiation failed:\n{e:?}")));
             }
-            eprintln!("Handler trapped: {e:?}");
-            return Ok(HyperResponse::builder()
-                .status(500)
-                .body(error_body(format!("Handler trapped:\n{e:?}")))?);
+            Err(_) => {
+                eprintln!("Instantiation timed out after {timeout_secs}s");
+                return Ok(error_response(
+                    504,
+                    format!("Instantiation timed out after {timeout_secs}s"),
+                ));
+            }
+        };
+
+    let (parts, body) = req.into_parts();
+    let body = body.map_err(HttpErrorCode::from_hyper_request_error);
+    let http_req = http::Request::from_parts(parts, body);
+    let (wasi_req, io) = WasiRequest::from_http(http_req);
+
+    let (resp_tx, resp_rx) = oneshot::channel::<HandlerOutcome>();
+    let (frame_tx, frame_rx) = mpsc::channel::<Frame<Bytes>>(8);
+
+    // The spawn task owns `store`, `service`, and `frame_tx`. Dropping
+    // `frame_tx` (which happens automatically when the closure exits)
+    // closes the body stream from hyper's point of view.
+    tokio::spawn(async move {
+        // Both `resp_tx` and `frame_rx` are taken at most once: when the
+        // handler produces head frames it moves the receiver into the
+        // outcome and releases the sender. After `run_concurrent` returns,
+        // a still-`Some` `resp_tx` means we never produced a head and need
+        // to surface the failure synthetically.
+        let mut resp_tx = Some(resp_tx);
+        let mut frame_rx_holder = Some(frame_rx);
+
+        let drive_result: Result<anyhow::Result<()>, wasmtime::Error> = store
+            .run_concurrent(async |store| -> anyhow::Result<()> {
+                let handler = pin!(async {
+                    let res = match service.handle(store, wasi_req).await? {
+                        Ok(res) => res,
+                        Err(err) => {
+                            if let Some(tx) = resp_tx.take() {
+                                let _ = tx.send(HandlerOutcome::GuestError(err));
+                            }
+                            return anyhow::Ok(());
+                        }
+                    };
+                    let res = store.with(|store| res.into_http(store, async { Ok(()) }))?;
+                    let (parts, body) = res.into_parts();
+
+                    // Hand the response head plus the receiver to the outer
+                    // task so hyper can start writing the response while we
+                    // keep producing frames here.
+                    if let Some(tx) = resp_tx.take() {
+                        let rx = frame_rx_holder
+                            .take()
+                            .expect("frame_rx is taken at most once");
+                        if tx.send(HandlerOutcome::Streaming(parts, rx)).is_err() {
+                            // Outer side gave up before the head landed
+                            // (e.g. first-byte timeout fired). Stop here;
+                            // the body will be discarded.
+                            return anyhow::Ok(());
+                        }
+                    }
+
+                    // Pump frames until EOF, body error, or hyper drops the
+                    // body. `frame_tx.send().await` blocks on a full channel,
+                    // so a slow consumer back-pressures into the guest.
+                    let mut body = pin!(body);
+                    loop {
+                        let frame = poll_fn(|cx| body.as_mut().poll_frame(cx)).await;
+                        match frame {
+                            Some(Ok(frame)) => {
+                                if frame_tx.send(frame).await.is_err() {
+                                    // Hyper dropped the body; abandon the
+                                    // rest of the stream.
+                                    break;
+                                }
+                            }
+                            // Body read error: close the stream by exiting
+                            // the loop. `frame_tx` is dropped on return,
+                            // which surfaces as EOF on the hyper side.
+                            Some(Err(_)) => break,
+                            None => break,
+                        }
+                    }
+                    anyhow::Ok(())
+                });
+                let io_arm = pin!(async {
+                    io.await
+                        .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
+                });
+                match select(handler, io_arm).await {
+                    Either::Left((res, _)) => res,
+                    Either::Right((res, _)) => res,
+                }
+            })
+            .await;
+
+        // Surface failures that prevented the handler from producing a head.
+        if let Some(tx) = resp_tx {
+            let outcome = match drive_result {
+                Ok(Ok(())) => HandlerOutcome::Trapped(
+                    "Handler returned without producing a response".to_string(),
+                ),
+                Ok(Err(e)) => HandlerOutcome::Trapped(format!("Handler error: {e:?}")),
+                Err(e) => {
+                    if is_epoch_deadline_error(&e) {
+                        HandlerOutcome::Timeout
+                    } else {
+                        HandlerOutcome::Trapped(format!("Handler trapped:\n{e:?}"))
+                    }
+                }
+            };
+            let _ = tx.send(outcome);
         }
-        Err(_elapsed) => {
-            // Future-level timeout fired (host I/O hang or yield path).
-            eprintln!("Handler timed out after {}s", timeout.as_secs());
-            return Ok(HyperResponse::builder()
-                .status(504)
-                .body(error_body(format!(
-                    "Handler timed out after {}s",
-                    timeout.as_secs()
-                )))?);
+    });
+
+    // First-byte timeout. After the head arrives, the body stream is
+    // bounded by the per-store epoch deadline rather than by this sleep.
+    let timeout_fut = pin!(tokio::time::sleep(timeout));
+    let outcome = match select(pin!(resp_rx), timeout_fut).await {
+        Either::Left((Ok(outcome), _)) => outcome,
+        Either::Left((Err(_recv), _)) => {
+            HandlerOutcome::Trapped("Handler aborted without producing a response".to_string())
         }
+        Either::Right((_, _resp_rx)) => HandlerOutcome::Timeout,
     };
 
-    match result {
-        Ok(res) => {
-            let (parts, body) = res.into_parts();
-            Ok(HyperResponse::from_parts(parts, BoxBody::new(body)))
+    Ok(match outcome {
+        HandlerOutcome::Streaming(parts, frame_rx) => {
+            let body = ChannelBody { rx: frame_rx };
+            HyperResponse::from_parts(parts, UnsyncBoxBody::new(body))
         }
-        Err(Some(error_code)) => Ok(HyperResponse::builder()
-            .status(500)
-            .body(error_body(format!("{error_code:?}")))?),
-        Err(None) => Ok(HyperResponse::builder()
-            .status(500)
-            .body(error_body("Handler returned error".to_string()))?),
-    }
+        HandlerOutcome::GuestError(err) => error_response(500, format!("{err:?}")),
+        HandlerOutcome::Trapped(msg) => {
+            eprintln!("{msg}");
+            error_response(500, msg)
+        }
+        HandlerOutcome::Timeout => {
+            eprintln!("Handler timed out after {timeout_secs}s");
+            error_response(504, format!("Handler timed out after {timeout_secs}s"))
+        }
+    })
 }
 
 fn is_epoch_deadline_error(err: &wasmtime::Error) -> bool {
     err.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::Interrupt)
-}
-
-fn error_body(msg: String) -> BoxBody<Bytes, Infallible> {
-    BoxBody::new(Full::new(Bytes::from(msg)))
 }
 
 /// Wait for a shutdown signal (SIGINT or, on Unix, SIGTERM). Resolves on

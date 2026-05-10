@@ -116,8 +116,9 @@ fn start_serve(fixture: &str, extra_args: &[&str]) -> (ServerGuard, u16, Arc<Mut
     panic!("wado serve did not accept connections within 60s. stderr:\n{captured}");
 }
 
-/// Send a minimal HTTP/1.1 GET and return `(status_code, body)`.
-fn http_get(port: u16, path: &str, timeout: Duration) -> (u16, String) {
+/// Send a minimal HTTP/1.1 GET and return the full raw response text
+/// (status line, headers, blank line, body — chunk framing intact).
+fn http_get_raw(port: u16, path: &str, timeout: Duration) -> String {
     let addr = format!("127.0.0.1:{port}");
     let mut stream = TcpStream::connect(&addr).expect("connect");
     stream.set_read_timeout(Some(timeout)).unwrap();
@@ -128,7 +129,13 @@ fn http_get(port: u16, path: &str, timeout: Duration) -> (u16, String) {
 
     let mut response = String::new();
     stream.read_to_string(&mut response).unwrap();
+    response
+}
 
+/// Parse `(status_code, raw_body)` from a raw HTTP/1.1 response. The body
+/// is returned exactly as it came off the wire — for chunked responses
+/// it still contains the chunk-size lines.
+fn parse_response(response: &str) -> (u16, String) {
     let status_line = response
         .lines()
         .next()
@@ -145,6 +152,11 @@ fn http_get(port: u16, path: &str, timeout: Duration) -> (u16, String) {
         .unwrap_or_default();
 
     (status, body)
+}
+
+/// Convenience wrapper for tests that don't care about chunk framing.
+fn http_get(port: u16, path: &str, timeout: Duration) -> (u16, String) {
+    parse_response(&http_get_raw(port, path, timeout))
 }
 
 /// A guest stuck in pure wasm past `--timeout` should trap (via
@@ -173,6 +185,39 @@ fn timeout_returns_504_for_runaway_guest() {
     assert!(
         elapsed <= Duration::from_secs(8),
         "504 returned in {elapsed:?} — later than expected for a 2s timeout",
+    );
+}
+
+/// The response body should leave the server one frame at a time rather
+/// than being buffered into a single `Content-Length` blob. We verify
+/// this end-to-end by asserting the response uses HTTP/1.1 chunked
+/// transfer encoding (the only way hyper can deliver a body whose total
+/// length isn't known up front), and that the literal body bytes survive
+/// the trip through the streaming pipeline.
+#[test]
+fn responds_with_streamed_chunked_body() {
+    let (_guard, port, _stderr) = start_serve("serve_hello.wado", &[]);
+
+    let raw = http_get_raw(port, "/", Duration::from_secs(15));
+    let (status, body) = parse_response(&raw);
+
+    assert_eq!(status, 200, "expected 200 OK; got raw response:\n{raw}");
+    let header_block = raw
+        .split_once("\r\n\r\n")
+        .map(|(h, _)| h.to_lowercase())
+        .unwrap_or_default();
+    assert!(
+        header_block.contains("transfer-encoding: chunked"),
+        "expected chunked transfer encoding (proof the streaming path is wired); \
+         got headers:\n{header_block}",
+    );
+    assert!(
+        !header_block.contains("content-length:"),
+        "streaming responses should not advertise a Content-Length; got headers:\n{header_block}",
+    );
+    assert!(
+        body.contains("Hello"),
+        "expected 'Hello' to survive the streaming pipeline; got chunked body:\n{body}",
     );
 }
 
