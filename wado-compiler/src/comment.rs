@@ -1,24 +1,20 @@
-// Comment handling for Wado formatter
+// Comment handling for Wado formatter and `wado doc`.
 //
-// Two complementary stores:
+// `TriviaMap` is the single AstId-keyed store for comments:
+//   * `leading_of(id)` — comments that precede the node, populated by
+//     the parser on each `alloc_ast_id` call.
+//   * `trailing_of(id)` — same-line tail comments, populated by
+//     [`populate_trailing`] after parsing completes.
+//   * `inner_tail_of(block_id)` — comments between a block's last
+//     statement and its closing `}`, populated by
+//     [`populate_inner_tail`].
+//   * `dangling()` — file-tail comments past the last AST node.
 //
-// - `CommentMap` is keyed by source byte position. Used by leaf paths in the
-//   unparser that look up "any comment in this byte range" (file-tail
-//   dangling, comments on closing braces, etc.).
-//
-// - `TriviaMap` is keyed by `AstId`. Populated by the parser as it allocates
-//   ids: every comment that appears in source between the previous token
-//   stream position and the next token of the node being constructed is
-//   attached to that node's id as *leading trivia*. The unparser reads
-//   `trivia.leading_of(id)` immediately before emitting the node, so an
-//   inline `/*name=*/` comment ends up exactly where it semantically
-//   belongs — attached to the AST node it precedes — without any
-//   position-based reconstruction.
-//
-// `TriviaMap` is the primary mechanism for new code. `CommentMap` continues
-// to back the residual position-based paths until they are migrated.
+// `populate_trailing` and `populate_inner_tail` walk the parsed AST and
+// repatriate comments out of their parser-assigned slots; the unparser
+// then reads `TriviaMap` exclusively, with no positional reconstruction.
 
-use crate::ast::AstId;
+use crate::ast::{AstId, AstVisitor, Block, Module, walk_block};
 use crate::token::Span;
 use std::collections::BTreeMap;
 
@@ -46,135 +42,6 @@ pub enum CommentKind {
     ModuleDoc,
 }
 
-/// Maps byte positions to comments.
-/// Uses `BTreeMap` for ordered iteration (important for unparsing).
-#[derive(Debug, Clone, Default)]
-pub struct CommentMap {
-    /// Comments indexed by their start byte position
-    comments: BTreeMap<usize, Comment>,
-    /// Source line count for position calculations
-    line_starts: Vec<usize>,
-}
-
-impl CommentMap {
-    /// Create an empty comment map
-    pub fn new() -> Self {
-        Self {
-            comments: BTreeMap::new(),
-            line_starts: Vec::new(),
-        }
-    }
-
-    /// Create a comment map from a list of comments.
-    /// Takes `&[Comment]` so callers that also need to hand the same
-    /// comment stream to `Parser::with_trivia` (the formatter pipeline)
-    /// don't have to clone the `Vec` first; the per-comment clone into
-    /// the `BTreeMap` happens here either way.
-    pub fn from_comments(comments: &[Comment], source: &str) -> Self {
-        let mut map = Self::new();
-        map.build_line_starts(source);
-        for comment in comments {
-            map.insert(comment.clone());
-        }
-        map
-    }
-
-    /// Build line start positions from source
-    fn build_line_starts(&mut self, source: &str) {
-        self.line_starts.clear();
-        self.line_starts.push(0); // Line 1 starts at position 0
-        for (i, ch) in source.char_indices() {
-            if ch == '\n' {
-                self.line_starts.push(i + 1);
-            }
-        }
-    }
-
-    /// Add a comment at its position
-    pub fn insert(&mut self, comment: Comment) {
-        self.comments.insert(comment.span.start, comment);
-    }
-
-    /// Get comments in a byte range [start, end)
-    pub fn comments_in_range(&self, start: usize, end: usize) -> Vec<&Comment> {
-        self.comments.range(start..end).map(|(_, c)| c).collect()
-    }
-
-    /// Get leading comments for a span.
-    /// Leading comments are comments that appear before the span starts,
-    /// either on the same line or on immediately preceding lines.
-    pub fn leading_comments(&self, span: &Span) -> Vec<&Comment> {
-        // Get all comments that end before this span starts
-        self.comments
-            .range(..span.start)
-            .map(|(_, c)| c)
-            .filter(|c| {
-                // Comment must be on a line before or the same line as the span
-                c.span.line <= span.line
-            })
-            .collect()
-    }
-
-    /// Get trailing comments for a span.
-    /// Trailing comments are comments on the same line as the span's end position.
-    pub fn trailing_comments(&self, span: &Span) -> Vec<&Comment> {
-        self.comments
-            .range(span.end..)
-            .map(|(_, c)| c)
-            .take_while(|c| c.span.line == span.end_line())
-            .collect()
-    }
-
-    /// Iterate all comments in order by position
-    pub fn iter(&self) -> impl Iterator<Item = &Comment> {
-        self.comments.values()
-    }
-
-    /// Check if the map is empty
-    pub fn is_empty(&self) -> bool {
-        self.comments.is_empty()
-    }
-
-    /// Get the number of comments
-    pub fn len(&self) -> usize {
-        self.comments.len()
-    }
-
-    /// Get a comment at a specific position
-    pub fn get(&self, pos: usize) -> Option<&Comment> {
-        self.comments.get(&pos)
-    }
-
-    /// Remove and return a comment at a specific position
-    pub fn remove(&mut self, pos: usize) -> Option<Comment> {
-        self.comments.remove(&pos)
-    }
-
-    /// Get comments between two positions (exclusive), typically used for
-    /// finding comments between consecutive AST nodes
-    pub fn comments_between(&self, after: usize, before: usize) -> Vec<&Comment> {
-        if after >= before {
-            return Vec::new();
-        }
-        self.comments.range(after..before).map(|(_, c)| c).collect()
-    }
-
-    /// Count blank lines between two line numbers.
-    /// Returns the number of consecutive empty lines between end of `prev_line` and start of `next_line`.
-    /// Rule: 0 → 0, 1 → 1, 2+ → 2
-    pub fn blank_lines_between(&self, prev_line: usize, next_line: usize) -> usize {
-        if next_line <= prev_line + 1 {
-            return 0;
-        }
-        let blank_count = next_line - prev_line - 1;
-        match blank_count {
-            0 => 0,
-            1 => 1,
-            _ => 2,
-        }
-    }
-}
-
 /// Trivia (currently: comments) attached to AST nodes by [`AstId`].
 ///
 /// The parser populates this as it allocates ids: at each `alloc_ast_id`
@@ -187,6 +54,18 @@ impl CommentMap {
 /// expect (`/*flag=*/true` belongs to the literal `true`, not to the
 /// surrounding call).
 ///
+/// `trailing` is populated by [`populate_trailing`] in a post-parse pass:
+/// any comment that sits on the same source line as a node's end position
+/// and starts at or after that position is repatriated from its
+/// parser-assigned `leading`/`dangling` slot to `trailing[node]`. The
+/// unparser reads `trailing_of(id)` to emit "tail" comments inline with
+/// the closing token of the node they belong to.
+///
+/// `inner_tail` is populated by [`populate_inner_tail`]: comments that
+/// fall *between the end of a block's last statement and its closing
+/// brace* are attributed to the innermost containing block's id. The
+/// unparser flushes them just before emitting the `}` of that block.
+///
 /// `dangling` collects comments that fall after the last token of the
 /// last allocated AST node — typically a comment on a trailing line of
 /// the file. Those are emitted by the unparser at a fixed sink (the end
@@ -194,6 +73,8 @@ impl CommentMap {
 #[derive(Debug, Clone, Default)]
 pub struct TriviaMap {
     leading: BTreeMap<AstId, Vec<Comment>>,
+    trailing: BTreeMap<AstId, Vec<Comment>>,
+    inner_tail: BTreeMap<AstId, Vec<Comment>>,
     dangling: Vec<Comment>,
 }
 
@@ -226,6 +107,18 @@ impl TriviaMap {
         self.leading.get(&id).map(Vec::as_slice).unwrap_or(&[])
     }
 
+    /// Trailing trivia for `id`, or an empty slice if none. Populated by
+    /// [`populate_trailing`].
+    pub fn trailing_of(&self, id: AstId) -> &[Comment] {
+        self.trailing.get(&id).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    /// Inner-tail trivia for a block `id`, or an empty slice if none.
+    /// Populated by [`populate_inner_tail`].
+    pub fn inner_tail_of(&self, id: AstId) -> &[Comment] {
+        self.inner_tail.get(&id).map(Vec::as_slice).unwrap_or(&[])
+    }
+
     /// File-tail dangling comments (after the last AST node).
     pub fn dangling(&self) -> &[Comment] {
         &self.dangling
@@ -234,93 +127,368 @@ impl TriviaMap {
     /// Drop every leading-trivia entry whose key is `>= threshold`.
     /// Used by the parser when a speculative branch backtracks: the
     /// AST ids it allocated are about to be re-issued, so any trivia
-    /// keyed by them must be cleared first.
+    /// keyed by them must be cleared first. `trailing` is not pruned
+    /// here because it is populated only after parsing completes, so
+    /// no speculative ids can be in it.
     pub fn discard_from(&mut self, threshold: AstId) {
         self.leading.retain(|id, _| *id < threshold);
     }
+}
+
+/// Identify the AST node that owns `c` as a trailing comment.
+///
+/// A node is a candidate when its span ends at or before `c.span.start`
+/// on the same source line as `c`. Among candidates we pick the one
+/// with the largest `span.end` (the one whose closing token is closest
+/// to the comment) and, on ties, the smallest `span.start` (the
+/// outermost of perfectly nested nodes). Returns `None` if no node fits.
+///
+/// Comments that are followed by another AST node on the same line —
+/// e.g. `foo(1, /*flag=*/true)` — are *interior* trivia of the
+/// surrounding construct and remain leading of the next node; they are
+/// never reclassified as trailing of the previous one.
+fn trailing_owner(c: &Comment, nodes: &[(AstId, Span)]) -> Option<AstId> {
+    let has_following_node_on_end_line = nodes
+        .iter()
+        .any(|(_, s)| s.line == c.span.end_line() && s.start >= c.span.end);
+    if has_following_node_on_end_line {
+        return None;
+    }
+    nodes
+        .iter()
+        .filter(|(_, s)| s.end_line() == c.span.line && s.end <= c.span.start)
+        .max_by_key(|(_, s)| (s.end, std::cmp::Reverse(s.start)))
+        .map(|(id, _)| *id)
+}
+
+/// Collect `(AstId, Span)` for every id-bearing node reached from `module`.
+fn collect_node_spans(module: &Module) -> Vec<(AstId, Span)> {
+    struct Collector(Vec<(AstId, Span)>);
+    impl AstVisitor for Collector {
+        fn visit_id(&mut self, id: AstId, span: Span) {
+            self.0.push((id, span));
+        }
+    }
+    let mut c = Collector(Vec::new());
+    for item in &module.items {
+        c.visit_item(item);
+    }
+    c.0
+}
+
+/// Repatriate same-line trailing comments out of `leading[*]` and
+/// `dangling` into `trailing[owner]`, using the [`trailing_owner`]
+/// rule. Idempotent: a second call is a no-op because the surviving
+/// `leading`/`dangling` entries by definition have no trailing owner.
+pub fn populate_trailing(trivia: &mut TriviaMap, module: &Module) {
+    let nodes = collect_node_spans(module);
+    populate_trailing_from_nodes(trivia, &nodes);
+}
+
+/// Identify the innermost block whose interior — between the last
+/// statement's end and the closing `}` — contains `c`. Returns `None`
+/// if `c` is not inside any block's interior. Innermost = smallest end
+/// position among the candidate set.
+fn inner_tail_owner(c: &Comment, blocks: &[(AstId, usize, usize)]) -> Option<AstId> {
+    blocks
+        .iter()
+        .filter(|(_, after, end)| *after <= c.span.start && c.span.start < *end)
+        .min_by_key(|(_, _, end)| *end)
+        .map(|(id, _, _)| *id)
+}
+
+/// Collect `(block.id, after, end)` for every [`Block`] in `module`,
+/// where `after` is the byte position immediately after the block's
+/// last statement (or `block.span.start` for an empty block) and `end`
+/// is `block.span.end`. The interval `[after, end)` is the block's
+/// "inner-tail" range — the source bytes between its content and its
+/// closing brace.
+fn collect_block_ranges(module: &Module) -> Vec<(AstId, usize, usize)> {
+    struct Collector(Vec<(AstId, usize, usize)>);
+    impl AstVisitor for Collector {
+        fn visit_block(&mut self, b: &Block) {
+            let after = b
+                .stmts
+                .last()
+                .map_or(b.span.start, |last| last.span().end);
+            self.0.push((b.id, after, b.span.end));
+            walk_block(self, b);
+        }
+    }
+    let mut c = Collector(Vec::new());
+    for item in &module.items {
+        c.visit_item(item);
+    }
+    c.0
+}
+
+/// Repatriate comments that sit between a block's last statement and
+/// its closing `}` into `inner_tail[block.id]`. Innermost block wins
+/// for nested cases. Idempotent: the surviving `leading`/`dangling`
+/// entries by definition contain no comments inside any block's
+/// inner-tail range.
+///
+/// Run *after* [`populate_trailing`] — comments already moved to a
+/// trailing slot are no longer in `leading`/`dangling` and are
+/// therefore left alone, preserving their stronger same-line tail
+/// attribution.
+pub fn populate_inner_tail(trivia: &mut TriviaMap, module: &Module) {
+    let blocks = collect_block_ranges(module);
+    populate_inner_tail_from_blocks(trivia, &blocks);
+}
+
+/// AST-shape-free core of [`populate_inner_tail`]. Exposed for unit
+/// tests that construct synthetic block tables.
+fn populate_inner_tail_from_blocks(
+    trivia: &mut TriviaMap,
+    blocks: &[(AstId, usize, usize)],
+) {
+    let leading_ids: Vec<AstId> = trivia.leading.keys().copied().collect();
+    for id in leading_ids {
+        let comments = trivia.leading.remove(&id).expect("key was just listed");
+        let mut stayers: Vec<Comment> = Vec::with_capacity(comments.len());
+        for c in comments {
+            match inner_tail_owner(&c, blocks) {
+                Some(owner) => trivia.inner_tail.entry(owner).or_default().push(c),
+                None => stayers.push(c),
+            }
+        }
+        if !stayers.is_empty() {
+            trivia.leading.insert(id, stayers);
+        }
+    }
+
+    let dangling = std::mem::take(&mut trivia.dangling);
+    let mut stayers: Vec<Comment> = Vec::with_capacity(dangling.len());
+    for c in dangling {
+        match inner_tail_owner(&c, blocks) {
+            Some(owner) => trivia.inner_tail.entry(owner).or_default().push(c),
+            None => stayers.push(c),
+        }
+    }
+    trivia.dangling = stayers;
+}
+
+/// AST-shape-free core of [`populate_trailing`]. Exposed for unit tests
+/// that construct synthetic `(AstId, Span)` tables.
+fn populate_trailing_from_nodes(trivia: &mut TriviaMap, nodes: &[(AstId, Span)]) {
+    let leading_ids: Vec<AstId> = trivia.leading.keys().copied().collect();
+    for id in leading_ids {
+        let comments = trivia.leading.remove(&id).expect("key was just listed");
+        let mut stayers: Vec<Comment> = Vec::with_capacity(comments.len());
+        for c in comments {
+            match trailing_owner(&c, nodes) {
+                Some(owner) => trivia.trailing.entry(owner).or_default().push(c),
+                None => stayers.push(c),
+            }
+        }
+        if !stayers.is_empty() {
+            trivia.leading.insert(id, stayers);
+        }
+    }
+
+    let dangling = std::mem::take(&mut trivia.dangling);
+    let mut stayers: Vec<Comment> = Vec::with_capacity(dangling.len());
+    for c in dangling {
+        match trailing_owner(&c, nodes) {
+            Some(owner) => trivia.trailing.entry(owner).or_default().push(c),
+            None => stayers.push(c),
+        }
+    }
+    trivia.dangling = stayers;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn make_comment(text: &str, start: usize, end: usize, line: usize) -> Comment {
+    fn line_comment(text: &str, start: usize, end: usize, line: usize, column: usize) -> Comment {
         Comment {
             text: text.to_string(),
             kind: CommentKind::Line,
-            span: Span::new(start, end, line, 1),
+            span: Span::new(start, end, line, column),
         }
     }
 
-    #[test]
-    fn test_comment_map_insert_and_iter() {
-        let mut map = CommentMap::new();
-        map.insert(make_comment(" comment 1", 0, 12, 1));
-        map.insert(make_comment(" comment 2", 20, 32, 2));
-
-        let comments: Vec<_> = map.iter().collect();
-        assert_eq!(comments.len(), 2);
-        assert_eq!(comments[0].text, " comment 1");
-        assert_eq!(comments[1].text, " comment 2");
+    /// Span helper that places start/end on the same line `line`. Used to
+    /// build small synthetic node tables for the trailing-attribution
+    /// tests; trailing attribution only inspects `span.end`/`span.line`,
+    /// so the column values are irrelevant beyond their byte order.
+    fn one_line_span(start: usize, end: usize, line: usize) -> Span {
+        Span::new(start, end, line, 1)
     }
 
     #[test]
-    fn test_comment_map_range() {
-        let mut map = CommentMap::new();
-        map.insert(make_comment(" c1", 0, 5, 1));
-        map.insert(make_comment(" c2", 10, 15, 2));
-        map.insert(make_comment(" c3", 20, 25, 3));
-
-        let comments = map.comments_in_range(5, 20);
-        assert_eq!(comments.len(), 1);
-        assert_eq!(comments[0].text, " c2");
-    }
-
-    #[test]
-    fn test_comment_map_between() {
-        let mut map = CommentMap::new();
-        map.insert(make_comment(" before", 0, 10, 1));
-        map.insert(make_comment(" middle", 15, 25, 2));
-        map.insert(make_comment(" after", 30, 40, 3));
-
-        let comments = map.comments_between(10, 30);
-        assert_eq!(comments.len(), 1);
-        assert_eq!(comments[0].text, " middle");
-    }
-
-    #[test]
-    fn test_comment_map_trailing() {
-        let mut map = CommentMap::new();
-        // Comment on line 1 at position 20 (after code at position 0-15)
-        map.insert(Comment {
-            text: " trailing".to_string(),
-            kind: CommentKind::Line,
-            span: Span::new(20, 32, 1, 21),
-        });
-        // Comment on line 2
-        map.insert(Comment {
-            text: " next line".to_string(),
-            kind: CommentKind::Line,
-            span: Span::new(40, 52, 2, 1),
-        });
-
-        // Code span on line 1, ending at position 15
-        let code_span = Span::new(0, 15, 1, 1);
-        let trailing = map.trailing_comments(&code_span);
-
-        assert_eq!(trailing.len(), 1);
-        assert_eq!(trailing[0].text, " trailing");
-    }
-
-    #[test]
-    fn test_from_comments() {
-        let source = "// comment 1\nlet x = 1; // comment 2\n";
-        let comments = vec![
-            make_comment(" comment 1", 0, 12, 1),
-            make_comment(" comment 2", 24, 36, 2),
+    fn trailing_owner_picks_largest_end_then_outermost() {
+        // Three nodes ending on the same line as a trailing comment:
+        //   A: 0..10  (outer)
+        //   B: 5..10  (inner, same end as A — outer should win on tiebreak)
+        //   C: 0..8   (smaller end — should not win)
+        let nodes = vec![
+            (AstId(0), one_line_span(0, 10, 1)),
+            (AstId(1), one_line_span(5, 10, 1)),
+            (AstId(2), one_line_span(0, 8, 1)),
         ];
+        let comment = line_comment(" tail", 12, 18, 1, 13);
+        assert_eq!(trailing_owner(&comment, &nodes), Some(AstId(0)));
+    }
 
-        let map = CommentMap::from_comments(&comments, source);
-        assert_eq!(map.len(), 2);
+    #[test]
+    fn trailing_owner_rejects_interior_block_comment_with_following_node() {
+        // `1, /*flag=*/true` shape: the `1` literal ends just before the
+        // block comment, and the `true` literal starts just after it on
+        // the same line. The comment is leading-of-`true`, never
+        // trailing-of-`1`.
+        let one_lit = (AstId(0), Span::new(0, 1, 1, 1));
+        let comment = line_comment("flag=", 3, 12, 1, 4); // "/*flag=*/" at bytes 3..12
+        let true_lit = (AstId(1), Span::new(12, 16, 1, 13));
+        let nodes = vec![one_lit, true_lit];
+        assert!(
+            trailing_owner(&comment, &nodes).is_none(),
+            "block comment between two nodes on the same line is interior, not trailing",
+        );
+    }
+
+    #[test]
+    fn trailing_owner_rejects_different_line_and_pre_end_comments() {
+        let nodes = vec![(AstId(0), one_line_span(0, 10, 1))];
+        // Comment on a later line — not a trailing of the line-1 node.
+        let next_line = line_comment(" next", 12, 18, 2, 1);
+        assert!(trailing_owner(&next_line, &nodes).is_none());
+        // Comment whose start is inside the node's span — not trailing.
+        let inside = line_comment(" in", 5, 8, 1, 6);
+        assert!(trailing_owner(&inside, &nodes).is_none());
+    }
+
+    #[test]
+    fn populate_moves_from_dangling_to_trailing() {
+        let nodes = vec![(AstId(0), one_line_span(0, 10, 1))];
+        let mut trivia = TriviaMap::new();
+        trivia.set_dangling(vec![line_comment(" tail", 12, 18, 1, 13)]);
+
+        populate_trailing_from_nodes(&mut trivia, &nodes);
+
+        assert_eq!(trivia.trailing_of(AstId(0)).len(), 1);
+        assert_eq!(trivia.trailing_of(AstId(0))[0].text, " tail");
+        assert!(trivia.dangling().is_empty());
+    }
+
+    #[test]
+    fn populate_moves_from_leading_of_next_to_trailing_of_prev() {
+        // Source-shape:  prev_node ends at byte 10, line 1.
+        //                 // tail of prev    (line 1, byte 12)
+        //                 next_node starts at line 2, byte 30.
+        // Parser would attach the comment as leading of next_node;
+        // populate_trailing must move it to trailing of prev_node.
+        let nodes = vec![
+            (AstId(0), one_line_span(0, 10, 1)),
+            (AstId(1), Span::new(30, 40, 2, 1)),
+        ];
+        let mut trivia = TriviaMap::new();
+        trivia.attach_leading(AstId(1), vec![line_comment(" tail", 12, 18, 1, 13)]);
+
+        populate_trailing_from_nodes(&mut trivia, &nodes);
+
+        assert_eq!(trivia.trailing_of(AstId(0)).len(), 1);
+        assert_eq!(trivia.trailing_of(AstId(0))[0].text, " tail");
+        assert!(
+            trivia.leading_of(AstId(1)).is_empty(),
+            "comment must be removed from the leading slot it was repatriated out of",
+        );
+    }
+
+    #[test]
+    fn populate_keeps_non_trailing_leading_in_place() {
+        // Comment is a true header (different line from the node it
+        // precedes), parser attaches it as leading; populate_trailing
+        // should leave it alone.
+        let nodes = vec![(AstId(0), Span::new(20, 30, 3, 1))];
+        let mut trivia = TriviaMap::new();
+        let header = line_comment(" header", 0, 8, 2, 1);
+        trivia.attach_leading(AstId(0), vec![header]);
+
+        populate_trailing_from_nodes(&mut trivia, &nodes);
+
+        assert_eq!(trivia.leading_of(AstId(0)).len(), 1);
+        assert_eq!(trivia.leading_of(AstId(0))[0].text, " header");
+        assert!(trivia.trailing_of(AstId(0)).is_empty());
+    }
+
+    #[test]
+    fn inner_tail_owner_picks_innermost_containing_block() {
+        // Outer block: [10..100), inner block: [50..80). A comment at
+        // byte 70 is contained by both — innermost (= smallest end)
+        // should win.
+        let blocks = vec![
+            (AstId(1), 10, 100), // outer
+            (AstId(2), 50, 80),  // inner
+        ];
+        let comment = line_comment(" inner-tail", 70, 84, 5, 1);
+        assert_eq!(inner_tail_owner(&comment, &blocks), Some(AstId(2)));
+    }
+
+    #[test]
+    fn populate_inner_tail_moves_dangling_in_block_to_inner_tail() {
+        // Block id 0 spans [0..50), last stmt ends at byte 20.
+        // A comment at byte 30 is inside the block's tail range.
+        let blocks = vec![(AstId(0), 20, 50)];
+        let mut trivia = TriviaMap::new();
+        trivia.set_dangling(vec![line_comment(" tail", 30, 38, 3, 5)]);
+
+        populate_inner_tail_from_blocks(&mut trivia, &blocks);
+
+        assert_eq!(trivia.inner_tail_of(AstId(0)).len(), 1);
+        assert_eq!(trivia.inner_tail_of(AstId(0))[0].text, " tail");
+        assert!(trivia.dangling().is_empty());
+    }
+
+    #[test]
+    fn populate_inner_tail_does_not_disturb_unrelated_leading() {
+        // Leading comment of a node OUTSIDE any block's inner-tail
+        // range stays as leading.
+        let blocks = vec![(AstId(0), 100, 200)];
+        let mut trivia = TriviaMap::new();
+        trivia.attach_leading(AstId(99), vec![line_comment(" header", 0, 8, 1, 1)]);
+
+        populate_inner_tail_from_blocks(&mut trivia, &blocks);
+
+        assert_eq!(trivia.leading_of(AstId(99)).len(), 1);
+        assert!(trivia.inner_tail_of(AstId(0)).is_empty());
+    }
+
+    #[test]
+    fn populate_inner_tail_is_idempotent() {
+        let blocks = vec![(AstId(0), 20, 50)];
+        let mut trivia = TriviaMap::new();
+        trivia.set_dangling(vec![line_comment(" tail", 30, 38, 3, 5)]);
+
+        populate_inner_tail_from_blocks(&mut trivia, &blocks);
+        let after_first: Vec<_> = trivia.inner_tail_of(AstId(0)).iter().map(|c| c.text.clone()).collect();
+
+        populate_inner_tail_from_blocks(&mut trivia, &blocks);
+        let after_second: Vec<_> = trivia.inner_tail_of(AstId(0)).iter().map(|c| c.text.clone()).collect();
+
+        assert_eq!(after_first, after_second);
+        assert_eq!(after_first.len(), 1);
+    }
+
+    #[test]
+    fn populate_is_idempotent() {
+        let nodes = vec![(AstId(0), one_line_span(0, 10, 1))];
+        let mut trivia = TriviaMap::new();
+        trivia.set_dangling(vec![line_comment(" tail", 12, 18, 1, 13)]);
+
+        populate_trailing_from_nodes(&mut trivia, &nodes);
+        let trailing_after_first = trivia.trailing_of(AstId(0)).to_vec();
+
+        populate_trailing_from_nodes(&mut trivia, &nodes);
+        let trailing_after_second = trivia.trailing_of(AstId(0)).to_vec();
+
+        assert_eq!(trailing_after_first.len(), 1);
+        assert_eq!(trailing_after_second.len(), 1);
+        assert_eq!(
+            trailing_after_first[0].text, trailing_after_second[0].text,
+            "second call must not duplicate the comment",
+        );
     }
 }

@@ -409,7 +409,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
     // AST section (Parser phase)
     if opts.show_ast {
         println!("=== AST ===");
-        let unparser = wado_compiler::unparse::Unparser::new(&result.comments);
+        let unparser = wado_compiler::unparse::Unparser::new().with_trivia(&result.trivia);
         let unparsed = unparser.unparse(&result.ast);
         println!("{unparsed}");
         println!();
@@ -418,7 +418,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
     // Desugared AST section
     if opts.show_desugared {
         println!("=== Desugared AST ===");
-        let unparser = wado_compiler::unparse::Unparser::new(&result.comments);
+        let unparser = wado_compiler::unparse::Unparser::new().with_trivia(&result.trivia);
         let unparsed = unparser.unparse(&result.desugared_ast);
         println!("{unparsed}");
         println!();
