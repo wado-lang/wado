@@ -1,5 +1,5 @@
 //! Replace each `builtin::copy_value::<T>(x)` call with a call to a
-//! synthesized concrete `$value_copy$T_<id>` function carrying
+//! synthesized concrete `$value_copy$T<id>` function carrying
 //! `FunctionKind::ValueCopy { type_id }`. Runs at the end of `lower`,
 //! immediately after `value_copy::insert::insert_value_copy_calls`.
 //!
@@ -545,7 +545,7 @@ fn build_struct_copy(
 }
 
 /// Wrap `expr` in `builtin::copy_value::<type_id>(expr)`. The wrapper
-/// gets resolved to the `$value_copy$T_<id>` helper by [`RewriteCalls`]
+/// gets resolved to the `$value_copy$T<id>` helper by [`RewriteCalls`]
 /// in the same pass.
 fn wrap_copy_value(expr: TirExpr, type_id: TypeId, span: Span) -> TirExpr {
     let func = FunctionRef {

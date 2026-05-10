@@ -1536,7 +1536,7 @@ pub enum WirInstr {
     /// GC stores the *same* element ref into both arrays — fine for
     /// primitives, but unsound for struct elements (every clone would
     /// share the underlying struct with the source). When set, the
-    /// loop calls the named `$value_copy$T_<id>` helper between
+    /// loop calls the named `$value_copy$T<id>` helper between
     /// `array.get` and `array.set` so each destination element is a
     /// fresh struct.
     ArrayClone {

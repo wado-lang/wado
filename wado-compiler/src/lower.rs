@@ -159,7 +159,7 @@ pub fn lower(flat: &mut FlatPackage) {
     // Materialize Wado's value-copy semantics in TIR. Insertion places
     // `builtin::copy_value::<T>(x)` wrappers at every defensive deep-copy
     // position; synthesis replaces those wrappers with calls to per-type
-    // `$value_copy$T_<id>` helpers. Both run here — before the optimizer —
+    // `$value_copy$T<id>` helpers. Both run here — before the optimizer —
     // so that every aliasing edge downstream passes care about is explicit
     // in the TIR fed to `optimize`. Wrapper elision happens later as a
     // regular pass inside the optimizer fixed-point loop.

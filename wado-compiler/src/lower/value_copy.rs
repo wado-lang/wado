@@ -10,7 +10,7 @@
 //! - `insert::insert_value_copy_calls` wraps every defensive deep-copy
 //!   position in `builtin::copy_value::<T>(x)`.
 //! - `synthesize::synthesize_value_copy_funcs` replaces those wrappers
-//!   with calls to per-type `$value_copy$T_<id>` helper functions whose
+//!   with calls to per-type `$value_copy$T<id>` helper functions whose
 //!   bodies perform a one-level shallow copy.
 //!
 //! Wrapper elision happens later in `optimize::value_copy_elide`, which
@@ -35,7 +35,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 /// (which decides whether a synthesized helper's per-field projection
 /// also needs to recurse into a nested value-typed struct). The two
 /// callers must agree: when this returns `true`,
-/// [`synthesize::generate_copy_function`] emits a `$value_copy$T_<id>`
+/// [`synthesize::generate_copy_function`] emits a `$value_copy$T<id>`
 /// helper, and any caller — user code or another synthesized helper —
 /// must route through it. If we wrapped fields whose helper would be
 /// identity (`return v;`), the helper would still be typed at WIR

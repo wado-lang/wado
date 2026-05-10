@@ -155,6 +155,35 @@ impl<'a> Unparser<'a> {
         }
     }
 
+    /// Emit leading trivia for an AST node that is about to be written
+    /// on its own line (e.g. inside a multiline call-args block where
+    /// each arg has been pre-indented). Block comments stay inline with
+    /// a trailing space — same as [`Self::emit_inline_leading_for`] —
+    /// while line / doc / module-doc comments get their own line with
+    /// matching indent so the textual position they had in the source
+    /// is preserved.
+    fn emit_multiline_leading_for(&mut self, id: crate::ast::AstId) {
+        let comments: Vec<crate::comment::Comment> = self.leading_of(id).to_vec();
+        for comment in comments {
+            if !self.emitted_comments.insert(comment.span.start) {
+                continue;
+            }
+            match comment.kind {
+                crate::comment::CommentKind::Block => {
+                    self.emit_comment(&comment);
+                    self.output.push(' ');
+                }
+                crate::comment::CommentKind::Line
+                | crate::comment::CommentKind::DocLine
+                | crate::comment::CommentKind::ModuleDoc => {
+                    self.emit_comment(&comment);
+                    self.output.push('\n');
+                    self.write_indent();
+                }
+            }
+        }
+    }
+
     /// Emit blank lines to reach the target line, updating `last_source_line`
     fn emit_blank_lines_to(&mut self, target_line: usize) {
         if self.last_source_line > 0 && target_line > self.last_source_line {
@@ -1610,7 +1639,11 @@ impl<'a> Unparser<'a> {
         self.indent_level += 1;
         for arg in args {
             self.write_indent();
-            self.emit_inline_leading_for(arg.id());
+            // Multiline form: line / doc comments must stay on their
+            // own line + indent (block comments stay inline with a
+            // trailing space). The single-line `inline_leading_for`
+            // would silently drop them.
+            self.emit_multiline_leading_for(arg.id());
             self.unparse_expr(arg);
             self.output.push_str(",\n");
         }

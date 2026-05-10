@@ -2158,7 +2158,7 @@ impl<'a> WirEmitter<'a> {
                 // helpers' explicit `builtin::array_clone::<T>(...)` calls.
                 //
                 // When `element_copy_func` is set the loop additionally
-                // calls the named `$value_copy$T_<id>` helper between
+                // calls the named `$value_copy$T<id>` helper between
                 // `array.get` and `array.set` so each destination element
                 // is a fresh struct, not an aliased ref into the source.
                 let arr_wasm_idx = self.resolve_type_index(type_id.index());
