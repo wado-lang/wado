@@ -1,6 +1,7 @@
 # Changelog
 
 ## [v0.0.2](https://github.com/wado-lang/wado/compare/v0.0.1...v0.0.2) - 2026-05-10
+
 - perf(opt): move DAE / DRVE / write-only local elim from WIR to TIR by @gfx in https://github.com/wado-lang/wado/pull/1024
 - docs: add core:benchmark, core:router, wasi:tls to stdlib doc generation by @gfx in https://github.com/wado-lang/wado/pull/1026
 - ci: use GitHub App token for tagpr by @gfx in https://github.com/wado-lang/wado/pull/1027
@@ -16,6 +17,7 @@
 - test: surface resolved #![TODO] tests and clean up stale TODO fixtures by @gfx in https://github.com/wado-lang/wado/pull/1042
 
 ## [v0.0.1](https://github.com/wado-lang/wado/commits/v0.0.1) - 2026-05-08
+
 - Add re-export syntax (`pub use`) and visibility documentation by @gfx in https://github.com/wado-lang/wado/pull/138
 - WEP update: Replace iterator-based with builder-pattern for tuple coercion by @gfx in https://github.com/wado-lang/wado/pull/137
 - Rename ADR to WEP in documentation by @gfx in https://github.com/wado-lang/wado/pull/140
@@ -133,6 +135,7 @@ of i64 for clock arithmetic.
 Sieve benchmark: ~152ms -> ~108ms (30% improvement, from 3.5x to 2.5x vs C).
 
 https://claude.ai/code/session_015YpSTu2TkzBcdZnjPaX8QA by @gfx in https://github.com/wado-lang/wado/pull/244
+
 - Organize core sub-modules: move string to prelude/, use core: namespace paths by @gfx in https://github.com/wado-lang/wado/pull/246
 - Add WEP: Variant Wasm GC Representation by @gfx in https://github.com/wado-lang/wado/pull/247
 - Refactor boxing: move primitive boxing from codegen to lower phase using Box<T> structs by @gfx in https://github.com/wado-lang/wado/pull/248
