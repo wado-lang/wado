@@ -1,14 +1,10 @@
-// Tests: Descriptor::stat and Descriptor::stat_at - file metadata
+// Tests Descriptor::stat and Descriptor::stat_at — file metadata.
 //
-// This test verifies that:
-// - stat() returns file metadata for an open file descriptor
-// - stat_at() returns file metadata for a path relative to a directory descriptor
+// Verifies that:
+// - stat() returns metadata for an open file descriptor
+// - stat_at() returns metadata for a path relative to a directory descriptor
 // - DescriptorStat fields (type, size) are accessible
 // - Regular files report DescriptorType::RegularFile
-//
-// To run when implemented (TODO removed):
-//   cargo run --bin wado -- run --dir wado-compiler/tests/fixtures/testdata \
-//     wado-compiler/tests/fixtures/wasi_filesystem_stat.wado
 
 use { println, eprintln, Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, DescriptorType, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
