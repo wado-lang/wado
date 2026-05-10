@@ -1,14 +1,7 @@
-#![TODO]
-// Smoke test: a single module declares `pub resource` and uses it
-// as a type annotation. Does not attempt to construct it — we only
-// want type-level declaration acceptance.
-//
-// TODO: user-defined `pub resource` at the user level currently ICEs
-// during core-Wasm validation:
-//   "type mismatch: expected i32, found (ref (exact $type))"
-// Same class of bug as `user_effect_smoke.wado` — codegen has only
-// been exercised against stdlib resources. Remove `#![TODO]` once
-// user-level resources compile cleanly.
+// Smoke test: a user-defined `pub resource` referenced only as a type
+// annotation. Verifies that the type-level declaration and reference
+// type (`&Counter`) are accepted by the compiler; the resource is
+// never constructed, so codegen does not exercise its representation.
 
 pub resource Counter {
     fn bump(&self);
