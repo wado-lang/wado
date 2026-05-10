@@ -631,6 +631,134 @@ test "lower single-alt Group field name dedupes against outer scope" {
     }
 }
 
+test "lower token-only Group produces TokenOnly shape with single field" {
+    // `cmd : (K_INSERT | K_REPLACE) ;`
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "cmd",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Group(GroupElement::new([
+            alt_of([Element::TokenRef(TokenRefElement::new("K_INSERT"))]),
+            alt_of([Element::TokenRef(TokenRefElement::new("K_REPLACE"))]),
+        ]))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 1;
+        if let Group(go) = &s.body.ops[0] {
+            if let TokenOnly(to) = &go.shape {
+                // Field name comes from `token_group_field_name`.
+                assert to.field == "k_insert_or_k_replace", to.field;
+            } else {
+                panic("expected GroupShape::TokenOnly");
+            }
+            assert go.alts.len() == 2;
+            assert go.alts[0].ops.len() == 1;
+            assert go.alts[1].ops.len() == 1;
+            // Direct dispatch on each alt's single token kind.
+            if let Direct(dd) = &go.dispatch {
+                assert dd.branches.len() == 2;
+                assert dd.branches[0].tokens.len() == 1;
+                assert dd.branches[0].tokens[0] == "TK_K_INSERT";
+                assert dd.branches[0].alt_index == 0;
+                assert dd.branches[1].tokens[0] == "TK_K_REPLACE";
+                assert dd.branches[1].alt_index == 1;
+            } else {
+                panic("expected MultiAltDispatch::Direct");
+            }
+            // Scan side mirrors the parse-side dispatch.
+            if let Direct(dd) = &go.scan_dispatch {
+                assert dd.branches.len() == 2;
+            } else {
+                panic("expected scan dispatch Direct");
+            }
+            assert go.scan_alts.len() == 2;
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower token-only Group accepts Literal alts" {
+    // `op : ('+' | '-') ;`
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "op",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Group(GroupElement::new([
+            alt_of([Element::Literal(LiteralElement::new("+"))]),
+            alt_of([Element::Literal(LiteralElement::new("-"))]),
+        ]))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Group(go) = &s.body.ops[0] {
+            if let TokenOnly(to) = &go.shape {
+                assert to.field == "plus_or_minus", to.field;
+            } else {
+                panic("expected GroupShape::TokenOnly");
+            }
+            // Each alt's body op is the matched Literal.
+            if let Literal(_) = &go.alts[0].ops[0] {
+                assert true;
+            } else {
+                panic("expected Literal Op for `+` alt");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower token-only Group field dedupes against outer scope" {
+    // `r : k_a (K_A | K_B) ;` — a label binds the outer field
+    // `k_a`, then the group's `token_group_field_name` is
+    // `k_a_or_k_b`. No collision today, so this just sanity-checks
+    // that the outer scope sees the group's field through dedup.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::Label(LabelElement::new(
+                "k_a_or_k_b",
+                false,
+                Element::TokenRef(TokenRefElement::new("ID")),
+            )),
+            Element::Group(GroupElement::new([
+                alt_of([Element::TokenRef(TokenRefElement::new("K_A"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("K_B"))]),
+            ])),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Group(go) = &s.body.ops[1] {
+            if let TokenOnly(to) = &go.shape {
+                // Outer label took the base name; the group dedups
+                // to `_2`.
+                assert to.field == "k_a_or_k_b_2", to.field;
+            } else {
+                panic("expected GroupShape::TokenOnly");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
 test "lower greedy Star Repeat with TokenRef inner" {
     // `tokens : INT* ;`
     let mut g = empty_grammar(&"T");

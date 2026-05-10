@@ -55,6 +55,10 @@ use {
     count_general_groups,
     single_alt_group_type_name,
     single_alt_group_field_name,
+    is_token_only_group,
+    is_simple_cst_group,
+    is_general_group,
+    token_group_field_name,
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { GenContext } from "./gen_context.wado";
@@ -89,6 +93,7 @@ use {
     GroupOp,
     GroupShape,
     SingleAltShape,
+    TokenOnlyShape,
     FieldDecl,
     FieldKind,
     KindSet,
@@ -462,42 +467,60 @@ fn lower_scan_element(elem: &Element) -> ScanElement {
     };
 }
 
-/// Scan-side twin of `lower_group_op`. Single-element transparent
-/// groups reduce to the inner element directly (no wrapper —
-/// scan-side has no struct construction). Multi-element single-alt
-/// groups (`SingleAlt` parse shape) become a `ScanGroupElem` with
-/// one alt holding the inner sequence; emit walks the elements
-/// in order with no dispatch.
+/// Scan-side twin of `lower_group_op`. The scan side has no struct
+/// construction, so the shape distinction matters only for the
+/// dispatch step: single-alt groups have no dispatch (one body run
+/// unconditionally / wrapped in a one-alt `ScanGroupElem`), while
+/// multi-alt token-only groups dispatch on token kind.
 fn lower_scan_group(g: &GroupElement) -> ScanElement {
     let alts = &g.alternatives;
-    if alts.len() != 1 {
-        panic("TODO Phase 2.x.group: multi-alt Group shape (scan side) not implemented yet");
+    if alts.len() == 0 {
+        panic("Group with no alts is not a valid scan-lowering input");
     }
-    let alt = &alts[0];
-    if alt.elements.len() == 0 {
-        panic("Group with empty alt is not a valid scan-lowering input");
+    if alts.len() == 1 {
+        let alt = &alts[0];
+        if alt.elements.len() == 0 {
+            panic("Group with empty alt is not a valid scan-lowering input");
+        }
+        if alt.elements.len() == 1 {
+            let inner = &alt.elements[0];
+            require_leaf_element(inner, &"Group (transparent, scan side)");
+            return lower_scan_element(inner);
+        }
+        for let elem of &alt.elements {
+            require_leaf_element(elem, &"Group (single-alt, scan side)");
+        }
+        let mut elements: Array<ScanElement> = [];
+        for let elem of &alt.elements {
+            elements.push(lower_scan_element(elem));
+        }
+        return ScanElement::Group(ScanGroupElem {
+            alts: [ScanBody { elements }],
+            dispatch: empty_direct_dispatch(),
+            lenient: false,
+        });
     }
-    if alt.elements.len() == 1 {
-        let inner = &alt.elements[0];
-        require_leaf_element(inner, &"Group (transparent, scan side)");
-        return lower_scan_element(inner);
+    if is_token_only_group(alts) {
+        let mut bodies: Array<ScanBody> = [];
+        let mut first_sets: Array<Array<String>> = [];
+        for let alt of alts {
+            let elem = &alt.elements[0];
+            bodies.push(ScanBody { elements: [lower_scan_element(elem)] });
+            first_sets.push([token_only_kind(elem)]);
+        }
+        return ScanElement::Group(ScanGroupElem {
+            alts: bodies,
+            dispatch: build_direct_dispatch(&first_sets),
+            lenient: false,
+        });
     }
-
-    // SingleAlt: scan the body's elements in order, wrapped in a
-    // `ScanGroupElem` so the surrounding scan walk can treat the
-    // group as a single step.
-    for let elem of &alt.elements {
-        require_leaf_element(elem, &"Group (single-alt, scan side)");
+    if is_simple_cst_group(alts) {
+        panic("TODO Phase 2.x.simplecst: SimpleCst Group shape (scan side) not implemented yet");
     }
-    let mut elements: Array<ScanElement> = [];
-    for let elem of &alt.elements {
-        elements.push(lower_scan_element(elem));
+    if is_general_group(alts) {
+        panic("TODO Phase 2.x.general: General Group shape (scan side) not implemented yet");
     }
-    return ScanElement::Group(ScanGroupElem {
-        alts: [ScanBody { elements }],
-        dispatch: empty_direct_dispatch(),
-        lenient: false,
-    });
+    panic("Group shape (scan side) unrecognised by classifier");
 }
 
 /// Scan-side twin of `lower_repeat_op`. Same restrictions: greedy
@@ -690,17 +713,29 @@ fn lower_group_op(
     rule_name: &String,
 ) -> Op {
     let alts = &g.alternatives;
-    if alts.len() != 1 {
-        panic("TODO Phase 2.x.group: multi-alt Group shape not implemented yet");
+    if alts.len() == 0 {
+        panic("Group with no alts is not a valid lowering input");
     }
-    let alt = &alts[0];
-    if alt.elements.len() == 0 {
-        panic("Group with empty alt is not a valid lowering input");
+    if alts.len() == 1 {
+        let alt = &alts[0];
+        if alt.elements.len() == 0 {
+            panic("Group with empty alt is not a valid lowering input");
+        }
+        if alt.elements.len() == 1 {
+            return lower_transparent_group(&alt.elements[0], name_counts, rule_name);
+        }
+        return lower_single_alt_group(alt, name_counts, rule_name);
     }
-    if alt.elements.len() == 1 {
-        return lower_transparent_group(&alt.elements[0], name_counts, rule_name);
+    if is_token_only_group(alts) {
+        return lower_token_only_group(alts, name_counts);
     }
-    return lower_single_alt_group(alt, name_counts, rule_name);
+    if is_simple_cst_group(alts) {
+        panic("TODO Phase 2.x.simplecst: SimpleCst Group shape not implemented yet");
+    }
+    if is_general_group(alts) {
+        panic("TODO Phase 2.x.general: General Group shape not implemented yet");
+    }
+    panic("Group shape unrecognised by classifier — should be impossible");
 }
 
 /// Single-element single-alt: `(e)` lowers to `e` with no struct of
@@ -808,6 +843,79 @@ fn lower_single_alt_group(
 fn empty_direct_dispatch() -> MultiAltDispatch {
     let branches: Array<DispatchBranch> = [];
     return MultiAltDispatch::Direct(DirectDispatch { branches });
+}
+
+/// Multi-alt group whose every alt is a single Token / Literal —
+/// `(K_INSERT | K_REPLACE)`. Lowers to `GroupShape::TokenOnly`,
+/// which emit realises as a single `Token`-typed CST field. The
+/// alt bodies are the matched leaf token; dispatch is direct on
+/// each alt's single token kind (the alts are mutually exclusive
+/// by construction — the classifier has already checked).
+///
+/// Field name is `token_group_field_name(alts)` (e.g.
+/// `k_insert_or_k_replace`), deduped against the surrounding alt
+/// scope. Inner ops carry no field name of their own — emit reads
+/// the matched token off the runtime stack and writes it into the
+/// outer `field` slot.
+fn lower_token_only_group(
+    alts: &Array<Alternative>,
+    name_counts: &mut Array<[String, i32]>,
+) -> Op {
+    let field = dedup_name(&token_group_field_name(alts), name_counts);
+
+    let mut bodies: Array<AltBody> = [];
+    let mut scan_bodies: Array<ScanBody> = [];
+    let mut first_sets: Array<Array<String>> = [];
+    let mut inner_counts: Array<[String, i32]> = [];
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let alt = &alts[i];
+        let elem = &alt.elements[0];
+        let op = lower_token_only_leaf(elem, &mut inner_counts);
+        bodies.push(AltBody {
+            alt_index: i,
+            // No per-alt case name / struct: the group's CST type
+            // is a single `Token` field. Emit dispatches on token
+            // kind and writes the matched token into the outer slot.
+            case_name: "",
+            struct_name: "",
+            ops: [op],
+            fields: [],
+            group_index_start: 0,
+            prefix_self_ref_min_prec: 0,
+        });
+        scan_bodies.push(ScanBody { elements: [lower_scan_element(elem)] });
+        first_sets.push([token_only_kind(elem)]);
+    }
+    let dispatch = build_direct_dispatch(&first_sets);
+    return Op::Group(GroupOp {
+        shape: GroupShape::TokenOnly(TokenOnlyShape { field: field }),
+        alts: bodies,
+        scan_alts: scan_bodies,
+        dispatch: dispatch,
+        scan_dispatch: clone_dispatch(&dispatch),
+    });
+}
+
+fn lower_token_only_leaf(elem: &Element, counts: &mut Array<[String, i32]>) -> Op {
+    return match *elem {
+        TokenRef(t) => Op::Token(TokenOp {
+            kind: `TK_{t.name}`,
+            field: dedup_name(&t.field_name, counts),
+        }),
+        Literal(l) => Op::Literal(LiteralOp {
+            kind: literal_const_name(&l.text),
+            field: dedup_name(&literal_field_name(&l.text), counts),
+        }),
+        _ => panic("lower_token_only_leaf: classifier permitted non-token leaf"),
+    };
+}
+
+fn token_only_kind(elem: &Element) -> String {
+    return match *elem {
+        TokenRef(t) => `TK_{t.name}`,
+        Literal(l) => literal_const_name(&l.text),
+        _ => panic("token_only_kind: classifier permitted non-token leaf"),
+    };
 }
 
 /// Lower a `Repeat` element (`e?` / `e*` / `e+`). Phase 2.x.partial
