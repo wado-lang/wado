@@ -877,6 +877,139 @@ test "lower SimpleCst Group field dedupes against outer scope" {
     }
 }
 
+test "lower General Group with disjoint multi-shape alts produces General shape" {
+    // `r : (stmt | INT INT) ; stmt : ID ;`
+    // Alt 0 is RuleRef → first set {ID}; alt 1 starts with INT.
+    // Mixed shape rules out SimpleCst / TokenOnly / SingleAlt, so
+    // the classifier picks General.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([Element::Group(GroupElement::new([
+                alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                alt_of([
+                    Element::TokenRef(TokenRefElement::new("INT")),
+                    Element::TokenRef(TokenRefElement::new("INT")),
+                ]),
+            ]))])],
+        ),
+        ParserRule::new(
+            "stmt",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 1;
+        if let Group(go) = &s.body.ops[0] {
+            if let General(gen) = &go.shape {
+                assert gen.variant_type == "RGroup0", gen.variant_type;
+                assert gen.field == "group_0", gen.field;
+                assert gen.group_index == 0;
+                assert gen.alt_struct_names.len() == 2;
+                assert gen.alt_struct_names[0] == "RGroup0Alt0", gen.alt_struct_names[0];
+                assert gen.alt_struct_names[1] == "RGroup0Alt1", gen.alt_struct_names[1];
+            } else {
+                panic("expected GroupShape::General");
+            }
+            assert go.alts.len() == 2;
+            assert go.alts[0].case_name == "Alt0", go.alts[0].case_name;
+            assert go.alts[0].struct_name == "RGroup0Alt0", go.alts[0].struct_name;
+            assert go.alts[1].case_name == "Alt1", go.alts[1].case_name;
+            assert go.alts[1].ops.len() == 2;
+            // Direct dispatch on each alt's first set.
+            if let Direct(dd) = &go.dispatch {
+                assert dd.branches.len() == 2;
+                assert dd.branches[0].tokens[0] == "TK_ID";
+                assert dd.branches[1].tokens[0] == "TK_INT";
+            } else {
+                panic("expected MultiAltDispatch::Direct");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower General Group group_index is per-rule cumulative" {
+    // `r : (stmt | INT INT) (other | FLOAT FLOAT) ;`
+    // `stmt : ID ; other : K_OTHER ;`
+    // Two general groups; the second gets group_index = 1.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([
+                Element::Group(GroupElement::new([
+                    alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                    alt_of([
+                        Element::TokenRef(TokenRefElement::new("INT")),
+                        Element::TokenRef(TokenRefElement::new("INT")),
+                    ]),
+                ])),
+                Element::Group(GroupElement::new([
+                    alt_of([Element::RuleRef(RuleRefElement::new("other"))]),
+                    alt_of([
+                        Element::TokenRef(TokenRefElement::new("FLOAT")),
+                        Element::TokenRef(TokenRefElement::new("FLOAT")),
+                    ]),
+                ])),
+            ])],
+        ),
+        ParserRule::new(
+            "stmt",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+        ),
+        ParserRule::new(
+            "other",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("K_OTHER"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 2;
+        if let Group(go0) = &s.body.ops[0] {
+            if let General(gen) = &go0.shape {
+                assert gen.group_index == 0;
+                assert gen.variant_type == "RGroup0", gen.variant_type;
+                assert gen.field == "group_0", gen.field;
+            } else {
+                panic("expected first group General");
+            }
+        } else {
+            panic("expected first Op::Group");
+        }
+        if let Group(go1) = &s.body.ops[1] {
+            if let General(gen) = &go1.shape {
+                assert gen.group_index == 1;
+                assert gen.variant_type == "RGroup1", gen.variant_type;
+                assert gen.field == "group_1", gen.field;
+            } else {
+                panic("expected second group General");
+            }
+        } else {
+            panic("expected second Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
 test "lower greedy Star Repeat with TokenRef inner" {
     // `tokens : INT* ;`
     let mut g = empty_grammar(&"T");

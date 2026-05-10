@@ -62,6 +62,9 @@ use {
     group_variant_type_name,
     group_field_base_name,
     group_case_name,
+    general_group_type_name,
+    general_group_field_name,
+    general_group_alt_struct_name,
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { GenContext } from "./gen_context.wado";
@@ -98,6 +101,7 @@ use {
     SingleAltShape,
     TokenOnlyShape,
     SimpleCstShape,
+    GeneralShape,
     FieldDecl,
     FieldKind,
     KindSet,
@@ -522,9 +526,32 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext) -> ScanElement {
         return lower_simple_cst_scan_group(alts, ctx);
     }
     if is_general_group(alts) {
-        panic("TODO Phase 2.x.general: General Group shape (scan side) not implemented yet");
+        return lower_general_scan_group(alts, ctx);
     }
     panic("Group shape (scan side) unrecognised by classifier");
+}
+
+fn lower_general_scan_group(
+    alts: &Array<Alternative>,
+    ctx: &mut GenContext,
+) -> ScanElement {
+    let mut bodies: Array<ScanBody> = [];
+    let mut first_sets: Array<Array<String>> = [];
+    for let alt of alts {
+        let mut elements: Array<ScanElement> = [];
+        for let elem of &alt.elements {
+            elements.push(lower_scan_element(elem, ctx));
+        }
+        bodies.push(ScanBody { elements });
+        let mut visiting: Array<String> = [];
+        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
+    }
+    panic_if_general_group_overlap(&"<scan>", 0, &first_sets);
+    return ScanElement::Group(ScanGroupElem {
+        alts: bodies,
+        dispatch: build_direct_dispatch(&first_sets),
+        lenient: false,
+    });
 }
 
 /// Scan-side twin of `lower_repeat_op`. Same restrictions: greedy
@@ -599,10 +626,17 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
         struct_name = `{base}{case_names[idx]}`;
     }
 
+    // The general-group counter is per-rule but its starting value
+    // for this alt is fixed by `compute_alt_gc_starts`, so init from
+    // there. Each general group encountered while lowering bumps it
+    // by 1 (mirrors `parser_gen::ctx.group_counter`).
+    let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
+    let mut group_counter: i32 = alt_gc_starts[idx];
+
     let mut name_counts: Array<[String, i32]> = [];
     let mut ops: Array<Op> = [];
     for let elem of &alt.elements {
-        ops.push(lower_op(elem, &mut name_counts, &rule.name, ctx));
+        ops.push(lower_op(elem, &mut name_counts, &rule.name, ctx, &mut group_counter));
     }
 
     // Phase 2.9 — full `FieldDecl` enumeration. Today we record only
@@ -658,6 +692,7 @@ fn lower_op(
     name_counts: &mut Array<[String, i32]>,
     rule_name: &String,
     ctx: &mut GenContext,
+    group_counter: &mut i32,
 ) -> Op {
     return match *elem {
         TokenRef(t) => Op::Token(TokenOp {
@@ -687,9 +722,9 @@ fn lower_op(
             kinds: collect_excluded_kinds(&ne.element),
             field: dedup_name(&not_element_field_name(&ne.element), name_counts),
         }),
-        Repeat(rep) => lower_repeat_op(rep, name_counts, rule_name, ctx),
-        Group(g) => lower_group_op(g, name_counts, rule_name, ctx),
-        Label(lab) => lower_label_op(lab, name_counts, rule_name, ctx),
+        Repeat(rep) => lower_repeat_op(rep, name_counts, rule_name, ctx, group_counter),
+        Group(g) => lower_group_op(g, name_counts, rule_name, ctx, group_counter),
+        Label(lab) => lower_label_op(lab, name_counts, rule_name, ctx, group_counter),
     };
 }
 
@@ -717,6 +752,7 @@ fn lower_group_op(
     name_counts: &mut Array<[String, i32]>,
     rule_name: &String,
     ctx: &mut GenContext,
+    group_counter: &mut i32,
 ) -> Op {
     let alts = &g.alternatives;
     if alts.len() == 0 {
@@ -728,9 +764,9 @@ fn lower_group_op(
             panic("Group with empty alt is not a valid lowering input");
         }
         if alt.elements.len() == 1 {
-            return lower_transparent_group(&alt.elements[0], name_counts, rule_name, ctx);
+            return lower_transparent_group(&alt.elements[0], name_counts, rule_name, ctx, group_counter);
         }
-        return lower_single_alt_group(alt, name_counts, rule_name, ctx);
+        return lower_single_alt_group(alt, name_counts, rule_name, ctx, group_counter);
     }
     if is_token_only_group(alts) {
         return lower_token_only_group(alts, name_counts, ctx);
@@ -739,7 +775,7 @@ fn lower_group_op(
         return lower_simple_cst_group(alts, name_counts, ctx);
     }
     if is_general_group(alts) {
-        panic("TODO Phase 2.x.general: General Group shape not implemented yet");
+        return lower_general_group(alts, name_counts, rule_name, ctx, group_counter);
     }
     panic("Group shape unrecognised by classifier — should be impossible");
 }
@@ -751,10 +787,11 @@ fn lower_transparent_group(
     name_counts: &mut Array<[String, i32]>,
     rule_name: &String,
     ctx: &mut GenContext,
+    group_counter: &mut i32,
 ) -> Op {
     require_leaf_element(inner, &"Group (transparent)");
 
-    let inner_op = lower_op(inner, name_counts, rule_name, ctx);
+    let inner_op = lower_op(inner, name_counts, rule_name, ctx, group_counter);
     let body = AltBody {
         alt_index: 0,
         // Transparent groups produce no struct of their own; case /
@@ -799,6 +836,7 @@ fn lower_single_alt_group(
     name_counts: &mut Array<[String, i32]>,
     rule_name: &String,
     ctx: &mut GenContext,
+    group_counter: &mut i32,
 ) -> Op {
     for let elem of &alt.elements {
         require_leaf_element(elem, &"Group (single-alt)");
@@ -813,7 +851,7 @@ fn lower_single_alt_group(
     let mut ops: Array<Op> = [];
     let mut scan_elements: Array<ScanElement> = [];
     for let elem of &alt.elements {
-        ops.push(lower_op(elem, &mut inner_counts, rule_name, ctx));
+        ops.push(lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter));
         scan_elements.push(lower_scan_element(elem, ctx));
     }
 
@@ -1055,6 +1093,114 @@ fn simple_cst_alt_target_name(alt: &Alternative) -> String {
     return "<unknown>";
 }
 
+/// Multi-alt group not covered by `SimpleCst` / `TokenOnly` /
+/// `SingleAlt` — `(stmt | 'go' expr)`. Lowers to
+/// `GroupShape::General` carrying:
+///
+/// * `variant_type = <RuleName>Group<idx>` — the per-rule variant
+///   type that stores one of the alts.
+/// * `alt_struct_names[j] = <RuleName>Group<idx>Alt<j>` — the
+///   per-alt struct name (always allocated, even when an alt is a
+///   single op, so emit can drop a uniform `<Variant>::Alt<j>(...)`
+///   constructor).
+/// * `field = group_<idx>` — deduped against the surrounding alt.
+/// * `group_index = <idx>` — the per-rule cumulative counter; emit
+///   uses this id to look up monomorph table entries and to
+///   resolve the cross-pass general-group enumeration.
+///
+/// Phase 2.x.general handles only the disjoint-first-set case.
+/// Overlapping alts (the typical case for non-trivial groups) need
+/// the scan-tournament dispatch from Phase 2.3c.
+///
+/// Per-alt elements use a fresh name table — the inner ops bind
+/// names inside the group's struct, not the outer alt. The shared
+/// `group_counter` is bumped before lowering inner alts so any
+/// nested general groups get the next sequential ids.
+fn lower_general_group(
+    alts: &Array<Alternative>,
+    name_counts: &mut Array<[String, i32]>,
+    rule_name: &String,
+    ctx: &mut GenContext,
+    group_counter: &mut i32,
+) -> Op {
+    let group_index = *group_counter;
+    *group_counter += 1;
+
+    let variant_type = general_group_type_name(rule_name, group_index);
+    let field = dedup_name(&general_group_field_name(group_index), name_counts);
+
+    let mut first_sets: Array<Array<String>> = [];
+    for let alt of alts {
+        let mut visiting: Array<String> = [];
+        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
+    }
+    panic_if_general_group_overlap(rule_name, group_index, &first_sets);
+
+    let mut bodies: Array<AltBody> = [];
+    let mut scan_bodies: Array<ScanBody> = [];
+    let mut alt_struct_names: Array<String> = [];
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let alt = &alts[i];
+        let alt_struct = general_group_alt_struct_name(rule_name, group_index, i);
+        alt_struct_names.push(alt_struct);
+
+        // Inner alts get a fresh name table (the group struct is
+        // its own scope) but share the outer rule's
+        // `group_counter` — nested general groups inside this
+        // alt take the next sequential ids.
+        let mut inner_counts: Array<[String, i32]> = [];
+        let mut ops: Array<Op> = [];
+        let mut scan_elements: Array<ScanElement> = [];
+        for let elem of &alt.elements {
+            ops.push(lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter));
+            scan_elements.push(lower_scan_element(elem, ctx));
+        }
+
+        bodies.push(AltBody {
+            alt_index: i,
+            // emit constructs `<Variant>::Alt<j>(...)`; case name is
+            // the literal `Alt<j>` so codegen does not need to
+            // re-derive it.
+            case_name: `Alt{i}`,
+            struct_name: alt_struct,
+            ops: ops,
+            fields: [],
+            group_index_start: 0,
+            prefix_self_ref_min_prec: 0,
+        });
+        scan_bodies.push(ScanBody { elements: scan_elements });
+    }
+    let dispatch = build_direct_dispatch(&first_sets);
+    return Op::Group(GroupOp {
+        shape: GroupShape::General(GeneralShape {
+            variant_type: variant_type,
+            alt_struct_names: alt_struct_names,
+            field: field,
+            group_index: group_index,
+        }),
+        alts: bodies,
+        scan_alts: scan_bodies,
+        dispatch: dispatch,
+        scan_dispatch: clone_dispatch(&dispatch),
+    });
+}
+
+fn panic_if_general_group_overlap(
+    rule_name: &String,
+    group_index: i32,
+    first_sets: &Array<Array<String>>,
+) {
+    for let mut i = 0; i < first_sets.len(); i += 1 {
+        for let mut j = i + 1; j < first_sets.len(); j += 1 {
+            for let tk of &first_sets[i] {
+                if first_set_contains(&first_sets[j], tk) {
+                    panic(`TODO Phase 2.3c: General group {*rule_name}Group{group_index} alts ({i}, {j}) share token {*tk}`);
+                }
+            }
+        }
+    }
+}
+
 /// Lower a `Repeat` element (`e?` / `e*` / `e+`). Phase 2.x.partial
 /// only handles greedy `Star` / `Plus` whose inner is a leaf
 /// element (no nested `Repeat` / `Group` / `Label`). The remaining
@@ -1078,6 +1224,7 @@ fn lower_repeat_op(
     _name_counts: &mut Array<[String, i32]>,
     rule_name: &String,
     ctx: &mut GenContext,
+    group_counter: &mut i32,
 ) -> Op {
     if rep.non_greedy {
         panic("TODO Phase 2.x.nongreedy: non-greedy Repeat needs follow-set analysis");
@@ -1088,7 +1235,7 @@ fn lower_repeat_op(
     require_leaf_element(&rep.element, &"Repeat");
 
     let mut inner_counts: Array<[String, i32]> = [];
-    let body = lower_op(&rep.element, &mut inner_counts, rule_name, ctx);
+    let body = lower_op(&rep.element, &mut inner_counts, rule_name, ctx, group_counter);
     return Op::Repeat(RepeatOp {
         kind: rep.kind,
         body,
@@ -1127,6 +1274,7 @@ fn lower_label_op(
     name_counts: &mut Array<[String, i32]>,
     rule_name: &String,
     ctx: &mut GenContext,
+    group_counter: &mut i32,
 ) -> Op {
     if lab.list {
         panic("TODO Phase 2.9: list-label (`+=`) lowering requires Array-typed FieldDecl");
@@ -1137,7 +1285,7 @@ fn lower_label_op(
     // we'll throw away the inner field name and use `label_field`
     // instead.
     let mut inner_counts: Array<[String, i32]> = [];
-    let inner_op = lower_op(&lab.element, &mut inner_counts, rule_name, ctx);
+    let inner_op = lower_op(&lab.element, &mut inner_counts, rule_name, ctx, group_counter);
     return rebind_op_field(inner_op, &label_field);
 }
 
