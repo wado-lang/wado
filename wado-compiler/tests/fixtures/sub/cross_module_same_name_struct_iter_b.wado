@@ -1,0 +1,15 @@
+// Module B: declares `pub struct Pair` with a different field shape
+// from module A's same-named private struct, plus a wrapping
+// container struct so the test entry can construct
+// `Outer { items: [Pair { ... }] }` (struct literal in array literal
+// in struct field — the WIR layout this regression targets).
+
+use { drive } from "./cross_module_same_name_struct_iter_a.wado";
+
+pub struct Outer {
+    pub items: Array<Pair>,
+}
+
+pub struct Pair {
+    pub indices: Array<i32>,
+}

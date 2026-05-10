@@ -1,0 +1,20 @@
+// Module A: defines a private `struct Pair` whose name COLLIDES
+// with the public struct in module B. Module A's function does:
+//   * binds a local `let mut pairs: Array<Pair> = []`
+//   * iterates `for let p of &mut pairs` and writes to a struct field
+//
+// The combination forces WIR codegen down a path that previously
+// confused module A's `Pair` with module B's same-named `Pair`,
+// emitting `struct.new <wrong-id>` and failing Wasm GC validation
+// with "expected (ref null $T), found (ref (exact $T))".
+
+struct Pair {
+    counts: Array<i32>,
+}
+
+pub fn drive() {
+    let mut pairs: Array<Pair> = [];
+    for let p of &mut pairs {
+        p.counts.push(1);
+    }
+}
