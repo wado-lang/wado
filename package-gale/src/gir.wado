@@ -1,0 +1,851 @@
+//! Gale IR (GIR) — the lowered IR consumed by parser code generation.
+//!
+//! The pipeline is:
+//!
+//! ```text
+//! .g4 source ──parse──► Grammar (surface IR, ir.wado)
+//!                ──lower──► LoweredGrammar (this module, gir.wado)
+//!                ──emit──► Wado source
+//! ```
+//!
+//! `Grammar` mirrors the .g4 syntax. `LoweredGrammar` is the form
+//! parser emit consumes after every analysis decision (rule shape,
+//! multi-alt dispatch, LR precedence, follow variants, group shape,
+//! repeat strategy, field deduplication, scan/parse symmetry) is
+//! committed at lower time. emit becomes a structural translation
+//! that does not consult `Grammar`.
+//!
+//! Design constraints:
+//!
+//! * Self-contained surface — does **not** re-export `ir::Element`,
+//!   `ir::ParserRule`, etc. `Element` here is the lowered element
+//!   type. This is deliberate: the boundary exists so emit cannot
+//!   reach back to surface IR for an ad-hoc decision. Modules that
+//!   bridge (i.e. `lower.wado`) import the surface IR with `as`
+//!   aliases.
+//! * Pure data — no methods that perform analysis. Constructors that
+//!   help with frequent shapes are allowed; they must not consult
+//!   the original grammar.
+//! * Stable across runs — every collection that influences generated
+//!   identifiers (kind-set ids, follow-variant ids, group indices,
+//!   field-name dedup counters) is laid out by `lower` in
+//!   deterministic order.
+//!
+//! Reused from the surface IR: `Visibility`, `OptionValue`,
+//! `GrammarOption`, `NamedAction`, `LexerRule`, `RepeatKind`. These
+//! are pure markers or unmodified passthrough data; duplicating them
+//! would invite drift without semantic benefit.
+
+use {
+    Visibility,
+    OptionValue,
+    GrammarOption,
+    NamedAction,
+    LexerRule,
+    RepeatKind,
+} from "./ir.wado";
+use { LitToken } from "./lexer_gen.wado";
+
+// ==========================================================================
+// Top-level
+// ==========================================================================
+
+/// The complete lowered grammar consumed by parser-side code
+/// generation. Lexer / visitor / highlight emission still take
+/// surface `Grammar` in v1; their data is included here so that a
+/// future migration can drop the surface IR entirely.
+///
+/// Construction is the responsibility of `lower(Grammar)`; consumers
+/// treat all fields as read-only. The struct is plain data so a
+/// `LoweredGrammar` value can be borrowed across emit functions
+/// without a `&mut` ceremony.
+pub struct LoweredGrammar {
+    /// Grammar name (`grammar Foo;`). Drives generated identifiers
+    /// and the entry module filename.
+    pub name: String,
+    /// `.g4` source paths the grammar was assembled from. Round-tripped
+    /// into the generated header's `#![generated(... sources = [...])]`.
+    pub source_files: Array<String>,
+    /// Grammar-level options from `options { ... }` prequels. Only
+    /// surfaced as a comment block by `gen_grammar_metadata`; carried
+    /// for round-trip visibility.
+    pub options: Array<GrammarOption>,
+    /// Grammar-level `@name { ... }` actions. Same comment-block
+    /// passthrough as `options`.
+    pub named_actions: Array<NamedAction>,
+    /// Lexer rules in source order. Lexer emission consumes these
+    /// directly (no per-rule lowering performed in v1). The vector
+    /// includes `is_virtual = true` entries from `tokens { }` blocks.
+    pub lexer_rules: Array<LexerRule>,
+    /// Mode names indexed by `LexerRule.mode` / `set_mode` /
+    /// `push_mode`. Index 0 is always `DEFAULT_MODE`.
+    pub mode_names: Array<String>,
+    /// Channel registry from `channels { }` blocks plus the
+    /// implicit defaults. Carried for lexer emission.
+    pub channels: Array<String>,
+    /// Literal tokens (`'foo'` occurrences in parser rules) collected
+    /// and assigned `LIT_<id>` constants. Computed once during
+    /// lowering and reused by both lexer and parser emission.
+    pub lit_tokens: Array<LitToken>,
+    /// Lowered parser rules in source order. `parser_rules[0]` is the
+    /// start rule (per ANTLR4 convention) and seeds `gen_parse_entry`.
+    pub parser_rules: Array<Rule>,
+    /// Follow-aware variant rules registered during lowering.
+    /// Variants are emitted as additional `parse_<rule>__follow_<id>`
+    /// / `scan_<rule>__follow_<id>` functions; their bodies are
+    /// independent `Rule` values whose `mask` field is non-empty.
+    /// Distinct from `parser_rules` so emit can iterate variants
+    /// without filtering and so the regular-rule emission order is
+    /// stable regardless of variant registration.
+    pub variant_rules: Array<Rule>,
+    /// Interned multi-element token-kind sets. `lower` rewrites every
+    /// `<expr> matches { TK_X | TK_Y | ... }` decision into a
+    /// `_gale_kind_set_<id>(<expr>)` call; this list drives the
+    /// helper-function emission.
+    pub kind_sets: Array<KindSet>,
+}
+
+// ==========================================================================
+// Rules
+// ==========================================================================
+
+/// A lowered parser rule. The variant captures the rule-level
+/// dispatch shape; element-level lowering lives inside `Body` /
+/// `AltBody`.
+///
+/// Surface-IR `ParserRule.alternatives` is split here based on the
+/// rule's parse strategy:
+///
+/// * `Simple` — exactly one alternative, no dispatch needed.
+/// * `MultiAlt` — two or more alternatives, none of which is
+///   left-recursive.
+/// * `LeftRecursive` — at least one alternative is directly
+///   left-recursive (its first non-trivial element is a self-ref).
+///   Non-LR alternatives become the `atom` body; LR alternatives
+///   become `lr_alts`.
+pub variant Rule {
+    Simple(SimpleRule),
+    MultiAlt(MultiAltRule),
+    LeftRecursive(LeftRecursiveRule),
+}
+
+/// Information common to every rule shape, gathered into a single
+/// header struct so the variant-payload structs don't repeat the
+/// fields. Keeps `Rule` traversals uniform: `rule_header(&rule)`
+/// returns this regardless of the variant.
+pub struct RuleHeader {
+    /// Rule name as it appears in the .g4 source (`expr`, `select_stmt`).
+    pub name: String,
+    /// `to_snake_case(name)` cached at lowering time. Drives
+    /// `parse_<snake>` / `scan_<snake>` function names.
+    pub snake_name: String,
+    /// `escape_ident(snake_name)` cached at lowering time. Used as a
+    /// standalone field name when the rule appears inside another
+    /// struct.
+    pub field_name: String,
+    /// CST struct/variant type name (`ExprNode`).
+    pub type_name: String,
+    /// `pub` / `protected` / `private` / default. Only `Default` and
+    /// `Public` affect generated visibility today; the rest are
+    /// preserved for round-trip / future tooling.
+    pub visibility: Visibility,
+    /// `Some(v)` when this rule is a follow-aware variant of the
+    /// regular rule with the same `name`. The mask in `v` drives
+    /// tail-greedy suppression in the variant body, and `v.id`
+    /// drives the variant's function-name suffix.
+    pub variant_of: Option<FollowVariant>,
+    /// Cached `case_names_for_rule(&rule.alternatives)`. Empty for
+    /// `Simple`. Indexed by alt position in the original rule body.
+    pub case_names: Array<String>,
+    /// Number of general-storable groups present anywhere in the
+    /// rule body, in lexical order. Cached so emit can lay out
+    /// per-alt counter starts via `alt_gc_starts` without
+    /// re-walking the IR.
+    pub alt_gc_starts: Array<i32>,
+}
+
+/// Single-alternative rule. The body is emitted directly inside
+/// `parse_<snake>` / `scan_<snake>` with no dispatch.
+pub struct SimpleRule {
+    pub header: RuleHeader,
+    pub body: AltBody,
+    pub scan_body: ScanBody,
+}
+
+/// Multi-alternative rule (no left recursion). Each alt is emitted
+/// either inline (when the alt is the only one in its overlap
+/// group) or as a `parse_<snake>_bt_<idx>` helper plus a
+/// dispatch entry.
+pub struct MultiAltRule {
+    pub header: RuleHeader,
+    /// One per alternative in original source order. The vector
+    /// runs parallel to the alt index; multi-alt dispatch refers to
+    /// alts by their original index, not by the order of appearance
+    /// in any group.
+    pub alts: Array<AltBody>,
+    /// Scan-side counterpart of `alts`, again indexed by original
+    /// alt index.
+    pub scan_alts: Array<ScanBody>,
+    /// Parse-side dispatch shape between the alternatives.
+    pub dispatch: MultiAltDispatch,
+    /// Scan-side dispatch shape. Frequently differs from `dispatch`:
+    /// scan side uses first-success-wins on
+    /// `sort_group_by_element_count` ordering, parse side uses
+    /// `sort_group_by_specificity`. Both decisions are made at lower
+    /// time so emit doesn't reproduce the sort logic.
+    pub scan_dispatch: MultiAltDispatch,
+}
+
+/// Direct left-recursive rule. The atom holds the non-LR alternatives
+/// (potentially multi-alt itself); the LR alternatives are decomposed
+/// into prefix-stripped suffixes plus the metadata required to
+/// emit precedence-climbing dispatch.
+pub struct LeftRecursiveRule {
+    pub header: RuleHeader,
+    /// Non-LR alternatives, lowered as a single multi-alt body. When
+    /// only one non-LR alt exists, this is still a `MultiAltRule`
+    /// with a `MultiAltDispatch::Direct` that has a single branch —
+    /// emit treats both cases uniformly.
+    pub atom: MultiAltRule,
+    /// LR alternatives (those whose first non-trivial element is a
+    /// self-ref to this rule), in original source order. Each carries
+    /// its own precedence assignment, conflict bound, last self-ref
+    /// position, and suffix first-set.
+    pub lr_alts: Array<LrAlt>,
+    /// Precedence-aware dispatch metadata for the LR suffix loop.
+    /// Captures the overlap groups between LR suffix first-sets and
+    /// the second-token disambiguation needed when first-tokens
+    /// collide.
+    pub lr_dispatch: LrDispatchData,
+}
+
+/// One left-recursive alternative, with the prefix self-reference
+/// stripped and replaced by precedence-climbing semantics.
+pub struct LrAlt {
+    /// Index of the alternative in the original rule body. Drives
+    /// the `_lr_<idx>` suffix-helper function name.
+    pub alt_index: i32,
+    /// CST case name (e.g. `BinaryExpr`) for the alt. Mirrors the
+    /// surface case_names entry for the same alt index.
+    pub case_name: String,
+    /// CST struct name for the alt's payload (e.g. `ExprBinaryExpr`).
+    pub struct_name: String,
+    /// Suffix elements (everything after the leading self-ref). The
+    /// suffix's first element is what the prediction loop dispatches
+    /// on; an LR alt with no suffix elements (`expr : expr`) is
+    /// degenerate and not registered here.
+    pub suffix: AltBody,
+    /// Scan-side mirror of `suffix`.
+    pub scan_suffix: ScanBody,
+    /// Precedence assigned to this alt by ANTLR4's left-recursion
+    /// rewrite. The LAST LR alt has the highest precedence; ties
+    /// follow source order. Right-associative alts use this same
+    /// value for the inner self-ref call (`min_prec = own_prec`),
+    /// left-associative use `own_prec + 1`.
+    pub own_prec: i32,
+    /// Minimum precedence required for the loop to enter this alt.
+    /// Equal to `own_prec` for left-associative and
+    /// `own_prec + 1`-derived adjustments for right-associative; the
+    /// exact recipe is fixed in `compute_lr_conflict_min_prec`.
+    pub conflict_min: i32,
+    /// Index (within the alt's elements) of the LAST self-reference
+    /// to the enclosing rule. -1 if there is no internal self-ref
+    /// beyond the leading-prefix one. Used by emit so the trailing
+    /// self-ref drops back to the LR loop with the right precedence.
+    pub last_self_ref_idx: i32,
+    /// First set of the LR suffix (i.e. the tokens that begin
+    /// `elements[1..]`). Drives the precedence-aware dispatch
+    /// in the LR loop.
+    pub suffix_first: Array<String>,
+    /// True for `<assoc=right>` alts (driven by the alt option
+    /// block, not source order). Affects how `own_prec` is reused
+    /// for the trailing self-ref.
+    pub right_associative: bool,
+}
+
+/// LR suffix dispatch metadata. The fields mirror
+/// `compute_lr_dispatch_data` in legacy `parser_gen.wado`, but
+/// computed once and stored.
+pub struct LrDispatchData {
+    /// Indices into `LeftRecursiveRule.lr_alts` of the alternatives
+    /// that have a non-empty suffix. The degenerate `expr : expr`
+    /// case is filtered out.
+    pub valid_lr_alts: Array<i32>,
+    /// Overlap groups between the suffix first-sets. Each inner
+    /// array lists indices into `valid_lr_alts`.
+    pub groups: Array<Array<i32>>,
+}
+
+/// Metadata for one follow-aware variant of a rule. Variants exist
+/// to suppress tail-greedy iterations whose first set collides with
+/// the caller's local FOLLOW. The pair `(rule_name, mask)` keys the
+/// `lower`-time interning, and `id` drives the variant-function-name
+/// suffix `__follow_<id>`. See `package-gale/AGENTS.md` for the LL
+/// invariants the variant emit must respect.
+pub struct FollowVariant {
+    /// Variant id, assigned in registration order during lowering.
+    /// Stable across runs because lower walks the grammar in
+    /// deterministic order.
+    pub id: i32,
+    /// The rule this variant specialises. The variant's body shares
+    /// shape with the regular rule's body but applies `mask` as
+    /// additional follow.
+    pub rule_name: String,
+    /// Canonical (sorted, unique) intersection of `caller_follow`
+    /// and `tail_greedy_first(rule)` at the call sites that
+    /// triggered registration. Drives suppression in
+    /// `RepeatStrategy::WithFollowSubtraction` and friends.
+    pub mask: Array<String>,
+    /// True when the variant has at least one scan-side caller.
+    /// Drives whether `scan_<rule>__follow_<id>` is emitted.
+    pub scan_used: bool,
+    /// True when the variant has at least one parse-side caller.
+    /// Drives whether `parse_<rule>__follow_<id>` is emitted.
+    pub parse_used: bool,
+}
+
+// ==========================================================================
+// Multi-alt dispatch
+// ==========================================================================
+
+/// How a multi-alternative rule (or rule atom) dispatches between its
+/// alts at parse time. Lowering picks exactly one variant per multi-
+/// alt body; emit pattern-matches the variant and translates each
+/// shape into the corresponding `if` chain / scan tournament / save-
+/// rewind cascade.
+pub variant MultiAltDispatch {
+    /// Alts have disjoint first-sets — straight token-led `if/else if`
+    /// chain followed by an error fallback. Used by the bulk of
+    /// "normal" rules.
+    Direct(DirectDispatch),
+    /// Two or more alts share a first-token but their LL prefixes
+    /// disambiguate within bounded lookahead. Each overlap group
+    /// carries a `PredictionNode` that emit translates into an
+    /// `if (peek) { ... } else if (peek_at(1)) { ... }` cascade.
+    Predict(PredictDispatch),
+    /// All non-last alts have full scan helpers (cover the entire
+    /// alternative). Emit runs every scan, picks the longest, parses
+    /// the winner. Equivalent to ANTLR4's longest-match LL choice.
+    Tournament(TournamentDispatch),
+    /// Mixed scannability — some alts have full scans, some partial,
+    /// some none. Emit cascades through them in
+    /// `sort_group_by_element_count` order, using whatever predicate
+    /// each alt provides.
+    PartialScan(PartialScanDispatch),
+    /// No alt has a scan helper. Emit save-and-rewinds the parser
+    /// position for each alt in turn. Last fallback in lowering's
+    /// dispatch decision.
+    SaveRewind(SaveRewindDispatch),
+}
+
+/// Token-led dispatch for non-overlapping alts.
+pub struct DirectDispatch {
+    /// One branch per alt, in the order emit should test them.
+    /// `tokens` is the alt's first-set; `alt_index` is the original
+    /// alt position. Branches with overlapping `tokens` are not
+    /// permitted — those land in `Predict` instead.
+    pub branches: Array<DispatchBranch>,
+}
+
+pub struct DispatchBranch {
+    pub tokens: Array<String>,
+    pub alt_index: i32,
+}
+
+/// Prediction-tree dispatch for overlapping alt prefixes.
+pub struct PredictDispatch {
+    /// Overlap groups in their dispatch order. Each group whose
+    /// `alts.len() == 1` is a degenerate single-alt entry; multi-alt
+    /// groups carry a non-empty `prediction` tree.
+    pub groups: Array<DispatchGroup>,
+}
+
+pub struct DispatchGroup {
+    /// Union of the alts' first-sets in this group. emit uses this
+    /// as the outer guard before descending into the prediction
+    /// tree.
+    pub union_first: Array<String>,
+    /// Original alt indices contained in this group, sorted by the
+    /// dispatch ordering picked at lower time
+    /// (`sort_group_by_specificity` for parse,
+    /// `sort_group_by_element_count` for scan).
+    pub alts: Array<i32>,
+    /// Pre-built prediction tree resolving the group. Empty
+    /// (`PredictionNode::Leaf` of the single alt) when `alts.len()
+    /// == 1`; non-trivial otherwise.
+    pub prediction: PredictionNode,
+}
+
+/// Scan tournament dispatch.
+pub struct TournamentDispatch {
+    /// Original alt indices in dispatch order
+    /// (`sort_group_by_element_count`). The longest-match scan
+    /// winner triggers the corresponding `parse_<rule>_bt_<idx>`.
+    pub alts: Array<i32>,
+}
+
+/// Mixed-scannability cascade.
+pub struct PartialScanDispatch {
+    pub alts: Array<PartialScanAlt>,
+}
+
+pub struct PartialScanAlt {
+    pub alt_index: i32,
+    pub scan_kind: ScanKind,
+}
+
+pub variant ScanKind {
+    /// No scan helper. Emit speculatively parses with save-and-
+    /// rewind on failure.
+    None,
+    /// Scan helper exists but covers only a prefix of the alt.
+    /// Success is a hint, not a guarantee.
+    Partial,
+    /// Scan helper covers the entire alt. Success implies parse
+    /// success.
+    Full,
+}
+
+/// Save-rewind cascade — no alt has a scan helper.
+pub struct SaveRewindDispatch {
+    /// Alt indices in fall-through order. The last entry is the
+    /// terminal alt whose error message is emitted on total
+    /// failure.
+    pub alts: Array<i32>,
+}
+
+// ==========================================================================
+// Body and elements
+// ==========================================================================
+
+/// One alt body — the lowered form of a surface `Alternative`.
+///
+/// `fields` is ordered for the CST struct emission; `elements` drives
+/// the parse-time emission. Both are derived from the same surface
+/// alt; emitting them in parallel keeps struct-field order in lockstep
+/// with the order locals are bound, which is what
+/// `gen_field_assignments` relies on.
+pub struct AltBody {
+    /// Index into the enclosing rule's `alts` vector. Stable across
+    /// lowering / scan / parse / variant emission.
+    pub alt_index: i32,
+    /// CST case name (`Str`, `Number`, `Plus`). Empty for
+    /// `Simple` rules where the rule body itself is the struct.
+    pub case_name: String,
+    /// CST struct name for this alt's payload (`ValueStr`,
+    /// `ExprPlus`, etc.). Equal to the rule's struct name for
+    /// `Simple` rules.
+    pub struct_name: String,
+    /// Lowered ops, in lexical order. `Repeat` strategies are
+    /// already chosen; `Group` shapes are already chosen; `Label`
+    /// nodes have been collapsed into the wrapped op's `field`
+    /// attribute.
+    pub ops: Array<Op>,
+    /// CST struct field declarations in struct order. Includes the
+    /// `span: Span` field as the first entry.
+    pub fields: Array<FieldDecl>,
+    /// Starting value of `general_group` counter for this alt.
+    /// Cumulative across alts in source order so general-group type
+    /// names are stable.
+    pub group_index_start: i32,
+    /// `min_prec` to pass to a self-recursive `RuleCall` inside this
+    /// body. 0 when the alt is not a prefix-LR alt; positive value
+    /// when ANTLR4's left-recursion rewrite assigns a precedence to
+    /// the prefix self-ref. Surfaced as a per-alt field rather than
+    /// per-element so prefix alts in non-LR contexts (which today
+    /// pass through `compute_prefix_self_ref_min_prec`) are decided
+    /// once at lower time.
+    pub prefix_self_ref_min_prec: i32,
+}
+
+/// One lowered op — the per-position unit of work in a parse-time
+/// alt body. Named `Op` rather than `Element` to keep the GIR
+/// variant disjoint from `ir::Element` (Wado's variant resolver
+/// hits a global table by variant name; reusing `Element` would
+/// alias one case space onto the other).
+///
+/// The variant tag selects the emit shape; the payload struct
+/// carries the resolved attributes (token kind, dedupped field name,
+/// follow-variant id, min-prec arg, etc.) that emit needs. Case
+/// names within `Op` are scoped under the variant so they do not
+/// collide with `ir::Element` cases of the same spelling.
+pub variant Op {
+    /// Named token reference (`ID`, `INT`, ...). `kind` is the
+    /// global `TK_<name>` constant; emit produces
+    /// `let <field> = p.expect(<kind>)?;`.
+    Token(TokenOp),
+    /// Inline string literal (`'+'`, `'fn'`). `kind` is the
+    /// `LIT_<id>` constant assigned by `lower`'s literal collection
+    /// pass.
+    Literal(LiteralOp),
+    /// Call into another rule. Carries the resolved variant id,
+    /// min-prec arg, and dedupped binding name so emit doesn't
+    /// reproduce the variant interning logic.
+    RuleCall(RuleCallOp),
+    /// `.` wildcard. Consumes one token of any kind (matches
+    /// `match_any` at runtime).
+    Wildcard(WildcardOp),
+    /// `~ X` set complement. `kinds` is the resolved exclusion set;
+    /// emit produces `p.match_not([...])` (or `match_not_via_X` if
+    /// the inner is a single-token RuleRef rule, recovered via
+    /// `not_match_call`'s lower-time analogue).
+    Excluded(ExcludedOp),
+    /// `e?` / `e*` / `e+`. `strategy` selects the loop shape; emit
+    /// is structural.
+    Repeat(RepeatOp),
+    /// `(...)` grouping. The shape determines whether the group is
+    /// a storable subtree, a token-only field, a single-alt struct,
+    /// a general variant, or a transparent inlining.
+    Group(GroupOp),
+}
+
+pub struct TokenOp {
+    /// Global `TK_<name>` token kind constant.
+    pub kind: String,
+    /// Dedupped field name in the enclosing alt's CST struct.
+    /// Already includes the `_2` / `_3` suffix where needed.
+    pub field: String,
+}
+
+pub struct LiteralOp {
+    /// `LIT_<id>` constant assigned during literal collection.
+    pub kind: String,
+    /// Dedupped field name. `lower` derives the base name from
+    /// `literal_field_name` and applies dedup.
+    pub field: String,
+}
+
+pub struct RuleCallOp {
+    /// Target rule name as it appears in `.g4`. Drives parser-rule
+    /// lookup at lower time; emit uses `target_snake` for the
+    /// generated function name.
+    pub target_name: String,
+    /// `to_snake_case(target_name)` cached at lowering.
+    pub target_snake: String,
+    /// `Some(id)` when this call site selected a follow-aware
+    /// variant; emit appends `__follow_<id>` to the function name.
+    pub variant_id: Option<i32>,
+    /// `Some(p)` when the call should pass `p` as the `min_prec`
+    /// argument. Set for self-recursive calls inside prefix LR alts.
+    /// `None` is the default and corresponds to
+    /// `parse_<rule>(p)` / `scan_<rule>(tokens, pos)` (both signatures
+    /// accept a defaulted `min_prec = 0`).
+    pub min_prec_arg: Option<i32>,
+    /// Dedupped field name in the enclosing alt's struct.
+    pub field: String,
+}
+
+pub struct WildcardOp {
+    pub field: String,
+}
+
+pub struct ExcludedOp {
+    /// Exclusion set. emit renders this as a literal token-array
+    /// passed to `p.match_not([...])`.
+    pub kinds: Array<String>,
+    pub field: String,
+}
+
+pub struct RepeatOp {
+    pub kind: RepeatKind,
+    /// Inner op (recursive — single-element only). Wado allows
+    /// the recursive type-reference; the variant boxes through the
+    /// payload struct.
+    pub body: Op,
+    pub strategy: RepeatStrategy,
+}
+
+pub struct GroupOp {
+    pub shape: GroupShape,
+    /// Alts inside the group, lowered in their own AltBody form.
+    /// For `Transparent` shape there is exactly one alt and its body
+    /// inlines into the surrounding sequence at emit.
+    pub alts: Array<AltBody>,
+    /// Scan-side mirror.
+    pub scan_alts: Array<ScanBody>,
+    /// Parse-time dispatch when the group has multiple alts. For
+    /// single-alt groups this is `MultiAltDispatch::Direct` with one
+    /// branch.
+    pub dispatch: MultiAltDispatch,
+    pub scan_dispatch: MultiAltDispatch,
+}
+
+/// How an `e?` / `e*` / `e+` repeat is emitted at parse time. The
+/// strategy is decided once by `lower`, so emit doesn't reproduce the
+/// "is the inner storable? does it have a follow? is it non-greedy?"
+/// fan-out that legacy `gen_repeat_body` performs.
+pub variant RepeatStrategy {
+    /// Plain greedy loop. `while peek in first { ... }` for `*` /
+    /// `+`; bare `if peek in first { ... }` for `?`.
+    Plain,
+    /// `?` over a `RuleRef`-shaped inner with a non-empty caller-
+    /// local FOLLOW. The effective first set already has the caller
+    /// follow subtracted at lower time, so emit just guards on the
+    /// reduced set.
+    WithFollowSubtraction(WithFollowSubtractionStrategy),
+    /// Non-greedy `*?` / `+?` / `??`. Exit conditions are computed
+    /// from the surrounding alt's follow at lower time.
+    NonGreedy(NonGreedyStrategy),
+    /// `?` over a `Group` whose inner alt has been linearised into a
+    /// shape lookahead signature. emit conditional-or's the
+    /// per-position kind checks.
+    OptionalLookahead(OptionalLookaheadStrategy),
+    /// `?` over a non-storable inner where lookahead can't decide;
+    /// emit uses a save-and-scan-then-rewind guard.
+    OptionalScanGuard,
+    /// The repeat is fully suppressed by the enclosing variant's
+    /// follow mask — emit replaces the whole repeat with a
+    /// `let <field>: Option<T> = null;` (or nothing for non-storable
+    /// inners). Variants register this when every first-token of the
+    /// repeat body lies in the mask.
+    Suppressed,
+}
+
+pub struct WithFollowSubtractionStrategy {
+    /// First-set of the inner, already with the caller-local FOLLOW
+    /// subtracted. emit guards on `peek_kind() ∈ effective_first`.
+    pub effective_first: Array<String>,
+}
+
+pub struct NonGreedyStrategy {
+    /// Tokens that may follow the loop. Drives the exit condition
+    /// `peek_kind() ∉ exit_first ∨ further-lookahead`.
+    pub exit_first: Array<String>,
+    /// Second-token disambiguation when `exit_first` overlaps with
+    /// the inner's first. Empty when not needed.
+    pub exit_second: Array<String>,
+}
+
+pub struct OptionalLookaheadStrategy {
+    /// Linearised lookahead signatures for each shape of the inner
+    /// group. Each inner array is a per-position token set; the
+    /// outer array enumerates the alternatives. emit emits a
+    /// disjunction of per-shape conjunctions.
+    pub sigs: Array<Array<Array<String>>>,
+}
+
+/// How a `(...)` group is realised in the CST and at parse time.
+pub variant GroupShape {
+    /// Multi-alt group whose every alt is a single `RuleRef` to a
+    /// distinct rule (`(stmt | expr | decl)`). Emitted as a CST
+    /// variant (`StmtOrExprOrDecl`).
+    SimpleCst(SimpleCstShape),
+    /// Multi-alt group whose every alt is a single `TokenRef` /
+    /// `Literal`. Emitted as a single `Token` field.
+    TokenOnly(TokenOnlyShape),
+    /// Single-alt group whose body deserves its own struct
+    /// (`(name=ID '=' expr)`). The struct is shared across rules
+    /// when its shape is identical.
+    SingleAlt(SingleAltShape),
+    /// General multi-alt group not covered by `SimpleCst` /
+    /// `TokenOnly` (`(stmt | 'go' expr)`). Emitted as a per-rule
+    /// variant (`<RuleName>Group<idx>`).
+    General(GeneralShape),
+    /// Group whose alts are inlined directly into the surrounding
+    /// alt body without a struct of their own. `(a b)` flattens to
+    /// `a b`. The group still gates dispatch when the alts have
+    /// distinct first-sets.
+    Transparent,
+}
+
+pub struct SimpleCstShape {
+    /// `<Variant>` type name shared across rules with identical
+    /// alt-shape.
+    pub type_name: String,
+    pub field: String,
+}
+
+pub struct TokenOnlyShape {
+    pub field: String,
+}
+
+pub struct SingleAltShape {
+    pub struct_name: String,
+    pub field: String,
+    /// Rule that owns the struct's general-group sub-type names
+    /// when the single-alt body contains nested general groups.
+    /// Drives `general_group_type_name` resolution; mirrors the
+    /// legacy `single_alt_owner` map.
+    pub owner_rule: String,
+}
+
+pub struct GeneralShape {
+    /// `<RuleName>Group<idx>` variant type name.
+    pub variant_type: String,
+    /// Per-alt struct names (`<RuleName>Group<idx>Alt<j>`).
+    pub alt_struct_names: Array<String>,
+    pub field: String,
+    /// Group counter id, stable across runs and matching the
+    /// `gen_cst_types` enumeration order.
+    pub group_index: i32,
+}
+
+// ==========================================================================
+// Scan-side IR
+// ==========================================================================
+
+/// Scan-side body — the `scan_<rule>` predicate's lowered form. Scan
+/// emission is structurally simpler than parse: no field bindings,
+/// no struct construction, just a token-stream walk that returns a
+/// new `pos` (or `-1` for failure). The IR is symmetric to the
+/// parse side but drops the storage decisions.
+pub struct ScanBody {
+    pub elements: Array<ScanElement>,
+}
+
+pub variant ScanElement {
+    Token(ScanTokenElem),
+    /// `RuleCall` mirror — resolved variant id and min-prec arg are
+    /// already baked in.
+    RuleCall(ScanRuleCallElem),
+    Wildcard,
+    Excluded(ScanExcludedElem),
+    Repeat(ScanRepeatElem),
+    Group(ScanGroupElem),
+    /// `?`-over-group lowered with the same shape signature as the
+    /// parse-side `OptionalLookaheadStrategy`. Exists in scan IR
+    /// because scan-side has its own `gen_scan_optional_with_lookahead`.
+    OptionalLookahead(ScanOptionalLookaheadElem),
+}
+
+pub struct ScanTokenElem {
+    pub kind: String,
+}
+
+pub struct ScanRuleCallElem {
+    pub target_snake: String,
+    pub variant_id: Option<i32>,
+    /// Always emit a `min_prec` argument so the call site is
+    /// uniform regardless of LR. `0` when the parse side did not
+    /// override.
+    pub min_prec_arg: i32,
+}
+
+pub struct ScanExcludedElem {
+    pub kinds: Array<String>,
+}
+
+pub struct ScanRepeatElem {
+    pub kind: RepeatKind,
+    pub body: ScanElement,
+    pub strategy: ScanRepeatStrategy,
+}
+
+pub variant ScanRepeatStrategy {
+    Plain,
+    WithFollowSubtraction(WithFollowSubtractionStrategy),
+    NonGreedy(NonGreedyStrategy),
+    Suppressed,
+}
+
+pub struct ScanGroupElem {
+    /// Multi-alt scan dispatch.
+    pub alts: Array<ScanBody>,
+    pub dispatch: MultiAltDispatch,
+    /// True for "lenient" groups whose dispatch may bail out
+    /// without advancing on no match (used for `?`-over-group).
+    pub lenient: bool,
+}
+
+pub struct ScanOptionalLookaheadElem {
+    pub sigs: Array<Array<Array<String>>>,
+    pub body: ScanBody,
+}
+
+// ==========================================================================
+// Prediction tree
+// ==========================================================================
+
+/// A pre-built prediction tree for an overlapping group. The shape is
+/// the same one `parser_gen.wado::PredictionNode` carries today; it
+/// has been hoisted into GIR because lower owns the analysis (SLL
+/// closure / advance / dedup) and emit translates 1:1.
+pub variant PredictionNode {
+    /// All paths that reach here have collapsed onto a single alt;
+    /// emit jumps to that alt's bt-helper.
+    Leaf(i32),
+    /// Token-led split — `peek_at(depth)` selects a sub-tree.
+    Dispatch(PredictionDispatch),
+    /// Common prefix consumed before the next decision. emit emits
+    /// `p.expect(<element>.kind)?;` (or the `RuleCall` analog) and
+    /// recurses with `skip += 1`. Stripped by `strip_dead_consume`
+    /// when the descendant is itself ambiguous.
+    Consume(ConsumeNode),
+    /// No further bounded lookahead can disambiguate; emit falls
+    /// back to the scan tournament / save-and-rewind cascade
+    /// determined by the surrounding `MultiAltDispatch`. Carries
+    /// the unresolved alt set so the caller's fallback knows which
+    /// alts to enumerate.
+    Ambiguous(Array<i32>),
+}
+
+pub struct ConsumeNode {
+    /// Op to consume before the descendant decision. Today's emit
+    /// recovers the surface `Element` here; in GIR we carry the
+    /// lowered form so emit needs no surface IR.
+    pub op: Op,
+    pub child: PredictionNode,
+}
+
+pub struct PredictionDispatch {
+    /// Lookahead depth of the dispatch, matching the existing
+    /// `peek_at(depth)` emission.
+    pub depth: i32,
+    pub branches: Array<PredictionBranch>,
+}
+
+pub struct PredictionBranch {
+    /// Token-kind set this branch matches.
+    pub tokens: Array<String>,
+    pub child: PredictionNode,
+}
+
+// ==========================================================================
+// Fields and kind sets
+// ==========================================================================
+
+/// CST struct field decl for a lowered alt. emit lays these out as
+/// `pub <name>: <type_str>` lines and the matching constructor
+/// assignments.
+pub struct FieldDecl {
+    /// Final field name including dedup suffix (`x`, `x_2`, ...).
+    pub name: String,
+    /// Type string as it should appear in the emitted struct
+    /// (`Token`, `Option<ExprNode>`, `Array<StmtNode>`, etc.).
+    pub type_str: String,
+    /// Field role. `Plain` for required fields, `Optional` for
+    /// `e?` / unstorable groups, `List` for `e*` / `e+` and `+=`
+    /// labels, `Span` reserved for the leading `span: Span` field
+    /// every alt struct carries.
+    pub kind: FieldKind,
+}
+
+pub variant FieldKind {
+    Plain,
+    Optional,
+    List,
+    Span,
+}
+
+/// One interned token-kind set. emit drops a `_gale_kind_set_<id>(k)
+/// -> bool` helper for each entry; multi-element `matches { ... }`
+/// checks elsewhere route through the helper to share the body.
+pub struct KindSet {
+    pub id: i32,
+    /// Canonical (sorted, unique) token kinds.
+    pub tokens: Array<String>,
+}
+
+// ==========================================================================
+// Header-extraction helper
+// ==========================================================================
+
+/// Borrow the rule header regardless of variant, so traversals don't
+/// repeat the match.
+pub fn rule_header(rule: &Rule) -> &RuleHeader with stores[rule] {
+    return match rule {
+        Simple(s) => &s.header,
+        MultiAlt(m) => &m.header,
+        LeftRecursive(l) => &l.header,
+    };
+}
