@@ -4,6 +4,8 @@ use std::net::SocketAddr;
 use std::pin::pin;
 use std::process;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use anyhow::Result;
 use bytes::Bytes;
@@ -16,18 +18,28 @@ use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto;
 use lexopt::Arg::Value;
 use tokio::net::TcpListener;
-use tokio::sync::Mutex;
+use tokio::task::JoinSet;
 use wasmtime::Engine;
 use wasmtime::Store;
-use wasmtime::component::{Component, Linker};
+use wasmtime::component::Component;
 use wasmtime_wasi_http::p3::Request as WasiRequest;
-use wasmtime_wasi_http::p3::bindings::Service;
+use wasmtime_wasi_http::p3::bindings::{Service, ServicePre};
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags, OptLevel};
 use crate::manifest;
 use crate::runtime::{self, Preopens, WasiState};
 use wado_compiler::LogLevel;
+
+/// Default per-request timeout in seconds. A guest that fails to produce a
+/// response within this window has its store traps via `epoch_deadline_trap`,
+/// freeing the tokio task and letting the client see a 504.
+const DEFAULT_TIMEOUT_SECS: u64 = 30;
+
+/// Epoch ticker interval. Each tick is a unit of `set_epoch_deadline`, so
+/// a 1s tick + a deadline of `timeout_secs` ticks yields second-granularity
+/// timeout enforcement — sufficient for the 30s default.
+const EPOCH_TICK_MS: u64 = 1000;
 
 pub struct ServeOptions {
     pub input: String,
@@ -41,6 +53,8 @@ pub struct ServeOptions {
     /// default — services rarely need filesystem access, so unlike `wado run`
     /// we do NOT preopen the cwd unless the user passes `--dir`.
     pub preopened_dirs: Vec<(String, String)>,
+    /// Per-request timeout in seconds.
+    pub timeout_secs: u64,
 }
 
 #[derive(Clone, Copy)]
@@ -52,8 +66,16 @@ enum Opt {
     OptIterations,
     LogLevel,
     Allocator,
+    Timeout,
     Help,
 }
+
+const TIMEOUT_SPEC: args::OptSpec = args::OptSpec {
+    long: Some("timeout"),
+    short: None,
+    value: Some("<seconds>"),
+    desc: "Per-request timeout in seconds (default: 30)",
+};
 
 impl Opt {
     const ALL: &[Self] = &[
@@ -64,6 +86,7 @@ impl Opt {
         Self::OptIterations,
         Self::LogLevel,
         Self::Allocator,
+        Self::Timeout,
         Self::Help,
     ];
 
@@ -86,6 +109,7 @@ impl Opt {
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
             Self::LogLevel => args::LOG_LEVEL_SPEC,
             Self::Allocator => args::ALLOCATOR_SPEC,
+            Self::Timeout => TIMEOUT_SPEC,
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -106,6 +130,19 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
+fn parse_timeout_arg(parser: &mut lexopt::Parser) -> Result<u64, CliExit> {
+    let s = args::require_string(parser)?;
+    let n = s.parse::<u64>().map_err(|_| {
+        CliExit::error(format!(
+            "--timeout requires a non-negative integer (seconds), got '{s}'"
+        ))
+    })?;
+    if n == 0 {
+        return Err(CliExit::error("--timeout must be > 0"));
+    }
+    Ok(n)
+}
+
 /// Parse command-line arguments for the `serve` subcommand.
 ///
 /// # Errors
@@ -121,6 +158,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut opt_iterations: Option<u32> = None;
     let mut allocator: Option<String> = None;
     let mut preopened_dirs: Vec<(String, String)> = Vec::new();
+    let mut timeout_secs: u64 = DEFAULT_TIMEOUT_SECS;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -142,6 +180,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                 }
                 Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
                 Opt::Allocator => allocator = Some(args::require_string(&mut parser)?),
+                Opt::Timeout => timeout_secs = parse_timeout_arg(&mut parser)?,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -161,6 +200,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         opt_iterations,
         allocator,
         preopened_dirs,
+        timeout_secs,
     })
 }
 
@@ -182,11 +222,17 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
 /// `Full<Bytes>` so that response trailers written by the guest survive the
 /// hop into hyper. `Full<Bytes>` carries no trailer frames, which would silently
 /// strip e.g. `Server-Timing` written via `trailers_tx.write(Some(...))`.
+///
+/// Per-request timeout is enforced two ways: `set_epoch_deadline` traps the
+/// guest if it stays inside wasm past the deadline (handles tight CPU loops
+/// that never await), and `tokio::time::timeout` cancels the future at the
+/// async boundary (handles host I/O hangs). The combination ensures a hung
+/// request never holds a tokio task longer than `timeout`.
 async fn handle_http_request(
     engine: &Engine,
-    component: &Component,
-    linker: &Linker<WasiState>,
+    service_pre: &ServicePre<WasiState>,
     preopens: &Preopens,
+    timeout: Duration,
     req: HyperRequest<hyper::body::Incoming>,
 ) -> Result<HyperResponse<BoxBody<Bytes, Infallible>>> {
     type HttpErrorCode = wasmtime_wasi_http::p3::bindings::http::types::ErrorCode;
@@ -201,15 +247,19 @@ async fn handle_http_request(
     // inherited stdio.
     let state = WasiState::new_no_inherit_env_with_preopens(preopens, &[]);
     let mut store = Store::new(engine, state);
+    // Set the epoch deadline so a guest stuck in pure wasm traps after
+    // `timeout` ticks (the engine is incremented every `EPOCH_TICK_MS`).
+    let deadline_ticks = timeout.as_secs().max(1);
+    store.set_epoch_deadline(deadline_ticks);
 
-    let service = Service::instantiate_async(&mut store, component, linker).await?;
+    let timeout_result = tokio::time::timeout(timeout, async {
+        let service: Service = service_pre.instantiate_async(&mut store).await?;
 
-    let (parts, body) = req.into_parts();
-    let body = body.map_err(HttpErrorCode::from_hyper_request_error);
-    let http_req = http::Request::from_parts(parts, body);
-    let (wasi_req, io) = WasiRequest::from_http(http_req);
+        let (parts, body) = req.into_parts();
+        let body = body.map_err(HttpErrorCode::from_hyper_request_error);
+        let http_req = http::Request::from_parts(parts, body);
+        let (wasi_req, io) = WasiRequest::from_http(http_req);
 
-    let result =
         store
             .run_concurrent(
                 async |store| -> Result<
@@ -237,21 +287,44 @@ async fn handle_http_request(
                     }
                 },
             )
-            .await;
+            .await
+    })
+    .await;
 
-    let result = match result {
-        Ok(Ok(inner)) => inner,
-        Ok(Err(e)) => {
+    let result = match timeout_result {
+        Ok(Ok(Ok(inner))) => inner,
+        Ok(Ok(Err(e))) => {
             eprintln!("Handler trapped: {e:?}");
             return Ok(HyperResponse::builder()
                 .status(500)
                 .body(error_body(format!("Handler trapped:\n{e:?}")))?);
         }
-        Err(e) => {
+        Ok(Err(e)) => {
+            // run_concurrent returned Err — most commonly an epoch trap from
+            // a guest that exceeded the deadline while inside wasm.
+            if is_epoch_deadline_error(&e) {
+                eprintln!("Handler timed out after {}s", timeout.as_secs());
+                return Ok(HyperResponse::builder()
+                    .status(504)
+                    .body(error_body(format!(
+                        "Handler timed out after {}s",
+                        timeout.as_secs()
+                    )))?);
+            }
             eprintln!("Handler trapped: {e:?}");
             return Ok(HyperResponse::builder()
                 .status(500)
                 .body(error_body(format!("Handler trapped:\n{e:?}")))?);
+        }
+        Err(_elapsed) => {
+            // Future-level timeout fired (host I/O hang or yield path).
+            eprintln!("Handler timed out after {}s", timeout.as_secs());
+            return Ok(HyperResponse::builder()
+                .status(504)
+                .body(error_body(format!(
+                    "Handler timed out after {}s",
+                    timeout.as_secs()
+                )))?);
         }
     };
 
@@ -269,8 +342,37 @@ async fn handle_http_request(
     }
 }
 
+fn is_epoch_deadline_error(err: &wasmtime::Error) -> bool {
+    err.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::Interrupt)
+}
+
 fn error_body(msg: String) -> BoxBody<Bytes, Infallible> {
     BoxBody::new(Full::new(Bytes::from(msg)))
+}
+
+/// Wait for a shutdown signal (SIGINT or, on Unix, SIGTERM). Resolves on
+/// the first signal received.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        let mut sigterm = match signal(SignalKind::terminate()) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("warning: failed to install SIGTERM handler: {e}");
+                let _ = tokio::signal::ctrl_c().await;
+                return;
+            }
+        };
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = sigterm.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
 }
 
 async fn run_http_server(
@@ -278,8 +380,9 @@ async fn run_http_server(
     addr: &str,
     cranelift_opt: wasmtime::OptLevel,
     preopened_dirs: Vec<(String, String)>,
+    timeout: Duration,
 ) -> Result<()> {
-    let engine = runtime::create_engine(cranelift_opt, &runtime::ProfileMode::None)?;
+    let engine = runtime::create_serve_engine(cranelift_opt)?;
     let component = Component::new(&engine, &wasm)?;
     let linker = runtime::create_linker(&engine)?;
     // Open preopens once here, then share across requests. Each request
@@ -287,52 +390,126 @@ async fn run_http_server(
     // which clones the underlying `Arc<cap_std::fs::Dir>` rather than
     // re-running `openat` per request.
     let preopens = Preopens::open(&preopened_dirs)?;
+    // Pre-link the component once. This front-loads the per-export string
+    // lookups that `Service::instantiate_async` would otherwise repeat on
+    // every request.
+    let instance_pre = linker.instantiate_pre(&component)?;
+    let service_pre = ServicePre::<WasiState>::new(instance_pre)?;
 
-    // Wrap in Arc for sharing across connections
+    // Drop the linker — the `InstancePre` already captured everything we
+    // need, and keeping the linker around would force every request to
+    // share it (the linker is `&self`, but holding it serves no purpose).
+    drop(linker);
+    drop(component);
+
     let engine = Arc::new(engine);
-    let component = Arc::new(component);
-    let linker = Arc::new(Mutex::new(linker));
+    let service_pre = Arc::new(service_pre);
     let preopens = Arc::new(preopens);
+
+    // Background ticker drives `Engine::increment_epoch` so the per-store
+    // `set_epoch_deadline` actually fires. Stopped via `epoch_stop` once
+    // the accept loop exits.
+    let epoch_stop = Arc::new(AtomicBool::new(false));
+    let epoch_thread = {
+        let stop = Arc::clone(&epoch_stop);
+        let engine = Arc::clone(&engine);
+        std::thread::spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                std::thread::sleep(Duration::from_millis(EPOCH_TICK_MS));
+                engine.increment_epoch();
+            }
+        })
+    };
 
     let addr: SocketAddr = addr.parse()?;
     let listener = TcpListener::bind(addr).await?;
 
     eprintln!("HTTP server listening on http://{addr}/");
-    eprintln!("Press Ctrl+C to stop");
+    eprintln!("Per-request timeout: {}s", timeout.as_secs());
+    eprintln!("Send SIGINT or SIGTERM to shut down");
 
-    loop {
-        let (stream, remote_addr) = listener.accept().await?;
-        let io = TokioIo::new(stream);
+    let mut connections: JoinSet<()> = JoinSet::new();
+    let shutdown = pin!(shutdown_signal());
 
-        let engine = Arc::clone(&engine);
-        let component = Arc::clone(&component);
-        let linker = Arc::clone(&linker);
-        let preopens = Arc::clone(&preopens);
+    // Accept loop with graceful shutdown. On signal, stop accepting and
+    // wait for in-flight connections to drain (with a hard cap so we don't
+    // hang forever on misbehaving clients).
+    {
+        let mut shutdown = shutdown;
+        loop {
+            tokio::select! {
+                accepted = listener.accept() => {
+                    let (stream, remote_addr) = match accepted {
+                        Ok(v) => v,
+                        Err(e) => {
+                            eprintln!("accept error: {e}");
+                            continue;
+                        }
+                    };
+                    let io = TokioIo::new(stream);
 
-        tokio::spawn(async move {
-            let service = service_fn(|req| {
-                let engine = Arc::clone(&engine);
-                let component = Arc::clone(&component);
-                let linker = Arc::clone(&linker);
-                let preopens = Arc::clone(&preopens);
+                    let engine = Arc::clone(&engine);
+                    let service_pre = Arc::clone(&service_pre);
+                    let preopens = Arc::clone(&preopens);
 
-                async move {
-                    let linker = linker.lock().await;
-                    handle_http_request(&engine, &component, &linker, &preopens, req).await
+                    connections.spawn(async move {
+                        let svc = service_fn(|req| {
+                            let engine = Arc::clone(&engine);
+                            let service_pre = Arc::clone(&service_pre);
+                            let preopens = Arc::clone(&preopens);
+
+                            async move {
+                                handle_http_request(
+                                    &engine,
+                                    &service_pre,
+                                    &preopens,
+                                    timeout,
+                                    req,
+                                )
+                                .await
+                            }
+                        });
+
+                        // Auto-detect HTTP/1.1 vs h2c (HTTP/2 cleartext, prior-knowledge)
+                        // by sniffing the connection preface. HTTP/1 callers see normal
+                        // behavior; h2c clients (e.g. `curl --http2-prior-knowledge`) get
+                        // trailers without needing the `TE: trailers` handshake hyper
+                        // requires on the HTTP/1 path.
+                        let builder = auto::Builder::new(TokioExecutor::new());
+                        if let Err(e) = builder.serve_connection(io, svc).await {
+                            eprintln!("Error serving {remote_addr}: {e}");
+                        }
+                    });
                 }
-            });
-
-            // Auto-detect HTTP/1.1 vs h2c (HTTP/2 cleartext, prior-knowledge)
-            // by sniffing the connection preface. HTTP/1 callers see normal
-            // behavior; h2c clients (e.g. `curl --http2-prior-knowledge`) get
-            // trailers without needing the `TE: trailers` handshake hyper
-            // requires on the HTTP/1 path.
-            let builder = auto::Builder::new(TokioExecutor::new());
-            if let Err(e) = builder.serve_connection(io, service).await {
-                eprintln!("Error serving {remote_addr}: {e}");
+                () = &mut shutdown => {
+                    eprintln!("Shutdown signal received; draining {} in-flight connection(s)…", connections.len());
+                    break;
+                }
+                // Reap finished connections so the JoinSet doesn't grow
+                // unboundedly on a long-running server.
+                Some(_res) = connections.join_next(), if !connections.is_empty() => {}
             }
-        });
+        }
     }
+
+    // Drain phase: stop accepting, give in-flight connections a bounded
+    // window to finish. Anything still alive at the deadline gets aborted.
+    let drain_deadline = timeout + Duration::from_secs(5);
+    let drain = async { while connections.join_next().await.is_some() {} };
+    if tokio::time::timeout(drain_deadline, drain).await.is_err() {
+        eprintln!(
+            "Drain timeout after {}s; aborting remaining connections",
+            drain_deadline.as_secs()
+        );
+        connections.shutdown().await;
+    }
+
+    epoch_stop.store(true, Ordering::Relaxed);
+    // The ticker sleeps `EPOCH_TICK_MS` between checks, so the join wakes
+    // up within that window.
+    let _ = epoch_thread.join();
+
+    Ok(())
 }
 
 pub async fn run(opts: ServeOptions) {
@@ -348,7 +525,16 @@ pub async fn run(opts: ServeOptions) {
     let cranelift_opt = opts.opt_level.to_wasmtime();
     let wasm = compile::compile(&opts.input, &flags).await;
 
-    if let Err(e) = run_http_server(wasm, &opts.addr, cranelift_opt, opts.preopened_dirs).await {
+    let timeout = Duration::from_secs(opts.timeout_secs);
+    if let Err(e) = run_http_server(
+        wasm,
+        &opts.addr,
+        cranelift_opt,
+        opts.preopened_dirs,
+        timeout,
+    )
+    .await
+    {
         eprintln!("Server error: {e}");
         process::exit(1);
     }

@@ -311,6 +311,22 @@ pub fn create_test_engine(opt_level: OptLevel) -> Result<Engine> {
     Ok(Engine::new(&config)?)
 }
 
+/// Create a wasmtime Engine for `wado serve` with epoch interruption enabled.
+///
+/// The serve loop pairs this with a per-store `set_epoch_deadline` and a
+/// background ticker that calls `Engine::increment_epoch`, so a guest stuck
+/// in a tight loop traps after the configured request timeout instead of
+/// holding a tokio task forever.
+///
+/// # Errors
+///
+/// Returns an error if the engine cannot be created with the given configuration.
+pub fn create_serve_engine(opt_level: OptLevel) -> Result<Engine> {
+    let mut config = create_config(opt_level, &ProfileMode::None);
+    config.epoch_interruption(true);
+    Ok(Engine::new(&config)?)
+}
+
 /// Create a Store with WASI state, preopened directories, and program arguments.
 /// `preopened_dirs`: `(host_path, guest_path)` pairs.
 /// `args`: arguments passed to the guest via `wasi:cli/environment.get-arguments`.
