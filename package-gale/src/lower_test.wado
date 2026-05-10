@@ -20,6 +20,7 @@ use {
     LabelElement,
     RepeatElement,
     RepeatKind,
+    GroupElement,
     Visibility,
 } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
@@ -296,6 +297,95 @@ test "lower multi-alt rule with labeled alts uses label as case name" {
         assert m.alts[1].struct_name == "ExprStrLit";
     } else {
         panic("expected Rule::MultiAlt");
+    }
+}
+
+test "lower transparent Group wraps single leaf element" {
+    // `wrapped : (INT) ;` — a syntactic wrapper with no struct of
+    // its own. The GroupOp carries `Transparent` shape and the
+    // inner Op is the leaf Token verbatim.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "wrapped",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Group(GroupElement::new([
+            alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+        ]))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 1;
+        if let Group(go) = &s.body.ops[0] {
+            if let Transparent = &go.shape {
+                assert true;
+            } else {
+                panic("expected GroupShape::Transparent");
+            }
+            assert go.alts.len() == 1;
+            assert go.alts[0].ops.len() == 1;
+            if let Token(t) = &go.alts[0].ops[0] {
+                assert t.kind == "TK_INT";
+                // Transparent: inner field is bound in the
+                // surrounding alt's scope, so dedup uses the same
+                // name table.
+                assert t.field == "int";
+            } else {
+                panic("expected inner Token");
+            }
+            assert go.scan_alts.len() == 1;
+            assert go.scan_alts[0].elements.len() == 1;
+            if let Token(t) = &go.scan_alts[0].elements[0] {
+                assert t.kind == "TK_INT";
+            } else {
+                panic("expected scan-side inner Token");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower transparent Group dedupes against surrounding scope" {
+    // `pair : INT (INT) ;` — the second INT lives inside a
+    // Transparent group, so its binding still nests in the outer
+    // alt's name table. Dedup turns the inner field into `int_2`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "pair",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::TokenRef(TokenRefElement::new("INT")),
+            Element::Group(GroupElement::new([
+                alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+            ])),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Token(t) = &s.body.ops[0] {
+            assert t.field == "int";
+        } else {
+            panic("expected first Token");
+        }
+        if let Group(go) = &s.body.ops[1] {
+            if let Token(t) = &go.alts[0].ops[0] {
+                // The Transparent group inherits the surrounding
+                // dedup table, so the second INT is `int_2`.
+                assert t.field == "int_2";
+            } else {
+                panic("expected Token inside Group");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
     }
 }
 

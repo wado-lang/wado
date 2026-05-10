@@ -44,6 +44,7 @@ use {
     LabelElement,
     RepeatElement,
     RepeatKind,
+    GroupElement,
 } from "./ir.wado";
 use {
     rule_type_name,
@@ -81,6 +82,8 @@ use {
     ExcludedOp,
     RepeatOp,
     RepeatStrategy,
+    GroupOp,
+    GroupShape,
     FieldDecl,
     FieldKind,
 } from "./gir.wado";
@@ -303,8 +306,23 @@ fn lower_scan_element(elem: &Element) -> ScanElement {
         }),
         Label(lab) => lower_scan_element(&lab.element),
         Repeat(rep) => lower_scan_repeat(rep),
-        Group(_) => panic("TODO Phase 2.x.group: lower_scan_element for Group not implemented"),
+        Group(g) => lower_scan_group(g),
     };
+}
+
+/// Scan-side twin of `lower_group_op`'s Transparent path. Same
+/// restriction: single alt with one leaf element. Returns the
+/// inner element directly — the scan side has no struct
+/// construction, so a Transparent group reduces to its inner
+/// element with no wrapper instruction.
+fn lower_scan_group(g: &GroupElement) -> ScanElement {
+    let alts = &g.alternatives;
+    if alts.len() != 1 || alts[0].elements.len() != 1 {
+        panic("TODO Phase 2.x.group: non-trivial Group shape (scan side) not implemented yet");
+    }
+    let inner = &alts[0].elements[0];
+    require_leaf_element(inner, &"Group (transparent, scan side)");
+    return lower_scan_element(inner);
 }
 
 /// Scan-side twin of `lower_repeat_op`. Same restrictions: greedy
@@ -460,9 +478,76 @@ fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>) -> Op {
             field: dedup_name(&not_element_field_name(&ne.element), name_counts),
         }),
         Repeat(rep) => lower_repeat_op(rep, name_counts),
-        Group(_) => panic("TODO Phase 2.x.group: lower_op for Group not implemented"),
+        Group(g) => lower_group_op(g, name_counts),
         Label(lab) => lower_label_op(lab, name_counts),
     };
+}
+
+/// Lower a `Group` element. Phase 2.x.transparent only handles the
+/// trivial wrapping shape — a single alt containing exactly one
+/// leaf element (e.g. `(INT)`). The wrapping is purely syntactic;
+/// the inner element runs unconditionally with the surrounding
+/// alt's binding scope, so the inner Op is lowered against the same
+/// `name_counts` and the resulting `GroupOp` carries
+/// `GroupShape::Transparent`.
+///
+/// Storable shapes (`SingleAlt`, `TokenOnly`, `SimpleCst`,
+/// `General`) and multi-element Transparent groups land in their
+/// own follow-up sub-phases:
+///
+/// * Phase 2.x.singlealt — single alt with ≥ 2 elements →
+///   `GroupShape::SingleAlt` (struct of its own)
+/// * Phase 2.x.tokenonly — every alt a single Token / Literal →
+///   `GroupShape::TokenOnly`
+/// * Phase 2.x.simplecst — every alt a single distinct RuleRef →
+///   `GroupShape::SimpleCst`
+/// * Phase 2.x.general — multi-alt non-trivial → `GroupShape::General`
+fn lower_group_op(
+    g: &GroupElement,
+    name_counts: &mut Array<[String, i32]>,
+) -> Op {
+    let alts = &g.alternatives;
+    if alts.len() != 1 || alts[0].elements.len() != 1 {
+        panic("TODO Phase 2.x.group: non-trivial Group shape not implemented yet");
+    }
+    let inner = &alts[0].elements[0];
+    require_leaf_element(inner, &"Group (transparent)");
+
+    // Transparent: lower the inner element with the surrounding
+    // alt's `name_counts` so the binding nests in the outer scope.
+    let inner_op = lower_op(inner, name_counts);
+    let body = AltBody {
+        alt_index: 0,
+        // Transparent groups produce no struct of their own; case /
+        // struct names are unused by emit when shape is Transparent.
+        case_name: "",
+        struct_name: "",
+        ops: [inner_op],
+        // No FieldDecl: the binding name lives in the surrounding
+        // alt's struct (which `lower_alt_body` already records).
+        fields: [],
+        group_index_start: 0,
+        prefix_self_ref_min_prec: 0,
+    };
+    let scan_body = ScanBody {
+        elements: [lower_scan_element(inner)],
+    };
+    // `dispatch` is meaningless for a one-alt Transparent group:
+    // emit recognises `GroupShape::Transparent` and skips the
+    // dispatch step, running the body unconditionally. The empty
+    // `Direct` placeholder is the cheapest valid `MultiAltDispatch`.
+    return Op::Group(GroupOp {
+        shape: GroupShape::Transparent,
+        alts: [body],
+        scan_alts: [scan_body],
+        dispatch: empty_direct_dispatch(),
+        scan_dispatch: empty_direct_dispatch(),
+    });
+}
+
+fn empty_direct_dispatch() -> MultiAltDispatch {
+    let branches: Array<DispatchBranch> = [];
+    return MultiAltDispatch::Direct(DirectDispatch { branches });
 }
 
 /// Lower a `Repeat` element (`e?` / `e*` / `e+`). Phase 2.x.partial
