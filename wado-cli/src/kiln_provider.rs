@@ -260,7 +260,7 @@ impl CliGeneratorProvider {
             .unwrap_or_default();
         let sources = dedup_sort_sources(make_relative_sources(&recording_base, recorded));
         let combined_hash = combined_sources_hash(&sources);
-        artifacts.source_hash = combined_hash.clone();
+        artifacts.source_hash.clone_from(&combined_hash);
 
         // Cache writes are best-effort: if the filesystem refuses we
         // still return the fresh bytes. The next invocation just repeats

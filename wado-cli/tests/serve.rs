@@ -62,6 +62,11 @@ impl Drop for ServerGuard {
 /// stderr is drained on a background thread so the child never blocks on a
 /// full pipe; the captured text is also used for assertions on shutdown
 /// messages.
+//
+// `clippy::zombie_processes` flags `cmd.spawn()` returning a `Child` that
+// isn't `wait()`-ed on every code path, but `ServerGuard::drop` reliably
+// calls `kill()` + `wait()` — clippy doesn't see across the type boundary.
+#[allow(clippy::zombie_processes)]
 fn start_serve(fixture: &str, extra_args: &[&str]) -> (ServerGuard, u16, Arc<Mutex<String>>) {
     let port = free_port();
     let addr = format!("127.0.0.1:{port}");
