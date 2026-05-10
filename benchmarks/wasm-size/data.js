@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778372135415,
+  "lastUpdate": 1778378968832,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20649,6 +20649,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8c9129a868bf60acaa328b8cd2468fcfeb9c4036"
         },
         "date": 1778372135219,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 511983,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5acd5b73e0d7ba26e78771bda3414518e7cbf3dc",
+          "message": "Merge pull request #1035 from wado-lang/claude/organize-compiler-docs-mymqq\n\ndocs(compiler): condense compiler.md to architecture overview",
+          "timestamp": "2026-05-10T11:00:29+09:00",
+          "tree_id": "fc3c8d1178dc6f6a552495d7d25f09fd5e5d348c",
+          "url": "https://github.com/wado-lang/wado/commit/5acd5b73e0d7ba26e78771bda3414518e7cbf3dc"
+        },
+        "date": 1778378968505,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
