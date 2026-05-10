@@ -52,12 +52,18 @@ use {
     count_general_groups,
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
+use { GenContext } from "./gen_context.wado";
+use { strip_suffix } from "./gen_util.wado";
 use {
     LoweredGrammar,
     Rule,
     SimpleRule,
+    MultiAltRule,
     RuleHeader,
     AltBody,
+    MultiAltDispatch,
+    DirectDispatch,
+    DispatchBranch,
     ScanBody,
     ScanElement,
     ScanTokenElem,
@@ -82,9 +88,16 @@ use {
 /// before lowering and threaded in so a single literal-collection
 /// pass serves both the lexer and parser sides.
 pub fn lower(grammar: &Grammar, lit_tokens: &Array<LitToken>) -> LoweredGrammar {
+    // GenContext caches first / nullable / single-token / scannable /
+    // tail-greedy facts as it walks the rules. Lowering reuses these
+    // caches across rules so e.g. `first_of_rule(expr)` is computed
+    // once even when many rules reference `expr`. The context is
+    // discarded once `LoweredGrammar` is built — every analysis fact
+    // lowering needs has already been baked into the GIR.
+    let mut ctx = GenContext::new(&grammar.parser_rules, lit_tokens);
     let mut parser_rules: Array<Rule> = [];
     for let rule of &grammar.parser_rules {
-        parser_rules.push(lower_rule(rule));
+        parser_rules.push(lower_rule(rule, &mut ctx));
     }
     return LoweredGrammar {
         name: grammar.name,
@@ -104,15 +117,19 @@ pub fn lower(grammar: &Grammar, lit_tokens: &Array<LitToken>) -> LoweredGrammar 
 }
 
 /// Classify a parser rule by shape and dispatch to the matching
-/// lowering. Phase 2.1 only handles single-alt rules; the multi-alt
-/// and left-recursive paths are gated behind `panic("TODO Phase
-/// 2.x")` so a partial implementation never feeds bad data into
-/// downstream emit.
-fn lower_rule(rule: &ParserRule) -> Rule {
+/// lowering. Single-alt → `Simple`; multi-alt with no LR alt →
+/// `MultiAlt`; multi-alt with at least one LR alt → `LeftRecursive`.
+/// The shape decision matches `parser_gen::gen_parse_fn_named`'s
+/// branching exactly so the eventual Phase 4 split is a structural
+/// translation rather than a re-classification.
+fn lower_rule(rule: &ParserRule, ctx: &mut GenContext) -> Rule {
     if rule.alternatives.len() == 1 {
         return Rule::Simple(lower_simple_rule(rule));
     }
-    panic(`TODO Phase 2.3: lower_rule for multi-alt rule '{rule.name}' not implemented yet`);
+    if has_left_recursive_alt(rule) {
+        panic(`TODO Phase 2.4: left-recursive rule '{rule.name}' not implemented yet`);
+    }
+    return Rule::MultiAlt(lower_multi_alt_rule(rule, ctx));
 }
 
 fn lower_simple_rule(rule: &ParserRule) -> SimpleRule {
@@ -122,6 +139,123 @@ fn lower_simple_rule(rule: &ParserRule) -> SimpleRule {
         header: lower_header(rule),
         body,
         scan_body,
+    };
+}
+
+/// Lower a multi-alt rule (no LR alts). Phase 2.3a only handles the
+/// case where every pair of alts has disjoint first-sets — the
+/// dispatch is a single token-led `if / else if` chain (`Direct`).
+/// Overlapping first-sets land in Phase 2.3b (`Predict`) and the
+/// scan-tournament / partial-scan / save-rewind variants land in
+/// Phase 2.3c.
+fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule {
+    let header = lower_header(rule);
+
+    // Compute per-alt first sets up-front so the dispatch decision
+    // sees them and the resulting `DispatchBranch.tokens` reuses the
+    // same sets the per-alt analysis already computed.
+    let mut first_sets: Array<Array<String>> = [];
+    for let alt of &rule.alternatives {
+        let mut visiting: Array<String> = [];
+        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
+    }
+    panic_if_any_overlap(rule, &first_sets);
+
+    let mut alts: Array<AltBody> = [];
+    let mut scan_alts: Array<ScanBody> = [];
+    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
+        alts.push(lower_alt_body(&rule.alternatives[i], i, rule));
+        scan_alts.push(lower_scan_body(&rule.alternatives[i]));
+    }
+
+    let dispatch = build_direct_dispatch(&first_sets);
+    return MultiAltRule {
+        header,
+        alts,
+        scan_alts,
+        // Scan side and parse side share the same dispatch shape
+        // when first-sets are disjoint — both branches are token-led.
+        // Phase 2.3c will compute the scan-side dispatch separately
+        // (e.g. tournament for full-scannable overlapping alts).
+        dispatch: clone_dispatch(&dispatch),
+        scan_dispatch: dispatch,
+    };
+}
+
+/// Phase 2.3a guard: every alt's first set must be disjoint from
+/// every other's. Overlapping first-sets need the Phase 2.3b
+/// `Predict` dispatch with a prediction tree, which is not yet
+/// implemented. Panicking here keeps lower from silently producing
+/// a `Direct` dispatch whose branches don't actually disambiguate.
+fn panic_if_any_overlap(rule: &ParserRule, first_sets: &Array<Array<String>>) {
+    for let mut i = 0; i < first_sets.len(); i += 1 {
+        for let mut j = i + 1; j < first_sets.len(); j += 1 {
+            for let tk of &first_sets[i] {
+                if first_set_contains(&first_sets[j], tk) {
+                    panic(`TODO Phase 2.3b: rule '{rule.name}' has overlapping alts ({i}, {j}) sharing token {*tk}`);
+                }
+            }
+        }
+    }
+}
+
+fn first_set_contains(set: &Array<String>, token: &String) -> bool {
+    for let t of set {
+        if *t == *token {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Build a `Direct` dispatch from disjoint first sets. Each branch
+/// matches one alt's first set; emit translates the branch list into
+/// an `if / else if` chain followed by an error fallback.
+fn build_direct_dispatch(first_sets: &Array<Array<String>>) -> MultiAltDispatch {
+    let mut branches: Array<DispatchBranch> = [];
+    for let mut i = 0; i < first_sets.len(); i += 1 {
+        branches.push(DispatchBranch {
+            tokens: first_sets[i],
+            alt_index: i,
+        });
+    }
+    return MultiAltDispatch::Direct(DirectDispatch { branches });
+}
+
+fn clone_dispatch(d: &MultiAltDispatch) -> MultiAltDispatch {
+    return match d {
+        Direct(dd) => MultiAltDispatch::Direct(DirectDispatch { branches: dd.branches }),
+        // Phase 2.3a only produces `Direct`; the other variants are
+        // built fresh per-side once their lowerings exist.
+        _ => panic("clone_dispatch: only Direct supported in Phase 2.3a"),
+    };
+}
+
+/// Whether the rule has at least one directly-left-recursive
+/// alternative. Mirrors `parser_gen::is_left_recursive`'s shallow
+/// first-element check (ANTLR4 only rewrites direct LR; deep LR is
+/// out of contract — see `vendor/antlr4/doc/left-recursion.md`).
+fn has_left_recursive_alt(rule: &ParserRule) -> bool {
+    for let alt of &rule.alternatives {
+        if alt_is_left_recursive(alt, &rule.name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn alt_is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
+    if alt.elements.is_empty() {
+        return false;
+    }
+    return element_is_self_ref(&alt.elements[0], rule_name);
+}
+
+fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
+    return match *elem {
+        RuleRef(r) => r.name == *rule_name,
+        Label(lab) => element_is_self_ref(&lab.element, rule_name),
+        _ => false,
     };
 }
 
@@ -203,22 +337,23 @@ fn compute_alt_gc_starts(alternatives: &Array<Alternative>) -> Array<i32> {
     return starts;
 }
 
-/// Lower one alternative body. For a `Simple` rule (one alternative)
-/// the rule's own struct is the alt's struct, so `case_name` is
-/// empty and `struct_name` is the rule's CST type name.
+/// Lower one alternative body. For a single-alt rule the rule's own
+/// struct is the alt's struct (`case_name` empty, `struct_name`
+/// is the rule's CST type name). For a multi-alt rule the alt
+/// gets a per-alt case + struct name derived from
+/// `case_names_for_rule` and the convention `<RuleBase><CaseName>`
+/// (`<RuleBase>` being `rule_type_name(rule.name)` with the trailing
+/// `Node` stripped — same as `parser_gen::gen_alt_body` callers).
 fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule) -> AltBody {
-    let case_name: String = if rule.alternatives.len() == 1 {
-        "";
-    } else {
-        // Phase 2.3 will compute the per-alt case name from
-        // `case_names_for_rule`. Single-alt path doesn't need it.
-        panic("TODO Phase 2.3: per-alt case_name not implemented");
-    };
-    let struct_name: String = if rule.alternatives.len() == 1 {
-        rule_type_name(&rule.name);
-    } else {
-        panic("TODO Phase 2.3: per-alt struct_name not implemented");
-    };
+    let type_name = rule_type_name(&rule.name);
+    let mut case_name: String = "";
+    let mut struct_name: String = type_name;
+    if rule.alternatives.len() != 1 {
+        let case_names = case_names_for_rule(&rule.alternatives);
+        let base = strip_suffix(&type_name, &"Node");
+        case_name = case_names[idx];
+        struct_name = `{base}{case_names[idx]}`;
+    }
 
     let mut name_counts: Array<[String, i32]> = [];
     let mut ops: Array<Op> = [];
@@ -243,12 +378,28 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule) -> AltBody {
         struct_name,
         ops,
         fields,
-        // Phase 2.3 — cumulative counter at this alt's start.
-        // Single-alt rules always start at 0.
-        group_index_start: 0,
+        // Cumulative `general_group` counter at this alt's start.
+        // Mirrors `parser_gen::gen_parse_fn_named`'s `alt_gc_starts`
+        // table; lookup against `RuleHeader.alt_gc_starts` keeps the
+        // per-alt index stable.
+        group_index_start: cumulative_group_index_start(rule, idx),
         // Phase 2.4 — prefix-LR alt precedence. Non-LR alts get 0.
         prefix_self_ref_min_prec: 0,
     };
+}
+
+/// Sum of `count_general_groups` for all alts before `idx`. Mirrors
+/// the per-alt counter `parser_gen::gen_parse_fn_named` builds at
+/// emit time. Recomputed (rather than reading
+/// `RuleHeader.alt_gc_starts`) so this fn doesn't take an extra
+/// parameter; the cost is negligible for the alt counts that occur
+/// in real grammars.
+fn cumulative_group_index_start(rule: &ParserRule, idx: i32) -> i32 {
+    let mut running: i32 = 0;
+    for let mut i = 0; i < idx; i += 1 {
+        running += count_general_groups(&rule.alternatives[i].elements);
+    }
+    return running;
 }
 
 /// Lower a single surface `Element` to a GIR `Op`. Phase 2.1 covers

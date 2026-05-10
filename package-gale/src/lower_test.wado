@@ -26,6 +26,7 @@ use {
     Rule,
     Op,
     ScanElement,
+    MultiAltDispatch,
 } from "./gir.wado";
 
 fn empty_grammar(name: &String) -> Grammar {
@@ -220,6 +221,51 @@ test "lower dedupes same-name fields" {
         }
     } else {
         panic("expected Rule::Simple");
+    }
+}
+
+test "lower multi-alt rule with disjoint first sets produces Direct dispatch" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "expr",
+        Visibility::Default,
+        [],
+        [
+            alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+            alt_of([Element::TokenRef(TokenRefElement::new("STRING"))]),
+            alt_of([Element::TokenRef(TokenRefElement::new("ID"))]),
+        ],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let MultiAlt(m) = &lowered.parser_rules[0] {
+        assert m.alts.len() == 3;
+        assert m.scan_alts.len() == 3;
+        // Per-alt case_name and struct_name follow the
+        // `case_names_for_rule` convention. Without explicit alt
+        // labels, names are positional: `Alt0`, `Alt1`, ... and the
+        // struct combines the rule's bare base ("Expr" — `ExprNode`
+        // with the `Node` suffix stripped) with the case name.
+        assert m.alts[0].case_name == "Alt0";
+        assert m.alts[0].struct_name == "ExprAlt0";
+        assert m.alts[1].case_name == "Alt1";
+        assert m.alts[1].struct_name == "ExprAlt1";
+        assert m.alts[2].case_name == "Alt2";
+        assert m.alts[2].struct_name == "ExprAlt2";
+
+        if let Direct(d) = &m.dispatch {
+            assert d.branches.len() == 3;
+            assert d.branches[0].alt_index == 0;
+            assert d.branches[0].tokens[0] == "TK_INT";
+            assert d.branches[1].alt_index == 1;
+            assert d.branches[1].tokens[0] == "TK_STRING";
+            assert d.branches[2].alt_index == 2;
+            assert d.branches[2].tokens[0] == "TK_ID";
+        } else {
+            panic("expected MultiAltDispatch::Direct");
+        }
+    } else {
+        panic("expected Rule::MultiAlt");
     }
 }
 
