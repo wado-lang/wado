@@ -67,7 +67,7 @@ The loader runs `lexer → parser → bind → desugar` on every loaded module:
 
 `annotate_loaded` (`annotate.rs`) is the entry point shared by LSP and batch compilation. It runs `analyze.rs` for symbol-table construction and `resolver/` for type checking; bodies are then lowered into TIR.
 
-The result, `Annotated`, carries the TIR modules plus an `AstIndex` and a use→def map (`(ModuleSource, AstId) → SymbolKey`). This is what makes the architecture LSP-friendly: facts are attached to AST nodes without mutating them, so cross-file navigation, hover, and rename all fall out of the same data the batch compiler uses.
+The result, `Annotated`, carries the TIR modules plus an `AstIndex` and a use→def map (`(ModuleSource, AstId) → SymbolKey`). This is what makes the architecture LSP-friendly: facts are attached to AST nodes without mutating them, so cross-file navigation, hover, and rename all fall out of the same data the batch compiler uses. See the [LSP](#lsp) section below.
 
 The resolver covers trait selection, generic inference, method dispatch, coercion, and effect typing. All trait calls are resolved statically — by the end of the pipeline every call targets a concrete monomorphized function. There is no runtime vtable.
 
@@ -181,6 +181,42 @@ Three registries collect declarative information from the standard library and f
 - `WasiRegistry` (`component_model.rs`) — extracts WASI interfaces from `lib/wasi/*.wado`: version pins, async flags, canonical method names, supported types. Codegen drives import generation from this registry; only interfaces whose types are fully supported are imported.
 - `WorldRegistry` (`world_registry.rs`) — collects world definitions (e.g., the `Command` world from `wasi/cli.wado`) and provides export signatures.
 - `BuiltinRegistry` (`builtin_registry.rs`) — collects function signatures from `lib/core/builtin.wado`. Functions tagged `#[canonical("ns", "name")]` import a CM canonical builtin (`wasi`, `mem`, or `bundled`); untagged builtins compile directly to Wasm instructions.
+
+## LSP
+
+The language server (`wado-lsp/`) is a thin layer on top of `wado_compiler::annotate`. The `Engine` holds open documents and answers LSP queries (diagnostics, hover, go-to-definition, references, document highlight, semantic tokens). Each query:
+
+1. Calls `annotate_with_invocations(source, host, …)` to obtain an `Annotated` snapshot.
+2. Uses `Annotated::cursor_at(module, line, col) → Cursor` to translate a (line, col) into a `SymbolKey`.
+3. Reads pre-computed facts off `Cursor` / `Annotated` (`def_key`, `def_name_span`, `references_to_def`, `is_write_target`, …).
+
+`Engine` itself performs no I/O — every query takes an `&impl CompilerHost`, so the caller decides how imported modules are loaded. `wado-lsp` ships a `FilesystemCompilerHost`; embeddings (VS Code Wasm, browser playground) supply their own host. The `wado-compiler` crate must compile to `wasm32-unknown-unknown` to support those bundled deployments; CI enforces this. See [WEP 2026-04-18: LSP Architecture](./wep-2026-04-18-lsp-architecture.md).
+
+## Kiln (Schema-Driven Code Generation)
+
+Kiln is the compiler's mechanism for turning external schemas (`.proto`, `.graphql`, `.g4`, `.wit`, custom IDLs) into `.wado` source. A **generator** is itself an ordinary Wado package that targets the `core:kiln/generator` world; the compiler builds it to a Wasm component, and the host (`wado-cli`) executes it via wasmtime to produce `.wado` source files. Invocations are content-addressed by their schema bytes, options, and the generator's source hash. See [WEP 2026-04-12: Kiln](./wep-2026-04-12-kiln.md).
+
+The compiler-side pieces live in `src/kiln/`:
+
+| Module             | Concern                                                                                         |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
+| `invocation.rs`    | Canonical `Invocation` representation (declaration site + options + schema paths)               |
+| `inline.rs`        | Collects inline `use … with { generator: … }` invocations (`InvocationIndex`)                   |
+| `plan.rs`          | DAG + topological sort of invocations; rejects cycles                                           |
+| `cache.rs`         | Cache-key composition over schemas, options, and the generator's identity hash                  |
+| `header.rs`        | Generated-file `#![generated]` header emission and parsing                                      |
+| `metadata.rs`      | Persisted per-invocation cache state (`<primary>.kiln.json`)                                    |
+| `options.rs`       | Extracts an `OptionsDescriptor` from a generator's `pub struct Options`                         |
+| `options_check.rs` | Validates user-supplied options against the descriptor                                          |
+| `import_check.rs`  | Refuses `wasi:*` imports inside generator packages; injects `Deserialize`/`Request<T>` adapters |
+
+The pipeline driver (`run_generator`, file persistence, `wado.lock` handling) lives in `wado-cli`; `wado-compiler` exports only the pure-data pieces above so it stays `wasm32-unknown-unknown`-clean.
+
+`compile_after_load` integrates Kiln at three spots:
+
+- **Phase 1a–1c (pre-analysis):** when the entry module's target world is `core:kiln/generator`, `import_check` rejects forbidden imports, auto-injects `impl Deserialize for Options;`, and rewrites `fn generate(req: Request<Options>)` to insert the `bind_request` boilerplate. This lets generator authors write idiomatic Wado without per-package adapter code.
+- **Phase 6c (post-annotate):** if the target world is `core:kiln/generator`, `extract_options_descriptor` walks the resolved `pub struct Options` and produces the descriptor that the CLI provider caches on disk so it can answer `describe-options` without a second compile.
+- **Module loading:** when an import target matches an entry in the caller-supplied `InvocationIndex`, the loader resolves it to `ModuleSource::Redirected { uri }` and asks the host to load the generated bytes. This is how `use Foo from "schema.proto" with { generator: ... }` gets wired up after generation.
 
 ## Standard Library
 
