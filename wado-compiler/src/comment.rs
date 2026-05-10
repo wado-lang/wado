@@ -135,31 +135,62 @@ impl TriviaMap {
     }
 }
 
-/// Identify the AST node that owns `c` as a trailing comment.
-///
-/// A node is a candidate when its span ends at or before `c.span.start`
-/// on the same source line as `c`. Among candidates we pick the one
-/// with the largest `span.end` (the one whose closing token is closest
-/// to the comment) and, on ties, the smallest `span.start` (the
-/// outermost of perfectly nested nodes). Returns `None` if no node fits.
-///
-/// Comments that are followed by another AST node on the same line —
-/// e.g. `foo(1, /*flag=*/true)` — are *interior* trivia of the
-/// surrounding construct and remain leading of the next node; they are
-/// never reclassified as trailing of the previous one.
-fn trailing_owner(c: &Comment, nodes: &[(AstId, Span)]) -> Option<AstId> {
-    let has_following_node_on_end_line = nodes
-        .iter()
-        .any(|(_, s)| s.line == c.span.end_line() && s.start >= c.span.end);
-    if has_following_node_on_end_line {
-        return None;
-    }
-    nodes
-        .iter()
-        .filter(|(_, s)| s.end_line() == c.span.line && s.end <= c.span.start)
-        .max_by_key(|(_, s)| (s.end, std::cmp::Reverse(s.start)))
-        .map(|(id, _)| *id)
+/// Per-line index over a node table, used by [`trailing_owner`] so each
+/// per-comment lookup is bounded by the number of nodes ending or
+/// starting on the comment's line — not the whole module's node count.
+struct NodeLookup {
+    /// `(AstId, Span)` for each node, grouped by `span.end_line()`.
+    /// The bucket for a line holds every node whose span ends on that
+    /// line; `trailing_owner`'s candidate filter only needs to scan
+    /// this bucket.
+    by_end_line: BTreeMap<usize, Vec<(AstId, Span)>>,
+    /// `span.start` byte positions, grouped by the node's start line
+    /// and sorted ascending. Used to binary-search the
+    /// "is there a node starting after `c.span.end` on `c`'s end
+    /// line?" disqualification check.
+    starts_by_line: BTreeMap<usize, Vec<usize>>,
 }
+
+impl NodeLookup {
+    fn build(nodes: &[(AstId, Span)]) -> Self {
+        let mut by_end_line: BTreeMap<usize, Vec<(AstId, Span)>> = BTreeMap::new();
+        let mut starts_by_line: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+        for (id, span) in nodes {
+            by_end_line.entry(span.end_line()).or_default().push((*id, *span));
+            starts_by_line.entry(span.line).or_default().push(span.start);
+        }
+        for v in starts_by_line.values_mut() {
+            v.sort_unstable();
+        }
+        Self {
+            by_end_line,
+            starts_by_line,
+        }
+    }
+
+    /// See [`trailing_owner`]; same algorithm using the indexed buckets.
+    fn trailing_owner(&self, c: &Comment) -> Option<AstId> {
+        if let Some(starts) = self.starts_by_line.get(&c.span.end_line()) {
+            // Sorted ascending; if any value is >= c.span.end, the
+            // comment is interior trivia — see `trailing_owner` docs.
+            let cut = starts.partition_point(|&s| s < c.span.end);
+            if cut < starts.len() {
+                return None;
+            }
+        }
+        let bucket = self.by_end_line.get(&c.span.line)?;
+        bucket
+            .iter()
+            .filter(|(_, s)| s.end <= c.span.start)
+            .max_by_key(|(_, s)| (s.end, std::cmp::Reverse(s.start)))
+            .map(|(id, _)| *id)
+    }
+}
+
+// `trailing_owner` is a method on [`NodeLookup`] now; the production
+// path in [`populate_trailing_from_nodes`] reuses a single lookup
+// across every comment instead of rebuilding it. Unit tests below
+// keep a one-shot wrapper for readability.
 
 /// Collect `(AstId, Span)` for every id-bearing node reached from `module`.
 fn collect_node_spans(module: &Module) -> Vec<(AstId, Span)> {
@@ -266,12 +297,13 @@ fn populate_inner_tail_from_blocks(trivia: &mut TriviaMap, blocks: &[(AstId, usi
 /// AST-shape-free core of [`populate_trailing`]. Exposed for unit tests
 /// that construct synthetic `(AstId, Span)` tables.
 fn populate_trailing_from_nodes(trivia: &mut TriviaMap, nodes: &[(AstId, Span)]) {
+    let lookup = NodeLookup::build(nodes);
     let leading_ids: Vec<AstId> = trivia.leading.keys().copied().collect();
     for id in leading_ids {
         let comments = trivia.leading.remove(&id).expect("key was just listed");
         let mut stayers: Vec<Comment> = Vec::with_capacity(comments.len());
         for c in comments {
-            match trailing_owner(&c, nodes) {
+            match lookup.trailing_owner(&c) {
                 Some(owner) => trivia.trailing.entry(owner).or_default().push(c),
                 None => stayers.push(c),
             }
@@ -284,7 +316,7 @@ fn populate_trailing_from_nodes(trivia: &mut TriviaMap, nodes: &[(AstId, Span)])
     let dangling = std::mem::take(&mut trivia.dangling);
     let mut stayers: Vec<Comment> = Vec::with_capacity(dangling.len());
     for c in dangling {
-        match trailing_owner(&c, nodes) {
+        match lookup.trailing_owner(&c) {
             Some(owner) => trivia.trailing.entry(owner).or_default().push(c),
             None => stayers.push(c),
         }
@@ -295,6 +327,13 @@ fn populate_trailing_from_nodes(trivia: &mut TriviaMap, nodes: &[(AstId, Span)])
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// One-shot trailing-owner lookup used by the per-rule unit tests
+    /// in this module — the production path uses [`NodeLookup`]
+    /// directly so the index is reused across every comment.
+    fn trailing_owner(c: &Comment, nodes: &[(AstId, Span)]) -> Option<AstId> {
+        NodeLookup::build(nodes).trailing_owner(c)
+    }
 
     fn line_comment(text: &str, start: usize, end: usize, line: usize, column: usize) -> Comment {
         Comment {
