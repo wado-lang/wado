@@ -544,10 +544,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"() {
     event = "core:internal/cm_waitable_set_poll"(ws);
     if ref.is_null(event) == 0 {
         "wasi/waitable-set-drop"(ws);
-        let __pair_temp_1: i64;
-        __pair_temp_1 = "wasi/future-new"();
-        trailers_future_2 = builtin::i32_wrap_i64(__pair_temp_1);
-        trailers_tx_3 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+        multivalue_bind [trailers_future_2, trailers_tx_3] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/future-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
         headers_4 = "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Fields_new"();
         let __sroa___pattern_temp_2_0: i32;
         let __sroa___pattern_temp_2_1: i32;
@@ -877,10 +874,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"() {
         drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
     }
     "wasi/waitable-set-drop"(ws);
-    let __pair_temp_3: i64;
-    __pair_temp_3 = "wasi/future-new"();
-    trailers_future_7 = builtin::i32_wrap_i64(__pair_temp_3);
-    trailers_tx_8 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+    multivalue_bind [trailers_future_7, trailers_tx_8] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/future-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
     headers_9 = "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Fields_new"();
     let __sroa___pattern_temp_4_0: i32;
     let __sroa___pattern_temp_4_1: i32;

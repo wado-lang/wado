@@ -2375,8 +2375,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 // Track tuple literals whose coercion was deferred because the field
                 // type had unresolved type parameters. After type inference, we'll
-                // re-coerce with the concrete type.
-                if needs_deferred_coercion && matches!(value.kind, TirExprKind::TupleLiteral { .. })
+                // re-coerce with the concrete type. Both `TupleLiteral` (heap form)
+                // and `MultiValueLiteral` (multi-value form) are tuple-shaped — the
+                // re-coercion to a sequence-builder block applies to either.
+                if needs_deferred_coercion
+                    && matches!(
+                        value.kind,
+                        TirExprKind::TupleLiteral { .. } | TirExprKind::MultiValueLiteral { .. }
+                    )
                 {
                     deferred_coercions.push((provided_idx, provided_idx));
                 }
@@ -2897,11 +2903,29 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         let tuple_type = self.type_table.borrow_mut().make_tuple(elem_types);
 
-        let tuple_expr = TirExpr::new(
-            TirExprKind::TupleLiteral { elements },
-            tuple_type,
-            tuple_lit.span,
-        );
+        // Default to the multi-value form (`MultiValueLiteral`). It carries
+        // the same TIR type as `TupleLiteral` and is semantically identical;
+        // the difference is at WIR build time, where `MultiValueLiteral`
+        // lowers to `MultiValueStructNew` (peephole-elidable when destructured;
+        // sroa_return-recognised at function return position) instead of a
+        // direct heap `struct.new`.
+        //
+        // When the literal contains a `TupleSpread` or `TypePackExpansion`
+        // element we keep the heap form: the monomorphiser's spread-expansion
+        // logic walks `TupleLiteral` specifically and re-emits the expanded
+        // result as `MultiValueLiteral` once all spreads are concrete.
+        let has_spread = elements.iter().any(|e| {
+            matches!(
+                e.kind,
+                TirExprKind::TupleSpread { .. } | TirExprKind::TypePackExpansion { .. }
+            )
+        });
+        let tuple_kind = if has_spread {
+            TirExprKind::TupleLiteral { elements }
+        } else {
+            TirExprKind::MultiValueLiteral { elements }
+        };
+        let tuple_expr = TirExpr::new(tuple_kind, tuple_type, tuple_lit.span);
 
         if spread_bindings.is_empty() {
             tuple_expr

@@ -703,6 +703,8 @@ fn generate_struct_serialize(
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     })
 }
 
@@ -1245,6 +1247,8 @@ fn generate_struct_deserialize(
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     };
 
     Some((lookup_func, deser_func))
@@ -1439,6 +1443,8 @@ fn generate_lookup_function(
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     }
 }
 
@@ -1596,6 +1602,8 @@ fn generate_enum_serialize(
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     })
 }
 
@@ -1972,6 +1980,8 @@ fn generate_enum_deserialize(
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     })
 }
 
@@ -2257,6 +2267,8 @@ fn generate_variant_serialize(
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     })
 }
 
@@ -2791,6 +2803,8 @@ fn generate_variant_deserialize(
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     })
 }
 
@@ -3066,6 +3080,8 @@ fn generate_flags_serialize(
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     })
 }
 
@@ -3412,6 +3428,8 @@ fn generate_flags_deserialize(
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     })
 }
 

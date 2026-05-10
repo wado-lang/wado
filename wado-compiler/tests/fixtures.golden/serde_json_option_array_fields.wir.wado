@@ -305,7 +305,7 @@ type "functype//wado-compiler/tests/fixtures/serde_json_option_array_fields.wado
 
 type "functype//wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__cm_export____test_3_roundtrip_with_none" = fn();  // TypeId(71)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/$value_copy$T47" = fn(ref "core:json//JsonSeqSerializer") -> ref "core:json//JsonSeqSerializer";  // TypeId(72)
+type "functype//wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/$value_copy$T48" = fn(ref "core:json//JsonSeqSerializer") -> ref "core:json//JsonSeqSerializer";  // TypeId(72)
 
 type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(73)
 
@@ -644,9 +644,9 @@ fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__test_2_ro
         let __sroa_parsed_r_case1_payload_0: ref null "core:serde//DeserializeError";
         multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core:json/core/json/from_string<User>"(json);
         if __sroa_parsed_r_discriminant == 0 {
-            parsed = __inline__value_copy_T44_4: block -> ref "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado//User" {
+            parsed = __inline__value_copy_T45_4: block -> ref "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado//User" {
                 v = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
-                break __inline__value_copy_T44_4: struct.new "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado//User" { name: v.name, email: v.email, scores: v.scores };
+                break __inline__value_copy_T45_4: struct.new "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado//User" { name: v.name, email: v.email, scores: v.scores };
                 unreachable;
             };
             __v0_6 = parsed.name;
@@ -847,9 +847,9 @@ fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__test_3_ro
         let __sroa_parsed_r_case1_payload_0: ref null "core:serde//DeserializeError";
         multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core:json/core/json/from_string<User>"(json);
         if __sroa_parsed_r_discriminant == 0 {
-            parsed = __inline__value_copy_T44_3: block -> ref "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado//User" {
+            parsed = __inline__value_copy_T45_3: block -> ref "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado//User" {
                 v = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
-                break __inline__value_copy_T44_3: struct.new "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado//User" { name: v.name, email: v.email, scores: v.scores };
+                break __inline__value_copy_T45_3: struct.new "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado//User" { name: v.name, email: v.email, scores: v.scores };
                 unreachable;
             };
             __v0_6 = parsed.name;
@@ -1107,7 +1107,7 @@ fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__cm_export
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/$value_copy$T47"(v) {
+fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/$value_copy$T48"(v) {
     return struct.new "core:json//JsonSeqSerializer" { buf: v.buf, count: v.count };
 }
 
@@ -1150,10 +1150,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;
@@ -4217,7 +4214,7 @@ fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/Array<i32>^
     let item: i32;
     let v: ref "core:json//JsonSeqAccess";
     let __qm_e_23: ref "core:serde//DeserializeError";
-    seq = __inline__value_copy_T57_0: block -> ref "core:json//JsonSeqAccess" {
+    seq = __inline__value_copy_T58_0: block -> ref "core:json//JsonSeqAccess" {
         let __match_scrut_1: ref "core:prelude/types.wado//Result<JsonSeqAccess,DeserializeError>";
         __match_scrut_1 = __inline_JsonDeserializer_Deserializer__begin_seq_1: block -> ref "core:prelude/types.wado//Result<JsonSeqAccess,DeserializeError>" {
             let __match_scrut_0: ref null "core:serde//DeserializeError";
@@ -4247,7 +4244,7 @@ fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/Array<i32>^
             unreachable;
             unreachable;
         });
-        break __inline__value_copy_T57_0: struct.new "core:json//JsonSeqAccess" { de: v.de, first: v.first };
+        break __inline__value_copy_T58_0: struct.new "core:json//JsonSeqAccess" { de: v.de, first: v.first };
         unreachable;
     };
     let __match_scrut_2: ref "core:prelude/types.wado//Result<Option<i32>,DeserializeError>";
@@ -4511,7 +4508,7 @@ fn "core:prelude/array.wado/Array<i32>^Serialize::serialize<JsonSerializer>"(sel
     let __qm_e_8: ref "core:serde//SerializeError";
     let __pattern_temp_0: ref null "core:prelude/types.wado//Box<i32>";
     let arr: ref "core:prelude//Array<i32>";
-    seq = "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/$value_copy$T47"(let __match_scrut_0: ref "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>"; __match_scrut_0 = __inline_JsonSerializer_Serializer__begin_seq_1: block -> ref "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>" {
+    seq = "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/$value_copy$T48"(let __match_scrut_0: ref "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>"; __match_scrut_0 = __inline_JsonSerializer_Serializer__begin_seq_1: block -> ref "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>" {
         drop(self.used);
         "core:prelude/string.wado/String::push"(s, 91);
         break __inline_JsonSerializer_Serializer__begin_seq_1: struct.new "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:json//JsonSeqSerializer" { buf: s, count: 0 } };

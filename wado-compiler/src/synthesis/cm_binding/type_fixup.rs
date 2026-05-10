@@ -668,8 +668,11 @@ fn fixup_expr_type(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) {
         expr.type_id = new_type;
     }
     match &mut expr.kind {
-        TirExprKind::TupleLiteral { .. } | TirExprKind::Call { .. } | TirExprKind::Local { .. } => {
-        }
+        TirExprKind::TupleLiteral { .. }
+        | TirExprKind::MultiValueLiteral { .. }
+        | TirExprKind::MultiValueProject { .. }
+        | TirExprKind::Call { .. }
+        | TirExprKind::Local { .. } => {}
         TirExprKind::VariantConstruct { variant_type, .. } => {
             if *variant_type == TypeTable::I32 || *variant_type == old_type {
                 *variant_type = new_type;
@@ -1489,10 +1492,13 @@ fn rewrite_calls_in_expr(
         TirExprKind::Resume { value } => {
             rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for elem in elements {
                 rewrite_calls_in_expr(elem, adapters, entry_source, wasi_registry, type_table);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            rewrite_calls_in_expr(source, adapters, entry_source, wasi_registry, type_table);
         }
         TirExprKind::TupleSpread { expr: inner }
         | TirExprKind::TupleZip { expr: inner }
@@ -1760,10 +1766,13 @@ fn collect_effect_calls_in_expr(
         TirExprKind::Resume { value } => {
             collect_effect_calls_in_expr(value, effects, wasi_registry);
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for elem in elements {
                 collect_effect_calls_in_expr(elem, effects, wasi_registry);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            collect_effect_calls_in_expr(source, effects, wasi_registry);
         }
         TirExprKind::TupleSpread { expr: inner }
         | TirExprKind::TupleZip { expr: inner }

@@ -474,10 +474,7 @@ fn "wado-compiler/tests/fixtures/http_echo_headers.wado/handle"(request) {
     let __ptr_157: i32;
     let __len_158: i32;
     req_headers = "wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Request_get_headers"(request);
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/future-new"();
-    trailers_future = builtin::i32_wrap_i64(__pair_temp_1);
-    trailers_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [trailers_future, trailers_tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/future-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     resp_headers = "wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_new"();
     if "wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_has"(req_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-echo"), used: 6 }) {
         values = "wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_get"(req_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-echo"), used: 6 });
@@ -1032,10 +1029,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

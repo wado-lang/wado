@@ -482,10 +482,13 @@ fn collect_bytes_literals_expr(expr: &TirExpr, used: &mut IndexSet<Vec<u8>>) {
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
             collect_bytes_literals_block(block, used);
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for e in elements {
                 collect_bytes_literals_expr(e, used);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            collect_bytes_literals_expr(source, used);
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for f in fields {
@@ -1465,7 +1468,7 @@ fn analyze_expr(
                 );
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for elem in elements {
                 analyze_expr(
                     elem,
@@ -1475,6 +1478,15 @@ fn analyze_expr(
                     analysis,
                 );
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            analyze_expr(
+                source,
+                current_module,
+                type_table,
+                inspectable_signatures,
+                analysis,
+            );
         }
         TirExprKind::Closure { body, .. } => {
             analyze_expr(
@@ -1857,7 +1869,7 @@ fn compute_reachable_types(project: &FlatPackage) -> IndexSet<TypeId> {
         // function just to build a lookup set. Pre-compute a hash set of
         // raw pointers so the per-functor check is O(1) instead of an
         // O(|functions|) linear scan per functor.
-        let surviving_ptrs: std::collections::HashSet<*const _> =
+        let surviving_ptrs: IndexSet<*const _> =
             project.functions.iter().map(std::rc::Rc::as_ptr).collect();
         for functor in &project.closure_functors {
             let cm_ptr = std::rc::Rc::as_ptr(&functor.call_method);
@@ -2164,10 +2176,13 @@ fn collect_types_from_expr(
                 collect_types_from_expr(&field.value, type_table, reachable);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for elem in elements {
                 collect_types_from_expr(elem, type_table, reachable);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            collect_types_from_expr(source, type_table, reachable);
         }
         TirExprKind::Closure {
             params,
@@ -2665,10 +2680,13 @@ fn collect_global_reads_expr(expr: &TirExpr, used: &mut IndexSet<(String, String
                 collect_global_reads_expr(&field.value, used);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for elem in elements {
                 collect_global_reads_expr(elem, used);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            collect_global_reads_expr(source, used);
         }
         TirExprKind::Closure { body, .. } => {
             collect_global_reads_expr(body, used);

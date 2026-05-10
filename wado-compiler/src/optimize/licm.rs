@@ -588,10 +588,13 @@ fn collect_modified_vars_in_expr(
                 collect_modified_vars_in_expr(&field.value, modified, type_table);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for elem in elements {
                 collect_modified_vars_in_expr(elem, modified, type_table);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            collect_modified_vars_in_expr(source, modified, type_table);
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
             collect_modified_vars_in_expr(callee, modified, type_table);
@@ -870,10 +873,13 @@ fn collect_licm_ref_bindings_in_expr(
                 collect_licm_ref_bindings_in_expr(&field.value, type_table, bindings);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for elem in elements {
                 collect_licm_ref_bindings_in_expr(elem, type_table, bindings);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            collect_licm_ref_bindings_in_expr(source, type_table, bindings);
         }
         TirExprKind::Closure { body, .. } => {
             collect_licm_ref_bindings_in_expr(body, type_table, bindings);
@@ -1371,7 +1377,7 @@ fn find_hoist_candidates_in_expr(
                 );
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for elem in elements {
                 find_hoist_candidates_in_expr(
                     elem,
@@ -1382,6 +1388,16 @@ fn find_hoist_candidates_in_expr(
                     next_local,
                 );
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            find_hoist_candidates_in_expr(
+                source,
+                modified_vars,
+                ref_bindings,
+                candidates,
+                seen,
+                next_local,
+            );
         }
         TirExprKind::TupleSpread { expr: inner }
         | TirExprKind::TupleZip { expr: inner }
@@ -1762,10 +1778,13 @@ fn replace_hoisted_in_expr(
                 replace_hoisted_in_expr(&mut field.value, candidates, ref_bindings);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for elem in elements {
                 replace_hoisted_in_expr(elem, candidates, ref_bindings);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            replace_hoisted_in_expr(source, candidates, ref_bindings);
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
             replace_hoisted_in_expr(callee, candidates, ref_bindings);

@@ -171,10 +171,7 @@ fn "wado-compiler/tests/fixtures/coerce_i128_u128.wado/run"() with Stdout {
         break __tmpl: __local_3;
         unreachable;
     };
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx_16 = builtin::i32_wrap_i64(__pair_temp_1);
-    tx_17 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx_16, tx_17] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle_18 = "wado-compiler/tests/fixtures/coerce_i128_u128.wado/__cm_binding__Stdout_write_via_stream"(rx_16);
     "core:cli/write_to_stream"(tx_17, message_15, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_18);
@@ -187,10 +184,7 @@ fn "wado-compiler/tests/fixtures/coerce_i128_u128.wado/run"() with Stdout {
         break __tmpl: __local_5;
         unreachable;
     };
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    rx_28 = builtin::i32_wrap_i64(__pair_temp_2);
-    tx_29 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [rx_28, tx_29] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     handle_30 = "wado-compiler/tests/fixtures/coerce_i128_u128.wado/__cm_binding__Stdout_write_via_stream"(rx_28);
     "core:cli/write_to_stream"(tx_29, message_27, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_30);
@@ -205,10 +199,7 @@ fn "wado-compiler/tests/fixtures/coerce_i128_u128.wado/run"() with Stdout {
         break __tmpl: __local_7;
         unreachable;
     };
-    let __pair_temp_3: i64;
-    __pair_temp_3 = "wasi/stream-new"();
-    rx_43 = builtin::i32_wrap_i64(__pair_temp_3);
-    tx_44 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+    multivalue_bind [rx_43, tx_44] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
     handle_45 = "wado-compiler/tests/fixtures/coerce_i128_u128.wado/__cm_binding__Stdout_write_via_stream"(rx_43);
     "core:cli/write_to_stream"(tx_44, message_42, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_45);
@@ -221,10 +212,7 @@ fn "wado-compiler/tests/fixtures/coerce_i128_u128.wado/run"() with Stdout {
         break __tmpl: __local_9;
         unreachable;
     };
-    let __pair_temp_4: i64;
-    __pair_temp_4 = "wasi/stream-new"();
-    rx_55 = builtin::i32_wrap_i64(__pair_temp_4);
-    tx_56 = builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+    multivalue_bind [rx_55, tx_56] = let __pair_temp_4: i64; __pair_temp_4 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
     handle_57 = "wado-compiler/tests/fixtures/coerce_i128_u128.wado/__cm_binding__Stdout_write_via_stream"(rx_55);
     "core:cli/write_to_stream"(tx_56, message_54, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_57);
@@ -299,10 +287,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;
@@ -366,7 +351,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
         unreachable;
     }
     if "core:prelude/int128.wado/u128^Ord::cmp"(self, divisor) == 0 {
-        return struct.new "tuple//[u128, u128]" { 0: struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, 1: self };
+        return multivalue_struct_new "tuple//[u128, u128]"(struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }; self);
     }
     if __inline_u128_Eq__eq_1: block -> bool {
         self_7 = self;
@@ -379,7 +364,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
         break __inline_u128_Eq__eq_1;
         unreachable;
     } {
-        return struct.new "tuple//[u128, u128]" { 0: struct.new "core:prelude/int128.wado//u128" { low: 1_i64, high: 0_i64 }, 1: struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 } };
+        return multivalue_struct_new "tuple//[u128, u128]"(struct.new "core:prelude/int128.wado//u128" { low: 1_i64, high: 0_i64 }; struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 });
     }
     quotient = struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 };
     remainder = struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 };
@@ -402,7 +387,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
             continue l12;
         };
     };
-    return struct.new "tuple//[u128, u128]" { 0: quotient, 1: remainder };
+    return multivalue_struct_new "tuple//[u128, u128]"(quotient; remainder);
 }
 
 fn "core:prelude/int128.wado/u128::get_bit"(self, i) {

@@ -451,9 +451,9 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/__test_2_enum_deseri
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\"Yellow\""), used: 8 });
     if __sroa_r_discriminant == 1 {
-        e = __inline__value_copy_T44_0: block -> ref "core:serde//DeserializeError" {
+        e = __inline__value_copy_T45_0: block -> ref "core:serde//DeserializeError" {
             v = ref.as_non_null(__sroa_r_case1_payload_0);
-            break __inline__value_copy_T44_0: struct.new "core:serde//DeserializeError" { kind: v.kind, message: v.message, offset: v.offset };
+            break __inline__value_copy_T45_0: struct.new "core:serde//DeserializeError" { kind: v.kind, message: v.message, offset: v.offset };
             unreachable;
         };
         __v0 = e.message;
@@ -591,10 +591,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;
@@ -2089,9 +2086,9 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Deserialize::d
     let __sroa___va_r_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa___va_r_discriminant, __sroa___va_r_case0_payload_0, __sroa___va_r_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_variant"(d, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color"), used: 5 }, 3);
     if __sroa___va_r_discriminant == 0 {
-        va = __inline__value_copy_T58_0: block -> ref "core:json//JsonVariantAccess" {
+        va = __inline__value_copy_T59_0: block -> ref "core:json//JsonVariantAccess" {
             v_10 = ref.as_non_null(__sroa___va_r_case0_payload_0);
-            break __inline__value_copy_T58_0: struct.new "core:json//JsonVariantAccess" { de: v_10.de, variant: v_10.variant, is_object: v_10.is_object };
+            break __inline__value_copy_T59_0: struct.new "core:json//JsonVariantAccess" { de: v_10.de, variant: v_10.variant, is_object: v_10.is_object };
             unreachable;
         };
         __disc_r = struct.new "core:prelude/types.wado//Result<i32,DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 9, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("JSON does not encode discriminants"), used: 34 }, offset: -1_i64 } };

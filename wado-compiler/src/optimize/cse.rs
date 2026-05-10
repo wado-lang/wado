@@ -606,10 +606,14 @@ fn replace_in_expr(expr: &mut TirExpr, key: &CseKey, replacement: &TirExprKind, 
                 replace_in_expr(&mut f.value, key, replacement, type_id);
             }
         }
-        TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. }
+        | TirExprKind::MultiValueLiteral { elements, .. } => {
             for elem in elements {
                 replace_in_expr(elem, key, replacement, type_id);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            replace_in_expr(source, key, replacement, type_id);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {

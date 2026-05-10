@@ -106,10 +106,7 @@ fn "wado-compiler/tests/fixtures/method_turbofish_non_generic_struct.wado/run"()
         break __inline_Converter__convert_String__2: value_7;
         unreachable;
     };
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx_9 = builtin::i32_wrap_i64(__pair_temp_1);
-    tx_10 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx_9, tx_10] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle_11 = "wado-compiler/tests/fixtures/method_turbofish_non_generic_struct.wado/__cm_binding__Stdout_write_via_stream"(rx_9);
     "core:cli/write_to_stream"(tx_10, s, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_11);
@@ -120,10 +117,7 @@ fn "wado-compiler/tests/fixtures/method_turbofish_non_generic_struct.wado/run"()
         break __tmpl: __local_3;
         unreachable;
     };
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    rx_17 = builtin::i32_wrap_i64(__pair_temp_2);
-    tx_18 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [rx_17, tx_18] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     handle_19 = "wado-compiler/tests/fixtures/method_turbofish_non_generic_struct.wado/__cm_binding__Stdout_write_via_stream"(rx_17);
     "core:cli/write_to_stream"(tx_18, message_16, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_19);

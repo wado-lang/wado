@@ -202,10 +202,7 @@ fn "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/run"() wi
             break __tmpl: __local_4;
             unreachable;
         };
-        let __pair_temp_1: i64;
-        __pair_temp_1 = "wasi/stream-new"();
-        rx_10 = builtin::i32_wrap_i64(__pair_temp_1);
-        tx_11 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+        multivalue_bind [rx_10, tx_11] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
         handle_12 = "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/__cm_binding__Stdout_write_via_stream"(rx_10);
         "core:cli/write_to_stream"(tx_11, message_9, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_12);
@@ -216,10 +213,7 @@ fn "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/run"() wi
     multivalue_bind [__sroa_r2_discriminant, __sroa_r2_case0_payload_0, __sroa_r2_case1_payload_0] = "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/make_outer"(-1);
     if __sroa_r2_discriminant == 1 {
         e = ref.as_non_null(__sroa_r2_case1_payload_0);
-        let __pair_temp_2: i64;
-        __pair_temp_2 = "wasi/stream-new"();
-        rx_27 = builtin::i32_wrap_i64(__pair_temp_2);
-        tx_28 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+        multivalue_bind [rx_27, tx_28] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
         handle_29 = "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/__cm_binding__Stdout_write_via_stream"(rx_27);
         "core:cli/write_to_stream"(tx_28, e, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_29);

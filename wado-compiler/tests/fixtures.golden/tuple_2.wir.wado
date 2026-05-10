@@ -206,7 +206,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/describe"(a, b) {
     let f_40: ref "core:prelude/format.wado//Formatter";
     let __sroa_self_value_44: bool;
     let __sroa_self_value_45: bool;
-    return let __match_scrut_0: ref "tuple//[TupleValue, TupleValue]", __match_scrut_0 = struct.new "tuple//[TupleValue, TupleValue]" { 0: a, 1: b }, (if __local_13 = __match_scrut_0.0; __local_14 = __match_scrut_0.1; (if __local_13.discriminant == 0 -> i32 {
+    return let __match_scrut_0: ref "tuple//[TupleValue, TupleValue]", __match_scrut_0 = multivalue_struct_new "tuple//[TupleValue, TupleValue]"(a; b), (if __local_13 = __match_scrut_0.0; __local_14 = __match_scrut_0.1; (if __local_13.discriminant == 0 -> i32 {
         __local_14.discriminant == 0;
     } else {
         0;
@@ -337,10 +337,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_basic"() with Stdout {
         break __tmpl: __local_2;
         unreachable;
     };
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -368,7 +365,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_for_of"() with Stdout {
     let tx_38: i32;
     let handle_39: i32;
     pairs = __seq_lit: block -> ref "core:prelude//Array<Tuple<i32,String>>" {
-        __b = struct.new "core:prelude//Array<Tuple<i32,String>>" { repr: array.new_fixed<ref "tuple//[i32, String]">(struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("one"), used: 3 } }, struct.new "tuple//[i32, String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("two"), used: 3 } }, struct.new "tuple//[i32, String]" { 0: 3, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("three"), used: 5 } }), used: 3 };
+        __b = struct.new "core:prelude//Array<Tuple<i32,String>>" { repr: array.new_fixed<ref "tuple//[i32, String]">(multivalue_struct_new "tuple//[i32, String]"(1; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("one"), used: 3 }), multivalue_struct_new "tuple//[i32, String]"(2; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("two"), used: 3 }), multivalue_struct_new "tuple//[i32, String]"(3; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("three"), used: 5 })), used: 3 };
         break __seq_lit: __b;
         unreachable;
     };
@@ -390,10 +387,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_for_of"() with Stdout {
                     break __tmpl: __local_7;
                     unreachable;
                 };
-                let __pair_temp_1: i64;
-                __pair_temp_1 = "wasi/stream-new"();
-                rx_24 = builtin::i32_wrap_i64(__pair_temp_1);
-                tx_25 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+                multivalue_bind [rx_24, tx_25] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
                 handle_26 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_24);
                 "core:cli/write_to_stream"(tx_25, message_23, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_26);
@@ -410,10 +404,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_for_of"() with Stdout {
             if ref.is_null(__pattern_temp_2) == 0 {
                 __pattern_temp_3 = ref.as_non_null(__pattern_temp_2);
                 name_6 = __pattern_temp_3.1;
-                let __pair_temp_2: i64;
-                __pair_temp_2 = "wasi/stream-new"();
-                rx_37 = builtin::i32_wrap_i64(__pair_temp_2);
-                tx_38 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+                multivalue_bind [rx_37, tx_38] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
                 handle_39 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_37);
                 "core:cli/write_to_stream"(tx_38, name_6, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_39);
@@ -462,7 +453,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_if_let"() with Stdout {
     let rx_60: i32;
     let tx_61: i32;
     let handle_62: i32;
-    opt = struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 };
+    opt = ref.as_non_null(multivalue_struct_new "tuple//[i32, i32]"(10; 20));
     if ref.is_null(opt) == 0 {
         __pattern_temp_1 = ref.as_non_null(opt);
         x_1 = __pattern_temp_1.0;
@@ -480,10 +471,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_if_let"() with Stdout {
             break __tmpl: __local_7;
             unreachable;
         };
-        let __pair_temp_1: i64;
-        __pair_temp_1 = "wasi/stream-new"();
-        rx_20 = builtin::i32_wrap_i64(__pair_temp_1);
-        tx_21 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+        multivalue_bind [rx_20, tx_21] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
         handle_22 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_20);
         "core:cli/write_to_stream"(tx_21, message_19, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_22);
@@ -506,19 +494,13 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_if_let"() with Stdout {
             break __tmpl: __local_9;
             unreachable;
         };
-        let __pair_temp_2: i64;
-        __pair_temp_2 = "wasi/stream-new"();
-        rx_37 = builtin::i32_wrap_i64(__pair_temp_2);
-        tx_38 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+        multivalue_bind [rx_37, tx_38] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
         handle_39 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_37);
         "core:cli/write_to_stream"(tx_38, message_36, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_39);
     } else {
         message_53 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 };
-        let __pair_temp_3: i64;
-        __pair_temp_3 = "wasi/stream-new"();
-        rx_54 = builtin::i32_wrap_i64(__pair_temp_3);
-        tx_55 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+        multivalue_bind [rx_54, tx_55] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
         handle_56 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_54);
         "core:cli/write_to_stream"(tx_55, message_53, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_56);
@@ -533,10 +515,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_if_let"() with Stdout {
             break __tmpl: __local_11;
             unreachable;
         };
-        let __pair_temp_4: i64;
-        __pair_temp_4 = "wasi/stream-new"();
-        rx_60 = builtin::i32_wrap_i64(__pair_temp_4);
-        tx_61 = builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+        multivalue_bind [rx_60, tx_61] = let __pair_temp_4: i64; __pair_temp_4 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
         handle_62 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_60);
         "core:cli/write_to_stream"(tx_61, message_59, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_62);
@@ -574,17 +553,14 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_matches"() with Stdout {
     let rx_35: i32;
     let tx_36: i32;
     let handle_37: i32;
-    pair = struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 };
+    pair = multivalue_struct_new "tuple//[i32, i32]"(10; 20);
     let __match_scrut_0: ref "tuple//[i32, i32]";
     __match_scrut_0 = pair;
     x_1 = __match_scrut_0.0;
     y_2 = __match_scrut_0.1;
     if (x_1 + y_2) > 25 {
         message_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("large pair"), used: 10 };
-        let __pair_temp_1: i64;
-        __pair_temp_1 = "wasi/stream-new"();
-        rx_11 = builtin::i32_wrap_i64(__pair_temp_1);
-        tx_12 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+        multivalue_bind [rx_11, tx_12] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
         handle_13 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_11);
         "core:cli/write_to_stream"(tx_12, message_10, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_13);
@@ -594,10 +570,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_matches"() with Stdout {
     y_3 = __match_scrut_1.1;
     if y_3 == 20 {
         message_16 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("y is 20"), used: 7 };
-        let __pair_temp_2: i64;
-        __pair_temp_2 = "wasi/stream-new"();
-        rx_17 = builtin::i32_wrap_i64(__pair_temp_2);
-        tx_18 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+        multivalue_bind [rx_17, tx_18] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
         handle_19 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_17);
         "core:cli/write_to_stream"(tx_18, message_16, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_19);
@@ -609,24 +582,18 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_matches"() with Stdout {
     is_small = (x_4 + y_5) < 5;
     if is_small {
         message_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("small"), used: 5 };
-        let __pair_temp_3: i64;
-        __pair_temp_3 = "wasi/stream-new"();
-        rx_23 = builtin::i32_wrap_i64(__pair_temp_3);
-        tx_24 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+        multivalue_bind [rx_23, tx_24] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
         handle_25 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_23);
         "core:cli/write_to_stream"(tx_24, message_22, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_25);
     } else {
         message_28 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not small"), used: 9 };
-        let __pair_temp_4: i64;
-        __pair_temp_4 = "wasi/stream-new"();
-        rx_29 = builtin::i32_wrap_i64(__pair_temp_4);
-        tx_30 = builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+        multivalue_bind [rx_29, tx_30] = let __pair_temp_4: i64; __pair_temp_4 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
         handle_31 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_29);
         "core:cli/write_to_stream"(tx_30, message_28, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_31);
     }
-    opt = struct.new "tuple//[i32, i32]" { 0: 1, 1: 2 };
+    opt = ref.as_non_null(multivalue_struct_new "tuple//[i32, i32]"(1; 2));
     let __match_scrut_3: ref null "tuple//[i32, i32]";
     __match_scrut_3 = opt;
     if (if ref.is_null(__match_scrut_3) == 0 -> bool {
@@ -641,10 +608,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_matches"() with Stdout {
         0;
     }) {
         message_34 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sum is 3"), used: 8 };
-        let __pair_temp_7: i64;
-        __pair_temp_7 = "wasi/stream-new"();
-        rx_35 = builtin::i32_wrap_i64(__pair_temp_7);
-        tx_36 = builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
+        multivalue_bind [rx_35, tx_36] = let __pair_temp_7: i64; __pair_temp_7 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_7); builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
         handle_37 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_35);
         "core:cli/write_to_stream"(tx_36, message_34, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_37);
@@ -689,10 +653,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_mut"() with Stdout {
         break __tmpl: __local_2;
         unreachable;
     };
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx_8 = builtin::i32_wrap_i64(__pair_temp_1);
-    tx_9 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx_8, tx_9] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle_10 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_8);
     "core:cli/write_to_stream"(tx_9, message_7, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_10);
@@ -716,10 +677,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_mut"() with Stdout {
         break __tmpl: __local_4;
         unreachable;
     };
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    rx_25 = builtin::i32_wrap_i64(__pair_temp_2);
-    tx_26 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [rx_25, tx_26] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     handle_27 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_25);
     "core:cli/write_to_stream"(tx_26, message_24, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_27);
@@ -752,10 +710,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_nested"() with Stdout {
         break __tmpl: __local_3;
         unreachable;
     };
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -783,10 +738,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_wildcard"() with Stdout {
         break __tmpl: __local_2;
         unreachable;
     };
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -845,7 +797,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
     let rx_94: i32;
     let tx_95: i32;
     let handle_96: i32;
-    pair = struct.new "tuple//[i32, i32]" { 0: 42, 1: 10 };
+    pair = multivalue_struct_new "tuple//[i32, i32]"(42; 10);
     let __match_scrut_0: ref "tuple//[i32, i32]";
     __match_scrut_0 = pair;
     result = (if a = __match_scrut_0.0; __local_26 = __match_scrut_0.1; __local_26 == 10 -> ref "core:prelude/string.wado//String" {
@@ -860,14 +812,11 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 };
     });
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx_41 = builtin::i32_wrap_i64(__pair_temp_1);
-    tx_42 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx_41, tx_42] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle_43 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_41);
     "core:cli/write_to_stream"(tx_42, result, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_43);
-    bpair = struct.new "tuple//[String, bool]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("yes"), used: 3 }, 1: 1 };
+    bpair = multivalue_struct_new "tuple//[String, bool]"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("yes"), used: 3 }; 1);
     let __match_scrut_1: ref "tuple//[String, bool]";
     __match_scrut_1 = bpair;
     result3 = (if s_4 = __match_scrut_1.0; __local_27 = __match_scrut_1.1; __local_27 == 1 -> ref "core:prelude/string.wado//String" {
@@ -891,14 +840,11 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
     } else {
         unreachable;
     });
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    rx_49 = builtin::i32_wrap_i64(__pair_temp_2);
-    tx_50 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [rx_49, tx_50] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     handle_51 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_49);
     "core:cli/write_to_stream"(tx_50, result3, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_51);
-    cpair = struct.new "tuple//[i32, char]" { 0: 99, 1: 88 };
+    cpair = multivalue_struct_new "tuple//[i32, char]"(99; 88);
     let __match_scrut_2: ref "tuple//[i32, char]";
     __match_scrut_2 = cpair;
     result4 = (if n_8 = __match_scrut_2.0; __local_29 = __match_scrut_2.1; __local_29 == 88 -> ref "core:prelude/string.wado//String" {
@@ -913,14 +859,11 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 };
     });
-    let __pair_temp_3: i64;
-    __pair_temp_3 = "wasi/stream-new"();
-    rx_61 = builtin::i32_wrap_i64(__pair_temp_3);
-    tx_62 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+    multivalue_bind [rx_61, tx_62] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
     handle_63 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_61);
     "core:cli/write_to_stream"(tx_62, result4, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_63);
-    spair = struct.new "tuple//[i32, String]" { 0: 7, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
+    spair = multivalue_struct_new "tuple//[i32, String]"(7; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
     let __match_scrut_3: ref "tuple//[i32, String]";
     __match_scrut_3 = spair;
     result5 = (if n_11 = __match_scrut_3.0; __local_30 = __match_scrut_3.1; __inline_String_Eq__eq_16: block -> bool {
@@ -943,10 +886,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 };
     });
-    let __pair_temp_4: i64;
-    __pair_temp_4 = "wasi/stream-new"();
-    rx_76 = builtin::i32_wrap_i64(__pair_temp_4);
-    tx_77 = builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+    multivalue_bind [rx_76, tx_77] = let __pair_temp_4: i64; __pair_temp_4 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
     handle_78 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_76);
     "core:cli/write_to_stream"(tx_77, result5, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_78);
@@ -958,23 +898,17 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
         break __tmpl: __local_24;
         unreachable;
     };
-    let __pair_temp_5: i64;
-    __pair_temp_5 = "wasi/stream-new"();
-    rx_82 = builtin::i32_wrap_i64(__pair_temp_5);
-    tx_83 = builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+    multivalue_bind [rx_82, tx_83] = let __pair_temp_5: i64; __pair_temp_5 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
     handle_84 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_82);
     "core:cli/write_to_stream"(tx_83, message_81, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_84);
-    bpair2 = struct.new "tuple//[i32, bool]" { 0: 42, 1: 0 };
+    bpair2 = multivalue_struct_new "tuple//[i32, bool]"(42; 0);
     let __match_scrut_4: ref "tuple//[i32, bool]";
     __match_scrut_4 = bpair2;
     __local_33 = __match_scrut_4.1;
     if __local_33 == 0 {
         message_93 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matches bool"), used: 12 };
-        let __pair_temp_6: i64;
-        __pair_temp_6 = "wasi/stream-new"();
-        rx_94 = builtin::i32_wrap_i64(__pair_temp_6);
-        tx_95 = builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
+        multivalue_bind [rx_94, tx_95] = let __pair_temp_6: i64; __pair_temp_6 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
         handle_96 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_94);
         "core:cli/write_to_stream"(tx_95, message_93, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_96);
@@ -1015,7 +949,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_match"() with Stdout {
     let rx_51: i32;
     let tx_52: i32;
     let handle_53: i32;
-    pair = struct.new "tuple//[i32, i32]" { 0: 5, 1: 10 };
+    pair = multivalue_struct_new "tuple//[i32, i32]"(5; 10);
     let __match_scrut_0: ref "tuple//[i32, i32]";
     __match_scrut_0 = pair;
     label = (if x_1 = __match_scrut_0.0; y_2 = __match_scrut_0.1; (x_1 + y_2) > 20 -> ref "core:prelude/string.wado//String" {
@@ -1041,10 +975,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_match"() with Stdout {
             unreachable;
         };
     });
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx_33 = builtin::i32_wrap_i64(__pair_temp_1);
-    tx_34 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx_33, tx_34] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle_35 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_33);
     "core:cli/write_to_stream"(tx_34, label, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_35);
@@ -1059,14 +990,11 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_match"() with Stdout {
         break __tmpl: __local_16;
         unreachable;
     };
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    rx_39 = builtin::i32_wrap_i64(__pair_temp_2);
-    tx_40 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [rx_39, tx_40] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     handle_41 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_39);
     "core:cli/write_to_stream"(tx_40, message_38, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_41);
-    opt = struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 };
+    opt = ref.as_non_null(multivalue_struct_new "tuple//[i32, i32]"(3; 4));
     let __match_scrut_2: ref null "tuple//[i32, i32]";
     __match_scrut_2 = opt;
     sum = (if ref.is_null(__match_scrut_2) == 0 -> i32 {
@@ -1087,10 +1015,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_match"() with Stdout {
         break __tmpl: __local_18;
         unreachable;
     };
-    let __pair_temp_5: i64;
-    __pair_temp_5 = "wasi/stream-new"();
-    rx_51 = builtin::i32_wrap_i64(__pair_temp_5);
-    tx_52 = builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+    multivalue_bind [rx_51, tx_52] = let __pair_temp_5: i64; __pair_temp_5 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
     handle_53 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_51);
     "core:cli/write_to_stream"(tx_52, message_50, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_53);
@@ -1118,42 +1043,27 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_variant"() with Stdout {
     let tx_26: i32;
     let handle_27: i32;
     message_0 = "wado-compiler/tests/fixtures/tuple_2.wado/describe"(struct.new "wado-compiler/tests/fixtures/tuple_2.wado//TupleValue::Bool" { discriminant: 1, payload_0: 1 }, struct.new "wado-compiler/tests/fixtures/tuple_2.wado//TupleValue::Bool" { discriminant: 1, payload_0: 0 });
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx_1 = builtin::i32_wrap_i64(__pair_temp_1);
-    tx_2 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx_1, tx_2] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle_3 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_1);
     "core:cli/write_to_stream"(tx_2, message_0, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_3);
     message_6 = "wado-compiler/tests/fixtures/tuple_2.wado/describe"(struct.new "wado-compiler/tests/fixtures/tuple_2.wado//TupleValue::Number" { discriminant: 2, payload_0: 1 }, struct.new "wado-compiler/tests/fixtures/tuple_2.wado//TupleValue::Number" { discriminant: 2, payload_0: 2 });
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    rx_7 = builtin::i32_wrap_i64(__pair_temp_2);
-    tx_8 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [rx_7, tx_8] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     handle_9 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_7);
     "core:cli/write_to_stream"(tx_8, message_6, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_9);
     message_12 = "wado-compiler/tests/fixtures/tuple_2.wado/describe"(struct.new "wado-compiler/tests/fixtures/tuple_2.wado//TupleValue" { 0 }, struct.new "wado-compiler/tests/fixtures/tuple_2.wado//TupleValue" { 0 });
-    let __pair_temp_3: i64;
-    __pair_temp_3 = "wasi/stream-new"();
-    rx_13 = builtin::i32_wrap_i64(__pair_temp_3);
-    tx_14 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+    multivalue_bind [rx_13, tx_14] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
     handle_15 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_13);
     "core:cli/write_to_stream"(tx_14, message_12, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_15);
     message_18 = "wado-compiler/tests/fixtures/tuple_2.wado/describe"(struct.new "wado-compiler/tests/fixtures/tuple_2.wado//TupleValue::Text" { discriminant: 3, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi"), used: 2 } }, struct.new "wado-compiler/tests/fixtures/tuple_2.wado//TupleValue::Text" { discriminant: 3, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bye"), used: 3 } });
-    let __pair_temp_4: i64;
-    __pair_temp_4 = "wasi/stream-new"();
-    rx_19 = builtin::i32_wrap_i64(__pair_temp_4);
-    tx_20 = builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+    multivalue_bind [rx_19, tx_20] = let __pair_temp_4: i64; __pair_temp_4 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
     handle_21 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_19);
     "core:cli/write_to_stream"(tx_20, message_18, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_21);
     message_24 = "wado-compiler/tests/fixtures/tuple_2.wado/describe"(struct.new "wado-compiler/tests/fixtures/tuple_2.wado//TupleValue::Bool" { discriminant: 1, payload_0: 1 }, struct.new "wado-compiler/tests/fixtures/tuple_2.wado//TupleValue::Number" { discriminant: 2, payload_0: 1 });
-    let __pair_temp_5: i64;
-    __pair_temp_5 = "wasi/stream-new"();
-    rx_25 = builtin::i32_wrap_i64(__pair_temp_5);
-    tx_26 = builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+    multivalue_bind [rx_25, tx_26] = let __pair_temp_5: i64; __pair_temp_5 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
     handle_27 = "wado-compiler/tests/fixtures/tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_25);
     "core:cli/write_to_stream"(tx_26, message_24, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_27);

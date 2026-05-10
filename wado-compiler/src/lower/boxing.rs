@@ -711,10 +711,14 @@ impl BoxLowerer {
                     Self::remap_locals_in_expr(&mut field.value, remap);
                 }
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements }
+            | TirExprKind::MultiValueLiteral { elements } => {
                 for elem in elements {
                     Self::remap_locals_in_expr(elem, remap);
                 }
+            }
+            TirExprKind::MultiValueProject { source, .. } => {
+                Self::remap_locals_in_expr(source, remap);
             }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(p) = payload {
@@ -986,10 +990,14 @@ impl BoxLowerer {
                     self.transform_expr(&mut field.value, address_taken, type_table);
                 }
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements }
+            | TirExprKind::MultiValueLiteral { elements } => {
                 for elem in elements {
                     self.transform_expr(elem, address_taken, type_table);
                 }
+            }
+            TirExprKind::MultiValueProject { source, .. } => {
+                self.transform_expr(source, address_taken, type_table);
             }
             TirExprKind::Closure {
                 body,

@@ -811,10 +811,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;
@@ -2210,9 +2207,9 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Deserialize::
         unreachable;
     };
     if ref.test "core:prelude/types.wado//Result<JsonSeqAccess,DeserializeError>::Ok"(__seq_r) {
-        seq = __inline__value_copy_T55_1: block -> ref "core:json//JsonSeqAccess" {
+        seq = __inline__value_copy_T56_1: block -> ref "core:json//JsonSeqAccess" {
             v_14 = ref.cast "core:prelude/types.wado//Result<JsonSeqAccess,DeserializeError>::Ok"(__seq_r).payload_0;
-            break __inline__value_copy_T55_1: struct.new "core:json//JsonSeqAccess" { de: v_14.de, first: v_14.first };
+            break __inline__value_copy_T56_1: struct.new "core:json//JsonSeqAccess" { de: v_14.de, first: v_14.first };
             unreachable;
         };
         bits = 0;

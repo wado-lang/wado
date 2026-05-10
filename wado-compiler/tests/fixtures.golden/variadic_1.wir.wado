@@ -228,11 +228,11 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_0_identity_mixed_types"(
     let f_42: ref "core:prelude/format.wado//Formatter";
     let f_47: ref "core:prelude/format.wado//Formatter";
     a = __inline_identity_Tuple_i32_String_bool___0: block -> ref "tuple//[i32, String, bool]" {
-        x = struct.new "tuple//[i32, String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 };
+        x = multivalue_struct_new "tuple//[i32, String, bool]"(1; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }; 1);
         break __inline_identity_Tuple_i32_String_bool___0: x;
         unreachable;
     };
-    __v0_1 = 1;
+    __v0_1 = a.0;
     __cond_2 = __v0_1 == 1;
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -305,7 +305,7 @@ condition: a.1 == \"hello\"
         });
         unreachable;
     }
-    __v0_5 = 1;
+    __v0_5 = a.2;
     __cond_6 = __v0_5 == 1;
     if __cond_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -345,6 +345,7 @@ condition: a.2 == true
 }
 
 fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_1_identity_single_element"() {
+    let b: ref "tuple//[i32]";
     let __v0: i32;
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
@@ -352,12 +353,12 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_1_identity_single_elemen
     let x: ref "tuple//[i32]";
     let f_9: ref "core:prelude/format.wado//Formatter";
     let f_14: ref "core:prelude/format.wado//Formatter";
-    drop(__inline_identity_Tuple_i32___0: block -> ref "tuple//[i32]" {
-        x = struct.new "tuple//[i32]" { 0: 42 };
+    b = __inline_identity_Tuple_i32___0: block -> ref "tuple//[i32]" {
+        x = multivalue_struct_new "tuple//[i32]"(42);
         break __inline_identity_Tuple_i32___0: x;
         unreachable;
-    });
-    __v0 = 42;
+    };
+    __v0 = b.0;
     __cond = __v0 == 42;
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -393,6 +394,7 @@ condition: b.0 == 42
 }
 
 fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_2_identity_homogeneous"() {
+    let c: ref "tuple//[i32, i32, i32]";
     let __v0_1: i32;
     let __cond_2: bool;
     let __v0_3: i32;
@@ -412,12 +414,12 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_2_identity_homogeneous"(
     let f_33: ref "core:prelude/format.wado//Formatter";
     let f_39: ref "core:prelude/format.wado//Formatter";
     let f_44: ref "core:prelude/format.wado//Formatter";
-    drop(__inline_identity_Tuple_i32_i32_i32___0: block -> ref "tuple//[i32, i32, i32]" {
-        x = struct.new "tuple//[i32, i32, i32]" { 0: 1, 1: 2, 2: 3 };
+    c = __inline_identity_Tuple_i32_i32_i32___0: block -> ref "tuple//[i32, i32, i32]" {
+        x = multivalue_struct_new "tuple//[i32, i32, i32]"(1; 2; 3);
         break __inline_identity_Tuple_i32_i32_i32___0: x;
         unreachable;
-    });
-    __v0_1 = 1;
+    };
+    __v0_1 = c.0;
     __cond_2 = __v0_1 == 1;
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -450,7 +452,7 @@ condition: c.0 == 1
         });
         unreachable;
     }
-    __v0_3 = 2;
+    __v0_3 = c.1;
     __cond_4 = __v0_3 == 2;
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -483,7 +485,7 @@ condition: c.1 == 2
         });
         unreachable;
     }
-    __v0_5 = 3;
+    __v0_5 = c.2;
     __cond_6 = __v0_5 == 3;
     if __cond_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -542,7 +544,7 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_3_append_to_pack"() {
     let __sroa_rest_0: ref "core:prelude/string.wado//String";
     result = __inline_append_Tuple_String_bool__i32__0: block -> ref "tuple//[String, bool, i32]" {
         __sroa_rest_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-        break __inline_append_Tuple_String_bool__i32__0: struct.new "tuple//[String, bool, i32]" { 0: __sroa_rest_0, 1: 1, 2: 42 };
+        break __inline_append_Tuple_String_bool__i32__0: multivalue_struct_new "tuple//[String, bool, i32]"(__sroa_rest_0; 1; 42);
         unreachable;
     };
     __v0_1 = result.0;
@@ -581,7 +583,7 @@ condition: result.0 == \"hello\"
         });
         unreachable;
     }
-    __v0_3 = 1;
+    __v0_3 = result.1;
     __cond_4 = __v0_3 == 1;
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -614,7 +616,7 @@ condition: result.1 == true
         });
         unreachable;
     }
-    __v0_5 = 42;
+    __v0_5 = result.2;
     __cond_6 = __v0_5 == 42;
     if __cond_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -663,10 +665,10 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_4_append_single_element_
     let f_32: ref "core:prelude/format.wado//Formatter";
     single = __inline_append_Tuple_i32__String__0: block -> ref "tuple//[i32, String]" {
         b = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("end"), used: 3 };
-        break __inline_append_Tuple_i32__String__0: struct.new "tuple//[i32, String]" { 0: 1, 1: b };
+        break __inline_append_Tuple_i32__String__0: multivalue_struct_new "tuple//[i32, String]"(1; b);
         unreachable;
     };
-    __v0_1 = 1;
+    __v0_1 = single.0;
     __cond_2 = __v0_1 == 1;
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -812,10 +814,10 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_6_prepend_mixed_params"(
     let __sroa_rest_0: ref "core:prelude/string.wado//String";
     result = __inline_prepend_i32_Tuple_String_bool___0: block -> ref "tuple//[i32, String, bool]" {
         __sroa_rest_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-        break __inline_prepend_i32_Tuple_String_bool___0: struct.new "tuple//[i32, String, bool]" { 0: 42, 1: __sroa_rest_0, 2: 1 };
+        break __inline_prepend_i32_Tuple_String_bool___0: multivalue_struct_new "tuple//[i32, String, bool]"(42; __sroa_rest_0; 1);
         unreachable;
     };
-    __v0_1 = 42;
+    __v0_1 = result.0;
     __cond_2 = __v0_1 == 42;
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -880,7 +882,7 @@ condition: result.1 == \"hello\"
         });
         unreachable;
     }
-    __v0_5 = 1;
+    __v0_5 = result.2;
     __cond_6 = __v0_5 == 1;
     if __cond_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -945,10 +947,10 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_9_surround_with_middle"(
     let __sroa_middle_0: ref "core:prelude/string.wado//String";
     result = __inline_surround_i32_Tuple_String_bool__i32__0: block -> ref "tuple//[i32, String, bool, i32]" {
         __sroa_middle_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-        break __inline_surround_i32_Tuple_String_bool__i32__0: struct.new "tuple//[i32, String, bool, i32]" { 0: 1, 1: __sroa_middle_0, 2: 1, 3: 99 };
+        break __inline_surround_i32_Tuple_String_bool__i32__0: multivalue_struct_new "tuple//[i32, String, bool, i32]"(1; __sroa_middle_0; 1; 99);
         unreachable;
     };
-    __v0_1 = 1;
+    __v0_1 = result.0;
     __cond_2 = __v0_1 == 1;
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -1013,7 +1015,7 @@ condition: result.1 == \"hello\"
         });
         unreachable;
     }
-    __v0_5 = 1;
+    __v0_5 = result.2;
     __cond_6 = __v0_5 == 1;
     if __cond_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -1046,7 +1048,7 @@ condition: result.2 == true
         });
         unreachable;
     }
-    __v0_7 = 99;
+    __v0_7 = result.3;
     __cond_8 = __v0_7 == 99;
     if __cond_8 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -1098,7 +1100,7 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_10_surround_empty_middle
     empty_mid = __inline_surround_String_Tuple_String__0: block -> ref "tuple//[String, String]" {
         a = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("start"), used: 5 };
         b = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("end"), used: 3 };
-        break __inline_surround_String_Tuple_String__0: struct.new "tuple//[String, String]" { 0: a, 1: b };
+        break __inline_surround_String_Tuple_String__0: multivalue_struct_new "tuple//[String, String]"(a; b);
         unreachable;
     };
     __v0_1 = empty_mid.0;
@@ -1198,11 +1200,11 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_12_nested_call"() {
     let f_43: ref "core:prelude/format.wado//Formatter";
     let f_48: ref "core:prelude/format.wado//Formatter";
     a = __inline_double_wrap_Tuple_i32_String_bool___0: block -> ref "tuple//[i32, String, bool]" {
-        x_13 = struct.new "tuple//[i32, String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 };
+        x_13 = multivalue_struct_new "tuple//[i32, String, bool]"(1; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }; 1);
         break __inline_double_wrap_Tuple_i32_String_bool___0: x_13;
         unreachable;
     };
-    __v0_1 = 1;
+    __v0_1 = a.0;
     __cond_2 = __v0_1 == 1;
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -1275,7 +1277,7 @@ condition: a.1 == \"hello\"
         });
         unreachable;
     }
-    __v0_5 = 1;
+    __v0_5 = a.2;
     __cond_6 = __v0_5 == 1;
     if __cond_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -1315,6 +1317,7 @@ condition: a.2 == true
 }
 
 fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_13_nested_call_single"() {
+    let b: ref "tuple//[i32]";
     let __v0: i32;
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
@@ -1322,12 +1325,12 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__test_13_nested_call_single"()
     let x_5: ref "tuple//[i32]";
     let f_10: ref "core:prelude/format.wado//Formatter";
     let f_15: ref "core:prelude/format.wado//Formatter";
-    drop(__inline_double_wrap_Tuple_i32___0: block -> ref "tuple//[i32]" {
-        x_5 = struct.new "tuple//[i32]" { 0: 42 };
+    b = __inline_double_wrap_Tuple_i32___0: block -> ref "tuple//[i32]" {
+        x_5 = multivalue_struct_new "tuple//[i32]"(42);
         break __inline_double_wrap_Tuple_i32___0: x_5;
         unreachable;
-    });
-    __v0 = 42;
+    };
+    __v0 = b.0;
     __cond = __v0 == 42;
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -1400,7 +1403,7 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__cm_export____test_6_prepend_m
 fn "wado-compiler/tests/fixtures/variadic_1.wado/__cm_export____test_7_empty_pack_identity"() {
     let x: ref "tuple//[]";
     drop(__inline_identity_Tuple__3: block -> ref "tuple//[]" {
-        x = struct.new "tuple//[]" {  };
+        x = multivalue_struct_new "tuple//[]"();
         break __inline_identity_Tuple__3: x;
         unreachable;
     });
@@ -1422,7 +1425,7 @@ fn "wado-compiler/tests/fixtures/variadic_1.wado/__cm_export____test_10_surround
 }
 
 fn "wado-compiler/tests/fixtures/variadic_1.wado/__cm_export____test_11_for_of_variadic"() {
-    "wado-compiler/tests/fixtures/variadic_1.wado/collect_for_of<Tuple<i32,String,bool>>"(struct.new "tuple//[i32, String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 });
+    "wado-compiler/tests/fixtures/variadic_1.wado/collect_for_of<Tuple<i32,String,bool>>"(multivalue_struct_new "tuple//[i32, String, bool]"(1; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }; 1));
     "wasi/task-return"(0);
 }
 
@@ -1673,10 +1676,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

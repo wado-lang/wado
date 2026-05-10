@@ -111,8 +111,8 @@ fn "wado-compiler/tests/fixtures/variadic_for_of_generic_method.wado/run"() with
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
-    let f_9: ref "core:prelude/format.wado//Formatter";
-    let f_14: ref "core:prelude/format.wado//Formatter";
+    let f_10: ref "core:prelude/format.wado//Formatter";
+    let f_15: ref "core:prelude/format.wado//Formatter";
     let message: ref "core:prelude/string.wado//String";
     let rx: i32;
     let tx: i32;
@@ -134,15 +134,15 @@ fn "wado-compiler/tests/fixtures/variadic_for_of_generic_method.wado/run"() with
             "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variadic_for_of_generic_method.wado"), used: 64 });
             "core:prelude/string.wado/String::push"(__local_3, 58);
             __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
-            f_9 = __local_4;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(42, f_9);
+            f_10 = __local_4;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(42, f_10);
             "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: t.value() == 43
 "), used: 28 });
             "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("t.value(): "), used: 11 });
             __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
-            f_14 = __local_4;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, f_14);
+            f_15 = __local_4;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, f_15);
             "core:prelude/string.wado/String::push"(__local_3, 10);
             break __tmpl: __local_3;
             unreachable;
@@ -150,10 +150,7 @@ condition: t.value() == 43
         unreachable;
     }
     message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle = "wado-compiler/tests/fixtures/variadic_for_of_generic_method.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -224,10 +221,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

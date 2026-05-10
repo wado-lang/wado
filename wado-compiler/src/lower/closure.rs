@@ -664,6 +664,8 @@ impl ClosureLowerer {
                 export_name: None,
                 allocator_tag: None,
                 kind: FunctionKind::Regular,
+
+                return_abi: crate::tir::ReturnAbi::default(),
             };
 
             let call_method_rc = Rc::new(RefCell::new(call_method));
@@ -877,6 +879,8 @@ impl ClosureLowerer {
             export_name: None,
             allocator_tag: None,
             kind: FunctionKind::Regular,
+
+            return_abi: crate::tir::ReturnAbi::default(),
         }
     }
 
@@ -1034,6 +1038,8 @@ impl ClosureLowerer {
             export_name: callee.export_name.clone(),
             allocator_tag: callee.allocator_tag.clone(),
             kind: FunctionKind::Regular,
+
+            return_abi: crate::tir::ReturnAbi::default(),
         };
 
         self.generated_functions

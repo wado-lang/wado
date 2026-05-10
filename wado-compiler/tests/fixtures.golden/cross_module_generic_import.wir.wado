@@ -124,10 +124,7 @@ fn "wado-compiler/tests/fixtures/cross_module_generic_import.wado/run"() with St
         break __tmpl: __local_3;
         unreachable;
     };
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx_11 = builtin::i32_wrap_i64(__pair_temp_1);
-    tx_12 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx_11, tx_12] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle_13 = "wado-compiler/tests/fixtures/cross_module_generic_import.wado/__cm_binding__Stdout_write_via_stream"(rx_11);
     "core:cli/write_to_stream"(tx_12, message_10, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_13);
@@ -143,16 +140,13 @@ fn "wado-compiler/tests/fixtures/cross_module_generic_import.wado/run"() with St
         break __tmpl: __local_5;
         unreachable;
     };
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    rx_24 = builtin::i32_wrap_i64(__pair_temp_2);
-    tx_25 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [rx_24, tx_25] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     handle_26 = "wado-compiler/tests/fixtures/cross_module_generic_import.wado/__cm_binding__Stdout_write_via_stream"(rx_24);
     "core:cli/write_to_stream"(tx_25, message_23, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_26);
     pair = __inline___cross_module_generic_helper_wado_make_pair_i32_String__13: block -> ref "tuple//[i32, String]" {
         second = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
-        break __inline___cross_module_generic_helper_wado_make_pair_i32_String__13: struct.new "tuple//[i32, String]" { 0: 10, 1: second };
+        break __inline___cross_module_generic_helper_wado_make_pair_i32_String__13: multivalue_struct_new "tuple//[i32, String]"(10; second);
         unreachable;
     };
     message_32 = __tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -167,10 +161,7 @@ fn "wado-compiler/tests/fixtures/cross_module_generic_import.wado/run"() with St
         break __tmpl: __local_6;
         unreachable;
     };
-    let __pair_temp_3: i64;
-    __pair_temp_3 = "wasi/stream-new"();
-    rx_33 = builtin::i32_wrap_i64(__pair_temp_3);
-    tx_34 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+    multivalue_bind [rx_33, tx_34] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
     handle_35 = "wado-compiler/tests/fixtures/cross_module_generic_import.wado/__cm_binding__Stdout_write_via_stream"(rx_33);
     "core:cli/write_to_stream"(tx_34, message_32, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_35);
