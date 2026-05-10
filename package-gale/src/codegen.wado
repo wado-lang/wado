@@ -41,7 +41,7 @@ use { gen_visitor } from "./visitor_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
-use { lower } from "./lower.wado";
+use { lower_with_ctx } from "./lower.wado";
 use { LoweredGrammar } from "./gir.wado";
 
 pub struct GenerateOptions {
@@ -62,14 +62,17 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> String {
     gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_cst_types(&mut w, &grammar.parser_rules);
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
-    // Phase 3 — run lower up front so any panic surfaces at the same
-    // place every grammar passes through. `gen_parser` reads the
-    // GIR for rule classification; the per-rule body emitters still
-    // consume surface IR until Phase 4 migrates them.
-    let lowered = lower(grammar, &lit_tokens);
+    // Create the shared GenContext up front so lower's pre-pass
+    // (follow-variant registry, kind-set registry, first / nullable
+    // / scannable caches) primes the same instance emit later
+    // consumes. Sharing the registry means id assignments line up:
+    // lower picks the first id for the first set it sees; emit's
+    // subsequent intern_kind_set / intern_follow_variant calls hit
+    // the cache and return the same id lower already chose.
+    let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
+    let lowered = lower_with_ctx(grammar, &lit_tokens, &mut ctx);
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
     gen_lexer(&mut w, grammar, &lit_tokens);
-    let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
     gen_parser(&mut w, grammar, &lowered, &mut ctx);
     gen_visitor(&mut w, grammar);
     if options.highlight {
@@ -79,7 +82,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> String {
     // call across parser/scan/lookahead generation has had a chance to
     // intern its set. Visitor and highlight do not emit `matches { TK_* }`
     // checks so this ordering is safe.
-    gen_kind_set_helpers(&mut w, &ctx);
+    gen_kind_set_helpers(&mut w, &lowered, &ctx);
     return w.to_string();
 }
 

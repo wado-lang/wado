@@ -6171,25 +6171,46 @@ fn gen_parse_entry(w: &mut CodeWriter, parser_rules: &Array<ParserRule>) {
 /// every multi-element `matches { ... }` check into a call into one of
 /// these helpers, so duplicate sets share a single function body in
 /// the generated wasm.
-pub fn gen_kind_set_helpers(w: &mut CodeWriter, ctx: &GenContext) {
+/// Emit `_gale_kind_set_<id>(k) -> bool` helpers. The id range
+/// `0..lowered.kind_sets.len()` reads tokens directly from
+/// `lowered.kind_sets` — that's lower's Phase 2.7 pre-interning
+/// surfacing as actual generated code. Higher ids (sets emit-time
+/// `kind_check_str` interned during walk) read from
+/// `ctx.kind_sets()` as a salvage tail, same pattern as the
+/// variant-emission split.
+///
+/// For the lower-registered prefix, the generated helper body is
+/// the canonical proof that `lowered.kind_sets[i].tokens` matches
+/// what emit subsequently calls — a mismatch would compile but
+/// parse wrong (the helper body would not include the token emit
+/// queries). Today the two registries converge by construction
+/// because both intern through the same `ctx.intern_kind_set`
+/// keyed by canonical token order.
+pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext) {
     let entries = ctx.kind_sets();
-    for let entry of &entries {
-        gen_kind_set_helper(w, entry);
+    for let mut idx = 0; idx < entries.len(); idx += 1 {
+        if idx < lowered.kind_sets.len() {
+            let ks = &lowered.kind_sets[idx];
+            gen_kind_set_helper_raw(w, ks.id, &ks.tokens);
+        } else {
+            let entry = &entries[idx];
+            gen_kind_set_helper_raw(w, entry.id, &entry.tokens);
+        }
     }
 }
 
-fn gen_kind_set_helper(w: &mut CodeWriter, entry: &KindSetEntry) {
-    let mut f = FnSpec::new(&`_gale_kind_set_{entry.id}`);
+fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &Array<String>) {
+    let mut f = FnSpec::new(&`_gale_kind_set_{id}`);
     f.add_param("k", "i32");
     f.set_return_type("bool");
     f.emit_begin(w);
     let mut body = String::with_capacity(64);
     body.push_str("return k matches { ");
-    for let mut i = 0; i < entry.tokens.len(); i += 1 {
+    for let mut i = 0; i < tokens.len(); i += 1 {
         if i > 0 {
             body.push_str(" | ");
         }
-        body.push_str(entry.tokens[i]);
+        body.push_str(tokens[i]);
     }
     body.push_str(" };");
     w.line(&body);

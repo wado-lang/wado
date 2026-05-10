@@ -130,17 +130,26 @@ use {
 /// `lit_tokens` is computed by `lexer_gen::collect_literal_tokens`
 /// before lowering and threaded in so a single literal-collection
 /// pass serves both the lexer and parser sides.
+/// Convenience entry for callers that don't share a `GenContext`
+/// with downstream emit (e.g. `lower_test.wado` smoke tests). Real
+/// codegen calls `lower_with_ctx` instead so the variant and
+/// kind-set registries land in the ctx emit later consumes.
 pub fn lower(grammar: &Grammar, lit_tokens: &Array<LitToken>) -> LoweredGrammar {
-    // GenContext caches first / nullable / single-token / scannable /
-    // tail-greedy facts as it walks the rules. Lowering reuses these
-    // caches across rules so e.g. `first_of_rule(expr)` is computed
-    // once even when many rules reference `expr`. The context is
-    // discarded once `LoweredGrammar` is built — every analysis fact
-    // lowering needs has already been baked into the GIR.
     let mut ctx = GenContext::new(&grammar.parser_rules, lit_tokens);
+    return lower_with_ctx(grammar, lit_tokens, &mut ctx);
+}
+
+pub fn lower_with_ctx(grammar: &Grammar, lit_tokens: &Array<LitToken>, ctx: &mut GenContext) -> LoweredGrammar {
+    // `ctx` is shared with downstream emit. The follow-variant
+    // and kind-set registries lower writes into ctx are the same
+    // ones emit reads from later: id assignments stay consistent
+    // between the pre-pass and emit's intern calls during body
+    // walking. Caches (first / nullable / single-token / scannable
+    // / tail-greedy) survive across the lower-then-emit boundary
+    // and only get computed once.
     let mut parser_rules: Array<Rule> = [];
     for let rule of &grammar.parser_rules {
-        parser_rules.push(lower_rule(rule, &mut ctx));
+        parser_rules.push(lower_rule(rule, ctx));
     }
     // Phase 2.6 — follow-variant pre-pass. The first lowering pass
     // already called `ctx.intern_follow_variant` at every RuleRef
@@ -150,13 +159,13 @@ pub fn lower(grammar: &Grammar, lit_tokens: &Array<LitToken>) -> LoweredGrammar 
     // may itself register new variants (a variant body re-walks the
     // rule with `current_follow_mask` applied), so loop to a
     // fixed point.
-    let variant_rules = lower_variant_rules(&grammar.parser_rules, &mut ctx);
+    let variant_rules = lower_variant_rules(&grammar.parser_rules, ctx);
     // Phase 2.7 — pre-intern multi-element token-kind sets that
     // surface in dispatch branches and `Op::Excluded` kinds. The
     // resulting registry is the source of truth for `_gale_kind_set_<id>`
     // helper-function emission; emit consults it in lockstep with
     // the dispatch / op walk it does anyway.
-    let kind_sets = intern_kind_sets(&parser_rules);
+    let kind_sets = intern_kind_sets(&parser_rules, ctx);
     return LoweredGrammar {
         name: grammar.name,
         source_files: grammar.source_files,
@@ -265,144 +274,94 @@ fn attach_variant_header(rule: &mut Rule, v: FollowVariant) {
 /// (`WithFollowSubtraction.effective_first`, `NonGreedy.exit_*`,
 /// `OptionalLookahead.sigs`) are consumed inline by emit and don't
 /// need helper-function interning.
-fn intern_kind_sets(parser_rules: &Array<Rule>) -> Array<KindSet> {
-    let mut registry: TreeMap<String, i32> = TreeMap::<String, i32>::new();
-    let mut sets: Array<KindSet> = [];
+fn intern_kind_sets(parser_rules: &Array<Rule>, ctx: &mut GenContext) -> Array<KindSet> {
+    // Prime ctx's kind-set registry with every multi-element token
+    // set the lowered IR carries. ctx is also where emit interns
+    // sets at gen_parse_fn time via `kind_check_str`; sharing the
+    // registry means lower's helper ids match emit's call sites
+    // exactly — `_gale_kind_set_<id>` references resolve to the
+    // helper this pre-pass produced.
     for let rule of parser_rules {
-        walk_rule_for_kind_sets(rule, &mut registry, &mut sets);
+        walk_rule_for_kind_sets(rule, ctx);
+    }
+    // Snapshot ctx's current state. Emit may grow this registry
+    // further when `kind_check_str` hits a set lower didn't see
+    // (e.g. token sets that surface only from the legacy emit
+    // walks that don't read from GIR yet). Those tail entries
+    // remain reachable via `ctx.kind_sets()` and the kind-set
+    // helper emitter handles them via the salvage tail.
+    let entries = ctx.kind_sets();
+    let mut sets: Array<KindSet> = [];
+    for let entry of &entries {
+        sets.push(KindSet { id: entry.id, tokens: entry.tokens });
     }
     return sets;
 }
 
-fn walk_rule_for_kind_sets(
-    rule: &Rule,
-    registry: &mut TreeMap<String, i32>,
-    sets: &mut Array<KindSet>,
-) {
+fn walk_rule_for_kind_sets(rule: &Rule, ctx: &mut GenContext) {
     match *rule {
-        Simple(s) => walk_alt_body_for_kind_sets(&s.body, registry, sets),
+        Simple(s) => walk_alt_body_for_kind_sets(&s.body, ctx),
         MultiAlt(m) => {
-            walk_dispatch_for_kind_sets(&m.dispatch, registry, sets);
-            walk_dispatch_for_kind_sets(&m.scan_dispatch, registry, sets);
+            walk_dispatch_for_kind_sets(&m.dispatch, ctx);
+            walk_dispatch_for_kind_sets(&m.scan_dispatch, ctx);
             for let alt of &m.alts {
-                walk_alt_body_for_kind_sets(alt, registry, sets);
+                walk_alt_body_for_kind_sets(alt, ctx);
             }
         },
         LeftRecursive(l) => {
-            // Atom is a `MultiAltRule` — same dispatch + per-alt walk.
-            walk_dispatch_for_kind_sets(&l.atom.dispatch, registry, sets);
-            walk_dispatch_for_kind_sets(&l.atom.scan_dispatch, registry, sets);
+            walk_dispatch_for_kind_sets(&l.atom.dispatch, ctx);
+            walk_dispatch_for_kind_sets(&l.atom.scan_dispatch, ctx);
             for let alt of &l.atom.alts {
-                walk_alt_body_for_kind_sets(alt, registry, sets);
+                walk_alt_body_for_kind_sets(alt, ctx);
             }
-            // LR suffix bodies. The LR loop dispatch is rebuilt at
-            // emit time from `lr_dispatch` + `lr_alts.suffix_first`,
-            // so no kind-set entries fall out of `lr_dispatch` itself.
             for let lr of &l.lr_alts {
-                walk_alt_body_for_kind_sets(&lr.suffix, registry, sets);
+                walk_alt_body_for_kind_sets(&lr.suffix, ctx);
             }
         },
     };
 }
 
-fn walk_dispatch_for_kind_sets(
-    d: &MultiAltDispatch,
-    registry: &mut TreeMap<String, i32>,
-    sets: &mut Array<KindSet>,
-) {
+fn walk_dispatch_for_kind_sets(d: &MultiAltDispatch, ctx: &mut GenContext) {
     match *d {
         Direct(dd) => {
             for let branch of &dd.branches {
                 if branch.tokens.len() >= 2 {
-                    intern_kind_set(&branch.tokens, registry, sets);
+                    ctx.intern_kind_set(&branch.tokens);
                 }
             }
         },
-        // `Tournament` carries only alt indices — no token-kind sets
-        // to intern. emit derives the per-alt scan calls from the
-        // matching `scan_alts` body, which already had its kind
-        // sets walked via the `AltBody` recursion.
         Tournament(_) => {},
     };
 }
 
-fn walk_alt_body_for_kind_sets(
-    alt: &AltBody,
-    registry: &mut TreeMap<String, i32>,
-    sets: &mut Array<KindSet>,
-) {
+fn walk_alt_body_for_kind_sets(alt: &AltBody, ctx: &mut GenContext) {
     for let op of &alt.ops {
-        walk_op_for_kind_sets(op, registry, sets);
+        walk_op_for_kind_sets(op, ctx);
     }
 }
 
-fn walk_op_for_kind_sets(
-    op: &Op,
-    registry: &mut TreeMap<String, i32>,
-    sets: &mut Array<KindSet>,
-) {
+fn walk_op_for_kind_sets(op: &Op, ctx: &mut GenContext) {
     match *op {
         Excluded(e) => {
             if e.kinds.len() >= 2 {
-                intern_kind_set(&e.kinds, registry, sets);
+                ctx.intern_kind_set(&e.kinds);
             }
         },
-        Repeat(r) => walk_op_for_kind_sets(&r.body, registry, sets),
+        Repeat(r) => walk_op_for_kind_sets(&r.body, ctx),
         Group(go) => {
-            walk_dispatch_for_kind_sets(&go.dispatch, registry, sets);
-            walk_dispatch_for_kind_sets(&go.scan_dispatch, registry, sets);
+            walk_dispatch_for_kind_sets(&go.dispatch, ctx);
+            walk_dispatch_for_kind_sets(&go.scan_dispatch, ctx);
             for let inner_alt of &go.alts {
-                walk_alt_body_for_kind_sets(inner_alt, registry, sets);
+                walk_alt_body_for_kind_sets(inner_alt, ctx);
             }
         },
-        // Token / Literal / RuleCall / Wildcard contribute no kind
-        // sets of their own — single-token checks render as a direct
-        // `<expr> == TK_X` and don't warrant a helper function.
         Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) => {},
     };
 }
 
-/// Intern a multi-element kind set. Equal sets (regardless of input
-/// order or duplicates) collapse to a single `id`; the canonical
-/// (sorted, unique) representation drives the registry key. New IDs
-/// are assigned in registration order.
-fn intern_kind_set(
-    tokens: &Array<String>,
-    registry: &mut TreeMap<String, i32>,
-    sets: &mut Array<KindSet>,
-) {
-    let canonical = canonical_kind_set(tokens);
-    let key = join_pipe(&canonical);
-    if registry.contains_key(key) {
-        return;
-    }
-    let id = sets.len();
-    registry.insert(key, id);
-    sets.push(KindSet { id, tokens: canonical });
-}
-
-fn canonical_kind_set(tokens: &Array<String>) -> Array<String> {
-    let mut sorted = *tokens;
-    sorted.sort();
-    let mut out: Array<String> = [];
-    for let mut i = 0; i < sorted.len(); i += 1 {
-        if i == 0 || sorted[i] != sorted[i - 1] {
-            out.push(sorted[i]);
-        }
-    }
-    return out;
-}
-
-fn join_pipe(tokens: &Array<String>) -> String {
-    let mut s = String::with_capacity(64);
-    for let mut i = 0; i < tokens.len(); i += 1 {
-        if i > 0 {
-            s.push('|');
-        }
-        s.push_str(tokens[i]);
-    }
-    return s;
-}
+// `intern_kind_set` / `canonical_kind_set` / `join_pipe` removed;
+// `walk_*_for_kind_sets` calls `ctx.intern_kind_set` directly so
+// lower and emit share a single registry.
 
 /// Classify a parser rule by shape and dispatch to the matching
 /// lowering. Single-alt → `Simple`; multi-alt with no LR alt →
