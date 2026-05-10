@@ -99,6 +99,7 @@ use {
     ExcludedOp,
     RepeatOp,
     RepeatStrategy,
+    NonGreedyStrategy,
     GroupOp,
     GroupShape,
     SingleAltShape,
@@ -567,8 +568,13 @@ fn lower_lr_alt_suffix(
 
     let mut name_counts: Array<[String, i32]> = [];
     let mut ops: Array<Op> = [];
+    // Same per-element follow logic as `lower_alt_body`, but the
+    // suffix starts at index 1 (index 0 is the stripped leading
+    // self-ref).
+    let outer_follow: Array<String> = [];
     for let mut i = 1; i < alt.elements.len(); i += 1 {
-        ops.push(lower_op(&alt.elements[i], &mut name_counts, &rule.name, ctx, &mut group_counter));
+        let elem_follow = inner_follow_at(&alt.elements, i, &outer_follow, ctx);
+        ops.push(lower_op(&alt.elements[i], &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow));
     }
 
     let fields = enumerate_alt_field_decls(&ops);
@@ -591,8 +597,13 @@ fn lower_lr_alt_scan_suffix(
 ) -> ScanBody {
     let alt = &rule.alternatives[alt_idx];
     let mut elements: Array<ScanElement> = [];
+    // LR suffix: the scan body walks elements after the leading
+    // self-ref. The follow at the end of the suffix is the rule's
+    // outer follow — empty here; Phase 2.6 may refine.
+    let outer_follow: Array<String> = [];
     for let mut i = 1; i < alt.elements.len(); i += 1 {
-        elements.push(lower_scan_element(&alt.elements[i], ctx));
+        let elem_follow = inner_follow_at(&alt.elements, i, &outer_follow, ctx);
+        elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
     }
     return ScanBody { elements };
 }
@@ -873,14 +884,20 @@ fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
 /// no name dedup — it only produces a token-stream walk that
 /// returns the new `pos`.
 fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext) -> ScanBody {
+    let outer_follow: Array<String> = [];
     let mut elements: Array<ScanElement> = [];
-    for let elem of &alt.elements {
-        elements.push(lower_scan_element(elem, ctx));
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        let elem_follow = inner_follow_at(&alt.elements, i, &outer_follow, ctx);
+        elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
     }
     return ScanBody { elements };
 }
 
-fn lower_scan_element(elem: &Element, ctx: &mut GenContext) -> ScanElement {
+fn lower_scan_element(
+    elem: &Element,
+    ctx: &mut GenContext,
+    outer_follow: &Array<String>,
+) -> ScanElement {
     return match *elem {
         TokenRef(t) => ScanElement::Token(ScanTokenElem { kind: `TK_{t.name}` }),
         Literal(l) => ScanElement::Token(ScanTokenElem {
@@ -899,9 +916,9 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext) -> ScanElement {
         Not(ne) => ScanElement::Excluded(ScanExcludedElem {
             kinds: collect_excluded_kinds(&ne.element),
         }),
-        Label(lab) => lower_scan_element(&lab.element, ctx),
-        Repeat(rep) => lower_scan_repeat(rep, ctx),
-        Group(g) => lower_scan_group(g, ctx),
+        Label(lab) => lower_scan_element(&lab.element, ctx, outer_follow),
+        Repeat(rep) => lower_scan_repeat(rep, ctx, outer_follow),
+        Group(g) => lower_scan_group(g, ctx, outer_follow),
     };
 }
 
@@ -910,7 +927,11 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext) -> ScanElement {
 /// dispatch step: single-alt groups have no dispatch (one body run
 /// unconditionally / wrapped in a one-alt `ScanGroupElem`), while
 /// multi-alt token-only groups dispatch on token kind.
-fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext) -> ScanElement {
+fn lower_scan_group(
+    g: &GroupElement,
+    ctx: &mut GenContext,
+    outer_follow: &Array<String>,
+) -> ScanElement {
     let alts = &g.alternatives;
     if alts.len() == 0 {
         panic("Group with no alts is not a valid scan-lowering input");
@@ -921,14 +942,16 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext) -> ScanElement {
             panic("Group with empty alt is not a valid scan-lowering input");
         }
         if alt.elements.len() == 1 {
-            // Transparent (scan side) — nested inner allowed.
-            return lower_scan_element(&alt.elements[0], ctx);
+            // Transparent (scan side) — nested inner allowed. The
+            // group's only element inherits the surrounding follow.
+            return lower_scan_element(&alt.elements[0], ctx, outer_follow);
         }
         // Single-alt (scan side) — nested elements allowed; each
         // is lowered through the standard scan-element recursion.
         let mut elements: Array<ScanElement> = [];
-        for let elem of &alt.elements {
-            elements.push(lower_scan_element(elem, ctx));
+        for let mut i = 0; i < alt.elements.len(); i += 1 {
+            let elem_follow = inner_follow_at(&alt.elements, i, outer_follow, ctx);
+            elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
         }
         return ScanElement::Group(ScanGroupElem {
             alts: [ScanBody { elements }],
@@ -941,7 +964,7 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext) -> ScanElement {
         let mut first_sets: Array<Array<String>> = [];
         for let alt of alts {
             let elem = &alt.elements[0];
-            bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx)] });
+            bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, outer_follow)] });
             first_sets.push([token_only_kind(elem)]);
         }
         return ScanElement::Group(ScanGroupElem {
@@ -951,10 +974,10 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext) -> ScanElement {
         });
     }
     if is_simple_cst_group(alts) {
-        return lower_simple_cst_scan_group(alts, ctx);
+        return lower_simple_cst_scan_group(alts, ctx, outer_follow);
     }
     if is_general_group(alts) {
-        return lower_general_scan_group(alts, ctx);
+        return lower_general_scan_group(alts, ctx, outer_follow);
     }
     panic("Group shape (scan side) unrecognised by classifier");
 }
@@ -962,13 +985,15 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext) -> ScanElement {
 fn lower_general_scan_group(
     alts: &Array<Alternative>,
     ctx: &mut GenContext,
+    outer_follow: &Array<String>,
 ) -> ScanElement {
     let mut bodies: Array<ScanBody> = [];
     let mut first_sets: Array<Array<String>> = [];
     for let alt of alts {
         let mut elements: Array<ScanElement> = [];
-        for let elem of &alt.elements {
-            elements.push(lower_scan_element(elem, ctx));
+        for let mut i = 0; i < alt.elements.len(); i += 1 {
+            let elem_follow = inner_follow_at(&alt.elements, i, outer_follow, ctx);
+            elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
         }
         bodies.push(ScanBody { elements });
         let mut visiting: Array<String> = [];
@@ -984,19 +1009,62 @@ fn lower_general_scan_group(
 
 /// Scan-side twin of `lower_repeat_op`. Same restrictions: greedy
 /// `Star` / `Plus` with a leaf inner only.
-fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext) -> ScanElement {
-    if rep.non_greedy {
-        panic("TODO Phase 2.x.nongreedy: non-greedy Repeat needs follow-set analysis");
-    }
-    // Optional / Star / Plus all use `Plain` strategy on the scan
-    // side — the scan twin of the Plain parse-side loop. Phase 2.6
-    // adds `WithFollowSubtraction` / `Suppressed` once the variant
-    // pre-pass produces follow masks.
-    let body = lower_scan_element(&rep.element, ctx);
+fn lower_scan_repeat(
+    rep: &RepeatElement,
+    ctx: &mut GenContext,
+    outer_follow: &Array<String>,
+) -> ScanElement {
+    let strategy = if rep.non_greedy {
+        compute_non_greedy_scan_strategy(&rep.element, outer_follow, ctx);
+    } else {
+        // Optional / Star / Plus use `Plain` strategy on the scan
+        // side — the scan twin of the Plain parse-side loop. Phase
+        // 2.6 adds `WithFollowSubtraction` / `Suppressed` once the
+        // variant pre-pass produces follow masks.
+        ScanRepeatStrategy::Plain;
+    };
+
+    let mut inner_visiting: Array<String> = [];
+    let inner_first = ctx.first_of_element(&rep.element, &mut inner_visiting);
+    let iter_follow = union_arrays(&inner_first, outer_follow);
+
+    let body = lower_scan_element(&rep.element, ctx, &iter_follow);
     return ScanElement::Repeat(ScanRepeatElem {
         kind: rep.kind,
         body,
-        strategy: ScanRepeatStrategy::Plain,
+        strategy: strategy,
+    });
+}
+
+/// Scan-side twin of `compute_non_greedy_strategy`. Same payload
+/// computation; only the wrapping `ScanRepeatStrategy` variant
+/// differs.
+fn compute_non_greedy_scan_strategy(
+    inner: &Element,
+    outer_follow: &Array<String>,
+    ctx: &mut GenContext,
+) -> ScanRepeatStrategy {
+    if let Wildcard(_) = inner {
+        return ScanRepeatStrategy::NonGreedy(NonGreedyStrategy {
+            exit_first: *outer_follow,
+            exit_second: [],
+        });
+    }
+    if let Not(_) = inner {
+        return ScanRepeatStrategy::NonGreedy(NonGreedyStrategy {
+            exit_first: *outer_follow,
+            exit_second: [],
+        });
+    }
+    let mut exit_second: Array<String> = [];
+    if let Group(g) = inner {
+        if g.alternatives.len() == 1 && g.alternatives[0].elements.len() >= 2 {
+            exit_second = ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
+        }
+    }
+    return ScanRepeatStrategy::NonGreedy(NonGreedyStrategy {
+        exit_first: *outer_follow,
+        exit_second: exit_second,
     });
 }
 
@@ -1063,8 +1131,16 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
 
     let mut name_counts: Array<[String, i32]> = [];
     let mut ops: Array<Op> = [];
-    for let elem of &alt.elements {
-        ops.push(lower_op(elem, &mut name_counts, &rule.name, ctx, &mut group_counter));
+    // Per-element follow within the alt: tokens that can appear
+    // immediately after this element in the alt. For the last
+    // element, the follow is empty (the rule's own follow is the
+    // surrounding caller's concern, threaded via Phase 2.6 variant
+    // masks rather than this local computation).
+    let outer_follow: Array<String> = [];
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        let elem = &alt.elements[i];
+        let elem_follow = inner_follow_at(&alt.elements, i, &outer_follow, ctx);
+        ops.push(lower_op(elem, &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow));
     }
 
     let fields = enumerate_alt_field_decls(&ops);
@@ -1112,6 +1188,7 @@ fn lower_op(
     rule_name: &String,
     ctx: &mut GenContext,
     group_counter: &mut i32,
+    outer_follow: &Array<String>,
 ) -> Op {
     return match *elem {
         TokenRef(t) => Op::Token(TokenOp {
@@ -1141,9 +1218,9 @@ fn lower_op(
             kinds: collect_excluded_kinds(&ne.element),
             field: dedup_name(&not_element_field_name(&ne.element), name_counts),
         }),
-        Repeat(rep) => lower_repeat_op(rep, name_counts, rule_name, ctx, group_counter),
-        Group(g) => lower_group_op(g, name_counts, rule_name, ctx, group_counter),
-        Label(lab) => lower_label_op(lab, name_counts, rule_name, ctx, group_counter),
+        Repeat(rep) => lower_repeat_op(rep, name_counts, rule_name, ctx, group_counter, outer_follow),
+        Group(g) => lower_group_op(g, name_counts, rule_name, ctx, group_counter, outer_follow),
+        Label(lab) => lower_label_op(lab, name_counts, rule_name, ctx, group_counter, outer_follow),
     };
 }
 
@@ -1172,6 +1249,7 @@ fn lower_group_op(
     rule_name: &String,
     ctx: &mut GenContext,
     group_counter: &mut i32,
+    outer_follow: &Array<String>,
 ) -> Op {
     let alts = &g.alternatives;
     if alts.len() == 0 {
@@ -1183,9 +1261,9 @@ fn lower_group_op(
             panic("Group with empty alt is not a valid lowering input");
         }
         if alt.elements.len() == 1 {
-            return lower_transparent_group(&alt.elements[0], name_counts, rule_name, ctx, group_counter);
+            return lower_transparent_group(&alt.elements[0], name_counts, rule_name, ctx, group_counter, outer_follow);
         }
-        return lower_single_alt_group(alt, name_counts, rule_name, ctx, group_counter);
+        return lower_single_alt_group(alt, name_counts, rule_name, ctx, group_counter, outer_follow);
     }
     if is_token_only_group(alts) {
         return lower_token_only_group(alts, name_counts, ctx);
@@ -1194,7 +1272,7 @@ fn lower_group_op(
         return lower_simple_cst_group(alts, name_counts, ctx);
     }
     if is_general_group(alts) {
-        return lower_general_group(alts, name_counts, rule_name, ctx, group_counter);
+        return lower_general_group(alts, name_counts, rule_name, ctx, group_counter, outer_follow);
     }
     panic("Group shape unrecognised by classifier — should be impossible");
 }
@@ -1207,12 +1285,15 @@ fn lower_transparent_group(
     rule_name: &String,
     ctx: &mut GenContext,
     group_counter: &mut i32,
+    outer_follow: &Array<String>,
 ) -> Op {
     // Nested inner is allowed: `((a))` / `(a*)` / `(name=a)`.
     // The Op carries whatever shape `lower_op` produces; the
     // surrounding emit-side Transparent path inlines it directly.
+    // A Transparent group adds nothing between the inner and the
+    // outer alt, so `outer_follow` passes through verbatim.
 
-    let inner_op = lower_op(inner, name_counts, rule_name, ctx, group_counter);
+    let inner_op = lower_op(inner, name_counts, rule_name, ctx, group_counter, outer_follow);
     let body = AltBody {
         alt_index: 0,
         // Transparent groups produce no struct of their own; case /
@@ -1227,7 +1308,7 @@ fn lower_transparent_group(
         prefix_self_ref_min_prec: 0,
     };
     let scan_body = ScanBody {
-        elements: [lower_scan_element(inner, ctx)],
+        elements: [lower_scan_element(inner, ctx, outer_follow)],
     };
     // `dispatch` is meaningless for a one-alt Transparent group:
     // emit recognises `GroupShape::Transparent` and skips the
@@ -1258,6 +1339,7 @@ fn lower_single_alt_group(
     rule_name: &String,
     ctx: &mut GenContext,
     group_counter: &mut i32,
+    outer_follow: &Array<String>,
 ) -> Op {
     // Nested elements are allowed: `(a (b c))` / `(a*)` /
     // `(name=a b)`. Each elem is lowered through the standard
@@ -1271,9 +1353,16 @@ fn lower_single_alt_group(
     let mut inner_counts: Array<[String, i32]> = [];
     let mut ops: Array<Op> = [];
     let mut scan_elements: Array<ScanElement> = [];
-    for let elem of &alt.elements {
-        ops.push(lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter));
-        scan_elements.push(lower_scan_element(elem, ctx));
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        let elem = &alt.elements[i];
+        // Per-element follow inside the group: tokens that can
+        // appear immediately after this element. For non-last
+        // positions, that's the first-set of the suffix in the
+        // group's alt. The last position inherits the surrounding
+        // alt's `outer_follow`.
+        let elem_follow = inner_follow_at(&alt.elements, i, outer_follow, ctx);
+        ops.push(lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow));
+        scan_elements.push(lower_scan_element(elem, ctx, &elem_follow));
     }
 
     let body = AltBody {
@@ -1351,7 +1440,10 @@ fn lower_token_only_group(
             group_index_start: 0,
             prefix_self_ref_min_prec: 0,
         });
-        scan_bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx)] });
+        // Token-only alts are by construction leaves with no inner
+        // Repeats — outer_follow is irrelevant, pass empty.
+        let empty_follow: Array<String> = [];
+        scan_bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, &empty_follow)] });
         first_sets.push([token_only_kind(elem)]);
     }
     let dispatch = build_direct_dispatch(&first_sets);
@@ -1431,7 +1523,11 @@ fn lower_simple_cst_group(
             group_index_start: 0,
             prefix_self_ref_min_prec: 0,
         });
-        scan_bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx)] });
+        // SimpleCst alts are single `RuleRef`s — outer_follow does
+        // not propagate into the callee (whole-rule follow is the
+        // callee's concern via Phase 2.6 variants).
+        let empty_follow: Array<String> = [];
+        scan_bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, &empty_follow)] });
     }
     let dispatch = build_direct_dispatch(&first_sets);
     return Op::Group(GroupOp {
@@ -1449,12 +1545,13 @@ fn lower_simple_cst_group(
 fn lower_simple_cst_scan_group(
     alts: &Array<Alternative>,
     ctx: &mut GenContext,
+    outer_follow: &Array<String>,
 ) -> ScanElement {
     let mut bodies: Array<ScanBody> = [];
     let mut first_sets: Array<Array<String>> = [];
     for let alt of alts {
         let elem = &alt.elements[0];
-        bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx)] });
+        bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, outer_follow)] });
         let mut visiting: Array<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
     }
@@ -1543,6 +1640,7 @@ fn lower_general_group(
     rule_name: &String,
     ctx: &mut GenContext,
     group_counter: &mut i32,
+    outer_follow: &Array<String>,
 ) -> Op {
     let group_index = *group_counter;
     *group_counter += 1;
@@ -1572,9 +1670,11 @@ fn lower_general_group(
         let mut inner_counts: Array<[String, i32]> = [];
         let mut ops: Array<Op> = [];
         let mut scan_elements: Array<ScanElement> = [];
-        for let elem of &alt.elements {
-            ops.push(lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter));
-            scan_elements.push(lower_scan_element(elem, ctx));
+        for let mut ei = 0; ei < alt.elements.len(); ei += 1 {
+            let elem = &alt.elements[ei];
+            let elem_follow = inner_follow_at(&alt.elements, ei, outer_follow, ctx);
+            ops.push(lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow));
+            scan_elements.push(lower_scan_element(elem, ctx, &elem_follow));
         }
 
         bodies.push(AltBody {
@@ -1646,23 +1746,8 @@ fn lower_repeat_op(
     rule_name: &String,
     ctx: &mut GenContext,
     group_counter: &mut i32,
+    outer_follow: &Array<String>,
 ) -> Op {
-    if rep.non_greedy {
-        panic("TODO Phase 2.x.nongreedy: non-greedy Repeat needs follow-set analysis");
-    }
-    // `?` / `*` / `+` all use the `Plain` strategy in the absence
-    // of a follow-aware variant context. `Plain` for `?` emits
-    // `if peek_kind ∈ first(inner) { ... }`; for `*` / `+` it's the
-    // standard `while peek ∈ first { ... }` (with `+`'s mandatory-
-    // first guard handled at emit time). The `WithFollowSubtraction`
-    // / `OptionalLookahead` / `OptionalScanGuard` strategies land in
-    // Phase 2.6 once the per-call-site follow-mask analysis runs.
-    //
-    // Nested inner is allowed: `(... )*` / `(name=e)*`. The inner
-    // op is a single `Op` (RepeatOp.body type), so any shape that
-    // `lower_op` can produce is valid. The g4 grammar already
-    // forbids `e**` / `e++`, so nested Repeat doesn't reach here.
-
     // Outer struct field name for the alt that contains this
     // Repeat. For `Star` / `Plus` it's `<inner_base>_list` (the
     // struct holds an `Array<...>`); for `Optional` it's just the
@@ -1672,14 +1757,118 @@ fn lower_repeat_op(
     let outer_base = repeat_outer_base_name(&rep.element, rep.kind);
     let outer_field = dedup_name(&outer_base, name_counts);
 
+    let strategy = if rep.non_greedy {
+        compute_non_greedy_strategy(&rep.element, outer_follow, ctx);
+    } else {
+        // `?` / `*` / `+` use the `Plain` strategy in the absence of
+        // a follow-aware variant context. `Plain` for `?` emits
+        // `if peek_kind ∈ first(inner) { ... }`; for `*` / `+` it's
+        // the standard `while peek ∈ first { ... }` (with `+`'s
+        // mandatory-first guard handled at emit time). The
+        // `WithFollowSubtraction` / `OptionalLookahead` /
+        // `OptionalScanGuard` strategies land in Phase 2.6 once the
+        // per-call-site follow-mask analysis runs.
+        RepeatStrategy::Plain;
+    };
+
+    // The inner body's `outer_follow` for nested constructs is the
+    // iter-follow of this repeat: `first(inner) ∪ outer_follow`,
+    // because after the inner finishes the loop either restarts
+    // (consuming a `first(inner)` token) or exits (the surrounding
+    // `outer_follow`). Phase 2.6 will refine for follow-aware
+    // variants; today this propagation is only consumed by nested
+    // non-greedy Repeats.
+    let mut inner_visiting: Array<String> = [];
+    let inner_first = ctx.first_of_element(&rep.element, &mut inner_visiting);
+    let iter_follow = union_arrays(&inner_first, outer_follow);
+
     let mut inner_counts: Array<[String, i32]> = [];
-    let body = lower_op(&rep.element, &mut inner_counts, rule_name, ctx, group_counter);
+    let body = lower_op(&rep.element, &mut inner_counts, rule_name, ctx, group_counter, &iter_follow);
     return Op::Repeat(RepeatOp {
         kind: rep.kind,
         body,
-        strategy: RepeatStrategy::Plain,
+        strategy: strategy,
         field: outer_field,
     });
+}
+
+/// Compute the `NonGreedy` strategy for a non-greedy Repeat (`e*?` /
+/// `e+?` / `e??`). `exit_first` is the surrounding alt's
+/// `outer_follow` — the tokens that may legitimately appear after
+/// the loop. `exit_second` provides 2-token disambiguation for the
+/// case where the inner's first set overlaps `outer_follow` (e.g.
+/// `(',' column_def)*?` followed by `(',' table_constraint)*`,
+/// where peek(0)==',' for both but peek(1) distinguishes).
+fn compute_non_greedy_strategy(
+    inner: &Element,
+    outer_follow: &Array<String>,
+    ctx: &mut GenContext,
+) -> RepeatStrategy {
+    // Wildcard / Not inner have open-ended first sets — emit treats
+    // their continue condition as "while not in follow". The strategy
+    // payload just carries `outer_follow` as `exit_first`; emit
+    // generates the appropriate "loop until follow appears" check.
+    if let Wildcard(_) = inner {
+        return RepeatStrategy::NonGreedy(NonGreedyStrategy {
+            exit_first: *outer_follow,
+            exit_second: [],
+        });
+    }
+    if let Not(_) = inner {
+        return RepeatStrategy::NonGreedy(NonGreedyStrategy {
+            exit_first: *outer_follow,
+            exit_second: [],
+        });
+    }
+
+    // `exit_second` is needed only when the inner's first set fully
+    // overlaps `outer_follow`. For now we only compute it for the
+    // single-alt Group inner case (the common ',' separator pattern)
+    // and leave it empty otherwise — emit's check falls back to a
+    // 1-token peek which conservatively matches minimum.
+    let mut exit_second: Array<String> = [];
+    if let Group(g) = inner {
+        if g.alternatives.len() == 1 && g.alternatives[0].elements.len() >= 2 {
+            exit_second = ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
+        }
+    }
+    return RepeatStrategy::NonGreedy(NonGreedyStrategy {
+        exit_first: *outer_follow,
+        exit_second: exit_second,
+    });
+}
+
+/// Append-and-dedup union of two token-kind arrays. Preserves the
+/// order of `a`, then appends new entries from `b`.
+fn union_arrays(a: &Array<String>, b: &Array<String>) -> Array<String> {
+    let mut result: Array<String> = [];
+    for let tk of a {
+        result.push(*tk);
+    }
+    for let tk of b {
+        if !first_set_contains(&result, tk) {
+            result.push(*tk);
+        }
+    }
+    return result;
+}
+
+/// Follow set for the element at index `i` in `elements`, taking
+/// the surrounding `outer_follow` as the propagation when the
+/// suffix `elements[i+1..]` is nullable. Mirrors what the legacy
+/// `parser_gen` computes per-position at its non-greedy / variant
+/// call sites.
+fn inner_follow_at(
+    elements: &Array<Element>,
+    i: i32,
+    outer_follow: &Array<String>,
+    ctx: &mut GenContext,
+) -> Array<String> {
+    let suffix_first = ctx.first_of_elements_from(elements, i + 1);
+    if ctx.tail_is_nullable_deep(elements, i + 1) {
+        return union_arrays(&suffix_first, outer_follow);
+    }
+    return suffix_first;
 }
 
 /// Outer struct field base name for a Repeat. `Star` / `Plus`
@@ -1757,6 +1946,7 @@ fn lower_label_op(
     rule_name: &String,
     ctx: &mut GenContext,
     group_counter: &mut i32,
+    outer_follow: &Array<String>,
 ) -> Op {
     if lab.list {
         panic("TODO Phase 2.9: list-label (`+=`) lowering requires Array-typed FieldDecl");
@@ -1765,9 +1955,10 @@ fn lower_label_op(
     // Recurse with a temporary name table so the inner op picks any
     // base name without polluting the surrounding alt's counts —
     // we'll throw away the inner field name and use `label_field`
-    // instead.
+    // instead. The label is a name-rebind around its inner; the
+    // follow set is the same as what the label itself sees.
     let mut inner_counts: Array<[String, i32]> = [];
-    let inner_op = lower_op(&lab.element, &mut inner_counts, rule_name, ctx, group_counter);
+    let inner_op = lower_op(&lab.element, &mut inner_counts, rule_name, ctx, group_counter, outer_follow);
     return rebind_op_field(inner_op, &label_field);
 }
 

@@ -1806,6 +1806,124 @@ test "lower LR rule with no trailing self-ref records last_self_ref_idx -1" {
     }
 }
 
+test "lower non-greedy Wildcard Repeat carries outer_follow as exit_first" {
+    // `comment : '/*' .*? '*/' ;` — `.*?` exits when `*/` appears.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "comment",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::Literal(LiteralElement::new("/*")),
+            Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::Wildcard(WildcardElement::new()),
+                non_greedy: true,
+            }),
+            Element::Literal(LiteralElement::new("*/")),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[1] {
+            if let NonGreedy(ng) = &rep.strategy {
+                // exit_first carries the trailing `*/` literal kind.
+                assert ng.exit_first.len() == 1, `expected 1, got {ng.exit_first.len()}`;
+                assert ng.exit_first[0] == "TK_LIT_STARSLASH", ng.exit_first[0];
+                assert ng.exit_second.is_empty();
+            } else {
+                panic("expected RepeatStrategy::NonGreedy");
+            }
+        } else {
+            panic("expected Op::Repeat at index 1");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower non-greedy TokenRef Repeat carries outer_follow as exit_first" {
+    // `r : ID*? '=' ;` — non-greedy `ID*?` followed by required `=`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::TokenRef(TokenRefElement::new("ID")),
+                non_greedy: true,
+            }),
+            Element::Literal(LiteralElement::new("=")),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let NonGreedy(ng) = &rep.strategy {
+                assert ng.exit_first.len() == 1;
+                assert ng.exit_first[0] == "TK_LIT_EQ", ng.exit_first[0];
+            } else {
+                panic("expected RepeatStrategy::NonGreedy");
+            }
+        } else {
+            panic("expected Op::Repeat at index 0");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower non-greedy Group Repeat fills exit_second from inner suffix" {
+    // `r : (',' INT)*? ',' STRING ;` — peek(0)==',' for both
+    // the inner and the follow; peek(1) distinguishes INT (inner)
+    // from STRING (follow). `exit_second` carries the inner's
+    // post-first first set so emit can disambiguate.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::Group(GroupElement::new([
+                    alt_of([
+                        Element::Literal(LiteralElement::new(",")),
+                        Element::TokenRef(TokenRefElement::new("INT")),
+                    ]),
+                ])),
+                non_greedy: true,
+            }),
+            Element::Literal(LiteralElement::new(",")),
+            Element::TokenRef(TokenRefElement::new("STRING")),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let NonGreedy(ng) = &rep.strategy {
+                // exit_first = first(',' STRING) = { TK_LIT_COMMA }.
+                assert ng.exit_first.len() == 1;
+                assert ng.exit_first[0] == "TK_LIT_COMMA";
+                // exit_second = first of inner-after-first = { TK_INT }.
+                assert ng.exit_second.len() == 1, `expected 1, got {ng.exit_second.len()}`;
+                assert ng.exit_second[0] == "TK_INT", ng.exit_second[0];
+            } else {
+                panic("expected RepeatStrategy::NonGreedy");
+            }
+        } else {
+            panic("expected Op::Repeat at index 0");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
 test "lower Transparent Group contributes inner op's field" {
     // `r : (INT) ;` — Transparent group with single leaf inner.
     // The struct field is the inner Token's, not a wrapper.
