@@ -17,6 +17,7 @@ use {
     LiteralElement,
     WildcardElement,
     NotElement,
+    LabelElement,
     Visibility,
 } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
@@ -213,6 +214,72 @@ test "lower dedupes same-name fields" {
         }
         if let Token(t) = &s.body.ops[1] {
             assert t.field == "int_2";
+        } else {
+            panic("expected second Token");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower scalar Label rebinds inner field name" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "labelled",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Label(LabelElement::new(
+            "lhs",
+            false,
+            Element::TokenRef(TokenRefElement::new("ID")),
+        ))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 1;
+        if let Token(t) = &s.body.ops[0] {
+            assert t.kind == "TK_ID";
+            assert t.field == "lhs";
+        } else {
+            panic("expected Op::Token");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Label dedupes against surrounding alt names" {
+    let mut g = empty_grammar(&"T");
+    // `lhs=ID lhs=ID` — two scalar labels with the same name.
+    // dedup_name should produce "lhs" then "lhs_2".
+    g.parser_rules = [ParserRule::new(
+        "two_labels",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::Label(LabelElement::new(
+                "lhs",
+                false,
+                Element::TokenRef(TokenRefElement::new("ID")),
+            )),
+            Element::Label(LabelElement::new(
+                "lhs",
+                false,
+                Element::TokenRef(TokenRefElement::new("ID")),
+            )),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Token(t) = &s.body.ops[0] {
+            assert t.field == "lhs";
+        } else {
+            panic("expected first Token");
+        }
+        if let Token(t) = &s.body.ops[1] {
+            assert t.field == "lhs_2";
         } else {
             panic("expected second Token");
         }

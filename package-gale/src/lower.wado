@@ -41,6 +41,7 @@ use {
     ParserRule,
     Alternative,
     Element,
+    LabelElement,
 } from "./ir.wado";
 use {
     rule_type_name,
@@ -236,9 +237,62 @@ fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>) -> Op {
             kinds: collect_excluded_kinds(&ne.element),
             field: dedup_name(&not_element_field_name(&ne.element), name_counts),
         }),
-        Repeat(_) => panic("TODO Phase 2.2: lower_op for Repeat not implemented"),
-        Group(_) => panic("TODO Phase 2.2: lower_op for Group not implemented"),
-        Label(_) => panic("TODO Phase 2.2: lower_op for Label not implemented"),
+        Repeat(_) => panic("TODO Phase 2.3: lower_op for Repeat not implemented"),
+        Group(_) => panic("TODO Phase 2.3: lower_op for Group not implemented"),
+        Label(lab) => lower_label_op(lab, name_counts),
+    };
+}
+
+/// Lower a `Label` element by recursively lowering its inner
+/// element, then overriding the inner op's field name with the
+/// label's name (deduped against the surrounding alt's name table).
+///
+/// Mirrors `parser_gen::gen_element`'s scalar-Label arm: the inner
+/// emission would have produced its own field name, but the label
+/// rebinds the value under `lab.field_name`. Phase 2.1 only allows
+/// labels around leaf elements; nested `Repeat` / `Group` inside a
+/// label requires the matching lowerings (Phase 2.3+) before the
+/// rebind can be expressed. List labels (`+=`) need an additional
+/// `Array<...>`-typed wrapper field; that wrapping is handled by
+/// the CST `FieldDecl` enumeration in Phase 2.9.
+fn lower_label_op(
+    lab: &LabelElement,
+    name_counts: &mut Array<[String, i32]>,
+) -> Op {
+    if lab.list {
+        panic("TODO Phase 2.9: list-label (`+=`) lowering requires Array-typed FieldDecl");
+    }
+    let label_field = dedup_name(&lab.field_name, name_counts);
+    // Recurse with a temporary name table so the inner op picks any
+    // base name without polluting the surrounding alt's counts —
+    // we'll throw away the inner field name and use `label_field`
+    // instead.
+    let mut inner_counts: Array<[String, i32]> = [];
+    let inner_op = lower_op(&lab.element, &mut inner_counts);
+    return rebind_op_field(inner_op, &label_field);
+}
+
+/// Replace the `field` slot of a leaf op with `new_field`. The
+/// recursive `Repeat` / `Group` cases panic — Phase 2.1 only allows
+/// labels around leaf elements (Token / Literal / RuleCall / Wildcard
+/// / Excluded). The wider rebind belongs in Phase 2.3 once the
+/// recursive op shapes are themselves lowerable.
+fn rebind_op_field(op: Op, new_field: &String) -> Op {
+    return match op {
+        Token(t) => Op::Token(TokenOp { kind: t.kind, field: *new_field }),
+        Literal(l) => Op::Literal(LiteralOp { kind: l.kind, field: *new_field }),
+        RuleCall(r) => Op::RuleCall(RuleCallOp {
+            target_name: r.target_name,
+            target_snake: r.target_snake,
+            variant_id: r.variant_id,
+            min_prec_arg: r.min_prec_arg,
+            field: *new_field,
+        }),
+        Wildcard(_) => Op::Wildcard(WildcardOp { field: *new_field }),
+        Excluded(e) => Op::Excluded(ExcludedOp { kinds: e.kinds, field: *new_field }),
+        Repeat(_) | Group(_) => panic(
+            "TODO Phase 2.3: rebind_op_field for Repeat/Group requires recursive lowering",
+        ),
     };
 }
 
