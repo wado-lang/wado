@@ -1,0 +1,25 @@
+// Module A: defines a private `struct Pair` whose name COLLIDES
+// with the public struct defined in module B. Crucially, this
+// module also contains a function that:
+//   * binds a local `let mut pairs: Array<Pair> = []`
+//   * iterates `for let p of &mut pairs` and writes to a struct field
+//
+// This combination is what trips the WIR codegen on the cross-
+// module struct-name collision: the codegen-time struct lookup
+// (used to type the `&mut Pair` local extracted from the iterator)
+// confuses module A's `Pair` with module B's `Pair`, and a
+// downstream caller of module B's `Pair` ends up with the wrong
+// struct's field layout in its array element type — surfacing as
+// "expected (ref null $type), found (ref (exact $type))" in
+// Wasm GC validation.
+
+struct Pair {
+    counts: Array<i32>,
+}
+
+pub fn drive() {
+    let mut pairs: Array<Pair> = [];
+    for let p of &mut pairs {
+        p.counts.push(1);
+    }
+}
