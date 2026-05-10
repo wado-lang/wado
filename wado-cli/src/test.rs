@@ -498,54 +498,70 @@ struct TestResult {
     duration: Duration,
 }
 
-/// Parse per-test timeout from export name.
-///
-/// Export names with custom timeout contain a `tm{N}` segment:
-/// - `test-tm2000-0-name` → `Some(2000)`
-/// - `test-trap-tm500-0-name` → `Some(500)`
-/// - `test-0-name` → `None` (use default)
-fn parse_timeout_ms(test_name: &str) -> Option<u64> {
-    let rest = test_name
-        .strip_prefix("test-trap-")
-        .or_else(|| test_name.strip_prefix("test-todo-"))
-        .or_else(|| test_name.strip_prefix("test-"))?;
-    let rest = rest.strip_prefix("tm")?;
-    let end = rest.find('-')?;
-    rest[..end].parse::<u64>().ok()
+/// Kind of test, parsed from the export name prefix.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum TestKind {
+    Normal,
+    ExpectTrap,
+    Todo,
 }
 
-/// Strip the `tm{N}-` segment from the name part for display purposes.
-fn strip_timeout_segment(name_part: &str) -> &str {
-    if let Some(rest) = name_part.strip_prefix("tm")
-        && let Some(idx) = rest.find('-')
-    {
-        return &rest[idx + 1..];
-    }
-    name_part
+/// Parsed test export name.
+///
+/// Export names follow the format `test-(trap-|todo-)?(tm{N}-)?{index}(-{name})?`
+/// emitted by the compiler when targeting the `test` world.
+#[derive(Debug, PartialEq, Eq)]
+struct TestExportName {
+    kind: TestKind,
+    timeout_ms: Option<u64>,
+    /// Human-readable display: the `name` segment with `-` → `_`,
+    /// or `<test {index}>` when no name was provided.
+    display: String,
 }
 
-/// Extract display name from test export name.
+/// Parse a `test-…` component export into its kind, timeout, and display name.
 ///
-/// - `test-0-simple` → `"simple"`
-/// - `test-1` → `"<test 1>"`
-/// - `test-trap-0-panics` → `"panics"` (`expect_trap` tests use the same display convention)
-/// - `test-trap-3` → `"<test 3>"`
-/// - `test-todo-0-not-yet` → `"not_yet"` (`TODO` tests use the same display convention)
-/// - `test-todo-2` → `"<test 2>"`
-fn extract_display_name(test_name: &str) -> String {
-    // Strip "test-trap-", "test-todo-", or "test-" prefix to get the "index[-name]" part
-    let name_part = test_name
-        .strip_prefix("test-trap-")
-        .or_else(|| test_name.strip_prefix("test-todo-"))
-        .or_else(|| test_name.strip_prefix("test-"))
-        .unwrap_or(test_name);
-    // Strip optional timeout segment (e.g., "tm2000-")
-    let name_part = strip_timeout_segment(name_part);
-    if let Some(idx) = name_part.find('-') {
-        name_part[idx + 1..].replace('-', "_")
+/// Returns `None` if the name doesn't begin with the `test-` family of prefixes,
+/// so callers can use it both as a filter and as a parser.
+fn parse_test_export(name: &str) -> Option<TestExportName> {
+    let (kind, rest) = if let Some(rest) = name.strip_prefix("test-trap-") {
+        (TestKind::ExpectTrap, rest)
+    } else if let Some(rest) = name.strip_prefix("test-todo-") {
+        (TestKind::Todo, rest)
+    } else if let Some(rest) = name.strip_prefix("test-") {
+        (TestKind::Normal, rest)
     } else {
-        format!("<test {name_part}>")
-    }
+        return None;
+    };
+
+    let (timeout_ms, rest) = parse_timeout_segment(rest);
+
+    let display = match rest.find('-') {
+        Some(idx) => rest[idx + 1..].replace('-', "_"),
+        None => format!("<test {rest}>"),
+    };
+
+    Some(TestExportName {
+        kind,
+        timeout_ms,
+        display,
+    })
+}
+
+/// Strip an optional `tm{N}-` segment, returning the parsed timeout (if any)
+/// and the remainder. A malformed `tm…` (no trailing dash, non-numeric N) is
+/// treated as part of the name rather than a timeout.
+fn parse_timeout_segment(rest: &str) -> (Option<u64>, &str) {
+    let Some(after_tm) = rest.strip_prefix("tm") else {
+        return (None, rest);
+    };
+    let Some(dash) = after_tm.find('-') else {
+        return (None, rest);
+    };
+    let Ok(n) = after_tm[..dash].parse::<u64>() else {
+        return (None, rest);
+    };
+    (Some(n), &after_tm[dash + 1..])
 }
 
 /// A `#![TODO]` module that failed to compile.
@@ -567,7 +583,7 @@ enum CompileTaskResult {
         path: String,
         engine: Arc<Engine>,
         component: Arc<Component>,
-        test_names: Vec<String>,
+        tests: Vec<ParsedTest>,
     },
     TodoCompileError(TodoCompileError),
     CompileFailure(CompileFailure),
@@ -619,10 +635,13 @@ async fn compile_one_file(
     println!("[{elapsed}] Compiled {path} ({dur}, loaded in {load_dur})");
 
     let component_ty = component.component_type();
-    let mut test_names: Vec<String> = Vec::new();
+    let mut tests: Vec<ParsedTest> = Vec::new();
     for (name, _) in component_ty.exports(&engine) {
-        if name.starts_with("test-") {
-            test_names.push(name.to_string());
+        if let Some(parsed) = parse_test_export(name) {
+            tests.push(ParsedTest {
+                export_name: name.to_string(),
+                parsed,
+            });
         }
     }
 
@@ -630,8 +649,23 @@ async fn compile_one_file(
         path,
         engine,
         component,
-        test_names,
+        tests,
     })
+}
+
+/// One discovered test export, paired with its raw export name.
+struct ParsedTest {
+    export_name: String,
+    parsed: TestExportName,
+}
+
+/// Aggregate output of [`collect_test_jobs`]: every per-file outcome from
+/// Phase 1 sorted into the bucket the runner needs for Phase 2 + reporting.
+struct CollectedTests {
+    modules: Vec<Arc<CompiledTestModule>>,
+    jobs: Vec<TestJob>,
+    todo_compile_errors: Vec<TodoCompileError>,
+    compile_failures: Vec<CompileFailure>,
 }
 
 /// Phase 1: Compile all test files and collect test jobs.
@@ -644,12 +678,7 @@ async fn collect_test_jobs(
     flags: Arc<CompileFlags>,
     parallelism: usize,
     overall_start: Instant,
-) -> Result<(
-    Vec<Arc<CompiledTestModule>>,
-    Vec<TestJob>,
-    Vec<TodoCompileError>,
-    Vec<CompileFailure>,
-)> {
+) -> Result<CollectedTests> {
     // The compile future borrows `Cell`/`RefCell` internals (non-Send), so we
     // can't `tokio::spawn` it onto the multi-thread runtime. Instead, hop each
     // file onto the blocking pool and drive it on a per-thread current-thread
@@ -682,20 +711,21 @@ async fn collect_test_jobs(
                 path,
                 engine,
                 component,
-                test_names,
+                tests,
             } => {
                 let module_idx = modules.len();
-                for test_name in &test_names {
-                    let expect_trap = test_name.starts_with("test-trap-");
-                    let is_todo = test_name.starts_with("test-todo-");
-                    let timeout_ms = parse_timeout_ms(test_name).unwrap_or(DEFAULT_TIMEOUT_MS);
+                for ParsedTest {
+                    export_name,
+                    parsed,
+                } in tests
+                {
                     jobs.push(TestJob {
                         module_idx,
-                        test_name: test_name.clone(),
-                        display_name: extract_display_name(test_name),
-                        expect_trap,
-                        is_todo,
-                        timeout_ms,
+                        test_name: export_name,
+                        display_name: parsed.display,
+                        expect_trap: parsed.kind == TestKind::ExpectTrap,
+                        is_todo: parsed.kind == TestKind::Todo,
+                        timeout_ms: parsed.timeout_ms.unwrap_or(DEFAULT_TIMEOUT_MS),
                     });
                 }
                 modules.push(Arc::new(CompiledTestModule {
@@ -709,7 +739,12 @@ async fn collect_test_jobs(
         }
     }
 
-    Ok((modules, jobs, todo_compile_errors, compile_failures))
+    Ok(CollectedTests {
+        modules,
+        jobs,
+        todo_compile_errors,
+        compile_failures,
+    })
 }
 
 /// Build a `TestResult` for a setup-time failure (store/linker/instance/etc.).
@@ -1126,21 +1161,19 @@ async fn run_one_package(
     preopened_dirs: Arc<Vec<(String, String)>>,
     overall_start: Instant,
     show_banner: bool,
-) -> PackageTotals {
+) -> Result<PackageTotals> {
     if show_banner {
         println!();
         println!("=== package: {} ===", pkg_run.label);
     }
 
     // Phase 1: Compile all files and collect test jobs
-    let (modules, jobs, todo_compile_errors, compile_failures) =
-        match collect_test_jobs(&pkg_run.paths, flags, parallelism, overall_start).await {
-            Ok(result) => result,
-            Err(e) => {
-                eprintln!("Error collecting tests: {e}");
-                process::exit(1);
-            }
-        };
+    let CollectedTests {
+        modules,
+        jobs,
+        todo_compile_errors,
+        compile_failures,
+    } = collect_test_jobs(&pkg_run.paths, flags, parallelism, overall_start).await?;
 
     // `compile_ok` counts every file whose compilation finished without a
     // non-TODO error. `#![TODO]` modules whose expected compile error fired
@@ -1159,7 +1192,7 @@ async fn run_one_package(
         };
         println!();
         print_three_axis(&totals, None);
-        return totals;
+        return Ok(totals);
     }
 
     // Phase 2: Execute tests in parallel
@@ -1198,7 +1231,7 @@ async fn run_one_package(
     println!();
     print_three_axis(&totals, None);
 
-    totals
+    Ok(totals)
 }
 
 pub async fn run(opts: TestOptions) {
@@ -1211,7 +1244,7 @@ pub async fn run(opts: TestOptions) {
 
     let mut grand = PackageTotals::default();
     for pkg_run in &package_runs {
-        let totals = run_one_package(
+        match run_one_package(
             pkg_run,
             Arc::clone(&flags),
             jobs,
@@ -1219,8 +1252,14 @@ pub async fn run(opts: TestOptions) {
             overall_start,
             multi_pkg,
         )
-        .await;
-        grand.merge(&totals);
+        .await
+        {
+            Ok(totals) => grand.merge(&totals),
+            Err(e) => {
+                eprintln!("Error collecting tests: {e}");
+                process::exit(1);
+            }
+        }
     }
 
     let total_dur = format_duration(overall_start.elapsed());
@@ -1241,24 +1280,51 @@ pub async fn run(opts: TestOptions) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_parse_timeout_ms() {
-        assert_eq!(parse_timeout_ms("test-tm2000-0-slow"), Some(2000));
-        assert_eq!(parse_timeout_ms("test-trap-tm500-0-panics"), Some(500));
-        assert_eq!(parse_timeout_ms("test-todo-tm3000-1"), Some(3000));
-        assert_eq!(parse_timeout_ms("test-0-simple"), None);
-        assert_eq!(parse_timeout_ms("test-trap-0-panics"), None);
-        assert_eq!(parse_timeout_ms("test-todo-2"), None);
+    fn parse(name: &str) -> TestExportName {
+        parse_test_export(name).unwrap_or_else(|| panic!("expected `test-` prefix in {name:?}"))
     }
 
     #[test]
-    fn test_extract_display_name_with_timeout() {
-        assert_eq!(extract_display_name("test-tm2000-0-slow"), "slow");
-        assert_eq!(extract_display_name("test-trap-tm500-0-panics"), "panics");
-        assert_eq!(extract_display_name("test-todo-tm3000-1"), "<test 1>");
-        // Existing behavior preserved
-        assert_eq!(extract_display_name("test-0-simple"), "simple");
-        assert_eq!(extract_display_name("test-trap-0-panics"), "panics");
-        assert_eq!(extract_display_name("test-1"), "<test 1>");
+    fn parses_kind() {
+        assert_eq!(parse("test-0-simple").kind, TestKind::Normal);
+        assert_eq!(parse("test-trap-0-panics").kind, TestKind::ExpectTrap);
+        assert_eq!(parse("test-todo-1").kind, TestKind::Todo);
+    }
+
+    #[test]
+    fn parses_timeout() {
+        assert_eq!(parse("test-tm2000-0-slow").timeout_ms, Some(2000));
+        assert_eq!(parse("test-trap-tm500-0-panics").timeout_ms, Some(500));
+        assert_eq!(parse("test-todo-tm3000-1").timeout_ms, Some(3000));
+        assert_eq!(parse("test-0-simple").timeout_ms, None);
+        assert_eq!(parse("test-trap-0-panics").timeout_ms, None);
+        assert_eq!(parse("test-todo-2").timeout_ms, None);
+    }
+
+    #[test]
+    fn parses_display_name() {
+        assert_eq!(parse("test-0-simple").display, "simple");
+        assert_eq!(parse("test-trap-0-panics").display, "panics");
+        assert_eq!(parse("test-todo-0-not-yet").display, "not_yet");
+        assert_eq!(parse("test-tm2000-0-slow").display, "slow");
+        assert_eq!(parse("test-trap-tm500-0-panics").display, "panics");
+        assert_eq!(parse("test-1").display, "<test 1>");
+        assert_eq!(parse("test-trap-3").display, "<test 3>");
+        assert_eq!(parse("test-todo-tm3000-1").display, "<test 1>");
+    }
+
+    #[test]
+    fn rejects_non_test_exports() {
+        assert!(parse_test_export("foo").is_none());
+        assert!(parse_test_export("testfoo").is_none());
+    }
+
+    #[test]
+    fn malformed_timeout_segment_is_kept_as_name() {
+        // `tm` not followed by digits-then-dash should fall through into the
+        // index/name branch instead of being silently swallowed as a timeout.
+        let parsed = parse("test-tmfoo-0-x");
+        assert_eq!(parsed.timeout_ms, None);
+        assert_eq!(parsed.display, "0_x");
     }
 }
