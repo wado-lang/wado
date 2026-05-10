@@ -47,6 +47,7 @@ use { GenContext, KindSetEntry, is_nullable, sets_overlap, is_simple_token_group
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
 use { log_stderr } from "core:cli";
 use { TreeSet } from "core:collections";
+use { LoweredGrammar, Rule } from "./gir.wado";
 
 fn first_contains(first: &Array<String>, token: &String) -> bool {
     for let item of first {
@@ -1041,11 +1042,19 @@ fn array_contains_i32(arr: &Array<i32>, val: i32) -> bool {
     return false;
 }
 
-pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
+pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
+    // Phase 3 — `lowered` mirrors `grammar.parser_rules` rule-for-rule
+    // by name and order. emit still consumes surface IR for the body
+    // of each rule (Phase 4 migrates those entry points); the
+    // `LoweredGrammar` is threaded through so we can dispatch on
+    // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
+    // recomputing the classification at every emit site.
     gen_parser_struct(w);
     gen_scan_functions(w, grammar, ctx);
-    for let rule of grammar.parser_rules {
-        gen_parse_fn(w, &rule, ctx);
+    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+        let rule = &grammar.parser_rules[i];
+        let lowered_rule = &lowered.parser_rules[i];
+        gen_parse_fn(w, rule, lowered_rule, ctx);
     }
     // Emit follow-aware variants until the registry reaches a fixed
     // point. A variant's body may register further variants when its
@@ -2554,7 +2563,13 @@ fn is_lenient_group(alts: &Array<Alternative>) -> bool {
     return is_simple_cst_group(alts) || is_general_group(alts);
 }
 
-fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
+fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
+    // `lowered_rule` is the GIR view of the same rule; today the
+    // body emitter still consumes surface IR but the classification
+    // (Simple / MultiAlt / LeftRecursive) and the per-alt field
+    // decisions can be read directly from GIR. Phase 4 splits this
+    // function along the variant axis.
+    let _ = lowered_rule;
     let fn_name = `parse_{rule.snake_name}`;
     let scan_fn_name = `scan_{rule.snake_name}`;
     gen_parse_fn_named(w, rule, ctx, &fn_name, &scan_fn_name, /*emit_visibility=*/ true);

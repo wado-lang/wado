@@ -63,16 +63,14 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> String {
     gen_cst_types(&mut w, &grammar.parser_rules);
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
     // Phase 3 — run lower up front so any panic surfaces at the same
-    // place every grammar passes through. The `LoweredGrammar` is
-    // not yet consumed by emit (Phase 4 migrates the per-rule emit
-    // entries to read it); the call here is a structural commitment
-    // and a regression gate for the lowering pipeline.
+    // place every grammar passes through. `gen_parser` reads the
+    // GIR for rule classification; the per-rule body emitters still
+    // consume surface IR until Phase 4 migrates them.
     let lowered = lower(grammar, &lit_tokens);
-    let _ = lowered;
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
     gen_lexer(&mut w, grammar, &lit_tokens);
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
-    gen_parser(&mut w, grammar, &mut ctx);
+    gen_parser(&mut w, grammar, &lowered, &mut ctx);
     gen_visitor(&mut w, grammar);
     if options.highlight {
         gen_highlight(&mut w, grammar, &lit_tokens);
