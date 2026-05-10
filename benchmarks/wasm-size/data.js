@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778447564402,
+  "lastUpdate": 1778456364902,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20957,6 +20957,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/92f87e8bddfe272044c2eb7021c440f8d6838a15"
         },
         "date": 1778447564229,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 512036,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "698027a94386bb416af0c4cfc9e0e7127f6b8ee6",
+          "message": "Merge pull request #1042 from wado-lang/claude/review-e2e-fixtures-todo-8MALq\n\ntest: surface resolved #![TODO] tests and clean up stale TODO fixtures",
+          "timestamp": "2026-05-11T08:32:35+09:00",
+          "tree_id": "560503320ff6db8c86141e13387485f8ce0593e0",
+          "url": "https://github.com/wado-lang/wado/commit/698027a94386bb416af0c4cfc9e0e7127f6b8ee6"
+        },
+        "date": 1778456364527,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
