@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778378968832,
+  "lastUpdate": 1778391901494,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -20693,6 +20693,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5acd5b73e0d7ba26e78771bda3414518e7cbf3dc"
         },
         "date": 1778378968505,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1770,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9140,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16987,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 511983,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2ffd547805bdbabaa8d193e0e1df17794871b66c",
+          "message": "Merge pull request #1036 from wado-lang/claude/investigate-wado-performance-r83kW\n\nperf(wado-cli serve): unblock concurrency, cache TLS roots, enforce per-request timeout, drain on shutdown",
+          "timestamp": "2026-05-10T14:35:54+09:00",
+          "tree_id": "192474f05af17b4127a6a8831f26840465dc1cbc",
+          "url": "https://github.com/wado-lang/wado/commit/2ffd547805bdbabaa8d193e0e1df17794871b66c"
+        },
+        "date": 1778391901265,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
