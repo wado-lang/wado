@@ -446,12 +446,24 @@ fn expr_returns_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
             Some(t) => *struct_type == t && fields.len() == expected.arity,
             None => false,
         },
-        TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } => {
-            // The block's tail value is its last `Break { value }` or its
-            // final expression statement. We rely on the type matching the
-            // function signature (already checked) and recurse into the
-            // block to validate any nested `Return` statements.
+        TirExprKind::Block(b) => {
+            // Plain block: only the tail expression flows out (no
+            // `break` can target an unlabelled block from outside).
             all_returns_match_shape(b, expected) && block_tail_returns_match(b, expected)
+        }
+        TirExprKind::LabeledBlock { block: b, .. } => {
+            // Labelled block: tail expression *and* every `break`
+            // targeting this label flow out as the function's return
+            // value. Without label-tracking we can't tell which inner
+            // breaks target this block versus an outer one, so we
+            // require *every* break-with-value inside the block to
+            // carry a matching fresh literal — conservative but the
+            // alternative is invalid Wasm at return-side unwrap time
+            // when a non-literal break value flows past the
+            // multi-value signature.
+            all_returns_match_shape(b, expected)
+                && block_tail_returns_match(b, expected)
+                && all_break_values_match_shape(b, expected)
         }
         TirExprKind::If {
             then_branch,
@@ -479,6 +491,92 @@ fn expr_returns_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
         // for the multi-value rewrite.
         _ => false,
     }
+}
+
+/// For a labelled block reached at return position, walk every nested
+/// `Break { value: Some(v) }` (recursively, through inner blocks /
+/// ifs / matches / switches / loops) and require `v` to match the
+/// expected fresh-literal shape. Without label tracking we can't tell
+/// which inner breaks target the outer labelled block versus an inner
+/// loop / labelled block, so we conservatively require literal values
+/// for every break. Functions whose inner breaks carry computed values
+/// stay on the heap-struct ABI; that's the same trade-off as rejecting
+/// `return match { … }` arms whose tail isn't a literal.
+fn all_break_values_match_shape(block: &TirBlock, expected: &ExpectedShape) -> bool {
+    block
+        .stmts
+        .iter()
+        .all(|stmt| stmt_break_values_match(stmt, expected))
+}
+
+fn stmt_break_values_match(stmt: &TirStmt, expected: &ExpectedShape) -> bool {
+    match &stmt.kind {
+        TirStmtKind::Break { value: Some(v), .. } => {
+            // The break value flows out as the labelled block's value.
+            // It must itself be a fresh aggregate literal matching the
+            // expected shape, AND its sub-expressions must not contain
+            // further breaks with non-literal values.
+            expr_returns_match(v, expected) && expr_break_values_match(v, expected)
+        }
+        TirStmtKind::Break { value: None, .. } | TirStmtKind::Continue => true,
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            expr_break_values_match(condition, expected)
+                && all_break_values_match_shape(then_block, expected)
+                && else_block
+                    .as_ref()
+                    .is_none_or(|b| all_break_values_match_shape(b, expected))
+        }
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            expr_break_values_match(scrutinee, expected)
+                && all_break_values_match_shape(then_block, expected)
+                && else_block
+                    .as_ref()
+                    .is_none_or(|b| all_break_values_match_shape(b, expected))
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            all_break_values_match_shape(body, expected)
+        }
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+            expr_break_values_match(value, expected)
+        }
+        TirStmtKind::Expr(e) | TirStmtKind::Return { value: Some(e) } => {
+            expr_break_values_match(e, expected)
+        }
+        TirStmtKind::Return { value: None }
+        | TirStmtKind::TaskReturn { .. }
+        | TirStmtKind::VariadicForOf { .. } => true,
+    }
+}
+
+fn expr_break_values_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
+    struct Walker<'a> {
+        expected: &'a ExpectedShape,
+        ok: bool,
+    }
+    impl TirRefVisitor for Walker<'_> {
+        fn visit_stmt(&mut self, stmt: &TirStmt) {
+            if !self.ok {
+                return;
+            }
+            if !stmt_break_values_match(stmt, self.expected) {
+                self.ok = false;
+                return;
+            }
+            self.walk_stmt(stmt);
+        }
+    }
+    let mut w = Walker { expected, ok: true };
+    w.visit_expr(expr);
+    w.ok
 }
 
 /// For a block reached at return / arm-tail position, the trailing

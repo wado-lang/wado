@@ -1444,7 +1444,7 @@ impl FunctionTranslator<'_, '_> {
                             mut other @ (WirInstr::Seq(_)
                             | WirInstr::Block { .. }
                             | WirInstr::If { .. }) => {
-                                lift_struct_new_to_seq(&mut other);
+                                lift_struct_new_to_seq(&mut other, false);
                                 Some(other)
                             }
                             other => Some(WirInstr::Return {
@@ -2246,72 +2246,40 @@ impl FunctionTranslator<'_, '_> {
 }
 
 /// Recursively rewrite leaf `StructNew` nodes in the value of a `Return`
-/// statement to `Seq(fields)` so the function pushes its N fields onto the
-/// stack instead of constructing a heap struct. Only applied when the
-/// enclosing function has `ReturnAbi::MultiValue`. Handles:
+/// statement so the function pushes its N fields onto the stack instead
+/// of constructing a heap struct. Only applied when the enclosing
+/// function has `ReturnAbi::MultiValue`. Handles:
 ///
 /// - direct `StructNew` (the common `return Point { x, y }` case)
 /// - `Seq(items)` — recurse into the trailing item
-/// - `If` / typed `Block` produced by `return if …` / `return match …` —
-///   recurse into branch tails and clear the result type since the
-///   branches now produce N stack values via inner `Return`s rather than a
-///   single ref
-/// - typed `Block` containing `StructNew; Br depth` exit pairs
-///   (BrTable-lowered match) — convert each pair to `Return { Seq(fields) }`
-fn lift_struct_new_to_seq(expr: &mut WirInstr) {
+/// - `If` produced by `return if …` — recurse into both branch tails;
+///   each branch tail's `StructNew` becomes its own `Return { Seq(fields) }`
+///   and the `If`'s `result` is cleared since branches now transfer
+///   control directly
+/// - typed `Block` produced by `return match …` (`BrTable` lowering) —
+///   rewrite each `StructNew; Br depth` exit pair to `Return { Seq(fields) }`
+///
+/// `wrap_in_return = false` is the outer call (the caller's `Return`
+/// will wrap the produced `Seq`); recursive calls into branch tails use
+/// `wrap_in_return = true` so each branch transfers control before the
+/// outer (now-unused) Return would.
+fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) {
     match expr {
         WirInstr::StructNew { .. } => {
             if let WirInstr::StructNew { fields, .. } = std::mem::replace(expr, WirInstr::Nop) {
-                *expr = WirInstr::Seq(fields);
-            }
-        }
-        WirInstr::Seq(items) => {
-            if let Some(last) = items.last_mut() {
-                lift_struct_new_to_seq(last);
-            }
-        }
-        WirInstr::If {
-            then_body,
-            else_body,
-            result,
-            ..
-        } => {
-            // Branches now Return directly, so the If no longer produces a value.
-            *result = None;
-            if let Some(last) = then_body.last_mut() {
-                lift_branch_tail(last);
-            }
-            if let Some(eb) = else_body
-                && let Some(last) = eb.last_mut()
-            {
-                lift_branch_tail(last);
-            }
-        }
-        WirInstr::Block { body, result, .. } => {
-            if result.is_some() {
-                rewrite_struct_new_br_to_return(body, 0);
-                *result = None;
-            }
-        }
-        _ => {}
-    }
-}
-
-/// Inside an If branch, the tail expression's value flows out as the If's
-/// value. For the multi-value-ABI return case we want each branch to emit
-/// `Return { Seq(fields) }` directly so no heap struct is constructed.
-fn lift_branch_tail(expr: &mut WirInstr) {
-    match expr {
-        WirInstr::StructNew { .. } => {
-            if let WirInstr::StructNew { fields, .. } = std::mem::replace(expr, WirInstr::Nop) {
-                *expr = WirInstr::Return {
-                    value: Some(Box::new(WirInstr::Seq(fields))),
+                let payload = WirInstr::Seq(fields);
+                *expr = if wrap_in_return {
+                    WirInstr::Return {
+                        value: Some(Box::new(payload)),
+                    }
+                } else {
+                    payload
                 };
             }
         }
         WirInstr::Seq(items) => {
             if let Some(last) = items.last_mut() {
-                lift_branch_tail(last);
+                lift_struct_new_to_seq(last, wrap_in_return);
             }
         }
         WirInstr::If {
@@ -2320,14 +2288,15 @@ fn lift_branch_tail(expr: &mut WirInstr) {
             result,
             ..
         } => {
+            // Branches now Return directly; the If no longer produces a value.
             *result = None;
             if let Some(last) = then_body.last_mut() {
-                lift_branch_tail(last);
+                lift_struct_new_to_seq(last, true);
             }
             if let Some(eb) = else_body
                 && let Some(last) = eb.last_mut()
             {
-                lift_branch_tail(last);
+                lift_struct_new_to_seq(last, true);
             }
         }
         WirInstr::Block { body, result, .. } => {
