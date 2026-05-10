@@ -564,7 +564,7 @@ condition: all.len() == 2
     __pair_temp_1 = "wasi/future-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
     trailers_future = __mv_lo_1;
     trailers_tx = __mv_hi_1;
     __pattern_temp_1 = "wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_binding__Response_new"(fields, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future);
@@ -1109,7 +1109,7 @@ fn "core:internal/log_stderr"(message) {
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
     rx = __mv_lo_1;
     tx = __mv_hi_1;
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);

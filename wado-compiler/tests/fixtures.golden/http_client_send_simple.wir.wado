@@ -476,7 +476,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_simple.wado/handle"() with Cli
     __pair_temp_1 = "wasi/future-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
     trailers_future = __mv_lo_1;
     trailers_tx = __mv_hi_1;
     __pattern_temp_1 = "wado-compiler/tests/fixtures/http_client_send_simple.wado/__cm_binding__Request_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 1 });

@@ -20,93 +20,83 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo {  // TypeId(3)
-    mut hi: u64,
-    mut lo: u64,
-}
+enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(3)
 
-struct wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair {  // TypeId(4)
-    mut a: i32,
-    mut b: i32,
-}
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
 
-enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(5)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(5)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(6)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(6)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(7)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(7)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(8)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(8)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(9)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(10)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(11)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
+type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_match_small" = fn(i32) -> [i32, i32];  // TypeId(12)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_match_large" = fn(i32) -> [u64, u64];  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_match_small" = fn(i32) -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair";  // TypeId(14)
+type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_match_with_unreachable" = fn(i32) -> [i32, i32];  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_match_large" = fn(i32) -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo";  // TypeId(15)
+type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_if" = fn(bool) -> [i32, i32];  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_match_with_unreachable" = fn(i32) -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair";  // TypeId(16)
+type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/use_match_small" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_if" = fn(bool) -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair";  // TypeId(17)
+type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/use_match_large" = fn(i32) -> u64;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/use_match_small" = fn(i32) -> i32;  // TypeId(18)
+type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/use_match_unreachable" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/use_match_large" = fn(i32) -> u64;  // TypeId(19)
+type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/use_if" = fn(bool) -> i32;  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/use_match_unreachable" = fn(i32) -> i32;  // TypeId(20)
+type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/run" = fn();  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/use_if" = fn(bool) -> i32;  // TypeId(21)
+type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/__cm_export__run" = fn();  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/run" = fn();  // TypeId(22)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(22)
 
-type "functype//wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/__cm_export__run" = fn();  // TypeId(23)
+type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(23)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(24)
+type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(24)
 
-type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(25)
+type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(25)
 
-type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(26)
+type "functype//core:internal/unreachable" = fn();  // TypeId(26)
 
-type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(27)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(27)
 
-type "functype//core:internal/unreachable" = fn();  // TypeId(28)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(28)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(29)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(29)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(30)
+type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(30)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(31)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(31)
 
-type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(32)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(32)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(33)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(34)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(34)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(35)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(35)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(36)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(37)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(37)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(38)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(38)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(39)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(40)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(41)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(42)
-
-type "functype//core:prelude/primitive.wado/u64::fmt_decimal" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(43)
+type "functype//core:prelude/primitive.wado/u64::fmt_decimal" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(41)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -122,76 +112,80 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_match_small"(x) {
-    return let __match_scrut_0: i32, __match_scrut_0 = x, (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair" {
-        struct.new "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair" { a: 10, b: 20 };
-    } else if __match_scrut_0 == 1 -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair" {
-        struct.new "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair" { a: 30, b: 40 };
+    if x == 0 {
+        return 10, 20;
+    } else if x == 1 {
+        return 30, 40;
     } else {
-        struct.new "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair" { a: 50, b: 60 };
-    });
+        return 50, 60;
+    }
 }
 
 fn "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_match_large"(i) {
-    return let __match_scrut_0: i32, __match_scrut_0 = i, (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo" {
-        struct.new "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo" { hi: 100_i64, lo: 200_i64 };
-    } else if __match_scrut_0 == 1 -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo" {
-        struct.new "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo" { hi: 300_i64, lo: 400_i64 };
-    } else if __match_scrut_0 == 2 -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo" {
-        struct.new "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo" { hi: 500_i64, lo: 600_i64 };
-    } else if __match_scrut_0 == 3 -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo" {
-        struct.new "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo" { hi: 700_i64, lo: 800_i64 };
-    } else if __match_scrut_0 == 4 -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo" {
-        struct.new "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo" { hi: 900_i64, lo: 1000_i64 };
-    } else if __match_scrut_0 == 5 -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo" {
-        struct.new "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo" { hi: 1100_i64, lo: 1200_i64 };
-    } else if __match_scrut_0 == 6 -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo" {
-        struct.new "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo" { hi: 1300_i64, lo: 1400_i64 };
+    if i == 0 {
+        return 100_i64, 200_i64;
+    } else if i == 1 {
+        return 300_i64, 400_i64;
+    } else if i == 2 {
+        return 500_i64, 600_i64;
+    } else if i == 3 {
+        return 700_i64, 800_i64;
+    } else if i == 4 {
+        return 900_i64, 1000_i64;
+    } else if i == 5 {
+        return 1100_i64, 1200_i64;
+    } else if i == 6 {
+        return 1300_i64, 1400_i64;
     } else {
-        struct.new "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo" { hi: 0_i64, lo: 0_i64 };
-    });
+        return 0_i64, 0_i64;
+    }
 }
 
 fn "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_match_with_unreachable"(x) {
-    return let __match_scrut_0: i32, __match_scrut_0 = x, (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair" {
-        struct.new "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair" { a: 1, b: 2 };
-    } else if __match_scrut_0 == 1 -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair" {
-        struct.new "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair" { a: 3, b: 4 };
+    if x == 0 {
+        return 1, 2;
+    } else if x == 1 {
+        return 3, 4;
     } else {
         "core:internal/unreachable"();
         unreachable;
-    });
+    }
 }
 
 fn "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_if"(cond) {
-    return (if cond -> ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair" {
-        struct.new "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair" { a: 100, b: 200 };
+    if cond {
+        return 100, 200;
     } else {
-        struct.new "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair" { a: 300, b: 400 };
-    });
+        return 300, 400;
+    }
 }
 
 fn "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/use_match_small"(x) {
-    let p: ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair";
-    p = "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_match_small"(x);
-    return p.a + p.b;
+    let p_mv_a: i32;
+    let p_mv_b: i32;
+    multivalue_bind [p_mv_a, p_mv_b] = "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_match_small"(x);
+    return p_mv_a + p_mv_b;
 }
 
 fn "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/use_match_large"(i) {
-    let hl: ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//HiLo";
-    hl = "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_match_large"(i);
-    return hl.hi + hl.lo;
+    let hl_mv_hi: u64;
+    let hl_mv_lo: u64;
+    multivalue_bind [hl_mv_hi, hl_mv_lo] = "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_match_large"(i);
+    return hl_mv_hi + hl_mv_lo;
 }
 
 fn "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/use_match_unreachable"(x) {
-    let p: ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair";
-    p = "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_match_with_unreachable"(x);
-    return p.a + p.b;
+    let p_mv_a: i32;
+    let p_mv_b: i32;
+    multivalue_bind [p_mv_a, p_mv_b] = "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_match_with_unreachable"(x);
+    return p_mv_a + p_mv_b;
 }
 
 fn "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/use_if"(cond) {
-    let p: ref "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado//Pair";
-    p = "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_if"(cond);
-    return p.a + p.b;
+    let p_mv_a: i32;
+    let p_mv_b: i32;
+    multivalue_bind [p_mv_a, p_mv_b] = "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/return_if"(cond);
+    return p_mv_a + p_mv_b;
 }
 
 fn "wado-compiler/tests/fixtures/opt_multi_value_user_struct_match.wado/run"() {
@@ -615,7 +609,7 @@ fn "core:internal/log_stderr"(message) {
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
     rx = __mv_lo_1;
     tx = __mv_hi_1;
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
