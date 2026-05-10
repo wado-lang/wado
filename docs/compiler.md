@@ -13,8 +13,9 @@ Source (.wado)
   → Lex → Parse → Bind → Desugar          (per module, in loader)
   → Annotate (Analyze + Resolve + lower TIR)
   → Default-purity Check
-  → Synthesis (auto-derives, template, From, serde, effect dispatch, CM bindings)
+  → Synthesis (auto-derives, template, From, serde, pre-CM effect dispatch, CM bindings)
   → Effect Check → Stores Check
+  → Effect Dispatch (post-check: WithHandler / Resume desugaring)
   → Link (Package → FlatPackage)
   → Monomorphize → Erase Newtypes & Flags
   → Lower
@@ -25,22 +26,24 @@ Source (.wado)
 
 The driver is `compile_after_load` in `src/lib.rs`.
 
-| Phase           | Output          | Module(s)                                        |
-| --------------- | --------------- | ------------------------------------------------ |
-| Lex / Parse     | AST             | `lexer.rs`, `parser.rs`, `token.rs`, `syntax.rs` |
-| Bind            | AST + bindings  | `bind.rs`                                        |
-| Desugar         | AST             | `desugar.rs`                                     |
-| Loader          | All modules     | `loader.rs`                                      |
-| Annotate        | TIR + facts     | `annotate.rs`, `analyze.rs`, `resolver/`         |
-| Synthesis       | TIR (extended)  | `synthesis/`                                     |
-| Effect / Stores | TIR (validated) | `effect_check.rs`                                |
-| Link            | `FlatPackage`   | `link.rs`                                        |
-| Monomorphize    | `FlatPackage`   | `monomorphize/`                                  |
-| Lower           | `FlatPackage`   | `lower/`                                         |
-| Optimize        | `FlatPackage`   | `optimize/`                                      |
-| WIR Build       | `WirPackage`    | `wir_build/`                                     |
-| WIR Optimize    | `WirPackage`    | `wir_optimize/`                                  |
-| Codegen         | Component bytes | `codegen/`                                       |
+| Phase                  | Output          | Module(s)                                        |
+| ---------------------- | --------------- | ------------------------------------------------ |
+| Lex / Parse            | AST             | `lexer.rs`, `parser.rs`, `token.rs`, `syntax.rs` |
+| Bind                   | AST + bindings  | `bind.rs`                                        |
+| Desugar                | AST             | `desugar.rs`                                     |
+| Loader                 | All modules     | `loader.rs`                                      |
+| Annotate               | TIR + facts     | `annotate.rs`, `analyze.rs`, `resolver/`         |
+| Default-purity Check   | (validation)    | `effect_check.rs::check_default_purity`          |
+| Synthesis              | TIR (extended)  | `synthesis/`                                     |
+| Effect / Stores        | TIR (validated) | `effect_check.rs`                                |
+| Effect Dispatch (post) | TIR             | `synthesis/effect_dispatch.rs`                   |
+| Link                   | `FlatPackage`   | `link.rs`                                        |
+| Monomorphize           | `FlatPackage`   | `monomorphize/`                                  |
+| Lower                  | `FlatPackage`   | `lower/`                                         |
+| Optimize               | `FlatPackage`   | `optimize/`                                      |
+| WIR Build              | `WirPackage`    | `wir_build/`                                     |
+| WIR Optimize           | `WirPackage`    | `wir_optimize/`                                  |
+| Codegen                | Component bytes | `codegen/`                                       |
 
 ## Compilation Units and IRs
 
@@ -52,7 +55,7 @@ The driver is `compile_after_load` in `src/lib.rs`.
 | `FlatPackage` (`flat_package.rs`) | Flat list of all functions, types, and globals; used from monomorphize through codegen.  |
 | `WirPackage` (`wir.rs`)           | Wasm IR — closer to Wasm core instructions, used for emit-time optimization and codegen. |
 
-Codegen consumes `Package`/`WirPackage` without knowledge of earlier phases — the rule that keeps the back end decoupled from the front.
+Codegen takes `&FlatPackage` + `&WirPackage` (`emit_wasm`) and has no knowledge of earlier phases — the rule that keeps the back end decoupled from the front.
 
 ## Frontend (per-module)
 
@@ -88,7 +91,11 @@ Synthesized impls are recorded back into the shared `TraitEnv` so subsequent pha
 
 ## Effect and Stores Checks
 
-`check_effects` and `check_stores` (`effect_check.rs`) run after synthesis and before monomorphize. They validate that every function declares the effects and reference stores it actually requires. Synthesized CM boundary code is exempted.
+`check_effects` and `check_stores` (`effect_check.rs`) run after synthesis and before monomorphize. They validate that every function declares the effects and reference stores it actually requires. Synthesized CM boundary code is exempted. A separate `check_default_purity` runs earlier, immediately before synthesis, to gate auto-derived `Default::default()` bodies on pure field defaults.
+
+## Effect Dispatch (post-check)
+
+`synthesis::effect_dispatch::synthesize_post_check` runs between the effect/stores checks and link. It desugars `WithHandler` / `Resume` constructs into the per-effect dispatch infrastructure (struct, mut global, dispatch wrappers). This pass is split out of the main synthesis stage so that effect-check sees the original `WithHandler` shape and can validate which effects are satisfied locally.
 
 ## Link → Monomorphize → Erase
 
@@ -116,17 +123,19 @@ Synthesized impls are recorded back into the shared `TraitEnv` so subsequent pha
 
 ## WIR Build
 
-`wir_build/build_wir_package` translates a `FlatPackage` into a `WirPackage` in three stages: register types, collect function signatures, then translate each function body via `FunctionTranslator`. The translator is split across sibling files by concern:
+`wir_build/build_wir_package` translates a `FlatPackage` into a `WirPackage` in three stages: register types, collect function signatures, then translate each function body via `FunctionTranslator`. The pass is split across sibling files by concern:
 
-| File                | Concern                                                                           |
-| ------------------- | --------------------------------------------------------------------------------- |
-| `context.rs`        | `WirContext` — accumulates types, functions, tables                               |
-| `component_plan.rs` | `ComponentPlan`: CM-level structure (imports, exports, adapters)                  |
-| `translate.rs`      | Driver and dispatch (`translate_expr` / `translate_stmt` / `translate_block`)     |
-| `primitive_ops.rs`  | Literals, binary / unary operators, casts, array indexing                         |
-| `calls.rs`          | Function-ref resolution, builtin intrinsics, indirect calls, closure-to-canonical |
-| `canonical_abi.rs`  | CM canonical ABI: future / stream creation, read / write lowering, result lifting |
-| `pattern_match.rs`  | `match` / `if let` / `switch` lowering, variant construct / test / payload        |
+| File                | Concern                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------- |
+| `context.rs`        | `WirContext` — accumulates types, functions, tables                                   |
+| `types.rs`          | Stage 1: register TIR types as WIR type definitions                                   |
+| `functions.rs`      | Stage 2: collect and register function signatures                                     |
+| `component_plan.rs` | `ComponentPlan`: CM-level structure (imports, exports, adapters)                      |
+| `translate.rs`      | Stage 3 driver and dispatch (`translate_expr` / `translate_stmt` / `translate_block`) |
+| `primitive_ops.rs`  | Literals, binary / unary operators, casts, array indexing                             |
+| `calls.rs`          | Function-ref resolution, builtin intrinsics, indirect calls, closure-to-canonical     |
+| `canonical_abi.rs`  | CM canonical ABI: future / stream creation, read / write lowering, result lifting     |
+| `pattern_match.rs`  | `match` / `if let` / `switch` lowering, variant construct / test / payload            |
 
 Each helper module calls back into `translate.rs` for sub-expression translation; cross-module access uses `pub(super)` on shared fields.
 
