@@ -1803,8 +1803,8 @@ pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: boo
 
 pub fn println(message: String) with Stdout {
     let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
-    let rx: Stream<u8> = __pattern_temp_0.0;
-    let tx: StreamWritable<u8> = __pattern_temp_0.1;
+    let rx: Stream<u8> = __pattern_temp_0.mv.0;
+    let tx: StreamWritable<u8> = __pattern_temp_0.mv.1;
     let handle: Future<Result<(), ErrorCode>> = __cm_binding__Stdout_write_via_stream(rx as i32);
     core::cli::write_to_stream(tx, message, true);
     core::internal::drop_cli_write_future(handle);
@@ -1812,8 +1812,8 @@ pub fn println(message: String) with Stdout {
 
 pub fn eprintln(message: String) with Stderr {
     let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
-    let rx: Stream<u8> = __pattern_temp_0.0;
-    let tx: StreamWritable<u8> = __pattern_temp_0.1;
+    let rx: Stream<u8> = __pattern_temp_0.mv.0;
+    let tx: StreamWritable<u8> = __pattern_temp_0.mv.1;
     let handle: Future<Result<(), ErrorCode>> = __cm_binding__Stderr_write_via_stream(rx as i32);
     core::cli::write_to_stream(tx, message, true);
     core::internal::drop_cli_write_future(handle);
@@ -1821,8 +1821,8 @@ pub fn eprintln(message: String) with Stderr {
 
 pub fn print(message: String) with Stdout {
     let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
-    let rx: Stream<u8> = __pattern_temp_0.0;
-    let tx: StreamWritable<u8> = __pattern_temp_0.1;
+    let rx: Stream<u8> = __pattern_temp_0.mv.0;
+    let tx: StreamWritable<u8> = __pattern_temp_0.mv.1;
     let handle: Future<Result<(), ErrorCode>> = __cm_binding__Stdout_write_via_stream(rx as i32);
     core::cli::write_to_stream(tx, message, false);
     core::internal::drop_cli_write_future(handle);
@@ -1830,8 +1830,8 @@ pub fn print(message: String) with Stdout {
 
 pub fn eprint(message: String) with Stderr {
     let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
-    let rx: Stream<u8> = __pattern_temp_0.0;
-    let tx: StreamWritable<u8> = __pattern_temp_0.1;
+    let rx: Stream<u8> = __pattern_temp_0.mv.0;
+    let tx: StreamWritable<u8> = __pattern_temp_0.mv.1;
     let handle: Future<Result<(), ErrorCode>> = __cm_binding__Stderr_write_via_stream(rx as i32);
     core::cli::write_to_stream(tx, message, false);
     core::internal::drop_cli_write_future(handle);
@@ -1839,8 +1839,8 @@ pub fn eprint(message: String) with Stderr {
 
 pub fn print_bytes(data: Array<u8>) with Stdout {
     let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
-    let rx: Stream<u8> = __pattern_temp_0.0;
-    let tx: StreamWritable<u8> = __pattern_temp_0.1;
+    let rx: Stream<u8> = __pattern_temp_0.mv.0;
+    let tx: StreamWritable<u8> = __pattern_temp_0.mv.1;
     let handle: Future<Result<(), ErrorCode>> = __cm_binding__Stdout_write_via_stream(rx as i32);
     core::internal::cm_stream_write_u8(&tx as i32, data);
     cm_raw_call stream-drop-writable(&tx as i32);
@@ -2261,8 +2261,8 @@ pub fn drop_cli_write_future(future: Future<Result<(), ErrorCode>>) {
 
 pub fn log_stdout(message: String) {
     let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
-    let rx: Stream<u8> = __pattern_temp_0.0;
-    let tx: StreamWritable<u8> = __pattern_temp_0.1;
+    let rx: Stream<u8> = __pattern_temp_0.mv.0;
+    let tx: StreamWritable<u8> = __pattern_temp_0.mv.1;
     let future_handle: i32 = core::builtin::call_indirect_stdout_write_via_stream(rx as i32);
     core::internal::write_string_to_stream(tx, message, true);
     core::internal::drop_cli_write_future(future_handle as Future<Result<(), ErrorCode>>);
@@ -2270,8 +2270,8 @@ pub fn log_stdout(message: String) {
 
 pub fn log_stderr(message: String) {
     let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
-    let rx: Stream<u8> = __pattern_temp_0.0;
-    let tx: StreamWritable<u8> = __pattern_temp_0.1;
+    let rx: Stream<u8> = __pattern_temp_0.mv.0;
+    let tx: StreamWritable<u8> = __pattern_temp_0.mv.1;
     let future_handle: i32 = core::builtin::call_indirect_stderr_write_via_stream(rx as i32);
     core::internal::write_string_to_stream(tx, message, true);
     core::internal::drop_cli_write_future(future_handle as Future<Result<(), ErrorCode>>);
@@ -2360,7 +2360,7 @@ pub fn cm_stream_read_raw(handle: i32, max: i32, element_size: i32, element_alig
         result = core::internal::wait_for_blocked(handle);
     }
     let count: i32 = (result >> 4);
-    return [ptr, count];
+    return mv[ptr, count];
 }
 
 pub fn array_new_empty(capacity: i32) -> Array<u8> {
@@ -4173,8 +4173,8 @@ pub fn short(f: f64) -> FormatResult {
     let can_trim: bool = ((d_div_10 * 10) >= dmin);
     if can_trim {
         let __pattern_temp_0: [u64, i32] = "core::prelude/fpfmt.wado::trim_zeros"(d_div_10, -(p - 1));
-        let digits: u64 = __pattern_temp_0.0;
-        let exponent: i32 = __pattern_temp_0.1;
+        let digits: u64 = __pattern_temp_0.mv.0;
+        let exponent: i32 = __pattern_temp_0.mv.1;
         return FormatResult { digits: digits, exponent: exponent };
     }
     let mut d: u64 = dmin;
@@ -4214,8 +4214,8 @@ pub fn short32(f: f32) -> FormatResult {
     let can_trim: bool = ((d_div_10 * 10) >= dmin);
     if can_trim {
         let __pattern_temp_0: [u64, i32] = "core::prelude/fpfmt.wado::trim_zeros"(d_div_10, -(p - 1));
-        let digits: u64 = __pattern_temp_0.0;
-        let exponent: i32 = __pattern_temp_0.1;
+        let digits: u64 = __pattern_temp_0.mv.0;
+        let exponent: i32 = __pattern_temp_0.mv.1;
         return FormatResult { digits: digits, exponent: exponent };
     }
     let mut d: u64 = dmin;
@@ -4250,7 +4250,7 @@ pub fn trim_zeros(x: u64, p: i32) -> [u64, i32] {
         xv = d1;
         pv = (pv + 1);
     } else {
-        return [xv, pv];
+        return mv[xv, pv];
     }
     let d8: u64 = "core::prelude/fpfmt.wado::rotate_right"("core::prelude/fpfmt.wado::u64_mul"(xv, inv5p8), 8);
     if (d8 <= thresh_1e8) {
@@ -4272,7 +4272,7 @@ pub fn trim_zeros(x: u64, p: i32) -> [u64, i32] {
         xv = d1b;
         pv = (pv + 1);
     }
-    return [xv, pv];
+    return mv[xv, pv];
 }
 
 pub fn rotate_right(x: u64, n: u64) -> u64 {
@@ -4562,21 +4562,21 @@ pub fn format_exp_prec(d: u64, p: i32, nd: i32, precision: i32, upper: bool) -> 
 pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
     let bits: i64 = Box<f64> { value: f }.f64::to_bits();
     if (bits == 0) {
-        return [true, false, SpecialKind::Zero];
+        return mv[true, false, SpecialKind::Zero];
     }
     if (bits == 0x8000000000000000 as i64) {
-        return [true, true, SpecialKind::Zero];
+        return mv[true, true, SpecialKind::Zero];
     }
     let is_neg: bool = (bits < 0);
     let exp_mask: i64 = 0x7FF0000000000000;
     if ((bits & exp_mask) == exp_mask) {
         let mantissa_mask: i64 = 0x000FFFFFFFFFFFFF;
         if ((bits & mantissa_mask) != 0) {
-            return [true, false, SpecialKind::NaN];
+            return mv[true, false, SpecialKind::NaN];
         }
-        return [true, is_neg, SpecialKind::Inf];
+        return mv[true, is_neg, SpecialKind::Inf];
     }
-    return [false, is_neg, SpecialKind::NotSpecial];
+    return mv[false, is_neg, SpecialKind::NotSpecial];
 }
 
 fn pack64(m: u64, e: i32) -> f64 {
@@ -5315,10 +5315,10 @@ pub fn u128::div_rem(self: &u128, divisor: &u128) -> [u128, u128] {
         core::internal::panic("u128 division by zero");
     }
     if (*self."u128^Ord::cmp"(&*divisor) == Ordering::Less) {
-        return ["core::prelude/int128.wado::u128::zero"(), *self];
+        return mv["core::prelude/int128.wado::u128::zero"(), *self];
     }
     if *self."u128^Eq::eq"(&*divisor) {
-        return ["core::prelude/int128.wado::u128::one"(), "core::prelude/int128.wado::u128::zero"()];
+        return mv["core::prelude/int128.wado::u128::one"(), "core::prelude/int128.wado::u128::zero"()];
     }
     let mut quotient: u128 = "core::prelude/int128.wado::u128::zero"();
     let mut remainder: u128 = "core::prelude/int128.wado::u128::zero"();
@@ -5339,7 +5339,7 @@ pub fn u128::div_rem(self: &u128, divisor: &u128) -> [u128, u128] {
         }
         i = (i - 1);
     }
-    return [quotient, remainder];
+    return mv[quotient, remainder];
 }
 
 pub fn u128::get_bit(self: &u128, i: i32) -> bool {
@@ -5700,8 +5700,8 @@ pub fn i128::from_str_radix(s: String, radix: u32) -> Result<i128, ParseIntError
             return Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
         },
     });
-    let is_negative: bool = __pattern_temp_0.0;
-    let start: i32 = __pattern_temp_0.1;
+    let is_negative: bool = __pattern_temp_0.mv.0;
+    let start: i32 = __pattern_temp_0.mv.1;
     let max_pos: u128 = "core::prelude/int128.wado::u128::from_pair"(18446744073709551615, 9223372036854775807 as u64);
     let max_neg_abs: u128 = "core::prelude/int128.wado::u128::from_pair"(0, 9223372036854775808);
     return match "core::prelude/intparse.wado::parse_u128_digits"(s, start, s.String::len(), radix) {
@@ -5795,7 +5795,7 @@ pub fn i128::div_rem(self: &i128, divisor: &i128) -> [i128, i128] {
     if dividend_neg {
         remainder = remainder.i128::neg();
     }
-    return [quotient, remainder];
+    return mv[quotient, remainder];
 }
 
 fn i128::fmt_into(self: &i128, f: &mut Formatter) {
@@ -6616,7 +6616,7 @@ pub fn parse_signed_prefix(s: String) -> Result<[bool, i32], IntErrorKind> {
     } else {
         0;
     };
-    return Result<[bool, i32], IntErrorKind>::Ok([is_negative, start]);
+    return Result<[bool, i32], IntErrorKind>::Ok(mv[is_negative, start]);
 }
 
 pub fn parse_unsigned_prefix(s: String) -> Result<i32, IntErrorKind> {
@@ -6648,8 +6648,8 @@ pub fn parse_i64_radix(s: String, radix: u32, max: i64, min_abs: u64) -> Result<
             return Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
         },
     });
-    let is_negative: bool = __pattern_temp_0.0;
-    let start: i32 = __pattern_temp_0.1;
+    let is_negative: bool = __pattern_temp_0.mv.0;
+    let start: i32 = __pattern_temp_0.mv.1;
     return match "core::prelude/intparse.wado::parse_u64_digits"(s, start, s.String::len(), radix) {
         Ok(v) => if is_negative {
             if (v > min_abs) {
@@ -7975,9 +7975,9 @@ fn f32::fmt_into(self: Box<f32>, f: &mut Formatter) {
         return;
     }
     let __pattern_temp_0: [bool, bool, SpecialKind] = "core::prelude/fpfmt.wado::check_special"(self.value as f64);
-    let is_special: bool = __pattern_temp_0.0;
-    let is_neg: bool = __pattern_temp_0.1;
-    let kind: SpecialKind = __pattern_temp_0.2;
+    let is_special: bool = __pattern_temp_0.mv.0;
+    let is_neg: bool = __pattern_temp_0.mv.1;
+    let kind: SpecialKind = __pattern_temp_0.mv.2;
     if is_special {
         "core::prelude/primitive.wado::fmt_float_special"(f, is_neg, kind, "0");
         return;
@@ -8003,9 +8003,9 @@ fn f32::inspect_into(self: Box<f32>, f: &mut Formatter) {
         return;
     }
     let __pattern_temp_0: [bool, bool, SpecialKind] = "core::prelude/fpfmt.wado::check_special"(self.value as f64);
-    let is_special: bool = __pattern_temp_0.0;
-    let is_neg: bool = __pattern_temp_0.1;
-    let kind: SpecialKind = __pattern_temp_0.2;
+    let is_special: bool = __pattern_temp_0.mv.0;
+    let is_neg: bool = __pattern_temp_0.mv.1;
+    let kind: SpecialKind = __pattern_temp_0.mv.2;
     if is_special {
         "core::prelude/primitive.wado::fmt_float_special"(f, is_neg, kind, "0.0");
         return;
@@ -8214,9 +8214,9 @@ fn f64::fmt_into(self: Box<f64>, f: &mut Formatter) {
     }
     let value: f64 = self.value;
     let __pattern_temp_0: [bool, bool, SpecialKind] = "core::prelude/fpfmt.wado::check_special"(value);
-    let is_special: bool = __pattern_temp_0.0;
-    let is_neg: bool = __pattern_temp_0.1;
-    let kind: SpecialKind = __pattern_temp_0.2;
+    let is_special: bool = __pattern_temp_0.mv.0;
+    let is_neg: bool = __pattern_temp_0.mv.1;
+    let kind: SpecialKind = __pattern_temp_0.mv.2;
     if is_special {
         "core::prelude/primitive.wado::fmt_float_special"(f, is_neg, kind, "0");
         return;
@@ -8243,9 +8243,9 @@ fn f64::inspect_into(self: Box<f64>, f: &mut Formatter) {
     }
     let value: f64 = self.value;
     let __pattern_temp_0: [bool, bool, SpecialKind] = "core::prelude/fpfmt.wado::check_special"(value);
-    let is_special: bool = __pattern_temp_0.0;
-    let is_neg: bool = __pattern_temp_0.1;
-    let kind: SpecialKind = __pattern_temp_0.2;
+    let is_special: bool = __pattern_temp_0.mv.0;
+    let is_neg: bool = __pattern_temp_0.mv.1;
+    let kind: SpecialKind = __pattern_temp_0.mv.2;
     if is_special {
         "core::prelude/primitive.wado::fmt_float_special"(f, is_neg, kind, "0.0");
         return;
@@ -8278,9 +8278,9 @@ fn f64::inspect_into(self: Box<f64>, f: &mut Formatter) {
 fn f64::fmt_fixed(self: Box<f64>, precision: i32, f: &mut Formatter) {
     let value: f64 = self.value;
     let __pattern_temp_0: [bool, bool, SpecialKind] = "core::prelude/fpfmt.wado::check_special"(value);
-    let is_special: bool = __pattern_temp_0.0;
-    let is_neg: bool = __pattern_temp_0.1;
-    let kind: SpecialKind = __pattern_temp_0.2;
+    let is_special: bool = __pattern_temp_0.mv.0;
+    let is_neg: bool = __pattern_temp_0.mv.1;
+    let kind: SpecialKind = __pattern_temp_0.mv.2;
     if is_special {
         if (match kind {
             NaN => true,
@@ -8321,9 +8321,9 @@ fn f64::fmt_exp(self: Box<f64>, precision: i32, upper: i32, f: &mut Formatter) {
     let value: f64 = self.value;
     let upper_bool: bool = (upper != 0);
     let __pattern_temp_0: [bool, bool, SpecialKind] = "core::prelude/fpfmt.wado::check_special"(value);
-    let is_special: bool = __pattern_temp_0.0;
-    let is_neg: bool = __pattern_temp_0.1;
-    let kind: SpecialKind = __pattern_temp_0.2;
+    let is_special: bool = __pattern_temp_0.mv.0;
+    let is_neg: bool = __pattern_temp_0.mv.1;
+    let kind: SpecialKind = __pattern_temp_0.mv.2;
     if is_special {
         if (match kind {
             NaN => true,
@@ -12870,27 +12870,27 @@ pub fn "StrCharIndicesIter^Iterator::next"(self: &mut StrCharIndicesIter) -> Opt
     let b0: u8 = core::builtin::array_get_u8(self.repr, self.byte_index);
     self.byte_index = (self.byte_index + 1);
     if (b0 < 0x80) {
-        return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32)]);
+        return Option<[i32, char]>::Some(mv[idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32)]);
     }
     if (b0 < 0xE0) {
         let b1: u32 = core::builtin::array_get_u8(self.repr, self.byte_index) as u32;
         self.byte_index = (self.byte_index + 1);
         let code: u32 = (((b0 as u32 & 0x1F) << 6) | (b1 & 0x3F));
-        return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
+        return Option<[i32, char]>::Some(mv[idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
     }
     if (b0 < 0xF0) {
         let b1: u32 = core::builtin::array_get_u8(self.repr, self.byte_index) as u32;
         let b2: u32 = core::builtin::array_get_u8(self.repr, (self.byte_index + 1)) as u32;
         self.byte_index = (self.byte_index + 2);
         let code: u32 = ((((b0 as u32 & 0x0F) << 12) | ((b1 & 0x3F) << 6)) | (b2 & 0x3F));
-        return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
+        return Option<[i32, char]>::Some(mv[idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
     }
     let b1: u32 = core::builtin::array_get_u8(self.repr, self.byte_index) as u32;
     let b2: u32 = core::builtin::array_get_u8(self.repr, (self.byte_index + 1)) as u32;
     let b3: u32 = core::builtin::array_get_u8(self.repr, (self.byte_index + 2)) as u32;
     self.byte_index = (self.byte_index + 3);
     let code: u32 = (((((b0 as u32 & 0x07) << 18) | ((b1 & 0x3F) << 12)) | ((b2 & 0x3F) << 6)) | (b3 & 0x3F));
-    return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
+    return Option<[i32, char]>::Some(mv[idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
 }
 
 pub fn "StrCharIndicesIter^Iterator::collect"(self: &mut StrCharIndicesIter) -> Array<[i32, char]> {
@@ -20555,7 +20555,7 @@ fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
 
 fn "Tuple<f64,f64>^Eq::eq"(self: &[f64, f64], other: &[f64, f64]) -> bool {
     __tuple_for_of_2: {
-        let __tuple_2: [[f64, f64], [f64, f64]] = [[[*self, *other].0.0, [*self, *other].1.0], [[*self, *other].0.1, [*self, *other].1.1]];
+        let __tuple_2: [[f64, f64], [f64, f64]] = "$value_copy$T661"(mv[mv[mv[*self, *other].0.0, mv[*self, *other].1.0], mv[mv[*self, *other].0.1, mv[*self, *other].1.1]]);
         __tuple_iter_2_0: {
             let __pattern_temp_2: [f64, f64] = __tuple_2.0;
             let a: f64 = __pattern_temp_2.0;
@@ -20931,5 +20931,9 @@ fn "$value_copy$T295"(v: [i32, char]) -> [i32, char] {
 
 fn "$value_copy$T19"(v: [f64, f64]) -> [f64, f64] {
     return Tuple<f64,f64> { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$T661"(v: [[f64, f64], [f64, f64]]) -> [[f64, f64], [f64, f64]] {
+    return Tuple<Tuple<f64,f64>,Tuple<f64,f64>> { 0: v.0, 1: v.1 };
 }
 

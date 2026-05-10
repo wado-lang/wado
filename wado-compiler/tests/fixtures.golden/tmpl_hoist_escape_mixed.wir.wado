@@ -136,10 +136,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_escape_mixed.wado/run"() with Stdout
                     break __tmpl: __local_6;
                     unreachable;
                 };
-                let __pair_temp_1: i64;
-                __pair_temp_1 = "wasi/stream-new"();
-                rx_25 = builtin::i32_wrap_i64(__pair_temp_1);
-                tx_26 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+                multivalue_bind [rx_25, tx_26] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
                 handle_27 = "wado-compiler/tests/fixtures/tmpl_hoist_escape_mixed.wado/__cm_binding__Stdout_write_via_stream"(rx_25);
                 "core:cli/write_to_stream"(tx_26, escaped, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_27);
@@ -161,10 +158,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_escape_mixed.wado/run"() with Stdout
         break __tmpl: __local_8;
         unreachable;
     };
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    rx_31 = builtin::i32_wrap_i64(__pair_temp_2);
-    tx_32 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [rx_31, tx_32] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     handle_33 = "wado-compiler/tests/fixtures/tmpl_hoist_escape_mixed.wado/__cm_binding__Stdout_write_via_stream"(rx_31);
     "core:cli/write_to_stream"(tx_32, message_30, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_33);

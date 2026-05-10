@@ -1184,6 +1184,20 @@ impl LocalMethodName {
     pub fn is_trait_method(&self) -> bool {
         self.trait_name.is_some()
     }
+
+    /// Returns true if this is the synthesized `__call` method on a
+    /// `__Closure_N` functor struct.
+    ///
+    /// Closure functor `__call` methods are inherent methods syntactically
+    /// (`trait_name` is `None`), but they participate in vtable dispatch
+    /// through the `Fn<arity, ret>` canonical type whose Wasm signature is
+    /// fixed. Treating them as ordinary inherent methods (e.g. for ABI
+    /// reshaping like multi-value return) would skew the signature against
+    /// the vtable slot they're installed into, so callers that reshape
+    /// ABIs need to filter them out.
+    pub fn is_closure_call(&self) -> bool {
+        self.method_name == "__call" && self.struct_name.starts_with("__Closure_")
+    }
 }
 
 /// A unified function identifier that can be either a free function or a method.

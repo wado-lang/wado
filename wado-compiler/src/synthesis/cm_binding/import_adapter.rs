@@ -234,6 +234,8 @@ pub(super) fn make_binding_function(
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     }))
 }
 

@@ -1068,10 +1068,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;
@@ -1902,7 +1899,7 @@ fn "core:prelude/intparse.wado/parse_signed_prefix"(s) {
         return struct.new "core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Err" { discriminant: 1, payload_0: 1 };
     }
     start = select i32(has_sign, 1, 0);
-    return struct.new "core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Ok" { discriminant: 0, payload_0: struct.new "tuple//[bool, i32]" { 0: is_negative, 1: start } };
+    return struct.new "core:prelude/types.wado//Result<Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Ok" { discriminant: 0, payload_0: ref.as_non_null(multivalue_struct_new "tuple//[bool, i32]"(is_negative; start)) };
 }
 
 fn "core:prelude/intparse.wado/parse_unsigned_prefix"(s) {
@@ -2285,7 +2282,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
         unreachable;
     }
     if "core:prelude/int128.wado/u128^Ord::cmp"(self, divisor) == 0 {
-        return struct.new "tuple//[u128, u128]" { 0: struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, 1: self };
+        return multivalue_struct_new "tuple//[u128, u128]"(struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }; self);
     }
     if __inline_u128_Eq__eq_1: block -> bool {
         self_7 = self;
@@ -2298,7 +2295,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
         break __inline_u128_Eq__eq_1;
         unreachable;
     } {
-        return struct.new "tuple//[u128, u128]" { 0: struct.new "core:prelude/int128.wado//u128" { low: 1_i64, high: 0_i64 }, 1: struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 } };
+        return multivalue_struct_new "tuple//[u128, u128]"(struct.new "core:prelude/int128.wado//u128" { low: 1_i64, high: 0_i64 }; struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 });
     }
     quotient = struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 };
     remainder = struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 };
@@ -2321,7 +2318,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
             continue l217;
         };
     };
-    return struct.new "tuple//[u128, u128]" { 0: quotient, 1: remainder };
+    return multivalue_struct_new "tuple//[u128, u128]"(quotient; remainder);
 }
 
 fn "core:prelude/int128.wado/u128::get_bit"(self, i) {

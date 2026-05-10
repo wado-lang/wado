@@ -191,16 +191,10 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/run"() with Stdout, Con
     let tx: i32;
     let handle: i32;
     conn = "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_new"();
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    data_rx = builtin::i32_wrap_i64(__pair_temp_1);
-    data_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [data_rx, data_tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     drop("wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_send"(conn, data_rx));
     "wasi/stream-drop-writable"(data_tx);
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    cipher_rx = builtin::i32_wrap_i64(__pair_temp_2);
-    cipher_tx = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [cipher_rx, cipher_tx] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     let __sroa___pattern_temp_3_0: i32;
     let __sroa___pattern_temp_3_1: i32;
     multivalue_bind [__sroa___pattern_temp_3_0, __sroa___pattern_temp_3_1] = "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_receive"(conn, cipher_rx);
@@ -244,10 +238,7 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/run"() with Stdout, Con
     if __sroa___match_scrut_1_discriminant == 0 {
         s = ref.as_non_null(__sroa___match_scrut_1_payload_0);
         block {
-            let __pair_temp_6: i64;
-            __pair_temp_6 = "wasi/stream-new"();
-            rx = builtin::i32_wrap_i64(__pair_temp_6);
-            tx = builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
+            multivalue_bind [rx, tx] = let __pair_temp_6: i64; __pair_temp_6 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
             handle = "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Stdout_write_via_stream"(rx);
             "core:cli/write_to_stream"(tx, s, 1);
             "wasi/future-drop-readable:transmission-cli"(handle);
@@ -413,10 +404,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

@@ -64,11 +64,15 @@ pub(super) fn materialize_if_needed(
 ) -> TirExpr {
     if matches!(
         expr.kind,
-        TirExprKind::Local { .. } | TirExprKind::Unit | TirExprKind::TupleLiteral { .. }
+        TirExprKind::Local { .. }
+            | TirExprKind::Unit
+            | TirExprKind::TupleLiteral { .. }
+            | TirExprKind::MultiValueLiteral { .. }
     ) {
-        // Local and Unit are already evaluated. TupleLiteral elements are
-        // individually materialized in synthesize_lift_tuple, so the whole
-        // expression is safe to evaluate after freeing.
+        // Local and Unit are already evaluated. Tuple-literal elements
+        // (heap or multi-value form) are individually materialised in
+        // synthesize_lift_tuple, so the whole expression is safe to evaluate
+        // after freeing.
         return expr;
     }
     // For non-local expressions, check if they reference memory by looking at
@@ -961,6 +965,12 @@ fn synthesize_lift_tuple(
             .collect();
         tt.make_tuple(elem_type_ids)
     };
+    // Heap form (`TupleLiteral`) is intentional here. CM lift bindings
+    // synthesise tuple values that flow across the linear-memory ↔ GC
+    // boundary; downstream consumers (CM record fields, list elements,
+    // result wrappers) all expect a heap struct ref. The multi-value
+    // form (`MultiValueLiteral`) would be wrong because the boundary
+    // crossing materialises a single GC ref, not N stack slots.
     TirExpr::new(
         TirExprKind::TupleLiteral {
             elements: elem_exprs,

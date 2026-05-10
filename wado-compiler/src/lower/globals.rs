@@ -253,6 +253,8 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     };
 
     module.functions.push(Rc::new(RefCell::new(init_func)));
@@ -288,10 +290,14 @@ fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<String>) {
                 collect_global_refs(&field.value, refs);
             }
         }
-        TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. }
+        | TirExprKind::MultiValueLiteral { elements, .. } => {
             for elem in elements {
                 collect_global_refs(elem, refs);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            collect_global_refs(source, refs);
         }
         TirExprKind::If {
             condition,
@@ -496,10 +502,13 @@ fn renumber_locals_in_expr(expr: &mut TirExpr, offset: u32) {
                 renumber_locals_in_expr(&mut field.value, offset);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for elem in elements {
                 renumber_locals_in_expr(elem, offset);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            renumber_locals_in_expr(source, offset);
         }
         TirExprKind::TupleSpread { expr } => {
             renumber_locals_in_expr(expr, offset);
@@ -772,6 +781,8 @@ pub(super) fn generate_initialize_modules_flat(flat: &mut FlatPackage) {
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
     };
 
     flat.functions

@@ -117,10 +117,7 @@ fn "wado-compiler/tests/fixtures/trait_mut_self.wado/run"() with Stdout {
         break __tmpl: __local_1;
         unreachable;
     };
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx_7 = builtin::i32_wrap_i64(__pair_temp_1);
-    tx_8 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx_7, tx_8] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle_9 = "wado-compiler/tests/fixtures/trait_mut_self.wado/__cm_binding__Stdout_write_via_stream"(rx_7);
     "core:cli/write_to_stream"(tx_8, message_6, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_9);
@@ -138,10 +135,7 @@ fn "wado-compiler/tests/fixtures/trait_mut_self.wado/run"() with Stdout {
         break __tmpl: __local_3;
         unreachable;
     };
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    rx_21 = builtin::i32_wrap_i64(__pair_temp_2);
-    tx_22 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [rx_21, tx_22] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     handle_23 = "wado-compiler/tests/fixtures/trait_mut_self.wado/__cm_binding__Stdout_write_via_stream"(rx_21);
     "core:cli/write_to_stream"(tx_22, message_20, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_23);

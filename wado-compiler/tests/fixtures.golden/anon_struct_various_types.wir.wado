@@ -203,7 +203,7 @@ fn "wado-compiler/tests/fixtures/anon_struct_various_types.wado/run"() with Stdo
     let __sroa_self_value_111: bool;
     e = struct.new "core:prelude/int128.wado//i128" { low: 999_i64, high: 0_i64 };
     f_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    g = struct.new "tuple//[i32, bool, String]" { 0: 1, 1: 1, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
+    g = multivalue_struct_new "tuple//[i32, bool, String]"(1; 1; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 });
     __sroa_s_e = e;
     __sroa_s_f = f_5;
     __sroa_s_g = g;
@@ -214,10 +214,7 @@ fn "wado-compiler/tests/fixtures/anon_struct_various_types.wado/run"() with Stdo
         break __tmpl: __local_8;
         unreachable;
     };
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx_24 = builtin::i32_wrap_i64(__pair_temp_1);
-    tx_25 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx_24, tx_25] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle_26 = "wado-compiler/tests/fixtures/anon_struct_various_types.wado/__cm_binding__Stdout_write_via_stream"(rx_24);
     "core:cli/write_to_stream"(tx_25, message_23, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_26);
@@ -228,10 +225,7 @@ fn "wado-compiler/tests/fixtures/anon_struct_various_types.wado/run"() with Stdo
         break __tmpl: __local_10;
         unreachable;
     };
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    rx_36 = builtin::i32_wrap_i64(__pair_temp_2);
-    tx_37 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [rx_36, tx_37] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     handle_38 = "wado-compiler/tests/fixtures/anon_struct_various_types.wado/__cm_binding__Stdout_write_via_stream"(rx_36);
     "core:cli/write_to_stream"(tx_37, message_35, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_38);
@@ -242,10 +236,7 @@ fn "wado-compiler/tests/fixtures/anon_struct_various_types.wado/run"() with Stdo
         break __tmpl: __local_12;
         unreachable;
     };
-    let __pair_temp_3: i64;
-    __pair_temp_3 = "wasi/stream-new"();
-    rx_48 = builtin::i32_wrap_i64(__pair_temp_3);
-    tx_49 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+    multivalue_bind [rx_48, tx_49] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
     handle_50 = "wado-compiler/tests/fixtures/anon_struct_various_types.wado/__cm_binding__Stdout_write_via_stream"(rx_48);
     "core:cli/write_to_stream"(tx_49, message_47, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_50);
@@ -256,10 +247,7 @@ fn "wado-compiler/tests/fixtures/anon_struct_various_types.wado/run"() with Stdo
         break __tmpl: __local_14;
         unreachable;
     };
-    let __pair_temp_4: i64;
-    __pair_temp_4 = "wasi/stream-new"();
-    rx_56 = builtin::i32_wrap_i64(__pair_temp_4);
-    tx_57 = builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+    multivalue_bind [rx_56, tx_57] = let __pair_temp_4: i64; __pair_temp_4 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
     handle_58 = "wado-compiler/tests/fixtures/anon_struct_various_types.wado/__cm_binding__Stdout_write_via_stream"(rx_56);
     "core:cli/write_to_stream"(tx_57, message_55, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_58);
@@ -270,17 +258,11 @@ fn "wado-compiler/tests/fixtures/anon_struct_various_types.wado/run"() with Stdo
         break __tmpl: __local_16;
         unreachable;
     };
-    let __pair_temp_5: i64;
-    __pair_temp_5 = "wasi/stream-new"();
-    rx_68 = builtin::i32_wrap_i64(__pair_temp_5);
-    tx_69 = builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+    multivalue_bind [rx_68, tx_69] = let __pair_temp_5: i64; __pair_temp_5 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
     handle_70 = "wado-compiler/tests/fixtures/anon_struct_various_types.wado/__cm_binding__Stdout_write_via_stream"(rx_68);
     "core:cli/write_to_stream"(tx_69, message_67, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_70);
-    let __pair_temp_6: i64;
-    __pair_temp_6 = "wasi/stream-new"();
-    rx_80 = builtin::i32_wrap_i64(__pair_temp_6);
-    tx_81 = builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
+    multivalue_bind [rx_80, tx_81] = let __pair_temp_6: i64; __pair_temp_6 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
     handle_82 = "wado-compiler/tests/fixtures/anon_struct_various_types.wado/__cm_binding__Stdout_write_via_stream"(rx_80);
     "core:cli/write_to_stream"(tx_81, __sroa_s_f, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_82);
@@ -306,10 +288,7 @@ fn "wado-compiler/tests/fixtures/anon_struct_various_types.wado/run"() with Stdo
         break __tmpl: __local_18;
         unreachable;
     };
-    let __pair_temp_7: i64;
-    __pair_temp_7 = "wasi/stream-new"();
-    rx_86 = builtin::i32_wrap_i64(__pair_temp_7);
-    tx_87 = builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
+    multivalue_bind [rx_86, tx_87] = let __pair_temp_7: i64; __pair_temp_7 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_7); builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
     handle_88 = "wado-compiler/tests/fixtures/anon_struct_various_types.wado/__cm_binding__Stdout_write_via_stream"(rx_86);
     "core:cli/write_to_stream"(tx_87, message_85, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_88);
@@ -384,10 +363,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;
@@ -498,7 +474,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
         unreachable;
     }
     if "core:prelude/int128.wado/u128^Ord::cmp"(self, divisor) == 0 {
-        return struct.new "tuple//[u128, u128]" { 0: struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, 1: self };
+        return multivalue_struct_new "tuple//[u128, u128]"(struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }; self);
     }
     if __inline_u128_Eq__eq_1: block -> bool {
         self_7 = self;
@@ -511,7 +487,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
         break __inline_u128_Eq__eq_1;
         unreachable;
     } {
-        return struct.new "tuple//[u128, u128]" { 0: struct.new "core:prelude/int128.wado//u128" { low: 1_i64, high: 0_i64 }, 1: struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 } };
+        return multivalue_struct_new "tuple//[u128, u128]"(struct.new "core:prelude/int128.wado//u128" { low: 1_i64, high: 0_i64 }; struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 });
     }
     quotient = struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 };
     remainder = struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 };
@@ -534,7 +510,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
             continue l21;
         };
     };
-    return struct.new "tuple//[u128, u128]" { 0: quotient, 1: remainder };
+    return multivalue_struct_new "tuple//[u128, u128]"(quotient; remainder);
 }
 
 fn "core:prelude/int128.wado/u128::get_bit"(self, i) {

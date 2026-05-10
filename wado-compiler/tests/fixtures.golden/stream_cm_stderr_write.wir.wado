@@ -74,10 +74,7 @@ fn "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/run"() with Stderr 
     let subtask: i32;
     let __b_3: ref "core:prelude//Array<u8>";
     let data: ref "core:prelude//Array<u8>";
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     subtask = "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/__cm_binding__Stderr_write_via_stream"(rx);
     data = __seq_lit: block -> ref "core:prelude//Array<u8>" {
         __b_3 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(101, 114, 114, 32, 109, 115, 103, 10), used: 8 };

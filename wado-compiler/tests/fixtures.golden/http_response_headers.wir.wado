@@ -415,10 +415,7 @@ fn "wado-compiler/tests/fixtures/http_response_headers.wado/handle"() {
     let __packed_155: i64;
     let __ptr_156: i32;
     let __len_157: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/future-new"();
-    trailers_future = builtin::i32_wrap_i64(__pair_temp_1);
-    trailers_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [trailers_future, trailers_tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/future-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     headers = "wado-compiler/tests/fixtures/http_response_headers.wado/__cm_binding__Fields_new"();
     value_4 = __seq_lit: block -> ref "core:prelude//Array<u8>" {
         __b_3 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };

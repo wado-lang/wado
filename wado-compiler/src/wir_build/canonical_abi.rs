@@ -231,6 +231,22 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Emit `stream-new()` or `future-new()` → split i64 into [`rx_i32`, `tx_i32`] tuple.
+    ///
+    /// Wrapped in `MultiValueStructNew` so the WIR `peephole` pass can elide
+    /// the struct allocation when the result is destructured immediately
+    /// (the typical case: `let [rx, tx] = Future::<T>::new();`). The peephole
+    /// pattern is:
+    ///
+    /// ```text
+    /// LocalSet __tmp = MultiValueStructNew { instr: <push low; push high>, type_id }
+    /// LocalSet rx = StructGet(__tmp, "0")
+    /// LocalSet tx = StructGet(__tmp, "1")
+    /// ```
+    ///
+    /// rewritten to `MultiValueLocalBind { instr, locals: [rx, tx] }`. When
+    /// only one of rx/tx is read (e.g. `let [rx, _tx] = ...`), the pass still
+    /// fires and drops the unused stack value — closing the regression where
+    /// PR #1024's TIR-only DCE could not reach the WIR struct.new.
     fn emit_stream_or_future_new(
         &mut self,
         is_future: bool,
@@ -246,7 +262,8 @@ impl FunctionTranslator<'_, '_> {
             .ctx
             .ensure_canonical(intrinsic, vec![], vec![WirType::I64]);
 
-        // Resolve the result tuple type for StructNew
+        // Resolve the result tuple type for StructNew (or its multi-value
+        // elision target: a struct of two i32 fields).
         let wir_type = self
             .ctx
             .type_id_to_wir_type(self.type_table, result_type_id);
@@ -257,7 +274,8 @@ impl FunctionTranslator<'_, '_> {
             ),
         };
 
-        // Declare a temp local, call import → i64, split into [rx, tx] tuple
+        // Declare a temp local, call import → i64, then push low/high i32 onto
+        // the stack as the multi-value producer for `MultiValueStructNew`.
         self.local_counter += 1;
         let temp = format!("__pair_temp_{}", self.local_counter);
         let declare = WirInstr::DeclareLocal {
@@ -284,9 +302,13 @@ impl FunctionTranslator<'_, '_> {
             Box::new(WirInstr::I64Const(32)),
         )));
 
-        let mut instrs = vec![declare, set_temp];
-        instrs.push(self.struct_new(type_id, vec![get_low, get_high]));
-        WirInstr::Seq(instrs)
+        // The Seq leaves [low, high] on the stack; MultiValueStructNew either
+        // wraps them in a struct (no elision) or is consumed by peephole's
+        // multi-value-bind rewrite (elision).
+        WirInstr::MultiValueStructNew {
+            type_id,
+            instr: Box::new(WirInstr::Seq(vec![declare, set_temp, get_low, get_high])),
+        }
     }
 
     /// Emit `future-read(handle)` → `Option<T>`.

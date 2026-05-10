@@ -112,19 +112,13 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_chained"() with 
         0;
     }) {
         message_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all casts produce same u64 value"), used: 32 };
-        let __pair_temp_1: i64;
-        __pair_temp_1 = "wasi/stream-new"();
-        rx_10 = builtin::i32_wrap_i64(__pair_temp_1);
-        tx_11 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+        multivalue_bind [rx_10, tx_11] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
         handle_12 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx_10);
         "core:cli/write_to_stream"(tx_11, message_9, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_12);
     } else {
         message_15 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("FAILED: values differ"), used: 21 };
-        let __pair_temp_2: i64;
-        __pair_temp_2 = "wasi/stream-new"();
-        rx_16 = builtin::i32_wrap_i64(__pair_temp_2);
-        tx_17 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+        multivalue_bind [rx_16, tx_17] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
         handle_18 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx_16);
         "core:cli/write_to_stream"(tx_17, message_15, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_18);
@@ -134,19 +128,13 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_chained"() with 
     diff = ts2 - ts;
     if diff >=u 0_i64 {
         message_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("timestamp arithmetic works"), used: 26 };
-        let __pair_temp_3: i64;
-        __pair_temp_3 = "wasi/stream-new"();
-        rx_22 = builtin::i32_wrap_i64(__pair_temp_3);
-        tx_23 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+        multivalue_bind [rx_22, tx_23] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
         handle_24 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx_22);
         "core:cli/write_to_stream"(tx_23, message_21, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_24);
     }
     message_27 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("chained newtype tests passed"), used: 28 };
-    let __pair_temp_4: i64;
-    __pair_temp_4 = "wasi/stream-new"();
-    rx_28 = builtin::i32_wrap_i64(__pair_temp_4);
-    tx_29 = builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+    multivalue_bind [rx_28, tx_29] = let __pair_temp_4: i64; __pair_temp_4 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
     handle_30 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx_28);
     "core:cli/write_to_stream"(tx_29, message_27, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_30);
@@ -179,19 +167,13 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_duration"() with
     res = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_get_resolution"();
     if res >u 0_i64 {
         message_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("resolution is positive"), used: 22 };
-        let __pair_temp_1: i64;
-        __pair_temp_1 = "wasi/stream-new"();
-        rx_4 = builtin::i32_wrap_i64(__pair_temp_1);
-        tx_5 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+        multivalue_bind [rx_4, tx_5] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
         handle_6 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx_4);
         "core:cli/write_to_stream"(tx_5, message_3, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_6);
     } else {
         message_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("resolution is zero or negative"), used: 30 };
-        let __pair_temp_2: i64;
-        __pair_temp_2 = "wasi/stream-new"();
-        rx_10 = builtin::i32_wrap_i64(__pair_temp_2);
-        tx_11 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+        multivalue_bind [rx_10, tx_11] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
         handle_12 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx_10);
         "core:cli/write_to_stream"(tx_11, message_9, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_12);
@@ -199,10 +181,7 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_duration"() with
     double_res = res * 2_i64;
     if double_res >=u res {
         message_15 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("double is >= original"), used: 21 };
-        let __pair_temp_3: i64;
-        __pair_temp_3 = "wasi/stream-new"();
-        rx_16 = builtin::i32_wrap_i64(__pair_temp_3);
-        tx_17 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+        multivalue_bind [rx_16, tx_17] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
         handle_18 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx_16);
         "core:cli/write_to_stream"(tx_17, message_15, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_18);
@@ -210,19 +189,13 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_duration"() with
     as_u64 = res;
     if as_u64 >u 0_i64 {
         message_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("cast to u64 works"), used: 17 };
-        let __pair_temp_4: i64;
-        __pair_temp_4 = "wasi/stream-new"();
-        rx_22 = builtin::i32_wrap_i64(__pair_temp_4);
-        tx_23 = builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+        multivalue_bind [rx_22, tx_23] = let __pair_temp_4: i64; __pair_temp_4 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
         handle_24 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx_22);
         "core:cli/write_to_stream"(tx_23, message_21, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_24);
     }
     message_27 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duration tests passed"), used: 21 };
-    let __pair_temp_5: i64;
-    __pair_temp_5 = "wasi/stream-new"();
-    rx_28 = builtin::i32_wrap_i64(__pair_temp_5);
-    tx_29 = builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+    multivalue_bind [rx_28, tx_29] = let __pair_temp_5: i64; __pair_temp_5 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
     handle_30 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx_28);
     "core:cli/write_to_stream"(tx_29, message_27, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_30);
@@ -253,10 +226,7 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_multiple"() with
         0;
     }) {
         message_6 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("both newtypes have positive values"), used: 34 };
-        let __pair_temp_1: i64;
-        __pair_temp_1 = "wasi/stream-new"();
-        rx_7 = builtin::i32_wrap_i64(__pair_temp_1);
-        tx_8 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+        multivalue_bind [rx_7, tx_8] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
         handle_9 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx_7);
         "core:cli/write_to_stream"(tx_8, message_6, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_9);
@@ -265,19 +235,13 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_multiple"() with
     elapsed = end - start;
     if elapsed >=u 0_i64 {
         message_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("elapsed time is non-negative"), used: 28 };
-        let __pair_temp_2: i64;
-        __pair_temp_2 = "wasi/stream-new"();
-        rx_13 = builtin::i32_wrap_i64(__pair_temp_2);
-        tx_14 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+        multivalue_bind [rx_13, tx_14] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
         handle_15 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx_13);
         "core:cli/write_to_stream"(tx_14, message_12, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_15);
     }
     message_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("multiple wasi newtype tests passed"), used: 34 };
-    let __pair_temp_3: i64;
-    __pair_temp_3 = "wasi/stream-new"();
-    rx_19 = builtin::i32_wrap_i64(__pair_temp_3);
-    tx_20 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+    multivalue_bind [rx_19, tx_20] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
     handle_21 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx_19);
     "core:cli/write_to_stream"(tx_20, message_18, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_21);

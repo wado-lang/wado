@@ -121,7 +121,7 @@ fn "wado-compiler/tests/fixtures/array_tuple_unit.wado/run"() with Stdout {
     let tx: i32;
     let handle: i32;
     arr = __seq_lit: block -> ref "core:prelude//Array<Tuple<i32,unit>>" {
-        __b_0 = struct.new "core:prelude//Array<Tuple<i32,unit>>" { repr: array.new_fixed<ref "tuple//[i32, unit]">(struct.new "tuple//[i32, unit]" { 0: 1 }, struct.new "tuple//[i32, unit]" { 0: 2 }, struct.new "tuple//[i32, unit]" { 0: 3 }), used: 3 };
+        __b_0 = struct.new "core:prelude//Array<Tuple<i32,unit>>" { repr: array.new_fixed<ref "tuple//[i32, unit]">(multivalue_struct_new "tuple//[i32, unit]"(1), multivalue_struct_new "tuple//[i32, unit]"(2), multivalue_struct_new "tuple//[i32, unit]"(3)), used: 3 };
         break __seq_lit: __b_0;
         unreachable;
     };
@@ -138,10 +138,7 @@ fn "wado-compiler/tests/fixtures/array_tuple_unit.wado/run"() with Stdout {
                     break __tmpl: __local_4;
                     unreachable;
                 };
-                let __pair_temp_1: i64;
-                __pair_temp_1 = "wasi/stream-new"();
-                rx = builtin::i32_wrap_i64(__pair_temp_1);
-                tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+                multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
                 handle = "wado-compiler/tests/fixtures/array_tuple_unit.wado/__cm_binding__Stdout_write_via_stream"(rx);
                 "core:cli/write_to_stream"(tx, message, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);

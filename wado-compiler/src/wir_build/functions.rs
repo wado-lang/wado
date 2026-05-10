@@ -394,13 +394,29 @@ fn register_single_function(
         param_names.push(unique_name);
     }
 
-    // Build result types
-    let results: Vec<WirType> =
-        if tir_func.return_type == TypeTable::UNIT || tir_func.return_type == TypeTable::NEVER {
-            Vec::new()
-        } else {
-            vec![ctx.type_id_to_wir_type(type_table, tir_func.return_type)]
-        };
+    // Build result types. Honour the function's `return_abi`:
+    //
+    // - `Single`: a single Wasm result whose type is the TIR return type
+    //   (or empty for unit/never). This is the historical behaviour.
+    // - `MultiValue { result_types }`: a Wasm multi-value result with one
+    //   slot per tuple element. Set by `optimize::multi_value_return` for
+    //   tuple-returning functions whose every call site destructures the
+    //   result. WIR-level `sroa_return` would otherwise have to discover
+    //   this — we hand it the answer up front.
+    let results: Vec<WirType> = match &tir_func.return_abi {
+        crate::tir::ReturnAbi::MultiValue { result_types } => result_types
+            .iter()
+            .map(|&t| ctx.type_id_to_wir_type(type_table, t))
+            .filter(|t| !matches!(t, WirType::Unit))
+            .collect(),
+        crate::tir::ReturnAbi::Single => {
+            if tir_func.return_type == TypeTable::UNIT || tir_func.return_type == TypeTable::NEVER {
+                Vec::new()
+            } else {
+                vec![ctx.type_id_to_wir_type(type_table, tir_func.return_type)]
+            }
+        }
+    };
     let effects = tir_func.effects.clone();
 
     // Register function type

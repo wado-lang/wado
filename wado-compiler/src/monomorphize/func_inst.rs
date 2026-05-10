@@ -882,6 +882,8 @@ impl Monomorphizer {
             export_name: generic.export_name.clone(),
             allocator_tag: generic.allocator_tag.clone(),
             kind: FunctionKind::Regular,
+
+            return_abi: crate::tir::ReturnAbi::default(),
         })
     }
 
@@ -1540,9 +1542,16 @@ impl Monomorphizer {
                             elements.push(elem);
                         }
                     }
-                    // Rebuild the tuple type from expanded element types
+                    // Rebuild the tuple type from expanded element types.
                     let new_elem_types: Vec<TypeId> = elements.iter().map(|e| e.type_id).collect();
                     expr.type_id = type_table.make_tuple(new_elem_types);
+                    // After expansion the literal contains no remaining
+                    // `TupleSpread` / `TypePackExpansion` elements, so we
+                    // can promote it to the multi-value form. This matches
+                    // the resolver's default for spread-free literals and
+                    // gives WIR build the chance to emit `MultiValueStructNew`.
+                    let elements = std::mem::take(elements);
+                    expr.kind = TirExprKind::MultiValueLiteral { elements };
                 }
             }
             TirExprKind::Assign { target, value } => {
@@ -1564,6 +1573,26 @@ impl Monomorphizer {
             }
             TirExprKind::FieldAccess { expr: inner, .. } => {
                 self.substitute_types_in_expr(inner, substitution, type_table, local_count, locals);
+            }
+            TirExprKind::MultiValueLiteral { elements } => {
+                for elem in elements.iter_mut() {
+                    self.substitute_types_in_expr(
+                        elem,
+                        substitution,
+                        type_table,
+                        local_count,
+                        locals,
+                    );
+                }
+            }
+            TirExprKind::MultiValueProject { source, .. } => {
+                self.substitute_types_in_expr(
+                    source,
+                    substitution,
+                    type_table,
+                    local_count,
+                    locals,
+                );
             }
             TirExprKind::TupleSpread { expr: inner } => {
                 self.substitute_types_in_expr(inner, substitution, type_table, local_count, locals);
@@ -1620,8 +1649,11 @@ impl Monomorphizer {
                     }
                     let col_types: Vec<TypeId> = inner_arities.iter().map(|row| row[col]).collect();
                     let col_tuple_type = type_table.make_tuple(col_types);
+                    // Inner row tuples have no remaining spreads after `.zip()`
+                    // expansion — emit as multi-value form, matching the
+                    // resolver's default for spread-free literals.
                     col_exprs.push(TirExpr::new(
-                        TirExprKind::TupleLiteral {
+                        TirExprKind::MultiValueLiteral {
                             elements: row_exprs,
                         },
                         col_tuple_type,
@@ -1631,7 +1663,7 @@ impl Monomorphizer {
                 // Compute the correct transposed type from the column tuple types
                 let transposed_types: Vec<TypeId> = col_exprs.iter().map(|e| e.type_id).collect();
                 let transposed_type = type_table.make_tuple(transposed_types);
-                expr.kind = TirExprKind::TupleLiteral {
+                expr.kind = TirExprKind::MultiValueLiteral {
                     elements: col_exprs,
                 };
                 expr.type_id = transposed_type;
@@ -2868,7 +2900,10 @@ impl Monomorphizer {
         locals: &mut Vec<TirLocal>,
     ) {
         match &mut expr.kind {
-            TirExprKind::TupleLiteral { elements } if elements.len() > 1 => {
+            TirExprKind::TupleLiteral { elements }
+            | TirExprKind::MultiValueLiteral { elements }
+                if elements.len() > 1 =>
+            {
                 // Collect local definitions from each element.
                 // If multiple elements define the same local, allocate new locals.
                 let mut first_seen_locals: IndexSet<u32> = IndexSet::default();
@@ -3001,10 +3036,14 @@ impl Monomorphizer {
                     Self::collect_locals_in_expr(&arg.expr, locals);
                 }
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements }
+            | TirExprKind::MultiValueLiteral { elements } => {
                 for elem in elements {
                     Self::collect_locals_in_expr(elem, locals);
                 }
+            }
+            TirExprKind::MultiValueProject { source, .. } => {
+                Self::collect_locals_in_expr(source, locals);
             }
             TirExprKind::VariantConstruct {
                 payload: Some(p), ..
@@ -3129,13 +3168,17 @@ impl Monomorphizer {
                 }
                 None
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements }
+            | TirExprKind::MultiValueLiteral { elements } => {
                 for elem in elements {
                     if let Some(t) = Self::find_local_type_in_expr(elem, local_idx) {
                         return Some(t);
                     }
                 }
                 None
+            }
+            TirExprKind::MultiValueProject { source, .. } => {
+                Self::find_local_type_in_expr(source, local_idx)
             }
             TirExprKind::VariantConstruct {
                 payload: Some(p), ..

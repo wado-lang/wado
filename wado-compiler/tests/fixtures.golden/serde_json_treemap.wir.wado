@@ -2184,10 +2184,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;
@@ -4539,7 +4536,7 @@ fn "core:collections/TreeMap<String,Option<i32>>::entries"(self) {
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = ref.as_non_null(__pattern_temp_0);
                 if entry.deleted == 0 {
-                    "core:prelude/array.wado/Array<Tuple<String,Option<i32>>>::push"(result, struct.new "tuple//[String, Option<i32>]" { 0: entry.key, 1: entry.value });
+                    "core:prelude/array.wado/Array<Tuple<String,Option<i32>>>::push"(result, multivalue_struct_new "tuple//[String, Option<i32>]"(entry.key; entry.value));
                 }
             } else {
                 break b357;
@@ -5012,7 +5009,7 @@ fn "core:collections/TreeMap<String,Array<i32>>::entries"(self) {
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = ref.as_non_null(__pattern_temp_0);
                 if entry.deleted == 0 {
-                    "core:prelude/array.wado/Array<Tuple<String,Array<i32>>>::push"(result, struct.new "tuple//[String, Array<i32>]" { 0: entry.key, 1: entry.value });
+                    "core:prelude/array.wado/Array<Tuple<String,Array<i32>>>::push"(result, multivalue_struct_new "tuple//[String, Array<i32>]"(entry.key; entry.value));
                 }
             } else {
                 break b405;
@@ -5401,7 +5398,7 @@ fn "core:collections/TreeMap<String,bool>::entries"(self) {
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = ref.as_non_null(__pattern_temp_0);
                 if entry.deleted == 0 {
-                    "core:prelude/array.wado/Array<Tuple<String,bool>>::push"(result, struct.new "tuple//[String, bool]" { 0: entry.key, 1: entry.value });
+                    "core:prelude/array.wado/Array<Tuple<String,bool>>::push"(result, multivalue_struct_new "tuple//[String, bool]"(entry.key; entry.value));
                 }
             } else {
                 break b446;
@@ -5794,7 +5791,7 @@ fn "core:collections/TreeMap<String,String>::entries"(self) {
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = ref.as_non_null(__pattern_temp_0);
                 if entry.deleted == 0 {
-                    "core:prelude/array.wado/Array<Tuple<String,String>>::push"(result, struct.new "tuple//[String, String]" { 0: entry.key, 1: entry.value });
+                    "core:prelude/array.wado/Array<Tuple<String,String>>::push"(result, multivalue_struct_new "tuple//[String, String]"(entry.key; entry.value));
                 }
             } else {
                 break b487;
@@ -6538,7 +6535,7 @@ fn "core:collections/TreeMap<String,i32>::entries"(self) {
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = ref.as_non_null(__pattern_temp_0);
                 if entry.deleted == 0 {
-                    "core:prelude/array.wado/Array<Tuple<String,i32>>::push"(result, struct.new "tuple//[String, i32]" { 0: entry.key, 1: entry.value });
+                    "core:prelude/array.wado/Array<Tuple<String,i32>>::push"(result, multivalue_struct_new "tuple//[String, i32]"(entry.key; entry.value));
                 }
             } else {
                 break b563;

@@ -194,10 +194,7 @@ fn "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/run"() with Std
         break __tmpl: __local_6;
         unreachable;
     };
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx_18 = builtin::i32_wrap_i64(__pair_temp_1);
-    tx_19 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx_18, tx_19] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle_20 = "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__cm_binding__Stdout_write_via_stream"(rx_18);
     "core:cli/write_to_stream"(tx_19, message_17, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_20);
@@ -217,10 +214,7 @@ fn "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/run"() with Std
         break __tmpl: __local_8;
         unreachable;
     };
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    rx_40 = builtin::i32_wrap_i64(__pair_temp_2);
-    tx_41 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [rx_40, tx_41] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     handle_42 = "wado-compiler/tests/fixtures/effect_handler_nested_same.wado/__cm_binding__Stdout_write_via_stream"(rx_40);
     "core:cli/write_to_stream"(tx_41, message_39, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_42);
@@ -313,10 +307,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

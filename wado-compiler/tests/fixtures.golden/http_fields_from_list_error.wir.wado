@@ -553,11 +553,11 @@ fn "wado-compiler/tests/fixtures/http_fields_from_list_error.wado/handle"() {
     let self_179: ref "core:prelude/string.wado//String";
     let self_196: ref "core:prelude/string.wado//String";
     valid_entries = __seq_lit: block -> ref "core:prelude//Array<Tuple<String,Array<u8>>>" {
-        __b_0 = struct.new "core:prelude//Array<Tuple<String,Array<u8>>>" { repr: array.new_fixed<ref "tuple//[String, Array<u8>]">(struct.new "tuple//[String, Array<u8>]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-valid"), used: 7 }, 1: ref.as_non_null(__inline_String__as_bytes_5: block -> ref "core:prelude//Array<u8>" {
+        __b_0 = struct.new "core:prelude//Array<Tuple<String,Array<u8>>>" { repr: array.new_fixed<ref "tuple//[String, Array<u8>]">(multivalue_struct_new "tuple//[String, Array<u8>]"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-valid"), used: 7 }; ref.as_non_null(__inline_String__as_bytes_5: block -> ref "core:prelude//Array<u8>" {
             self_179 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value"), used: 5 };
             break __inline_String__as_bytes_5: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_179.repr, used: self_179.used, index: 0 });
             unreachable;
-        }) }), used: 1 };
+        }))), used: 1 };
         break __seq_lit: __b_0;
         unreachable;
     };
@@ -616,11 +616,11 @@ condition: valid_result matches { Ok(_) }
         unreachable;
     });
     invalid_entries = __seq_lit: block -> ref "core:prelude//Array<Tuple<String,Array<u8>>>" {
-        __b_8 = struct.new "core:prelude//Array<Tuple<String,Array<u8>>>" { repr: array.new_fixed<ref "tuple//[String, Array<u8>]">(struct.new "tuple//[String, Array<u8>]" { 0: null_name, 1: ref.as_non_null(__inline_String__as_bytes_18: block -> ref "core:prelude//Array<u8>" {
+        __b_8 = struct.new "core:prelude//Array<Tuple<String,Array<u8>>>" { repr: array.new_fixed<ref "tuple//[String, Array<u8>]">(multivalue_struct_new "tuple//[String, Array<u8>]"(null_name; ref.as_non_null(__inline_String__as_bytes_18: block -> ref "core:prelude//Array<u8>" {
             self_196 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value"), used: 5 };
             break __inline_String__as_bytes_18: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_196.repr, used: self_196.used, index: 0 });
             unreachable;
-        }) }), used: 1 };
+        }))), used: 1 };
         break __seq_lit: __b_8;
         unreachable;
     };
@@ -660,10 +660,7 @@ condition: invalid_result matches { Err(_) }
         });
         unreachable;
     }
-    let __pair_temp_5: i64;
-    __pair_temp_5 = "wasi/future-new"();
-    trailers_future = builtin::i32_wrap_i64(__pair_temp_5);
-    trailers_tx = builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+    multivalue_bind [trailers_future, trailers_tx] = let __pair_temp_5: i64; __pair_temp_5 = "wasi/future-new"(); builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
     resp_headers = "wado-compiler/tests/fixtures/http_fields_from_list_error.wado/__cm_binding__Fields_new"();
     let __sroa___pattern_temp_1_0: i32;
     let __sroa___pattern_temp_1_1: i32;
@@ -1175,10 +1172,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

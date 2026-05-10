@@ -239,10 +239,14 @@ fn analyze_expr(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
                 analyze_expr(&field.value, usage, type_table);
             }
         }
-        TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. }
+        | TirExprKind::MultiValueLiteral { elements, .. } => {
             for elem in elements {
                 analyze_expr(elem, usage, type_table);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            analyze_expr(source, usage, type_table);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
@@ -590,10 +594,13 @@ fn strip_in_expr(
                 strip_in_expr(&mut field.value, value_copy_set, usage);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for elem in elements {
                 strip_in_expr(elem, value_copy_set, usage);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            strip_in_expr(source, value_copy_set, usage);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {

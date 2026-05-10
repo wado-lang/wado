@@ -192,10 +192,14 @@ impl StringCollector {
                     self.collect_expr(&field.value);
                 }
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements }
+            | TirExprKind::MultiValueLiteral { elements } => {
                 for elem in elements {
                     self.collect_expr(elem);
                 }
+            }
+            TirExprKind::MultiValueProject { source, .. } => {
+                self.collect_expr(source);
             }
             TirExprKind::Assign { target, value } => {
                 self.collect_expr(target);

@@ -111,38 +111,26 @@ fn "wado-compiler/tests/fixtures/wasi_clocks.wado/run"() with Stdout, MonotonicC
     t3 = "wado-compiler/tests/fixtures/wasi_clocks.wado/__cm_binding__MonotonicClock_now"();
     if t2 >=u t1 {
         message_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: monotonic clock t2 >= t1"), used: 30 };
-        let __pair_temp_1: i64;
-        __pair_temp_1 = "wasi/stream-new"();
-        rx_6 = builtin::i32_wrap_i64(__pair_temp_1);
-        tx_7 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+        multivalue_bind [rx_6, tx_7] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
         handle_8 = "wado-compiler/tests/fixtures/wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
         "core:cli/write_to_stream"(tx_7, message_5, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_8);
     } else {
         message_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: FAILED - monotonic clock went backwards"), used: 45 };
-        let __pair_temp_2: i64;
-        __pair_temp_2 = "wasi/stream-new"();
-        rx_12 = builtin::i32_wrap_i64(__pair_temp_2);
-        tx_13 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+        multivalue_bind [rx_12, tx_13] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
         handle_14 = "wado-compiler/tests/fixtures/wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_12);
         "core:cli/write_to_stream"(tx_13, message_11, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_14);
     }
     if t3 >=u t2 {
         message_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: monotonic clock t3 >= t2"), used: 30 };
-        let __pair_temp_3: i64;
-        __pair_temp_3 = "wasi/stream-new"();
-        rx_18 = builtin::i32_wrap_i64(__pair_temp_3);
-        tx_19 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+        multivalue_bind [rx_18, tx_19] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
         handle_20 = "wado-compiler/tests/fixtures/wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_18);
         "core:cli/write_to_stream"(tx_19, message_17, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_20);
     } else {
         message_23 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: FAILED - monotonic clock went backwards"), used: 45 };
-        let __pair_temp_4: i64;
-        __pair_temp_4 = "wasi/stream-new"();
-        rx_24 = builtin::i32_wrap_i64(__pair_temp_4);
-        tx_25 = builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+        multivalue_bind [rx_24, tx_25] = let __pair_temp_4: i64; __pair_temp_4 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
         handle_26 = "wado-compiler/tests/fixtures/wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_24);
         "core:cli/write_to_stream"(tx_25, message_23, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_26);
@@ -157,19 +145,13 @@ fn "wado-compiler/tests/fixtures/wasi_clocks.wado/run"() with Stdout, MonotonicC
         t3 >u 0_i64;
     }) {
         message_29 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: monotonic clock returns positive values"), used: 45 };
-        let __pair_temp_5: i64;
-        __pair_temp_5 = "wasi/stream-new"();
-        rx_30 = builtin::i32_wrap_i64(__pair_temp_5);
-        tx_31 = builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+        multivalue_bind [rx_30, tx_31] = let __pair_temp_5: i64; __pair_temp_5 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
         handle_32 = "wado-compiler/tests/fixtures/wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_30);
         "core:cli/write_to_stream"(tx_31, message_29, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_32);
     } else {
         message_35 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: monotonic clock returned all zeros (unusual)"), used: 50 };
-        let __pair_temp_6: i64;
-        __pair_temp_6 = "wasi/stream-new"();
-        rx_36 = builtin::i32_wrap_i64(__pair_temp_6);
-        tx_37 = builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
+        multivalue_bind [rx_36, tx_37] = let __pair_temp_6: i64; __pair_temp_6 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
         handle_38 = "wado-compiler/tests/fixtures/wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_36);
         "core:cli/write_to_stream"(tx_37, message_35, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_38);
@@ -177,28 +159,19 @@ fn "wado-compiler/tests/fixtures/wasi_clocks.wado/run"() with Stdout, MonotonicC
     elapsed = t3 - t1;
     if elapsed >=u 0_i64 {
         message_41 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: elapsed time is non-negative"), used: 34 };
-        let __pair_temp_7: i64;
-        __pair_temp_7 = "wasi/stream-new"();
-        rx_42 = builtin::i32_wrap_i64(__pair_temp_7);
-        tx_43 = builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
+        multivalue_bind [rx_42, tx_43] = let __pair_temp_7: i64; __pair_temp_7 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_7); builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
         handle_44 = "wado-compiler/tests/fixtures/wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_42);
         "core:cli/write_to_stream"(tx_43, message_41, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_44);
     } else {
         message_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: FAILED - elapsed time is negative"), used: 39 };
-        let __pair_temp_8: i64;
-        __pair_temp_8 = "wasi/stream-new"();
-        rx_48 = builtin::i32_wrap_i64(__pair_temp_8);
-        tx_49 = builtin::i32_wrap_i64(__pair_temp_8 >>u 32_i64);
+        multivalue_bind [rx_48, tx_49] = let __pair_temp_8: i64; __pair_temp_8 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_8); builtin::i32_wrap_i64(__pair_temp_8 >>u 32_i64);
         handle_50 = "wado-compiler/tests/fixtures/wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_48);
         "core:cli/write_to_stream"(tx_49, message_47, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_50);
     }
     message_53 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all clocks tests passed"), used: 23 };
-    let __pair_temp_9: i64;
-    __pair_temp_9 = "wasi/stream-new"();
-    rx_54 = builtin::i32_wrap_i64(__pair_temp_9);
-    tx_55 = builtin::i32_wrap_i64(__pair_temp_9 >>u 32_i64);
+    multivalue_bind [rx_54, tx_55] = let __pair_temp_9: i64; __pair_temp_9 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_9); builtin::i32_wrap_i64(__pair_temp_9 >>u 32_i64);
     handle_56 = "wado-compiler/tests/fixtures/wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_54);
     "core:cli/write_to_stream"(tx_55, message_53, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_56);

@@ -828,8 +828,9 @@ impl WhitelistChecker<'_> {
         expected_layout: &ElementLayout,
     ) -> bool {
         match &expr.kind {
-            // Direct tuple literal: [e0, e1, ...]
-            TirExprKind::TupleLiteral { elements } => {
+            // Direct tuple literal `[e0, e1, ...]` (heap or multi-value form).
+            TirExprKind::TupleLiteral { elements }
+            | TirExprKind::MultiValueLiteral { elements } => {
                 if !matches!(expected_layout, ElementLayout::Tuple) {
                     return false;
                 }
@@ -1302,7 +1303,7 @@ fn decompose_source(
     ctx: &RewriteCtx,
 ) -> Option<Vec<TirExpr>> {
     match &expr.kind {
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             if !matches!(expected_layout, ElementLayout::Tuple) {
                 return None;
             }
@@ -1829,10 +1830,13 @@ fn walk_expr_mut(expr: &mut TirExpr, ctx: &RewriteCtx) {
                 rewrite_expr_inplace(&mut f.value, ctx);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
             for e in elements {
                 rewrite_expr_inplace(e, ctx);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            rewrite_expr_inplace(source, ctx);
         }
         TirExprKind::Closure { body, .. } => {
             rewrite_expr_inplace(body, ctx);

@@ -381,10 +381,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/write_bytes"(file
     let write_tx: i32;
     let subtask: i32;
     let __f: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    write_rx = builtin::i32_wrap_i64(__pair_temp_1);
-    write_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [write_rx, write_tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     subtask = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_write_via_stream"(file, write_rx, 0_i64);
     "core:internal/cm_stream_write_u8"(write_tx, data);
     "wasi/stream-drop-writable"(write_tx);
@@ -530,10 +527,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         message_34 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 };
-        let __pair_temp_1: i64;
-        __pair_temp_1 = "wasi/stream-new"();
-        rx_35 = builtin::i32_wrap_i64(__pair_temp_1);
-        tx_36 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+        multivalue_bind [rx_35, tx_36] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
         handle_37 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stderr_write_via_stream"(rx_35);
         "core:cli/write_to_stream"(tx_36, message_34, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_37);
@@ -561,10 +555,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
             s_7 = ref.cast "core:prelude/types.wado//Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat1).payload_0;
             if s_7.size == 10_i64 {
                 message_65 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: initial size is 10 (correct)"), used: 38 };
-                let __pair_temp_2: i64;
-                __pair_temp_2 = "wasi/stream-new"();
-                rx_66 = builtin::i32_wrap_i64(__pair_temp_2);
-                tx_67 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+                multivalue_bind [rx_66, tx_67] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
                 handle_68 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stdout_write_via_stream"(rx_66);
                 "core:cli/write_to_stream"(tx_67, message_65, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_68);
@@ -579,10 +570,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
                     break __tmpl: __local_18;
                     unreachable;
                 };
-                let __pair_temp_3: i64;
-                __pair_temp_3 = "wasi/stream-new"();
-                rx_72 = builtin::i32_wrap_i64(__pair_temp_3);
-                tx_73 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+                multivalue_bind [rx_72, tx_73] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
                 handle_74 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stderr_write_via_stream"(rx_72);
                 "core:cli/write_to_stream"(tx_73, message_71, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_74);
@@ -591,19 +579,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
         trunc_result = "core:prelude/types.wado/AsyncCall<Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_set_size"(file, 5_i64));
         if ref.is_null(trunc_result) {
             message_83 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncate to 5 succeeded"), used: 33 };
-            let __pair_temp_4: i64;
-            __pair_temp_4 = "wasi/stream-new"();
-            rx_84 = builtin::i32_wrap_i64(__pair_temp_4);
-            tx_85 = builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+            multivalue_bind [rx_84, tx_85] = let __pair_temp_4: i64; __pair_temp_4 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
             handle_86 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stdout_write_via_stream"(rx_84);
             "core:cli/write_to_stream"(tx_85, message_83, 1);
             "wasi/future-drop-readable:transmission-cli"(handle_86);
         } else {
             message_89 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncate failed"), used: 25 };
-            let __pair_temp_5: i64;
-            __pair_temp_5 = "wasi/stream-new"();
-            rx_90 = builtin::i32_wrap_i64(__pair_temp_5);
-            tx_91 = builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
+            multivalue_bind [rx_90, tx_91] = let __pair_temp_5: i64; __pair_temp_5 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64);
             handle_92 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stderr_write_via_stream"(rx_90);
             "core:cli/write_to_stream"(tx_91, message_89, 1);
             "wasi/future-drop-readable:transmission-cli"(handle_92);
@@ -614,10 +596,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
             s_11 = ref.cast "core:prelude/types.wado//Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat2).payload_0;
             if s_11.size == 5_i64 {
                 message_95 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncated size is 5 (correct)"), used: 39 };
-                let __pair_temp_6: i64;
-                __pair_temp_6 = "wasi/stream-new"();
-                rx_96 = builtin::i32_wrap_i64(__pair_temp_6);
-                tx_97 = builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
+                multivalue_bind [rx_96, tx_97] = let __pair_temp_6: i64; __pair_temp_6 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
                 handle_98 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stdout_write_via_stream"(rx_96);
                 "core:cli/write_to_stream"(tx_97, message_95, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_98);
@@ -632,10 +611,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
                     break __tmpl: __local_20;
                     unreachable;
                 };
-                let __pair_temp_7: i64;
-                __pair_temp_7 = "wasi/stream-new"();
-                rx_102 = builtin::i32_wrap_i64(__pair_temp_7);
-                tx_103 = builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
+                multivalue_bind [rx_102, tx_103] = let __pair_temp_7: i64; __pair_temp_7 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_7); builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
                 handle_104 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stderr_write_via_stream"(rx_102);
                 "core:cli/write_to_stream"(tx_103, message_101, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_104);
@@ -699,10 +675,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
             0;
         }) {
             message_124 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncated content is ABCDE (correct)"), used: 46 };
-            let __pair_temp_8: i64;
-            __pair_temp_8 = "wasi/stream-new"();
-            rx_125 = builtin::i32_wrap_i64(__pair_temp_8);
-            tx_126 = builtin::i32_wrap_i64(__pair_temp_8 >>u 32_i64);
+            multivalue_bind [rx_125, tx_126] = let __pair_temp_8: i64; __pair_temp_8 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_8); builtin::i32_wrap_i64(__pair_temp_8 >>u 32_i64);
             handle_127 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stdout_write_via_stream"(rx_125);
             "core:cli/write_to_stream"(tx_126, message_124, 1);
             "wasi/future-drop-readable:transmission-cli"(handle_127);
@@ -715,10 +688,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
                 break __tmpl: __local_22;
                 unreachable;
             };
-            let __pair_temp_9: i64;
-            __pair_temp_9 = "wasi/stream-new"();
-            rx_131 = builtin::i32_wrap_i64(__pair_temp_9);
-            tx_132 = builtin::i32_wrap_i64(__pair_temp_9 >>u 32_i64);
+            multivalue_bind [rx_131, tx_132] = let __pair_temp_9: i64; __pair_temp_9 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_9); builtin::i32_wrap_i64(__pair_temp_9 >>u 32_i64);
             handle_133 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stderr_write_via_stream"(rx_131);
             "core:cli/write_to_stream"(tx_132, message_130, 1);
             "wasi/future-drop-readable:transmission-cli"(handle_133);
@@ -726,19 +696,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
         extend_result = "core:prelude/types.wado/AsyncCall<Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_set_size"(file, 8_i64));
         if ref.is_null(extend_result) {
             message_143 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: extend to 8 succeeded"), used: 31 };
-            let __pair_temp_10: i64;
-            __pair_temp_10 = "wasi/stream-new"();
-            rx_144 = builtin::i32_wrap_i64(__pair_temp_10);
-            tx_145 = builtin::i32_wrap_i64(__pair_temp_10 >>u 32_i64);
+            multivalue_bind [rx_144, tx_145] = let __pair_temp_10: i64; __pair_temp_10 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_10); builtin::i32_wrap_i64(__pair_temp_10 >>u 32_i64);
             handle_146 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stdout_write_via_stream"(rx_144);
             "core:cli/write_to_stream"(tx_145, message_143, 1);
             "wasi/future-drop-readable:transmission-cli"(handle_146);
         } else {
             message_149 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: extend failed"), used: 23 };
-            let __pair_temp_11: i64;
-            __pair_temp_11 = "wasi/stream-new"();
-            rx_150 = builtin::i32_wrap_i64(__pair_temp_11);
-            tx_151 = builtin::i32_wrap_i64(__pair_temp_11 >>u 32_i64);
+            multivalue_bind [rx_150, tx_151] = let __pair_temp_11: i64; __pair_temp_11 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_11); builtin::i32_wrap_i64(__pair_temp_11 >>u 32_i64);
             handle_152 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stderr_write_via_stream"(rx_150);
             "core:cli/write_to_stream"(tx_151, message_149, 1);
             "wasi/future-drop-readable:transmission-cli"(handle_152);
@@ -748,10 +712,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
             s_16 = ref.cast "core:prelude/types.wado//Result<DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat3).payload_0;
             if s_16.size == 8_i64 {
                 message_155 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: extended size is 8 (correct)"), used: 38 };
-                let __pair_temp_12: i64;
-                __pair_temp_12 = "wasi/stream-new"();
-                rx_156 = builtin::i32_wrap_i64(__pair_temp_12);
-                tx_157 = builtin::i32_wrap_i64(__pair_temp_12 >>u 32_i64);
+                multivalue_bind [rx_156, tx_157] = let __pair_temp_12: i64; __pair_temp_12 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_12); builtin::i32_wrap_i64(__pair_temp_12 >>u 32_i64);
                 handle_158 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stdout_write_via_stream"(rx_156);
                 "core:cli/write_to_stream"(tx_157, message_155, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_158);
@@ -766,10 +727,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
                     break __tmpl: __local_24;
                     unreachable;
                 };
-                let __pair_temp_13: i64;
-                __pair_temp_13 = "wasi/stream-new"();
-                rx_162 = builtin::i32_wrap_i64(__pair_temp_13);
-                tx_163 = builtin::i32_wrap_i64(__pair_temp_13 >>u 32_i64);
+                multivalue_bind [rx_162, tx_163] = let __pair_temp_13: i64; __pair_temp_13 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_13); builtin::i32_wrap_i64(__pair_temp_13 >>u 32_i64);
                 handle_164 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stderr_write_via_stream"(rx_162);
                 "core:cli/write_to_stream"(tx_163, message_161, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_164);
@@ -778,19 +736,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
         drop("core:prelude/types.wado/AsyncCall<Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size_test.txt"), used: 17 })));
     } else {
         message_173 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("failed to create set_size_test.txt"), used: 34 };
-        let __pair_temp_14: i64;
-        __pair_temp_14 = "wasi/stream-new"();
-        rx_174 = builtin::i32_wrap_i64(__pair_temp_14);
-        tx_175 = builtin::i32_wrap_i64(__pair_temp_14 >>u 32_i64);
+        multivalue_bind [rx_174, tx_175] = let __pair_temp_14: i64; __pair_temp_14 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_14); builtin::i32_wrap_i64(__pair_temp_14 >>u 32_i64);
         handle_176 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stderr_write_via_stream"(rx_174);
         "core:cli/write_to_stream"(tx_175, message_173, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_176);
     }
     message_179 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all set_size tests passed"), used: 25 };
-    let __pair_temp_15: i64;
-    __pair_temp_15 = "wasi/stream-new"();
-    rx_180 = builtin::i32_wrap_i64(__pair_temp_15);
-    tx_181 = builtin::i32_wrap_i64(__pair_temp_15 >>u 32_i64);
+    multivalue_bind [rx_180, tx_181] = let __pair_temp_15: i64; __pair_temp_15 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_15); builtin::i32_wrap_i64(__pair_temp_15 >>u 32_i64);
     handle_182 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stdout_write_via_stream"(rx_180);
     "core:cli/write_to_stream"(tx_181, message_179, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_182);
@@ -1509,10 +1461,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

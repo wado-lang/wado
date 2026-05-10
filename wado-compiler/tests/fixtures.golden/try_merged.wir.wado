@@ -490,10 +490,7 @@ condition: n == 200 as u8
         unreachable;
     }
     message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("try_from ok"), used: 11 };
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle = "wado-compiler/tests/fixtures/try_merged.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -706,10 +703,7 @@ condition: pipeline(100) matches { Err(e) && e == \"step2: too large\" }
         unreachable;
     }
     message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("chained ok"), used: 10 };
-    let __pair_temp_4: i64;
-    __pair_temp_4 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_4);
-    tx = builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_4: i64; __pair_temp_4 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
     handle = "wado-compiler/tests/fixtures/try_merged.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -857,10 +851,7 @@ condition: first_positive_doubled([-1, -2] as Array<i32>) matches { None }
         unreachable;
     }
     message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("option ok"), used: 9 };
-    let __pair_temp_4: i64;
-    __pair_temp_4 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_4);
-    tx = builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_4: i64; __pair_temp_4 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64);
     handle = "wado-compiler/tests/fixtures/try_merged.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -998,10 +989,7 @@ condition: compute_div(10, 0) matches { Err(msg) && msg == \"division by zero\" 
         unreachable;
     }
     message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("result basic ok"), used: 15 };
-    let __pair_temp_7: i64;
-    __pair_temp_7 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_7);
-    tx = builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_7: i64; __pair_temp_7 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_7); builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64);
     handle = "wado-compiler/tests/fixtures/try_merged.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -1145,10 +1133,7 @@ condition: inner.code == 42
         unreachable;
     }
     message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("result from ok"), used: 14 };
-    let __pair_temp_6: i64;
-    __pair_temp_6 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_6);
-    tx = builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_6: i64; __pair_temp_6 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64);
     handle = "wado-compiler/tests/fixtures/try_merged.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -1396,10 +1381,7 @@ condition: inner.input == \"bad\"
         unreachable;
     }
     message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("variant from ok"), used: 15 };
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle = "wado-compiler/tests/fixtures/try_merged.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
@@ -1437,10 +1419,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/__cm_export__run"() {
             unreachable;
         }
         message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unit result ok"), used: 14 };
-        let __pair_temp_3: i64;
-        __pair_temp_3 = "wasi/stream-new"();
-        rx = builtin::i32_wrap_i64(__pair_temp_3);
-        tx = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+        multivalue_bind [rx, tx] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
         handle = "wado-compiler/tests/fixtures/try_merged.wado/__cm_binding__Stdout_write_via_stream"(rx);
         "core:cli/write_to_stream"(tx, message, 1);
         "wasi/future-drop-readable:transmission-cli"(handle);
@@ -1506,10 +1485,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

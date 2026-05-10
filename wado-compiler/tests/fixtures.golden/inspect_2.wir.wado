@@ -1825,7 +1825,7 @@ fn "wado-compiler/tests/fixtures/inspect_2.wado/__test_13_nested_array_tuple"() 
     let other: ref "core:prelude/string.wado//String";
     let len_a: i32;
     arr = __seq_lit: block -> ref "core:prelude//Array<Tuple<i32,String>>" {
-        __b = struct.new "core:prelude//Array<Tuple<i32,String>>" { repr: array.new_fixed<ref "tuple//[i32, String]">(struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("one"), used: 3 } }, struct.new "tuple//[i32, String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("two"), used: 3 } }), used: 2 };
+        __b = struct.new "core:prelude//Array<Tuple<i32,String>>" { repr: array.new_fixed<ref "tuple//[i32, String]">(multivalue_struct_new "tuple//[i32, String]"(1; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("one"), used: 3 }), multivalue_struct_new "tuple//[i32, String]"(2; struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("two"), used: 3 })), used: 2 };
         break __seq_lit: __b;
         unreachable;
     };
@@ -2181,10 +2181,7 @@ fn "core:internal/log_stderr"(message) {
     let tx: i32;
     let future_handle: i32;
     let future: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;

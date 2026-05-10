@@ -138,10 +138,7 @@ fn "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/run"() with
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 };
     });
-    let __pair_temp_3: i64;
-    __pair_temp_3 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_3);
-    tx = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+    multivalue_bind [rx, tx] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
     handle = "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, result, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);

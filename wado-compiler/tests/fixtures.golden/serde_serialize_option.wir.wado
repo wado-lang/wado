@@ -152,10 +152,7 @@ fn "wado-compiler/tests/fixtures/serde_serialize_option.wado/run"() with Stdout 
         break __tmpl: __local_3_3;
         unreachable;
     };
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx_13 = builtin::i32_wrap_i64(__pair_temp_1);
-    tx_14 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    multivalue_bind [rx_13, tx_14] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle_15 = "wado-compiler/tests/fixtures/serde_serialize_option.wado/__cm_binding__Stdout_write_via_stream"(rx_13);
     "core:cli/write_to_stream"(tx_14, message_12, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_15);
@@ -182,10 +179,7 @@ fn "wado-compiler/tests/fixtures/serde_serialize_option.wado/run"() with Stdout 
         break __tmpl: __local_4;
         unreachable;
     };
-    let __pair_temp_2: i64;
-    __pair_temp_2 = "wasi/stream-new"();
-    rx_26 = builtin::i32_wrap_i64(__pair_temp_2);
-    tx_27 = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    multivalue_bind [rx_26, tx_27] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     handle_28 = "wado-compiler/tests/fixtures/serde_serialize_option.wado/__cm_binding__Stdout_write_via_stream"(rx_26);
     "core:cli/write_to_stream"(tx_27, message_25, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_28);

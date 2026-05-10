@@ -346,11 +346,13 @@ fn expr_for_each_child(expr: &TirExpr, f: &mut dyn FnMut(&TirExpr)) {
                 f(&field.value);
             }
         }
-        TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. }
+        | TirExprKind::MultiValueLiteral { elements, .. } => {
             for elem in elements {
                 f(elem);
             }
         }
+        TirExprKind::MultiValueProject { source, .. } => f(source),
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 f(p);
@@ -640,13 +642,17 @@ fn collect_aliased_in_expr(expr: &TirExpr, out: &mut IndexSet<u32>) {
                 collect_aliased_in_expr(&field.value, out);
             }
         }
-        TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. }
+        | TirExprKind::MultiValueLiteral { elements, .. } => {
             for elem in elements {
                 if let TirExprKind::Local { index, .. } = &elem.kind {
                     out.insert(*index);
                 }
                 collect_aliased_in_expr(elem, out);
             }
+        }
+        TirExprKind::MultiValueProject { source, .. } => {
+            collect_aliased_in_expr(source, out);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {

@@ -1,0 +1,42 @@
+// Regression test for #1025: partial-use destructure of `Future::<T>::new()`
+// must not lift a heap tuple struct in WIR.
+//
+// PR #1024 moved DAE / DRVE / write-only-local elimination from WIR to TIR.
+// After that move, the unused half of `let [_rx, tx] = Future::<…>::new()`
+// was elided at TIR, but the `__pattern_temp` holding the canonical
+// `future-new` result kept a `struct.new tuple<…>` shape in WIR —
+// `wir_optimize::elide_multi_field_struct_locals` refused to fire because
+// not every field was accessed exactly once, and the existing peephole
+// only matched on `MultiValueStructNew`, not the wrapped-in-Seq shape
+// produced by `emit_stream_or_future_new`.
+//
+// Fix (Phase 3 of #1025): wrap the canonical-future i64-split sequence in
+// `MultiValueStructNew` so `wir_optimize::peephole::elide_multi_value_structs`
+// rewrites it to `multivalue_bind [_, tx] = …` even with one unbound field.
+
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Regression case: only the writable end is used; `_rx` is unused.
+    // The i32 future's tx.write doesn't block, so the handler completes.
+    let [_rx, tx] = Future::<i32>::new();
+    tx.write(42);
+
+    // Standard response with trailers (both ends used so the response completes).
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {"status": 200},
+    "wir_not_expect:O2": [
+        "struct.new \"tuple//[Future<i32>"
+    ],
+    "wir_expect:O2": [
+        "multivalue_bind [_, tx] ="
+    ]
+}
