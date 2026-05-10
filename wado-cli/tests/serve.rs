@@ -13,12 +13,8 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-fn project_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .to_path_buf()
-}
+mod common;
+use common::{project_root, wado_bin};
 
 fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -70,7 +66,7 @@ fn start_serve(fixture: &str, extra_args: &[&str]) -> (ServerGuard, u16, Arc<Mut
     let port = free_port();
     let addr = format!("127.0.0.1:{port}");
 
-    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("wado"));
+    let mut cmd = Command::new(wado_bin());
     cmd.current_dir(project_root())
         .arg("serve")
         .arg("--addr")

@@ -8,23 +8,10 @@
 
 #![allow(unused_crate_dependencies)]
 
-use std::path::PathBuf;
-use std::process::Command;
-
 use predicates::prelude::*;
 
-fn project_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .to_path_buf()
-}
-
-fn wado() -> assert_cmd::Command {
-    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("wado"));
-    cmd.current_dir(project_root());
-    cmd.into()
-}
+mod common;
+use common::wado;
 
 #[test]
 fn gale_gen_calculator_emits_generated_parser() {
