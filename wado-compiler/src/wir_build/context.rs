@@ -825,8 +825,9 @@ impl<'a> WirContext<'a> {
                         nullable: false,
                     }
                 } else {
-                    // Fallback: look up by element type name (handles cross-module TypeIds)
-                    let elem_name = type_table.mangle_type_name(*elem_type_id);
+                    // Fallback: look up by element type name (handles cross-module TypeIds).
+                    // Uses qualified mangle to match `register_raw_array_type`'s key.
+                    let elem_name = type_table.mangle_type_arg_for_generic(*elem_type_id);
                     if let Some(type_id) = self.array_type_by_name.get(&elem_name) {
                         WirType::Ref {
                             type_id: type_id.clone(),
@@ -834,8 +835,8 @@ impl<'a> WirContext<'a> {
                         }
                     } else {
                         // Fallback: resolve newtypes in element type
-                        let resolved_name =
-                            type_table.mangle_type_name_resolving_newtypes(*elem_type_id);
+                        let resolved_name = type_table
+                            .mangle_type_arg_for_generic_resolving_newtypes(*elem_type_id);
                         if resolved_name != elem_name
                             && let Some(type_id) = self.array_type_by_name.get(&resolved_name)
                         {
