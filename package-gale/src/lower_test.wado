@@ -759,6 +759,124 @@ test "lower token-only Group field dedupes against outer scope" {
     }
 }
 
+test "lower SimpleCst Group with single-RuleRef alts produces SimpleCst shape" {
+    // `wrap : (stmt | expr) ; stmt : ID ; expr : INT ;`
+    // The wrap rule's group is SimpleCst — each alt is a single
+    // distinct RuleRef with disjoint first sets.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "wrap",
+            Visibility::Default,
+            [],
+            [alt_of([Element::Group(GroupElement::new([
+                alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                alt_of([Element::RuleRef(RuleRefElement::new("expr"))]),
+            ]))])],
+        ),
+        ParserRule::new(
+            "stmt",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+        ),
+        ParserRule::new(
+            "expr",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 1;
+        if let Group(go) = &s.body.ops[0] {
+            if let SimpleCst(scst) = &go.shape {
+                assert scst.type_name == "StmtOrExprGroup", scst.type_name;
+                assert scst.field == "stmt_or_expr", scst.field;
+            } else {
+                panic("expected GroupShape::SimpleCst");
+            }
+            assert go.alts.len() == 2;
+            assert go.alts[0].case_name == "Stmt", go.alts[0].case_name;
+            assert go.alts[1].case_name == "Expr", go.alts[1].case_name;
+            // Each body op is the matched RuleCall.
+            if let RuleCall(rc) = &go.alts[0].ops[0] {
+                assert rc.target_name == "stmt";
+                assert rc.target_snake == "stmt";
+                assert rc.field == "stmt";
+            } else {
+                panic("expected RuleCall for first alt");
+            }
+            // Direct dispatch on each rule's first set.
+            if let Direct(dd) = &go.dispatch {
+                assert dd.branches.len() == 2;
+                assert dd.branches[0].tokens[0] == "TK_ID";
+                assert dd.branches[1].tokens[0] == "TK_INT";
+            } else {
+                panic("expected MultiAltDispatch::Direct");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower SimpleCst Group field dedupes against outer scope" {
+    // `r : stmt_or_expr=ID (stmt | expr) ; stmt : INT ; expr : ID ;`
+    // The outer label binds `stmt_or_expr` first; the group dedups
+    // its base name to `stmt_or_expr_2`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([
+                Element::Label(LabelElement::new(
+                    "stmt_or_expr",
+                    false,
+                    Element::TokenRef(TokenRefElement::new("ID")),
+                )),
+                Element::Group(GroupElement::new([
+                    alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                    alt_of([Element::RuleRef(RuleRefElement::new("expr"))]),
+                ])),
+            ])],
+        ),
+        ParserRule::new(
+            "stmt",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+        ),
+        ParserRule::new(
+            "expr",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("FLOAT"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Group(go) = &s.body.ops[1] {
+            if let SimpleCst(scst) = &go.shape {
+                assert scst.field == "stmt_or_expr_2", scst.field;
+            } else {
+                panic("expected GroupShape::SimpleCst");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
 test "lower greedy Star Repeat with TokenRef inner" {
     // `tokens : INT* ;`
     let mut g = empty_grammar(&"T");
