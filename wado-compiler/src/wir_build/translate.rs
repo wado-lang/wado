@@ -906,17 +906,17 @@ impl FunctionTranslator<'_, '_> {
             _ => return None,
         };
         let key = (func.name.clone(), func.module_source.clone());
-        let (field_names, result_types) = self.ctx.multi_value_return_funcs.get(&key)?.clone();
+        let fields = self.ctx.multi_value_return_funcs.get(&key)?.clone();
 
         // Build per-field split locals: `<base>_mv_<field_name>`.
         let base = self.local_name(local_index);
         let mut split: IndexMap<String, (String, WirType)> = IndexMap::default();
-        let mut order: Vec<(String, String, WirType)> = Vec::with_capacity(field_names.len());
-        for (field_name, &result_type) in field_names.iter().zip(result_types.iter()) {
+        let mut order: Vec<(String, WirType)> = Vec::with_capacity(fields.len());
+        for (field_name, result_type) in &fields {
             let local_name = format!("{base}_mv_{field_name}");
-            let wir_ty = self.ctx.type_id_to_wir_type(self.type_table, result_type);
+            let wir_ty = self.ctx.type_id_to_wir_type(self.type_table, *result_type);
             split.insert(field_name.clone(), (local_name.clone(), wir_ty.clone()));
-            order.push((field_name.clone(), local_name, wir_ty));
+            order.push((local_name, wir_ty));
         }
 
         // Translate the call (after dropping any borrow on `value`'s expr).
@@ -924,13 +924,13 @@ impl FunctionTranslator<'_, '_> {
 
         // Emit DeclareLocal for each split, plus the MultiValueLocalBind.
         let mut instrs: Vec<WirInstr> = Vec::with_capacity(order.len() + 1);
-        for (_, name, ty) in &order {
+        for (name, ty) in &order {
             instrs.push(WirInstr::DeclareLocal {
                 name: name.clone(),
                 ty: ty.clone(),
             });
         }
-        let locals = order.iter().map(|(_, n, _)| Some(n.clone())).collect();
+        let locals = order.iter().map(|(n, _)| Some(n.clone())).collect();
         instrs.push(WirInstr::MultiValueLocalBind {
             instr: Box::new(call_instr),
             locals,
@@ -944,9 +944,10 @@ impl FunctionTranslator<'_, '_> {
 
     /// Resolve the WIR tuple struct type and translate its non-unit field
     /// initialisers, applying `cast_nonnull_fields` to honour non-nullable
-    /// field declarations. Shared between `TupleLiteral` (heap-resident)
-    /// and `MultiValueLiteral` (multi-value) lowering — only the wrapping
-    /// instruction differs (`struct.new` vs `MultiValueStructNew`).
+    /// field declarations. Used by `TupleLiteral` lowering (the resulting
+    /// `StructNew` is later unwrapped to a `Seq(fields)` at the function
+    /// return boundary if `ReturnAbi::MultiValue` is set, or left as-is
+    /// for the heap-resident path).
     fn tuple_constructor_args(
         &mut self,
         tuple_type_id: crate::tir::TypeId,

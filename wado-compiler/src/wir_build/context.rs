@@ -136,12 +136,13 @@ pub struct WirContext<'a> {
     /// `return_abi` is `MultiValue`. Names alone are not unique across
     /// modules (e.g. two `make_pair` in different `.wado` files), so the
     /// pair is what the call-site translator queries.
-    /// Value is the callee's per-result `field_names` (e.g. `["0", "1"]`
-    /// for tuples or `["x", "y"]` for user structs) and TIR result types,
-    /// so the call-site translator can build named split locals without
-    /// re-deriving the aggregate shape.
+    /// Value is the callee's per-result `(field_name, type_id)` in
+    /// declaration order — `("0", i32)` / `("1", i32)` for tuple returns,
+    /// `("x", i32)` / `("y", i32)` for user-struct returns. The
+    /// call-site translator uses this to build named split locals
+    /// without re-deriving the aggregate shape.
     /// Computed from `package.functions` at WIR-build start.
-    pub multi_value_return_funcs: IndexMap<(String, ModuleSource), (Vec<String>, Vec<TypeId>)>,
+    pub multi_value_return_funcs: IndexMap<(String, ModuleSource), Vec<(String, TypeId)>>,
 }
 
 /// A function body that needs to be translated from TIR to WIR.
@@ -239,7 +240,7 @@ impl<'a> WirContext<'a> {
         // get the per-result `(field_name, type_id)` info for naming the
         // split locals. Keyed by `(name, module_source)` because plain
         // names are not unique across modules.
-        let multi_value_return_funcs: IndexMap<(String, ModuleSource), (Vec<String>, Vec<TypeId>)> =
+        let multi_value_return_funcs: IndexMap<(String, ModuleSource), Vec<(String, TypeId)>> =
             package
                 .functions
                 .iter()
@@ -250,10 +251,12 @@ impl<'a> WirContext<'a> {
                         field_names,
                     } = &f.return_abi
                     {
-                        Some((
-                            (f.name.clone(), f.module_source.clone()),
-                            (field_names.clone(), result_types.clone()),
-                        ))
+                        let pairs: Vec<(String, TypeId)> = field_names
+                            .iter()
+                            .cloned()
+                            .zip(result_types.iter().copied())
+                            .collect();
+                        Some(((f.name.clone(), f.module_source.clone()), pairs))
                     } else {
                         None
                     }

@@ -15,9 +15,10 @@
 //!   `StructNew` so the function's return pushes N values instead of
 //!   wrapping them in a heap struct.
 //!
-//! Historically this work lived in `wir_optimize::sroa_return`, which
-//! pattern-matched on WIR `StructNew` returns and `StructGet` call-site
-//! reads. Moving the decision to TIR has three benefits:
+//! Historically this work lived in `wir_optimize::sroa_variant_return`
+//! (then named `sroa_return`), which pattern-matched on WIR `StructNew`
+//! returns and `StructGet` call-site reads. Moving the decision to TIR
+//! has three benefits:
 //!
 //! 1. **Better visibility**: TIR analysis sees `TupleLiteral` /
 //!    `StructLiteral` / `FieldAccess` directly — high-level intent —

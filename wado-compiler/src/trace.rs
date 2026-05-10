@@ -12,8 +12,8 @@
 //! Examples (all from a development shell):
 //!
 //! ```sh
-//! WADO_TRACE=sroa_return cargo run --bin wado -- compile foo.wado
-//! WADO_TRACE=sroa_return,inline cargo run --bin wado -- compile foo.wado
+//! WADO_TRACE=sroa_variant_return cargo run --bin wado -- compile foo.wado
+//! WADO_TRACE=sroa_variant_return,inline cargo run --bin wado -- compile foo.wado
 //! WADO_TRACE='*' cargo run --bin wado -- compile foo.wado
 //! ```
 //!
@@ -78,7 +78,7 @@ fn parse_filter(raw: Option<&str>) -> TraceFilter {
 /// `WADO_TRACE`.
 ///
 /// ```ignore
-/// compiler_trace!("sroa_return", "rewrite return at {span:?}");
+/// compiler_trace!("sroa_variant_return", "rewrite return at {span:?}");
 /// ```
 #[macro_export]
 macro_rules! compiler_trace {
@@ -104,27 +104,27 @@ mod tests {
     fn star_enables_everything() {
         let f = parse_filter(Some("*"));
         assert!(f.enabled("anything"));
-        assert!(f.enabled("sroa_return"));
+        assert!(f.enabled("sroa_variant_return"));
     }
 
     #[test]
     fn comma_separated_list() {
-        let f = parse_filter(Some("sroa_return,inline"));
-        assert!(f.enabled("sroa_return"));
+        let f = parse_filter(Some("sroa_variant_return,inline"));
+        assert!(f.enabled("sroa_variant_return"));
         assert!(f.enabled("inline"));
         assert!(!f.enabled("dce"));
     }
 
     #[test]
     fn whitespace_is_tolerated() {
-        let f = parse_filter(Some(" sroa_return , inline "));
-        assert!(f.enabled("sroa_return"));
+        let f = parse_filter(Some(" sroa_variant_return , inline "));
+        assert!(f.enabled("sroa_variant_return"));
         assert!(f.enabled("inline"));
     }
 
     #[test]
     fn empty_entries_are_dropped() {
-        let f = parse_filter(Some(",,sroa_return,,"));
-        assert!(f.enabled("sroa_return"));
+        let f = parse_filter(Some(",,sroa_variant_return,,"));
+        assert!(f.enabled("sroa_variant_return"));
     }
 }

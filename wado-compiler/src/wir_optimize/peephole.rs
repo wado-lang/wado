@@ -111,7 +111,7 @@ fn rename_locals_in_instr(instr: &mut WirInstr, copies: &IndexMap<String, String
 /// elision requires knowing every trailing instruction reachable after the
 /// copy — including those in enclosing scopes — and recursive per-scope calls
 /// cannot observe them.
-pub(super) fn run_peephole(instrs: &mut Vec<WirInstr>, types: &[WirTypeDef]) {
+pub(super) fn run_peephole(instrs: &mut [WirInstr], types: &[WirTypeDef]) {
     for instr in instrs.iter_mut() {
         optimize_nested(instr, types);
     }

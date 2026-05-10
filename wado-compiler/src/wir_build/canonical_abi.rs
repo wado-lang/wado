@@ -307,10 +307,10 @@ impl FunctionTranslator<'_, '_> {
         // i32 onto the stack as the multi-value producer for the
         // MultiValueLocalBind below.
         self.local_counter += 1;
-        let temp = format!("__pair_temp_{}", self.local_counter);
-        self.local_counter += 1;
-        let lo = format!("__mv_lo_{}", self.local_counter);
-        let hi = format!("__mv_hi_{}", self.local_counter);
+        let n = self.local_counter;
+        let temp = format!("__pair_temp_{n}");
+        let lo = format!("__mv_lo_{n}");
+        let hi = format!("__mv_hi_{n}");
         let declare_temp = WirInstr::DeclareLocal {
             name: temp.clone(),
             ty: WirType::I64,
