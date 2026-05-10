@@ -269,6 +269,34 @@ test "lower multi-alt rule with disjoint first sets produces Direct dispatch" {
     }
 }
 
+test "lower multi-alt rule with labeled alts uses label as case name" {
+    let mut g = empty_grammar(&"T");
+    // `expr : INT #IntLit | STRING #StrLit ;` (each alt labeled).
+    let mut int_alt = alt_of([Element::TokenRef(TokenRefElement::new("INT"))]);
+    int_alt.label = Option::<String>::Some("IntLit");
+    let mut str_alt = alt_of([Element::TokenRef(TokenRefElement::new("STRING"))]);
+    str_alt.label = Option::<String>::Some("StrLit");
+    g.parser_rules = [ParserRule::new(
+        "expr",
+        Visibility::Default,
+        [],
+        [int_alt, str_alt],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let MultiAlt(m) = &lowered.parser_rules[0] {
+        // When all alts are labeled, `case_names_for_rule` uses the
+        // labels directly (positional `Alt0`/`Alt1` only fires for
+        // unlabeled rules).
+        assert m.alts[0].case_name == "IntLit";
+        assert m.alts[0].struct_name == "ExprIntLit";
+        assert m.alts[1].case_name == "StrLit";
+        assert m.alts[1].struct_name == "ExprStrLit";
+    } else {
+        panic("expected Rule::MultiAlt");
+    }
+}
+
 test "lower simple rule produces scan body mirroring leaf ops" {
     let mut g = empty_grammar(&"T");
     g.parser_rules = [ParserRule::new(
