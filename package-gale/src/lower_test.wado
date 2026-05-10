@@ -2081,6 +2081,39 @@ test "lower variant_rules empty when no caller follow overlaps callee tail-greed
     assert lowered.variant_rules.is_empty();
 }
 
+test "lower Repeat with list-label inner uses label name as outer field" {
+    // `r : (names+=ID)* ;` — `+=` inside a `*` Repeat. The Repeat
+    // becomes the array; the label name `names` IS the outer
+    // struct field (no `_list` suffix).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Repeat(RepeatElement {
+            kind: RepeatKind::Star,
+            element: Element::Label(LabelElement::new(
+                "names",
+                true,
+                Element::TokenRef(TokenRefElement::new("ID")),
+            )),
+            non_greedy: false,
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            // The Repeat's outer field is `names`, not `id_list`.
+            assert rep.field == "names", rep.field;
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
 test "lower Transparent Group contributes inner op's field" {
     // `r : (INT) ;` — Transparent group with single leaf inner.
     // The struct field is the inner Token's, not a wrapper.

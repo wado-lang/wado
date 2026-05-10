@@ -1028,9 +1028,11 @@ fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
 
 /// Lower the scan-side body for an alternative — the structural
 /// twin of `lower_alt_body` for the `scan_<rule>` predicate
-/// emission. Phase 2.5a covers the same leaf-op set as `lower_op`;
-/// `Repeat` / `Group` / `Label` mirror the parse-side gating with
-/// their own `panic("TODO Phase 2.x")`.
+/// emission. Covers every shape `lower_op` handles: leaf ops, scalar
+/// `Label` rebinds, `Repeat` (greedy / non-greedy / Optional with
+/// follow propagation), and every `Group` shape
+/// (`Transparent` / `SingleAlt` / `TokenOnly` / `SimpleCst` /
+/// `General`).
 ///
 /// The scan side has no field bindings, no struct construction, and
 /// no name dedup — it only produces a token-stream walk that
@@ -1881,8 +1883,21 @@ fn lower_repeat_op(
     // inner base name (the struct holds an `Option<...>`). Dedup
     // against the surrounding alt's name table — the inner body
     // op's field lives in a fresh scope and does not collide.
-    let outer_base = repeat_outer_base_name(&rep.element, rep.kind);
-    let outer_field = dedup_name(&outer_base, name_counts);
+    //
+    // Special case: `(name+=expr)*` — when the Repeat's inner is a
+    // list-label (`+=`), the label name IS the array, with no
+    // `_list` suffix. Mirrors `parser_gen::gen_repeat_body`'s
+    // `is_list_label(inner)` branch at line 3113.
+    let outer_field = if repeat_inner_is_list_label(&rep.element) {
+        if let Label(lab) = rep.element {
+            dedup_name(&lab.field_name, name_counts);
+        } else {
+            panic("repeat_inner_is_list_label returned true for non-Label");
+        }
+    } else {
+        let outer_base = repeat_outer_base_name(&rep.element, rep.kind);
+        dedup_name(&outer_base, name_counts);
+    };
 
     let strategy = if rep.non_greedy {
         compute_non_greedy_strategy(&rep.element, outer_follow, ctx);
@@ -1998,6 +2013,17 @@ fn inner_follow_at(
     return suffix_first;
 }
 
+/// True iff `elem` is a list-label (`+=`). Used by
+/// `lower_repeat_op` to bypass the `_list`-suffix base-name
+/// computation: when a Repeat's inner is `name+=expr`, the label
+/// name IS the array.
+fn repeat_inner_is_list_label(elem: &Element) -> bool {
+    if let Label(lab) = elem {
+        return lab.list;
+    }
+    return false;
+}
+
 /// Outer struct field base name for a Repeat. `Star` / `Plus`
 /// take a `_list` suffix on the inner element's base; `Optional`
 /// uses the inner base unchanged. Mirrors `parser_gen`'s
@@ -2075,9 +2101,13 @@ fn lower_label_op(
     group_counter: &mut i32,
     outer_follow: &Array<String>,
 ) -> Op {
-    if lab.list {
-        panic("TODO Phase 2.9: list-label (`+=`) lowering requires Array-typed FieldDecl");
-    }
+    // `+=` list-label outside a Repeat: bind the inner element under
+    // the label name and rely on `FieldDecl` enumeration to wrap the
+    // outer struct field as `Array<inner_type>`. Inside a Repeat,
+    // `lower_repeat_op` already detected the list-label and is using
+    // the label name as the Repeat's outer field (no `_list` suffix);
+    // here we still produce the rebound inner op so the per-iteration
+    // body sees the matched value.
     let label_field = dedup_name(&lab.field_name, name_counts);
     // Recurse with a temporary name table so the inner op picks any
     // base name without polluting the surrounding alt's counts —
