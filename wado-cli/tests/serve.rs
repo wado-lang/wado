@@ -103,7 +103,7 @@ fn start_serve(fixture: &str, extra_args: &[&str]) -> (ServerGuard, u16, Arc<Mut
     }
 
     // Compile time at -O0 is a few seconds; 60s is generous for slow CI.
-    let deadline = Instant::now() + Duration::from_secs(60);
+    let deadline = Instant::now() + Duration::from_mins(1);
     let socket_addr: SocketAddr = addr.parse().unwrap();
     while Instant::now() < deadline {
         if TcpStream::connect_timeout(&socket_addr, Duration::from_millis(200)).is_ok() {
@@ -202,9 +202,10 @@ fn sigterm_triggers_graceful_shutdown() {
         match guard.try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) => {
-                if Instant::now() >= deadline {
-                    panic!("server did not exit within 15s after SIGTERM");
-                }
+                assert!(
+                    Instant::now() < deadline,
+                    "server did not exit within 15s after SIGTERM"
+                );
                 std::thread::sleep(Duration::from_millis(50));
             }
             Err(e) => panic!("try_wait failed: {e}"),
