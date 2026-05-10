@@ -2,13 +2,14 @@ use crate::hashmap::IndexSet;
 use serde::Serialize;
 
 use crate::ast::{
-    AssociatedConst, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl, ImplBlock,
-    InterfaceDecl, Item, Module, Newtype, Param, SelfKind, StructDecl, StructField, TraitDecl,
-    Type, UseItem, VariantDecl,
+    AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
+    ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, SelfKind, StructDecl, StructField,
+    TraitDecl, Type, UseItem, VariantDecl,
 };
-use crate::comment::{CommentKind, CommentMap};
+use crate::comment::{CommentKind, TriviaMap};
 use crate::stdlib;
-use crate::unparse::{get_item_span, unparse_type_into};
+use crate::token::Span;
+use crate::unparse::{get_item_id, unparse_type_into};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DocModule {
@@ -184,8 +185,8 @@ pub struct DocFlagsMember {
     pub doc: Option<String>,
 }
 
-pub fn extract_doc(module: &Module, comments: &CommentMap, module_name: &str) -> DocModule {
-    let module_doc = extract_module_doc(comments, module);
+pub fn extract_doc(module: &Module, trivia: &TriviaMap, module_name: &str) -> DocModule {
+    let module_doc = extract_module_doc(trivia, module);
 
     let mut traits: Vec<DocTrait> = Vec::new();
     let mut structs: Vec<DocStruct> = Vec::new();
@@ -211,16 +212,16 @@ pub fn extract_doc(module: &Module, comments: &CommentMap, module_name: &str) ->
             continue;
         }
         match item {
-            Item::Trait(t) => traits.push(build_doc_trait(t, comments)),
-            Item::Struct(s) => structs.push(build_doc_struct(s, &impls, comments)),
-            Item::Newtype(t) => types.push(build_doc_type(t, comments)),
-            Item::Global(g) => globals.push(build_doc_global(g, comments)),
-            Item::Enum(e) => enums.push(build_doc_enum(e, comments)),
-            Item::Variant(v) => variants.push(build_doc_variant(v, comments)),
-            Item::Flags(f) => flags.push(build_doc_flags(f, comments)),
-            Item::Interface(e) => effects.push(build_doc_interface(e, comments)),
-            Item::Resource(r) => resources.push(build_doc_resource(r, comments)),
-            Item::Function(f) => functions.push(build_doc_function(f, comments)),
+            Item::Trait(t) => traits.push(build_doc_trait(t, trivia)),
+            Item::Struct(s) => structs.push(build_doc_struct(s, &impls, trivia)),
+            Item::Newtype(t) => types.push(build_doc_type(t, trivia)),
+            Item::Global(g) => globals.push(build_doc_global(g, trivia)),
+            Item::Enum(e) => enums.push(build_doc_enum(e, trivia)),
+            Item::Variant(v) => variants.push(build_doc_variant(v, trivia)),
+            Item::Flags(f) => flags.push(build_doc_flags(f, trivia)),
+            Item::Interface(e) => effects.push(build_doc_interface(e, trivia)),
+            Item::Resource(r) => resources.push(build_doc_resource(r, trivia)),
+            Item::Function(f) => functions.push(build_doc_function(f, trivia)),
             _ => {}
         }
     }
@@ -242,7 +243,7 @@ pub fn extract_doc(module: &Module, comments: &CommentMap, module_name: &str) ->
     }
 }
 
-fn build_doc_trait(t: &TraitDecl, comments: &CommentMap) -> DocTrait {
+fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
     let mut sig = String::new();
     if t.is_pub {
         sig.push_str("pub ");
@@ -256,18 +257,18 @@ fn build_doc_trait(t: &TraitDecl, comments: &CommentMap) -> DocTrait {
     let methods: Vec<DocFunction> = t
         .methods
         .iter()
-        .map(|m| build_doc_function(m, comments))
+        .map(|m| build_doc_function(m, trivia))
         .collect();
 
     DocTrait {
         signature: sig,
-        doc: extract_doc_comment(comments, &t.span),
+        doc: extract_doc_comment(trivia, t.id, &t.span),
         associated_types,
         methods,
     }
 }
 
-fn build_doc_struct(s: &StructDecl, impls: &[&ImplBlock], comments: &CommentMap) -> DocStruct {
+fn build_doc_struct(s: &StructDecl, impls: &[&ImplBlock], trivia: &TriviaMap) -> DocStruct {
     // `__`-prefixed fields are an internal-naming convention (CM ABI
     // plumbing on `AsyncCall<T>`, etc.). Treat them like private fields
     // for documentation: hide the field row but still flag the struct
@@ -283,15 +284,15 @@ fn build_doc_struct(s: &StructDecl, impls: &[&ImplBlock], comments: &CommentMap)
         .map(|f| DocField {
             name: f.name.clone(),
             ty: render_type(&f.ty),
-            doc: extract_doc_comment_with_attrs(comments, &f.span, &f.attrs),
+            doc: extract_doc_comment_with_attrs(trivia, f.id, &f.span, &f.attrs),
         })
         .collect();
 
-    let (methods, trait_impls) = collect_impl_methods_for_type(&s.name, impls, comments);
+    let (methods, trait_impls) = collect_impl_methods_for_type(&s.name, impls, trivia);
 
     DocStruct {
         signature: render_struct_signature(s),
-        doc: extract_doc_comment_with_attrs(comments, &s.span, &s.attrs),
+        doc: extract_doc_comment_with_attrs(trivia, s.id, &s.span, &s.attrs),
         fields,
         has_private_fields,
         methods,
@@ -299,7 +300,7 @@ fn build_doc_struct(s: &StructDecl, impls: &[&ImplBlock], comments: &CommentMap)
     }
 }
 
-fn build_doc_type(t: &Newtype, comments: &CommentMap) -> DocType {
+fn build_doc_type(t: &Newtype, trivia: &TriviaMap) -> DocType {
     let mut sig = String::new();
     if t.is_pub {
         sig.push_str("pub ");
@@ -313,11 +314,11 @@ fn build_doc_type(t: &Newtype, comments: &CommentMap) -> DocType {
         name: t.name.clone(),
         base_type: render_type(&t.ty),
         signature: sig,
-        doc: extract_doc_comment(comments, &t.span),
+        doc: extract_doc_comment(trivia, t.id, &t.span),
     }
 }
 
-fn build_doc_global(g: &GlobalDecl, comments: &CommentMap) -> DocGlobal {
+fn build_doc_global(g: &GlobalDecl, trivia: &TriviaMap) -> DocGlobal {
     let mut sig = String::new();
     if g.is_pub {
         sig.push_str("pub ");
@@ -335,27 +336,27 @@ fn build_doc_global(g: &GlobalDecl, comments: &CommentMap) -> DocGlobal {
         ty: render_type(&g.ty),
         mutable: g.mutable,
         signature: sig,
-        doc: extract_doc_comment(comments, &g.span),
+        doc: extract_doc_comment(trivia, g.id, &g.span),
     }
 }
 
-fn build_doc_enum(e: &EnumDecl, comments: &CommentMap) -> DocEnum {
+fn build_doc_enum(e: &EnumDecl, trivia: &TriviaMap) -> DocEnum {
     let cases = e
         .cases
         .iter()
         .map(|c| DocEnumCase {
             name: c.name.clone(),
-            doc: extract_doc_comment_with_attrs(comments, &c.span, &c.attrs),
+            doc: extract_doc_comment_with_attrs(trivia, c.id, &c.span, &c.attrs),
         })
         .collect();
     DocEnum {
         signature: render_enum_signature(e),
         cases,
-        doc: extract_doc_comment_with_attrs(comments, &e.span, &e.attrs),
+        doc: extract_doc_comment_with_attrs(trivia, e.id, &e.span, &e.attrs),
     }
 }
 
-fn build_doc_variant(v: &VariantDecl, comments: &CommentMap) -> DocVariant {
+fn build_doc_variant(v: &VariantDecl, trivia: &TriviaMap) -> DocVariant {
     let mut sig = String::new();
     if v.is_pub {
         sig.push_str("pub ");
@@ -370,7 +371,7 @@ fn build_doc_variant(v: &VariantDecl, comments: &CommentMap) -> DocVariant {
         .map(|c| DocVariantCase {
             name: c.name.clone(),
             payload: c.payload.as_ref().map(render_type),
-            doc: extract_doc_comment_with_attrs(comments, &c.span, &c.attrs),
+            doc: extract_doc_comment_with_attrs(trivia, c.id, &c.span, &c.attrs),
         })
         .collect();
 
@@ -378,11 +379,11 @@ fn build_doc_variant(v: &VariantDecl, comments: &CommentMap) -> DocVariant {
         name: v.name.clone(),
         signature: sig,
         cases,
-        doc: extract_doc_comment_with_attrs(comments, &v.span, &v.attrs),
+        doc: extract_doc_comment_with_attrs(trivia, v.id, &v.span, &v.attrs),
     }
 }
 
-fn build_doc_flags(f: &FlagsDecl, comments: &CommentMap) -> DocFlags {
+fn build_doc_flags(f: &FlagsDecl, trivia: &TriviaMap) -> DocFlags {
     let mut sig = String::new();
     if f.is_pub {
         sig.push_str("pub ");
@@ -395,7 +396,7 @@ fn build_doc_flags(f: &FlagsDecl, comments: &CommentMap) -> DocFlags {
         .iter()
         .map(|m| DocFlagsMember {
             name: m.name.clone(),
-            doc: extract_doc_comment_with_attrs(comments, &m.span, &m.attrs),
+            doc: extract_doc_comment_with_attrs(trivia, m.id, &m.span, &m.attrs),
         })
         .collect();
     DocFlags {
@@ -403,14 +404,15 @@ fn build_doc_flags(f: &FlagsDecl, comments: &CommentMap) -> DocFlags {
         signature: sig,
         members,
         doc: extract_doc_comment_with_attrs(
-            comments,
+            trivia,
+            f.id,
             &f.span,
             f.attributes.as_deref().unwrap_or(&[]),
         ),
     }
 }
 
-fn build_doc_interface(e: &InterfaceDecl, comments: &CommentMap) -> DocEffect {
+fn build_doc_interface(e: &InterfaceDecl, trivia: &TriviaMap) -> DocEffect {
     let mut sig = String::new();
     if e.is_pub {
         sig.push_str("pub ");
@@ -423,7 +425,7 @@ fn build_doc_interface(e: &InterfaceDecl, comments: &CommentMap) -> DocEffect {
         .iter()
         .map(|m| DocFunction {
             signature: render_interface_method_signature(m),
-            doc: extract_doc_comment_with_attrs(comments, &m.span, &m.attrs),
+            doc: extract_doc_comment_with_attrs(trivia, m.id, &m.span, &m.attrs),
         })
         .collect();
 
@@ -431,11 +433,11 @@ fn build_doc_interface(e: &InterfaceDecl, comments: &CommentMap) -> DocEffect {
         name: e.name.clone(),
         signature: sig,
         methods,
-        doc: extract_doc_comment_with_attrs(comments, &e.span, &e.attrs),
+        doc: extract_doc_comment_with_attrs(trivia, e.id, &e.span, &e.attrs),
     }
 }
 
-fn build_doc_resource(r: &crate::ast::ResourceDecl, comments: &CommentMap) -> DocResource {
+fn build_doc_resource(r: &crate::ast::ResourceDecl, trivia: &TriviaMap) -> DocResource {
     let mut sig = String::new();
     if r.is_pub {
         sig.push_str("pub ");
@@ -449,7 +451,7 @@ fn build_doc_resource(r: &crate::ast::ResourceDecl, comments: &CommentMap) -> Do
         .iter()
         .map(|m| DocFunction {
             signature: render_interface_method_signature(m),
-            doc: extract_doc_comment_with_attrs(comments, &m.span, &m.attrs),
+            doc: extract_doc_comment_with_attrs(trivia, m.id, &m.span, &m.attrs),
         })
         .collect();
 
@@ -457,14 +459,14 @@ fn build_doc_resource(r: &crate::ast::ResourceDecl, comments: &CommentMap) -> Do
         name: r.name.clone(),
         signature: sig,
         methods,
-        doc: extract_doc_comment_with_attrs(comments, &r.span, &r.attrs),
+        doc: extract_doc_comment_with_attrs(trivia, r.id, &r.span, &r.attrs),
     }
 }
 
-fn build_doc_function(f: &Function, comments: &CommentMap) -> DocFunction {
+fn build_doc_function(f: &Function, trivia: &TriviaMap) -> DocFunction {
     DocFunction {
         signature: render_fn_signature(f),
-        doc: extract_doc_comment_with_attrs(comments, &f.span, &f.attrs),
+        doc: extract_doc_comment_with_attrs(trivia, f.id, &f.span, &f.attrs),
     }
 }
 
@@ -483,16 +485,17 @@ fn doc_text(comment: &crate::comment::Comment) -> &str {
     rest.strip_prefix(' ').unwrap_or(rest)
 }
 
-fn extract_doc_comment(comments: &CommentMap, span: &crate::token::Span) -> Option<String> {
-    extract_doc_comment_with_attrs(comments, span, &[])
+fn extract_doc_comment(trivia: &TriviaMap, id: AstId, span: &Span) -> Option<String> {
+    extract_doc_comment_with_attrs(trivia, id, span, &[])
 }
 
 fn extract_doc_comment_with_attrs(
-    comments: &CommentMap,
-    span: &crate::token::Span,
+    trivia: &TriviaMap,
+    id: AstId,
+    span: &Span,
     attrs: &[Attribute],
 ) -> Option<String> {
-    let leading = comments.leading_comments(span);
+    let leading = trivia.leading_of(id);
     // When attributes are present, the doc comment is before the first attribute,
     // not immediately before the keyword. Use the first attribute's line as the
     // start to bridge the gap.
@@ -520,16 +523,17 @@ fn extract_doc_comment_with_attrs(
     Some(text.join("\n"))
 }
 
-fn extract_module_doc(comments: &CommentMap, module: &Module) -> Option<String> {
-    let first_item_start = module
-        .items
-        .first()
-        .map(|item| get_item_span(item).start)
-        .unwrap_or(usize::MAX);
-
-    let doc_lines: Vec<&str> = comments
+fn extract_module_doc(trivia: &TriviaMap, module: &Module) -> Option<String> {
+    // `//!` module-doc comments are pinned by the parser to the leading
+    // trivia of the first allocated id (= the first item, since the
+    // module itself has no `AstId`). When the module has no items at
+    // all, the comments end up in `dangling`.
+    let leading = match module.items.first() {
+        Some(first) => trivia.leading_of(get_item_id(first)),
+        None => trivia.dangling(),
+    };
+    let doc_lines: Vec<&str> = leading
         .iter()
-        .take_while(|c| c.span.start < first_item_start)
         .filter(|c| c.kind == CommentKind::ModuleDoc)
         .map(doc_text)
         .collect();
@@ -737,7 +741,7 @@ pub fn resolve_stdlib_source(module_name: &str) -> Option<&'static str> {
 pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
     let source = stdlib::get_stdlib_module(module_name)?;
     let parsed = crate::parse(source).ok()?;
-    let mut doc = extract_doc(&parsed.ast, &parsed.comments, module_name);
+    let mut doc = extract_doc(&parsed.ast, &parsed.trivia, module_name);
 
     // For modules with pub use re-exports, follow them to get the actual items
     let reexport_sources = collect_pub_use_sources(&parsed.ast);
@@ -747,7 +751,7 @@ pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
             if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source)
                 && let Ok(sub_parsed) = crate::parse(sub_source)
             {
-                let sub_doc = extract_doc(&sub_parsed.ast, &sub_parsed.comments, reexport_source);
+                let sub_doc = extract_doc(&sub_parsed.ast, &sub_parsed.trivia, reexport_source);
                 merge_reexported_items(&mut doc, &sub_doc, &exported_names);
             }
         }
@@ -760,7 +764,7 @@ pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
             && let Ok(sub_parsed) = crate::parse(sub_source)
         {
             let prim_types =
-                collect_primitive_types_from_module(&sub_parsed.ast, &sub_parsed.comments);
+                collect_primitive_types_from_module(&sub_parsed.ast, &sub_parsed.trivia);
             merge_primitive_types(&mut doc.primitive_types, prim_types);
         }
     }
@@ -777,13 +781,13 @@ pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
                     && let Ok(se_parsed) = crate::parse(se_source)
                 {
                     let prim_types =
-                        collect_primitive_types_from_module(&se_parsed.ast, &se_parsed.comments);
+                        collect_primitive_types_from_module(&se_parsed.ast, &se_parsed.trivia);
                     merge_primitive_types(&mut doc.primitive_types, prim_types);
                 }
             }
             // Also check the re-exported module itself
             let prim_types =
-                collect_primitive_types_from_module(&sub_parsed.ast, &sub_parsed.comments);
+                collect_primitive_types_from_module(&sub_parsed.ast, &sub_parsed.trivia);
             merge_primitive_types(&mut doc.primitive_types, prim_types);
         }
     }
@@ -912,7 +916,7 @@ fn extract_item_name<'a>(sig: &'a str, keyword: &str) -> &'a str {
 fn collect_impl_methods_for_type(
     type_name: &str,
     impls: &[&ImplBlock],
-    comments: &CommentMap,
+    trivia: &TriviaMap,
 ) -> (Vec<DocFunction>, Vec<DocTraitImpl>) {
     let mut inherent_methods = Vec::new();
     let mut trait_impls = Vec::new();
@@ -931,7 +935,7 @@ fn collect_impl_methods_for_type(
             let methods: Vec<DocFunction> = i
                 .methods
                 .iter()
-                .map(|m| build_doc_function(m, comments))
+                .map(|m| build_doc_function(m, trivia))
                 .collect();
             if methods.is_empty() {
                 continue;
@@ -945,7 +949,7 @@ fn collect_impl_methods_for_type(
         } else {
             for m in &i.methods {
                 if m.is_pub || m.is_export {
-                    inherent_methods.push(build_doc_function(m, comments));
+                    inherent_methods.push(build_doc_function(m, trivia));
                 }
             }
         }
@@ -958,7 +962,7 @@ const PRIMITIVE_TYPE_NAMES: &[&str] = &[
     "bool", "char", "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "f32", "f64",
 ];
 
-fn build_doc_const(c: &AssociatedConst, comments: &CommentMap) -> DocFunction {
+fn build_doc_const(c: &AssociatedConst, trivia: &TriviaMap) -> DocFunction {
     let mut sig = String::new();
     if c.is_pub {
         sig.push_str("pub ");
@@ -969,7 +973,7 @@ fn build_doc_const(c: &AssociatedConst, comments: &CommentMap) -> DocFunction {
     unparse_type_into(&c.ty, &mut sig);
     DocFunction {
         signature: sig,
-        doc: extract_doc_comment_with_attrs(comments, &c.span, &[]),
+        doc: extract_doc_comment_with_attrs(trivia, c.id, &c.span, &[]),
     }
 }
 
@@ -989,7 +993,7 @@ fn collect_side_effect_import_sources(module: &Module) -> Vec<String> {
 /// Collect `impl` blocks on primitive types from a parsed module, grouping by type name.
 fn collect_primitive_types_from_module(
     module: &Module,
-    comments: &CommentMap,
+    trivia: &TriviaMap,
 ) -> Vec<DocPrimitiveType> {
     use crate::hashmap::IndexMap;
 
@@ -1003,7 +1007,7 @@ fn collect_primitive_types_from_module(
     let mut by_name: IndexMap<&str, DocPrimitiveType> = IndexMap::default();
 
     for &prim_name in PRIMITIVE_TYPE_NAMES {
-        let (methods, trait_impls) = collect_impl_methods_for_type(prim_name, &impls, comments);
+        let (methods, trait_impls) = collect_impl_methods_for_type(prim_name, &impls, trivia);
 
         // Also collect associated constants
         let mut constants = Vec::new();
@@ -1018,7 +1022,7 @@ fn collect_primitive_types_from_module(
             }
             for c in &i.constants {
                 if c.is_pub {
-                    constants.push(build_doc_const(c, comments));
+                    constants.push(build_doc_const(c, trivia));
                 }
             }
         }

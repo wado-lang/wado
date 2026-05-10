@@ -427,6 +427,7 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
                 .arms
                 .iter()
                 .map(|arm| MatchArm {
+                    id: arm.id,
                     pattern: arm.pattern.clone(),
                     guard: arm.guard.as_ref().map(desugar_expr),
                     body: desugar_expr(&arm.body),
@@ -636,6 +637,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                 .arms
                 .iter()
                 .map(|arm| MatchArm {
+                    id: arm.id,
                     pattern: arm.pattern.clone(),
                     guard: arm.guard.as_ref().map(desugar_expr),
                     body: desugar_expr(&arm.body),
@@ -792,12 +794,14 @@ fn desugar_matches_expr(m: &crate::ast::MatchesExpr) -> Expr {
         expr: scrutinee,
         arms: vec![
             MatchArm {
+                id: m.id,
                 pattern: m.pattern.clone(),
                 guard: None,
                 body: match_body,
                 span: m.span,
             },
             MatchArm {
+                id: m.id,
                 pattern: Pattern::Wildcard,
                 guard: None,
                 body: wildcard_body,

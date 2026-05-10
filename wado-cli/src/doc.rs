@@ -245,7 +245,7 @@ fn load_doc(input: &str) -> DocModule {
         .file_stem()
         .map_or("unknown", |s| s.to_str().unwrap_or("unknown"));
 
-    extract_doc(&parsed.ast, &parsed.comments, module_name)
+    extract_doc(&parsed.ast, &parsed.trivia, module_name)
 }
 
 /// Filesystem-safe stem for a module input: stdlib `core:cli` -> `core-cli`,

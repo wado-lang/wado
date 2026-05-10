@@ -1522,18 +1522,19 @@ impl Parser {
     /// pipeline (effect-check, TIR lowering, dispatch synthesis)
     /// continues to see a single `Expr::WithHandler`.
     fn parse_with_handler_stmt(&mut self) -> ParseResult<Stmt> {
+        let id = self.alloc_ast_id();
         let expr = self.parse_with_handler_expr()?;
         if self.check(&TokenKind::Semicolon) {
             self.advance();
         }
         let span = expr.span();
-        let id = self.alloc_ast_id();
         Ok(Stmt::Expr(crate::ast::ExprStmt { id, expr, span }))
     }
 
     /// Parse an expression statement in a block, with optional trailing semicolon
     fn parse_expr_stmt_in_block(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
+        let id = self.alloc_ast_id();
         let expr = self.parse_expr()?;
 
         // Semicolon is optional if followed by `}` (end of block)
@@ -1549,7 +1550,7 @@ impl Parser {
         };
 
         Ok(Stmt::Expr(ExprStmt {
-            id: self.alloc_ast_id(),
+            id,
             expr,
             span: start_span.merge(&end_span),
         }))
@@ -1557,6 +1558,7 @@ impl Parser {
 
     fn parse_labeled_block_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
+        let id = self.alloc_ast_id();
 
         // Parse the label (identifier)
         let label = match self.advance().kind.clone() {
@@ -1572,7 +1574,7 @@ impl Parser {
         let end_span = block.span;
 
         Ok(Stmt::LabeledBlock(LabeledBlockStmt {
-            id: self.alloc_ast_id(),
+            id,
             label,
             block,
             span: start_span.merge(&end_span),
@@ -1581,6 +1583,7 @@ impl Parser {
 
     fn parse_assert_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
+        let id = self.alloc_ast_id();
         self.expect(&TokenKind::Assert)?;
 
         let condition = self.parse_expr()?;
@@ -1596,7 +1599,7 @@ impl Parser {
         let semi_span = self.expect(&TokenKind::Semicolon)?.span;
 
         Ok(Stmt::Assert(AssertStmt {
-            id: self.alloc_ast_id(),
+            id,
             condition,
             message,
             span: start_span.merge(&semi_span),
@@ -1617,6 +1620,13 @@ impl Parser {
     /// Used in for loop init: `for (let mut i = 0; ...)`
     fn parse_let_stmt_inner(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
+        // Allocate the let-stmt id BEFORE descending into children so
+        // leading comments preceding `let` (e.g. `// note\nlet x = ...`)
+        // attach to the stmt itself rather than to its first child id.
+        // Matches the `alloc_ast_id`-at-start convention used by every
+        // outermost-first parser (`parse_block`, `parse_function`,
+        // `parse_match_arm`, …).
+        let id = self.alloc_ast_id();
 
         let is_reactive = if self.check(&TokenKind::Reactive) {
             self.advance();
@@ -1666,7 +1676,7 @@ impl Parser {
         };
 
         Ok(Stmt::Let(LetStmt {
-            id: self.alloc_ast_id(),
+            id,
             pattern,
             name_span,
             is_mut,
@@ -1679,6 +1689,7 @@ impl Parser {
 
     fn parse_return_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
+        let id = self.alloc_ast_id();
         self.expect(&TokenKind::Return)?;
 
         let value = if self.check(&TokenKind::Semicolon) {
@@ -1690,7 +1701,7 @@ impl Parser {
         let semi_span = self.expect(&TokenKind::Semicolon)?.span;
 
         Ok(Stmt::Return(ReturnStmt {
-            id: self.alloc_ast_id(),
+            id,
             value,
             span: start_span.merge(&semi_span),
         }))
@@ -1699,6 +1710,7 @@ impl Parser {
     /// Parse `task return expr;` — delivers the async task result without terminating the function.
     fn parse_task_return_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
+        let id = self.alloc_ast_id();
         // Consume the `task` identifier
         self.advance();
         // Consume the `return` keyword
@@ -1708,7 +1720,7 @@ impl Parser {
         let semi_span = self.expect(&TokenKind::Semicolon)?.span;
 
         Ok(Stmt::TaskReturn(TaskReturnStmt {
-            id: self.alloc_ast_id(),
+            id,
             value,
             span: start_span.merge(&semi_span),
         }))
@@ -1716,6 +1728,7 @@ impl Parser {
 
     fn parse_if_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
+        let id = self.alloc_ast_id();
         self.expect(&TokenKind::If)?;
 
         let condition = if self.check(&TokenKind::Let) {
@@ -1753,7 +1766,7 @@ impl Parser {
         let span = start_span.merge(end_span);
 
         Ok(Stmt::If(IfStmt {
-            id: self.alloc_ast_id(),
+            id,
             condition,
             then_block,
             else_block,
@@ -1922,6 +1935,7 @@ impl Parser {
 
     fn parse_while_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
+        let id = self.alloc_ast_id();
         self.expect(&TokenKind::While)?;
 
         let condition = if self.check(&TokenKind::Let) {
@@ -1935,7 +1949,7 @@ impl Parser {
         let span = start_span.merge(&body.span);
 
         Ok(Stmt::While(WhileStmt {
-            id: self.alloc_ast_id(),
+            id,
             condition,
             body,
             span,
@@ -1947,6 +1961,7 @@ impl Parser {
     /// - For-of: `for let item of array { body }`
     fn parse_for_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
+        let id = self.alloc_ast_id();
         self.expect(&TokenKind::For)?;
 
         // Check for for-of syntax: `for let [mut] pattern of array { ... }`
@@ -1975,7 +1990,7 @@ impl Parser {
                 let span = start_span.merge(&body.span);
 
                 return Ok(Stmt::ForOf(ForOfStmt {
-                    id: self.alloc_ast_id(),
+                    id,
                     binding,
                     is_mut,
                     iterable,
@@ -2043,7 +2058,7 @@ impl Parser {
         let span = start_span.merge(&body.span);
 
         Ok(Stmt::For(ForStmt {
-            id: self.alloc_ast_id(),
+            id,
             init,
             condition,
             update,
@@ -2055,18 +2070,19 @@ impl Parser {
     /// Parse infinite loop: `loop { body }`
     fn parse_loop_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
+        let id = self.alloc_ast_id();
         self.expect(&TokenKind::Loop)?;
 
         let body = self.parse_block()?;
         let span = start_span.merge(&body.span);
 
-        let id = self.alloc_ast_id();
         Ok(Stmt::Loop(LoopStmt { id, body, span }))
     }
 
     /// Parse break statement: `break;`, `break label;`, or `break label: expr;`
     fn parse_break_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
+        let id = self.alloc_ast_id();
         self.expect(&TokenKind::Break)?;
 
         // Check for optional label
@@ -2089,7 +2105,7 @@ impl Parser {
         let semi_span = self.expect(&TokenKind::Semicolon)?.span;
 
         Ok(Stmt::Break(BreakStmt {
-            id: self.alloc_ast_id(),
+            id,
             label,
             value,
             span: start_span.merge(&semi_span),
@@ -2099,10 +2115,10 @@ impl Parser {
     /// Parse continue statement: `continue;`
     fn parse_continue_stmt(&mut self) -> ParseResult<Stmt> {
         let span = self.peek().span;
+        let id = self.alloc_ast_id();
         self.expect(&TokenKind::Continue)?;
         self.expect(&TokenKind::Semicolon)?;
 
-        let id = self.alloc_ast_id();
         Ok(Stmt::Continue(ContinueStmt { id, span }))
     }
 
@@ -3477,6 +3493,7 @@ impl Parser {
     /// Parse match expression: `match expr { pattern => body, ... }`
     fn parse_match_expr(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
+        let id = self.alloc_ast_id();
         self.expect(&TokenKind::Match)?;
 
         // Parse scrutinee expression (no struct literals - ambiguous with match body braces)
@@ -3500,7 +3517,7 @@ impl Parser {
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(Expr::Match(Box::new(MatchExpr {
-            id: self.alloc_ast_id(),
+            id,
             expr: scrutinee,
             arms,
             span: start_span.merge(&end_span),
@@ -3510,6 +3527,10 @@ impl Parser {
     /// Parse a single match arm: `pattern [&& guard] => body`
     fn parse_match_arm(&mut self) -> ParseResult<MatchArm> {
         let start_span = self.peek().span;
+        // Allocate the arm's id before any child node, so leading
+        // comments preceding the arm are pinned to `arm.id` rather
+        // than leaking into the pattern's first descendant id.
+        let id = self.alloc_ast_id();
 
         // Parse pattern
         let pattern = self.parse_pattern()?;
@@ -3560,6 +3581,7 @@ impl Parser {
 
         let end_span = body.span();
         Ok(MatchArm {
+            id,
             pattern,
             guard,
             body,
@@ -4113,6 +4135,15 @@ impl Parser {
                 None
             };
 
+            // Field span covers the full declaration — start of the
+            // first token through the end of the default expression
+            // (or the type, if there is no default). A start-only span
+            // would leave descendant spans extending past the parent,
+            // breaking AstId-keyed trivia attribution that picks the
+            // outermost node ending on the comment's line.
+            let last_end = default.as_ref().map_or_else(|| ty.span(), Expr::span);
+            let span = start_span.merge(&last_end);
+
             fields.push(StructField {
                 id,
                 name,
@@ -4121,7 +4152,7 @@ impl Parser {
                 ty,
                 attrs,
                 default,
-                span: start_span,
+                span,
             });
 
             if !self.check(&TokenKind::RBrace) {
@@ -4299,13 +4330,19 @@ impl Parser {
             None
         };
 
+        // Case span covers the full extent — start through the payload
+        // type's end, when present. A start-only span would leave the
+        // payload's descendant ids extending past the parent.
+        let last_end = payload.as_ref().map_or(name_span, Type::span);
+        let span = start_span.merge(&last_end);
+
         Ok(VariantCase {
             id,
             name,
             name_span,
             payload,
             attrs,
-            span: start_span,
+            span,
         })
     }
 
@@ -4595,6 +4632,7 @@ impl Parser {
             // Check if this is an associated type declaration: `type Name;` or `type Name: Bound1 + Bound2;`
             if self.check(&TokenKind::Type) {
                 let type_span = self.peek().span;
+                let assoc_id = self.alloc_ast_id();
                 self.advance();
                 let assoc_name = self.consume_ident()?;
                 let bounds = if self.check(&TokenKind::Colon) {
@@ -4605,7 +4643,7 @@ impl Parser {
                 };
                 let end = self.expect(&TokenKind::Semicolon)?.span;
                 associated_types.push(AssociatedTypeDecl {
-                    id: self.alloc_ast_id(),
+                    id: assoc_id,
                     name: assoc_name,
                     bounds,
                     span: type_span.merge(&end),
