@@ -486,6 +486,16 @@ fn verify_http_result(result: &HttpTestResult, spec: &HttpServiceSpec, fixture_n
 // Test world runner
 // ---------------------------------------------------------------------------
 
+/// Sentinel panic payload signalling that a `#[TODO]` test passed unexpectedly.
+///
+/// The test-world runner raises this via `std::panic::panic_any` (rather than
+/// `anyhow::bail!`) so the outer `#![TODO]` module wrapper can distinguish a
+/// resolved-but-still-marked TODO (hard failure) from a genuine pending test
+/// (silent OK). The runner identifies it by downcasting the panic payload;
+/// all other panics fall back to the "pending" path.
+#[derive(Debug)]
+struct TodoResolved(String);
+
 /// Run all test exports from a Wasm component compiled with the `test` world.
 /// Each test function is called in its own Store. All tests must pass.
 fn run_test_world(
@@ -548,12 +558,14 @@ fn run_test_world(
             match func.call_async(&mut store, ()).await {
                 Ok((Ok(()),)) => {
                     if is_todo {
-                        // TODO test passed — the feature may now work.
-                        // This is a hard failure: #[TODO] must be removed.
-                        anyhow::bail!(
+                        // TODO test passed — the feature may now work. This must surface
+                        // as a hard failure even inside an outer `#![TODO]` catch_unwind,
+                        // so we panic with a typed sentinel rather than bailing through
+                        // the generic `anyhow::Result` channel.
+                        std::panic::panic_any(TodoResolved(format!(
                             "[{test_id}] TODO test '{test_name}' resolved — \
                              remove the #[TODO] attribute"
-                        );
+                        )));
                     } else if expect_trap {
                         anyhow::bail!(
                             "[{test_id}] test '{test_name}' was expected to trap but returned Ok(())"
@@ -661,8 +673,8 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
         }));
         match test_result {
             Ok(()) if spec.test_world.is_some() => {
-                // Test world: individual tests are already marked #[TODO] by the resolver.
-                // Success here means all TODO tests resolved — report but don't fail.
+                // Test world: every test is marked `test-todo-*` by the resolver.
+                // Reaching Ok means each one trapped as expected — pending, not resolved.
             }
             Ok(()) => {
                 // #![TODO] module passed — the feature may now work.
@@ -673,6 +685,12 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
                 );
             }
             Err(err) => {
+                // A `test-todo-*` export that returned Ok signals a resolved TODO via
+                // `TodoResolved`. Re-raise it so the test framework reports the failure;
+                // everything else is treated as a still-pending TODO.
+                if let Some(resolved) = err.downcast_ref::<TodoResolved>() {
+                    panic!("{}", resolved.0);
+                }
                 let msg = err
                     .downcast_ref::<String>()
                     .map(String::as_str)
@@ -941,4 +959,72 @@ datatest_mini::harness! {
     { test = fixture_test_o2, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
     { test = fixture_test_o3, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
     { test = fixture_test_os, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
+}
+
+/// End-to-end check on the `#![TODO]` wrapper: a module-level `#![TODO]` whose
+/// test passes must still hard-fail. Before the sentinel fix the resolved
+/// panic was swallowed as "pending" because the outer `catch_unwind` could
+/// not distinguish it from a genuine still-pending TODO trap.
+#[test]
+#[should_panic(expected = "TODO test 'test-todo-0-passes-unexpectedly' resolved")]
+fn module_todo_with_passing_test_hard_fails() {
+    let source = r#"#![TODO]
+test "passes unexpectedly" {
+    assert true;
+}
+
+__DATA__
+{"test": {}}
+"#;
+    run_fixture_test_with_opt(
+        std::path::Path::new("synthetic_module_todo.wado"),
+        source,
+        OptLevel::O0,
+    );
+}
+
+/// A `#[TODO]` test that returns Ok must surface as a hard failure rather than
+/// being swallowed as "pending" by the outer `#![TODO]` catch_unwind path.
+/// We exercise the runner end-to-end: compile a synthetic source whose only
+/// test is `#[TODO]` and passes, then call `run_test_world` and assert that
+/// the resulting panic payload carries the `TodoResolved` sentinel.
+#[test]
+fn run_test_world_signals_resolved_todo_via_sentinel() {
+    let source = r#"#[TODO]
+test "passes unexpectedly" {
+    assert true;
+}
+"#;
+    let options = CompilerOptions {
+        opt_level: OptLevel::O0,
+        target_world: Some("test".to_string()),
+        ..Default::default()
+    };
+    let path = std::path::Path::new("synthetic_todo_resolved.wado");
+    let compile_result = common::compile_source_with_compiler_options(path, source, options)
+        .expect("compilation should succeed");
+
+    let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_test_world(
+            &compile_result.wasm,
+            "synthetic-todo-resolved",
+            indexmap::IndexMap::new(),
+            indexmap::IndexMap::new(),
+        )
+    }))
+    .expect_err("a resolved #[TODO] test must panic, not return");
+
+    let resolved = payload
+        .downcast_ref::<TodoResolved>()
+        .expect("panic payload should be TodoResolved");
+    assert!(
+        resolved.0.contains("resolved"),
+        "message should mention `resolved`: {}",
+        resolved.0,
+    );
+    assert!(
+        resolved.0.contains("passes-unexpectedly"),
+        "message should mention the offending test name: {}",
+        resolved.0,
+    );
 }

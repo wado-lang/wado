@@ -1,13 +1,7 @@
-#![TODO]
-// Smoke test: a single module declares `pub effect` and a function
-// that requires it. Does not call effect methods — we only want
-// type-level acceptance.
-//
-// TODO: user-defined `pub effect` at the user level currently ICEs
-// during core-Wasm validation:
-//   "type mismatch: expected i32, found (ref (exact $type))"
-// The compiler's codegen path has only been exercised against stdlib
-// effects. Remove `#![TODO]` once user-level effects compile cleanly.
+// Smoke test: a user-defined `pub interface` (an effect) and a function
+// that declares it via `with`. Verifies type-level acceptance — the
+// function body does not invoke any interface method, so codegen never
+// touches the effect's dispatch surface.
 
 pub interface Logger {
     fn log(msg: String);

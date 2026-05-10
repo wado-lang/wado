@@ -1,9 +1,6 @@
-// Test: Client::send Err variant handling.
-//
-// Sends a request to an unmocked path. The test mock system traps
-// (rather than returning ErrorCode), so this test expects a trap.
-// When the mock system is updated to return proper ErrorCode, this
-// test should be changed to verify the Err variant.
+// Verifies that Client::send traps when the request targets an unmocked
+// path. The outgoing-mock harness raises a trap rather than synthesizing
+// a concrete ErrorCode, asserted via `trapped: true` in __DATA__.
 
 use { Request, Response, ErrorCode, Fields, Scheme, Trailers } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
@@ -21,11 +18,6 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
 
     let result = Client::send(out_req).wait();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
-
-    // TODO: When mock returns ErrorCode instead of trap, test Err variant:
-    // if let Err(e) = result {
-    //     // verify error code variant
-    // }
 
     task return result;
 }
