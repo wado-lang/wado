@@ -288,29 +288,29 @@ fn build_copy_return_expr(
         return None;
     }
     let mangled = type_table.borrow().mangle_type_name(type_id);
-    if let Some(struct_def) = lookup_struct(project, &mangled) {
+    if let Some(struct_def) = lookup_struct(project, &mangled)
+        && !struct_has_recursive_variant(type_id, type_table, project)
+    {
         return Some(build_struct_copy(
             type_id, &mangled, struct_def, v_local, type_table, span,
         ));
     }
-    if let ResolvedType::GenericInstance { type_args, .. } = resolved
-        && let Some(generic_struct) = generic_template_for(resolved, project)
-    {
-        return Some(build_struct_copy_with_substitution(
-            type_id,
-            &mangled,
-            generic_struct,
-            type_args,
-            v_local,
-            type_table,
-            span,
-        ));
-    }
+    // `GenericInstance` whose monomorphized struct didn't get
+    // materialised in `project.structs` is an unresolved-at-WIR-level
+    // shape — its `type_id` resolves to `AbstractRef(Struct)` rather
+    // than a concrete `WirType::Ref`, which the WIR-build
+    // `StructLiteral` arm rejects with a hard panic. Falling through
+    // here without a non-identity body keeps every reachable
+    // `array_clone::<T>` generation safe even when a stray reachable
+    // type in the closure happens to be a non-monomorphized template
+    // wrapper. The shape that *does* need a non-identity copy
+    // (Array<T> / tuple) is recovered by the explicit checks below.
     if let ResolvedType::GenericInstance {
         name, type_args, ..
     } = resolved
         && name == "Array"
         && type_args.len() == 1
+        && is_synth_safe_element(type_args[0], type_table, project)
     {
         return Some(build_array_wrapper_copy(
             type_id,
@@ -349,6 +349,7 @@ fn lookup_struct<'a>(project: &'a FlatPackage, mangled_name: &str) -> Option<&'a
     project.structs.iter().find(|s| s.name == mangled_name)
 }
 
+#[allow(dead_code)]
 fn generic_template_for<'a>(
     resolved: &ResolvedType,
     project: &'a FlatPackage,
@@ -365,6 +366,169 @@ fn generic_template_for<'a>(
             .find(|s| &s.name == name && &s.module_source == module_source)
     } else {
         None
+    }
+}
+
+/// True when `type_id` is part of a struct cycle that runs through a
+/// variant payload (e.g. `Object(TreeMap<String, Value>)` in the
+/// recursive `Value` variant). Concrete WIR registration for these
+/// cycles uses `AbstractRef(Struct)` placeholders that the
+/// post-registration fix-up only resolves *inside* struct field
+/// definitions — the `expr.type_id` on a synthesized helper's
+/// `StructLiteral` body therefore can still resolve to `AbstractRef`
+/// at WIR-translate time, hitting the hard panic in that arm.
+/// Skipping the non-identity body for these types is sound: the
+/// caller already routes through `$value_copy$T<id>` either way, and
+/// identity is a strict subset of the value-semantic deep copy
+/// behaviour the rest of the helper would have provided. The
+/// underlying gap (per-position deep copy of cyclic recursive types)
+/// is tracked as a follow-up.
+fn struct_has_recursive_variant(
+    type_id: TypeId,
+    type_table: &Rc<RefCell<TypeTable>>,
+    project: &FlatPackage,
+) -> bool {
+    let mut seen: IndexSet<TypeId> = IndexSet::default();
+    contains_variant_recursive(type_id, type_table, project, &mut seen, 0)
+}
+
+fn contains_variant_recursive(
+    type_id: TypeId,
+    type_table: &Rc<RefCell<TypeTable>>,
+    project: &FlatPackage,
+    seen: &mut IndexSet<TypeId>,
+    depth: usize,
+) -> bool {
+    if depth > 16 || !seen.insert(type_id) {
+        return false;
+    }
+    let resolved = type_table.borrow().get(type_id).clone();
+    match resolved {
+        ResolvedType::Variant { .. } => true,
+        ResolvedType::GenericInstance {
+            name,
+            module_source,
+            type_args,
+        } => {
+            // Generic-variant instance (`Option<T>` / `Result<T, E>` /
+            // user-defined recursive variants like `Value` from
+            // `core:json_value`): treat as a variant boundary, since
+            // its monomorphised registration in WIR may still be an
+            // `AbstractRef(Struct)` placeholder when the helper body
+            // is translated.
+            if type_table
+                .borrow()
+                .find_struct_type(&name, &module_source)
+                .is_none()
+            {
+                return true;
+            }
+            // Concrete monomorphised struct — recurse into its fields
+            // and type args.
+            for arg in &type_args {
+                if contains_variant_recursive(*arg, type_table, project, seen, depth + 1) {
+                    return true;
+                }
+            }
+            let mangled = type_table.borrow().mangle_type_name(type_id);
+            if let Some(struct_def) = lookup_struct(project, &mangled) {
+                let mut substitution = crate::hashmap::IndexMap::default();
+                for (idx, ty) in type_args.iter().enumerate() {
+                    substitution.insert(idx as u32, *ty);
+                }
+                for field in &struct_def.fields {
+                    let concrete = type_table
+                        .borrow_mut()
+                        .substitute_type_params(field.type_id, &substitution);
+                    if contains_variant_recursive(concrete, type_table, project, seen, depth + 1) {
+                        return true;
+                    }
+                }
+            }
+            false
+        }
+        ResolvedType::Struct { .. } => {
+            let mangled = type_table.borrow().mangle_type_name(type_id);
+            if let Some(struct_def) = lookup_struct(project, &mangled) {
+                for field in &struct_def.fields {
+                    if contains_variant_recursive(
+                        field.type_id,
+                        type_table,
+                        project,
+                        seen,
+                        depth + 1,
+                    ) {
+                        return true;
+                    }
+                }
+            }
+            false
+        }
+        ResolvedType::BuiltinArray(elem) => {
+            contains_variant_recursive(elem, type_table, project, seen, depth + 1)
+        }
+        _ => false,
+    }
+}
+
+/// `Array<T>`'s wrapper-struct deep-copy emits a `StructLiteral`
+/// whose `type_id` is `Array<T>`. WIR-level resolution of that
+/// `type_id` becomes `AbstractRef(Struct)` whenever `T` is a shape
+/// that the WIR struct registry never materialises a concrete entry
+/// for — variants, resources, function/closure types, and unmaterialised
+/// generic instances. The downstream `StructLiteral` translation
+/// only knows how to handle a concrete `WirType::Ref`, so we skip
+/// the non-identity body and fall through to identity for those `T`s.
+/// Built-in primitives, ordinary structs, and known wrapper shapes
+/// (`Array<T>`, `String`, tuples) all have concrete WIR registrations
+/// and are passed through.
+fn is_synth_safe_element(
+    elem_type: TypeId,
+    type_table: &Rc<RefCell<TypeTable>>,
+    project: &FlatPackage,
+) -> bool {
+    let resolved = type_table.borrow().get(elem_type).clone();
+    match resolved {
+        ResolvedType::Variant { .. }
+        | ResolvedType::Resource { .. }
+        | ResolvedType::GenericResource { .. }
+        | ResolvedType::Function { .. }
+        | ResolvedType::TypeParam { .. }
+        | ResolvedType::TypePack { .. } => false,
+        ResolvedType::GenericInstance {
+            name,
+            module_source,
+            ..
+        } => {
+            // Tuples / String / Array<T> / known struct templates are
+            // safe; unknown generic-instance names whose template
+            // isn't a registered struct are not.
+            if TypeTable::is_tuple_type(&name, &module_source) {
+                return true;
+            }
+            if name == "Array" || name == "String" || name == "Box" {
+                return true;
+            }
+            // A concrete monomorphised struct entry is the strongest
+            // signal — without it WIR has no `Ref` to point at.
+            let mangled = type_table.borrow().mangle_type_name(elem_type);
+            if lookup_struct(project, &mangled).is_some() {
+                return true;
+            }
+            // Generic-variant instances (`Option<T>` / `Result<T, E>` /
+            // user-defined variants) are reference-shaped at WIR but
+            // their helper bodies are identity, so the call site never
+            // wraps a wrapper around them anyway. Treat as safe.
+            if type_table
+                .borrow()
+                .find_struct_type(&name, &module_source)
+                .is_none()
+            {
+                return false;
+            }
+            true
+        }
+        _ => true,
     }
 }
 
@@ -463,6 +627,7 @@ fn build_tuple_copy(
     )
 }
 
+#[allow(dead_code)]
 fn build_struct_copy_with_substitution(
     type_id: TypeId,
     mangled_name: &str,
