@@ -795,7 +795,10 @@ pub trait FromStr {
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<Self, Self::Err>;
 
     /// Parse the entire string as `Self`. Delegates to `from_str_range`.
-    fn from_str(s: String) -> Result<Self, Self::Err> {
-        return Self::from_str_range(&s, 0, s.len());
+    /// Takes `&String` for the same reason `from_str_range` does — callers
+    /// already holding a `&String` (e.g. the JSON deserializer threading
+    /// the input buffer through) should not have to dereference and copy.
+    fn from_str(s: &String) -> Result<Self, Self::Err> {
+        return Self::from_str_range(s, 0, s.len());
     }
 }

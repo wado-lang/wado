@@ -1,111 +1,111 @@
 // Tests for primitive type methods (f64, f32, etc.).
 
 test "f64::from_str basic" {
-    assert f64::from_str("3.14") matches { Ok(v) && v == 3.14 };
-    assert f64::from_str("0.5") matches { Ok(v) && v == 0.5 };
-    assert f64::from_str("123") matches { Ok(v) && v == 123.0 };
-    assert f64::from_str("0") matches { Ok(v) && v == 0.0 };
+    assert f64::from_str(&"3.14") matches { Ok(v) && v == 3.14 };
+    assert f64::from_str(&"0.5") matches { Ok(v) && v == 0.5 };
+    assert f64::from_str(&"123") matches { Ok(v) && v == 123.0 };
+    assert f64::from_str(&"0") matches { Ok(v) && v == 0.0 };
 }
 
 test "f64::from_str with exponent" {
-    assert f64::from_str("1e2") matches { Ok(v) && v == 100.0 };
-    assert f64::from_str("1.5e-3") matches { Ok(v) && v == 0.0015 };
-    assert f64::from_str("25E+2") matches { Ok(v) && v == 2500.0 };
+    assert f64::from_str(&"1e2") matches { Ok(v) && v == 100.0 };
+    assert f64::from_str(&"1.5e-3") matches { Ok(v) && v == 0.0015 };
+    assert f64::from_str(&"25E+2") matches { Ok(v) && v == 2500.0 };
 }
 
 test "f64::from_str with sign" {
-    assert f64::from_str("-42") matches { Ok(v) && v == -42.0 };
-    assert f64::from_str("+3.14") matches { Ok(v) && v == 3.14 };
-    assert f64::from_str("-0.5e2") matches { Ok(v) && v == -50.0 };
+    assert f64::from_str(&"-42") matches { Ok(v) && v == -42.0 };
+    assert f64::from_str(&"+3.14") matches { Ok(v) && v == 3.14 };
+    assert f64::from_str(&"-0.5e2") matches { Ok(v) && v == -50.0 };
 }
 
 test "f64::from_str infinity" {
-    assert f64::from_str("inf") matches { Ok(v) && v == f64::INFINITY };
-    assert f64::from_str("-inf") matches { Ok(v) && v == f64::NEG_INFINITY };
-    assert f64::from_str("+infinity") matches { Ok(v) && v == f64::INFINITY };
-    assert f64::from_str("-Infinity") matches { Ok(v) && v == f64::NEG_INFINITY };
-    assert f64::from_str("INF") matches { Ok(v) && v == f64::INFINITY };
-    assert f64::from_str("INFINITY") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str(&"inf") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str(&"-inf") matches { Ok(v) && v == f64::NEG_INFINITY };
+    assert f64::from_str(&"+infinity") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str(&"-Infinity") matches { Ok(v) && v == f64::NEG_INFINITY };
+    assert f64::from_str(&"INF") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str(&"INFINITY") matches { Ok(v) && v == f64::INFINITY };
 }
 
 test "f64::from_str nan" {
-    assert f64::from_str("nan") matches { Ok(v) && v.is_nan() };
-    assert f64::from_str("NaN") matches { Ok(v) && v.is_nan() };
-    assert f64::from_str("NAN") matches { Ok(v) && v.is_nan() };
+    assert f64::from_str(&"nan") matches { Ok(v) && v.is_nan() };
+    assert f64::from_str(&"NaN") matches { Ok(v) && v.is_nan() };
+    assert f64::from_str(&"NAN") matches { Ok(v) && v.is_nan() };
 }
 
 test "f64::from_str negative zero" {
-    assert f64::from_str("-0") matches { Ok(v) && v == 0.0 };
+    assert f64::from_str(&"-0") matches { Ok(v) && v == 0.0 };
 }
 
 test "f64::from_str overflow underflow" {
-    assert f64::from_str("1e999") matches { Ok(v) && v == f64::INFINITY };
-    assert f64::from_str("-1e999") matches { Ok(v) && v == f64::NEG_INFINITY };
-    assert f64::from_str("1e-999") matches { Ok(v) && v == 0.0 };
+    assert f64::from_str(&"1e999") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str(&"-1e999") matches { Ok(v) && v == f64::NEG_INFINITY };
+    assert f64::from_str(&"1e-999") matches { Ok(v) && v == 0.0 };
 
     // Boundary: eff_p 350 is within table, 351 overflows
-    assert f64::from_str("1e350") matches { Ok(v) && v.is_finite() };
-    assert f64::from_str("1e351") matches { Ok(v) && v == f64::INFINITY };
-    assert f64::from_str("-1e351") matches { Ok(v) && v == f64::NEG_INFINITY };
+    assert f64::from_str(&"1e350") matches { Ok(v) && v.is_finite() };
+    assert f64::from_str(&"1e351") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str(&"-1e351") matches { Ok(v) && v == f64::NEG_INFINITY };
 
     // Boundary: eff_p -351 is within table (subnormal), -352 underflows to zero
-    assert f64::from_str("1e-351") matches { Ok(v) && v.is_finite() && v > 0.0 };
-    assert f64::from_str("1e-352") matches { Ok(v) && v == 0.0 };
+    assert f64::from_str(&"1e-351") matches { Ok(v) && v.is_finite() && v > 0.0 };
+    assert f64::from_str(&"1e-352") matches { Ok(v) && v == 0.0 };
 }
 
 test "f64::from_str malformed" {
-    assert f64::from_str("") matches { Err(e) && e.kind() == FloatErrorKind::Empty };
-    assert f64::from_str("abc") matches { Err(e) && e.kind() == FloatErrorKind::Invalid };
-    assert f64::from_str(".5") matches { Err(_) };
-    assert f64::from_str("5.") matches { Err(_) };
-    assert f64::from_str("+") matches { Err(_) };
-    assert f64::from_str("-") matches { Err(_) };
-    assert f64::from_str("1.2.3") matches { Err(_) };
-    assert f64::from_str("e5") matches { Err(_) };
-    assert f64::from_str("1e") matches { Err(_) };
-    assert f64::from_str("infi") matches { Err(_) };
-    assert f64::from_str("nana") matches { Err(_) };
+    assert f64::from_str(&"") matches { Err(e) && e.kind() == FloatErrorKind::Empty };
+    assert f64::from_str(&"abc") matches { Err(e) && e.kind() == FloatErrorKind::Invalid };
+    assert f64::from_str(&".5") matches { Err(_) };
+    assert f64::from_str(&"5.") matches { Err(_) };
+    assert f64::from_str(&"+") matches { Err(_) };
+    assert f64::from_str(&"-") matches { Err(_) };
+    assert f64::from_str(&"1.2.3") matches { Err(_) };
+    assert f64::from_str(&"e5") matches { Err(_) };
+    assert f64::from_str(&"1e") matches { Err(_) };
+    assert f64::from_str(&"infi") matches { Err(_) };
+    assert f64::from_str(&"nana") matches { Err(_) };
 }
 
 test "f32::from_str basic" {
-    assert f32::from_str("3.14") matches { Ok(v) && v == 3.14 };
-    assert f32::from_str("-42") matches { Ok(v) && v == -42.0 };
-    assert f32::from_str("inf") matches { Ok(v) && v == f32::INFINITY };
-    assert f32::from_str("") matches { Err(e) && e.kind() == FloatErrorKind::Empty };
-    assert f32::from_str(".5") matches { Err(e) && e.kind() == FloatErrorKind::Invalid };
+    assert f32::from_str(&"3.14") matches { Ok(v) && v == 3.14 };
+    assert f32::from_str(&"-42") matches { Ok(v) && v == -42.0 };
+    assert f32::from_str(&"inf") matches { Ok(v) && v == f32::INFINITY };
+    assert f32::from_str(&"") matches { Err(e) && e.kind() == FloatErrorKind::Empty };
+    assert f32::from_str(&".5") matches { Err(e) && e.kind() == FloatErrorKind::Invalid };
 }
 
 test "i32::from_str basic" {
-    assert i32::from_str("0") matches { Ok(0) };
-    assert i32::from_str("42") matches { Ok(42) };
-    assert i32::from_str("+42") matches { Ok(42) };
-    assert i32::from_str("-42") matches { Ok(-42) };
-    assert i32::from_str("2147483647") matches { Ok(v) && v == i32::MAX };
-    assert i32::from_str("-2147483648") matches { Ok(v) && v == i32::MIN };
+    assert i32::from_str(&"0") matches { Ok(0) };
+    assert i32::from_str(&"42") matches { Ok(42) };
+    assert i32::from_str(&"+42") matches { Ok(42) };
+    assert i32::from_str(&"-42") matches { Ok(-42) };
+    assert i32::from_str(&"2147483647") matches { Ok(v) && v == i32::MAX };
+    assert i32::from_str(&"-2147483648") matches { Ok(v) && v == i32::MIN };
 }
 
 test "i32::from_str errors" {
-    assert i32::from_str("") matches { Err(e) && e.kind() == IntErrorKind::Empty };
-    assert i32::from_str("+") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
-    assert i32::from_str("-") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
-    assert i32::from_str("abc") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
-    assert i32::from_str("12x") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
-    assert i32::from_str("2147483648") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
-    assert i32::from_str("-2147483649") matches { Err(e) && e.kind() == IntErrorKind::NegOverflow };
+    assert i32::from_str(&"") matches { Err(e) && e.kind() == IntErrorKind::Empty };
+    assert i32::from_str(&"+") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert i32::from_str(&"-") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert i32::from_str(&"abc") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert i32::from_str(&"12x") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert i32::from_str(&"2147483648") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert i32::from_str(&"-2147483649") matches { Err(e) && e.kind() == IntErrorKind::NegOverflow };
 }
 
 test "u32::from_str basic" {
-    assert u32::from_str("0") matches { Ok(0) };
-    assert u32::from_str("42") matches { Ok(42) };
-    assert u32::from_str("+42") matches { Ok(42) };
-    assert u32::from_str("4294967295") matches { Ok(v) && v == u32::MAX };
+    assert u32::from_str(&"0") matches { Ok(0) };
+    assert u32::from_str(&"42") matches { Ok(42) };
+    assert u32::from_str(&"+42") matches { Ok(42) };
+    assert u32::from_str(&"4294967295") matches { Ok(v) && v == u32::MAX };
 }
 
 test "u32::from_str errors" {
-    assert u32::from_str("") matches { Err(e) && e.kind() == IntErrorKind::Empty };
-    assert u32::from_str("-0") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
-    assert u32::from_str("-1") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
-    assert u32::from_str("4294967296") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert u32::from_str(&"") matches { Err(e) && e.kind() == IntErrorKind::Empty };
+    assert u32::from_str(&"-0") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert u32::from_str(&"-1") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert u32::from_str(&"4294967296") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
 }
 
 test "i32::from_str_radix" {
@@ -131,15 +131,15 @@ test "u32::from_str_hex" {
 }
 
 test "i64::from_str bounds" {
-    assert i64::from_str("9223372036854775807") matches { Ok(v) && v == i64::MAX };
-    assert i64::from_str("-9223372036854775808") matches { Ok(v) && v == i64::MIN };
-    assert i64::from_str("9223372036854775808") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
-    assert i64::from_str("-9223372036854775809") matches { Err(e) && e.kind() == IntErrorKind::NegOverflow };
+    assert i64::from_str(&"9223372036854775807") matches { Ok(v) && v == i64::MAX };
+    assert i64::from_str(&"-9223372036854775808") matches { Ok(v) && v == i64::MIN };
+    assert i64::from_str(&"9223372036854775808") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert i64::from_str(&"-9223372036854775809") matches { Err(e) && e.kind() == IntErrorKind::NegOverflow };
 }
 
 test "u64::from_str bounds" {
-    assert u64::from_str("18446744073709551615") matches { Ok(v) && v == u64::MAX };
-    assert u64::from_str("18446744073709551616") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert u64::from_str(&"18446744073709551615") matches { Ok(v) && v == u64::MAX };
+    assert u64::from_str(&"18446744073709551616") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
 }
 
 test "u64::from_str_hex" {
@@ -148,20 +148,20 @@ test "u64::from_str_hex" {
 }
 
 test "i8 u8 i16 u16 from_str bounds" {
-    assert i8::from_str("127") matches { Ok(127) };
-    assert i8::from_str("-128") matches { Ok(-128) };
-    assert i8::from_str("128") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
-    assert i8::from_str("-129") matches { Err(e) && e.kind() == IntErrorKind::NegOverflow };
+    assert i8::from_str(&"127") matches { Ok(127) };
+    assert i8::from_str(&"-128") matches { Ok(-128) };
+    assert i8::from_str(&"128") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert i8::from_str(&"-129") matches { Err(e) && e.kind() == IntErrorKind::NegOverflow };
 
-    assert u8::from_str("255") matches { Ok(255) };
-    assert u8::from_str("256") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert u8::from_str(&"255") matches { Ok(255) };
+    assert u8::from_str(&"256") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
 
-    assert i16::from_str("32767") matches { Ok(32767) };
-    assert i16::from_str("-32768") matches { Ok(-32768) };
-    assert i16::from_str("32768") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert i16::from_str(&"32767") matches { Ok(32767) };
+    assert i16::from_str(&"-32768") matches { Ok(-32768) };
+    assert i16::from_str(&"32768") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
 
-    assert u16::from_str("65535") matches { Ok(65535) };
-    assert u16::from_str("65536") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert u16::from_str(&"65535") matches { Ok(65535) };
+    assert u16::from_str(&"65536") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
 }
 
 test "i8 from_str_hex common cases" {
