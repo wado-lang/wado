@@ -3,7 +3,8 @@
 use crate::ast::{self, Function, GlobalDecl, SelfKind, Type};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexSet;
-use crate::name::{LocalMethodName, MethodName, ModuleSource};
+use crate::module_source::ModuleSource;
+use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
     FunctionKind, TirEffect, TirEffectOp, TirFunction, TirGlobal, TirParam, TirResource, TirStruct,
     TirTest, TirVariantCase, TirVariantDecl, TypeId, TypeTable,

@@ -6,7 +6,8 @@ use super::util;
 use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexSet;
-use crate::name::{LocalMethodName, MethodName, ModuleSource};
+use crate::module_source::ModuleSource;
+use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt,
     TirStmtKind, TypeId, TypeTable,

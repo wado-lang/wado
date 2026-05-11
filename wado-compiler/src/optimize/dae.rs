@@ -43,7 +43,7 @@
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{
     FunctionKind, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind,
 };

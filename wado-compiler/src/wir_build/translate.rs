@@ -427,7 +427,7 @@ fn register_call_wrapper(
 #[allow(clippy::too_many_arguments)]
 fn register_inspect_wrapper(
     ctx: &mut WirContext<'_>,
-    module_source: &crate::name::ModuleSource,
+    module_source: &crate::module_source::ModuleSource,
     functor_name: &str,
     trait_name: &str,
     method_name: &str,
@@ -453,7 +453,7 @@ fn register_inspect_wrapper(
     let formatter_struct_type_id = ctx
         .struct_type_map
         .get(&crate::name::StructName::new(
-            crate::name::ModuleSource::format(),
+            crate::module_source::ModuleSource::format(),
             "Formatter".to_string(),
         ))
         .cloned();
@@ -1056,7 +1056,11 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Build the qualified global name.
-    fn make_global_name(&self, module_source: &crate::name::ModuleSource, name: &str) -> String {
+    fn make_global_name(
+        &self,
+        module_source: &crate::module_source::ModuleSource,
+        name: &str,
+    ) -> String {
         if module_source.is_entry_point() {
             format!("global:{name}")
         } else {

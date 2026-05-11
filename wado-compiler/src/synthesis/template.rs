@@ -14,7 +14,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::name::{LocalMethodName, ModuleSource};
+use crate::module_source::ModuleSource;
+use crate::name::LocalMethodName;
 use crate::resolver::trait_env::TraitEnv;
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr,

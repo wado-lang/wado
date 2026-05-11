@@ -10,7 +10,7 @@ use crate::ast::{AstId, GenericType, NamedType, Type};
 use crate::cm_abi;
 use crate::component_model::WasiRegistry;
 use crate::hashmap::IndexMap;
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
     TirVariantDecl, TypeId, TypeTable,
@@ -48,7 +48,7 @@ pub struct LiftContext<'a> {
     /// callers must not hold a `RefMut` to the same cell across calls
     /// into `synthesize_lift` or its helpers. The lift path itself only
     /// borrows transiently inside `module_source_for_cm_interface`.
-    pub interner: &'a RefCell<crate::name::ModuleSourceInterner>,
+    pub interner: &'a RefCell<crate::module_source::ModuleSourceInterner>,
 }
 
 /// Convert a WASI AST `Type` to a `TypeId` in the type table.
@@ -208,7 +208,7 @@ pub(super) fn wasi_interface_suffix(source_interface: &str) -> String {
 /// matching the `StructName`s under which the WIR types pass registered
 /// them (see `wir_build::types::register_struct`).
 pub(super) fn module_source_for_cm_interface(
-    interner: &mut crate::name::ModuleSourceInterner,
+    interner: &mut crate::module_source::ModuleSourceInterner,
     source_interface: &str,
 ) -> ModuleSource {
     if source_interface.starts_with("wasi:") {

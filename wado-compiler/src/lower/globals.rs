@@ -5,7 +5,7 @@ use std::rc::Rc;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::flat_package::FlatPackage;
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::FunctionRef;
 use crate::tir::{
     FunctionKind, InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,

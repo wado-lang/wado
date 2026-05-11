@@ -12,9 +12,10 @@ use crate::hashmap::IndexSet;
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
+use crate::module_source::ModuleSource;
 use crate::name::{
-    FreeFunctionName, FunctionId, MethodName, ModuleSource, mangle_generic_name,
-    mangle_local_method, mangle_local_trait_method, mangle_method_generic,
+    FreeFunctionName, FunctionId, MethodName, mangle_generic_name, mangle_local_method,
+    mangle_local_trait_method, mangle_method_generic,
 };
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirStmt, TirStmtKind,
@@ -3009,13 +3010,16 @@ fn remove_dead_global_sets_expr(expr: &mut TirExpr, used: &IndexSet<(String, Str
 mod tests {
     use super::*;
 
-    fn free_fn(interner: &mut crate::name::ModuleSourceInterner, name: &str) -> FunctionId {
+    fn free_fn(
+        interner: &mut crate::module_source::ModuleSourceInterner,
+        name: &str,
+    ) -> FunctionId {
         FunctionId::Free(FreeFunctionName::from_strs(interner, &["test"], name))
     }
 
     #[test]
     fn test_empty_reachable_set() {
-        let mut interner = crate::name::ModuleSourceInterner::new();
+        let mut interner = crate::module_source::ModuleSourceInterner::new();
         let call_graph = IndexMap::default();
         let entry = free_fn(&mut interner, "run");
         let reachable = compute_reachable(&call_graph, &entry);
@@ -3025,7 +3029,7 @@ mod tests {
 
     #[test]
     fn test_transitive_reachability() {
-        let mut interner = crate::name::ModuleSourceInterner::new();
+        let mut interner = crate::module_source::ModuleSourceInterner::new();
         let mut call_graph = IndexMap::default();
         call_graph.insert(
             free_fn(&mut interner, "run"),

@@ -5,7 +5,7 @@
 //! These methods are part of `FunctionTranslator`; see `translate.rs` for
 //! the struct definition and the primary translation dispatch.
 
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{CallArg, TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
@@ -93,7 +93,7 @@ impl FunctionTranslator<'_, '_> {
     /// Follows the newtype chain for chained newtypes (C → B → A → Point).
     fn resolve_newtype_method(
         &self,
-        module_source: &crate::name::ModuleSource,
+        module_source: &crate::module_source::ModuleSource,
         method_info: &crate::name::LocalMethodName,
     ) -> Option<crate::wir::WirFuncId> {
         let struct_name = &method_info.base_struct_name;

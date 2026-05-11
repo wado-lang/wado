@@ -1,6 +1,7 @@
 use crate::hashmap::IndexMap;
 
-use crate::name::{LocalMethodName, ModuleSource};
+use crate::module_source::ModuleSource;
+use crate::name::LocalMethodName;
 use crate::tir::FunctionRef;
 use crate::tir::{
     CallArg, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirField,

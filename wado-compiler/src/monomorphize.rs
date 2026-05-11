@@ -21,7 +21,8 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::name::{FreeFunctionName, ModuleSource};
+use crate::module_source::ModuleSource;
+use crate::name::FreeFunctionName;
 
 /// Returns the key used to store/look up a generic function in the global function map.
 ///

@@ -8,7 +8,8 @@ use std::rc::Rc;
 
 use crate::hashmap::IndexSet;
 
-use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_local_trait_method};
+use crate::module_source::ModuleSource;
+use crate::name::{LocalMethodName, MethodName, mangle_local_trait_method};
 use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr, TirExprKind,

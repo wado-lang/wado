@@ -6,7 +6,7 @@
 //! operands eagerly.
 
 use crate::flat_package::FlatPackage;
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, TirBlock, TirExpr, TirExprKind, TirStmtKind, TypeId,
     TypeTable,

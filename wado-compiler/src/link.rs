@@ -18,7 +18,7 @@ use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::package::Package;
 use crate::tir::TypeTable;
 use crate::wir_build::component_plan;

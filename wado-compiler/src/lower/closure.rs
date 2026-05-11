@@ -4,7 +4,8 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::name::{LocalMethodName, MethodName, ModuleSource};
+use crate::module_source::ModuleSource;
+use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
     CallArg, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType, TirBlock,
     TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirImpl, TirLocal, TirModule,

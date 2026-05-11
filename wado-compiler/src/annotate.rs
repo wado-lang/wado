@@ -17,7 +17,7 @@ use crate::compiler_host::{CompilerHost, LogLevel};
 use crate::hashmap::IndexMap;
 use crate::loader;
 use crate::logger::{Bail, Logger};
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::resolver::Resolver;
 use crate::resolver::orchestration::AnnotateState;
 use crate::symbol::{Symbol, SymbolKey, SymbolTable};
@@ -50,7 +50,7 @@ pub struct Annotated {
     /// methods — a nested `borrow_mut` will panic. The intended
     /// pattern is `annotated.interner.borrow_mut().<one method call>`,
     /// dropping the borrow at the statement boundary.
-    pub interner: std::rc::Rc<std::cell::RefCell<crate::name::ModuleSourceInterner>>,
+    pub interner: std::rc::Rc<std::cell::RefCell<crate::module_source::ModuleSourceInterner>>,
     /// Per-module structural index (name spans, write targets, span lookup).
     /// Built once per [`Module`] in [`annotate_loaded`]. LSP queries (and
     /// the in-tree [`name_span_of`] / [`span_of_key`] helpers) consult this

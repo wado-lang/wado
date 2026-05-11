@@ -4,7 +4,8 @@ use crate::hashmap::IndexMap;
 
 use crate::ast::{self, Expr, Item, Type};
 use crate::compiler_host::CompilerHost;
-use crate::name::{LocalMethodName, MethodName, ModuleSource};
+use crate::module_source::ModuleSource;
+use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable,
 };

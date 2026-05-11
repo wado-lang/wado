@@ -24,7 +24,7 @@
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{
     EffectRef, ResolvedType, TirExpr, TirExprKind, TirHandlerBinding, TypeId, TypeTable,
 };

@@ -3,7 +3,8 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::name::{ModuleSource, mangle_generic_name};
+use crate::module_source::ModuleSource;
+use crate::name::mangle_generic_name;
 use crate::tir::{
     MonomorphInfo, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField,
     TirFunction, TirLocal, TirModule, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,

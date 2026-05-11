@@ -7,7 +7,8 @@
 
 use crate::hashmap::IndexSet;
 
-use crate::name::{LocalMethodName, ModuleSource};
+use crate::module_source::ModuleSource;
+use crate::name::LocalMethodName;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
@@ -343,7 +344,7 @@ pub fn param_local(name: &str, type_id: TypeId, is_mut: bool) -> TirLocal {
 pub fn generic_static_call(
     struct_name: &str,
     method_name: &str,
-    module_source: crate::name::ModuleSource,
+    module_source: crate::module_source::ModuleSource,
     type_args: Vec<TypeId>,
     args: Vec<TirExpr>,
     return_type: TypeId,
@@ -386,7 +387,7 @@ pub fn generic_method_call(
     receiver: TirExpr,
     struct_name: &str,
     method_name: &str,
-    method_module_source: crate::name::ModuleSource,
+    method_module_source: crate::module_source::ModuleSource,
     args: Vec<TirExpr>,
     return_type: TypeId,
 ) -> TirExpr {

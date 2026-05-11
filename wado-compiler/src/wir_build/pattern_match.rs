@@ -629,7 +629,7 @@ impl FunctionTranslator<'_, '_> {
     fn variant_case_indexer(
         &self,
         variant_name: &str,
-        module_source: &crate::name::ModuleSource,
+        module_source: &crate::module_source::ModuleSource,
     ) -> Option<CaseIndexer> {
         let fq = format!("{module_source}//{variant_name}");
         let variant_type_id = self.ctx.type_map.get(&fq)?;

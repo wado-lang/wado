@@ -19,7 +19,7 @@ pub mod serde_synth;
 pub mod template;
 pub mod traits;
 
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::package::Package;
 use crate::resolver::trait_env::{SynthesisedImpls, TraitEnv};
 use crate::tir::ResolvedType;

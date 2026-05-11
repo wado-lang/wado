@@ -7,7 +7,8 @@ use std::rc::Rc;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::flat_package::FlatPackage;
-use crate::name::{ModuleSource, StructName};
+use crate::module_source::ModuleSource;
+use crate::name::StructName;
 use crate::tir::{TirFunction, TypeId, TypeTable};
 use crate::wir::{
     CanonicalIntrinsic, WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction,

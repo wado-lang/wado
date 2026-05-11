@@ -104,7 +104,7 @@ use std::rc::Rc;
 
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
     TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,

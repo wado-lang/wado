@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use crate::annotate::Annotated;
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexSet;
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirField, TirModule, TypeId, TypeTable,
 };

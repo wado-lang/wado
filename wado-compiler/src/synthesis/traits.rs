@@ -14,7 +14,8 @@ use std::rc::Rc;
 
 use crate::hashmap::IndexSet;
 
-use crate::name::{LocalMethodName, MethodName, ModuleSource};
+use crate::module_source::ModuleSource;
+use crate::name::{LocalMethodName, MethodName};
 use crate::package::Package;
 use crate::resolver::trait_env::TraitEnv;
 use crate::tir::{

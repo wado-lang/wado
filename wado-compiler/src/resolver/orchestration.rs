@@ -31,7 +31,8 @@ use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::CompilerHost;
 use crate::component_model::WasiRegistry;
 use crate::logger::{Bail, Logger};
-use crate::name::{self as name, ModuleSource};
+use crate::module_source::ModuleSource;
+use crate::name::{self as name};
 use crate::symbol::{Symbol, SymbolKey, SymbolTable};
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::world_registry::WorldRegistry;
@@ -83,7 +84,7 @@ pub(crate) struct AnnotateState {
     /// `ModuleSource` interner shared across phases. `Rc<RefCell<>>` so
     /// `&self` resolver methods can `borrow_mut()` it when constructing
     /// new module sources during name resolution.
-    pub(crate) interner: Rc<RefCell<crate::name::ModuleSourceInterner>>,
+    pub(crate) interner: Rc<RefCell<crate::module_source::ModuleSourceInterner>>,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -99,7 +100,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         logger: &'a Logger<'a, H>,
         included_files: &'a IndexMap<[String; 2], Vec<u8>>,
         invocations: crate::kiln::InvocationIndex,
-        interner: Rc<RefCell<crate::name::ModuleSourceInterner>>,
+        interner: Rc<RefCell<crate::module_source::ModuleSourceInterner>>,
     ) -> Result<(IndexMap<ModuleSource, TirModule>, Arc<TraitEnv>), Bail> {
         let state = Self::annotate_modules(
             symbols,
@@ -131,7 +132,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         entry_module_source: &ModuleSource,
         logger: &'a Logger<'a, H>,
         invocations: crate::kiln::InvocationIndex,
-        interner: Rc<RefCell<crate::name::ModuleSourceInterner>>,
+        interner: Rc<RefCell<crate::module_source::ModuleSourceInterner>>,
     ) -> Result<AnnotateState, Bail> {
         let invocations = Rc::new(invocations);
         // Create a shared type table wrapped in Rc<RefCell<>> for cross-module sharing
@@ -983,7 +984,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// Returns `(local_name -> module_source, local_name -> original_name)`.
     /// The `original_name` is different from `local_name` when `use { Foo as Bar }` is used.
     pub(super) fn build_imported_type_sources(
-        interner: &mut crate::name::ModuleSourceInterner,
+        interner: &mut crate::module_source::ModuleSourceInterner,
         module: &Module,
         from_module: &ModuleSource,
         entry_module: Option<&ModuleSource>,

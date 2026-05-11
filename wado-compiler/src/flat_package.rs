@@ -11,7 +11,8 @@ use std::rc::Rc;
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{LocalMethodName, ModuleSource};
+use crate::module_source::ModuleSource;
+use crate::name::LocalMethodName;
 use crate::tir::{
     ClosureFunctor, TirEnum, TirFlags, TirFunction, TirGlobal, TirImport, TirStruct, TirTest,
     TirVariantDecl, TypeId, TypeTable,

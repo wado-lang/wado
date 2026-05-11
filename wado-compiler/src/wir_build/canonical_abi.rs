@@ -156,7 +156,7 @@ impl FunctionTranslator<'_, '_> {
             | ResolvedType::Variant { module_source, .. } => module_source,
             _ => return "cli".to_string(),
         };
-        if let crate::name::ModuleSource::Wasi { interface } = module_source {
+        if let crate::module_source::ModuleSource::Wasi { interface } = module_source {
             // interface format is "{package}/..." (e.g., "http/types.wado")
             interface.split('/').next().unwrap_or("cli").to_string()
         } else {

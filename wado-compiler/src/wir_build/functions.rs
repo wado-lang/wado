@@ -2,7 +2,7 @@
 //! registers their types and creates `WirFunction` stubs (bodies filled later).
 
 use crate::hashmap::IndexMap;
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{TirFunction, TypeTable};
 use crate::wir::{
     CanonicalIntrinsic, WirFunction, WirGlobal, WirImport, WirImportDesc, WirMeta, WirName, WirType,

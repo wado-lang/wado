@@ -23,7 +23,7 @@ use crate::ast::{
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
 use crate::logger::Logger;
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::synthesis::kiln_synth::KILN_GENERATOR_WORLD;
 use crate::token::Span;
 

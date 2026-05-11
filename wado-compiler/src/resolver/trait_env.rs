@@ -10,7 +10,7 @@ use std::sync::Arc;
 use crate::ast::{self, Item, Module, Type};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{TypeId, TypeTable};
 
 use super::Resolver;
@@ -844,7 +844,7 @@ mod tests {
 
     fn make_type_decl_index(local_names: &[&str]) -> IndexMap<String, ModuleSource> {
         let mut m = IndexMap::default();
-        let mut interner = crate::name::ModuleSourceInterner::new();
+        let mut interner = crate::module_source::ModuleSourceInterner::new();
         let entry = interner.entry_point("test.wado");
         for &name in local_names {
             m.insert(name.to_string(), entry.clone());
@@ -871,13 +871,13 @@ mod tests {
 
     #[test]
     fn test_is_user_local_entry_point() {
-        let mut interner = crate::name::ModuleSourceInterner::new();
+        let mut interner = crate::module_source::ModuleSourceInterner::new();
         assert!(is_user_local(&interner.entry_point("main.wado")));
     }
 
     #[test]
     fn test_is_user_local_local_path() {
-        let mut interner = crate::name::ModuleSourceInterner::new();
+        let mut interner = crate::module_source::ModuleSourceInterner::new();
         assert!(is_user_local(&interner.local("./lib.wado")));
     }
 
@@ -893,7 +893,7 @@ mod tests {
 
     #[test]
     fn test_is_user_local_remote_is_foreign() {
-        let mut interner = crate::name::ModuleSourceInterner::new();
+        let mut interner = crate::module_source::ModuleSourceInterner::new();
         assert!(!is_user_local(
             &interner.remote("https://example.com/lib.wado")
         ));

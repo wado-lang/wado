@@ -23,7 +23,7 @@ mod wide_int;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::TirModule;
 
 use boxing::BoxLowerer;

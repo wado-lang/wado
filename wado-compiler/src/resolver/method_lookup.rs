@@ -4,7 +4,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, BinaryOp, Expr, Item, Literal, Type, UnaryOp};
 use crate::compiler_host::CompilerHost;
-use crate::name::{LocalMethodName, MethodName, ModuleSource};
+use crate::module_source::ModuleSource;
+use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
 };
@@ -2809,7 +2810,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         method_name: &str,
         assoc_type_name: &str,
         expected_index_type: Option<TypeId>,
-    ) -> Option<(TypeId, ast::SelfKind, String, crate::name::ModuleSource)> {
+    ) -> Option<(
+        TypeId,
+        ast::SelfKind,
+        String,
+        crate::module_source::ModuleSource,
+    )> {
         // Check cache first (include expected_index_type in key)
         let cache_key = (
             struct_name.to_string(),

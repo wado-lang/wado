@@ -2,7 +2,8 @@
 
 use crate::ast::{self, Item};
 use crate::compiler_host::CompilerHost;
-use crate::name::{LocalMethodName, MethodName, ModuleSource};
+use crate::module_source::ModuleSource;
+use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirExpr, TirExprKind,
     TypeId, TypeTable,

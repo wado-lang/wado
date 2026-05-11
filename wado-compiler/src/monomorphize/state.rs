@@ -3,7 +3,8 @@
 use std::sync::Arc;
 
 use crate::hashmap::IndexMap;
-use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
+use crate::module_source::ModuleSource;
+use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
 use crate::resolver::trait_env::TraitEnv;
 use crate::tir::{InstantiationKey, ResolvedType, TypeId, TypeTable};
 

@@ -24,7 +24,7 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::package::Package;
 use crate::tir::{ResolvedType, TirFunction, TirModule, TypeTable};
 
@@ -522,7 +522,7 @@ mod tests {
     struct LiftCtxFixture {
         registry: WasiRegistry,
         type_table: std::cell::RefCell<TypeTable>,
-        interner: std::cell::RefCell<crate::name::ModuleSourceInterner>,
+        interner: std::cell::RefCell<crate::module_source::ModuleSourceInterner>,
     }
 
     impl LiftCtxFixture {
@@ -539,7 +539,7 @@ mod tests {
             Self {
                 registry: WasiRegistry::new(),
                 type_table: std::cell::RefCell::new(tt),
-                interner: std::cell::RefCell::new(crate::name::ModuleSourceInterner::new()),
+                interner: std::cell::RefCell::new(crate::module_source::ModuleSourceInterner::new()),
             }
         }
 
@@ -836,7 +836,7 @@ mod tests {
             ModuleSource::prelude(),
         );
         let type_table = std::cell::RefCell::new(tt);
-        let interner = std::cell::RefCell::new(crate::name::ModuleSourceInterner::new());
+        let interner = std::cell::RefCell::new(crate::module_source::ModuleSourceInterner::new());
         let ctx = LiftContext {
             wasi_registry: registry,
             type_table: &type_table,
@@ -1069,7 +1069,7 @@ mod tests {
     #[test]
     fn param_needs_lifting_enum() {
         let mut tt = TypeTable::new();
-        let mut interner = crate::name::ModuleSourceInterner::new();
+        let mut interner = crate::module_source::ModuleSourceInterner::new();
         let e = tt.intern(crate::tir::ResolvedType::Enum {
             name: "Color".to_string(),
             module_source: interner.entry_point("<test>"),
