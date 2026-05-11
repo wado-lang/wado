@@ -749,7 +749,10 @@ mod tests {
             (ModuleSource::wasi_clocks(), i.wasi("clocks")),
             (ModuleSource::wasi_filesystem(), i.wasi("filesystem")),
             (ModuleSource::wasi_http(), i.wasi("http")),
-            (ModuleSource::entry_point_synthetic(), i.entry_point("<entry>")),
+            (
+                ModuleSource::entry_point_synthetic(),
+                i.entry_point("<entry>"),
+            ),
             (ModuleSource::entry_point_stdin(), i.entry_point("<stdin>")),
             (
                 ModuleSource::entry_point_uninitialized(),
