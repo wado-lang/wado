@@ -9,17 +9,17 @@ struct core:prelude/string.wado//String {  // TypeId(1)
     mut used: i32,
 }
 
-variant core:prelude/types.wado//Result<i32,String> {  // TypeId(2)
+variant core:prelude/types.wado//Result<i32,core:prelude/string.wado/String> {  // TypeId(2)
     Ok(i32),
     Err(ref "core:prelude/string.wado//String"),
 }
 
-struct core:prelude/types.wado//Result<i32,String>::Ok {  // TypeId(3)
+struct core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok {  // TypeId(3)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct core:prelude/types.wado//Result<i32,String>::Err {  // TypeId(4)
+struct core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err {  // TypeId(4)
     discriminant: i32,
     payload_0: ref "core:prelude/string.wado//String",
 }
@@ -82,7 +82,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "wado-compiler/tests/fixtures/result_if_let_err.wado/run"() with Stdout {
-    let r: ref "core:prelude/types.wado//Result<i32,String>";
+    let r: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
     let e: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/string.wado//String";
     let message_5: ref "core:prelude/string.wado//String";
@@ -93,9 +93,9 @@ fn "wado-compiler/tests/fixtures/result_if_let_err.wado/run"() with Stdout {
     let rx_13: i32;
     let tx_14: i32;
     let handle_15: i32;
-    r = struct.new "core:prelude/types.wado//Result<i32,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bad"), used: 3 } };
-    if ref.test "core:prelude/types.wado//Result<i32,String>::Err"(r) {
-        e = ref.cast "core:prelude/types.wado//Result<i32,String>::Err"(r).payload_0;
+    r = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bad"), used: 3 } };
+    if ref.test "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err"(r) {
+        e = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err"(r).payload_0;
         message_5 = __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
             "core:prelude/string.wado/String::push"(__local_2, 69);

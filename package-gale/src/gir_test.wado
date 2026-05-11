@@ -1,0 +1,343 @@
+//! Smoke tests for the GIR type surface.
+//!
+//! These tests do not exercise lowering or emission — those land
+//! in `lower_test.wado` (Phase 2) and the emit-side tests
+//! (Phase 4). The point here is to confirm that every `pub` GIR
+//! type is reachable, constructible, and round-trips through
+//! pattern matching.
+
+use {
+    LoweredGrammar,
+    Rule,
+    RuleHeader,
+    SimpleRule,
+    MultiAltRule,
+    LeftRecursiveRule,
+    LrDispatchData,
+    FollowVariant,
+    MultiAltDispatch,
+    DirectDispatch,
+    DispatchBranch,
+    TournamentDispatch,
+    AltBody,
+    Op,
+    TokenOp,
+    LiteralOp,
+    RuleCallOp,
+    WildcardOp,
+    ExcludedOp,
+    RepeatOp,
+    RepeatStrategy,
+    WithFollowSubtractionStrategy,
+    NonGreedyStrategy,
+    OptionalLookaheadStrategy,
+    GroupShape,
+    SimpleCstShape,
+    TokenOnlyShape,
+    SingleAltShape,
+    GeneralShape,
+    ScanBody,
+    ScanElement,
+    ScanTokenElem,
+    ScanRuleCallElem,
+    ScanExcludedElem,
+    ScanRepeatElem,
+    ScanRepeatStrategy,
+    FieldDecl,
+    FieldKind,
+    KindSet,
+    rule_header,
+} from "./gir.wado";
+use { Visibility, RepeatKind } from "./ir.wado";
+
+fn empty_alt_body(idx: i32) -> AltBody {
+    return AltBody {
+        alt_index: idx,
+        case_name: "",
+        struct_name: "",
+        ops: [],
+        fields: [],
+        group_index_start: 0,
+        prefix_self_ref_min_prec: 0,
+    };
+}
+
+fn empty_scan_body() -> ScanBody {
+    return ScanBody { elements: [] };
+}
+
+fn empty_header(name: &String) -> RuleHeader {
+    return RuleHeader {
+        name: *name,
+        snake_name: *name,
+        field_name: *name,
+        type_name: `{*name}Node`,
+        visibility: Visibility::Default,
+        variant_of: null,
+        case_names: [],
+        alt_gc_starts: [],
+    };
+}
+
+fn direct_single_alt(idx: i32) -> MultiAltDispatch {
+    let branch = DispatchBranch { tokens: [], alt_index: idx };
+    let mut branches: Array<DispatchBranch> = [];
+    branches.push(branch);
+    return MultiAltDispatch::Direct(DirectDispatch { branches });
+}
+
+test "LoweredGrammar empty construction" {
+    let g = LoweredGrammar {
+        name: "Empty",
+        source_files: [],
+        options: [],
+        named_actions: [],
+        lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        lit_tokens: [],
+        parser_rules: [],
+        variant_rules: [],
+        kind_sets: [],
+    };
+    assert g.name == "Empty";
+    assert g.parser_rules.is_empty();
+    assert g.variant_rules.is_empty();
+    assert g.kind_sets.is_empty();
+    assert g.mode_names.len() == 1;
+}
+
+test "Rule::Simple round-trip" {
+    let rule = Rule::Simple(SimpleRule {
+        header: empty_header(&"value"),
+        body: empty_alt_body(0),
+        scan_body: empty_scan_body(),
+    });
+    let header = rule_header(&rule);
+    assert header.name == "value";
+    if let Simple(s) = &rule {
+        assert s.body.alt_index == 0;
+    } else {
+        panic("expected Simple");
+    }
+}
+
+test "Op::Token round-trip" {
+    let token = Op::Token(TokenOp { kind: "TK_ID", field: "id" });
+    if let Token(t) = &token {
+        assert t.kind == "TK_ID";
+    } else {
+        panic("Token");
+    }
+}
+
+test "Op::Literal round-trip" {
+    let lit = Op::Literal(LiteralOp { kind: "LIT_PLUS", field: "plus" });
+    if let Literal(l) = &lit {
+        assert l.kind == "LIT_PLUS";
+    } else {
+        panic("Literal");
+    }
+}
+
+test "Op::RuleCall preserves variant_id and min_prec" {
+    let call = Op::RuleCall(RuleCallOp {
+        target_name: "expr",
+        target_snake: "expr",
+        variant_id: null,
+        min_prec_arg: null,
+        field: "expr",
+    });
+    if let RuleCall(r) = &call {
+        assert r.target_snake == "expr";
+        assert r.variant_id matches { None };
+        assert r.min_prec_arg matches { None };
+    } else {
+        panic("RuleCall");
+    }
+}
+
+test "Op::Wildcard / Excluded round-trip" {
+    let any = Op::Wildcard(WildcardOp { field: "wildcard" });
+    let excl = Op::Excluded(ExcludedOp {
+        kinds: ["TK_FOO", "TK_BAR"],
+        field: "not_foo",
+    });
+
+    if let Wildcard(w) = &any {
+        assert w.field == "wildcard";
+    } else { panic("Wildcard"); }
+    if let Excluded(e) = &excl {
+        assert e.kinds.len() == 2;
+    } else { panic("Excluded"); }
+}
+
+test "Op::Repeat carries inner element and strategy" {
+    let inner = Op::Token(TokenOp { kind: "TK_X", field: "x" });
+    let rep = Op::Repeat(RepeatOp {
+        kind: RepeatKind::Star,
+        body: inner,
+        strategy: RepeatStrategy::Plain,
+        field: "x_list",
+    });
+    if let Repeat(r) = &rep {
+        if let Star = r.kind {
+            assert true;
+        } else {
+            panic("expected Star");
+        }
+    } else {
+        panic("Repeat");
+    }
+}
+
+test "RepeatStrategy variants round-trip" {
+    let plain = RepeatStrategy::Plain;
+    let with_follow = RepeatStrategy::WithFollowSubtraction(
+        WithFollowSubtractionStrategy { effective_first: ["TK_A"] }
+    );
+    let non_greedy = RepeatStrategy::NonGreedy(NonGreedyStrategy {
+        exit_first: ["TK_END"],
+        exit_second: [],
+    });
+    let lookahead_strategy = OptionalLookaheadStrategy {
+        sigs: [[["TK_X"], ["TK_Y"]]],
+    };
+    let lookahead = RepeatStrategy::OptionalLookahead(lookahead_strategy);
+    let scan_guard = RepeatStrategy::OptionalScanGuard;
+    let suppressed = RepeatStrategy::Suppressed;
+
+    if let Plain = &plain { assert true; } else { panic("Plain"); }
+    if let WithFollowSubtraction(s) = &with_follow {
+        assert s.effective_first[0] == "TK_A";
+    } else { panic("WithFollowSubtraction"); }
+    if let NonGreedy(s) = &non_greedy {
+        assert s.exit_first[0] == "TK_END";
+    } else { panic("NonGreedy"); }
+    if let OptionalLookahead(s) = &lookahead {
+        assert s.sigs[0][0][0] == "TK_X";
+    } else { panic("OptionalLookahead"); }
+    if let OptionalScanGuard = &scan_guard { assert true; } else { panic("OptionalScanGuard"); }
+    if let Suppressed = &suppressed { assert true; } else { panic("Suppressed"); }
+}
+
+test "GroupShape variants round-trip" {
+    let s = GroupShape::SimpleCst(SimpleCstShape {
+        type_name: "StmtOrExpr",
+        field: "stmt_or_expr",
+    });
+    let t = GroupShape::TokenOnly(TokenOnlyShape { field: "op" });
+    let a = GroupShape::SingleAlt(SingleAltShape {
+        struct_name: "Pair",
+        field: "pair",
+        owner_rule: "obj",
+    });
+    let g = GroupShape::General(GeneralShape {
+        variant_type: "ExprGroup0",
+        alt_struct_names: ["ExprGroup0Alt0"],
+        field: "group0",
+        group_index: 0,
+    });
+    let tr = GroupShape::Transparent;
+
+    if let SimpleCst(x) = &s { assert x.type_name == "StmtOrExpr"; } else { panic("SimpleCst"); }
+    if let TokenOnly(x) = &t { assert x.field == "op"; } else { panic("TokenOnly"); }
+    if let SingleAlt(x) = &a { assert x.owner_rule == "obj"; } else { panic("SingleAlt"); }
+    if let General(x) = &g { assert x.group_index == 0; } else { panic("General"); }
+    if let Transparent = &tr { assert true; } else { panic("Transparent"); }
+}
+
+test "MultiAltDispatch flat variants round-trip" {
+    let direct = direct_single_alt(0);
+    let tournament = MultiAltDispatch::Tournament(TournamentDispatch { alts: [0, 1] });
+
+    if let Direct(d) = &direct { assert d.branches.len() == 1; } else { panic("Direct"); }
+    if let Tournament(t) = &tournament { assert t.alts.len() == 2; } else { panic("Tournament"); }
+}
+
+test "ScanElement variants round-trip" {
+    let token = ScanElement::Token(ScanTokenElem { kind: "TK_X" });
+    let call = ScanElement::RuleCall(ScanRuleCallElem {
+        target_snake: "expr",
+        variant_id: Option::<i32>::Some(2),
+        min_prec_arg: 0,
+    });
+    let any = ScanElement::Wildcard;
+    let excl = ScanElement::Excluded(ScanExcludedElem { kinds: ["TK_A"] });
+    let inner_scan = ScanElement::Token(ScanTokenElem { kind: "TK_X" });
+    let rep = ScanElement::Repeat(ScanRepeatElem {
+        kind: RepeatKind::Plus,
+        body: inner_scan,
+        strategy: ScanRepeatStrategy::Plain,
+    });
+
+    if let Token(t) = &token { assert t.kind == "TK_X"; } else { panic("Token"); }
+    if let RuleCall(c) = &call {
+        if let Some(id) = c.variant_id { assert id == 2; } else { panic("variant_id"); }
+    } else { panic("RuleCall"); }
+    if let Wildcard = &any { assert true; } else { panic("Wildcard"); }
+    if let Excluded(e) = &excl { assert e.kinds[0] == "TK_A"; } else { panic("Excluded"); }
+    if let Repeat(r) = &rep {
+        if let Plus = r.kind { assert true; } else { panic("Plus"); }
+    } else { panic("Repeat"); }
+}
+
+test "FollowVariant carries scan/parse usage" {
+    let v = FollowVariant {
+        id: 7,
+        rule_name: "ws",
+        mask: ["TK_SPACE"],
+        scan_used: true,
+        parse_used: false,
+    };
+    assert v.id == 7;
+    assert v.scan_used == true;
+    assert v.parse_used == false;
+    assert v.mask.len() == 1;
+}
+
+test "FieldDecl and KindSet" {
+    let f = FieldDecl {
+        name: "expr_2",
+        type_str: "Option<ExprNode>",
+        kind: FieldKind::Optional,
+    };
+    if let Optional = &f.kind { assert true; } else { panic("Optional"); }
+    assert f.name == "expr_2";
+
+    let ks = KindSet { id: 0, tokens: ["TK_A", "TK_B"] };
+    assert ks.id == 0;
+    assert ks.tokens.len() == 2;
+}
+
+test "rule_header reaches every Rule variant" {
+    let s = Rule::Simple(SimpleRule {
+        header: empty_header(&"a"),
+        body: empty_alt_body(0),
+        scan_body: empty_scan_body(),
+    });
+    let m = Rule::MultiAlt(MultiAltRule {
+        header: empty_header(&"b"),
+        alts: [empty_alt_body(0)],
+        scan_alts: [empty_scan_body()],
+        dispatch: direct_single_alt(0),
+        scan_dispatch: direct_single_alt(0),
+    });
+    let lr_atom = MultiAltRule {
+        header: empty_header(&"c_atom"),
+        alts: [empty_alt_body(0)],
+        scan_alts: [empty_scan_body()],
+        dispatch: direct_single_alt(0),
+        scan_dispatch: direct_single_alt(0),
+    };
+    let lr = Rule::LeftRecursive(LeftRecursiveRule {
+        header: empty_header(&"c"),
+        atom: lr_atom,
+        lr_alts: [],
+        lr_dispatch: LrDispatchData { valid_lr_alts: [], groups: [] },
+    });
+
+    assert rule_header(&s).name == "a";
+    assert rule_header(&m).name == "b";
+    assert rule_header(&lr).name == "c";
+}

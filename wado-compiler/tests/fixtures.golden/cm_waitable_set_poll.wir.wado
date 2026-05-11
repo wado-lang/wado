@@ -147,7 +147,7 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(21)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>] {  // TypeId(22)
+struct tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>] {  // TypeId(22)
     mut 0: i32,
     mut 1: i32,
 }
@@ -231,7 +231,7 @@ type "functype//wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle" =
 
 type "functype//wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(42)
 
-type "functype//wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]";  // TypeId(43)
+type "functype//wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";  // TypeId(43)
 
 type "functype//wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_export__handle" = fn(i32);  // TypeId(44)
 
@@ -545,8 +545,8 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"() {
     let __packed_311: i64;
     let __ptr_312: i32;
     let __len_313: i32;
-    let __pattern_temp_2: ref "tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]";
-    let __pattern_temp_4: ref "tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_2: ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_4: ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
     ws = "wasi/waitable-set-new"();
     event = "core:internal/cm_waitable_set_poll"(ws);
     if ref.is_null(event) == 0 {
@@ -1239,7 +1239,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Respons
     __lifted_result_7 = builtin::load_i32(__outptr + 0);
     __lifted_result_8 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_7, 1: __lifted_result_8 };
+    return struct.new "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_7, 1: __lifted_result_8 };
 }
 
 fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_export__handle"(request) {

@@ -47,16 +47,16 @@ struct wado-compiler/tests/fixtures/cross_module_type_identity.wado//Shape::Rect
     payload_0: ref "wado-compiler/tests/fixtures/cross_module_type_identity.wado//RectData",
 }
 
-array builtin::array<Shape> (mut ref "wado-compiler/tests/fixtures/cross_module_type_identity.wado//Shape");  // TypeId(9)
+array builtin::array<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape> (mut ref "wado-compiler/tests/fixtures/cross_module_type_identity.wado//Shape");  // TypeId(9)
 
 struct core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape> {  // TypeId(10)
-    mut repr: ref builtin::array<Shape>,
+    mut repr: ref "builtin::array<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>",
     mut used: i32,
     mut index: i32,
 }
 
-struct core:prelude//Array<Shape> {  // TypeId(11)
-    mut repr: ref builtin::array<Shape>,
+struct core:prelude//Array<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape> {  // TypeId(11)
+    mut repr: ref "builtin::array<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>",
     mut used: i32,
 }
 
@@ -82,7 +82,7 @@ type "functype//wado-compiler/tests/fixtures/cross_module_type_identity.wado/run
 
 type "functype//wado-compiler/tests/fixtures/cross_module_type_identity.wado/__cm_export__run" = fn();  // TypeId(22)
 
-type "functype//./sub/cross_module_type_identity_util.wado/sum_shapes" = fn(ref "core:prelude//Array<Shape>") -> i32;  // TypeId(23)
+type "functype//./sub/cross_module_type_identity_util.wado/sum_shapes" = fn(ref "core:prelude//Array<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>") -> i32;  // TypeId(23)
 
 type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(24)
 
@@ -136,16 +136,16 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/cross_module_type_identity.wado/run"() {
-    let __b_0: ref "core:prelude//Array<Shape>";
-    let shapes: ref "core:prelude//Array<Shape>";
+    let __b_0: ref "core:prelude//Array<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>";
+    let shapes: ref "core:prelude//Array<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>";
     let result: i32;
     let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let f_18: ref "core:prelude/format.wado//Formatter";
     let f_23: ref "core:prelude/format.wado//Formatter";
-    shapes = __seq_lit: block -> ref "core:prelude//Array<Shape>" {
-        __b_0 = struct.new "core:prelude//Array<Shape>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/cross_module_type_identity.wado//Shape">(struct.new "wado-compiler/tests/fixtures/cross_module_type_identity.wado//Shape::Circle" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/cross_module_type_identity.wado//CircleData" { radius: 10 } }, struct.new "wado-compiler/tests/fixtures/cross_module_type_identity.wado//Shape::Rect" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/cross_module_type_identity.wado//RectData" { width: 5 } }), used: 2 };
+    shapes = __seq_lit: block -> ref "core:prelude//Array<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>" {
+        __b_0 = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/cross_module_type_identity.wado//Shape">(struct.new "wado-compiler/tests/fixtures/cross_module_type_identity.wado//Shape::Circle" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/cross_module_type_identity.wado//CircleData" { radius: 10 } }, struct.new "wado-compiler/tests/fixtures/cross_module_type_identity.wado//Shape::Rect" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/cross_module_type_identity.wado//RectData" { width: 5 } }), used: 2 };
         break __seq_lit: __b_0;
         unreachable;
     };
@@ -201,7 +201,7 @@ fn "./sub/cross_module_type_identity_util.wado/sum_shapes"(shapes) {
     let c: ref "wado-compiler/tests/fixtures/cross_module_type_identity.wado//CircleData";
     let r: ref "wado-compiler/tests/fixtures/cross_module_type_identity.wado//RectData";
     let __pattern_temp_0: ref null "core:prelude/types.wado//Box<Shape>";
-    let arr: ref "core:prelude//Array<Shape>";
+    let arr: ref "core:prelude//Array<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>";
     total = 0;
     __iter_2 = __inline__wado_compiler_tests_fixtures_cross_module_type_identity_wado_Shape_IntoIterator__into_iter_0: block -> ref "core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>" {
         arr = shapes;

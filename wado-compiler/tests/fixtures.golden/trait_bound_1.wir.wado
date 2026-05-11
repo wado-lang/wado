@@ -24,10 +24,10 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-array builtin::array<Box<i32>> (mut ref "core:prelude/types.wado//Box<i32>");  // TypeId(4)
+array builtin::array<core:prelude/types.wado/Box<i32>> (mut ref "core:prelude/types.wado//Box<i32>");  // TypeId(4)
 
-struct core:prelude//Array<Box<i32>> {  // TypeId(5)
-    mut repr: ref builtin::array<Box<i32>>,
+struct core:prelude//Array<core:prelude/types.wado/Box<i32>> {  // TypeId(5)
+    mut repr: ref "builtin::array<core:prelude/types.wado/Box<i32>>",
     mut used: i32,
 }
 
@@ -123,8 +123,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 fn "wado-compiler/tests/fixtures/trait_bound_1.wado/trait_bound_array_of_ref"() with Stdout {
     let a: ref "core:prelude/types.wado//Box<i32>";
     let b: ref "core:prelude/types.wado//Box<i32>";
-    let __b: ref "core:prelude//Array<Box<i32>>";
-    let arr: ref "core:prelude//Array<Box<i32>>";
+    let __b: ref "core:prelude//Array<core:prelude/types.wado/Box<i32>>";
+    let arr: ref "core:prelude//Array<core:prelude/types.wado/Box<i32>>";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/string.wado//String";
@@ -139,8 +139,8 @@ fn "wado-compiler/tests/fixtures/trait_bound_1.wado/trait_bound_array_of_ref"() 
     let handle_32: i32;
     a = struct.new "core:prelude/types.wado//Box<i32>" { value: 10 };
     b = struct.new "core:prelude/types.wado//Box<i32>" { value: 20 };
-    arr = __seq_lit: block -> ref "core:prelude//Array<Box<i32>>" {
-        __b = struct.new "core:prelude//Array<Box<i32>>" { repr: array.new_fixed<ref "core:prelude/types.wado//Box<i32>">(a, b), used: 2 };
+    arr = __seq_lit: block -> ref "core:prelude//Array<core:prelude/types.wado/Box<i32>>" {
+        __b = struct.new "core:prelude//Array<core:prelude/types.wado/Box<i32>>" { repr: array.new_fixed<ref "core:prelude/types.wado//Box<i32>">(a, b), used: 2 };
         break __seq_lit: __b;
         unreachable;
     };

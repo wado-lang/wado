@@ -1,0 +1,96 @@
+// Mutual recursion between generic free functions over a recursive
+// variant/struct shape, combined with synthesized `==` over the same
+// recursive shape. At -O3 the inliner walks both as candidates and
+// inlines them into each other until the host thread's stack
+// overflows — unless `find_recursive_functions` correctly detects
+// the mutual cycle.
+//
+// The regression: the inliner keyed its call graph on
+// `MethodInfo::to_mangled_name()` (for methods) and
+// `FuncRef::full_name()` (for callees), both of which derived the
+// struct/type-arg portion from `method_info`'s string-typed fields.
+// Those fields were populated by different paths in the monomorphizer
+// using different mangling functions (qualified vs unqualified
+// `mangle_type_arg_for_generic` vs `mangle_type_name`), so the same
+// logical function appeared under two distinct keys in the call graph.
+// Mutual recursion went undetected and `-O3 inline_threshold = 50`
+// expanded `walk_node<Sum>` ↔ `walk_branch<Sum>` (and synthesized
+// `Node::eq` ↔ `BranchNode::eq`) infinitely.
+
+use { println, Stdout } from "core:cli";
+
+pub trait Visit {
+    fn visit_leaf(&mut self, v: i32);
+}
+
+pub variant Node {
+    Leaf(LeafNode),
+    Branch(BranchNode),
+}
+
+pub struct LeafNode {
+    pub value: i32,
+}
+
+pub struct BranchNode {
+    pub children: Array<Node>,
+}
+
+pub fn walk_node<V: Visit>(v: &mut V, node: &Node) {
+    match node {
+        Leaf(l) => v.visit_leaf(l.value),
+        Branch(b) => walk_branch(v, b),
+    }
+}
+
+pub fn walk_branch<V: Visit>(v: &mut V, b: &BranchNode) {
+    for let c of &b.children {
+        walk_node(v, c);
+    }
+}
+
+struct Sum {
+    pub total: i32,
+}
+
+impl Visit for Sum {
+    fn visit_leaf(&mut self, v: i32) {
+        self.total += v;
+    }
+}
+
+export fn run() with Stdout {
+    let tree = Node::Branch(BranchNode {
+        children: [
+            Node::Leaf(LeafNode { value: 1 }),
+            Node::Branch(BranchNode {
+                children: [
+                    Node::Leaf(LeafNode { value: 2 }),
+                    Node::Leaf(LeafNode { value: 3 }),
+                ],
+            }),
+        ],
+    });
+    let mut sum = Sum { total: 0 };
+    walk_node(&mut sum, &tree);
+
+    // Synthesized Eq over the recursive shape — `Node::eq`
+    // and `BranchNode::eq` form their own mutual cycle that
+    // the inliner must also detect.
+    let same = Node::Branch(BranchNode {
+        children: [
+            Node::Leaf(LeafNode { value: 1 }),
+            Node::Branch(BranchNode {
+                children: [
+                    Node::Leaf(LeafNode { value: 2 }),
+                    Node::Leaf(LeafNode { value: 3 }),
+                ],
+            }),
+        ],
+    });
+    assert tree == same;
+    println(`{sum.total}`);
+}
+
+__DATA__
+{"stdout": "6\n"}

@@ -181,14 +181,14 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(25)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct tuple//[Request, Future<Result<unit,wasi:http/types.wado/ErrorCode>>] {  // TypeId(26)
+struct tuple//[Request, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>] {  // TypeId(26)
     mut 0: i32,
     mut 1: i32,
 }
 
 struct wado-compiler/tests/fixtures/http_request_setter_errors.wado//__Closure_2 {  // TypeId(27)}
 
-struct core:prelude/types.wado//AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>> {  // TypeId(28)
+struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>> {  // TypeId(28)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
@@ -325,7 +325,7 @@ type "functype//wado-compiler/tests/fixtures/http_request_setter_errors.wado/han
 
 type "functype//wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(67)
 
-type "functype//wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> ref "tuple//[Request, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]";  // TypeId(68)
+type "functype//wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> ref "tuple//[Request, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";  // TypeId(68)
 
 type "functype//wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_set_path_with_query" = fn(i32, ref null "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<unit,unit>";  // TypeId(69)
 
@@ -341,7 +341,7 @@ type "functype//wado-compiler/tests/fixtures/http_request_setter_errors.wado/__c
 
 type "functype//wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_set_method" = fn(i32, ref "wasi:http/types.wado//Method") -> ref "core:prelude/types.wado//Result<unit,unit>";  // TypeId(75)
 
-type "functype//wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Client_send" = fn(i32) -> ref "core:prelude/types.wado//AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";  // TypeId(76)
+type "functype//wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Client_send" = fn(i32) -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";  // TypeId(76)
 
 type "functype//wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_lift__Client_send" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(77)
 
@@ -381,7 +381,7 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(95)
 
-type "functype//core:prelude/types.wado/AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(96)
+type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(96)
 
 type "functype//wado-compiler/tests/fixtures/http_request_setter_errors.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(97)
 
@@ -593,7 +593,7 @@ fn "wado-compiler/tests/fixtures/http_request_setter_errors.wado/handle"() with 
     let __packed_184: i64;
     let __ptr_185: i32;
     let __len_186: i32;
-    let __pattern_temp_1: ref "tuple//[Request, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_1: ref "tuple//[Request, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
     headers = "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Fields_new"();
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
@@ -878,7 +878,7 @@ condition: ok_method matches { Ok(_) }
     drop("wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_set_scheme"(out_req, struct.new "wasi:http/types.wado//Scheme" { 0 }));
     drop("wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_set_authority"(out_req, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("localhost"), used: 9 }));
     drop("wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_set_method"(out_req, struct.new "wasi:http/types.wado//Method" { 0 }));
-    result = "core:prelude/types.wado/AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Client_send"(out_req));
+    result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Client_send"(out_req));
     let __fw_write_ptr_2: i32;
     let __fw_handle_2: i32;
     let __fw_result_2: i32;
@@ -1229,7 +1229,7 @@ fn "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__R
     __lifted_result_11 = builtin::load_i32(__outptr + 0);
     __lifted_result_12 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Request, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_11, 1: __lifted_result_12 };
+    return struct.new "tuple//[Request, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_11, 1: __lifted_result_12 };
 }
 
 fn "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_set_path_with_query"(self, path_with_query) with Request {
@@ -1433,7 +1433,7 @@ fn "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__C
     let __subtask_packed: i32;
     __async_outptr = "mem/realloc"(0, 0, 8, 40);
     __subtask_packed = "wasi/wasi:http/Client::send"(request, __async_outptr);
-    return struct.new "core:prelude/types.wado//AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 40, __cm_align: 8, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/http_request_setter_errors.wado//__Closure_2" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/http_request_setter_errors.wado/__closure_wrapper_0") } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 40, __cm_align: 8, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/http_request_setter_errors.wado//__Closure_2" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/http_request_setter_errors.wado/__closure_wrapper_0") } };
 }
 
 fn "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_lift__Client_send"(__outptr) {
@@ -2240,7 +2240,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/types.wado/AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"(self) {
+fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"(self) {
     let handle_1: i32;
     let raw: i32;
     let ws_3: i32;

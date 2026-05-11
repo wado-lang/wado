@@ -1,0 +1,23 @@
+// Module A: defines variant Element with case RuleRef and uses
+// `if let RuleRef(...)` to pattern-match against it. The case names
+// here are intentionally disjoint from module B's so that a flat
+// per-name variant-case map (the legacy bug) collides at lookup
+// time.
+pub variant Element {
+    RuleRef(i32),
+    TokenRef(i32),
+}
+
+pub fn process(e: Element) -> i32 {
+    if let RuleRef(n) = e {
+        return n;
+    }
+    if let TokenRef(n) = e {
+        return n + 1000;
+    }
+    return -1;
+}
+
+pub fn make_rr(n: i32) -> Element {
+    return Element::RuleRef(n);
+}

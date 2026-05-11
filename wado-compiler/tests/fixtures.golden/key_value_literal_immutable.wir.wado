@@ -20,12 +20,12 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-array builtin::array<String> (mut ref "core:prelude/string.wado//String");  // TypeId(3)
+array builtin::array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(3)
 
 array builtin::array<i32> (mut i32);  // TypeId(4)
 
-struct core:prelude//Array<String> {  // TypeId(5)
-    mut repr: ref builtin::array<String>,
+struct core:prelude//Array<core:prelude/string.wado/String> {  // TypeId(5)
+    mut repr: ref "builtin::array<core:prelude/string.wado/String>",
     mut used: i32,
 }
 
@@ -35,7 +35,7 @@ struct core:prelude//Array<i32> {  // TypeId(6)
 }
 
 struct wado-compiler/tests/fixtures/key_value_literal_immutable.wado//FrozenMap<i32> {  // TypeId(7)
-    mut keys: ref "core:prelude//Array<String>",
+    mut keys: ref "core:prelude//Array<core:prelude/string.wado/String>",
     mut values: ref "core:prelude//Array<i32>",
 }
 
@@ -97,13 +97,13 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
 
-type "functype//core:prelude/array.wado/Array<String>::grow" = fn(ref "core:prelude//Array<String>");  // TypeId(37)
+type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>");  // TypeId(37)
 
 type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(38)
 
 type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(39)
 
-type "functype//core:prelude/array.wado/Array<String>::push" = fn(ref "core:prelude//Array<String>", ref "core:prelude/string.wado//String");  // TypeId(40)
+type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(40)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(41)
 
@@ -152,12 +152,12 @@ fn "wado-compiler/tests/fixtures/key_value_literal_immutable.wado/run"() with St
     let __local_24: ref "core:prelude/format.wado//Formatter";
     let __local_25: ref "core:prelude/string.wado//String";
     let __local_26: ref "core:prelude/format.wado//Formatter";
-    let __b_32: ref "core:prelude//Array<String>";
+    let __b_32: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let __b_33: ref "core:prelude//Array<i32>";
     let key_41: ref "core:prelude/string.wado//String";
     let key_44: ref "core:prelude/string.wado//String";
     let key_47: ref "core:prelude/string.wado//String";
-    let self_51: ref "core:prelude//Array<String>";
+    let self_51: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let f_55: ref "core:prelude/format.wado//Formatter";
     let f_60: ref "core:prelude/format.wado//Formatter";
     let f_66: ref "core:prelude/format.wado//Formatter";
@@ -166,24 +166,24 @@ fn "wado-compiler/tests/fixtures/key_value_literal_immutable.wado/run"() with St
     let f_82: ref "core:prelude/format.wado//Formatter";
     let f_88: ref "core:prelude/format.wado//Formatter";
     let f_93: ref "core:prelude/format.wado//Formatter";
-    let __b_97: ref "core:prelude//Array<String>";
+    let __b_97: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let __b_98: ref "core:prelude//Array<i32>";
     let key_106: ref "core:prelude/string.wado//String";
     let key_109: ref "core:prelude/string.wado//String";
-    let self_113: ref "core:prelude//Array<String>";
+    let self_113: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let f_117: ref "core:prelude/format.wado//Formatter";
     let f_122: ref "core:prelude/format.wado//Formatter";
     let message: ref "core:prelude/string.wado//String";
     let rx: i32;
     let tx: i32;
     let handle: i32;
-    let __sroa___b_keys_131: ref "core:prelude//Array<String>";
+    let __sroa___b_keys_131: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let __sroa___b_values_132: ref "core:prelude//Array<i32>";
-    let __sroa___b_keys_133: ref "core:prelude//Array<String>";
+    let __sroa___b_keys_133: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let __sroa___b_values_134: ref "core:prelude//Array<i32>";
     m = __kv_lit: block -> ref "wado-compiler/tests/fixtures/key_value_literal_immutable.wado//FrozenMap<i32>" {
-        __sroa___b_keys_131 = __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__new_literal_2____seq_lit: block -> ref "core:prelude//Array<String>" {
-            __b_32 = struct.new "core:prelude//Array<String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
+        __sroa___b_keys_131 = __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__new_literal_2____seq_lit: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
+            __b_32 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
             break __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__new_literal_2____seq_lit: __b_32;
             unreachable;
         };
@@ -193,20 +193,20 @@ fn "wado-compiler/tests/fixtures/key_value_literal_immutable.wado/run"() with St
             unreachable;
         };
         key_41 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 };
-        "core:prelude/array.wado/Array<String>::push"(__sroa___b_keys_131, key_41);
+        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(__sroa___b_keys_131, key_41);
         "core:prelude/array.wado/Array<i32>::push"(__sroa___b_values_132, 10);
         key_44 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("y"), used: 1 };
-        "core:prelude/array.wado/Array<String>::push"(__sroa___b_keys_131, key_44);
+        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(__sroa___b_keys_131, key_44);
         "core:prelude/array.wado/Array<i32>::push"(__sroa___b_values_132, 20);
         key_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("z"), used: 1 };
-        "core:prelude/array.wado/Array<String>::push"(__sroa___b_keys_131, key_47);
+        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(__sroa___b_keys_131, key_47);
         "core:prelude/array.wado/Array<i32>::push"(__sroa___b_values_132, 30);
         break __kv_lit: struct.new "wado-compiler/tests/fixtures/key_value_literal_immutable.wado//FrozenMap<i32>" { keys: __sroa___b_keys_131, values: __sroa___b_values_132 };
         unreachable;
     };
-    __v0_2 = __inline_Array_String___len_14: block -> i32 {
+    __v0_2 = __inline_Array_core_prelude_string_wado_String___len_14: block -> i32 {
         self_51 = m.keys;
-        break __inline_Array_String___len_14: self_51.used;
+        break __inline_Array_core_prelude_string_wado_String___len_14: self_51.used;
         unreachable;
     };
     __cond_3 = __v0_2 == 3;
@@ -354,8 +354,8 @@ condition: v == 30
         }
     }
     m2 = __kv_lit: block -> ref "wado-compiler/tests/fixtures/key_value_literal_immutable.wado//FrozenMap<i32>" {
-        __sroa___b_keys_133 = __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__new_literal_43____seq_lit: block -> ref "core:prelude//Array<String>" {
-            __b_97 = struct.new "core:prelude//Array<String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
+        __sroa___b_keys_133 = __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__new_literal_43____seq_lit: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
+            __b_97 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
             break __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__new_literal_43____seq_lit: __b_97;
             unreachable;
         };
@@ -365,17 +365,17 @@ condition: v == 30
             unreachable;
         };
         key_106 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 };
-        "core:prelude/array.wado/Array<String>::push"(__sroa___b_keys_133, key_106);
+        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(__sroa___b_keys_133, key_106);
         "core:prelude/array.wado/Array<i32>::push"(__sroa___b_values_134, 1);
         key_109 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("b"), used: 1 };
-        "core:prelude/array.wado/Array<String>::push"(__sroa___b_keys_133, key_109);
+        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(__sroa___b_keys_133, key_109);
         "core:prelude/array.wado/Array<i32>::push"(__sroa___b_values_134, 2);
         break __kv_lit: struct.new "wado-compiler/tests/fixtures/key_value_literal_immutable.wado//FrozenMap<i32>" { keys: __sroa___b_keys_133, values: __sroa___b_values_134 };
         unreachable;
     };
-    __v0_15 = __inline_Array_String___len_54: block -> i32 {
+    __v0_15 = __inline_Array_core_prelude_string_wado_String___len_54: block -> i32 {
         self_113 = m2.keys;
-        break __inline_Array_String___len_54: self_113.used;
+        break __inline_Array_core_prelude_string_wado_String___len_54: self_113.used;
         unreachable;
     };
     __cond_16 = __v0_15 == 2;
@@ -871,11 +871,11 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<String>::grow"(self) {
+fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref builtin::array<String>;
-    let old_repr: ref builtin::array<String>;
+    let new_repr: ref "builtin::array<core:prelude/string.wado/String>";
+    let old_repr: ref "builtin::array<core:prelude/string.wado/String>";
     let used: i32;
     let i: i32;
     let a: i32;
@@ -908,10 +908,10 @@ fn "wado-compiler/tests/fixtures/key_value_literal_immutable.wado/FrozenMap<i32>
     let i: i32;
     let self_6: ref "core:prelude/string.wado//String";
     let len_a: i32;
-    let _licm_keys_11: ref "core:prelude//Array<String>";
+    let _licm_keys_11: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let _licm_values_12: ref "core:prelude//Array<i32>";
     let _licm_used_13: i32;
-    let _licm_repr_14: ref builtin::array<String>;
+    let _licm_repr_14: ref "builtin::array<core:prelude/string.wado/String>";
     let _licm_used_15: i32;
     let _licm_repr_16: ref builtin::array<i32>;
     let _licm_used_21: i32;
@@ -996,11 +996,11 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/array.wado/Array<String>::push"(self, value) {
+fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<String>::grow"(self);
+        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self);
     }
     builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
     self.used = used + 1;

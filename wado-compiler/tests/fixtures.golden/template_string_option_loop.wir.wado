@@ -30,17 +30,17 @@ struct wado-compiler/tests/fixtures/template_string_option_loop.wado//Case {  //
     mut payload: ref null "core:prelude/string.wado//String",
 }
 
-array builtin::array<Case> (mut ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case");  // TypeId(5)
+array builtin::array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case> (mut ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case");  // TypeId(5)
 
-array builtin::array<String> (mut ref "core:prelude/string.wado//String");  // TypeId(6)
+array builtin::array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(6)
 
-struct core:prelude//Array<String> {  // TypeId(7)
-    mut repr: ref builtin::array<String>,
+struct core:prelude//Array<core:prelude/string.wado/String> {  // TypeId(7)
+    mut repr: ref "builtin::array<core:prelude/string.wado/String>",
     mut used: i32,
 }
 
-struct core:prelude//Array<Case> {  // TypeId(8)
-    mut repr: ref builtin::array<Case>,
+struct core:prelude//Array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case> {  // TypeId(8)
+    mut repr: ref "builtin::array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case>",
     mut used: i32,
 }
 
@@ -98,9 +98,9 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(35)
 
-type "functype//core:prelude/array.wado/Array<Case>::push" = fn(ref "core:prelude//Array<Case>", ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case");  // TypeId(36)
+type "functype//core:prelude/array.wado/Array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case>::push" = fn(ref "core:prelude//Array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case>", ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case");  // TypeId(36)
 
-type "functype//core:prelude/array.wado/Array<Case>::grow" = fn(ref "core:prelude//Array<Case>");  // TypeId(37)
+type "functype//core:prelude/array.wado/Array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case>::grow" = fn(ref "core:prelude//Array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case>");  // TypeId(37)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(38)
 
@@ -126,11 +126,11 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/template_string_option_loop.wado/run"() {
-    let __b_0: ref "core:prelude//Array<Case>";
-    let cases: ref "core:prelude//Array<Case>";
+    let __b_0: ref "core:prelude//Array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case>";
+    let cases: ref "core:prelude//Array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case>";
     let base: ref "core:prelude/string.wado//String";
-    let __b_3: ref "core:prelude//Array<String>";
-    let labels: ref "core:prelude//Array<String>";
+    let __b_3: ref "core:prelude//Array<core:prelude/string.wado/String>";
+    let labels: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let i: i32;
     let s: ref "core:prelude/string.wado//String";
     let p0: ref "core:prelude/string.wado//String";
@@ -157,15 +157,15 @@ fn "wado-compiler/tests/fixtures/template_string_option_loop.wado/run"() {
     let __sroa_self_value_75: ref null "core:prelude/string.wado//String";
     let __sroa_self_value_76: ref null "core:prelude/string.wado//String";
     let _licm_used_77: i32;
-    let _licm_repr_78: ref builtin::array<String>;
-    cases = __seq_lit: block -> ref "core:prelude//Array<Case>" {
-        __b_0 = struct.new "core:prelude//Array<Case>" { repr: builtin::array_new<ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case">(0), used: 0 };
+    let _licm_repr_78: ref "builtin::array<core:prelude/string.wado/String>";
+    cases = __seq_lit: block -> ref "core:prelude//Array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case>" {
+        __b_0 = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case>" { repr: builtin::array_new<ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case">(0), used: 0 };
         break __seq_lit: __b_0;
         unreachable;
     };
     base = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Expr"), used: 4 };
-    labels = __seq_lit: block -> ref "core:prelude//Array<String>" {
-        __b_3 = struct.new "core:prelude//Array<String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("BinOp"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Pass"), used: 4 }), used: 2 };
+    labels = __seq_lit: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
+        __b_3 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("BinOp"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Pass"), used: 4 }), used: 2 };
         break __seq_lit: __b_3;
         unreachable;
     };
@@ -185,40 +185,40 @@ fn "wado-compiler/tests/fixtures/template_string_option_loop.wado/run"() {
                     break __tmpl: __local_13;
                     unreachable;
                 };
-                "core:prelude/array.wado/Array<Case>::push"(cases, struct.new "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case" { payload: s });
+                "core:prelude/array.wado/Array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case>::push"(cases, struct.new "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case" { payload: s });
                 i = i + 1;
                 continue l1;
             };
         };
     };
-    p0 = __inline_Option_String___unwrap_13: block -> ref "core:prelude/string.wado//String" {
-        __sroa_self_value_75 = __inline_Array_Case__IndexValue_i32___index_value_14: block -> ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case" {
+    p0 = __inline_Option_core_prelude_string_wado_String___unwrap_13: block -> ref "core:prelude/string.wado//String" {
+        __sroa_self_value_75 = __inline_Array_wado_compiler_tests_fixtures_template_string_option_loop_wado_Case__IndexValue_i32___index_value_14: block -> ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case" {
             if 0 >= cases.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
-            break __inline_Array_Case__IndexValue_i32___index_value_14: builtin::array_get<ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case">(cases.repr, 0);
+            break __inline_Array_wado_compiler_tests_fixtures_template_string_option_loop_wado_Case__IndexValue_i32___index_value_14: builtin::array_get<ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case">(cases.repr, 0);
             unreachable;
         }.payload;
         if ref.is_null(__sroa_self_value_75) == 0 {
             v_36 = ref.as_non_null(__sroa_self_value_75);
-            break __inline_Option_String___unwrap_13: v_36;
+            break __inline_Option_core_prelude_string_wado_String___unwrap_13: v_36;
         }
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Option::unwrap() on a None value"), used: 39 });
         unreachable;
     };
-    p1 = __inline_Option_String___unwrap_15: block -> ref "core:prelude/string.wado//String" {
-        __sroa_self_value_76 = __inline_Array_Case__IndexValue_i32___index_value_16: block -> ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case" {
+    p1 = __inline_Option_core_prelude_string_wado_String___unwrap_15: block -> ref "core:prelude/string.wado//String" {
+        __sroa_self_value_76 = __inline_Array_wado_compiler_tests_fixtures_template_string_option_loop_wado_Case__IndexValue_i32___index_value_16: block -> ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case" {
             if 1 >= cases.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
-            break __inline_Array_Case__IndexValue_i32___index_value_16: builtin::array_get<ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case">(cases.repr, 1);
+            break __inline_Array_wado_compiler_tests_fixtures_template_string_option_loop_wado_Case__IndexValue_i32___index_value_16: builtin::array_get<ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case">(cases.repr, 1);
             unreachable;
         }.payload;
         if ref.is_null(__sroa_self_value_76) == 0 {
             v_41 = ref.as_non_null(__sroa_self_value_76);
-            break __inline_Option_String___unwrap_15: v_41;
+            break __inline_Option_core_prelude_string_wado_String___unwrap_15: v_41;
         }
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Option::unwrap() on a None value"), used: 39 });
         unreachable;
@@ -806,13 +806,13 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let self_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         self_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             self_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: self_8.repr, used: self_8.used, byte_index: 0 };
             unreachable;
         };
-        break __inline_StrCharIter_IntoIterator__into_iter_1: self_7;
+        break __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: self_7;
         unreachable;
     };
     _licm_buf_33 = f.buf;
@@ -850,21 +850,21 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
 }
 
-fn "core:prelude/array.wado/Array<Case>::push"(self, value) {
+fn "core:prelude/array.wado/Array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<Case>::grow"(self);
+        "core:prelude/array.wado/Array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case>::grow"(self);
     }
     builtin::array_set<ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<Case>::grow"(self) {
+fn "core:prelude/array.wado/Array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref builtin::array<Case>;
-    let old_repr: ref builtin::array<Case>;
+    let new_repr: ref "builtin::array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case>";
+    let old_repr: ref "builtin::array<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case>";
     let used: i32;
     let i: i32;
     let a: i32;

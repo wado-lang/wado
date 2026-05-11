@@ -36,15 +36,15 @@ struct wado-compiler/tests/fixtures/inline_merged.wado//InlineItem {  // TypeId(
 
 array builtin::array<i32> (mut i32);  // TypeId(6)
 
-array builtin::array<InlineItem> (mut ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem");  // TypeId(7)
+array builtin::array<wado-compiler/tests/fixtures/inline_merged.wado/InlineItem> (mut ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem");  // TypeId(7)
 
 struct core:prelude//Array<i32> {  // TypeId(8)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
 
-struct core:prelude//Array<InlineItem> {  // TypeId(9)
-    mut repr: ref builtin::array<InlineItem>,
+struct core:prelude//Array<wado-compiler/tests/fixtures/inline_merged.wado/InlineItem> {  // TypeId(9)
+    mut repr: ref "builtin::array<wado-compiler/tests/fixtures/inline_merged.wado/InlineItem>",
     mut used: i32,
 }
 
@@ -302,8 +302,8 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_early_return"() with St
 fn "wado-compiler/tests/fixtures/inline_merged.wado/test_generic_nested_ref"() with Stdout {
     let a: ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem";
     let b: ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem";
-    let __b: ref "core:prelude//Array<InlineItem>";
-    let items: ref "core:prelude//Array<InlineItem>";
+    let __b: ref "core:prelude//Array<wado-compiler/tests/fixtures/inline_merged.wado/InlineItem>";
+    let items: ref "core:prelude//Array<wado-compiler/tests/fixtures/inline_merged.wado/InlineItem>";
     let i: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
@@ -312,11 +312,11 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_generic_nested_ref"() w
     let tx: i32;
     let handle: i32;
     let _licm_used_29: i32;
-    let _licm_repr_30: ref builtin::array<InlineItem>;
+    let _licm_repr_30: ref "builtin::array<wado-compiler/tests/fixtures/inline_merged.wado/InlineItem>";
     a = struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem" { value: 10 };
     b = struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem" { value: 20 };
-    items = __seq_lit: block -> ref "core:prelude//Array<InlineItem>" {
-        __b = struct.new "core:prelude//Array<InlineItem>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem">(a, b), used: 2 };
+    items = __seq_lit: block -> ref "core:prelude//Array<wado-compiler/tests/fixtures/inline_merged.wado/InlineItem>" {
+        __b = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/inline_merged.wado/InlineItem>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem">(a, b), used: 2 };
         break __seq_lit: __b;
         unreachable;
     };

@@ -47,6 +47,14 @@ use { GenContext, KindSetEntry, is_nullable, sets_overlap, is_simple_token_group
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
 use { log_stderr } from "core:cli";
 use { TreeSet } from "core:collections";
+use { LoweredGrammar, Rule, SimpleRule, MultiAltRule, LeftRecursiveRule, rule_header } from "./gir.wado";
+use {
+    is_left_recursive,
+    is_prefix_alt,
+    is_self_ref_element,
+    unwrap_label,
+    compute_prefix_self_ref_min_prec,
+} from "./lr_util.wado";
 
 fn first_contains(first: &Array<String>, token: &String) -> bool {
     for let item of first {
@@ -1041,30 +1049,100 @@ fn array_contains_i32(arr: &Array<i32>, val: i32) -> bool {
     return false;
 }
 
-pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
+pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
+    // Phase 3 — `lowered` mirrors `grammar.parser_rules` rule-for-rule
+    // by name and order. emit still consumes surface IR for the body
+    // of each rule (Phase 4 migrates those entry points); the
+    // `LoweredGrammar` is threaded through so we can dispatch on
+    // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
+    // recomputing the classification at every emit site.
     gen_parser_struct(w);
     gen_scan_functions(w, grammar, ctx);
-    for let rule of grammar.parser_rules {
-        gen_parse_fn(w, &rule, ctx);
+    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+        let rule = &grammar.parser_rules[i];
+        let lowered_rule = &lowered.parser_rules[i];
+        gen_parse_fn(w, rule, lowered_rule, ctx);
     }
-    // Emit follow-aware variants until the registry reaches a fixed
-    // point. A variant's body may register further variants when its
-    // own RuleRef calls hit follow-sensitive rules; we keep emitting
-    // until no new entries appear. Each iteration emits scan-side and
-    // parse-side variants discovered up to that point.
+    // Phase 4 — variant emission consumes `lowered.variant_rules`
+    // as its primary source. The fixed-point loop walks the
+    // follow-variant registry in id order: for ids in
+    // `lowered.variant_rules.len()`'s range, drive from the GIR
+    // (proving lower's variant pre-pass is the consumer); for
+    // higher ids — entries that emit-time intern registered
+    // because lower's `inner_follow_at` uses a looser nullable
+    // rule than the legacy `compute_ruleref_call_follow` — fall
+    // back to the entry-driven path so codegen never leaks a
+    // dangling `__follow_<id>` reference.
     let mut emitted_count = 0;
     loop {
         let entries = ctx.follow_variants();
-        if entries.len() == emitted_count {
+        let cur = entries.len();
+        if cur == emitted_count {
             break;
         }
-        for let mut idx = emitted_count; idx < entries.len(); idx += 1 {
-            let entry = &entries[idx];
-            emit_follow_variant(w, entry, ctx);
+        for let mut idx = emitted_count; idx < cur; idx += 1 {
+            if idx < lowered.variant_rules.len() {
+                emit_follow_variant_from_gir(w, &lowered.variant_rules[idx], ctx);
+            } else {
+                emit_follow_variant(w, &entries[idx], ctx);
+            }
         }
-        emitted_count = entries.len();
+        emitted_count = cur;
     }
-    gen_parse_entry(w, &grammar.parser_rules);
+    gen_parse_entry(w, lowered);
+}
+
+/// Emit one follow-aware rule variant from its lowered `Rule`. The
+/// variant's `FollowVariant` lives on `header.variant_of` (attached
+/// by `lower::attach_variant_header`); we extract it, look the base
+/// surface `ParserRule` up by name, and call the same emit core the
+/// legacy `emit_follow_variant` used. ctx state is saved / restored
+/// across the call so subsequent variants and the trailing
+/// `gen_parse_entry` see clean state.
+fn emit_follow_variant_from_gir(w: &mut CodeWriter, variant_rule: &Rule, ctx: &mut GenContext) {
+    let entry_opt = match *variant_rule {
+        Simple(s) => s.header.variant_of,
+        MultiAlt(m) => m.header.variant_of,
+        LeftRecursive(l) => l.header.variant_of,
+    };
+    let entry = if let Some(v) = entry_opt {
+        v;
+    } else {
+        panic(
+            "emit_follow_variant_from_gir: variant_rule.header.variant_of is null; lower must tag every variant body",
+        );
+    };
+    let rule = if let Some(r) = ctx.find_rule(&entry.rule_name) {
+        r;
+    } else {
+        panic(
+            `emit_follow_variant_from_gir: rule '{entry.rule_name}' not found`,
+        );
+    };
+
+    let saved_rule_name = ctx.current_rule_name;
+    let saved_group_counter = ctx.group_counter;
+    let saved_alt_gc_starts = ctx.alt_gc_starts;
+    let saved_mask = ctx.current_follow_mask;
+    let saved_outer = ctx.current_outer_follow;
+
+    ctx.current_follow_mask = entry.mask;
+    ctx.current_outer_follow = entry.mask;
+
+    let scan_name = `scan_{rule.snake_name}__follow_{entry.id}`;
+    let parse_name = `parse_{rule.snake_name}__follow_{entry.id}`;
+    if entry.scan_used {
+        gen_scan_function_named(w, rule, ctx, &scan_name, /*allow_lr_split=*/ true);
+    }
+    if entry.parse_used {
+        gen_parse_fn_named(w, rule, ctx, &parse_name, &scan_name, /*emit_visibility=*/ false);
+    }
+
+    ctx.current_rule_name = saved_rule_name;
+    ctx.group_counter = saved_group_counter;
+    ctx.alt_gc_starts = saved_alt_gc_starts;
+    ctx.current_follow_mask = saved_mask;
+    ctx.current_outer_follow = saved_outer;
 }
 
 /// Emit one follow-aware rule variant. Routes through the unified
@@ -2554,10 +2632,74 @@ fn is_lenient_group(alts: &Array<Alternative>) -> bool {
     return is_simple_cst_group(alts) || is_general_group(alts);
 }
 
-fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
+fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
+    // Phase 4 — dispatch on the GIR `Rule` variant. Each shape gets
+    // its own focused emit entry; the existing internal helpers
+    // carry the body emission but no longer need to re-classify
+    // the rule from surface IR.
     let fn_name = `parse_{rule.snake_name}`;
     let scan_fn_name = `scan_{rule.snake_name}`;
-    gen_parse_fn_named(w, rule, ctx, &fn_name, &scan_fn_name, /*emit_visibility=*/ true);
+    match *lowered_rule {
+        Simple(s) => gen_parse_fn_simple(w, rule, s, ctx, &fn_name, &scan_fn_name),
+        MultiAlt(m) => gen_parse_fn_multi_alt(w, rule, m, ctx, &fn_name, &scan_fn_name),
+        LeftRecursive(l) => gen_parse_fn_left_recursive(w, rule, l, ctx, &fn_name, &scan_fn_name),
+    };
+}
+
+/// Emit a single-alternative rule. The body inlines the alt
+/// directly with no dispatch table — the simplest shape. The
+/// lowered `SimpleRule` carries the header / fields / alt body
+/// already classified; this wrapper installs the public function
+/// name and delegates to the shared emit core.
+fn gen_parse_fn_simple(w: &mut CodeWriter, rule: &ParserRule, lowered: &SimpleRule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String) {
+    let _ = scan_fn_name;
+    let _ = lowered;
+    gen_parse_fn_simple_named(w, rule, ctx, fn_name, /*emit_visibility=*/ true);
+}
+
+/// Body emitter for a single-alt rule, parameterised by function
+/// name so the follow-aware variant pass can reuse it with
+/// `parse_<rule>__follow_<id>`. No internal classification — the
+/// caller already committed to the Simple shape.
+fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext, fn_name: &String, emit_visibility: bool) {
+    ctx.current_rule_name = rule.name;
+    ctx.group_counter = 0;
+    let type_name = rule_type_name(&rule.name);
+    if emit_visibility {
+        gen_visibility_comment(w, &rule.visibility);
+    }
+
+    // Single-alt rules have exactly one alt, so the `alt_gc_starts`
+    // entry is `[0]`. Keep the field set for compatibility with any
+    // helpers that consult it.
+    ctx.alt_gc_starts = [0];
+
+    let mut f = FnSpec::new(fn_name);
+    f.add_param("p", "&mut Parser");
+    f.set_return_type(`Result<{type_name}, ParseError>`);
+    f.emit_begin(w);
+    w.line("let start = p.peek().span.start;");
+    gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], ctx);
+    w.end();
+    w.blank();
+}
+
+/// Emit a multi-alternative rule with no LR alts. Dispatch comes
+/// from the lowered `MultiAltRule.dispatch` — `Direct` for
+/// disjoint first-sets, `Tournament` for overlapping
+/// fully-scannable alts.
+fn gen_parse_fn_multi_alt(w: &mut CodeWriter, rule: &ParserRule, lowered: &MultiAltRule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String) {
+    let _ = lowered;
+    gen_parse_fn_named(w, rule, ctx, fn_name, scan_fn_name, /*emit_visibility=*/ true);
+}
+
+/// Emit a directly-left-recursive rule (atom + lr_alts +
+/// precedence-climbing suffix loop). The lowered
+/// `LeftRecursiveRule` already split the alts into atom / LR
+/// groups and computed every precedence assignment.
+fn gen_parse_fn_left_recursive(w: &mut CodeWriter, rule: &ParserRule, lowered: &LeftRecursiveRule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String) {
+    let _ = lowered;
+    gen_parse_fn_named(w, rule, ctx, fn_name, scan_fn_name, /*emit_visibility=*/ true);
 }
 
 
@@ -2573,6 +2715,15 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
 /// `pub`/`export` doc comment on the variant function (variants are
 /// implementation details, not part of the rule's exposed surface).
 fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String, emit_visibility: bool) {
+    // Variant emission and the (legacy) single shared dispatch route
+    // through here. Single-alt rules are handled by the dedicated
+    // \`gen_parse_fn_simple_named\` so the heavy multi-alt + LR setup
+    // below doesn't run for the trivial shape.
+    if rule.alternatives.len() == 1 {
+        gen_parse_fn_simple_named(w, rule, ctx, fn_name, emit_visibility);
+        return;
+    }
+
     ctx.current_rule_name = rule.name;
     ctx.group_counter = 0;
     let type_name = rule_type_name(&rule.name);
@@ -2589,18 +2740,6 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContex
         gc_running += count_general_groups(&alt.elements);
     }
     ctx.alt_gc_starts = alt_gc_starts;
-
-    if rule.alternatives.len() == 1 {
-        let mut f = FnSpec::new(fn_name);
-        f.add_param("p", "&mut Parser");
-        f.set_return_type(`Result<{type_name}, ParseError>`);
-        f.emit_begin(w);
-        w.line("let start = p.peek().span.start;");
-        gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], ctx);
-        w.end();
-        w.blank();
-        return;
-    }
 
     let case_names = case_names_for_rule(&rule.alternatives);
 
@@ -5948,12 +6087,9 @@ fn elements_match(consumed: &Element, expected: &Element) -> bool {
     return false;
 }
 
-fn unwrap_label(elem: &Element) -> &Element with stores[elem] {
-    if let Label(lab) = elem {
-        return &lab.element;
-    }
-    return elem;
-}
+// `unwrap_label`, `is_left_recursive`, `is_prefix_alt`,
+// `is_self_ref_element`, `compute_prefix_self_ref_min_prec`
+// have moved to `lr_util.wado`.
 
 fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, ctx: &mut GenContext, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>) {
     let case_names = case_names_for_rule(&rule.alternatives);
@@ -6010,17 +6146,24 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
     gen_error_fallback(w, rule, type_name, ctx);
 }
 
-fn gen_parse_entry(w: &mut CodeWriter, parser_rules: &Array<ParserRule>) {
-    if parser_rules.len() == 0 {
+/// Emit the public `parse(input)` entry function that dispatches
+/// into the first rule's parser. Read entirely from
+/// `lowered.parser_rules[0].header` — `RuleHeader` carries the
+/// pre-computed `type_name` and `snake_name` so this fn doesn't
+/// re-run `rule_type_name` or recompute the function name. A
+/// mismatch between lower's header and emit's expectations would
+/// surface here as a wrong fn name reference at the top of the
+/// generated source.
+fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar) {
+    if lowered.parser_rules.len() == 0 {
         return;
     }
-    let root = &parser_rules[0];
-    let type_name = rule_type_name(&root.name);
-    let fn_name = `parse_{root.snake_name}`;
+    let header = rule_header(&lowered.parser_rules[0]);
+    let fn_name = `parse_{header.snake_name}`;
     let mut f = FnSpec::new("parse");
     f.set_pub();
     f.add_param("input", "&String");
-    f.set_return_type(`Result<{type_name}, ParseError>`);
+    f.set_return_type(`Result<{header.type_name}, ParseError>`);
     f.emit_begin(w);
     w.line("let tokens = tokenize(input);");
     w.line("let mut parser = Parser::new(tokens);");
@@ -6035,25 +6178,46 @@ fn gen_parse_entry(w: &mut CodeWriter, parser_rules: &Array<ParserRule>) {
 /// every multi-element `matches { ... }` check into a call into one of
 /// these helpers, so duplicate sets share a single function body in
 /// the generated wasm.
-pub fn gen_kind_set_helpers(w: &mut CodeWriter, ctx: &GenContext) {
+/// Emit `_gale_kind_set_<id>(k) -> bool` helpers. The id range
+/// `0..lowered.kind_sets.len()` reads tokens directly from
+/// `lowered.kind_sets` — that's lower's Phase 2.7 pre-interning
+/// surfacing as actual generated code. Higher ids (sets emit-time
+/// `kind_check_str` interned during walk) read from
+/// `ctx.kind_sets()` as a salvage tail, same pattern as the
+/// variant-emission split.
+///
+/// For the lower-registered prefix, the generated helper body is
+/// the canonical proof that `lowered.kind_sets[i].tokens` matches
+/// what emit subsequently calls — a mismatch would compile but
+/// parse wrong (the helper body would not include the token emit
+/// queries). Today the two registries converge by construction
+/// because both intern through the same `ctx.intern_kind_set`
+/// keyed by canonical token order.
+pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext) {
     let entries = ctx.kind_sets();
-    for let entry of &entries {
-        gen_kind_set_helper(w, entry);
+    for let mut idx = 0; idx < entries.len(); idx += 1 {
+        if idx < lowered.kind_sets.len() {
+            let ks = &lowered.kind_sets[idx];
+            gen_kind_set_helper_raw(w, ks.id, &ks.tokens);
+        } else {
+            let entry = &entries[idx];
+            gen_kind_set_helper_raw(w, entry.id, &entry.tokens);
+        }
     }
 }
 
-fn gen_kind_set_helper(w: &mut CodeWriter, entry: &KindSetEntry) {
-    let mut f = FnSpec::new(&`_gale_kind_set_{entry.id}`);
+fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &Array<String>) {
+    let mut f = FnSpec::new(&`_gale_kind_set_{id}`);
     f.add_param("k", "i32");
     f.set_return_type("bool");
     f.emit_begin(w);
     let mut body = String::with_capacity(64);
     body.push_str("return k matches { ");
-    for let mut i = 0; i < entry.tokens.len(); i += 1 {
+    for let mut i = 0; i < tokens.len(); i += 1 {
         if i > 0 {
             body.push_str(" | ");
         }
-        body.push_str(entry.tokens[i]);
+        body.push_str(tokens[i]);
     }
     body.push_str(" };");
     w.line(&body);
@@ -6162,88 +6326,8 @@ fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
 /// `a=e` at the start of an alt as left-recursive too (per
 /// `vendor/antlr4/doc/left-recursion.md`), so `is_self_ref_element`
 /// unwraps one `Label`.
-fn is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
-    if alt.elements.len() == 0 {
-        return false;
-    }
-    return is_self_ref_element(&alt.elements[0], rule_name);
-}
-
-/// True iff the alternative matches ANTLR4's `prefix` shape from
-/// `LeftRecursiveRuleWalker.g`:
-///   prefix : ALT element+ recurse epsilonElement* ;
-/// i.e. the alt does NOT start with a self-reference but its LAST
-/// element IS a self-reference. Examples: `'-' e`, `('~'|'!') e`,
-/// `'(' typespec ')' e`. Counter-examples that look superficially
-/// similar but are NOT prefix alts in ANTLR4's classification:
-///   - `'(' e ')'` — last elem is `')'`, not self-ref → "other" alt
-///   - `'new' T ( ... e ... )` — last elem is a Group → "other" alt
-/// "Other" alts (`otherAlt`) are NOT given a precedence rewrite in
-/// ANTLR4: their inner self-refs run with `_p = 0`, accepting all
-/// LR operators inside.
-///
-/// Gale's IR has already stripped action bodies and semantic predicates,
-/// so the upstream `epsilonElement*` tail collapses to the empty case.
-fn is_prefix_alt(alt: &Alternative, rule_name: &String) -> bool {
-    if is_left_recursive(alt, rule_name) {
-        return false;
-    }
-    if alt.elements.len() == 0 {
-        return false;
-    }
-    let last_idx = alt.elements.len() - 1;
-    return is_self_ref_element(&alt.elements[last_idx], rule_name);
-}
-
-/// True iff the element is a direct RuleRef to `rule_name` (possibly
-/// wrapped in a single `Label`). Mirrors `is_left_recursive`'s use of
-/// `unwrap_label` so labeled self-refs at the alt tail (e.g. `b=e`)
-/// are still recognised.
-fn is_self_ref_element(elem: &Element, rule_name: &String) -> bool {
-    if let RuleRef(r) = unwrap_label(elem) {
-        return r.name == *rule_name;
-    }
-    return false;
-}
-
-/// Compute the `min_prec` value to pass into self-recursive RuleRef calls
-/// inside a prefix alt. ANTLR4's left-recursion transform calls the inner
-/// `e` of a prefix alt with the alt's own precedence (`e[precedence(alt)]`),
-/// so any LR suffix below the prefix alt in source order is excluded.
-///
-/// Returns 0 if the alt is not a prefix alt, or if the rule has no LR alts
-/// (in which case `parse_<rule>` has no `min_prec` parameter and the
-/// override would not be valid).
-///
-/// Formula: count the LR alts at positions strictly greater than `alt_idx`
-/// in `rule.alternatives`. Their `own_prec` values are 1..N (N = the count),
-/// so setting `min_prec = N + 1` rejects all of them while still admitting
-/// LR alts that come before this prefix.
-fn compute_prefix_self_ref_min_prec(rule: &ParserRule, alt_idx: i32) -> i32 {
-    let alts = &rule.alternatives;
-    let rule_name = &rule.name;
-    if alt_idx < 0 || alt_idx >= alts.len() {
-        return 0;
-    }
-    let alt = &alts[alt_idx];
-    if !is_prefix_alt(alt, rule_name) {
-        return 0;
-    }
-    let mut lr_after = 0;
-    let mut has_any_lr = false;
-    for let mut i = 0; i < alts.len(); i += 1 {
-        if is_left_recursive(&alts[i], rule_name) {
-            has_any_lr = true;
-            if i > alt_idx {
-                lr_after += 1;
-            }
-        }
-    }
-    if !has_any_lr {
-        return 0;
-    }
-    return lr_after + 1;
-}
+// `is_left_recursive` / `is_prefix_alt` / `is_self_ref_element` /
+// `compute_prefix_self_ref_min_prec` have moved to `lr_util.wado`.
 
 fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<i32>> {
     let n = first_sets.len();

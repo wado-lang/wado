@@ -1,0 +1,2555 @@
+//! `lower(Grammar) -> LoweredGrammar` — translate the surface IR
+//! to GIR for parser code generation.
+//!
+//! This is the planning phase of the pipeline:
+//!
+//! ```text
+//! .g4 source ──parse──► Grammar (surface IR, ir.wado)
+//!                ──lower──► LoweredGrammar (gir.wado)
+//!                ──emit──► Wado source
+//! ```
+//!
+//! Every codegen-time decision (rule shape, multi-alt dispatch, LR
+//! precedence, follow variants, group shape, repeat strategy, field
+//! deduplication, scan/parse symmetry) is committed here so the emit
+//! layer can translate structurally without consulting the surface IR.
+//!
+//! ## Phase status
+//!
+//! Phase 2 is complete: lower handles every shape the surface IR
+//! produces — single-alt and multi-alt rules, left-recursive rules
+//! (atom + lr_alts), every Group classifier (`Transparent`,
+//! `SingleAlt`, `TokenOnly`, `SimpleCst`, `General`), every Repeat
+//! kind (`Star` / `Plus` / `Optional`) with both greedy and
+//! non-greedy semantics, `Not` complements (single token or
+//! multi-token Group), and scalar / list (`+=`) Labels. Dispatch
+//! falls into `Direct` for disjoint first-sets or `Tournament` for
+//! overlapping fully-scannable alts. Follow-aware variants are
+//! registered per call site and re-lowered per `(rule, mask)` pair;
+//! variant-body Repeats pick `Suppressed` / `WithFollowSubtraction`
+//! / `Plain` based on how the mask intersects the loop's inner
+//! first set. Repeats over General-Group inners coordinate the
+//! per-rule `group_counter` so the outer field name and the inner
+//! variant share the same id.
+//!
+//! Optional `?` Repeats now resolve to `OptionalLookahead` when
+//! the inner is a single-alt Group of ≥ 2 fixed tokens, or to
+//! `OptionalScanGuard` when the inner is a scannable Group /
+//! RuleRef without a usable fixed-token prefix. The mask-driven
+//! `Suppressed` decision still wins over both — if every iteration
+//! is claimed by the variant's follow mask, the loop never runs.
+//!
+//! Phase 3 swaps `codegen::generate` to call `lower` and feed the
+//! result through a thin emit adapter; until then this file is
+//! exercised only by `lower_test.wado`.
+
+use {
+    Grammar,
+    ParserRule,
+    Alternative,
+    Element,
+    LabelElement,
+    RepeatElement,
+    RepeatKind,
+    GroupElement,
+} from "./ir.wado";
+use {
+    rule_type_name,
+    literal_const_name,
+    literal_field_name,
+    not_element_field_name,
+    case_names_for_rule,
+    count_general_groups,
+    single_alt_group_type_name,
+    single_alt_group_field_name,
+    is_token_only_group,
+    is_simple_cst_group,
+    is_general_group,
+    token_group_field_name,
+    group_variant_type_name,
+    group_field_base_name,
+    group_case_name,
+    general_group_type_name,
+    general_group_field_name,
+    general_group_alt_struct_name,
+} from "./gen_util.wado";
+use { LitToken } from "./lexer_gen.wado";
+use { GenContext } from "./gen_context.wado";
+use { strip_suffix } from "./gen_util.wado";
+use { TreeMap } from "core:collections";
+use {
+    LoweredGrammar,
+    Rule,
+    SimpleRule,
+    MultiAltRule,
+    LeftRecursiveRule,
+    LrAlt,
+    LrDispatchData,
+    RuleHeader,
+    AltBody,
+    MultiAltDispatch,
+    DirectDispatch,
+    DispatchBranch,
+    TournamentDispatch,
+    ScanBody,
+    ScanElement,
+    ScanTokenElem,
+    ScanRuleCallElem,
+    ScanExcludedElem,
+    ScanRepeatElem,
+    ScanRepeatStrategy,
+    ScanGroupElem,
+    Op,
+    TokenOp,
+    LiteralOp,
+    RuleCallOp,
+    WildcardOp,
+    ExcludedOp,
+    RepeatOp,
+    RepeatStrategy,
+    NonGreedyStrategy,
+    WithFollowSubtractionStrategy,
+    OptionalLookaheadStrategy,
+    GroupOp,
+    GroupShape,
+    SingleAltShape,
+    TokenOnlyShape,
+    SimpleCstShape,
+    GeneralShape,
+    FieldDecl,
+    FieldKind,
+    KindSet,
+    FollowVariant,
+} from "./gir.wado";
+
+/// Lower a `Grammar` to `LoweredGrammar`. The returned value is the
+/// only input parser-side codegen needs; lexer / visitor / highlight
+/// emission still consume `Grammar` directly in v1 (their data is
+/// also mirrored here for forward compatibility).
+///
+/// `lit_tokens` is computed by `lexer_gen::collect_literal_tokens`
+/// before lowering and threaded in so a single literal-collection
+/// pass serves both the lexer and parser sides.
+/// Convenience entry for callers that don't share a `GenContext`
+/// with downstream emit (e.g. `lower_test.wado` smoke tests). Real
+/// codegen calls `lower_with_ctx` instead so the variant and
+/// kind-set registries land in the ctx emit later consumes.
+pub fn lower(grammar: &Grammar, lit_tokens: &Array<LitToken>) -> LoweredGrammar {
+    let mut ctx = GenContext::new(&grammar.parser_rules, lit_tokens);
+    return lower_with_ctx(grammar, lit_tokens, &mut ctx);
+}
+
+pub fn lower_with_ctx(grammar: &Grammar, lit_tokens: &Array<LitToken>, ctx: &mut GenContext) -> LoweredGrammar {
+    // `ctx` is shared with downstream emit. The follow-variant
+    // and kind-set registries lower writes into ctx are the same
+    // ones emit reads from later: id assignments stay consistent
+    // between the pre-pass and emit's intern calls during body
+    // walking. Caches (first / nullable / single-token / scannable
+    // / tail-greedy) survive across the lower-then-emit boundary
+    // and only get computed once.
+    let mut parser_rules: Array<Rule> = [];
+    for let rule of &grammar.parser_rules {
+        parser_rules.push(lower_rule(rule, ctx));
+    }
+    // Phase 2.6 — follow-variant pre-pass. The first lowering pass
+    // already called `ctx.intern_follow_variant` at every RuleRef
+    // site whose `outer_follow` overlaps the callee's tail-greedy
+    // first set; iterate over the registry to lower one
+    // variant-body per registered entry. Each variant's lowering
+    // may itself register new variants (a variant body re-walks the
+    // rule with `current_follow_mask` applied), so loop to a
+    // fixed point.
+    let variant_rules = lower_variant_rules(&grammar.parser_rules, ctx);
+    // Phase 2.7 — pre-intern multi-element token-kind sets that
+    // surface in dispatch branches and `Op::Excluded` kinds. The
+    // resulting registry is the source of truth for `_gale_kind_set_<id>`
+    // helper-function emission; emit consults it in lockstep with
+    // the dispatch / op walk it does anyway.
+    let kind_sets = intern_kind_sets(&parser_rules, ctx);
+    return LoweredGrammar {
+        name: grammar.name,
+        source_files: grammar.source_files,
+        options: grammar.options,
+        named_actions: grammar.named_actions,
+        lexer_rules: grammar.lexer_rules,
+        mode_names: grammar.mode_names,
+        channels: grammar.channels,
+        lit_tokens: *lit_tokens,
+        parser_rules,
+        variant_rules,
+        kind_sets,
+    };
+}
+
+/// Lower each registered follow-aware variant. Runs as a fixed-point
+/// loop because a variant body may itself register new variants. The
+/// per-variant lowering installs `ctx.current_follow_mask` (consumed
+/// by `lower_repeat_op` for `Suppressed` / `WithFollowSubtraction`
+/// strategies — those are stubs today; Phase 2.6 follow-up will fill
+/// them in once a committed grammar exercises them) before walking
+/// the rule, then restores the previous mask so subsequent variants
+/// see a clean slate.
+fn lower_variant_rules(
+    parser_rules: &Array<ParserRule>,
+    ctx: &mut GenContext,
+) -> Array<Rule> {
+    let mut result: Array<Rule> = [];
+    let mut lowered_count: i32 = 0;
+    loop {
+        let entries = ctx.follow_variants();
+        if entries.len() == lowered_count {
+            break;
+        }
+        // Lower the entries we haven't seen yet. The registry is
+        // append-only, so indices < `lowered_count` are already in
+        // `result`; new entries land at the end.
+        for let mut i = lowered_count; i < entries.len(); i += 1 {
+            let entry = &entries[i];
+            let rule = match ctx.find_rule(&entry.rule_name) {
+                Some(r) => r,
+                null => panic(`lower_variant_rules: rule '{entry.rule_name}' not found — intern_follow_variant should reject unknown rules`),
+            };
+            let saved_mask = ctx.current_follow_mask;
+            ctx.current_follow_mask = entry.mask;
+            let mut lowered = lower_rule(rule, ctx);
+            ctx.current_follow_mask = saved_mask;
+            // Tag the lowered rule's header so emit can route the
+            // variant to its `__follow_<id>` function name.
+            attach_variant_header(&mut lowered, FollowVariant {
+                id: entry.id,
+                rule_name: entry.rule_name,
+                mask: entry.mask,
+                scan_used: entry.scan_used,
+                parse_used: entry.parse_used,
+            });
+            result.push(lowered);
+        }
+        lowered_count = entries.len();
+    }
+    return result;
+}
+
+fn attach_variant_header(rule: &mut Rule, v: FollowVariant) {
+    let wrapped = Option::<FollowVariant>::Some(v);
+    match *rule {
+        Simple(s) => {
+            let mut h = s.header;
+            h.variant_of = wrapped;
+            *rule = Rule::Simple(SimpleRule { header: h, body: s.body, scan_body: s.scan_body });
+        },
+        MultiAlt(m) => {
+            let mut h = m.header;
+            h.variant_of = wrapped;
+            *rule = Rule::MultiAlt(MultiAltRule {
+                header: h,
+                alts: m.alts,
+                scan_alts: m.scan_alts,
+                dispatch: m.dispatch,
+                scan_dispatch: m.scan_dispatch,
+            });
+        },
+        LeftRecursive(l) => {
+            let mut h = l.header;
+            h.variant_of = wrapped;
+            *rule = Rule::LeftRecursive(LeftRecursiveRule {
+                header: h,
+                atom: l.atom,
+                lr_alts: l.lr_alts,
+                lr_dispatch: l.lr_dispatch,
+            });
+        },
+    };
+}
+
+/// Walk every lowered `Rule` and intern every multi-element
+/// token-kind set into a single `KindSet` registry. The resulting
+/// `Array<KindSet>` is keyed by registration order — single-token
+/// sets are not interned (emit renders those as `<expr> == TK_X`
+/// directly), and identical sets share a single `id` so the
+/// generated `_gale_kind_set_<id>` helper is shared.
+///
+/// Covers the `Direct` dispatch (multi-token branch.tokens) and
+/// `Op::Excluded.kinds`. `Tournament` carries only alt indices and
+/// has no kind set to intern. Strategy-internal token sets
+/// (`WithFollowSubtraction.effective_first`, `NonGreedy.exit_*`,
+/// `OptionalLookahead.sigs`) are consumed inline by emit and don't
+/// need helper-function interning.
+fn intern_kind_sets(parser_rules: &Array<Rule>, ctx: &mut GenContext) -> Array<KindSet> {
+    // Prime ctx's kind-set registry with every multi-element token
+    // set the lowered IR carries. ctx is also where emit interns
+    // sets at gen_parse_fn time via `kind_check_str`; sharing the
+    // registry means lower's helper ids match emit's call sites
+    // exactly — `_gale_kind_set_<id>` references resolve to the
+    // helper this pre-pass produced.
+    for let rule of parser_rules {
+        walk_rule_for_kind_sets(rule, ctx);
+    }
+    // Snapshot ctx's current state. Emit may grow this registry
+    // further when `kind_check_str` hits a set lower didn't see
+    // (e.g. token sets that surface only from the legacy emit
+    // walks that don't read from GIR yet). Those tail entries
+    // remain reachable via `ctx.kind_sets()` and the kind-set
+    // helper emitter handles them via the salvage tail.
+    let entries = ctx.kind_sets();
+    let mut sets: Array<KindSet> = [];
+    for let entry of &entries {
+        sets.push(KindSet { id: entry.id, tokens: entry.tokens });
+    }
+    return sets;
+}
+
+fn walk_rule_for_kind_sets(rule: &Rule, ctx: &mut GenContext) {
+    match *rule {
+        Simple(s) => walk_alt_body_for_kind_sets(&s.body, ctx),
+        MultiAlt(m) => {
+            walk_dispatch_for_kind_sets(&m.dispatch, ctx);
+            walk_dispatch_for_kind_sets(&m.scan_dispatch, ctx);
+            for let alt of &m.alts {
+                walk_alt_body_for_kind_sets(alt, ctx);
+            }
+        },
+        LeftRecursive(l) => {
+            walk_dispatch_for_kind_sets(&l.atom.dispatch, ctx);
+            walk_dispatch_for_kind_sets(&l.atom.scan_dispatch, ctx);
+            for let alt of &l.atom.alts {
+                walk_alt_body_for_kind_sets(alt, ctx);
+            }
+            for let lr of &l.lr_alts {
+                walk_alt_body_for_kind_sets(&lr.suffix, ctx);
+            }
+        },
+    };
+}
+
+fn walk_dispatch_for_kind_sets(d: &MultiAltDispatch, ctx: &mut GenContext) {
+    match *d {
+        Direct(dd) => {
+            for let branch of &dd.branches {
+                if branch.tokens.len() >= 2 {
+                    ctx.intern_kind_set(&branch.tokens);
+                }
+            }
+        },
+        Tournament(_) => {},
+    };
+}
+
+fn walk_alt_body_for_kind_sets(alt: &AltBody, ctx: &mut GenContext) {
+    for let op of &alt.ops {
+        walk_op_for_kind_sets(op, ctx);
+    }
+}
+
+fn walk_op_for_kind_sets(op: &Op, ctx: &mut GenContext) {
+    match *op {
+        Excluded(e) => {
+            if e.kinds.len() >= 2 {
+                ctx.intern_kind_set(&e.kinds);
+            }
+        },
+        Repeat(r) => walk_op_for_kind_sets(&r.body, ctx),
+        Group(go) => {
+            walk_dispatch_for_kind_sets(&go.dispatch, ctx);
+            walk_dispatch_for_kind_sets(&go.scan_dispatch, ctx);
+            for let inner_alt of &go.alts {
+                walk_alt_body_for_kind_sets(inner_alt, ctx);
+            }
+        },
+        Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) => {},
+    };
+}
+
+// `intern_kind_set` / `canonical_kind_set` / `join_pipe` removed;
+// `walk_*_for_kind_sets` calls `ctx.intern_kind_set` directly so
+// lower and emit share a single registry.
+
+/// Classify a parser rule by shape and dispatch to the matching
+/// lowering. Single-alt → `Simple`; multi-alt with no LR alt →
+/// `MultiAlt`; multi-alt with at least one LR alt → `LeftRecursive`.
+/// The shape decision matches `parser_gen::gen_parse_fn_named`'s
+/// branching exactly so the eventual Phase 4 split is a structural
+/// translation rather than a re-classification.
+fn lower_rule(rule: &ParserRule, ctx: &mut GenContext) -> Rule {
+    if rule.alternatives.len() == 1 {
+        return Rule::Simple(lower_simple_rule(rule, ctx));
+    }
+    if has_left_recursive_alt(rule) {
+        return Rule::LeftRecursive(lower_lr_rule(rule, ctx));
+    }
+    return Rule::MultiAlt(lower_multi_alt_rule(rule, ctx));
+}
+
+fn lower_simple_rule(rule: &ParserRule, ctx: &mut GenContext) -> SimpleRule {
+    let body = lower_alt_body(&rule.alternatives[0], 0, rule, ctx);
+    let scan_body = lower_scan_body(&rule.alternatives[0], ctx);
+    return SimpleRule {
+        header: lower_header(rule),
+        body,
+        scan_body,
+    };
+}
+
+/// Lower a multi-alt rule (no LR alts). Phase 2.3a only handles the
+/// case where every pair of alts has disjoint first-sets — the
+/// dispatch is a single token-led `if / else if` chain (`Direct`).
+/// Overlapping first-sets land in `Tournament` (scan-and-commit).
+fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule {
+    let header = lower_header(rule);
+
+    // Compute per-alt first sets up-front so the dispatch decision
+    // sees them and the resulting `DispatchBranch.tokens` reuses the
+    // same sets the per-alt analysis already computed.
+    let mut first_sets: Array<Array<String>> = [];
+    for let alt of &rule.alternatives {
+        let mut visiting: Array<String> = [];
+        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
+    }
+
+    let mut alts: Array<AltBody> = [];
+    let mut scan_alts: Array<ScanBody> = [];
+    let mut all_indices: Array<i32> = [];
+    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
+        alts.push(lower_alt_body(&rule.alternatives[i], i, rule, ctx));
+        scan_alts.push(lower_scan_body(&rule.alternatives[i], ctx));
+        all_indices.push(i);
+    }
+
+    let ctx_label = `rule '{rule.name}'`;
+    let dispatch = build_overlap_dispatch(&ctx_label, &rule.alternatives, &all_indices, &first_sets, ctx);
+    return MultiAltRule {
+        header,
+        alts,
+        scan_alts,
+        // Scan side and parse side share the same dispatch — for
+        // both Direct and Tournament shapes, the same selection
+        // logic applies to both halves of the codegen.
+        dispatch: clone_dispatch(&dispatch),
+        scan_dispatch: dispatch,
+    };
+}
+
+/// Lower a directly-left-recursive rule. ANTLR4 rewrites
+/// `expr : expr op expr | atom ;` into a precedence-climbing
+/// `parse_expr(min_prec)` whose body parses an atom and then runs
+/// a loop that dispatches on the next token to one of the LR
+/// suffix bodies. We mirror that structure in GIR:
+///
+/// * `atom: MultiAltRule` — the non-LR alternatives, lowered
+///   exactly as a regular multi-alt rule. When only one non-LR alt
+///   exists, this is still a `MultiAltRule` with a single-branch
+///   `Direct` dispatch — emit treats both cases uniformly.
+/// * `lr_alts: Array<LrAlt>` — per-LR-alt metadata: prefix-stripped
+///   suffix, precedence assignment, conflict-min-precedence, last
+///   internal self-ref index, suffix first-set, right-associativity.
+/// * `lr_dispatch: LrDispatchData` — the suffix-loop overlap groups
+///   and the indices of LR alts that have a non-empty suffix.
+///
+/// Phase 2.4 only handles the disjoint-suffix-first case (no overlap
+/// groups beyond singletons). Overlapping suffix first-sets need
+/// the scan-tournament dispatch from Phase 2.3c.
+fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
+    let header = lower_header(rule);
+
+    // Partition alts into atom (non-LR) and lr (LR). ANTLR4 requires
+    // at least one non-LR alt; we mirror the assertion so the GIR
+    // `atom: MultiAltRule` invariant (header derived from a non-empty
+    // alt set) is honoured.
+    let mut non_lr_indices: Array<i32> = [];
+    let mut lr_indices: Array<i32> = [];
+    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
+        if alt_is_left_recursive(&rule.alternatives[i], &rule.name) {
+            lr_indices.push(i);
+        } else {
+            non_lr_indices.push(i);
+        }
+    }
+    if non_lr_indices.is_empty() {
+        panic(`LR rule '{rule.name}' has no non-LR alt — ANTLR4 requires at least one atom alt`);
+    }
+    if lr_indices.is_empty() {
+        panic(`LR rule '{rule.name}' has no LR alt — should not have reached lower_lr_rule`);
+    }
+
+    let total_lr: i32 = lr_indices.len();
+    let atom = lower_lr_atom(rule, &non_lr_indices, ctx);
+
+    // Lower each LR alt's suffix and compute its precedence /
+    // metadata. `own_prec` follows ANTLR4's convention: first LR
+    // alt in source order gets the highest precedence (`total_lr`),
+    // last gets `1`.
+    let mut lr_alts: Array<LrAlt> = [];
+    let mut lr_position: i32 = 0;
+    for let lr_idx of &lr_indices {
+        let alt = &rule.alternatives[*lr_idx];
+        let own_prec = total_lr - lr_position;
+        let conflict_min = compute_lr_conflict_min_prec(
+            alt, own_prec, &lr_indices, rule, ctx, total_lr);
+        lr_alts.push(lower_lr_alt(rule, *lr_idx, own_prec, conflict_min, ctx));
+        lr_position += 1;
+    }
+
+    let lr_dispatch = compute_lr_dispatch_data(&lr_alts);
+
+    return LeftRecursiveRule {
+        header,
+        atom,
+        lr_alts,
+        lr_dispatch,
+    };
+}
+
+/// Lower the atom side of an LR rule — the non-LR alternatives only.
+/// Reuses `lower_multi_alt_rule`'s first-set + dispatch logic but
+/// projects through `non_lr_indices` so the output's `alt_index`,
+/// `case_name` / `struct_name` still match the ORIGINAL alt index in
+/// the surface `rule.alternatives` list. emit relies on that
+/// correspondence to look up case names from `header.case_names`.
+fn lower_lr_atom(
+    rule: &ParserRule,
+    non_lr_indices: &Array<i32>,
+    ctx: &mut GenContext,
+) -> MultiAltRule {
+    let header = lower_header(rule);
+
+    let mut first_sets: Array<Array<String>> = [];
+    for let idx of non_lr_indices {
+        let mut visiting: Array<String> = [];
+        first_sets.push(ctx.first_of_alt(&rule.alternatives[*idx], &mut visiting));
+    }
+
+    let mut alts: Array<AltBody> = [];
+    let mut scan_alts: Array<ScanBody> = [];
+    for let idx of non_lr_indices {
+        alts.push(lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx));
+        scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx));
+    }
+
+    let ctx_label = `LR rule '{rule.name}' atom`;
+    let dispatch = build_overlap_dispatch(&ctx_label, &rule.alternatives, non_lr_indices, &first_sets, ctx);
+    return MultiAltRule {
+        header,
+        alts,
+        scan_alts,
+        dispatch: clone_dispatch(&dispatch),
+        scan_dispatch: dispatch,
+    };
+}
+
+/// Lower a single LR alternative. Strips the leading self-ref and
+/// lowers everything after it as the alt's suffix body. The
+/// precedence (`own_prec`) and conflict floor (`conflict_min`) are
+/// computed by the caller and stored verbatim.
+fn lower_lr_alt(
+    rule: &ParserRule,
+    alt_idx: i32,
+    own_prec: i32,
+    conflict_min: i32,
+    ctx: &mut GenContext,
+) -> LrAlt {
+    let alt = &rule.alternatives[alt_idx];
+    if alt.elements.is_empty() {
+        panic(`LR alt {alt_idx} of '{rule.name}' is empty — should not be classified LR`);
+    }
+
+    // Build per-alt CST identifiers. `case_name` mirrors
+    // `case_names_for_rule`, and `struct_name` follows the
+    // `<RuleBase><CaseName>` convention the rest of `lower_alt_body`
+    // uses. We don't reuse `lower_alt_body` directly because we need
+    // the suffix elements (skipping the leading self-ref), not the
+    // whole alt.
+    let case_names = case_names_for_rule(&rule.alternatives);
+    let type_name = rule_type_name(&rule.name);
+    let base = strip_suffix(&type_name, &"Node");
+    let case_name = case_names[alt_idx];
+    let struct_name = `{base}{case_name}`;
+
+    // Compute `last_self_ref_idx` — the index (within the original
+    // alt's element list) of the LAST self-reference. -1 when the
+    // only self-ref is the leading one. This drives emit's
+    // "trailing self-ref drops back into the LR loop with the right
+    // precedence" handling.
+    let last_self_ref_idx = find_last_self_ref_idx(alt, &rule.name);
+
+    // Suffix first-set drives the LR loop's per-iteration dispatch.
+    let suffix_first = ctx.first_of_elements_from(&alt.elements, 1);
+
+    // Lower the suffix (elements[1..]) as an AltBody / ScanBody.
+    let suffix = lower_lr_alt_suffix(rule, alt_idx, &case_name, &struct_name, ctx);
+    let scan_suffix = lower_lr_alt_scan_suffix(rule, alt_idx, ctx);
+
+    return LrAlt {
+        alt_index: alt_idx,
+        case_name: case_name,
+        struct_name: struct_name,
+        suffix: suffix,
+        scan_suffix: scan_suffix,
+        own_prec: own_prec,
+        conflict_min: conflict_min,
+        last_self_ref_idx: last_self_ref_idx,
+        suffix_first: suffix_first,
+        right_associative: is_right_associative_alt(alt),
+    };
+}
+
+fn lower_lr_alt_suffix(
+    rule: &ParserRule,
+    alt_idx: i32,
+    case_name: &String,
+    struct_name: &String,
+    ctx: &mut GenContext,
+) -> AltBody {
+    let alt = &rule.alternatives[alt_idx];
+
+    // Per-alt counter starts at this alt's position in the rule's
+    // alt_gc_starts table — same as `lower_alt_body` does for the
+    // full-alt case. The suffix walk continues from there.
+    let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
+    let mut group_counter: i32 = alt_gc_starts[alt_idx];
+
+    let mut name_counts: Array<[String, i32]> = [];
+    let mut ops: Array<Op> = [];
+    // Same per-element follow logic as `lower_alt_body`, but the
+    // suffix starts at index 1 (index 0 is the stripped leading
+    // self-ref).
+    let outer_follow: Array<String> = [];
+    for let mut i = 1; i < alt.elements.len(); i += 1 {
+        let elem_follow = inner_follow_at(&alt.elements, i, &outer_follow, ctx);
+        ops.push(lower_op(&alt.elements[i], &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow));
+    }
+
+    let fields = enumerate_alt_field_decls(&ops);
+
+    return AltBody {
+        alt_index: alt_idx,
+        case_name: *case_name,
+        struct_name: *struct_name,
+        ops: ops,
+        fields: fields,
+        group_index_start: alt_gc_starts[alt_idx],
+        prefix_self_ref_min_prec: 0,
+    };
+}
+
+fn lower_lr_alt_scan_suffix(
+    rule: &ParserRule,
+    alt_idx: i32,
+    ctx: &mut GenContext,
+) -> ScanBody {
+    let alt = &rule.alternatives[alt_idx];
+    let mut elements: Array<ScanElement> = [];
+    // LR suffix: the scan body walks elements after the leading
+    // self-ref. The follow at the end of the suffix is the rule's
+    // outer follow — empty here; Phase 2.6 may refine.
+    let outer_follow: Array<String> = [];
+    for let mut i = 1; i < alt.elements.len(); i += 1 {
+        let elem_follow = inner_follow_at(&alt.elements, i, &outer_follow, ctx);
+        elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
+    }
+    return ScanBody { elements };
+}
+
+/// Index (within `alt.elements`) of the LAST self-reference to
+/// `rule_name`. Returns `-1` when the leading-prefix self-ref is
+/// the ONLY self-ref. Mirrors what emit needs to know about
+/// trailing self-refs (`expr op expr` has a trailing one;
+/// `expr '++' ` does not).
+fn find_last_self_ref_idx(alt: &Alternative, rule_name: &String) -> i32 {
+    let mut last: i32 = -1;
+    // Index 0 is the leading prefix self-ref (already known to
+    // exist for an LR alt); we count any self-ref at i >= 1 as
+    // "internal".
+    for let mut i = 1; i < alt.elements.len(); i += 1 {
+        if element_is_self_ref(&alt.elements[i], rule_name) {
+            last = i;
+        }
+    }
+    return last;
+}
+
+/// True iff `alt` carries `<assoc=right>` in its options. Mirrors
+/// `parser_gen::is_right_associative`.
+fn is_right_associative_alt(alt: &Alternative) -> bool {
+    for let opt of &alt.options {
+        if opt.name != "assoc" {
+            continue;
+        }
+        if let Ident(v) = &opt.value {
+            if *v == "right" {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// Compute the conflict-floor `min_prec` for `alt`. Left-associative
+/// alts use `own_prec + 1` as the floor (rejecting same-precedence
+/// on the right operand); right-associative use `own_prec` (so
+/// same-precedence nests rightward). Then widen the floor when a
+/// strictly higher-precedence alt's suffix claims one of our suffix's
+/// fixed tokens — see `parser_gen::compute_lr_conflict_min_prec` for
+/// the rationale (essentially: avoid the higher-prec alt grabbing a
+/// shared delimiter at the wrong precedence).
+fn compute_lr_conflict_min_prec(
+    alt: &Alternative,
+    own_prec: i32,
+    lr_indices: &Array<i32>,
+    rule: &ParserRule,
+    ctx: &mut GenContext,
+    total_lr: i32,
+) -> i32 {
+    let mut min_prec: i32 = if is_right_associative_alt(alt) { own_prec } else { own_prec + 1 };
+
+    let mut fixed_tokens: Array<String> = [];
+    for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
+        let elem = &alt.elements[ei];
+        match *elem {
+            TokenRef(t) => fixed_tokens.push(`TK_{t.name}`),
+            Literal(l) => fixed_tokens.push(literal_const_name(&l.text)),
+            _ => {},
+        };
+    }
+    if fixed_tokens.is_empty() {
+        return min_prec;
+    }
+
+    let mut lr_pos: i32 = 0;
+    for let lr_idx of lr_indices {
+        let other = &rule.alternatives[*lr_idx];
+        if other.elements.len() <= 1 {
+            lr_pos += 1;
+            continue;
+        }
+        let other_prec = total_lr - lr_pos;
+        if other_prec <= own_prec {
+            lr_pos += 1;
+            continue;
+        }
+        let suffix_first = ctx.first_of_elements_from(&other.elements, 1);
+        for let ft of &fixed_tokens {
+            if first_set_contains(&suffix_first, ft) {
+                let candidate = other_prec + 1;
+                if candidate > min_prec {
+                    min_prec = candidate;
+                }
+            }
+        }
+        lr_pos += 1;
+    }
+    return min_prec;
+}
+
+/// Build the LR loop's dispatch metadata. `valid_lr_alts` lists the
+/// indices (into `lr_alts`) of alts whose suffix is non-empty —
+/// degenerate `expr : expr` alts are filtered out. `groups` is the
+/// overlap-group partition over those alts' `suffix_first` sets.
+///
+/// Phase 2.4 only handles the disjoint case (each group is a
+/// singleton). Overlap groups land in Phase 2.3c.
+fn compute_lr_dispatch_data(lr_alts: &Array<LrAlt>) -> LrDispatchData {
+    let mut valid_lr_alts: Array<i32> = [];
+    let mut suffix_first_sets: Array<Array<String>> = [];
+    for let mut i = 0; i < lr_alts.len(); i += 1 {
+        let lr = &lr_alts[i];
+        if lr.suffix_first.is_empty() {
+            continue;
+        }
+        valid_lr_alts.push(i);
+        suffix_first_sets.push(lr.suffix_first);
+    }
+
+    // Overlap groups are tolerated here: emit's LR-suffix loop
+    // resolves multi-alt groups via scan-dispatch on the suffix
+    // (same scan-tournament pattern as the top-level `Tournament`
+    // dispatch). The GIR carries the groups as-is; correctness
+    // falls out of emit treating `group.len() > 1` as the cue to
+    // generate a scan-and-commit cascade across the group's alts.
+    let groups = compute_overlap_groups(&suffix_first_sets);
+
+    return LrDispatchData {
+        valid_lr_alts: valid_lr_alts,
+        groups: groups,
+    };
+}
+
+/// Union-find overlap grouping over per-alt first sets. Mirrors
+/// `parser_gen::compute_overlap_groups` — alts whose first sets
+/// share at least one token end up in the same group; disjoint
+/// alts get their own singleton group. The output's iteration order
+/// matches the input order (first occurrence wins as group root).
+fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<i32>> {
+    let n = first_sets.len();
+    let mut group_ids: Array<i32> = [];
+    for let mut i = 0; i < n; i += 1 {
+        group_ids.push(i);
+    }
+    for let mut i = 0; i < n; i += 1 {
+        for let mut j = i + 1; j < n; j += 1 {
+            if first_sets_overlap(&first_sets[i], &first_sets[j]) {
+                let gi = group_ids[i];
+                let gj = group_ids[j];
+                if gi != gj {
+                    for let mut k = 0; k < n; k += 1 {
+                        if group_ids[k] == gj {
+                            group_ids[k] = gi;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut seen_ids: Array<i32> = [];
+    let mut groups: Array<Array<i32>> = [];
+    for let mut i = 0; i < n; i += 1 {
+        let gid = group_ids[i];
+        let mut found: i32 = -1;
+        for let mut s = 0; s < seen_ids.len(); s += 1 {
+            if seen_ids[s] == gid {
+                found = s;
+                break;
+            }
+        }
+        if found >= 0 {
+            groups[found].push(i);
+        } else {
+            seen_ids.push(gid);
+            groups.push([i]);
+        }
+    }
+    return groups;
+}
+
+fn first_sets_overlap(a: &Array<String>, b: &Array<String>) -> bool {
+    for let tk of a {
+        if first_set_contains(b, tk) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn first_set_contains(set: &Array<String>, token: &String) -> bool {
+    for let t of set {
+        if *t == *token {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Build a `Direct` dispatch from disjoint first sets. Each branch
+/// matches one alt's first set; emit translates the branch list into
+/// an `if / else if` chain followed by an error fallback.
+fn build_direct_dispatch(first_sets: &Array<Array<String>>) -> MultiAltDispatch {
+    let mut branches: Array<DispatchBranch> = [];
+    for let mut i = 0; i < first_sets.len(); i += 1 {
+        branches.push(DispatchBranch {
+            tokens: first_sets[i],
+            alt_index: i,
+        });
+    }
+    return MultiAltDispatch::Direct(DirectDispatch { branches });
+}
+
+fn clone_dispatch(d: &MultiAltDispatch) -> MultiAltDispatch {
+    return match d {
+        Direct(dd) => MultiAltDispatch::Direct(DirectDispatch { branches: dd.branches }),
+        Tournament(td) => MultiAltDispatch::Tournament(TournamentDispatch { alts: td.alts }),
+    };
+}
+
+/// Choose a dispatch for a set of alternatives. When the per-alt
+/// first sets are pairwise disjoint, falls through to a token-led
+/// `Direct` dispatch. Otherwise (any two alts share a first token),
+/// requires every alt to be fully scannable and falls back to a
+/// scan-side `Tournament` dispatch sorted by element count
+/// descending — emit runs each scan helper and commits to the
+/// longest match. ANTLR4's longest-match LL choice, no backtracking.
+///
+/// `ctx_name` is the human-readable owner used in the panic message
+/// for unscannable alts (`"rule 'expr'"`, `"SimpleCst group"`, …).
+/// `alts` is the underlying surface alternative list; `indices`
+/// selects which alts participate in this dispatch.
+fn build_overlap_dispatch(
+    ctx_name: &String,
+    alts: &Array<Alternative>,
+    indices: &Array<i32>,
+    first_sets: &Array<Array<String>>,
+    ctx: &mut GenContext,
+) -> MultiAltDispatch {
+    if !any_overlap(first_sets) {
+        let mut branches: Array<DispatchBranch> = [];
+        for let mut k = 0; k < indices.len(); k += 1 {
+            branches.push(DispatchBranch {
+                tokens: first_sets[k],
+                alt_index: indices[k],
+            });
+        }
+        return MultiAltDispatch::Direct(DirectDispatch { branches });
+    }
+
+    for let idx of indices {
+        let mut visiting: Array<String> = [];
+        if !ctx.is_alt_scannable(&alts[*idx].elements, &mut visiting) {
+            panic(`{*ctx_name}: alt {*idx} is not fully scannable; Tournament dispatch needs all alts scannable`);
+        }
+    }
+
+    let mut sorted: Array<i32> = [];
+    for let idx of indices {
+        sorted.push(*idx);
+    }
+    sort_alts_by_element_count(&mut sorted, alts);
+    return MultiAltDispatch::Tournament(TournamentDispatch { alts: sorted });
+}
+
+/// True iff any pair of first-sets shares at least one token.
+fn any_overlap(first_sets: &Array<Array<String>>) -> bool {
+    for let mut i = 0; i < first_sets.len(); i += 1 {
+        for let mut j = i + 1; j < first_sets.len(); j += 1 {
+            if first_sets_overlap(&first_sets[i], &first_sets[j]) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// Sort `indices` by descending number of MANDATORY-leading-elements,
+/// with ties broken by `alt_sort_priority` and finally source order.
+/// Mirrors `parser_gen::sort_group_by_element_count` for the
+/// tournament-style dispatch.
+fn sort_alts_by_element_count(indices: &mut Array<i32>, alts: &Array<Alternative>) {
+    for let mut i = 0; i < indices.len(); i += 1 {
+        for let mut j = i + 1; j < indices.len(); j += 1 {
+            let pi = alt_sort_priority(&alts[indices[i]]);
+            let pj = alt_sort_priority(&alts[indices[j]]);
+            let mut swap = false;
+            if pj > pi {
+                swap = true;
+            } else if pj == pi {
+                if alts[indices[j]].elements.len() > alts[indices[i]].elements.len() {
+                    swap = true;
+                }
+            }
+            if swap {
+                let tmp = indices[i];
+                indices[i] = indices[j];
+                indices[j] = tmp;
+            }
+        }
+    }
+}
+
+/// Per-alt sorting priority, mirroring `parser_gen::alt_sort_priority`.
+/// Higher = preferred at dispatch time. Single-element alts whose
+/// only element is a `RuleRef` get a higher tier than multi-element
+/// `RuleRef`-led alts so SQLite-style `tor (',' tor)* | join_clause`
+/// groupings still pick the rule-ref catch-all on tie.
+fn alt_sort_priority(alt: &Alternative) -> i32 {
+    if alt.elements.len() == 1 {
+        if let RuleRef(_) = alt.elements[0] {
+            return 3;
+        }
+        return 1;
+    }
+    for let elem of &alt.elements {
+        match *elem {
+            TokenRef(_) | Literal(_) => return 4,
+            _ => return 2,
+        };
+    }
+    return 2;
+}
+
+/// Whether the rule has at least one directly-left-recursive
+/// alternative. Mirrors `parser_gen::is_left_recursive`'s shallow
+/// first-element check (ANTLR4 only rewrites direct LR; deep LR is
+/// out of contract — see `vendor/antlr4/doc/left-recursion.md`).
+fn has_left_recursive_alt(rule: &ParserRule) -> bool {
+    for let alt of &rule.alternatives {
+        if alt_is_left_recursive(alt, &rule.name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn alt_is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
+    if alt.elements.is_empty() {
+        return false;
+    }
+    return element_is_self_ref(&alt.elements[0], rule_name);
+}
+
+fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
+    return match *elem {
+        RuleRef(r) => r.name == *rule_name,
+        Label(lab) => element_is_self_ref(&lab.element, rule_name),
+        _ => false,
+    };
+}
+
+/// Lower the scan-side body for an alternative — the structural
+/// twin of `lower_alt_body` for the `scan_<rule>` predicate
+/// emission. Covers every shape `lower_op` handles: leaf ops, scalar
+/// `Label` rebinds, `Repeat` (greedy / non-greedy / Optional with
+/// follow propagation), and every `Group` shape
+/// (`Transparent` / `SingleAlt` / `TokenOnly` / `SimpleCst` /
+/// `General`).
+///
+/// The scan side has no field bindings, no struct construction, and
+/// no name dedup — it only produces a token-stream walk that
+/// returns the new `pos`.
+fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext) -> ScanBody {
+    let outer_follow: Array<String> = [];
+    let mut elements: Array<ScanElement> = [];
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        let elem_follow = inner_follow_at(&alt.elements, i, &outer_follow, ctx);
+        elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
+    }
+    return ScanBody { elements };
+}
+
+fn lower_scan_element(
+    elem: &Element,
+    ctx: &mut GenContext,
+    outer_follow: &Array<String>,
+) -> ScanElement {
+    return match *elem {
+        TokenRef(t) => ScanElement::Token(ScanTokenElem { kind: `TK_{t.name}` }),
+        Literal(l) => ScanElement::Token(ScanTokenElem {
+            kind: literal_const_name(&l.text),
+        }),
+        RuleRef(r) => ScanElement::RuleCall(ScanRuleCallElem {
+            target_snake: r.snake_name,
+            // Phase 2.6 — same follow-variant intern as the parse
+            // side, but with `is_scan = true` so the registry
+            // records this side's use.
+            variant_id: ctx.intern_follow_variant(&r.name, outer_follow, true),
+            // Phase 2.4 — `min_prec_arg = 0` is the scan-side default
+            // (`scan_<rule>` accepts an unused defaulted parameter
+            // regardless of LR-ness so the call site is uniform).
+            min_prec_arg: 0,
+        }),
+        Wildcard(_) => ScanElement::Wildcard,
+        Not(ne) => ScanElement::Excluded(ScanExcludedElem {
+            kinds: collect_excluded_kinds(&ne.element),
+        }),
+        Label(lab) => lower_scan_element(&lab.element, ctx, outer_follow),
+        Repeat(rep) => lower_scan_repeat(rep, ctx, outer_follow),
+        Group(g) => lower_scan_group(g, ctx, outer_follow),
+    };
+}
+
+/// Scan-side twin of `lower_group_op`. The scan side has no struct
+/// construction, so the shape distinction matters only for the
+/// dispatch step: single-alt groups have no dispatch (one body run
+/// unconditionally / wrapped in a one-alt `ScanGroupElem`), while
+/// multi-alt token-only groups dispatch on token kind.
+fn lower_scan_group(
+    g: &GroupElement,
+    ctx: &mut GenContext,
+    outer_follow: &Array<String>,
+) -> ScanElement {
+    let alts = &g.alternatives;
+    if alts.len() == 0 {
+        panic("Group with no alts is not a valid scan-lowering input");
+    }
+    if alts.len() == 1 {
+        let alt = &alts[0];
+        if alt.elements.len() == 0 {
+            panic("Group with empty alt is not a valid scan-lowering input");
+        }
+        if alt.elements.len() == 1 {
+            // Transparent (scan side) — nested inner allowed. The
+            // group's only element inherits the surrounding follow.
+            return lower_scan_element(&alt.elements[0], ctx, outer_follow);
+        }
+        // Single-alt (scan side) — nested elements allowed; each
+        // is lowered through the standard scan-element recursion.
+        let mut elements: Array<ScanElement> = [];
+        for let mut i = 0; i < alt.elements.len(); i += 1 {
+            let elem_follow = inner_follow_at(&alt.elements, i, outer_follow, ctx);
+            elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
+        }
+        return ScanElement::Group(ScanGroupElem {
+            alts: [ScanBody { elements }],
+            dispatch: empty_direct_dispatch(),
+            lenient: false,
+        });
+    }
+    if is_token_only_group(alts) {
+        let mut bodies: Array<ScanBody> = [];
+        let mut first_sets: Array<Array<String>> = [];
+        for let alt of alts {
+            let elem = &alt.elements[0];
+            bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, outer_follow)] });
+            first_sets.push([token_only_kind(elem)]);
+        }
+        return ScanElement::Group(ScanGroupElem {
+            alts: bodies,
+            dispatch: build_direct_dispatch(&first_sets),
+            lenient: false,
+        });
+    }
+    if is_simple_cst_group(alts) {
+        return lower_simple_cst_scan_group(alts, ctx, outer_follow);
+    }
+    if is_general_group(alts) {
+        return lower_general_scan_group(alts, ctx, outer_follow);
+    }
+    panic("Group shape (scan side) unrecognised by classifier");
+}
+
+fn lower_general_scan_group(
+    alts: &Array<Alternative>,
+    ctx: &mut GenContext,
+    outer_follow: &Array<String>,
+) -> ScanElement {
+    let mut bodies: Array<ScanBody> = [];
+    let mut first_sets: Array<Array<String>> = [];
+    let mut all_indices: Array<i32> = [];
+    for let mut ai = 0; ai < alts.len(); ai += 1 {
+        let alt = &alts[ai];
+        let mut elements: Array<ScanElement> = [];
+        for let mut i = 0; i < alt.elements.len(); i += 1 {
+            let elem_follow = inner_follow_at(&alt.elements, i, outer_follow, ctx);
+            elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
+        }
+        bodies.push(ScanBody { elements });
+        let mut visiting: Array<String> = [];
+        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
+        all_indices.push(ai);
+    }
+    let dispatch = build_overlap_dispatch(&"General group (scan)", alts, &all_indices, &first_sets, ctx);
+    return ScanElement::Group(ScanGroupElem {
+        alts: bodies,
+        dispatch: dispatch,
+        lenient: false,
+    });
+}
+
+/// Scan-side twin of `lower_repeat_op`. Same restrictions: greedy
+/// `Star` / `Plus` with a leaf inner only.
+fn lower_scan_repeat(
+    rep: &RepeatElement,
+    ctx: &mut GenContext,
+    outer_follow: &Array<String>,
+) -> ScanElement {
+    let mut inner_visiting: Array<String> = [];
+    let inner_first = ctx.first_of_element(&rep.element, &mut inner_visiting);
+
+    let strategy = if rep.non_greedy {
+        compute_non_greedy_scan_strategy(&rep.element, outer_follow, ctx);
+    } else {
+        choose_greedy_scan_repeat_strategy(&inner_first, &ctx.current_follow_mask);
+    };
+
+    let iter_follow = union_arrays(&inner_first, outer_follow);
+
+    let body = lower_scan_element(&rep.element, ctx, &iter_follow);
+    return ScanElement::Repeat(ScanRepeatElem {
+        kind: rep.kind,
+        body,
+        strategy: strategy,
+    });
+}
+
+/// Scan-side twin of `compute_non_greedy_strategy`. Same payload
+/// computation; only the wrapping `ScanRepeatStrategy` variant
+/// differs.
+fn compute_non_greedy_scan_strategy(
+    inner: &Element,
+    outer_follow: &Array<String>,
+    ctx: &mut GenContext,
+) -> ScanRepeatStrategy {
+    if let Wildcard(_) = inner {
+        return ScanRepeatStrategy::NonGreedy(NonGreedyStrategy {
+            exit_first: *outer_follow,
+            exit_second: [],
+        });
+    }
+    if let Not(_) = inner {
+        return ScanRepeatStrategy::NonGreedy(NonGreedyStrategy {
+            exit_first: *outer_follow,
+            exit_second: [],
+        });
+    }
+    let mut exit_second: Array<String> = [];
+    if let Group(g) = inner {
+        if g.alternatives.len() == 1 && g.alternatives[0].elements.len() >= 2 {
+            exit_second = ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
+        }
+    }
+    return ScanRepeatStrategy::NonGreedy(NonGreedyStrategy {
+        exit_first: *outer_follow,
+        exit_second: exit_second,
+    });
+}
+
+/// Build the `RuleHeader` shared by every `Rule` variant. The cached
+/// snake/field names on `ParserRule` are reused so we don't recompute
+/// `to_snake_case`. `case_names` and `alt_gc_starts` are derived
+/// from the alternative list with the same helpers the legacy
+/// `parser_gen.wado` uses, so the result is observationally
+/// identical.
+fn lower_header(rule: &ParserRule) -> RuleHeader {
+    return RuleHeader {
+        name: rule.name,
+        snake_name: rule.snake_name,
+        field_name: rule.field_name,
+        type_name: rule_type_name(&rule.name),
+        visibility: rule.visibility,
+        // Regular rules have no follow mask; variants set this in
+        // the Phase 2.6 pre-pass.
+        variant_of: null,
+        case_names: case_names_for_rule(&rule.alternatives),
+        alt_gc_starts: compute_alt_gc_starts(&rule.alternatives),
+    };
+}
+
+/// Cumulative `general_group` counter starts per alternative.
+/// Mirrors `parser_gen::gen_parse_fn_named`'s `alt_gc_starts`
+/// computation: each alt records the running counter at its start,
+/// then `count_general_groups(&alt.elements)` advances it for the
+/// next alt.
+fn compute_alt_gc_starts(alternatives: &Array<Alternative>) -> Array<i32> {
+    let mut starts: Array<i32> = [];
+    let mut running: i32 = 0;
+    for let alt of alternatives {
+        starts.push(running);
+        running += count_general_groups(&alt.elements);
+    }
+    return starts;
+}
+
+/// Lower one alternative body. For a single-alt rule the rule's own
+/// struct is the alt's struct (`case_name` empty, `struct_name`
+/// is the rule's CST type name). For a multi-alt rule the alt
+/// gets a per-alt case + struct name derived from
+/// `case_names_for_rule` and the convention `<RuleBase><CaseName>`
+/// (`<RuleBase>` being `rule_type_name(rule.name)` with the trailing
+/// `Node` stripped — same as `parser_gen::gen_alt_body` callers).
+fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenContext) -> AltBody {
+    let type_name = rule_type_name(&rule.name);
+    let mut case_name: String = "";
+    let mut struct_name: String = type_name;
+    if rule.alternatives.len() != 1 {
+        let case_names = case_names_for_rule(&rule.alternatives);
+        let base = strip_suffix(&type_name, &"Node");
+        case_name = case_names[idx];
+        struct_name = `{base}{case_names[idx]}`;
+    }
+
+    // The general-group counter is per-rule but its starting value
+    // for this alt is fixed by `compute_alt_gc_starts`, so init from
+    // there. Each general group encountered while lowering bumps it
+    // by 1 (mirrors `parser_gen::ctx.group_counter`).
+    let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
+    let mut group_counter: i32 = alt_gc_starts[idx];
+
+    let mut name_counts: Array<[String, i32]> = [];
+    let mut ops: Array<Op> = [];
+    // Per-element follow within the alt: tokens that can appear
+    // immediately after this element in the alt. For the last
+    // element, the follow is empty (the rule's own follow is the
+    // surrounding caller's concern, threaded via Phase 2.6 variant
+    // masks rather than this local computation).
+    let outer_follow: Array<String> = [];
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        let elem = &alt.elements[i];
+        let elem_follow = inner_follow_at(&alt.elements, i, &outer_follow, ctx);
+        ops.push(lower_op(elem, &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow));
+    }
+
+    let fields = enumerate_alt_field_decls(&ops);
+
+    return AltBody {
+        alt_index: idx,
+        case_name,
+        struct_name,
+        ops,
+        fields,
+        // Cumulative `general_group` counter at this alt's start.
+        // Mirrors `parser_gen::gen_parse_fn_named`'s `alt_gc_starts`
+        // table; lookup against `RuleHeader.alt_gc_starts` keeps the
+        // per-alt index stable.
+        group_index_start: cumulative_group_index_start(rule, idx),
+        // Phase 2.4 — prefix-LR alt precedence. Non-LR alts get 0.
+        prefix_self_ref_min_prec: 0,
+    };
+}
+
+/// Sum of `count_general_groups` for all alts before `idx`. Mirrors
+/// the per-alt counter `parser_gen::gen_parse_fn_named` builds at
+/// emit time. Recomputed (rather than reading
+/// `RuleHeader.alt_gc_starts`) so this fn doesn't take an extra
+/// parameter; the cost is negligible for the alt counts that occur
+/// in real grammars.
+fn cumulative_group_index_start(rule: &ParserRule, idx: i32) -> i32 {
+    let mut running: i32 = 0;
+    for let mut i = 0; i < idx; i += 1 {
+        running += count_general_groups(&rule.alternatives[i].elements);
+    }
+    return running;
+}
+
+/// Lower a single surface `Element` to a GIR `Op`. `rule_name` is
+/// the enclosing rule's name, threaded through so nested
+/// `SingleAlt` / `General` groups can fill in their `owner_rule`
+/// slot (the rule whose monomorph table the group's struct names
+/// live under). Phase 2.1 covers the trivial leaf elements; the
+/// remaining shapes panic with their own `TODO Phase 2.x` markers
+/// so a half-lowered alt body can't quietly reach codegen.
+fn lower_op(
+    elem: &Element,
+    name_counts: &mut Array<[String, i32]>,
+    rule_name: &String,
+    ctx: &mut GenContext,
+    group_counter: &mut i32,
+    outer_follow: &Array<String>,
+) -> Op {
+    return match *elem {
+        TokenRef(t) => Op::Token(TokenOp {
+            kind: `TK_{t.name}`,
+            field: dedup_name(&t.field_name, name_counts),
+        }),
+        Literal(l) => Op::Literal(LiteralOp {
+            kind: literal_const_name(&l.text),
+            field: dedup_name(&literal_field_name(&l.text), name_counts),
+        }),
+        RuleRef(r) => Op::RuleCall(RuleCallOp {
+            target_name: r.name,
+            target_snake: r.snake_name,
+            // Phase 2.6 — intern a follow-aware variant when the call
+            // site's `outer_follow` overlaps the callee's tail-greedy
+            // first set. `ctx.intern_follow_variant` handles the
+            // mask intersection and rejects empty / unknown-rule cases
+            // with `null`.
+            variant_id: ctx.intern_follow_variant(&r.name, outer_follow, false),
+            // Phase 2.4 — prefix-LR self-ref alts pass `min_prec` to
+            // their callee; non-LR call sites get the default `0`
+            // via the callee's defaulted parameter.
+            min_prec_arg: null,
+            field: dedup_name(&r.field_name, name_counts),
+        }),
+        Wildcard(_) => Op::Wildcard(WildcardOp {
+            field: dedup_name(&"wildcard", name_counts),
+        }),
+        Not(ne) => Op::Excluded(ExcludedOp {
+            kinds: collect_excluded_kinds(&ne.element),
+            field: dedup_name(&not_element_field_name(&ne.element), name_counts),
+        }),
+        Repeat(rep) => lower_repeat_op(rep, name_counts, rule_name, ctx, group_counter, outer_follow),
+        Group(g) => lower_group_op(g, name_counts, rule_name, ctx, group_counter, outer_follow),
+        Label(lab) => lower_label_op(lab, name_counts, rule_name, ctx, group_counter, outer_follow),
+    };
+}
+
+/// Lower a `Group` element. Phase 2.x.transparent only handles the
+/// trivial wrapping shape — a single alt containing exactly one
+/// leaf element (e.g. `(INT)`). The wrapping is purely syntactic;
+/// the inner element runs unconditionally with the surrounding
+/// alt's binding scope, so the inner Op is lowered against the same
+/// `name_counts` and the resulting `GroupOp` carries
+/// `GroupShape::Transparent`.
+///
+/// Storable shapes (`SingleAlt`, `TokenOnly`, `SimpleCst`,
+/// `General`) and multi-element Transparent groups land in their
+/// own follow-up sub-phases:
+///
+/// * Phase 2.x.singlealt — single alt with ≥ 2 elements →
+///   `GroupShape::SingleAlt` (struct of its own)
+/// * Phase 2.x.tokenonly — every alt a single Token / Literal →
+///   `GroupShape::TokenOnly`
+/// * Phase 2.x.simplecst — every alt a single distinct RuleRef →
+///   `GroupShape::SimpleCst`
+/// * Phase 2.x.general — multi-alt non-trivial → `GroupShape::General`
+fn lower_group_op(
+    g: &GroupElement,
+    name_counts: &mut Array<[String, i32]>,
+    rule_name: &String,
+    ctx: &mut GenContext,
+    group_counter: &mut i32,
+    outer_follow: &Array<String>,
+) -> Op {
+    let alts = &g.alternatives;
+    if alts.len() == 0 {
+        panic("Group with no alts is not a valid lowering input");
+    }
+    if alts.len() == 1 {
+        let alt = &alts[0];
+        if alt.elements.len() == 0 {
+            panic("Group with empty alt is not a valid lowering input");
+        }
+        if alt.elements.len() == 1 {
+            return lower_transparent_group(&alt.elements[0], name_counts, rule_name, ctx, group_counter, outer_follow);
+        }
+        return lower_single_alt_group(alt, name_counts, rule_name, ctx, group_counter, outer_follow);
+    }
+    if is_token_only_group(alts) {
+        return lower_token_only_group(alts, name_counts, ctx);
+    }
+    if is_simple_cst_group(alts) {
+        return lower_simple_cst_group(alts, name_counts, ctx);
+    }
+    if is_general_group(alts) {
+        return lower_general_group(alts, name_counts, rule_name, ctx, group_counter, outer_follow);
+    }
+    panic("Group shape unrecognised by classifier — should be impossible");
+}
+
+/// Single-element single-alt: `(e)` lowers to `e` with no struct of
+/// its own. The binding nests in the surrounding alt's name table.
+fn lower_transparent_group(
+    inner: &Element,
+    name_counts: &mut Array<[String, i32]>,
+    rule_name: &String,
+    ctx: &mut GenContext,
+    group_counter: &mut i32,
+    outer_follow: &Array<String>,
+) -> Op {
+    // Nested inner is allowed: `((a))` / `(a*)` / `(name=a)`.
+    // The Op carries whatever shape `lower_op` produces; the
+    // surrounding emit-side Transparent path inlines it directly.
+    // A Transparent group adds nothing between the inner and the
+    // outer alt, so `outer_follow` passes through verbatim.
+
+    let inner_op = lower_op(inner, name_counts, rule_name, ctx, group_counter, outer_follow);
+    let body = AltBody {
+        alt_index: 0,
+        // Transparent groups produce no struct of their own; case /
+        // struct names are unused by emit when shape is Transparent.
+        case_name: "",
+        struct_name: "",
+        ops: [inner_op],
+        // No FieldDecl: the binding name lives in the surrounding
+        // alt's struct (which `lower_alt_body` already records).
+        fields: [],
+        group_index_start: 0,
+        prefix_self_ref_min_prec: 0,
+    };
+    let scan_body = ScanBody {
+        elements: [lower_scan_element(inner, ctx, outer_follow)],
+    };
+    // `dispatch` is meaningless for a one-alt Transparent group:
+    // emit recognises `GroupShape::Transparent` and skips the
+    // dispatch step, running the body unconditionally. The empty
+    // `Direct` placeholder is the cheapest valid `MultiAltDispatch`.
+    return Op::Group(GroupOp {
+        shape: GroupShape::Transparent,
+        alts: [body],
+        scan_alts: [scan_body],
+        dispatch: empty_direct_dispatch(),
+        scan_dispatch: empty_direct_dispatch(),
+    });
+}
+
+/// Single-alt with ≥ 2 elements: `(name=ID '=' expr)` lowers to a
+/// struct of its own (`NameIdEqualsExprItem`) bound under a single
+/// field in the outer alt. The struct's element bindings live in a
+/// fresh name scope — they don't pollute the outer alt's counts.
+///
+/// `owner_rule` records the surrounding rule's name so a future
+/// nested `General` group inside this body can resolve its
+/// monomorph table key (`<RuleName>Group<idx>`). For Phase
+/// 2.x.singlealt the inner ops are leaves only; nested groups land
+/// in Phase 2.x.nested.
+fn lower_single_alt_group(
+    alt: &Alternative,
+    name_counts: &mut Array<[String, i32]>,
+    rule_name: &String,
+    ctx: &mut GenContext,
+    group_counter: &mut i32,
+    outer_follow: &Array<String>,
+) -> Op {
+    // Nested elements are allowed: `(a (b c))` / `(a*)` /
+    // `(name=a b)`. Each elem is lowered through the standard
+    // `lower_op` recursion.
+
+    let struct_name = single_alt_group_type_name(alt);
+    let field = dedup_name(&single_alt_group_field_name(alt), name_counts);
+
+    // Inner ops use a fresh name table — bindings inside the
+    // group's struct don't dedup against the outer alt.
+    let mut inner_counts: Array<[String, i32]> = [];
+    let mut ops: Array<Op> = [];
+    let mut scan_elements: Array<ScanElement> = [];
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        let elem = &alt.elements[i];
+        // Per-element follow inside the group: tokens that can
+        // appear immediately after this element. For non-last
+        // positions, that's the first-set of the suffix in the
+        // group's alt. The last position inherits the surrounding
+        // alt's `outer_follow`.
+        let elem_follow = inner_follow_at(&alt.elements, i, outer_follow, ctx);
+        ops.push(lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow));
+        scan_elements.push(lower_scan_element(elem, ctx, &elem_follow));
+    }
+
+    let body = AltBody {
+        alt_index: 0,
+        // Case name is unused for SingleAlt (no enum dispatch); the
+        // struct name is the single shape.
+        case_name: "",
+        struct_name: struct_name,
+        ops: ops,
+        // Phase 2.9 will enumerate `FieldDecl`s for the struct's
+        // own fields. Today emit-side code still walks `ops` to
+        // synthesise them, so leaving this empty matches the
+        // existing parser_gen behaviour.
+        fields: [],
+        group_index_start: 0,
+        prefix_self_ref_min_prec: 0,
+    };
+    let scan_body = ScanBody { elements: scan_elements };
+    return Op::Group(GroupOp {
+        shape: GroupShape::SingleAlt(SingleAltShape {
+            struct_name: struct_name,
+            field: field,
+            owner_rule: *rule_name,
+        }),
+        alts: [body],
+        scan_alts: [scan_body],
+        // Single-alt groups have no dispatch — emit recognises the
+        // shape and runs the body unconditionally.
+        dispatch: empty_direct_dispatch(),
+        scan_dispatch: empty_direct_dispatch(),
+    });
+}
+
+fn empty_direct_dispatch() -> MultiAltDispatch {
+    let branches: Array<DispatchBranch> = [];
+    return MultiAltDispatch::Direct(DirectDispatch { branches });
+}
+
+/// Multi-alt group whose every alt is a single Token / Literal —
+/// `(K_INSERT | K_REPLACE)`. Lowers to `GroupShape::TokenOnly`,
+/// which emit realises as a single `Token`-typed CST field. The
+/// alt bodies are the matched leaf token; dispatch is direct on
+/// each alt's single token kind (the alts are mutually exclusive
+/// by construction — the classifier has already checked).
+///
+/// Field name is `token_group_field_name(alts)` (e.g.
+/// `k_insert_or_k_replace`), deduped against the surrounding alt
+/// scope. Inner ops carry no field name of their own — emit reads
+/// the matched token off the runtime stack and writes it into the
+/// outer `field` slot.
+fn lower_token_only_group(
+    alts: &Array<Alternative>,
+    name_counts: &mut Array<[String, i32]>,
+    ctx: &mut GenContext,
+) -> Op {
+    let field = dedup_name(&token_group_field_name(alts), name_counts);
+
+    let mut bodies: Array<AltBody> = [];
+    let mut scan_bodies: Array<ScanBody> = [];
+    let mut first_sets: Array<Array<String>> = [];
+    let mut inner_counts: Array<[String, i32]> = [];
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let alt = &alts[i];
+        let elem = &alt.elements[0];
+        let op = lower_token_only_leaf(elem, &mut inner_counts);
+        bodies.push(AltBody {
+            alt_index: i,
+            // No per-alt case name / struct: the group's CST type
+            // is a single `Token` field. Emit dispatches on token
+            // kind and writes the matched token into the outer slot.
+            case_name: "",
+            struct_name: "",
+            ops: [op],
+            fields: [],
+            group_index_start: 0,
+            prefix_self_ref_min_prec: 0,
+        });
+        // Token-only alts are by construction leaves with no inner
+        // Repeats — outer_follow is irrelevant, pass empty.
+        let empty_follow: Array<String> = [];
+        scan_bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, &empty_follow)] });
+        first_sets.push([token_only_kind(elem)]);
+    }
+    let dispatch = build_direct_dispatch(&first_sets);
+    return Op::Group(GroupOp {
+        shape: GroupShape::TokenOnly(TokenOnlyShape { field: field }),
+        alts: bodies,
+        scan_alts: scan_bodies,
+        dispatch: dispatch,
+        scan_dispatch: clone_dispatch(&dispatch),
+    });
+}
+
+fn lower_token_only_leaf(elem: &Element, counts: &mut Array<[String, i32]>) -> Op {
+    return match *elem {
+        TokenRef(t) => Op::Token(TokenOp {
+            kind: `TK_{t.name}`,
+            field: dedup_name(&t.field_name, counts),
+        }),
+        Literal(l) => Op::Literal(LiteralOp {
+            kind: literal_const_name(&l.text),
+            field: dedup_name(&literal_field_name(&l.text), counts),
+        }),
+        _ => panic("lower_token_only_leaf: classifier permitted non-token leaf"),
+    };
+}
+
+fn token_only_kind(elem: &Element) -> String {
+    return match *elem {
+        TokenRef(t) => `TK_{t.name}`,
+        Literal(l) => literal_const_name(&l.text),
+        _ => panic("token_only_kind: classifier permitted non-token leaf"),
+    };
+}
+
+/// Multi-alt group whose every alt is a single distinct `RuleRef` —
+/// `(stmt | expr | decl)`. Lowers to `GroupShape::SimpleCst` with
+/// a shared variant type name and a single field name. Each alt's
+/// body is the matched `RuleCall`; dispatch uses each callee rule's
+/// first set.
+///
+/// Phase 2.x.simplecst handles only the disjoint-first-set case so
+/// the dispatch is a clean `Direct` chain. Overlapping rule-ref
+/// alts (e.g. two rules sharing a leading IDENT) need the scan-side
+/// tournament dispatch — that lands in Phase 2.3c.
+fn lower_simple_cst_group(
+    alts: &Array<Alternative>,
+    name_counts: &mut Array<[String, i32]>,
+    ctx: &mut GenContext,
+) -> Op {
+    let type_name = group_variant_type_name(alts);
+    let field = dedup_name(&group_field_base_name(alts), name_counts);
+
+    let mut first_sets: Array<Array<String>> = [];
+    for let alt of alts {
+        let mut visiting: Array<String> = [];
+        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
+    }
+
+    let mut bodies: Array<AltBody> = [];
+    let mut scan_bodies: Array<ScanBody> = [];
+    let mut inner_counts: Array<[String, i32]> = [];
+    let mut all_indices: Array<i32> = [];
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let alt = &alts[i];
+        let elem = &alt.elements[0];
+        let case_name = group_case_name(alt);
+        let op = lower_simple_cst_alt_call(elem, &mut inner_counts);
+        bodies.push(AltBody {
+            alt_index: i,
+            case_name: case_name,
+            // SimpleCst alts don't get their own struct — emit
+            // wraps the matched rule's CST node in a `<Variant>::<Case>`
+            // arm.
+            struct_name: "",
+            ops: [op],
+            fields: [],
+            group_index_start: 0,
+            prefix_self_ref_min_prec: 0,
+        });
+        // SimpleCst alts are single `RuleRef`s — outer_follow does
+        // not propagate into the callee (whole-rule follow is the
+        // callee's concern via Phase 2.6 variants).
+        let empty_follow: Array<String> = [];
+        scan_bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, &empty_follow)] });
+        all_indices.push(i);
+    }
+    let dispatch = build_overlap_dispatch(&"SimpleCst group", alts, &all_indices, &first_sets, ctx);
+    return Op::Group(GroupOp {
+        shape: GroupShape::SimpleCst(SimpleCstShape {
+            type_name: type_name,
+            field: field,
+        }),
+        alts: bodies,
+        scan_alts: scan_bodies,
+        dispatch: clone_dispatch(&dispatch),
+        scan_dispatch: dispatch,
+    });
+}
+
+fn lower_simple_cst_scan_group(
+    alts: &Array<Alternative>,
+    ctx: &mut GenContext,
+    outer_follow: &Array<String>,
+) -> ScanElement {
+    let mut bodies: Array<ScanBody> = [];
+    let mut first_sets: Array<Array<String>> = [];
+    let mut all_indices: Array<i32> = [];
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let alt = &alts[i];
+        let elem = &alt.elements[0];
+        bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, outer_follow)] });
+        let mut visiting: Array<String> = [];
+        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
+        all_indices.push(i);
+    }
+    let dispatch = build_overlap_dispatch(&"SimpleCst group (scan)", alts, &all_indices, &first_sets, ctx);
+    return ScanElement::Group(ScanGroupElem {
+        alts: bodies,
+        dispatch: dispatch,
+        lenient: false,
+    });
+}
+
+fn lower_simple_cst_alt_call(elem: &Element, counts: &mut Array<[String, i32]>) -> Op {
+    if let RuleRef(r) = *elem {
+        return Op::RuleCall(RuleCallOp {
+            target_name: r.name,
+            target_snake: r.snake_name,
+            // Phase 2.6 will populate `variant_id` from the
+            // follow-aware variant table. Today the call is to the
+            // base rule.
+            variant_id: null,
+            // Phase 2.4 — `null` is the regular-rule default; LR
+            // rules override at the rule-call site.
+            min_prec_arg: null,
+            field: dedup_name(&r.field_name, counts),
+        });
+    }
+    panic("lower_simple_cst_alt_call: classifier permitted non-RuleRef leaf");
+}
+
+fn simple_cst_alt_target_name(alt: &Alternative) -> String {
+    if let RuleRef(r) = &alt.elements[0] {
+        return r.name;
+    }
+    return "<unknown>";
+}
+
+/// Multi-alt group not covered by `SimpleCst` / `TokenOnly` /
+/// `SingleAlt` — `(stmt | 'go' expr)`. Lowers to
+/// `GroupShape::General` carrying:
+///
+/// * `variant_type = <RuleName>Group<idx>` — the per-rule variant
+///   type that stores one of the alts.
+/// * `alt_struct_names[j] = <RuleName>Group<idx>Alt<j>` — the
+///   per-alt struct name (always allocated, even when an alt is a
+///   single op, so emit can drop a uniform `<Variant>::Alt<j>(...)`
+///   constructor).
+/// * `field = group_<idx>` — deduped against the surrounding alt.
+/// * `group_index = <idx>` — the per-rule cumulative counter; emit
+///   uses this id to look up monomorph table entries and to
+///   resolve the cross-pass general-group enumeration.
+///
+/// Phase 2.x.general handles only the disjoint-first-set case.
+/// Overlapping alts (the typical case for non-trivial groups) need
+/// the scan-tournament dispatch from Phase 2.3c.
+///
+/// Per-alt elements use a fresh name table — the inner ops bind
+/// names inside the group's struct, not the outer alt. The shared
+/// `group_counter` is bumped before lowering inner alts so any
+/// nested general groups get the next sequential ids.
+fn lower_general_group(
+    alts: &Array<Alternative>,
+    name_counts: &mut Array<[String, i32]>,
+    rule_name: &String,
+    ctx: &mut GenContext,
+    group_counter: &mut i32,
+    outer_follow: &Array<String>,
+) -> Op {
+    let group_index = *group_counter;
+    *group_counter += 1;
+
+    let variant_type = general_group_type_name(rule_name, group_index);
+    let field = dedup_name(&general_group_field_name(group_index), name_counts);
+
+    let mut first_sets: Array<Array<String>> = [];
+    for let alt of alts {
+        let mut visiting: Array<String> = [];
+        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
+    }
+
+    let mut bodies: Array<AltBody> = [];
+    let mut scan_bodies: Array<ScanBody> = [];
+    let mut alt_struct_names: Array<String> = [];
+    let mut all_indices: Array<i32> = [];
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let alt = &alts[i];
+        let alt_struct = general_group_alt_struct_name(rule_name, group_index, i);
+        all_indices.push(i);
+        alt_struct_names.push(alt_struct);
+
+        // Inner alts get a fresh name table (the group struct is
+        // its own scope) but share the outer rule's
+        // `group_counter` — nested general groups inside this
+        // alt take the next sequential ids.
+        let mut inner_counts: Array<[String, i32]> = [];
+        let mut ops: Array<Op> = [];
+        let mut scan_elements: Array<ScanElement> = [];
+        for let mut ei = 0; ei < alt.elements.len(); ei += 1 {
+            let elem = &alt.elements[ei];
+            let elem_follow = inner_follow_at(&alt.elements, ei, outer_follow, ctx);
+            ops.push(lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow));
+            scan_elements.push(lower_scan_element(elem, ctx, &elem_follow));
+        }
+
+        bodies.push(AltBody {
+            alt_index: i,
+            // emit constructs `<Variant>::Alt<j>(...)`; case name is
+            // the literal `Alt<j>` so codegen does not need to
+            // re-derive it.
+            case_name: `Alt{i}`,
+            struct_name: alt_struct,
+            ops: ops,
+            fields: [],
+            group_index_start: 0,
+            prefix_self_ref_min_prec: 0,
+        });
+        scan_bodies.push(ScanBody { elements: scan_elements });
+    }
+    let ctx_label = `General group {*rule_name}Group{group_index}`;
+    let dispatch = build_overlap_dispatch(&ctx_label, alts, &all_indices, &first_sets, ctx);
+    return Op::Group(GroupOp {
+        shape: GroupShape::General(GeneralShape {
+            variant_type: variant_type,
+            alt_struct_names: alt_struct_names,
+            field: field,
+            group_index: group_index,
+        }),
+        alts: bodies,
+        scan_alts: scan_bodies,
+        dispatch: clone_dispatch(&dispatch),
+        scan_dispatch: dispatch,
+    });
+}
+
+/// Lower a `Repeat` element (`e?` / `e*` / `e+`). Phase 2.x.partial
+/// only handles greedy `Star` / `Plus` whose inner is a leaf
+/// element (no nested `Repeat` / `Group` / `Label`). The remaining
+/// shapes panic with their own `TODO` markers so a half-lowered
+/// `Repeat` cannot quietly reach codegen.
+///
+/// Strategy is `Plain`: emit produces `while peek_kind ∈ first_of_inner
+/// { … push body }` for `Star` and `Plus` (with `+`'s mandatory-first
+/// guard handled at emit time, not in the strategy enum). Phase
+/// 2.6 will introduce `WithFollowSubtraction` / `OptionalLookahead`
+/// / `OptionalScanGuard` once the per-call-site follow analysis
+/// runs as a pre-pass.
+///
+/// The inner Op uses a fresh `name_counts` because the binding name
+/// inside a loop body is a local to that iteration — it does not
+/// shadow or dedup against the surrounding alt's bindings (the
+/// outer alt's list-typed field comes from `FieldDecl` in Phase 2.9,
+/// independent of the inner binding).
+fn lower_repeat_op(
+    rep: &RepeatElement,
+    name_counts: &mut Array<[String, i32]>,
+    rule_name: &String,
+    ctx: &mut GenContext,
+    group_counter: &mut i32,
+    outer_follow: &Array<String>,
+) -> Op {
+    // Outer struct field name for the alt that contains this
+    // Repeat. For `Star` / `Plus` it's `<inner_base>_list` (the
+    // struct holds an `Array<...>`); for `Optional` it's just the
+    // inner base name (the struct holds an `Option<...>`). Dedup
+    // against the surrounding alt's name table — the inner body
+    // op's field lives in a fresh scope and does not collide.
+    //
+    // Special case: `(name+=expr)*` — when the Repeat's inner is a
+    // list-label (`+=`), the label name IS the array, with no
+    // `_list` suffix. Mirrors `parser_gen::gen_repeat_body`'s
+    // `is_list_label(inner)` branch at line 3113.
+    let outer_field = if repeat_inner_is_list_label(&rep.element) {
+        if let Label(lab) = rep.element {
+            dedup_name(&lab.field_name, name_counts);
+        } else {
+            panic("repeat_inner_is_list_label returned true for non-Label");
+        }
+    } else {
+        // Speculative `group_counter` value the inner lowering
+        // will see: pass the current value verbatim. A General-
+        // Group inner uses this id for its `group_<idx>` field
+        // name; the increment happens during the inner-Op
+        // lowering below so the outer name and inner shape stay
+        // in lockstep.
+        let outer_base = repeat_outer_base_name(&rep.element, rep.kind, *group_counter);
+        dedup_name(&outer_base, name_counts);
+    };
+
+    // Pre-compute the inner's first set; used both by the strategy
+    // decision (mask subtraction / suppression) and by the
+    // iter-follow propagation for nested constructs.
+    let mut inner_visiting: Array<String> = [];
+    let inner_first = ctx.first_of_element(&rep.element, &mut inner_visiting);
+
+    // Optional `?` has two specialised strategies that supersede
+    // the mask-aware decision when applicable:
+    //
+    // * `OptionalLookahead` — single-alt Group whose leading
+    //   elements are fixed tokens (≥ 2 of them). emit conjunctively
+    //   guards on the per-position kind checks.
+    // * `OptionalScanGuard` — any other Optional shape (Group with
+    //   non-token leading element, or scan-only mismatch) where the
+    //   inner is fully scannable. emit runs the scan helper as a
+    //   commit gate, then parses on success.
+    //
+    // Both kick in only outside a follow-mask suppression window;
+    // when the mask fully blocks the loop (`Suppressed`), the
+    // specialised strategies are unnecessary.
+    let mut opt_specialised: Option<RepeatStrategy> = null;
+    if !rep.non_greedy {
+        if let Optional = rep.kind {
+            let la = try_optional_lookahead(&rep.element);
+            if let Some(strat) = la {
+                opt_specialised = Option::<RepeatStrategy>::Some(strat);
+            } else {
+                opt_specialised = try_optional_scan_guard(&rep.element, ctx);
+            }
+        }
+    }
+
+    let strategy = if rep.non_greedy {
+        compute_non_greedy_strategy(&rep.element, outer_follow, ctx);
+    } else {
+        // Mask-driven `Suppressed` always wins — if every iteration's
+        // first token is in the variant mask, the loop never enters
+        // and any specialised guard would be unreachable. Otherwise
+        // prefer the specialised strategy when one is available;
+        // fall through to the mask-aware decision when not.
+        let mask_decision = choose_greedy_repeat_strategy(&inner_first, &ctx.current_follow_mask);
+        pick_greedy_strategy(mask_decision, opt_specialised);
+    };
+
+    // The inner body's `outer_follow` for nested constructs is the
+    // iter-follow of this repeat: `first(inner) ∪ outer_follow`,
+    // because after the inner finishes the loop either restarts
+    // (consuming a `first(inner)` token) or exits (the surrounding
+    // `outer_follow`). Today this propagation is only consumed by
+    // nested non-greedy Repeats.
+    let iter_follow = union_arrays(&inner_first, outer_follow);
+
+    let mut inner_counts: Array<[String, i32]> = [];
+    let body = lower_op(&rep.element, &mut inner_counts, rule_name, ctx, group_counter, &iter_follow);
+    return Op::Repeat(RepeatOp {
+        kind: rep.kind,
+        body,
+        strategy: strategy,
+        field: outer_field,
+    });
+}
+
+/// Try to materialise an `OptionalLookahead` strategy for an
+/// `Optional` Repeat whose inner is a single-alt Group of fixed
+/// tokens. Returns `null` when the inner doesn't yield a usable
+/// signature; the caller then falls through to the mask-aware
+/// `Plain` / `WithFollowSubtraction` / `Suppressed` decision.
+///
+/// Mirrors `parser_gen::optional_lookahead_depth` /
+/// `optional_lookahead_tokens` — emit's
+/// `gen_optional_with_lookahead` consumes the signature as a
+/// conjunction of per-position kind checks. The strategy fires
+/// only when the depth is ≥ 2; single-token inners already get
+/// the right behaviour from `Plain`.
+fn try_optional_lookahead(inner: &Element) -> Option<RepeatStrategy> {
+    if let Group(g) = inner {
+        let alts = &g.alternatives;
+        if alts.len() != 1 {
+            return null;
+        }
+        let mut sig: Array<String> = [];
+        for let elem of &alts[0].elements {
+            if let TokenRef(t) = elem {
+                sig.push(`TK_{t.name}`);
+            } else if let Literal(l) = elem {
+                sig.push(literal_const_name(&l.text));
+            } else {
+                break;
+            }
+        }
+        if sig.len() < 2 {
+            return null;
+        }
+        // Wrap each token in its own per-position array (the GIR's
+        // `sigs` shape allows multi-shape inner alts; for the
+        // single-alt fixed-token case each position has exactly one
+        // valid kind).
+        let mut per_position: Array<Array<String>> = [];
+        for let tk of &sig {
+            per_position.push([*tk]);
+        }
+        return Option::<RepeatStrategy>::Some(RepeatStrategy::OptionalLookahead(
+            OptionalLookaheadStrategy { sigs: [per_position] },
+        ));
+    }
+    return null;
+}
+
+/// Combine the mask-aware decision with an optional specialised
+/// strategy: `Suppressed` always wins (the loop won't run at all);
+/// otherwise the specialised strategy is preferred when available.
+fn pick_greedy_strategy(
+    mask_decision: RepeatStrategy,
+    specialised: Option<RepeatStrategy>,
+) -> RepeatStrategy {
+    if let Suppressed = mask_decision {
+        return mask_decision;
+    }
+    if let Some(strat) = specialised {
+        return strat;
+    }
+    return mask_decision;
+}
+
+/// Try to materialise an `OptionalScanGuard` strategy for an
+/// `Optional` Repeat whose inner cannot be decided by k-token
+/// lookahead but IS fully scannable. emit's
+/// `gen_optional_with_scan_guard` runs the scan helper and only
+/// parses the body when the scan succeeds.
+///
+/// Returns `null` for:
+/// * leaf inners (Token / Literal / Wildcard / Not — `Plain`
+///   handles them without a scan probe);
+/// * unscannable inners (the runtime has no save-and-rewind path,
+///   so an unscannable `?` is a codegen-time error — surface that
+///   by leaving the decision to `Plain` so emit can panic with the
+///   "no backtracking" message);
+/// * RuleRef inners that are unscannable (same reason).
+fn try_optional_scan_guard(
+    inner: &Element,
+    ctx: &mut GenContext,
+) -> Option<RepeatStrategy> {
+    let needs_guard = match *inner {
+        Group(_) => true,
+        RuleRef(_) => true,
+        _ => false,
+    };
+    if !needs_guard {
+        return null;
+    }
+    let mut visiting: Array<String> = [];
+    if !ctx.is_element_scannable(inner, &mut visiting) {
+        return null;
+    }
+    return Option::<RepeatStrategy>::Some(RepeatStrategy::OptionalScanGuard);
+}
+
+/// Greedy Repeat strategy decision. Outside a follow-aware variant
+/// (`current_follow_mask` empty) the strategy is `Plain`. Inside a
+/// variant we apply the mask to the inner's first set:
+///
+/// * `effective_first` is empty → every iteration's first token is
+///   in the mask, so the loop should never enter — emit it
+///   `Suppressed` and the runtime skips the storage allocation
+///   entirely.
+/// * `effective_first` is shorter than `inner_first` (some overlap
+///   between the loop's first set and the mask) → emit guards on
+///   the subtracted set with `WithFollowSubtraction`.
+/// * No overlap at all → `Plain` (the mask doesn't intersect this
+///   loop's iteration condition, so emit walks the standard
+///   `while peek ∈ first` path).
+fn choose_greedy_repeat_strategy(
+    inner_first: &Array<String>,
+    mask: &Array<String>,
+) -> RepeatStrategy {
+    if mask.is_empty() {
+        return RepeatStrategy::Plain;
+    }
+    let effective = subtract_first(inner_first, mask);
+    if effective.is_empty() {
+        return RepeatStrategy::Suppressed;
+    }
+    if effective.len() == inner_first.len() {
+        return RepeatStrategy::Plain;
+    }
+    return RepeatStrategy::WithFollowSubtraction(WithFollowSubtractionStrategy {
+        effective_first: effective,
+    });
+}
+
+/// Scan-side twin of `choose_greedy_repeat_strategy`. Different
+/// enum (`ScanRepeatStrategy` lacks `OptionalLookahead` /
+/// `OptionalScanGuard`) but otherwise identical decision tree.
+fn choose_greedy_scan_repeat_strategy(
+    inner_first: &Array<String>,
+    mask: &Array<String>,
+) -> ScanRepeatStrategy {
+    if mask.is_empty() {
+        return ScanRepeatStrategy::Plain;
+    }
+    let effective = subtract_first(inner_first, mask);
+    if effective.is_empty() {
+        return ScanRepeatStrategy::Suppressed;
+    }
+    if effective.len() == inner_first.len() {
+        return ScanRepeatStrategy::Plain;
+    }
+    return ScanRepeatStrategy::WithFollowSubtraction(WithFollowSubtractionStrategy {
+        effective_first: effective,
+    });
+}
+
+/// Token-by-token subtraction of `b` from `a`, preserving `a`'s
+/// order. Linear scan; kind-set sizes here are small (≤ a few
+/// dozen) so a linear `first_set_contains` is fine.
+fn subtract_first(a: &Array<String>, b: &Array<String>) -> Array<String> {
+    let mut result: Array<String> = [];
+    for let tk of a {
+        if !first_set_contains(b, tk) {
+            result.push(*tk);
+        }
+    }
+    return result;
+}
+
+/// Compute the `NonGreedy` strategy for a non-greedy Repeat (`e*?` /
+/// `e+?` / `e??`). `exit_first` is the surrounding alt's
+/// `outer_follow` — the tokens that may legitimately appear after
+/// the loop. `exit_second` provides 2-token disambiguation for the
+/// case where the inner's first set overlaps `outer_follow` (e.g.
+/// `(',' column_def)*?` followed by `(',' table_constraint)*`,
+/// where peek(0)==',' for both but peek(1) distinguishes).
+fn compute_non_greedy_strategy(
+    inner: &Element,
+    outer_follow: &Array<String>,
+    ctx: &mut GenContext,
+) -> RepeatStrategy {
+    // Wildcard / Not inner have open-ended first sets — emit treats
+    // their continue condition as "while not in follow". The strategy
+    // payload just carries `outer_follow` as `exit_first`; emit
+    // generates the appropriate "loop until follow appears" check.
+    if let Wildcard(_) = inner {
+        return RepeatStrategy::NonGreedy(NonGreedyStrategy {
+            exit_first: *outer_follow,
+            exit_second: [],
+        });
+    }
+    if let Not(_) = inner {
+        return RepeatStrategy::NonGreedy(NonGreedyStrategy {
+            exit_first: *outer_follow,
+            exit_second: [],
+        });
+    }
+
+    // `exit_second` is needed only when the inner's first set fully
+    // overlaps `outer_follow`. For now we only compute it for the
+    // single-alt Group inner case (the common ',' separator pattern)
+    // and leave it empty otherwise — emit's check falls back to a
+    // 1-token peek which conservatively matches minimum.
+    let mut exit_second: Array<String> = [];
+    if let Group(g) = inner {
+        if g.alternatives.len() == 1 && g.alternatives[0].elements.len() >= 2 {
+            exit_second = ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
+        }
+    }
+    return RepeatStrategy::NonGreedy(NonGreedyStrategy {
+        exit_first: *outer_follow,
+        exit_second: exit_second,
+    });
+}
+
+/// Append-and-dedup union of two token-kind arrays. Preserves the
+/// order of `a`, then appends new entries from `b`.
+fn union_arrays(a: &Array<String>, b: &Array<String>) -> Array<String> {
+    let mut result: Array<String> = [];
+    for let tk of a {
+        result.push(*tk);
+    }
+    for let tk of b {
+        if !first_set_contains(&result, tk) {
+            result.push(*tk);
+        }
+    }
+    return result;
+}
+
+/// Follow set for the element at index `i` in `elements`, taking
+/// the surrounding `outer_follow` as the propagation when the
+/// suffix `elements[i+1..]` is nullable. Mirrors what the legacy
+/// `parser_gen` computes per-position at its non-greedy / variant
+/// call sites.
+fn inner_follow_at(
+    elements: &Array<Element>,
+    i: i32,
+    outer_follow: &Array<String>,
+    ctx: &mut GenContext,
+) -> Array<String> {
+    let suffix_first = ctx.first_of_elements_from(elements, i + 1);
+    if ctx.tail_is_nullable_deep(elements, i + 1) {
+        return union_arrays(&suffix_first, outer_follow);
+    }
+    return suffix_first;
+}
+
+/// True iff `elem` is a list-label (`+=`). Used by
+/// `lower_repeat_op` to bypass the `_list`-suffix base-name
+/// computation: when a Repeat's inner is `name+=expr`, the label
+/// name IS the array.
+fn repeat_inner_is_list_label(elem: &Element) -> bool {
+    if let Label(lab) = elem {
+        return lab.list;
+    }
+    return false;
+}
+
+/// Outer struct field base name for a Repeat. `Star` / `Plus`
+/// take a `_list` suffix on the inner element's base; `Optional`
+/// uses the inner base unchanged. Mirrors `parser_gen`'s
+/// `dedup_name(&"<inner>_list", ...)` / `dedup_name(&"<inner>", ...)`
+/// pattern at field-info call sites.
+///
+/// `gc_speculative` is the value `group_counter` will be sitting
+/// at when the inner is lowered. For a General-Group inner, the
+/// outer field name embeds this id (`group_<id>_list`); the
+/// subsequent inner lowering consumes the same id and increments
+/// the counter. Other shapes ignore this parameter.
+fn repeat_outer_base_name(elem: &Element, kind: RepeatKind, gc_speculative: i32) -> String {
+    let base = repeat_inner_base_name(elem, gc_speculative);
+    return match kind {
+        Optional => base,
+        Star | Plus => `{base}_list`,
+    };
+}
+
+/// Inner element's base name, mirroring `gen_util::element_base_name`
+/// but inlined here so the lowering boundary stays self-contained.
+fn repeat_inner_base_name(elem: &Element, gc_speculative: i32) -> String {
+    return match elem {
+        TokenRef(t) => t.field_name,
+        Literal(l) => literal_field_name(&l.text),
+        RuleRef(r) => r.field_name,
+        Wildcard(_) => "wildcard",
+        Not(ne) => not_element_field_name(&ne.element),
+        Label(lab) => lab.field_name,
+        Group(g) => repeat_inner_group_base_name(g, gc_speculative),
+        Repeat(_) => panic("Nested Repeat (e**) is not valid g4 syntax"),
+    };
+}
+
+/// Base name for a Group element when it appears as a Repeat's
+/// inner — selects the Group shape's field-base helper that
+/// matches the classifier. For a General-Group inner, embeds the
+/// caller's speculative `group_counter` value (the same id the
+/// inner lowering will consume).
+fn repeat_inner_group_base_name(g: &GroupElement, gc_speculative: i32) -> String {
+    let alts = &g.alternatives;
+    if alts.len() == 1 {
+        let alt = &alts[0];
+        if alt.elements.len() == 1 {
+            // Transparent (single-element single-alt) — peel through
+            // to the inner element and let it pick the name.
+            return repeat_inner_base_name(&alt.elements[0], gc_speculative);
+        }
+        return single_alt_group_field_name(alt);
+    }
+    if is_token_only_group(alts) {
+        return token_group_field_name(alts);
+    }
+    if is_simple_cst_group(alts) {
+        return group_field_base_name(alts);
+    }
+    if is_general_group(alts) {
+        // The General group's CST type uses `group_<idx>` where
+        // `<idx>` is the per-rule `group_counter` value at the
+        // point the lowering visits it. The Repeat is the first
+        // visitor (computing its outer field name) but defers the
+        // actual increment to the subsequent inner-Op lowering, so
+        // we just embed the same speculative value here.
+        return general_group_field_name(gc_speculative);
+    }
+    panic("Group shape unrecognised by classifier (Repeat inner base name)");
+}
+
+/// Lower a `Label` element by recursively lowering its inner
+/// element, then overriding the inner op's field name with the
+/// label's name (deduped against the surrounding alt's name table).
+///
+/// Mirrors `parser_gen::gen_element`'s scalar-Label arm: the inner
+/// emission would have produced its own field name, but the label
+/// rebinds the value under `lab.field_name`. Phase 2.1 only allows
+/// labels around leaf elements; nested `Repeat` / `Group` inside a
+/// label requires the matching lowerings (Phase 2.3+) before the
+/// rebind can be expressed. List labels (`+=`) need an additional
+/// `Array<...>`-typed wrapper field; that wrapping is handled by
+/// the CST `FieldDecl` enumeration in Phase 2.9.
+fn lower_label_op(
+    lab: &LabelElement,
+    name_counts: &mut Array<[String, i32]>,
+    rule_name: &String,
+    ctx: &mut GenContext,
+    group_counter: &mut i32,
+    outer_follow: &Array<String>,
+) -> Op {
+    // `+=` list-label outside a Repeat: bind the inner element under
+    // the label name and rely on `FieldDecl` enumeration to wrap the
+    // outer struct field as `Array<inner_type>`. Inside a Repeat,
+    // `lower_repeat_op` already detected the list-label and is using
+    // the label name as the Repeat's outer field (no `_list` suffix);
+    // here we still produce the rebound inner op so the per-iteration
+    // body sees the matched value.
+    let label_field = dedup_name(&lab.field_name, name_counts);
+    // Recurse with a temporary name table so the inner op picks any
+    // base name without polluting the surrounding alt's counts —
+    // we'll throw away the inner field name and use `label_field`
+    // instead. The label is a name-rebind around its inner; the
+    // follow set is the same as what the label itself sees.
+    let mut inner_counts: Array<[String, i32]> = [];
+    let inner_op = lower_op(&lab.element, &mut inner_counts, rule_name, ctx, group_counter, outer_follow);
+    return rebind_op_field(inner_op, &label_field);
+}
+
+/// Enumerate the CST struct fields for an alt's `ops` list. The
+/// leading `span: Span` is always present; the rest map 1:1 from
+/// the lowered op list. Transparent `Group` ops contribute their
+/// inner op's field instead (the group itself has no struct slot).
+///
+/// Mirrors what `parser_gen::element_field_info` computed at emit
+/// time, but consumes the lowered IR so the field name and type
+/// agree with whatever shape the lowering chose. emit reads this
+/// list directly to lay out the struct.
+fn enumerate_alt_field_decls(ops: &Array<Op>) -> Array<FieldDecl> {
+    let mut fields: Array<FieldDecl> = [
+        FieldDecl {
+            name: "span",
+            type_str: "Span",
+            kind: FieldKind::Span,
+        },
+    ];
+    for let op of ops {
+        if let Some(decl) = op_field_decl(op) {
+            fields.push(decl);
+        }
+    }
+    return fields;
+}
+
+/// Single-op field decl. Returns `None` when the op contributes no
+/// struct field (Transparent groups inline their inner; Repeats
+/// over zero-field inners would do the same once supported).
+fn op_field_decl(op: &Op) -> Option<FieldDecl> {
+    return match op {
+        Token(t) => Option::<FieldDecl>::Some(FieldDecl {
+            name: t.field,
+            type_str: "Token",
+            kind: FieldKind::Plain,
+        }),
+        Literal(l) => Option::<FieldDecl>::Some(FieldDecl {
+            name: l.field,
+            type_str: "Token",
+            kind: FieldKind::Plain,
+        }),
+        RuleCall(r) => Option::<FieldDecl>::Some(FieldDecl {
+            name: r.field,
+            type_str: rule_type_name(&r.target_name),
+            kind: FieldKind::Plain,
+        }),
+        Wildcard(w) => Option::<FieldDecl>::Some(FieldDecl {
+            name: w.field,
+            type_str: "Token",
+            kind: FieldKind::Plain,
+        }),
+        Excluded(e) => Option::<FieldDecl>::Some(FieldDecl {
+            name: e.field,
+            type_str: "Token",
+            kind: FieldKind::Plain,
+        }),
+        Repeat(rep) => repeat_field_decl(rep),
+        Group(g) => group_field_decl(g),
+    };
+}
+
+fn repeat_field_decl(rep: &RepeatOp) -> Option<FieldDecl> {
+    let inner_decl = op_field_decl(&rep.body);
+    let inner_type = match &inner_decl {
+        Some(d) => d.type_str,
+        // No-field inner (e.g. transparent group with no leaf type
+        // resolution). The Repeat then has no struct field either —
+        // emit doesn't allocate storage for it.
+        null => return null,
+    };
+    return match rep.kind {
+        Optional => Option::<FieldDecl>::Some(FieldDecl {
+            name: rep.field,
+            type_str: `Option<{inner_type}>`,
+            kind: FieldKind::Optional,
+        }),
+        Star | Plus => Option::<FieldDecl>::Some(FieldDecl {
+            name: rep.field,
+            type_str: `Array<{inner_type}>`,
+            kind: FieldKind::List,
+        }),
+    };
+}
+
+fn group_field_decl(g: &GroupOp) -> Option<FieldDecl> {
+    return match &g.shape {
+        // Transparent groups inline their single inner op; there
+        // is no group-level field. The inner op's decl was already
+        // pushed by the surrounding `enumerate_alt_field_decls`
+        // — except… it wasn't, because the Group op IS the only
+        // entry in the alt's op list at that position. We need to
+        // hand back the inner's decl directly.
+        Transparent => transparent_group_inner_decl(g),
+        TokenOnly(to) => Option::<FieldDecl>::Some(FieldDecl {
+            name: to.field,
+            type_str: "Token",
+            kind: FieldKind::Plain,
+        }),
+        SimpleCst(scst) => Option::<FieldDecl>::Some(FieldDecl {
+            name: scst.field,
+            type_str: scst.type_name,
+            kind: FieldKind::Plain,
+        }),
+        SingleAlt(sa) => Option::<FieldDecl>::Some(FieldDecl {
+            name: sa.field,
+            type_str: sa.struct_name,
+            kind: FieldKind::Plain,
+        }),
+        General(gen) => Option::<FieldDecl>::Some(FieldDecl {
+            name: gen.field,
+            type_str: gen.variant_type,
+            kind: FieldKind::Plain,
+        }),
+    };
+}
+
+/// Transparent groups have exactly one alt whose body is one op.
+/// That inner op's decl is the field this group contributes.
+fn transparent_group_inner_decl(g: &GroupOp) -> Option<FieldDecl> {
+    if g.alts.len() != 1 || g.alts[0].ops.len() != 1 {
+        panic("Transparent Group must have exactly one alt with one inner op");
+    }
+    return op_field_decl(&g.alts[0].ops[0]);
+}
+
+/// Replace the `field` slot of an op with `new_field`. Covers
+/// every Op variant — labels can wrap any inner shape, and the
+/// rebind only rewrites the outermost field slot:
+///
+/// * Leaf ops carry their field directly — just replace.
+/// * `Repeat` carries the outer struct field on `RepeatOp.field`
+///   (the per-iteration `body.field` lives in its own scope and
+///   is unaffected).
+/// * `Group` shapes carry their outer field inside the shape
+///   payload (`TokenOnly.field`, `SimpleCst.field`, etc.); the
+///   `Transparent` shape has no field of its own and the label
+///   passes through to the inner op.
+fn rebind_op_field(op: Op, new_field: &String) -> Op {
+    return match op {
+        Token(t) => Op::Token(TokenOp { kind: t.kind, field: *new_field }),
+        Literal(l) => Op::Literal(LiteralOp { kind: l.kind, field: *new_field }),
+        RuleCall(r) => Op::RuleCall(RuleCallOp {
+            target_name: r.target_name,
+            target_snake: r.target_snake,
+            variant_id: r.variant_id,
+            min_prec_arg: r.min_prec_arg,
+            field: *new_field,
+        }),
+        Wildcard(_) => Op::Wildcard(WildcardOp { field: *new_field }),
+        Excluded(e) => Op::Excluded(ExcludedOp { kinds: e.kinds, field: *new_field }),
+        Repeat(rep) => Op::Repeat(RepeatOp {
+            kind: rep.kind,
+            body: rep.body,
+            strategy: rep.strategy,
+            field: *new_field,
+        }),
+        Group(g) => Op::Group(GroupOp {
+            shape: rebind_group_shape(g.shape, new_field),
+            alts: g.alts,
+            scan_alts: g.scan_alts,
+            dispatch: g.dispatch,
+            scan_dispatch: g.scan_dispatch,
+        }),
+    };
+}
+
+fn rebind_group_shape(shape: GroupShape, new_field: &String) -> GroupShape {
+    return match shape {
+        // Transparent groups inline their inner op; the label
+        // rebinds the inner op's field directly. The Group node
+        // itself has no field slot, so return the shape unchanged
+        // — the caller's `rebind_op_field` should have recursed
+        // into the inner op instead. Keep this as the unreachable
+        // arm rather than crashing: a label on a Transparent group
+        // is uncommon and emit's existing path handles it via the
+        // inner op's field.
+        Transparent => GroupShape::Transparent,
+        TokenOnly(to) => GroupShape::TokenOnly(TokenOnlyShape { field: *new_field }),
+        SimpleCst(scst) => GroupShape::SimpleCst(SimpleCstShape {
+            type_name: scst.type_name,
+            field: *new_field,
+        }),
+        SingleAlt(sa) => GroupShape::SingleAlt(SingleAltShape {
+            struct_name: sa.struct_name,
+            field: *new_field,
+            owner_rule: sa.owner_rule,
+        }),
+        General(gen) => GroupShape::General(GeneralShape {
+            variant_type: gen.variant_type,
+            alt_struct_names: gen.alt_struct_names,
+            field: *new_field,
+            group_index: gen.group_index,
+        }),
+    };
+}
+
+/// Resolve the exclusion set for a `~ X` element.
+///
+/// * `~ TOKEN` / `~ 'lit'` — single-token complement, the simple case.
+/// * `~ ( A | B | C )` — multi-token complement; each alt must be a
+///   single `TokenRef` or `Literal` (mirrors `parser_gen::collect_not_set_tokens`).
+///
+/// Other inner shapes (`~ rule`, `~ ( a b )`) are not supported by
+/// the runtime helpers (`p.match_not([...])`) and aren't expected
+/// in committed grammars.
+fn collect_excluded_kinds(inner: &Element) -> Array<String> {
+    return match *inner {
+        TokenRef(t) => [`TK_{t.name}`],
+        Literal(l) => [literal_const_name(&l.text)],
+        Group(g) => collect_excluded_kinds_from_group(&g),
+        _ => panic("collect_excluded_kinds: unsupported inner shape (only TokenRef / Literal / single-token-alts Group are valid)"),
+    };
+}
+
+fn collect_excluded_kinds_from_group(g: &GroupElement) -> Array<String> {
+    let mut kinds: Array<String> = [];
+    for let alt of &g.alternatives {
+        if alt.elements.len() != 1 {
+            panic("collect_excluded_kinds: ~ Group alt must be a single token / literal");
+        }
+        let elem = &alt.elements[0];
+        match *elem {
+            TokenRef(t) => kinds.push(`TK_{t.name}`),
+            Literal(l) => kinds.push(literal_const_name(&l.text)),
+            _ => panic("collect_excluded_kinds: ~ Group alt must be a single token / literal"),
+        }
+    }
+    return kinds;
+}
+
+/// Field-name deduplication mirroring `parser_gen::dedup_name`. The
+/// first occurrence keeps the base name; subsequent occurrences get
+/// `<base>_<n>` for `n = 2, 3, ...`.
+///
+/// Re-implemented here (not imported from `parser_gen.wado`) because
+/// Phase 4's split will move every emit-side helper out of
+/// `parser_gen.wado`; sharing utilities cross-file before the split
+/// would just create import churn for a few lines of straightforward
+/// counting.
+fn dedup_name(base: &String, counts: &mut Array<[String, i32]>) -> String {
+    let count = get_count(counts, base);
+    increment_count(counts, base);
+    if count > 0 {
+        return `{*base}_{count + 1}`;
+    }
+    return *base;
+}
+
+fn get_count(counts: &Array<[String, i32]>, name: &String) -> i32 {
+    for let entry of counts {
+        if entry.0 == *name {
+            return entry.1;
+        }
+    }
+    return 0;
+}
+
+fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
+    for let mut i = 0; i < counts.len(); i += 1 {
+        if counts[i].0 == *name {
+            let prev = counts[i].1;
+            counts[i] = [*name, prev + 1];
+            return;
+        }
+    }
+    counts.push([*name, 1]);
+}

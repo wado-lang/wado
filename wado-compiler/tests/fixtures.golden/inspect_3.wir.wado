@@ -42,7 +42,7 @@ struct wado-compiler/tests/fixtures/inspect_3.wado//PrettyLine {  // TypeId(6)
 
 array builtin::array<u64> (mut u64);  // TypeId(7)
 
-array builtin::array<PrettyPoint> (mut ref "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint");  // TypeId(8)
+array builtin::array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint> (mut ref "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint");  // TypeId(8)
 
 array builtin::array<i32> (mut i32);  // TypeId(9)
 
@@ -66,8 +66,8 @@ struct core:prelude//Array<i32> {  // TypeId(13)
     mut used: i32,
 }
 
-struct core:prelude//Array<PrettyPoint> {  // TypeId(14)
-    mut repr: ref builtin::array<PrettyPoint>,
+struct core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint> {  // TypeId(14)
+    mut repr: ref "builtin::array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>",
     mut used: i32,
 }
 
@@ -185,9 +185,9 @@ type "functype//core:prelude/format.wado/Formatter::apply_padding" = fn(ref "cor
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(71)
 
-type "functype//core:prelude/format.wado/Array<PrettyPoint>^Inspect::inspect" = fn(ref "core:prelude//Array<PrettyPoint>", ref "core:prelude/format.wado//Formatter");  // TypeId(72)
+type "functype//core:prelude/format.wado/Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>^Inspect::inspect" = fn(ref "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>", ref "core:prelude/format.wado//Formatter");  // TypeId(72)
 
-type "functype//core:prelude/format.wado/Array<PrettyPoint>^InspectAlt::inspect_alt" = fn(ref "core:prelude//Array<PrettyPoint>", ref "core:prelude/format.wado//Formatter");  // TypeId(73)
+type "functype//core:prelude/format.wado/Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>^InspectAlt::inspect_alt" = fn(ref "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>", ref "core:prelude/format.wado//Formatter");  // TypeId(73)
 
 type "functype//core:prelude/format.wado/Array<i32>^InspectAlt::inspect_alt" = fn(ref "core:prelude//Array<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(74)
 
@@ -207,11 +207,11 @@ type "functype//wado-compiler/tests/fixtures/inspect_3.wado/NDShape^Inspect::ins
 
 type "functype//wado-compiler/tests/fixtures/inspect_3.wado/NDMode^Inspect::inspect" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(82)
 
-type "functype//core:prelude/types.wado/Option<PrettyPoint>^Inspect::inspect" = fn(ref null "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint", ref "core:prelude/format.wado//Formatter");  // TypeId(83)
+type "functype//core:prelude/types.wado/Option<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>^Inspect::inspect" = fn(ref null "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint", ref "core:prelude/format.wado//Formatter");  // TypeId(83)
 
 type "functype//core:prelude/types.wado/Option<i32>^Inspect::inspect" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(84)
 
-type "functype//core:prelude/types.wado/Option<PrettyPoint>^InspectAlt::inspect_alt" = fn(ref null "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint", ref "core:prelude/format.wado//Formatter");  // TypeId(85)
+type "functype//core:prelude/types.wado/Option<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>^InspectAlt::inspect_alt" = fn(ref null "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint", ref "core:prelude/format.wado//Formatter");  // TypeId(85)
 
 type "functype//core:prelude/types.wado/Option<i32>^InspectAlt::inspect_alt" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(86)
 
@@ -238,8 +238,8 @@ fn "wado-compiler/tests/fixtures/inspect_3.wado/__test_0_pretty_array"() {
     let __b_3: ref "core:prelude//Array<i32>";
     let nums: ref "core:prelude//Array<i32>";
     let __cond_5: bool;
-    let __b_6: ref "core:prelude//Array<PrettyPoint>";
-    let points: ref "core:prelude//Array<PrettyPoint>";
+    let __b_6: ref "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>";
+    let points: ref "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>";
     let __cond_8: bool;
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/format.wado//Formatter";
@@ -354,8 +354,8 @@ condition: `{nums:#?}` == \"[
         });
         unreachable;
     }
-    points = __seq_lit: block -> ref "core:prelude//Array<PrettyPoint>" {
-        __b_6 = struct.new "core:prelude//Array<PrettyPoint>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint">(struct.new "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint" { x: 3, y: 4 }), used: 2 };
+    points = __seq_lit: block -> ref "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>" {
+        __b_6 = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint">(struct.new "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint" { x: 3, y: 4 }), used: 2 };
         break __seq_lit: __b_6;
         unreachable;
     };
@@ -363,7 +363,7 @@ condition: `{nums:#?}` == \"[
         self_70 = __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
             __local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
-            "core:prelude/format.wado/Array<PrettyPoint>^InspectAlt::inspect_alt"(points, __local_18);
+            "core:prelude/format.wado/Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>^InspectAlt::inspect_alt"(points, __local_18);
             break __tmpl: __local_17;
             unreachable;
         };
@@ -650,7 +650,7 @@ condition: `{none_val:#?}` == \"Option::None\"
         self_48 = __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
             __local_15 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
-            "core:prelude/types.wado/Option<PrettyPoint>^InspectAlt::inspect_alt"(nested, __local_15);
+            "core:prelude/types.wado/Option<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>^InspectAlt::inspect_alt"(nested, __local_15);
             break __tmpl: __local_14;
             unreachable;
         };
@@ -709,8 +709,8 @@ fn "wado-compiler/tests/fixtures/inspect_3.wado/__test_3_no_display"() {
     let __cond_11: bool;
     let opt_p: ref null "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint";
     let __cond_13: bool;
-    let __b: ref "core:prelude//Array<PrettyPoint>";
-    let arr: ref "core:prelude//Array<PrettyPoint>";
+    let __b: ref "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>";
+    let arr: ref "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>";
     let __cond_16: bool;
     let __cond_18: bool;
     let __local_19: ref "core:prelude/string.wado//String";
@@ -1009,7 +1009,7 @@ condition: `{none:?}` == \"Option::None\"
         self_145 = __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_43 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
             __local_44 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_43 };
-            "core:prelude/types.wado/Option<PrettyPoint>^Inspect::inspect"(opt_p, __local_44);
+            "core:prelude/types.wado/Option<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>^Inspect::inspect"(opt_p, __local_44);
             break __tmpl: __local_43;
             unreachable;
         };
@@ -1042,8 +1042,8 @@ condition: `{opt_p:?}` == \"Option::Some(PrettyPoint { x: 10, y: 20 })\"
         });
         unreachable;
     }
-    arr = __seq_lit: block -> ref "core:prelude//Array<PrettyPoint>" {
-        __b = struct.new "core:prelude//Array<PrettyPoint>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint">(struct.new "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint" { x: 3, y: 4 }), used: 2 };
+    arr = __seq_lit: block -> ref "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>" {
+        __b = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint">(struct.new "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint" { x: 3, y: 4 }), used: 2 };
         break __seq_lit: __b;
         unreachable;
     };
@@ -1051,7 +1051,7 @@ condition: `{opt_p:?}` == \"Option::Some(PrettyPoint { x: 10, y: 20 })\"
         self_167 = __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_47 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
             __local_48 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_47 };
-            "core:prelude/format.wado/Array<PrettyPoint>^Inspect::inspect"(arr, __local_48);
+            "core:prelude/format.wado/Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>^Inspect::inspect"(arr, __local_48);
             break __tmpl: __local_47;
             unreachable;
         };
@@ -3116,11 +3116,11 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/format.wado/Array<PrettyPoint>^Inspect::inspect"(self, f) {
+fn "core:prelude/format.wado/Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>^Inspect::inspect"(self, f) {
     let i: i32;
     let s: ref "core:prelude/string.wado//String";
     let _licm_used_12: i32;
-    let _licm_repr_13: ref builtin::array<PrettyPoint>;
+    let _licm_repr_13: ref "builtin::array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>";
     "core:prelude/string.wado/String::push"(f.buf, 91);
     __for_5: block {
         i = 0;
@@ -3144,7 +3144,7 @@ fn "core:prelude/format.wado/Array<PrettyPoint>^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 93);
 }
 
-fn "core:prelude/types.wado/Option<PrettyPoint>^Inspect::inspect"(self, f) {
+fn "core:prelude/types.wado/Option<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>^Inspect::inspect"(self, f) {
     let s_3: ref "core:prelude/string.wado//String";
     let s_5: ref "core:prelude/string.wado//String";
     let s_7: ref "core:prelude/string.wado//String";
@@ -3176,7 +3176,7 @@ fn "core:prelude/types.wado/Option<i32>^Inspect::inspect"(self, f) {
     }
 }
 
-fn "core:prelude/types.wado/Option<PrettyPoint>^InspectAlt::inspect_alt"(self, f) {
+fn "core:prelude/types.wado/Option<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>^InspectAlt::inspect_alt"(self, f) {
     let open: ref "core:prelude/string.wado//String";
     let i_10: i32;
     let s_12: ref "core:prelude/string.wado//String";
@@ -3286,7 +3286,7 @@ fn "core:prelude/types.wado/Option<i32>^InspectAlt::inspect_alt"(self, f) {
     }
 }
 
-fn "core:prelude/format.wado/Array<PrettyPoint>^InspectAlt::inspect_alt"(self, f) {
+fn "core:prelude/format.wado/Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>^InspectAlt::inspect_alt"(self, f) {
     let i_2: i32;
     let s_5: ref "core:prelude/string.wado//String";
     let open: ref "core:prelude/string.wado//String";
@@ -3296,7 +3296,7 @@ fn "core:prelude/format.wado/Array<PrettyPoint>^InspectAlt::inspect_alt"(self, f
     let i_28: i32;
     let s_30: ref "core:prelude/string.wado//String";
     let _licm_used_33: i32;
-    let _licm_repr_34: ref builtin::array<PrettyPoint>;
+    let _licm_repr_34: ref "builtin::array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>";
     let _licm_indent_35: i32;
     let _licm_buf_36: ref "core:prelude/string.wado//String";
     let _licm_indent_37: i32;

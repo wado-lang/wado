@@ -37,32 +37,32 @@ struct wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado//Point {  // 
     mut y: i32,
 }
 
-variant core:prelude/types.wado//Result<Point,String> {  // TypeId(6)
+variant core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String> {  // TypeId(6)
     Ok(ref "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado//Point"),
     Err(ref "core:prelude/string.wado//String"),
 }
 
-struct core:prelude/types.wado//Result<Point,String>::Ok {  // TypeId(7)
+struct core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>::Ok {  // TypeId(7)
     discriminant: i32,
     payload_0: ref "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado//Point",
 }
 
-struct core:prelude/types.wado//Result<Point,String>::Err {  // TypeId(8)
+struct core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>::Err {  // TypeId(8)
     discriminant: i32,
     payload_0: ref "core:prelude/string.wado//String",
 }
 
-variant core:prelude/types.wado//Result<Config,String> {  // TypeId(9)
+variant core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String> {  // TypeId(9)
     Ok(ref "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado//Config"),
     Err(ref "core:prelude/string.wado//String"),
 }
 
-struct core:prelude/types.wado//Result<Config,String>::Ok {  // TypeId(10)
+struct core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Ok {  // TypeId(10)
     discriminant: i32,
     payload_0: ref "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado//Config",
 }
 
-struct core:prelude/types.wado//Result<Config,String>::Err {  // TypeId(11)
+struct core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Err {  // TypeId(11)
     discriminant: i32,
     payload_0: ref "core:prelude/string.wado//String",
 }
@@ -87,11 +87,11 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/point_sum" = fn(i32) -> i32;  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/make_config" = fn(i32) -> ref "core:prelude/types.wado//Result<Config,String>";  // TypeId(22)
+type "functype//wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/make_config" = fn(i32) -> ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>";  // TypeId(22)
 
 type "functype//wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/config_summary" = fn(i32) -> i32;  // TypeId(23)
 
-type "functype//wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/get_point" = fn(i32) -> ref "core:prelude/types.wado//Result<Point,String>";  // TypeId(24)
+type "functype//wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/get_point" = fn(i32) -> ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>";  // TypeId(24)
 
 type "functype//wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/run" = fn();  // TypeId(25)
 
@@ -184,20 +184,20 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/point_sum"(n) {
 
 fn "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/make_config"(n) {
     if n == 0 {
-        return struct.new "core:prelude/types.wado//Result<Config,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("zero"), used: 4 } };
+        return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("zero"), used: 4 } };
     }
-    return struct.new "core:prelude/types.wado//Result<Config,String>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado//Config" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test"), used: 4 }, value: n, enabled: n > 0 } };
+    return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado//Config" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test"), used: 4 }, value: n, enabled: n > 0 } };
 }
 
 fn "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/config_summary"(n) {
-    let result: ref "core:prelude/types.wado//Result<Config,String>";
+    let result: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>";
     let c: ref "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado//Config";
     let base: i32;
     let self: ref "core:prelude/string.wado//String";
     result = "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/make_config"(n);
-    if ref.test "core:prelude/types.wado//Result<Config,String>::Ok"(result) {
-        let __cast_2: ref "core:prelude/types.wado//Result<Config,String>::Ok";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<Config,String>::Ok"(result);
+    if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Ok"(result) {
+        let __cast_2: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Ok";
+        __cast_2 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Ok"(result);
         c = __cast_2.payload_0;
         base = c.value * 10;
         if c.enabled {
@@ -220,9 +220,9 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/config_summary"(
 
 fn "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/get_point"(n) {
     if n < 0 {
-        return struct.new "core:prelude/types.wado//Result<Point,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bad"), used: 3 } };
+        return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bad"), used: 3 } };
     }
-    return struct.new "core:prelude/types.wado//Result<Point,String>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado//Point" { x: n, y: n + 1 } };
+    return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado//Point" { x: n, y: n + 1 } };
 }
 
 fn "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/run"() {
@@ -272,21 +272,21 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/run"() {
     let f_78: ref "core:prelude/format.wado//Formatter";
     let f_84: ref "core:prelude/format.wado//Formatter";
     let f_89: ref "core:prelude/format.wado//Formatter";
-    let result_93: ref "core:prelude/types.wado//Result<Point,String>";
+    let result_93: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>";
     let p_94: ref "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado//Point";
     let f_99: ref "core:prelude/format.wado//Formatter";
     let f_104: ref "core:prelude/format.wado//Formatter";
-    let result_108: ref "core:prelude/types.wado//Result<Point,String>";
+    let result_108: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>";
     let p_109: ref "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado//Point";
     let f_114: ref "core:prelude/format.wado//Formatter";
     let f_119: ref "core:prelude/format.wado//Formatter";
-    let result_123: ref "core:prelude/types.wado//Result<Config,String>";
+    let result_123: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>";
     let c_124: ref "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado//Config";
     let msg_125: ref "core:prelude/string.wado//String";
     let other_127: ref "core:prelude/string.wado//String";
     let len_a_128: i32;
     let f_136: ref "core:prelude/format.wado//Formatter";
-    let result_141: ref "core:prelude/types.wado//Result<Config,String>";
+    let result_141: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>";
     let c_142: ref "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado//Config";
     let msg_143: ref "core:prelude/string.wado//String";
     let other_145: ref "core:prelude/string.wado//String";
@@ -449,18 +449,18 @@ condition: config_summary(0) == -1
     }
     __v0_10 = __inline_pass_payload_37: block -> i32 {
         result_93 = "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/get_point"(5);
-        let __match_scrut_0: ref "core:prelude/types.wado//Result<Point,String>";
+        let __match_scrut_0: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>";
         __match_scrut_0 = result_93;
-        if ref.test "core:prelude/types.wado//Result<Point,String>::Ok"(__match_scrut_0) {
-            let __cast_2: ref "core:prelude/types.wado//Result<Point,String>::Ok";
-            __cast_2 = ref.cast "core:prelude/types.wado//Result<Point,String>::Ok"(__match_scrut_0);
+        if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>::Ok"(__match_scrut_0) {
+            let __cast_2: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>::Ok";
+            __cast_2 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>::Ok"(__match_scrut_0);
             p_94 = __cast_2.payload_0;
             break __inline_pass_payload_37: p_94.x + p_94.y;
             unreachable;
             unreachable;
         } else {
-            let __cast_1: ref "core:prelude/types.wado//Result<Point,String>::Err";
-            __cast_1 = ref.cast "core:prelude/types.wado//Result<Point,String>::Err"(__match_scrut_0);
+            let __cast_1: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>::Err";
+            __cast_1 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>::Err"(__match_scrut_0);
             break __inline_pass_payload_37: -1;
             unreachable;
             unreachable;
@@ -499,18 +499,18 @@ condition: pass_payload(5) == 11
     }
     __v0_12 = __inline_pass_payload_45: block -> i32 {
         result_108 = "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/get_point"(-1);
-        let __match_scrut_1: ref "core:prelude/types.wado//Result<Point,String>";
+        let __match_scrut_1: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>";
         __match_scrut_1 = result_108;
-        if ref.test "core:prelude/types.wado//Result<Point,String>::Ok"(__match_scrut_1) {
-            let __cast_4: ref "core:prelude/types.wado//Result<Point,String>::Ok";
-            __cast_4 = ref.cast "core:prelude/types.wado//Result<Point,String>::Ok"(__match_scrut_1);
+        if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>::Ok"(__match_scrut_1) {
+            let __cast_4: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>::Ok";
+            __cast_4 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>::Ok"(__match_scrut_1);
             p_109 = __cast_4.payload_0;
             break __inline_pass_payload_45: p_109.x + p_109.y;
             unreachable;
             unreachable;
         } else {
-            let __cast_3: ref "core:prelude/types.wado//Result<Point,String>::Err";
-            __cast_3 = ref.cast "core:prelude/types.wado//Result<Point,String>::Err"(__match_scrut_1);
+            let __cast_3: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>::Err";
+            __cast_3 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Point,core:prelude/string.wado/String>::Err"(__match_scrut_1);
             break __inline_pass_payload_45: -1;
             unreachable;
             unreachable;
@@ -549,18 +549,18 @@ condition: pass_payload(-1) == -1
     }
     __v0_14 = __inline_both_branches_53: block -> ref "core:prelude/string.wado//String" {
         result_123 = "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/make_config"(1);
-        let __match_scrut_2: ref "core:prelude/types.wado//Result<Config,String>";
+        let __match_scrut_2: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>";
         __match_scrut_2 = result_123;
-        if ref.test "core:prelude/types.wado//Result<Config,String>::Ok"(__match_scrut_2) {
-            let __cast_6: ref "core:prelude/types.wado//Result<Config,String>::Ok";
-            __cast_6 = ref.cast "core:prelude/types.wado//Result<Config,String>::Ok"(__match_scrut_2);
+        if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Ok"(__match_scrut_2) {
+            let __cast_6: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Ok";
+            __cast_6 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Ok"(__match_scrut_2);
             c_124 = __cast_6.payload_0;
             break __inline_both_branches_53: c_124.name;
             unreachable;
             unreachable;
         } else {
-            let __cast_5: ref "core:prelude/types.wado//Result<Config,String>::Err";
-            __cast_5 = ref.cast "core:prelude/types.wado//Result<Config,String>::Err"(__match_scrut_2);
+            let __cast_5: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Err";
+            __cast_5 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Err"(__match_scrut_2);
             msg_125 = __cast_5.payload_0;
             break __inline_both_branches_53: msg_125;
             unreachable;
@@ -607,18 +607,18 @@ condition: both_branches(1) == \"test\"
     }
     __v0_16 = __inline_both_branches_64: block -> ref "core:prelude/string.wado//String" {
         result_141 = "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/make_config"(0);
-        let __match_scrut_3: ref "core:prelude/types.wado//Result<Config,String>";
+        let __match_scrut_3: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>";
         __match_scrut_3 = result_141;
-        if ref.test "core:prelude/types.wado//Result<Config,String>::Ok"(__match_scrut_3) {
-            let __cast_8: ref "core:prelude/types.wado//Result<Config,String>::Ok";
-            __cast_8 = ref.cast "core:prelude/types.wado//Result<Config,String>::Ok"(__match_scrut_3);
+        if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Ok"(__match_scrut_3) {
+            let __cast_8: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Ok";
+            __cast_8 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Ok"(__match_scrut_3);
             c_142 = __cast_8.payload_0;
             break __inline_both_branches_64: c_142.name;
             unreachable;
             unreachable;
         } else {
-            let __cast_7: ref "core:prelude/types.wado//Result<Config,String>::Err";
-            __cast_7 = ref.cast "core:prelude/types.wado//Result<Config,String>::Err"(__match_scrut_3);
+            let __cast_7: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Err";
+            __cast_7 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Err"(__match_scrut_3);
             msg_143 = __cast_7.payload_0;
             break __inline_both_branches_64: msg_143;
             unreachable;
@@ -1146,13 +1146,13 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let self_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         self_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             self_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: self_8.repr, used: self_8.used, byte_index: 0 };
             unreachable;
         };
-        break __inline_StrCharIter_IntoIterator__into_iter_1: self_7;
+        break __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: self_7;
         unreachable;
     };
     _licm_buf_33 = f.buf;

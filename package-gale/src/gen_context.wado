@@ -582,7 +582,7 @@ impl GenContext {
     }
 
     /// Returns true if every element in the sequence is scannable.
-    fn is_alt_scannable(&mut self, elements: &Array<Element>, visiting: &mut Array<String>) -> bool {
+    pub fn is_alt_scannable(&mut self, elements: &Array<Element>, visiting: &mut Array<String>) -> bool {
         for let elem of elements {
             if !self.is_element_scannable(elem, visiting) {
                 return false;
@@ -592,7 +592,7 @@ impl GenContext {
     }
 
     /// Returns true if a single element is scannable.
-    fn is_element_scannable(&mut self, elem: &Element, visiting: &mut Array<String>) -> bool {
+    pub fn is_element_scannable(&mut self, elem: &Element, visiting: &mut Array<String>) -> bool {
         return match elem {
             TokenRef(_) | Literal(_) => true,
             RuleRef(r) => self.is_rule_scannable(&r.name, visiting),

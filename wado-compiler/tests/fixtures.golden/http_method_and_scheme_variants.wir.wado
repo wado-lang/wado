@@ -193,7 +193,7 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(27)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>] {  // TypeId(28)
+struct tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>] {  // TypeId(28)
     mut 0: i32,
     mut 1: i32,
 }
@@ -302,7 +302,7 @@ type "functype//wado-compiler/tests/fixtures/http_method_and_scheme_variants.wad
 
 type "functype//wado-compiler/tests/fixtures/http_method_and_scheme_variants.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(59)
 
-type "functype//wado-compiler/tests/fixtures/http_method_and_scheme_variants.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]";  // TypeId(60)
+type "functype//wado-compiler/tests/fixtures/http_method_and_scheme_variants.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";  // TypeId(60)
 
 type "functype//wado-compiler/tests/fixtures/http_method_and_scheme_variants.wado/__cm_export__handle" = fn(i32);  // TypeId(61)
 
@@ -578,7 +578,7 @@ fn "wado-compiler/tests/fixtures/http_method_and_scheme_variants.wado/handle"(re
     let __packed_208: i64;
     let __ptr_209: i32;
     let __len_210: i32;
-    let __pattern_temp_3: ref "tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_3: ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
     let s_217: ref "core:prelude/string.wado//String";
     let other_219: ref "core:prelude/string.wado//String";
     let len_a_220: i32;
@@ -1830,7 +1830,7 @@ fn "wado-compiler/tests/fixtures/http_method_and_scheme_variants.wado/__cm_bindi
     __lifted_result_7 = builtin::load_i32(__outptr + 0);
     __lifted_result_8 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_7, 1: __lifted_result_8 };
+    return struct.new "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_7, 1: __lifted_result_8 };
 }
 
 fn "wado-compiler/tests/fixtures/http_method_and_scheme_variants.wado/__cm_export__handle"(request) {
@@ -2501,13 +2501,13 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let self_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         self_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             self_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: self_8.repr, used: self_8.used, byte_index: 0 };
             unreachable;
         };
-        break __inline_StrCharIter_IntoIterator__into_iter_1: self_7;
+        break __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: self_7;
         unreachable;
     };
     _licm_buf_33 = f.buf;

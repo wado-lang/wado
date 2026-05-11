@@ -1,0 +1,2441 @@
+//! Smoke tests for `lower(Grammar) -> LoweredGrammar`.
+//!
+//! Phase 2.1 covers single-alternative rules with leaf elements
+//! (TokenRef / Literal / RuleRef / Wildcard / Not). Tests build a
+//! minimal `Grammar` directly via struct-literal syntax (no g4
+//! parser) so the lowering invariants are exercised in isolation
+//! from the front end.
+
+use {
+    Grammar,
+    GrammarKind,
+    GrammarOption,
+    OptionValue,
+    ParserRule,
+    Alternative,
+    Element,
+    RuleRefElement,
+    TokenRefElement,
+    LiteralElement,
+    WildcardElement,
+    NotElement,
+    LabelElement,
+    RepeatElement,
+    RepeatKind,
+    GroupElement,
+    Visibility,
+} from "./ir.wado";
+use { LitToken } from "./lexer_gen.wado";
+use { lower } from "./lower.wado";
+use {
+    Rule,
+    Op,
+    ScanElement,
+    MultiAltDispatch,
+    GroupShape,
+    FieldDecl,
+    FieldKind,
+} from "./gir.wado";
+
+fn empty_grammar(name: &String) -> Grammar {
+    return Grammar {
+        name: *name,
+        kind: GrammarKind::Combined,
+        parser_rules: [],
+        lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+        pending_refs: [],
+        source_files: [],
+    };
+}
+
+fn no_lit_tokens() -> Array<LitToken> {
+    return [];
+}
+
+fn alt_of(elements: Array<Element>) -> Alternative {
+    return Alternative {
+        label: null,
+        options: [],
+        elements,
+    };
+}
+
+test "lower passes through grammar metadata" {
+    let mut g = empty_grammar(&"JSON");
+    g.source_files = ["JSON.g4"];
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.name == "JSON";
+    assert lowered.source_files.len() == 1;
+    assert lowered.source_files[0] == "JSON.g4";
+    assert lowered.parser_rules.is_empty();
+    assert lowered.variant_rules.is_empty();
+    assert lowered.kind_sets.is_empty();
+    assert lowered.mode_names.len() == 1;
+}
+
+test "lower simple rule with single TokenRef" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "value",
+        Visibility::Default,
+        [],
+        [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.parser_rules.len() == 1;
+    let rule = &lowered.parser_rules[0];
+
+    if let Simple(s) = rule {
+        assert s.header.name == "value";
+        assert s.header.snake_name == "value";
+        assert s.header.type_name == "ValueNode";
+        assert s.body.alt_index == 0;
+        assert s.body.case_name == "";
+        assert s.body.struct_name == "ValueNode";
+        assert s.body.ops.len() == 1;
+        if let Token(t) = &s.body.ops[0] {
+            assert t.kind == "TK_INT";
+            assert t.field == "int";
+        } else {
+            panic("expected Op::Token");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower simple rule with Literal" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "punc",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Literal(LiteralElement::new("+"))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Literal(l) = &s.body.ops[0] {
+            assert l.kind == "TK_LIT_PLUS";
+            assert l.field == "plus";
+        } else {
+            panic("expected Op::Literal");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower simple rule with RuleRef" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "stmt",
+        Visibility::Default,
+        [],
+        [alt_of([Element::RuleRef(RuleRefElement::new("expr"))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let RuleCall(r) = &s.body.ops[0] {
+            assert r.target_name == "expr";
+            assert r.target_snake == "expr";
+            assert r.field == "expr";
+            assert r.variant_id matches { None };
+            assert r.min_prec_arg matches { None };
+        } else {
+            panic("expected Op::RuleCall");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower simple rule with Wildcard" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "any",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Wildcard(WildcardElement::new())])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Wildcard(w) = &s.body.ops[0] {
+            assert w.field == "wildcard";
+        } else {
+            panic("expected Op::Wildcard");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower simple rule with Not" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "no_int",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Not(NotElement {
+            element: Element::TokenRef(TokenRefElement::new("INT")),
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Excluded(e) = &s.body.ops[0] {
+            assert e.kinds.len() == 1;
+            assert e.kinds[0] == "TK_INT";
+            assert e.field == "not_int";
+        } else {
+            panic("expected Op::Excluded");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower simple rule with Not over multi-token Group" {
+    // `r : ~ ( INT | FLOAT ) ;` — Not over a Group whose alts are
+    // each a single token. The kinds array carries both
+    // alternative kinds.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "no_num",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Not(NotElement {
+            element: Element::Group(GroupElement::new([
+                alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("FLOAT"))]),
+            ])),
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Excluded(e) = &s.body.ops[0] {
+            assert e.kinds.len() == 2;
+            assert e.kinds[0] == "TK_INT";
+            assert e.kinds[1] == "TK_FLOAT";
+        } else {
+            panic("expected Op::Excluded");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower dedupes same-name fields" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "two_ints",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::TokenRef(TokenRefElement::new("INT")),
+            Element::TokenRef(TokenRefElement::new("INT")),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 2;
+        if let Token(t) = &s.body.ops[0] {
+            assert t.field == "int";
+        } else {
+            panic("expected first Token");
+        }
+        if let Token(t) = &s.body.ops[1] {
+            assert t.field == "int_2";
+        } else {
+            panic("expected second Token");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower multi-alt rule with disjoint first sets produces Direct dispatch" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "expr",
+        Visibility::Default,
+        [],
+        [
+            alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+            alt_of([Element::TokenRef(TokenRefElement::new("STRING"))]),
+            alt_of([Element::TokenRef(TokenRefElement::new("ID"))]),
+        ],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let MultiAlt(m) = &lowered.parser_rules[0] {
+        assert m.alts.len() == 3;
+        assert m.scan_alts.len() == 3;
+        // Per-alt case_name and struct_name follow the
+        // `case_names_for_rule` convention. Without explicit alt
+        // labels, names are positional: `Alt0`, `Alt1`, ... and the
+        // struct combines the rule's bare base ("Expr" — `ExprNode`
+        // with the `Node` suffix stripped) with the case name.
+        assert m.alts[0].case_name == "Alt0";
+        assert m.alts[0].struct_name == "ExprAlt0";
+        assert m.alts[1].case_name == "Alt1";
+        assert m.alts[1].struct_name == "ExprAlt1";
+        assert m.alts[2].case_name == "Alt2";
+        assert m.alts[2].struct_name == "ExprAlt2";
+
+        if let Direct(d) = &m.dispatch {
+            assert d.branches.len() == 3;
+            assert d.branches[0].alt_index == 0;
+            assert d.branches[0].tokens[0] == "TK_INT";
+            assert d.branches[1].alt_index == 1;
+            assert d.branches[1].tokens[0] == "TK_STRING";
+            assert d.branches[2].alt_index == 2;
+            assert d.branches[2].tokens[0] == "TK_ID";
+        } else {
+            panic("expected MultiAltDispatch::Direct");
+        }
+    } else {
+        panic("expected Rule::MultiAlt");
+    }
+}
+
+test "lower multi-alt rule with labeled alts uses label as case name" {
+    let mut g = empty_grammar(&"T");
+    // `expr : INT #IntLit | STRING #StrLit ;` (each alt labeled).
+    let mut int_alt = alt_of([Element::TokenRef(TokenRefElement::new("INT"))]);
+    int_alt.label = Option::<String>::Some("IntLit");
+    let mut str_alt = alt_of([Element::TokenRef(TokenRefElement::new("STRING"))]);
+    str_alt.label = Option::<String>::Some("StrLit");
+    g.parser_rules = [ParserRule::new(
+        "expr",
+        Visibility::Default,
+        [],
+        [int_alt, str_alt],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let MultiAlt(m) = &lowered.parser_rules[0] {
+        // When all alts are labeled, `case_names_for_rule` uses the
+        // labels directly (positional `Alt0`/`Alt1` only fires for
+        // unlabeled rules).
+        assert m.alts[0].case_name == "IntLit";
+        assert m.alts[0].struct_name == "ExprIntLit";
+        assert m.alts[1].case_name == "StrLit";
+        assert m.alts[1].struct_name == "ExprStrLit";
+    } else {
+        panic("expected Rule::MultiAlt");
+    }
+}
+
+test "lower interns multi-element first set from Direct dispatch branch" {
+    // `expr : num | STRING ;`
+    // `num  : INT | FLOAT ;`
+    //
+    // `num`'s first set is `{TK_INT, TK_FLOAT}` (multi-alt,
+    // disjoint), so when `expr`'s `RuleRef(num)` alt computes its
+    // own first set the result is `{TK_INT, TK_FLOAT}` — a
+    // two-element `DispatchBranch.tokens` that Phase 2.7 should
+    // intern as a single `KindSet`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "expr",
+            Visibility::Default,
+            [],
+            [
+                alt_of([Element::RuleRef(RuleRefElement::new("num"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("STRING"))]),
+            ],
+        ),
+        ParserRule::new(
+            "num",
+            Visibility::Default,
+            [],
+            [
+                alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("FLOAT"))]),
+            ],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.kind_sets.len() == 1;
+    let ks = &lowered.kind_sets[0];
+    assert ks.id == 0;
+    // Canonical form: sorted alphabetically.
+    assert ks.tokens.len() == 2;
+    assert ks.tokens[0] == "TK_FLOAT";
+    assert ks.tokens[1] == "TK_INT";
+}
+
+test "lower kind set registry collapses identical sets to one id" {
+    // Two rules whose alts share the same multi-token first set
+    // should produce only ONE entry in `kind_sets`. Both `expr`
+    // and `lit` reference `num`, so the dispatch branch covering
+    // alt 0 in each rule has the same `{TK_FLOAT, TK_INT}` set.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "expr",
+            Visibility::Default,
+            [],
+            [
+                alt_of([Element::RuleRef(RuleRefElement::new("num"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("STRING"))]),
+            ],
+        ),
+        ParserRule::new(
+            "lit",
+            Visibility::Default,
+            [],
+            [
+                alt_of([Element::RuleRef(RuleRefElement::new("num"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("BYTES"))]),
+            ],
+        ),
+        ParserRule::new(
+            "num",
+            Visibility::Default,
+            [],
+            [
+                alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("FLOAT"))]),
+            ],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.kind_sets.len() == 1;
+    assert lowered.kind_sets[0].id == 0;
+}
+
+test "lower produces empty kind_sets when every dispatch branch is single-token" {
+    // Two-alt rule where each alt's first set is a single token.
+    // Direct dispatch yields two single-token branches — neither
+    // contributes to `kind_sets`, so the registry stays empty.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "expr",
+        Visibility::Default,
+        [],
+        [
+            alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+            alt_of([Element::TokenRef(TokenRefElement::new("STRING"))]),
+        ],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.kind_sets.is_empty();
+}
+
+test "lower transparent Group wraps single leaf element" {
+    // `wrapped : (INT) ;` — a syntactic wrapper with no struct of
+    // its own. The GroupOp carries `Transparent` shape and the
+    // inner Op is the leaf Token verbatim.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "wrapped",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Group(GroupElement::new([
+            alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+        ]))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 1;
+        if let Group(go) = &s.body.ops[0] {
+            if let Transparent = &go.shape {
+                assert true;
+            } else {
+                panic("expected GroupShape::Transparent");
+            }
+            assert go.alts.len() == 1;
+            assert go.alts[0].ops.len() == 1;
+            if let Token(t) = &go.alts[0].ops[0] {
+                assert t.kind == "TK_INT";
+                // Transparent: inner field is bound in the
+                // surrounding alt's scope, so dedup uses the same
+                // name table.
+                assert t.field == "int";
+            } else {
+                panic("expected inner Token");
+            }
+            assert go.scan_alts.len() == 1;
+            assert go.scan_alts[0].elements.len() == 1;
+            if let Token(t) = &go.scan_alts[0].elements[0] {
+                assert t.kind == "TK_INT";
+            } else {
+                panic("expected scan-side inner Token");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower transparent Group dedupes against surrounding scope" {
+    // `pair : INT (INT) ;` — the second INT lives inside a
+    // Transparent group, so its binding still nests in the outer
+    // alt's name table. Dedup turns the inner field into `int_2`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "pair",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::TokenRef(TokenRefElement::new("INT")),
+            Element::Group(GroupElement::new([
+                alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+            ])),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Token(t) = &s.body.ops[0] {
+            assert t.field == "int";
+        } else {
+            panic("expected first Token");
+        }
+        if let Group(go) = &s.body.ops[1] {
+            if let Token(t) = &go.alts[0].ops[0] {
+                // The Transparent group inherits the surrounding
+                // dedup table, so the second INT is `int_2`.
+                assert t.field == "int_2";
+            } else {
+                panic("expected Token inside Group");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower single-alt Group with two leaves produces SingleAlt shape" {
+    // `assignment : (name=ID '=' INT) ;` — a single alt with 3
+    // elements lowers to `GroupShape::SingleAlt`. The struct gets
+    // its own name table; the surrounding alt sees a single field.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "assignment",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Group(GroupElement::new([
+            alt_of([
+                Element::TokenRef(TokenRefElement::new("ID")),
+                Element::Literal(LiteralElement::new("=")),
+                Element::TokenRef(TokenRefElement::new("INT")),
+            ]),
+        ]))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 1;
+        if let Group(go) = &s.body.ops[0] {
+            if let SingleAlt(sa) = &go.shape {
+                // Struct name comes from `single_alt_group_type_name`.
+                // `=` lowers to `eq` (per `symbol_char_names`).
+                assert sa.struct_name == "IdEqIntItem", sa.struct_name;
+                // Field name comes from `single_alt_group_field_name`.
+                assert sa.field == "id_eq_int", sa.field;
+                // owner_rule threads the surrounding rule through.
+                assert sa.owner_rule == "assignment", sa.owner_rule;
+            } else {
+                panic("expected GroupShape::SingleAlt");
+            }
+            assert go.alts.len() == 1;
+            assert go.alts[0].ops.len() == 3;
+            assert go.alts[0].struct_name == "IdEqIntItem";
+            assert go.scan_alts.len() == 1;
+            assert go.scan_alts[0].elements.len() == 3;
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower single-alt Group uses fresh name table for inner ops" {
+    // `pair : ID (ID INT) ;` — the outer ID dedups under `id`.
+    // The inner Group is a SingleAlt, so its first ID gets the
+    // base name `id` again (fresh table inside the struct).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "pair",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::TokenRef(TokenRefElement::new("ID")),
+            Element::Group(GroupElement::new([
+                alt_of([
+                    Element::TokenRef(TokenRefElement::new("ID")),
+                    Element::TokenRef(TokenRefElement::new("INT")),
+                ]),
+            ])),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Token(t) = &s.body.ops[0] {
+            assert t.field == "id";
+        } else {
+            panic("expected first Token");
+        }
+        if let Group(go) = &s.body.ops[1] {
+            if let SingleAlt(_) = &go.shape {
+                assert true;
+            } else {
+                panic("expected GroupShape::SingleAlt");
+            }
+            // Inner ops live in a fresh name table — the inner ID
+            // is `id` not `id_2`.
+            if let Token(t) = &go.alts[0].ops[0] {
+                assert t.field == "id", t.field;
+            } else {
+                panic("expected inner Token ID");
+            }
+            if let Token(t) = &go.alts[0].ops[1] {
+                assert t.field == "int", t.field;
+            } else {
+                panic("expected inner Token INT");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower single-alt Group field name dedupes against outer scope" {
+    // `r : id_int (ID INT) ;` — the outer field name `id_int`
+    // collides with the inner group's `single_alt_group_field_name`,
+    // which is also `id_int`. The outer name table dedupes the
+    // group's field to `id_int_2`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::Label(LabelElement::new(
+                "id_int",
+                false,
+                Element::TokenRef(TokenRefElement::new("ID")),
+            )),
+            Element::Group(GroupElement::new([
+                alt_of([
+                    Element::TokenRef(TokenRefElement::new("ID")),
+                    Element::TokenRef(TokenRefElement::new("INT")),
+                ]),
+            ])),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Group(go) = &s.body.ops[1] {
+            if let SingleAlt(sa) = &go.shape {
+                assert sa.field == "id_int_2", sa.field;
+            } else {
+                panic("expected GroupShape::SingleAlt");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower token-only Group produces TokenOnly shape with single field" {
+    // `cmd : (K_INSERT | K_REPLACE) ;`
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "cmd",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Group(GroupElement::new([
+            alt_of([Element::TokenRef(TokenRefElement::new("K_INSERT"))]),
+            alt_of([Element::TokenRef(TokenRefElement::new("K_REPLACE"))]),
+        ]))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 1;
+        if let Group(go) = &s.body.ops[0] {
+            if let TokenOnly(to) = &go.shape {
+                // Field name comes from `token_group_field_name`.
+                assert to.field == "k_insert_or_k_replace", to.field;
+            } else {
+                panic("expected GroupShape::TokenOnly");
+            }
+            assert go.alts.len() == 2;
+            assert go.alts[0].ops.len() == 1;
+            assert go.alts[1].ops.len() == 1;
+            // Direct dispatch on each alt's single token kind.
+            if let Direct(dd) = &go.dispatch {
+                assert dd.branches.len() == 2;
+                assert dd.branches[0].tokens.len() == 1;
+                assert dd.branches[0].tokens[0] == "TK_K_INSERT";
+                assert dd.branches[0].alt_index == 0;
+                assert dd.branches[1].tokens[0] == "TK_K_REPLACE";
+                assert dd.branches[1].alt_index == 1;
+            } else {
+                panic("expected MultiAltDispatch::Direct");
+            }
+            // Scan side mirrors the parse-side dispatch.
+            if let Direct(dd) = &go.scan_dispatch {
+                assert dd.branches.len() == 2;
+            } else {
+                panic("expected scan dispatch Direct");
+            }
+            assert go.scan_alts.len() == 2;
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower token-only Group accepts Literal alts" {
+    // `op : ('+' | '-') ;`
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "op",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Group(GroupElement::new([
+            alt_of([Element::Literal(LiteralElement::new("+"))]),
+            alt_of([Element::Literal(LiteralElement::new("-"))]),
+        ]))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Group(go) = &s.body.ops[0] {
+            if let TokenOnly(to) = &go.shape {
+                assert to.field == "plus_or_minus", to.field;
+            } else {
+                panic("expected GroupShape::TokenOnly");
+            }
+            // Each alt's body op is the matched Literal.
+            if let Literal(_) = &go.alts[0].ops[0] {
+                assert true;
+            } else {
+                panic("expected Literal Op for `+` alt");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower token-only Group field dedupes against outer scope" {
+    // `r : k_a (K_A | K_B) ;` — a label binds the outer field
+    // `k_a`, then the group's `token_group_field_name` is
+    // `k_a_or_k_b`. No collision today, so this just sanity-checks
+    // that the outer scope sees the group's field through dedup.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::Label(LabelElement::new(
+                "k_a_or_k_b",
+                false,
+                Element::TokenRef(TokenRefElement::new("ID")),
+            )),
+            Element::Group(GroupElement::new([
+                alt_of([Element::TokenRef(TokenRefElement::new("K_A"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("K_B"))]),
+            ])),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Group(go) = &s.body.ops[1] {
+            if let TokenOnly(to) = &go.shape {
+                // Outer label took the base name; the group dedups
+                // to `_2`.
+                assert to.field == "k_a_or_k_b_2", to.field;
+            } else {
+                panic("expected GroupShape::TokenOnly");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower SimpleCst Group with single-RuleRef alts produces SimpleCst shape" {
+    // `wrap : (stmt | expr) ; stmt : ID ; expr : INT ;`
+    // The wrap rule's group is SimpleCst — each alt is a single
+    // distinct RuleRef with disjoint first sets.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "wrap",
+            Visibility::Default,
+            [],
+            [alt_of([Element::Group(GroupElement::new([
+                alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                alt_of([Element::RuleRef(RuleRefElement::new("expr"))]),
+            ]))])],
+        ),
+        ParserRule::new(
+            "stmt",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+        ),
+        ParserRule::new(
+            "expr",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 1;
+        if let Group(go) = &s.body.ops[0] {
+            if let SimpleCst(scst) = &go.shape {
+                assert scst.type_name == "StmtOrExprGroup", scst.type_name;
+                assert scst.field == "stmt_or_expr", scst.field;
+            } else {
+                panic("expected GroupShape::SimpleCst");
+            }
+            assert go.alts.len() == 2;
+            assert go.alts[0].case_name == "Stmt", go.alts[0].case_name;
+            assert go.alts[1].case_name == "Expr", go.alts[1].case_name;
+            // Each body op is the matched RuleCall.
+            if let RuleCall(rc) = &go.alts[0].ops[0] {
+                assert rc.target_name == "stmt";
+                assert rc.target_snake == "stmt";
+                assert rc.field == "stmt";
+            } else {
+                panic("expected RuleCall for first alt");
+            }
+            // Direct dispatch on each rule's first set.
+            if let Direct(dd) = &go.dispatch {
+                assert dd.branches.len() == 2;
+                assert dd.branches[0].tokens[0] == "TK_ID";
+                assert dd.branches[1].tokens[0] == "TK_INT";
+            } else {
+                panic("expected MultiAltDispatch::Direct");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower SimpleCst Group field dedupes against outer scope" {
+    // `r : stmt_or_expr=ID (stmt | expr) ; stmt : INT ; expr : ID ;`
+    // The outer label binds `stmt_or_expr` first; the group dedups
+    // its base name to `stmt_or_expr_2`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([
+                Element::Label(LabelElement::new(
+                    "stmt_or_expr",
+                    false,
+                    Element::TokenRef(TokenRefElement::new("ID")),
+                )),
+                Element::Group(GroupElement::new([
+                    alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                    alt_of([Element::RuleRef(RuleRefElement::new("expr"))]),
+                ])),
+            ])],
+        ),
+        ParserRule::new(
+            "stmt",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+        ),
+        ParserRule::new(
+            "expr",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("FLOAT"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Group(go) = &s.body.ops[1] {
+            if let SimpleCst(scst) = &go.shape {
+                assert scst.field == "stmt_or_expr_2", scst.field;
+            } else {
+                panic("expected GroupShape::SimpleCst");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower General Group with disjoint multi-shape alts produces General shape" {
+    // `r : (stmt | INT INT) ; stmt : ID ;`
+    // Alt 0 is RuleRef → first set {ID}; alt 1 starts with INT.
+    // Mixed shape rules out SimpleCst / TokenOnly / SingleAlt, so
+    // the classifier picks General.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([Element::Group(GroupElement::new([
+                alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                alt_of([
+                    Element::TokenRef(TokenRefElement::new("INT")),
+                    Element::TokenRef(TokenRefElement::new("INT")),
+                ]),
+            ]))])],
+        ),
+        ParserRule::new(
+            "stmt",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 1;
+        if let Group(go) = &s.body.ops[0] {
+            if let General(gen) = &go.shape {
+                assert gen.variant_type == "RGroup0", gen.variant_type;
+                assert gen.field == "group_0", gen.field;
+                assert gen.group_index == 0;
+                assert gen.alt_struct_names.len() == 2;
+                assert gen.alt_struct_names[0] == "RGroup0Alt0", gen.alt_struct_names[0];
+                assert gen.alt_struct_names[1] == "RGroup0Alt1", gen.alt_struct_names[1];
+            } else {
+                panic("expected GroupShape::General");
+            }
+            assert go.alts.len() == 2;
+            assert go.alts[0].case_name == "Alt0", go.alts[0].case_name;
+            assert go.alts[0].struct_name == "RGroup0Alt0", go.alts[0].struct_name;
+            assert go.alts[1].case_name == "Alt1", go.alts[1].case_name;
+            assert go.alts[1].ops.len() == 2;
+            // Direct dispatch on each alt's first set.
+            if let Direct(dd) = &go.dispatch {
+                assert dd.branches.len() == 2;
+                assert dd.branches[0].tokens[0] == "TK_ID";
+                assert dd.branches[1].tokens[0] == "TK_INT";
+            } else {
+                panic("expected MultiAltDispatch::Direct");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower General Group group_index is per-rule cumulative" {
+    // `r : (stmt | INT INT) (other | FLOAT FLOAT) ;`
+    // `stmt : ID ; other : K_OTHER ;`
+    // Two general groups; the second gets group_index = 1.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([
+                Element::Group(GroupElement::new([
+                    alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                    alt_of([
+                        Element::TokenRef(TokenRefElement::new("INT")),
+                        Element::TokenRef(TokenRefElement::new("INT")),
+                    ]),
+                ])),
+                Element::Group(GroupElement::new([
+                    alt_of([Element::RuleRef(RuleRefElement::new("other"))]),
+                    alt_of([
+                        Element::TokenRef(TokenRefElement::new("FLOAT")),
+                        Element::TokenRef(TokenRefElement::new("FLOAT")),
+                    ]),
+                ])),
+            ])],
+        ),
+        ParserRule::new(
+            "stmt",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+        ),
+        ParserRule::new(
+            "other",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("K_OTHER"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 2;
+        if let Group(go0) = &s.body.ops[0] {
+            if let General(gen) = &go0.shape {
+                assert gen.group_index == 0;
+                assert gen.variant_type == "RGroup0", gen.variant_type;
+                assert gen.field == "group_0", gen.field;
+            } else {
+                panic("expected first group General");
+            }
+        } else {
+            panic("expected first Op::Group");
+        }
+        if let Group(go1) = &s.body.ops[1] {
+            if let General(gen) = &go1.shape {
+                assert gen.group_index == 1;
+                assert gen.variant_type == "RGroup1", gen.variant_type;
+                assert gen.field == "group_1", gen.field;
+            } else {
+                panic("expected second group General");
+            }
+        } else {
+            panic("expected second Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Repeat with nested SingleAlt Group inner" {
+    // `r : (a b)* ;` — Repeat over a multi-element single-alt Group.
+    // The Repeat body becomes a SingleAlt Group Op.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Repeat(RepeatElement {
+            kind: RepeatKind::Star,
+            element: Element::Group(GroupElement::new([
+                alt_of([
+                    Element::TokenRef(TokenRefElement::new("A")),
+                    Element::TokenRef(TokenRefElement::new("B")),
+                ]),
+            ])),
+            non_greedy: false,
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let Group(go) = &rep.body {
+                if let SingleAlt(_) = &go.shape {
+                    assert true;
+                } else {
+                    panic("expected nested SingleAlt Group");
+                }
+                assert go.alts[0].ops.len() == 2;
+            } else {
+                panic("expected Repeat body to be Group");
+            }
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower SingleAlt Group containing nested Group" {
+    // `r : (a (b c)) ;` — outer SingleAlt contains a nested
+    // SingleAlt as its second element. Nested ops carry through
+    // recursively.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Group(GroupElement::new([
+            alt_of([
+                Element::TokenRef(TokenRefElement::new("A")),
+                Element::Group(GroupElement::new([
+                    alt_of([
+                        Element::TokenRef(TokenRefElement::new("B")),
+                        Element::TokenRef(TokenRefElement::new("C")),
+                    ]),
+                ])),
+            ]),
+        ]))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Group(outer) = &s.body.ops[0] {
+            if let SingleAlt(_) = &outer.shape {
+                assert true;
+            } else {
+                panic("expected outer SingleAlt");
+            }
+            assert outer.alts[0].ops.len() == 2;
+            if let Group(inner) = &outer.alts[0].ops[1] {
+                if let SingleAlt(_) = &inner.shape {
+                    assert true;
+                } else {
+                    panic("expected inner SingleAlt");
+                }
+                assert inner.alts[0].ops.len() == 2;
+            } else {
+                panic("expected nested Op::Group");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Transparent Group wrapping Repeat" {
+    // `r : (a*) ;` — Transparent Group whose only inner element is
+    // a Repeat. The Op is a Repeat directly (no Group wrapper at
+    // emit time).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Group(GroupElement::new([
+            alt_of([Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::TokenRef(TokenRefElement::new("A")),
+                non_greedy: false,
+            })]),
+        ]))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Group(go) = &s.body.ops[0] {
+            if let Transparent = &go.shape {
+                assert true;
+            } else {
+                panic("expected Transparent shape");
+            }
+            assert go.alts[0].ops.len() == 1;
+            if let Repeat(_) = &go.alts[0].ops[0] {
+                assert true;
+            } else {
+                panic("expected inner Repeat");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Optional Repeat with TokenRef inner uses Plain strategy" {
+    // `r : INT? ;` — Optional Repeat. Without a follow-aware
+    // variant context, the Plain strategy is correct: emit fires
+    // `if peek_kind ∈ first(inner) { ... }`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Repeat(RepeatElement {
+            kind: RepeatKind::Optional,
+            element: Element::TokenRef(TokenRefElement::new("INT")),
+            non_greedy: false,
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let Optional = rep.kind {
+                assert true;
+            } else {
+                panic("expected RepeatKind::Optional");
+            }
+            if let Plain = rep.strategy {
+                assert true;
+            } else {
+                panic("expected RepeatStrategy::Plain");
+            }
+            if let Token(t) = &rep.body {
+                assert t.kind == "TK_INT";
+            } else {
+                panic("expected Token body");
+            }
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower greedy Star Repeat with TokenRef inner" {
+    // `tokens : INT* ;`
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "tokens",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Repeat(RepeatElement {
+            kind: RepeatKind::Star,
+            element: Element::TokenRef(TokenRefElement::new("INT")),
+            non_greedy: false,
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 1;
+        if let Repeat(r) = &s.body.ops[0] {
+            // RepeatKind round-trips from surface IR to GIR.
+            if let Star = r.kind { assert true; } else { panic("expected Star"); }
+            // Strategy is Plain at Phase 2.x.partial.
+            if let Plain = &r.strategy { assert true; } else { panic("expected Plain"); }
+            // Inner Op is the leaf Token, with its own (fresh) field
+            // — the binding name inside the loop body, not the
+            // surrounding alt's list-typed field.
+            if let Token(t) = &r.body {
+                assert t.kind == "TK_INT";
+                assert t.field == "int";
+            } else {
+                panic("expected inner Token");
+            }
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower greedy Plus Repeat with RuleRef inner" {
+    // `exprs : expr+ ;`
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "exprs",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Repeat(RepeatElement {
+            kind: RepeatKind::Plus,
+            element: Element::RuleRef(RuleRefElement::new("expr")),
+            non_greedy: false,
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(r) = &s.body.ops[0] {
+            if let Plus = r.kind { assert true; } else { panic("expected Plus"); }
+            if let RuleCall(c) = &r.body {
+                assert c.target_name == "expr";
+                assert c.field == "expr";
+            } else {
+                panic("expected inner RuleCall");
+            }
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Repeat scan body mirrors parse body" {
+    // Scan side gets its own ScanElement::Repeat with the same kind
+    // and inner shape, no field bindings, ScanRepeatStrategy::Plain.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "tokens",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Repeat(RepeatElement {
+            kind: RepeatKind::Star,
+            element: Element::TokenRef(TokenRefElement::new("INT")),
+            non_greedy: false,
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(r) = &s.scan_body.elements[0] {
+            if let Star = r.kind { assert true; } else { panic("expected Star (scan)"); }
+            if let Plain = &r.strategy { assert true; } else { panic("expected Plain (scan)"); }
+            if let Token(t) = &r.body {
+                assert t.kind == "TK_INT";
+            } else {
+                panic("expected inner ScanElement::Token");
+            }
+        } else {
+            panic("expected ScanElement::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower simple rule produces scan body mirroring leaf ops" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "mix",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::TokenRef(TokenRefElement::new("ID")),
+            Element::Literal(LiteralElement::new("=")),
+            Element::RuleRef(RuleRefElement::new("expr")),
+            Element::Wildcard(WildcardElement::new()),
+            Element::Not(NotElement {
+                element: Element::TokenRef(TokenRefElement::new("INT")),
+            }),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.scan_body.elements.len() == 5;
+        if let Token(t) = &s.scan_body.elements[0] {
+            assert t.kind == "TK_ID";
+        } else {
+            panic("scan_body[0] != Token");
+        }
+        if let Token(t) = &s.scan_body.elements[1] {
+            assert t.kind == "TK_LIT_EQ";
+        } else {
+            panic("scan_body[1] != Token (literal)");
+        }
+        if let RuleCall(r) = &s.scan_body.elements[2] {
+            assert r.target_snake == "expr";
+            assert r.min_prec_arg == 0;
+            assert r.variant_id matches { None };
+        } else {
+            panic("scan_body[2] != RuleCall");
+        }
+        if let Wildcard = &s.scan_body.elements[3] {
+            assert true;
+        } else {
+            panic("scan_body[3] != Wildcard");
+        }
+        if let Excluded(e) = &s.scan_body.elements[4] {
+            assert e.kinds.len() == 1;
+            assert e.kinds[0] == "TK_INT";
+        } else {
+            panic("scan_body[4] != Excluded");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower scan element flattens scalar Label" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "labelled",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Label(LabelElement::new(
+            "lhs",
+            false,
+            Element::TokenRef(TokenRefElement::new("ID")),
+        ))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.scan_body.elements.len() == 1;
+        if let Token(t) = &s.scan_body.elements[0] {
+            assert t.kind == "TK_ID";
+        } else {
+            panic("expected Token in scan_body");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower scalar Label rebinds inner field name" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "labelled",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Label(LabelElement::new(
+            "lhs",
+            false,
+            Element::TokenRef(TokenRefElement::new("ID")),
+        ))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 1;
+        if let Token(t) = &s.body.ops[0] {
+            assert t.kind == "TK_ID";
+            assert t.field == "lhs";
+        } else {
+            panic("expected Op::Token");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Label dedupes against surrounding alt names" {
+    let mut g = empty_grammar(&"T");
+    // `lhs=ID lhs=ID` — two scalar labels with the same name.
+    // dedup_name should produce "lhs" then "lhs_2".
+    g.parser_rules = [ParserRule::new(
+        "two_labels",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::Label(LabelElement::new(
+                "lhs",
+                false,
+                Element::TokenRef(TokenRefElement::new("ID")),
+            )),
+            Element::Label(LabelElement::new(
+                "lhs",
+                false,
+                Element::TokenRef(TokenRefElement::new("ID")),
+            )),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Token(t) = &s.body.ops[0] {
+            assert t.field == "lhs";
+        } else {
+            panic("expected first Token");
+        }
+        if let Token(t) = &s.body.ops[1] {
+            assert t.field == "lhs_2";
+        } else {
+            panic("expected second Token");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower carries every leaf op in order" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "mix",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::TokenRef(TokenRefElement::new("ID")),
+            Element::Literal(LiteralElement::new(":")),
+            Element::RuleRef(RuleRefElement::new("expr")),
+            Element::Wildcard(WildcardElement::new()),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 4;
+        if let Token(_) = &s.body.ops[0] { assert true; } else { panic("ops[0] != Token"); }
+        if let Literal(_) = &s.body.ops[1] { assert true; } else { panic("ops[1] != Literal"); }
+        if let RuleCall(_) = &s.body.ops[2] { assert true; } else { panic("ops[2] != RuleCall"); }
+        if let Wildcard(_) = &s.body.ops[3] { assert true; } else { panic("ops[3] != Wildcard"); }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower enumerates leaf field decls with span and Plain kinds" {
+    // `mix : ID ':' expr ;` — leaf ops produce a 4-field struct
+    // (span + id + colon + expr), all `Plain` kind.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "mix",
+            Visibility::Default,
+            [],
+            [alt_of([
+                Element::TokenRef(TokenRefElement::new("ID")),
+                Element::Literal(LiteralElement::new(":")),
+                Element::RuleRef(RuleRefElement::new("expr")),
+            ])],
+        ),
+        ParserRule::new(
+            "expr",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.fields.len() == 4, `expected 4 fields, got {s.body.fields.len()}`;
+        assert s.body.fields[0].name == "span";
+        if let Span = &s.body.fields[0].kind {
+            assert true;
+        } else {
+            panic("expected Span kind for leading field");
+        }
+        assert s.body.fields[1].name == "id";
+        assert s.body.fields[1].type_str == "Token";
+        assert s.body.fields[2].name == "colon";
+        assert s.body.fields[2].type_str == "Token";
+        assert s.body.fields[3].name == "expr";
+        assert s.body.fields[3].type_str == "ExprNode", s.body.fields[3].type_str;
+        if let Plain = &s.body.fields[3].kind {
+            assert true;
+        } else {
+            panic("expected Plain kind for RuleCall field");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower enumerates Repeat field decls with List/Optional kinds" {
+    // `r : INT* INT? ;` — Star produces `int_list: Array<Token>`,
+    // Optional produces `int: Option<Token>`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::TokenRef(TokenRefElement::new("INT")),
+                non_greedy: false,
+            }),
+            Element::Repeat(RepeatElement {
+                kind: RepeatKind::Optional,
+                element: Element::TokenRef(TokenRefElement::new("INT")),
+                non_greedy: false,
+            }),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        // [span, int_list, int]
+        assert s.body.fields.len() == 3, `expected 3 fields, got {s.body.fields.len()}`;
+        assert s.body.fields[1].name == "int_list";
+        assert s.body.fields[1].type_str == "Array<Token>";
+        if let List = &s.body.fields[1].kind {
+            assert true;
+        } else {
+            panic("expected List kind for Star Repeat");
+        }
+        assert s.body.fields[2].name == "int";
+        assert s.body.fields[2].type_str == "Option<Token>";
+        if let Optional = &s.body.fields[2].kind {
+            assert true;
+        } else {
+            panic("expected Optional kind for Optional Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Repeat field name dedupes against outer scope" {
+    // `r : int_list=ID INT* ;` — outer label takes `int_list`,
+    // the unlabeled `INT*` dedups its outer struct field to
+    // `int_list_2`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::Label(LabelElement::new(
+                "int_list",
+                false,
+                Element::TokenRef(TokenRefElement::new("ID")),
+            )),
+            Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::TokenRef(TokenRefElement::new("INT")),
+                non_greedy: false,
+            }),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        // [span, int_list (label), int_list_2 (Repeat dedup)]
+        assert s.body.fields.len() == 3;
+        assert s.body.fields[1].name == "int_list";
+        assert s.body.fields[2].name == "int_list_2", s.body.fields[2].name;
+        // Op.field on the Repeat carries the same deduped name.
+        if let Repeat(rep) = &s.body.ops[1] {
+            assert rep.field == "int_list_2", rep.field;
+        } else {
+            panic("expected Op::Repeat at index 1");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Group field decls match shape's outer field/type" {
+    // `r : (K_A | K_B) (stmt | expr) (a b) ;`
+    // `stmt : ID ; expr : INT ;`
+    // — TokenOnly, SimpleCst, SingleAlt shapes each produce one
+    // field on the outer struct.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([
+                Element::Group(GroupElement::new([
+                    alt_of([Element::TokenRef(TokenRefElement::new("K_A"))]),
+                    alt_of([Element::TokenRef(TokenRefElement::new("K_B"))]),
+                ])),
+                Element::Group(GroupElement::new([
+                    alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                    alt_of([Element::RuleRef(RuleRefElement::new("expr"))]),
+                ])),
+                Element::Group(GroupElement::new([
+                    alt_of([
+                        Element::TokenRef(TokenRefElement::new("A")),
+                        Element::TokenRef(TokenRefElement::new("B")),
+                    ]),
+                ])),
+            ])],
+        ),
+        ParserRule::new(
+            "stmt",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+        ),
+        ParserRule::new(
+            "expr",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        // [span, k_a_or_k_b: Token, stmt_or_expr: StmtOrExprGroup, a_b: ABItem]
+        assert s.body.fields.len() == 4, `expected 4 fields, got {s.body.fields.len()}`;
+        assert s.body.fields[1].name == "k_a_or_k_b";
+        assert s.body.fields[1].type_str == "Token";
+        assert s.body.fields[2].name == "stmt_or_expr";
+        assert s.body.fields[2].type_str == "StmtOrExprGroup";
+        assert s.body.fields[3].name == "a_b";
+        assert s.body.fields[3].type_str == "ABItem", s.body.fields[3].type_str;
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower LR rule splits atom and lr_alts and assigns precedence" {
+    // `expr : INT | expr '+' expr | expr '*' expr ;`
+    // Two LR alts (`+` and `*`) plus one atom (`INT`). ANTLR4's
+    // precedence assignment: first LR alt = highest = total_lr,
+    // last = 1. So `+` (alt 1, lr_position 0) → own_prec = 2;
+    // `*` (alt 2, lr_position 1) → own_prec = 1.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "expr",
+        Visibility::Default,
+        [],
+        [
+            alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+            alt_of([
+                Element::RuleRef(RuleRefElement::new("expr")),
+                Element::Literal(LiteralElement::new("+")),
+                Element::RuleRef(RuleRefElement::new("expr")),
+            ]),
+            alt_of([
+                Element::RuleRef(RuleRefElement::new("expr")),
+                Element::Literal(LiteralElement::new("*")),
+                Element::RuleRef(RuleRefElement::new("expr")),
+            ]),
+        ],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let LeftRecursive(l) = &lowered.parser_rules[0] {
+        assert l.header.name == "expr";
+        // Atom: only the non-LR alt (alt_index 0).
+        assert l.atom.alts.len() == 1;
+        assert l.atom.alts[0].alt_index == 0;
+        // LR alts: alts 1 and 2, in source order.
+        assert l.lr_alts.len() == 2;
+        assert l.lr_alts[0].alt_index == 1;
+        assert l.lr_alts[0].own_prec == 2;
+        assert l.lr_alts[1].alt_index == 2;
+        assert l.lr_alts[1].own_prec == 1;
+        // Each suffix has 2 elements (the operator + trailing self-ref).
+        assert l.lr_alts[0].suffix.ops.len() == 2;
+        assert l.lr_alts[1].suffix.ops.len() == 2;
+        // Trailing self-ref at original-element index 2.
+        assert l.lr_alts[0].last_self_ref_idx == 2;
+        assert l.lr_alts[1].last_self_ref_idx == 2;
+        // Left-associative by default: conflict_min = own_prec + 1.
+        assert l.lr_alts[0].conflict_min == 3;
+        assert l.lr_alts[1].conflict_min == 2;
+        assert !l.lr_alts[0].right_associative;
+        // Suffix first sets are the operator tokens.
+        assert l.lr_alts[0].suffix_first.len() == 1;
+        assert l.lr_alts[1].suffix_first.len() == 1;
+        // Both LR alts have non-empty suffixes → both valid.
+        assert l.lr_dispatch.valid_lr_alts.len() == 2;
+        // Disjoint first sets → two singleton groups.
+        assert l.lr_dispatch.groups.len() == 2;
+    } else {
+        panic("expected Rule::LeftRecursive");
+    }
+}
+
+test "lower LR rule respects right-associative conflict_min" {
+    // `expr : INT | <assoc=right> expr '**' expr ;`
+    // Right-assoc: conflict_min = own_prec (not own_prec + 1).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "expr",
+        Visibility::Default,
+        [],
+        [
+            alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+            Alternative {
+                label: null,
+                options: [GrammarOption {
+                    name: "assoc",
+                    value: OptionValue::Ident("right"),
+                }],
+                elements: [
+                    Element::RuleRef(RuleRefElement::new("expr")),
+                    Element::Literal(LiteralElement::new("**")),
+                    Element::RuleRef(RuleRefElement::new("expr")),
+                ],
+            },
+        ],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let LeftRecursive(l) = &lowered.parser_rules[0] {
+        assert l.lr_alts.len() == 1;
+        assert l.lr_alts[0].right_associative;
+        assert l.lr_alts[0].own_prec == 1;
+        // Right-assoc floor: conflict_min == own_prec.
+        assert l.lr_alts[0].conflict_min == 1, `expected 1, got {l.lr_alts[0].conflict_min}`;
+    } else {
+        panic("expected Rule::LeftRecursive");
+    }
+}
+
+test "lower LR rule with no trailing self-ref records last_self_ref_idx -1" {
+    // `expr : INT | expr '++' ;` — the LR alt has no internal
+    // self-ref beyond the leading prefix.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "expr",
+        Visibility::Default,
+        [],
+        [
+            alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+            alt_of([
+                Element::RuleRef(RuleRefElement::new("expr")),
+                Element::Literal(LiteralElement::new("++")),
+            ]),
+        ],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let LeftRecursive(l) = &lowered.parser_rules[0] {
+        assert l.lr_alts.len() == 1;
+        assert l.lr_alts[0].last_self_ref_idx == -1;
+        assert l.lr_alts[0].suffix.ops.len() == 1;
+    } else {
+        panic("expected Rule::LeftRecursive");
+    }
+}
+
+test "lower non-greedy Wildcard Repeat carries outer_follow as exit_first" {
+    // `comment : '/*' .*? '*/' ;` — `.*?` exits when `*/` appears.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "comment",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::Literal(LiteralElement::new("/*")),
+            Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::Wildcard(WildcardElement::new()),
+                non_greedy: true,
+            }),
+            Element::Literal(LiteralElement::new("*/")),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[1] {
+            if let NonGreedy(ng) = &rep.strategy {
+                // exit_first carries the trailing `*/` literal kind.
+                assert ng.exit_first.len() == 1, `expected 1, got {ng.exit_first.len()}`;
+                assert ng.exit_first[0] == "TK_LIT_STARSLASH", ng.exit_first[0];
+                assert ng.exit_second.is_empty();
+            } else {
+                panic("expected RepeatStrategy::NonGreedy");
+            }
+        } else {
+            panic("expected Op::Repeat at index 1");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower non-greedy TokenRef Repeat carries outer_follow as exit_first" {
+    // `r : ID*? '=' ;` — non-greedy `ID*?` followed by required `=`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::TokenRef(TokenRefElement::new("ID")),
+                non_greedy: true,
+            }),
+            Element::Literal(LiteralElement::new("=")),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let NonGreedy(ng) = &rep.strategy {
+                assert ng.exit_first.len() == 1;
+                assert ng.exit_first[0] == "TK_LIT_EQ", ng.exit_first[0];
+            } else {
+                panic("expected RepeatStrategy::NonGreedy");
+            }
+        } else {
+            panic("expected Op::Repeat at index 0");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower non-greedy Group Repeat fills exit_second from inner suffix" {
+    // `r : (',' INT)*? ',' STRING ;` — peek(0)==',' for both
+    // the inner and the follow; peek(1) distinguishes INT (inner)
+    // from STRING (follow). `exit_second` carries the inner's
+    // post-first first set so emit can disambiguate.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::Group(GroupElement::new([
+                    alt_of([
+                        Element::Literal(LiteralElement::new(",")),
+                        Element::TokenRef(TokenRefElement::new("INT")),
+                    ]),
+                ])),
+                non_greedy: true,
+            }),
+            Element::Literal(LiteralElement::new(",")),
+            Element::TokenRef(TokenRefElement::new("STRING")),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let NonGreedy(ng) = &rep.strategy {
+                // exit_first = first(',' STRING) = { TK_LIT_COMMA }.
+                assert ng.exit_first.len() == 1;
+                assert ng.exit_first[0] == "TK_LIT_COMMA";
+                // exit_second = first of inner-after-first = { TK_INT }.
+                assert ng.exit_second.len() == 1, `expected 1, got {ng.exit_second.len()}`;
+                assert ng.exit_second[0] == "TK_INT", ng.exit_second[0];
+            } else {
+                panic("expected RepeatStrategy::NonGreedy");
+            }
+        } else {
+            panic("expected Op::Repeat at index 0");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower multi-alt rule with overlapping first sets emits Tournament dispatch" {
+    // `r : ID INT | ID STRING ;` — both alts start with ID, so
+    // overlap. Both are fully scannable → Tournament dispatch.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [
+            alt_of([
+                Element::TokenRef(TokenRefElement::new("ID")),
+                Element::TokenRef(TokenRefElement::new("INT")),
+            ]),
+            alt_of([
+                Element::TokenRef(TokenRefElement::new("ID")),
+                Element::TokenRef(TokenRefElement::new("STRING")),
+            ]),
+        ],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let MultiAlt(m) = &lowered.parser_rules[0] {
+        if let Tournament(td) = &m.dispatch {
+            assert td.alts.len() == 2;
+            // Both alts have 2 elements; tie-break is source order.
+            assert td.alts[0] == 0 || td.alts[0] == 1;
+        } else {
+            panic("expected MultiAltDispatch::Tournament");
+        }
+        if let Tournament(_) = &m.scan_dispatch {
+            assert true;
+        } else {
+            panic("expected scan_dispatch Tournament");
+        }
+    } else {
+        panic("expected Rule::MultiAlt");
+    }
+}
+
+test "lower Tournament sorts longer alt first" {
+    // `r : ID INT STRING | ID INT ;` — both start with ID, but the
+    // 3-element alt is "more specific" and sorts before the 2-elem
+    // alt (longest-match wins).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [
+            alt_of([
+                Element::TokenRef(TokenRefElement::new("ID")),
+                Element::TokenRef(TokenRefElement::new("INT")),
+                Element::TokenRef(TokenRefElement::new("STRING")),
+            ]),
+            alt_of([
+                Element::TokenRef(TokenRefElement::new("ID")),
+                Element::TokenRef(TokenRefElement::new("INT")),
+            ]),
+        ],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let MultiAlt(m) = &lowered.parser_rules[0] {
+        if let Tournament(td) = &m.dispatch {
+            // alt 0 has 3 elements, alt 1 has 2; alt 0 sorts first.
+            assert td.alts[0] == 0, `expected alt 0 first, got {td.alts[0]}`;
+            assert td.alts[1] == 1;
+        } else {
+            panic("expected MultiAltDispatch::Tournament");
+        }
+    } else {
+        panic("expected Rule::MultiAlt");
+    }
+}
+
+test "lower registers follow-aware variant when caller follow overlaps callee tail-greedy" {
+    // `r : a 'end' ; a : 'x'* ;`
+    // The call to `a` at position 0 has caller-follow = first('end'),
+    // which overlaps `a`'s tail-greedy first set (`'x'`)... actually
+    // `'x'` is not in `'end'`'s first, so no variant here. Use a
+    // case where they DO overlap: `r : a ; a : 'x'* ; ` — empty
+    // outer_follow, no variant. Need a real overlap.
+    //
+    // `r : a STRING ; a : 'x'* ;` — outer_follow at `a` is `{TK_STRING}`.
+    // tail_greedy_first(a) = first('x') = {TK_LIT_X}. No overlap.
+    //
+    // For an actual overlap, the callee's tail-greedy first must
+    // include a token in the caller's follow. Construct:
+    // `r : a X ; a : X* ;` — outer_follow = {TK_X}, tail-greedy = {TK_X}.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([
+                Element::RuleRef(RuleRefElement::new("a")),
+                Element::TokenRef(TokenRefElement::new("X")),
+            ])],
+        ),
+        ParserRule::new(
+            "a",
+            Visibility::Default,
+            [],
+            [alt_of([Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::TokenRef(TokenRefElement::new("X")),
+                non_greedy: false,
+            })])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    // Variant registered → variant_rules has one entry.
+    assert lowered.variant_rules.len() == 1, `expected 1 variant, got {lowered.variant_rules.len()}`;
+    // The RuleCall at r's first op carries the variant_id.
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let RuleCall(rc) = &s.body.ops[0] {
+            if let Some(id) = &rc.variant_id {
+                assert *id == 0;
+            } else {
+                panic("expected variant_id on RuleCall");
+            }
+        } else {
+            panic("expected RuleCall");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower variant_rules empty when no caller follow overlaps callee tail-greedy" {
+    // `r : a X ; a : Y ;` — no Repeat → tail_greedy_first(a) = {}.
+    // No variant registered.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([
+                Element::RuleRef(RuleRefElement::new("a")),
+                Element::TokenRef(TokenRefElement::new("X")),
+            ])],
+        ),
+        ParserRule::new(
+            "a",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("Y"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.variant_rules.is_empty();
+}
+
+test "lower variant body suppresses Repeat when first set is fully in follow mask" {
+    // `r : a X ; a : X* ;`
+    // At the call site `a X`, caller_follow = {TK_X}. `a`'s
+    // tail-greedy first = {TK_X}. The variant `a__follow_0`
+    // installs mask = {TK_X}; lowering `X*` then sees
+    // first(X*) = {TK_X} ⊆ mask → Suppressed.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([
+                Element::RuleRef(RuleRefElement::new("a")),
+                Element::TokenRef(TokenRefElement::new("X")),
+            ])],
+        ),
+        ParserRule::new(
+            "a",
+            Visibility::Default,
+            [],
+            [alt_of([Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::TokenRef(TokenRefElement::new("X")),
+                non_greedy: false,
+            })])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.variant_rules.len() == 1;
+    if let Simple(s) = &lowered.variant_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let Suppressed = &rep.strategy {
+                assert true;
+            } else {
+                panic("expected RepeatStrategy::Suppressed in variant body");
+            }
+        } else {
+            panic("expected Op::Repeat in variant body");
+        }
+    } else {
+        panic("expected Rule::Simple for variant body");
+    }
+    // The base (non-variant) rule still uses Plain.
+    if let Simple(s) = &lowered.parser_rules[1] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let Plain = &rep.strategy {
+                assert true;
+            } else {
+                panic("expected RepeatStrategy::Plain in base rule");
+            }
+        } else {
+            panic("expected Op::Repeat in base rule");
+        }
+    } else {
+        panic("expected Rule::Simple for base rule 'a'");
+    }
+}
+
+test "lower variant body uses WithFollowSubtraction when mask partially overlaps inner first" {
+    // `t : X | Y ;` — single-token rule whose first set is {X, Y}.
+    // `a : t* ;` — the Repeat's inner is `t`, which IS a single-token
+    //   element (its callee always consumes exactly one token), so
+    //   tail_greedy_first_of_rule(a) = first(t) = {X, Y}.
+    // `r : a X ;` — caller follow at `a` is {X}; mask = {X}.
+    // Variant body re-lowers `a`'s `t*` with mask = {X}; the inner
+    // first = {X, Y}, subtract mask → effective = {Y}.
+    // → WithFollowSubtraction(effective_first = [Y]).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([
+                Element::RuleRef(RuleRefElement::new("a")),
+                Element::TokenRef(TokenRefElement::new("X")),
+            ])],
+        ),
+        ParserRule::new(
+            "a",
+            Visibility::Default,
+            [],
+            [alt_of([Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::RuleRef(RuleRefElement::new("t")),
+                non_greedy: false,
+            })])],
+        ),
+        ParserRule::new(
+            "t",
+            Visibility::Default,
+            [],
+            [
+                alt_of([Element::TokenRef(TokenRefElement::new("X"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("Y"))]),
+            ],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.variant_rules.len() == 1, `expected 1 variant, got {lowered.variant_rules.len()}`;
+    if let Simple(s) = &lowered.variant_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let WithFollowSubtraction(wfs) = &rep.strategy {
+                assert wfs.effective_first.len() == 1;
+                assert wfs.effective_first[0] == "TK_Y", wfs.effective_first[0];
+            } else {
+                panic("expected RepeatStrategy::WithFollowSubtraction");
+            }
+        } else {
+            panic("expected Op::Repeat in variant body");
+        }
+    } else {
+        panic("expected Rule::Simple for variant body");
+    }
+}
+
+test "lower Optional Repeat over multi-token Group uses OptionalLookahead strategy" {
+    // `r : ('-' '>')? ;` — single-alt Group with two fixed-token
+    // elements. The Optional needs a 2-token lookahead to commit
+    // to firing. Emits `OptionalLookahead` carrying the
+    // per-position signatures.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Repeat(RepeatElement {
+            kind: RepeatKind::Optional,
+            element: Element::Group(GroupElement::new([
+                alt_of([
+                    Element::Literal(LiteralElement::new("-")),
+                    Element::Literal(LiteralElement::new(">")),
+                ]),
+            ])),
+            non_greedy: false,
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let OptionalLookahead(ol) = &rep.strategy {
+                // Single inner alt → one outer entry; per-position
+                // sigs are [[TK_LIT_MINUS], [TK_LIT_GT]].
+                assert ol.sigs.len() == 1;
+                assert ol.sigs[0].len() == 2, `expected 2 positions, got {ol.sigs[0].len()}`;
+                assert ol.sigs[0][0][0] == "TK_LIT_MINUS", ol.sigs[0][0][0];
+                assert ol.sigs[0][1][0] == "TK_LIT_GT", ol.sigs[0][1][0];
+            } else {
+                panic("expected RepeatStrategy::OptionalLookahead");
+            }
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Optional Repeat with single-token inner stays Plain" {
+    // `r : INT? ;` — single-token Optional. The lookahead depth is
+    // only 1, so OptionalLookahead doesn't fire (`Plain` already
+    // handles single-token guards).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Repeat(RepeatElement {
+            kind: RepeatKind::Optional,
+            element: Element::TokenRef(TokenRefElement::new("INT")),
+            non_greedy: false,
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let Plain = &rep.strategy {
+                assert true;
+            } else {
+                panic("expected RepeatStrategy::Plain for single-token Optional");
+            }
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Optional Repeat over RuleRef inner uses OptionalScanGuard" {
+    // `r : a? ; a : X ;` — Optional Repeat whose inner is a RuleRef
+    // with no fixed-token prefix (the rule body is a single TokenRef,
+    // so lookahead depth could be 1, but OptionalLookahead requires
+    // ≥ 2 — `Plain` already handles single-token guards). The inner
+    // `a` is scannable, so `OptionalScanGuard` applies: emit gates
+    // entry on a scan probe.
+    //
+    // To force a scan-guard (not lookahead, not Plain), use a
+    // multi-element single-alt RuleRef-led group inner.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([Element::Repeat(RepeatElement {
+                kind: RepeatKind::Optional,
+                element: Element::Group(GroupElement::new([
+                    alt_of([
+                        Element::RuleRef(RuleRefElement::new("a")),
+                        Element::TokenRef(TokenRefElement::new("X")),
+                    ]),
+                ])),
+                non_greedy: false,
+            })])],
+        ),
+        ParserRule::new(
+            "a",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("Y"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let OptionalScanGuard = &rep.strategy {
+                assert true;
+            } else {
+                panic("expected RepeatStrategy::OptionalScanGuard");
+            }
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Repeat over General Group inner uses speculative group_counter id" {
+    // `r : (stmt | INT INT)+ ; stmt : ID ;`
+    // The General Group inside the Repeat gets group_index = 0
+    // (the per-rule counter starts at 0 in alt 0). The Repeat's
+    // outer struct field is `group_0_list` (Plus → `_list` suffix
+    // on the General-Group base `group_<idx>`).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [alt_of([Element::Repeat(RepeatElement {
+                kind: RepeatKind::Plus,
+                element: Element::Group(GroupElement::new([
+                    alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                    alt_of([
+                        Element::TokenRef(TokenRefElement::new("INT")),
+                        Element::TokenRef(TokenRefElement::new("INT")),
+                    ]),
+                ])),
+                non_greedy: false,
+            })])],
+        ),
+        ParserRule::new(
+            "stmt",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            // Outer field uses speculative counter id 0.
+            assert rep.field == "group_0_list", rep.field;
+            // The inner Op is the General-Group, with the SAME id
+            // (the inner lowering consumed the same counter value).
+            if let Group(go) = &rep.body {
+                if let General(gen) = &go.shape {
+                    assert gen.group_index == 0;
+                    assert gen.variant_type == "RGroup0";
+                } else {
+                    panic("expected nested General Group");
+                }
+            } else {
+                panic("expected Op::Group inside Repeat");
+            }
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Repeat with list-label inner uses label name as outer field" {
+    // `r : (names+=ID)* ;` — `+=` inside a `*` Repeat. The Repeat
+    // becomes the array; the label name `names` IS the outer
+    // struct field (no `_list` suffix).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Repeat(RepeatElement {
+            kind: RepeatKind::Star,
+            element: Element::Label(LabelElement::new(
+                "names",
+                true,
+                Element::TokenRef(TokenRefElement::new("ID")),
+            )),
+            non_greedy: false,
+        })])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            // The Repeat's outer field is `names`, not `id_list`.
+            assert rep.field == "names", rep.field;
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower Transparent Group contributes inner op's field" {
+    // `r : (INT) ;` — Transparent group with single leaf inner.
+    // The struct field is the inner Token's, not a wrapper.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Group(GroupElement::new([
+            alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+        ]))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        // [span, int (from Transparent passthrough)]
+        assert s.body.fields.len() == 2, `expected 2 fields, got {s.body.fields.len()}`;
+        assert s.body.fields[1].name == "int";
+        assert s.body.fields[1].type_str == "Token";
+    } else {
+        panic("expected Rule::Simple");
+    }
+}

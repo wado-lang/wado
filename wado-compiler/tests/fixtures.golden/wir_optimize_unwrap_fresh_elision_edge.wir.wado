@@ -32,27 +32,27 @@ struct wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/
     mut name: ref "core:prelude/string.wado//String",
 }
 
-variant core:prelude/types.wado//Result<Data,String> {  // TypeId(5)
+variant core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/Data,core:prelude/string.wado/String> {  // TypeId(5)
     Ok(ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data"),
     Err(ref "core:prelude/string.wado//String"),
 }
 
-struct core:prelude/types.wado//Result<Data,String>::Ok {  // TypeId(6)
+struct core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/Data,core:prelude/string.wado/String>::Ok {  // TypeId(6)
     discriminant: i32,
     payload_0: ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data",
 }
 
-struct core:prelude/types.wado//Result<Data,String>::Err {  // TypeId(7)
+struct core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/Data,core:prelude/string.wado/String>::Err {  // TypeId(7)
     discriminant: i32,
     payload_0: ref "core:prelude/string.wado//String",
 }
 
-variant core:prelude/types.wado//Option<Option<Data>> {  // TypeId(8)
+variant core:prelude/types.wado//Option<core:prelude/types.wado/Option<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/Data>> {  // TypeId(8)
     Some(ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data"),
     None,
 }
 
-struct core:prelude/types.wado//Option<Option<Data>>::Some {  // TypeId(9)
+struct core:prelude/types.wado//Option<core:prelude/types.wado/Option<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/Data>>::Some {  // TypeId(9)
     discriminant: i32,
     payload_0: ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data",
 }
@@ -79,9 +79,9 @@ type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/make_data" = fn(i32) -> ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data";  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/make_result" = fn(i32) -> ref "core:prelude/types.wado//Result<Data,String>";  // TypeId(21)
+type "functype//wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/make_result" = fn(i32) -> ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/Data,core:prelude/string.wado/String>";  // TypeId(21)
 
-type "functype//wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/make_nested" = fn(i32) -> ref "core:prelude/types.wado//Option<Option<Data>>";  // TypeId(22)
+type "functype//wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/make_nested" = fn(i32) -> ref "core:prelude/types.wado//Option<core:prelude/types.wado/Option<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/Data>>";  // TypeId(22)
 
 type "functype//wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/run" = fn();  // TypeId(23)
 
@@ -169,7 +169,7 @@ fn "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/mak
 fn "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/make_result"(x) {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
-    return struct.new "core:prelude/types.wado//Result<Data,String>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" { x: x, y: x * 10, name: ref.as_non_null(__tmpl: block -> ref "core:prelude/string.wado//String" {
+    return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/Data,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" { x: x, y: x * 10, name: ref.as_non_null(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
         "core:prelude/string.wado/String::push"(__local_1, 114);
         "core:prelude/string.wado/String::push"(__local_1, 101);
@@ -185,7 +185,7 @@ fn "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/mak
 fn "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/make_nested"(x) {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
-    return struct.new "core:prelude/types.wado//Option<Option<Data>>::Some" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" { x: x, y: x * 3, name: ref.as_non_null(__tmpl: block -> ref "core:prelude/string.wado//String" {
+    return struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Option<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/Data>>::Some" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" { x: x, y: x * 3, name: ref.as_non_null(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
         "core:prelude/string.wado/String::push"(__local_1, 110);
         "core:prelude/string.wado/String::push"(__local_1, 101);
@@ -329,15 +329,15 @@ fn "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/run
     let __sroa_self_value_320: ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data";
     let __sroa_self_value_321: ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data";
     let __sroa_self_value_322: ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data";
-    let __sroa_self_value_323: ref "core:prelude/types.wado//Option<Option<Data>>";
-    let __sroa_self_value_325: ref "core:prelude/types.wado//Result<Data,String>";
+    let __sroa_self_value_323: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Option<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/Data>>";
+    let __sroa_self_value_325: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/Data,core:prelude/string.wado/String>";
     let __sroa_self_value_326: ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data";
     let __sroa_self_value_327: ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data";
-    d1 = __inline_Option_Data___unwrap_2: block -> ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
+    d1 = __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data___unwrap_2: block -> ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
         __sroa_self_value_319 = "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/make_data"(1);
         if ref.is_null(__sroa_self_value_319) == 0 {
             v_83 = ref.as_non_null(__sroa_self_value_319);
-            break __inline_Option_Data___unwrap_2: v_83;
+            break __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data___unwrap_2: v_83;
         }
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Option::unwrap() on a None value"), used: 39 });
         unreachable;
@@ -386,11 +386,11 @@ condition: d1.y == 2
                 if i >= 3 {
                     break __for_0;
                 }
-                d_6 = __inline_Option_Data___unwrap_17: block -> ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
+                d_6 = __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data___unwrap_17: block -> ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
                     __sroa_self_value_320 = "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/make_data"(i);
                     if ref.is_null(__sroa_self_value_320) == 0 {
                         v_108 = ref.as_non_null(__sroa_self_value_320);
-                        break __inline_Option_Data___unwrap_17: v_108;
+                        break __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data___unwrap_17: v_108;
                     }
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Option::unwrap() on a None value"), used: 39 });
                     unreachable;
@@ -498,20 +498,20 @@ condition: d.y == i * 2
             };
         };
     };
-    a = __inline_Option_Data___unwrap_41: block -> ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
+    a = __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data___unwrap_41: block -> ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
         __sroa_self_value_321 = "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/make_data"(10);
         if ref.is_null(__sroa_self_value_321) == 0 {
             v_148 = ref.as_non_null(__sroa_self_value_321);
-            break __inline_Option_Data___unwrap_41: v_148;
+            break __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data___unwrap_41: v_148;
         }
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Option::unwrap() on a None value"), used: 39 });
         unreachable;
     };
-    b = __inline_Option_Data___unwrap_42: block -> ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
+    b = __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data___unwrap_42: block -> ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
         __sroa_self_value_322 = "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/make_data"(20);
         if ref.is_null(__sroa_self_value_322) == 0 {
             v_151 = ref.as_non_null(__sroa_self_value_322);
-            break __inline_Option_Data___unwrap_42: v_151;
+            break __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data___unwrap_42: v_151;
         }
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Option::unwrap() on a None value"), used: 39 });
         unreachable;
@@ -676,19 +676,19 @@ condition: b.name == \"data-20\"
         });
         unreachable;
     }
-    inner_opt = __inline_Option_Option_Data____unwrap_77: block -> ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
+    inner_opt = __inline_Option_core_prelude_types_wado_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data____unwrap_77: block -> ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
         __sroa_self_value_323 = "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/make_nested"(5);
-        if ref.test "core:prelude/types.wado//Option<Option<Data>>::Some"(__sroa_self_value_323) {
-            v_204 = ref.cast "core:prelude/types.wado//Option<Option<Data>>::Some"(__sroa_self_value_323).payload_0;
-            break __inline_Option_Option_Data____unwrap_77: v_204;
+        if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Option<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/Data>>::Some"(__sroa_self_value_323) {
+            v_204 = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Option<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/Data>>::Some"(__sroa_self_value_323).payload_0;
+            break __inline_Option_core_prelude_types_wado_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data____unwrap_77: v_204;
         }
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Option::unwrap() on a None value"), used: 39 });
         unreachable;
     };
-    d4 = __inline_Option_Data___unwrap_78: block -> ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
+    d4 = __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data___unwrap_78: block -> ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
         if ref.is_null(inner_opt) == 0 {
             v_207 = ref.as_non_null(inner_opt);
-            break __inline_Option_Data___unwrap_78: v_207;
+            break __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data___unwrap_78: v_207;
         }
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Option::unwrap() on a None value"), used: 39 });
         unreachable;
@@ -765,11 +765,11 @@ condition: d4.y == 15
         });
         unreachable;
     }
-    d5 = __inline_Result_Data_String___unwrap_93: block -> ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
+    d5 = __inline_Result_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data_core_prelude_string_wado_String___unwrap_93: block -> ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
         __sroa_self_value_325 = "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/make_result"(7);
-        if ref.test "core:prelude/types.wado//Result<Data,String>::Ok"(__sroa_self_value_325) {
-            v_232 = ref.cast "core:prelude/types.wado//Result<Data,String>::Ok"(__sroa_self_value_325).payload_0;
-            break __inline_Result_Data_String___unwrap_93: v_232;
+        if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/Data,core:prelude/string.wado/String>::Ok"(__sroa_self_value_325) {
+            v_232 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/Data,core:prelude/string.wado/String>::Ok"(__sroa_self_value_325).payload_0;
+            break __inline_Result_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data_core_prelude_string_wado_String___unwrap_93: v_232;
         }
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Result::unwrap() on an Err value"), used: 39 });
         unreachable;
@@ -847,11 +847,11 @@ condition: d5.name == \"res-7\"
         });
         unreachable;
     }
-    d6 = __inline_Option_Data___unwrap_111: block -> ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
+    d6 = __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data___unwrap_111: block -> ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
         __sroa_self_value_326 = "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/make_data"(3);
         if ref.is_null(__sroa_self_value_326) == 0 {
             v_260 = ref.as_non_null(__sroa_self_value_326);
-            break __inline_Option_Data___unwrap_111: v_260;
+            break __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data___unwrap_111: v_260;
         }
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Option::unwrap() on a None value"), used: 39 });
         unreachable;
@@ -894,11 +894,11 @@ condition: check_data(&d6)
         });
         unreachable;
     }
-    __pattern_temp_0_80 = __inline_Option_Data___unwrap_120: block -> ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
+    __pattern_temp_0_80 = __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data___unwrap_120: block -> ref "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado//Data" {
         __sroa_self_value_327 = "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision_edge.wado/make_data"(42);
         if ref.is_null(__sroa_self_value_327) == 0 {
             v_275 = ref.as_non_null(__sroa_self_value_327);
-            break __inline_Option_Data___unwrap_120: v_275;
+            break __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_edge_wado_Data___unwrap_120: v_275;
         }
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Option::unwrap() on a None value"), used: 39 });
         unreachable;
@@ -1630,13 +1630,13 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let self_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         self_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             self_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: self_8.repr, used: self_8.used, byte_index: 0 };
             unreachable;
         };
-        break __inline_StrCharIter_IntoIterator__into_iter_1: self_7;
+        break __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: self_7;
         unreachable;
     };
     _licm_buf_33 = f.buf;

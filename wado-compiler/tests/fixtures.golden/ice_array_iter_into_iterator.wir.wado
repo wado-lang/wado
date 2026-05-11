@@ -62,7 +62,7 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(24)
 
-type "functype//core:prelude/string.wado/String::from_utf8<ArrayIter<u8>>" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, ref null "core:prelude/string.wado//String"];  // TypeId(25)
+type "functype//core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/ArrayIter<u8>>" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, ref null "core:prelude/string.wado//String"];  // TypeId(25)
 
 type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(26)
 
@@ -93,7 +93,7 @@ fn "wado-compiler/tests/fixtures/ice_array_iter_into_iterator.wado/run"() with S
     };
     let __sroa___pattern_temp_0_3_discriminant: i32;
     let __sroa___pattern_temp_0_3_payload_0: ref null "core:prelude/string.wado//String";
-    multivalue_bind [__sroa___pattern_temp_0_3_discriminant, __sroa___pattern_temp_0_3_payload_0] = "core:prelude/string.wado/String::from_utf8<ArrayIter<u8>>"(struct.new "core:prelude/array.wado//ArrayIter<u8>" { repr: arr.repr, used: arr.used, index: 0 });
+    multivalue_bind [__sroa___pattern_temp_0_3_discriminant, __sroa___pattern_temp_0_3_payload_0] = "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/ArrayIter<u8>>"(struct.new "core:prelude/array.wado//ArrayIter<u8>" { repr: arr.repr, used: arr.used, index: 0 });
     if __sroa___pattern_temp_0_3_discriminant == 0 {
         s = ref.as_non_null(__sroa___pattern_temp_0_3_payload_0);
         let __pair_temp_1: i64;
@@ -239,7 +239,7 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "core:prelude/string.wado/String::from_utf8<ArrayIter<u8>>"(bytes) {
+fn "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/ArrayIter<u8>>"(bytes) {
     let builder: ref "core:prelude/string.wado//String";
     let iter: ref "core:prelude/array.wado//ArrayIter<u8>";
     let b0: u8;

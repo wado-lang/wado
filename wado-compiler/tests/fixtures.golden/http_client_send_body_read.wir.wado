@@ -158,17 +158,17 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(23)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct tuple//[Request, Future<Result<unit,wasi:http/types.wado/ErrorCode>>] {  // TypeId(24)
+struct tuple//[Request, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>] {  // TypeId(24)
     mut 0: i32,
     mut 1: i32,
 }
 
-struct tuple//[Stream<u8>, Future<Result<Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>] {  // TypeId(25)
+struct tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>] {  // TypeId(25)
     mut 0: i32,
     mut 1: i32,
 }
 
-struct tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>] {  // TypeId(26)
+struct tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>] {  // TypeId(26)
     mut 0: i32,
     mut 1: i32,
 }
@@ -181,7 +181,7 @@ struct core:prelude/array.wado//ArrayIter<u8> {  // TypeId(28)
     mut index: i32,
 }
 
-struct core:prelude/types.wado//AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>> {  // TypeId(29)
+struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>> {  // TypeId(29)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
@@ -229,17 +229,17 @@ struct core:prelude/types.wado//Option<u64>::Some {  // TypeId(37)
     payload_0: u64,
 }
 
-variant core:prelude/types.wado//Result<String,String> {  // TypeId(38)
+variant core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String> {  // TypeId(38)
     Ok(ref "core:prelude/string.wado//String"),
     Err(ref "core:prelude/string.wado//String"),
 }
 
-struct core:prelude/types.wado//Result<String,String>::Ok {  // TypeId(39)
+struct core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok {  // TypeId(39)
     discriminant: i32,
     payload_0: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/types.wado//Result<String,String>::Err {  // TypeId(40)
+struct core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err {  // TypeId(40)
     discriminant: i32,
     payload_0: ref "core:prelude/string.wado//String",
 }
@@ -334,7 +334,7 @@ type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/han
 
 type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(70)
 
-type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> ref "tuple//[Request, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]";  // TypeId(71)
+type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> ref "tuple//[Request, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";  // TypeId(71)
 
 type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Request_set_scheme" = fn(i32, ref null "wasi:http/types.wado//Scheme") -> ref "core:prelude/types.wado//Result<unit,unit>";  // TypeId(72)
 
@@ -342,11 +342,11 @@ type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/__c
 
 type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Request_set_path_with_query" = fn(i32, ref null "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<unit,unit>";  // TypeId(74)
 
-type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Client_send" = fn(i32) -> ref "core:prelude/types.wado//AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";  // TypeId(75)
+type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Client_send" = fn(i32) -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";  // TypeId(75)
 
-type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Response_consume_body" = fn(i32, i32) -> ref "tuple//[Stream<u8>, Future<Result<Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>]";  // TypeId(76)
+type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Response_consume_body" = fn(i32, i32) -> ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>]";  // TypeId(76)
 
-type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]";  // TypeId(77)
+type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";  // TypeId(77)
 
 type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_lift__Client_send" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(78)
 
@@ -384,9 +384,9 @@ type "functype//core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect" = fn
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(95)
 
-type "functype//core:prelude/string.wado/String::from_utf8<Array<u8>>" = fn(ref "core:prelude//Array<u8>") -> ref "core:prelude/types.wado//Result<String,String>";  // TypeId(96)
+type "functype//core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>>" = fn(ref "core:prelude//Array<u8>") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>";  // TypeId(96)
 
-type "functype//core:prelude/types.wado/AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(97)
+type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(97)
 
 type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(98)
 
@@ -593,9 +593,9 @@ fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/handle"() with 
     let __packed_171: i64;
     let __ptr_172: i32;
     let __len_173: i32;
-    let __pattern_temp_1: ref "tuple//[Request, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]";
-    let __pattern_temp_3: ref "tuple//[Stream<u8>, Future<Result<Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>]";
-    let __pattern_temp_6: ref "tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_1: ref "tuple//[Request, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_3: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_6: ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
     let self_183: ref "core:prelude/string.wado//String";
     headers = "wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Fields_new"();
     let __pair_temp_1: i64;
@@ -610,7 +610,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/handle"() with 
     drop("wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Request_set_scheme"(out_req, struct.new "wasi:http/types.wado//Scheme" { 0 }));
     drop("wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Request_set_authority"(out_req, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("localhost"), used: 9 }));
     drop("wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Request_set_path_with_query"(out_req, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/upstream"), used: 9 }));
-    upstream_result = "core:prelude/types.wado/AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Client_send"(out_req));
+    upstream_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Client_send"(out_req));
     let __fw_write_ptr_2: i32;
     let __fw_handle_2: i32;
     let __fw_result_2: i32;
@@ -659,16 +659,16 @@ fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/handle"() with 
             if chunk.used == 0 {
                 break b2;
             }
-            let __match_scrut_1: ref "core:prelude/types.wado//Result<String,String>";
-            __match_scrut_1 = "core:prelude/string.wado/String::from_utf8<Array<u8>>"(chunk);
-            text = (if ref.test "core:prelude/types.wado//Result<String,String>::Ok"(__match_scrut_1) -> ref "core:prelude/string.wado//String" {
-                let __cast_7: ref "core:prelude/types.wado//Result<String,String>::Ok";
-                __cast_7 = ref.cast "core:prelude/types.wado//Result<String,String>::Ok"(__match_scrut_1);
+            let __match_scrut_1: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>";
+            __match_scrut_1 = "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>>"(chunk);
+            text = (if ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(__match_scrut_1) -> ref "core:prelude/string.wado//String" {
+                let __cast_7: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok";
+                __cast_7 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(__match_scrut_1);
                 s = __cast_7.payload_0;
                 s;
             } else {
-                let __cast_6: ref "core:prelude/types.wado//Result<String,String>::Err";
-                __cast_6 = ref.cast "core:prelude/types.wado//Result<String,String>::Err"(__match_scrut_1);
+                let __cast_6: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err";
+                __cast_6 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err"(__match_scrut_1);
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid utf-8 in upstream body"), used: 30 });
                 unreachable;
             });
@@ -1051,7 +1051,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__R
     __lifted_result_11 = builtin::load_i32(__outptr + 0);
     __lifted_result_12 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Request, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_11, 1: __lifted_result_12 };
+    return struct.new "tuple//[Request, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_11, 1: __lifted_result_12 };
 }
 
 fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Request_set_scheme"(self, scheme) with Request {
@@ -1147,7 +1147,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__C
     let __subtask_packed: i32;
     __async_outptr = "mem/realloc"(0, 0, 8, 40);
     __subtask_packed = "wasi/wasi:http/Client::send"(request, __async_outptr);
-    return struct.new "core:prelude/types.wado//AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 40, __cm_align: 8, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/http_client_send_body_read.wado//__Closure_2" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/http_client_send_body_read.wado/__closure_wrapper_0") } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 40, __cm_align: 8, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/http_client_send_body_read.wado//__Closure_2" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/http_client_send_body_read.wado/__closure_wrapper_0") } };
 }
 
 fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Response_consume_body"(this, res) with Response {
@@ -1159,7 +1159,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__R
     __lifted_result_3 = builtin::load_i32(__outptr + 0);
     __lifted_result_4 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Stream<u8>, Future<Result<Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_3, 1: __lifted_result_4 };
+    return struct.new "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_3, 1: __lifted_result_4 };
 }
 
 fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
@@ -1178,7 +1178,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__R
     __lifted_result_7 = builtin::load_i32(__outptr + 0);
     __lifted_result_8 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Response, Future<Result<unit,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_7, 1: __lifted_result_8 };
+    return struct.new "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_7, 1: __lifted_result_8 };
 }
 
 fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_lift__Client_send"(__outptr) {
@@ -1810,7 +1810,7 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "core:prelude/string.wado/String::from_utf8<Array<u8>>"(bytes) {
+fn "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>>"(bytes) {
     let builder: ref "core:prelude/string.wado//String";
     let iter: ref "core:prelude/array.wado//ArrayIter<u8>";
     let b0: u8;
@@ -1834,7 +1834,7 @@ fn "core:prelude/string.wado/String::from_utf8<Array<u8>>"(bytes) {
                 if b0 <u 128 {
                     code = b0;
                 } else if b0 <u 194 {
-                    return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: unexpected byte"), used: 30 } };
+                    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: unexpected byte"), used: 30 } };
                 } else if b0 <u 224 {
                     let __sroa___pattern_temp_1_discriminant: i32;
                     let __sroa___pattern_temp_1_payload_0: u8;
@@ -1846,11 +1846,11 @@ fn "core:prelude/string.wado/String::from_utf8<Array<u8>>"(bytes) {
                         } else {
                             b1_5 >u 191;
                         }) {
-                            return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
+                            return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
                         }
                         code = ((b0 & 31) << 6) | (b1_5 & 63);
                     } else {
-                        return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
+                        return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
                     }
                 } else if b0 <u 240 {
                     let __sroa___pattern_temp_2_discriminant: i32;
@@ -1868,35 +1868,35 @@ fn "core:prelude/string.wado/String::from_utf8<Array<u8>>"(bytes) {
                             } else {
                                 0;
                             }) {
-                                return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: overlong sequence"), used: 32 } };
+                                return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: overlong sequence"), used: 32 } };
                             }
                             if (if b0 == 237 -> i32 {
                                 b1_6 >=u 160;
                             } else {
                                 0;
                             }) {
-                                return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: surrogate codepoint"), used: 34 } };
+                                return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: surrogate codepoint"), used: 34 } };
                             }
                             if (if b1_6 <u 128 -> i32 {
                                 1;
                             } else {
                                 b1_6 >u 191;
                             }) {
-                                return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
+                                return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
                             }
                             if (if b2_7 <u 128 -> i32 {
                                 1;
                             } else {
                                 b2_7 >u 191;
                             }) {
-                                return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
+                                return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
                             }
                             code = (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63);
                         } else {
-                            return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
+                            return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
                         }
                     } else {
-                        return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
+                        return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
                     }
                 } else if b0 <u 245 {
                     let __sroa___pattern_temp_4_discriminant: i32;
@@ -1919,48 +1919,48 @@ fn "core:prelude/string.wado/String::from_utf8<Array<u8>>"(bytes) {
                                 } else {
                                     0;
                                 }) {
-                                    return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: overlong sequence"), used: 32 } };
+                                    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: overlong sequence"), used: 32 } };
                                 }
                                 if (if b0 == 244 -> i32 {
                                     b1_8 >u 143;
                                 } else {
                                     0;
                                 }) {
-                                    return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: out of Unicode range"), used: 35 } };
+                                    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: out of Unicode range"), used: 35 } };
                                 }
                                 if (if b1_8 <u 128 -> i32 {
                                     1;
                                 } else {
                                     b1_8 >u 191;
                                 }) {
-                                    return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
+                                    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
                                 }
                                 if (if b2_9 <u 128 -> i32 {
                                     1;
                                 } else {
                                     b2_9 >u 191;
                                 }) {
-                                    return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
+                                    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
                                 }
                                 if (if b3 <u 128 -> i32 {
                                     1;
                                 } else {
                                     b3 >u 191;
                                 }) {
-                                    return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
+                                    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
                                 }
                                 code = ((((b0 & 7) << 18) | ((b1_8 & 63) << 12)) | ((b2_9 & 63) << 6)) | (b3 & 63);
                             } else {
-                                return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
+                                return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
                             }
                         } else {
-                            return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
+                            return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
                         }
                     } else {
-                        return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
+                        return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
                     }
                 } else {
-                    return struct.new "core:prelude/types.wado//Result<String,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: byte out of range"), used: 32 } };
+                    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: byte out of range"), used: 32 } };
                 }
                 "core:prelude/string.wado/String::push"(builder, code);
             } else {
@@ -1969,7 +1969,7 @@ fn "core:prelude/string.wado/String::from_utf8<Array<u8>>"(bytes) {
             continue l135;
         };
     };
-    return struct.new "core:prelude/types.wado//Result<String,String>::Ok" { discriminant: 0, payload_0: builder };
+    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: builder };
 }
 
 fn "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(self) {
@@ -1982,7 +1982,7 @@ fn "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(self) {
     return 0, item;
 }
 
-fn "core:prelude/types.wado/AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"(self) {
+fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"(self) {
     let handle_1: i32;
     let raw: i32;
     let ws_3: i32;

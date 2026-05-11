@@ -710,8 +710,12 @@ impl<'a> WirContext<'a> {
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } if name == "Array" && type_args.len() == 1 => {
-                // Look up Array<T> struct type
-                let elem_type_name = type_table.mangle_type_name(type_args[0]);
+                // Look up Array<T> struct type. The element name must
+                // come from `mangle_type_arg_for_generic` so it agrees
+                // with the registration key produced by the
+                // monomorphizer's `instantiation_name` (which qualifies
+                // Struct / GenericInstance args by `ModuleSource`).
+                let elem_type_name = type_table.mangle_type_arg_for_generic(type_args[0]);
                 let array_fq = format!("core:prelude//Array<{elem_type_name}>");
                 if let Some(type_id) = self.type_map.get(&array_fq) {
                     WirType::Ref {
@@ -721,7 +725,7 @@ impl<'a> WirContext<'a> {
                 } else {
                     // Fallback: resolve newtypes in element type (e.g., FieldName → String)
                     let resolved_name =
-                        type_table.mangle_type_name_resolving_newtypes(type_args[0]);
+                        type_table.mangle_type_arg_for_generic_resolving_newtypes(type_args[0]);
                     if resolved_name != elem_type_name {
                         let resolved_fq = format!("core:prelude//Array<{resolved_name}>");
                         if let Some(type_id) = self.type_map.get(&resolved_fq) {
@@ -838,8 +842,9 @@ impl<'a> WirContext<'a> {
                         nullable: false,
                     }
                 } else {
-                    // Fallback: look up by element type name (handles cross-module TypeIds)
-                    let elem_name = type_table.mangle_type_name(*elem_type_id);
+                    // Fallback: look up by element type name (handles cross-module TypeIds).
+                    // Uses qualified mangle to match `register_raw_array_type`'s key.
+                    let elem_name = type_table.mangle_type_arg_for_generic(*elem_type_id);
                     if let Some(type_id) = self.array_type_by_name.get(&elem_name) {
                         WirType::Ref {
                             type_id: type_id.clone(),
@@ -847,8 +852,8 @@ impl<'a> WirContext<'a> {
                         }
                     } else {
                         // Fallback: resolve newtypes in element type
-                        let resolved_name =
-                            type_table.mangle_type_name_resolving_newtypes(*elem_type_id);
+                        let resolved_name = type_table
+                            .mangle_type_arg_for_generic_resolving_newtypes(*elem_type_id);
                         if resolved_name != elem_name
                             && let Some(type_id) = self.array_type_by_name.get(&resolved_name)
                         {

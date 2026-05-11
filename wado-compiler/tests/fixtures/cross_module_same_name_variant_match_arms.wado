@@ -1,0 +1,46 @@
+// Cross-module variant-name namespacing — match form, both arms.
+//
+// Strengthens `cross_module_same_name_variant.wado` (which only
+// exercises the FIRST arm of each match, so any regression that
+// silently makes every arm always-match would still pass) by
+// running the SECOND arm of each module's match with a distinctive
+// sentinel.
+//
+// The two modules each declare `variant Status` with disjoint
+// cases (Active/Inactive vs Ok/Err). A regression in match-arm
+// lowering that confused module A's `Inactive` with module B's
+// case set — or vice versa — would surface as the wrong return
+// value for the second-arm input, not as a panic.
+//
+// (The companion `cross_module_same_name_variant_iflet.wado` is the
+// targeted regression for the lower-time `variant_case_map` keying
+// bug. The `match` form goes through a different lowering path that
+// resolves cases via the scrutinee's `TypeId` directly, so this
+// fixture is defensive coverage rather than a regression for that
+// specific bug.)
+
+use {
+    make_active,
+    make_inactive,
+    status_value,
+} from "./sub/cross_module_same_name_variant_match_arms_a.wado";
+use {
+    make_ok,
+    make_err,
+    status_describe,
+} from "./sub/cross_module_same_name_variant_match_arms_b.wado";
+
+test "match exercises both arms across same-name variants" {
+    let a1 = make_active(42);
+    assert status_value(a1) == 42;
+    let a2 = make_inactive();
+    assert status_value(a2) == 999;
+
+    let b1 = make_ok("hello");
+    assert status_describe(b1) == "hello";
+    let b2 = make_err(7);
+    assert status_describe(b2) == "err7";
+}
+
+__DATA__
+{"test": {}}

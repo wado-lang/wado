@@ -31,7 +31,7 @@ struct wado-compiler/tests/fixtures/for_of_ref.wado//Point {  // TypeId(4)
 
 array builtin::array<i32> (mut i32);  // TypeId(5)
 
-array builtin::array<Point> (mut ref "wado-compiler/tests/fixtures/for_of_ref.wado//Point");  // TypeId(6)
+array builtin::array<wado-compiler/tests/fixtures/for_of_ref.wado/Point> (mut ref "wado-compiler/tests/fixtures/for_of_ref.wado//Point");  // TypeId(6)
 
 struct core:prelude/array.wado//ArrayIter<i32> {  // TypeId(7)
     mut repr: ref builtin::array<i32>,
@@ -39,8 +39,8 @@ struct core:prelude/array.wado//ArrayIter<i32> {  // TypeId(7)
     mut index: i32,
 }
 
-struct core:prelude/array.wado//ArrayRefIter<Point> {  // TypeId(8)
-    mut repr: ref builtin::array<Point>,
+struct core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point> {  // TypeId(8)
+    mut repr: ref "builtin::array<wado-compiler/tests/fixtures/for_of_ref.wado/Point>",
     mut used: i32,
     mut index: i32,
 }
@@ -56,8 +56,8 @@ struct core:prelude//Array<i32> {  // TypeId(10)
     mut used: i32,
 }
 
-struct core:prelude//Array<Point> {  // TypeId(11)
-    mut repr: ref builtin::array<Point>,
+struct core:prelude//Array<wado-compiler/tests/fixtures/for_of_ref.wado/Point> {  // TypeId(11)
+    mut repr: ref "builtin::array<wado-compiler/tests/fixtures/for_of_ref.wado/Point>",
     mut used: i32,
 }
 
@@ -123,7 +123,7 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(42)
 
-type "functype//core:prelude/array.wado/ArrayRefIter<Point>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayRefIter<Point>") -> ref null "wado-compiler/tests/fixtures/for_of_ref.wado//Point";  // TypeId(43)
+type "functype//core:prelude/array.wado/ArrayRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>") -> ref null "wado-compiler/tests/fixtures/for_of_ref.wado//Point";  // TypeId(43)
 
 type "functype//core:prelude/array.wado/ArrayRefIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(44)
 
@@ -241,39 +241,39 @@ condition: sum == 60
 }
 
 fn "wado-compiler/tests/fixtures/for_of_ref.wado/test_for_of_ref_struct"() with Stdout {
-    let __b: ref "core:prelude//Array<Point>";
-    let points: ref "core:prelude//Array<Point>";
+    let __b: ref "core:prelude//Array<wado-compiler/tests/fixtures/for_of_ref.wado/Point>";
+    let points: ref "core:prelude//Array<wado-compiler/tests/fixtures/for_of_ref.wado/Point>";
     let sum: i32;
-    let __iter_3: ref "core:prelude/array.wado//ArrayRefIter<Point>";
+    let __iter_3: ref "core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>";
     let p: ref "wado-compiler/tests/fixtures/for_of_ref.wado//Point";
     let __v0: i32;
     let __cond: bool;
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let __pattern_temp_0_9: ref null "wado-compiler/tests/fixtures/for_of_ref.wado//Point";
-    let self_17: ref "core:prelude//Array<Point>";
-    let arr: ref "core:prelude//Array<Point>";
+    let self_17: ref "core:prelude//Array<wado-compiler/tests/fixtures/for_of_ref.wado/Point>";
+    let arr: ref "core:prelude//Array<wado-compiler/tests/fixtures/for_of_ref.wado/Point>";
     let f_22: ref "core:prelude/format.wado//Formatter";
     let f_27: ref "core:prelude/format.wado//Formatter";
     let message: ref "core:prelude/string.wado//String";
     let rx: i32;
     let tx: i32;
     let handle: i32;
-    points = __seq_lit: block -> ref "core:prelude//Array<Point>" {
-        __b = struct.new "core:prelude//Array<Point>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/for_of_ref.wado//Point">(struct.new "wado-compiler/tests/fixtures/for_of_ref.wado//Point" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/for_of_ref.wado//Point" { x: 3, y: 4 }), used: 2 };
+    points = __seq_lit: block -> ref "core:prelude//Array<wado-compiler/tests/fixtures/for_of_ref.wado/Point>" {
+        __b = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/for_of_ref.wado/Point>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/for_of_ref.wado//Point">(struct.new "wado-compiler/tests/fixtures/for_of_ref.wado//Point" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/for_of_ref.wado//Point" { x: 3, y: 4 }), used: 2 };
         break __seq_lit: __b;
         unreachable;
     };
     sum = 0;
-    __iter_3 = __inline__Point_IntoIterator__into_iter_5: block -> ref "core:prelude/array.wado//ArrayRefIter<Point>" {
+    __iter_3 = __inline__wado_compiler_tests_fixtures_for_of_ref_wado_Point_IntoIterator__into_iter_5: block -> ref "core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>" {
         self_17 = points;
         arr = self_17;
-        break __inline__Point_IntoIterator__into_iter_5: struct.new "core:prelude/array.wado//ArrayRefIter<Point>" { repr: arr.repr, used: arr.used, index: 0 };
+        break __inline__wado_compiler_tests_fixtures_for_of_ref_wado_Point_IntoIterator__into_iter_5: struct.new "core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>" { repr: arr.repr, used: arr.used, index: 0 };
         unreachable;
     };
     b4: block {
         l5: loop {
-            __pattern_temp_0_9 = "core:prelude/array.wado/ArrayRefIter<Point>^Iterator::next"(__iter_3);
+            __pattern_temp_0_9 = "core:prelude/array.wado/ArrayRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>^Iterator::next"(__iter_3);
             if ref.is_null(__pattern_temp_0_9) == 0 {
                 p = ref.as_non_null(__pattern_temp_0_9);
                 sum = sum + (p.x + p.y);
@@ -944,7 +944,7 @@ fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
     return 0, item;
 }
 
-fn "core:prelude/array.wado/ArrayRefIter<Point>^Iterator::next"(self) {
+fn "core:prelude/array.wado/ArrayRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>^Iterator::next"(self) {
     let val: ref "wado-compiler/tests/fixtures/for_of_ref.wado//Point";
     if self.index >= self.used {
         return ref.null none;

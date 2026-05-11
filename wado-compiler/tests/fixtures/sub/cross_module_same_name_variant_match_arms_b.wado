@@ -1,0 +1,23 @@
+// Module B — separate variant Status with disjoint cases (Ok, Err).
+// Same trick as in module A: distinctive sentinel for the second arm
+// so a silent fallback caused by a global-keyed variant case map
+// would surface as a wrong return value for the Err branch.
+pub variant Status {
+    Ok(String),
+    Err(i32),
+}
+
+pub fn make_ok(msg: String) -> Status {
+    return Status::Ok(msg);
+}
+
+pub fn make_err(code: i32) -> Status {
+    return Status::Err(code);
+}
+
+pub fn status_describe(s: Status) -> String {
+    return match s {
+        Ok(msg) => msg,
+        Err(code) => `err{code}`,
+    };
+}

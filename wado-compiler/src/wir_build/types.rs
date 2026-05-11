@@ -459,7 +459,13 @@ fn register_raw_array_type(
     if ctx.array_type_map.contains_key(&element_type_id) {
         return;
     }
-    let elem_name = type_table.mangle_type_name(element_type_id);
+    // Use the type-arg mangle so the element name matches what
+    // `register_array_wrapper_struct` looks up under (which is the
+    // monomorphizer-side qualified form). Otherwise the wrapper
+    // lookup misses and the wrapper struct ends up unregistered for
+    // any element whose qualified form differs from the unqualified
+    // one (i.e. user-defined Structs / GenericInstances).
+    let elem_name = type_table.mangle_type_arg_for_generic(element_type_id);
     if ctx.array_type_by_name.contains_key(&elem_name) {
         // Already registered under a different TypeId
         let existing = ctx.array_type_by_name.get(&elem_name).unwrap().clone();
@@ -467,7 +473,7 @@ fn register_raw_array_type(
         return;
     }
     // Fallback: resolve newtypes in element type name for deduplication
-    let resolved_name = type_table.mangle_type_name_resolving_newtypes(element_type_id);
+    let resolved_name = type_table.mangle_type_arg_for_generic_resolving_newtypes(element_type_id);
     if resolved_name != elem_name && ctx.array_type_by_name.contains_key(&resolved_name) {
         let existing = ctx.array_type_by_name.get(&resolved_name).unwrap().clone();
         ctx.array_type_map.insert(element_type_id, existing);
@@ -1175,10 +1181,17 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
                 if type_table.contains_type_param(type_args[0]) {
                     continue;
                 }
-                // Use newtype-resolved name for deduplication so that e.g.
-                // Array<[FieldName, FieldValue]> and Array<[String, Array<u8>]>
-                // are treated as the same type.
-                let elem_name = type_table.mangle_type_name_resolving_newtypes(type_args[0]);
+                // Use the type-arg mangle so the element name matches
+                // the registration key the monomorphizer's
+                // `instantiation_name` produces (qualifies Struct /
+                // GenericInstance args by `ModuleSource`). The
+                // newtype-resolving variant additionally resolves any
+                // newtype wrappers so that e.g.
+                // `Array<[FieldName, FieldValue]>` and
+                // `Array<[String, Array<u8>]>` dedup to one entry when
+                // FieldName/FieldValue are newtypes.
+                let elem_name =
+                    type_table.mangle_type_arg_for_generic_resolving_newtypes(type_args[0]);
                 if !array_elem_types.iter().any(|(_, n)| n == &elem_name) {
                     array_elem_types.push((type_args[0], elem_name));
                 }

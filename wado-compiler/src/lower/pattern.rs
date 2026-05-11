@@ -199,20 +199,28 @@ fn match_to_switch(
 
 pub(super) fn lower_patterns(
     module: &mut TirModule,
-    global_variant_map: &IndexMap<String, Vec<(String, u32)>>,
+    global_variant_map: &IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
 ) {
-    // Build a map from variant name to case info for quick lookup
-    // Start with global variants from all modules (for cross-module pattern matching)
-    let mut variant_case_map: IndexMap<String, Vec<(String, u32)>> = global_variant_map.clone();
+    // Build a map keyed by (variant_name, module_source). The
+    // module_source axis is required so that two modules each
+    // declaring a variant with the same name keep their case
+    // tables distinct — pattern lookup resolves the
+    // module_source from the scrutinee's resolved type.
+    let mut variant_case_map: IndexMap<(String, ModuleSource), Vec<(String, u32)>> =
+        global_variant_map.clone();
 
-    // Add module-defined variants (overrides globals for same-module variants)
+    // Add module-defined variants. Same-module variants share
+    // the (name, module_source) key with whatever the global map
+    // already produced, so the per-module entry is an idempotent
+    // refresh rather than an override that would mask a sibling
+    // module's variant of the same name.
     for variant in &module.variants {
         let cases: Vec<(String, u32)> = variant
             .cases
             .iter()
             .map(|c| (c.name.clone(), c.index))
             .collect();
-        variant_case_map.insert(variant.name.clone(), cases);
+        variant_case_map.insert((variant.name.clone(), variant.module_source.clone()), cases);
     }
 
     // Build struct fields map from module structs
@@ -251,8 +259,13 @@ struct PatternLowerer<'a> {
     local_count: u32,
     locals: Vec<TirLocal>,
     temp_counter: u32,
-    /// Map from variant name to list of (`case_name`, `case_index`) pairs
-    variant_case_map: &'a IndexMap<String, Vec<(String, u32)>>,
+    /// Map from (`variant_name`, `module_source`) to a list of
+    /// (`case_name`, `case_index`) pairs. The `module_source` axis
+    /// is required because Wado allows two modules to each declare a
+    /// variant with the same name; lookup resolves the source from
+    /// the scrutinee's `ResolvedType::Variant.module_source` (or
+    /// `GenericInstance.module_source`).
+    variant_case_map: &'a IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
     /// Map from (`struct_name`, `module_source`) to field definitions
     struct_fields_map: &'a IndexMap<(String, ModuleSource), Vec<TirField>>,
 }
@@ -261,7 +274,7 @@ impl<'a> PatternLowerer<'a> {
     fn new(
         local_count: u32,
         locals: Vec<TirLocal>,
-        variant_case_map: &'a IndexMap<String, Vec<(String, u32)>>,
+        variant_case_map: &'a IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
         struct_fields_map: &'a IndexMap<(String, ModuleSource), Vec<TirField>>,
     ) -> Self {
         Self {
@@ -273,10 +286,20 @@ impl<'a> PatternLowerer<'a> {
         }
     }
 
-    /// Look up the case index for a variant case by variant name and case name
-    fn get_case_index(&self, variant_name: &str, case_name: &str) -> Option<u32> {
+    /// Look up the case index for a variant case by (variant name,
+    /// module source, case name). The module source is mandatory to
+    /// distinguish two modules' same-named variants; the legacy
+    /// name-only lookup silently overwrote one module's cases with
+    /// the other's and produced spurious "Unknown case" panics on
+    /// `if let` patterns whose target was the overwritten variant.
+    fn get_case_index(
+        &self,
+        variant_name: &str,
+        module_source: &ModuleSource,
+        case_name: &str,
+    ) -> Option<u32> {
         self.variant_case_map
-            .get(variant_name)
+            .get(&(variant_name.to_string(), module_source.clone()))
             .and_then(|cases| cases.iter().find(|(name, _)| name == case_name))
             .map(|(_, index)| *index)
     }
@@ -606,14 +629,22 @@ impl<'a> PatternLowerer<'a> {
                 };
 
                 // Generate VariantTest condition
-                let variant_type_name = match type_table.get(*enum_type) {
-                    ResolvedType::Variant { name, .. }
-                    | ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                let variant_type_info = match type_table.get(*enum_type) {
+                    ResolvedType::Variant {
+                        name,
+                        module_source,
+                        ..
+                    }
+                    | ResolvedType::GenericInstance {
+                        name,
+                        module_source,
+                        ..
+                    } => Some((name.clone(), module_source.clone())),
                     _ => None,
                 };
 
-                if let Some(ref vt_name) = variant_type_name
-                    && let Some(case_index) = self.get_case_index(vt_name, variant_name)
+                if let Some((ref vt_name, ref vt_module)) = variant_type_info
+                    && let Some(case_index) = self.get_case_index(vt_name, vt_module, variant_name)
                 {
                     let cond = TirExpr::new(
                         TirExprKind::VariantTest {
@@ -1043,14 +1074,22 @@ impl<'a> PatternLowerer<'a> {
                     inner = t;
                 }
 
-                let variant_type_name = match type_table.get(*enum_type) {
-                    ResolvedType::Variant { name, .. }
-                    | ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                let variant_type_info = match type_table.get(*enum_type) {
+                    ResolvedType::Variant {
+                        name,
+                        module_source,
+                        ..
+                    }
+                    | ResolvedType::GenericInstance {
+                        name,
+                        module_source,
+                        ..
+                    } => Some((name.clone(), module_source.clone())),
                     _ => None,
                 };
-                let case_index_opt = variant_type_name
+                let case_index_opt = variant_type_info
                     .as_ref()
-                    .and_then(|vt| self.get_case_index(vt, variant_name));
+                    .and_then(|(vt, ms)| self.get_case_index(vt, ms, variant_name));
 
                 let Some(case_index) = case_index_opt else {
                     // Variant info not found; fall back to letting value be bound and
@@ -2330,20 +2369,30 @@ impl<'a> PatternLowerer<'a> {
             } => {
                 // All variants (including Option) use VariantTest/VariantPayload
 
-                // Get variant type name
+                // Get variant type name and its defining module —
+                // both required to disambiguate same-named variants
+                // declared in two modules.
                 let scrutinee_type = type_table.get(scrutinee.type_id);
-                let variant_type_name = match scrutinee_type {
-                    ResolvedType::Variant { name, .. }
-                    | ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                let variant_type_info = match scrutinee_type {
+                    ResolvedType::Variant {
+                        name,
+                        module_source,
+                        ..
+                    }
+                    | ResolvedType::GenericInstance {
+                        name,
+                        module_source,
+                        ..
+                    } => Some((name.clone(), module_source.clone())),
                     _ => None,
                 };
 
-                let condition = if let Some(ref vt_name) = variant_type_name {
-                    let case_index =
-                        self.get_case_index(vt_name, variant_name)
-                            .unwrap_or_else(|| {
-                                panic!("Unknown case {variant_name} for variant {vt_name}")
-                            });
+                let condition = if let Some((ref vt_name, ref vt_module)) = variant_type_info {
+                    let case_index = self
+                        .get_case_index(vt_name, vt_module, variant_name)
+                        .unwrap_or_else(|| {
+                            panic!("Unknown case {variant_name} for variant {vt_name}")
+                        });
                     TirExpr::new(
                         TirExprKind::VariantTest {
                             expr: Box::new(scrutinee.clone()),
@@ -2366,9 +2415,9 @@ impl<'a> PatternLowerer<'a> {
                 if let Some(binding) = bindings.first()
                     && !matches!(binding, TirPattern::Wildcard)
                 {
-                    let case_index = variant_type_name
+                    let case_index = variant_type_info
                         .as_ref()
-                        .and_then(|vt| self.get_case_index(vt, variant_name))
+                        .and_then(|(vt, ms)| self.get_case_index(vt, ms, variant_name))
                         .unwrap_or(0);
 
                     let payload_expr = TirExpr::new(

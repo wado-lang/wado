@@ -1962,13 +1962,31 @@ impl TypeTable {
     /// it encounters and the later one's case-struct payload to silently
     /// inherit the wrong representation.
     ///
-    /// `Struct` is intentionally *not* qualified here: same-named structs
-    /// from different modules already get distinct
-    /// `StructName(ModuleSource, name)` map keys at the WIR layer, and
-    /// the monomorphizer's `instantiation_name` builds names with the
-    /// unqualified mangle. Threading qualified `Struct` names through
-    /// would require a lockstep update of every struct-identity map and
-    /// is out of scope for the bug-2 fix.
+    /// `Struct` and `GenericInstance` are qualified here too, so that
+    /// the mangled name a type takes inside a generic-instance identity
+    /// is stable regardless of where the type was defined.
+    ///
+    /// Without `Struct` qualification, two same-named structs from
+    /// distinct modules collapsed to the same `Array<S>` mangled fq
+    /// at the WIR layer, leaving `Array<S>` registered with one
+    /// module's element struct and code constructing the other module's
+    /// struct stored into that array — a Wasm GC validation failure
+    /// (regression `cross_module_same_name_struct_iter.wado`).
+    ///
+    /// Without `GenericInstance` qualification the mangled name flips
+    /// at the substitution boundary `GenericInstance → Struct`
+    /// (`IterFilter<ArrayIter<i32>>` while still `GenericInstance` vs
+    /// `IterFilter<core:prelude/array.wado/ArrayIter<i32>>` once the
+    /// inner is monomorphized to `Struct`), producing duplicate WIR
+    /// registrations of the same logical struct.
+    ///
+    /// All sites that build a generic-instance identity, register a
+    /// struct, or look one up by name must agree on this qualified
+    /// form. `wir_build::context::type_id_to_wir_type`'s `Array<T>`
+    /// lookup, `wir_build::types::register_struct`'s fq construction,
+    /// and the `synthesis::cm_binding` / `synthesis::serde_synth`
+    /// name builders all flow through this function or through
+    /// `mangle_type_name` (which delegates here for type args).
     ///
     /// Standalone uses (e.g. `mangle_type_name(ErrorCode)` outside a
     /// generic instance, or method-dispatch `base_struct_name`) keep the
@@ -2003,14 +2021,35 @@ impl TypeTable {
                 name,
                 module_source,
                 ..
+            }
+            | ResolvedType::Struct {
+                name,
+                module_source,
+                ..
             } => format!("{module_source}/{name}"),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => {
+                // Qualify the BASE name of the instance and recursively
+                // qualify each type argument so the result is identical
+                // to the qualified name produced once the instance is
+                // substituted to a `Struct` by the monomorphizer.
+                // Without this, the mangled name flips at the
+                // substitution boundary and downstream registries see
+                // two distinct mangled names for the same logical type.
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_arg_for_generic(*t))
+                    .collect();
+                let unqualified = crate::name::mangle_generic_name(name, &args);
+                format!("{module_source}/{unqualified}")
+            }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.mangle_type_arg_for_generic(*inner)
             }
-            // GenericInstance / Struct / primitives / arrays / functions
-            // delegate to `mangle_type_name`. For `GenericInstance`, that
-            // already recursively qualifies *its* type arguments through
-            // this same function — see `get_type_name_info`.
+            // Primitives / arrays / functions delegate to `mangle_type_name`.
             _ => self.mangle_type_name(id),
         }
     }
