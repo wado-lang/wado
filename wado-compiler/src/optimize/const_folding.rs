@@ -472,32 +472,29 @@ impl ConstFoldVisitor<'_> {
     /// After a statement is walked, capture any introduced binding into
     /// the interpreter's env so subsequent uses can fold against it.
     fn update_env_from_stmt(&mut self, stmt: &NirStmt) {
-        match &stmt.kind {
-            NirStmtKind::Let {
-                local_index,
-                is_mut,
-                value,
-                ..
-            } => {
-                let lat = if *is_mut {
-                    // `let mut x = …` — any later `x = …` would
-                    // invalidate the binding anyway. The interpreter
-                    // doesn't track flow-sensitive values for mutable
-                    // locals, so be conservative up front.
-                    Lattice::NonConst
-                } else {
-                    self.interpreter.reduce_to_lattice(value)
-                };
-                // Drop any prior knowledge keyed by this index (rare
-                // — a fresh `let` typically introduces a unique
-                // index, but defensive). This also clears stale field
-                // entries from a same-index reuse before we record
-                // new ones below.
-                self.interpreter.invalidate_local(*local_index);
-                self.interpreter.bind_local(*local_index, lat);
-                self.update_field_env_from_let(*local_index, value);
-            }
-            _ => {}
+        if let NirStmtKind::Let {
+            local_index,
+            is_mut,
+            value,
+            ..
+        } = &stmt.kind
+        {
+            let lat = if *is_mut {
+                // `let mut x = …` — any later `x = …` would
+                // invalidate the binding anyway. The interpreter
+                // doesn't track flow-sensitive values for mutable
+                // locals, so be conservative up front.
+                Lattice::NonConst
+            } else {
+                self.interpreter.reduce_to_lattice(value)
+            };
+            // Drop any prior knowledge keyed by this index (rare —
+            // a fresh `let` typically introduces a unique index, but
+            // defensive). This also clears stale field entries from a
+            // same-index reuse before we record new ones below.
+            self.interpreter.invalidate_local(*local_index);
+            self.interpreter.bind_local(*local_index, lat);
+            self.update_field_env_from_let(*local_index, value);
         }
     }
 

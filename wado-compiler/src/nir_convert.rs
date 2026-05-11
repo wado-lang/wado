@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
+use crate::hashmap::IndexMap;
 use crate::nir;
 use crate::nir::{
     NirBlock, NirCapture, NirEnum, NirEnumCase, NirExpr, NirExprKind, NirField, NirFlags,
@@ -36,10 +37,8 @@ pub fn flat_to_nir(flat: &FlatPackage) -> NirPackage {
     // `ClosureFunctor::call_method` can reuse the same fresh `Rc` instead of
     // allocating a sibling — the optimizer's closure-type DCE pass keys on
     // `Rc::ptr_eq` between `functor.call_method` and `project.functions[i]`.
-    let mut func_map: std::collections::HashMap<
-        *const RefCell<TirFunction>,
-        Rc<RefCell<NirFunction>>,
-    > = std::collections::HashMap::with_capacity(flat.functions.len());
+    let mut func_map: IndexMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>> =
+        IndexMap::with_capacity_and_hasher(flat.functions.len(), rustc_hash::FxBuildHasher);
     let functions: Vec<Rc<RefCell<NirFunction>>> = flat
         .functions
         .iter()
@@ -216,7 +215,7 @@ fn convert_import(i: &TirImport) -> NirImport {
 
 fn convert_closure_functor(
     cf: &ClosureFunctor,
-    func_map: &std::collections::HashMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>>,
+    func_map: &IndexMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>>,
 ) -> nir::ClosureFunctor {
     // Reuse the converted function `Rc` when the functor's `call_method`
     // shares its allocation with one of the package's top-level functions
