@@ -62,6 +62,7 @@ use {
     ExcludedOp,
     RepeatOp,
     GroupOp,
+    ListLabelOp,
     FieldDecl,
     FieldKind,
     rule_header,
@@ -2945,6 +2946,8 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
             }
         } else if op_is_leaf(op) {
             gen_op_leaf(w, op, elem, ctx, &mut name_counts);
+        } else if let ListLabel(ll) = op {
+            gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else {
             gen_element(w, elem, ctx, &mut name_counts);
         }
@@ -3204,6 +3207,85 @@ fn sync_name_counts_for_leaf(elem: &Element, name_counts: &mut Array<[String, i3
         let _ = dedup_name(&lab.field_name, name_counts);
         sync_name_counts_for_leaf(&lab.element, name_counts);
     }
+}
+
+/// Emit `name+=elem` outside a Repeat: allocate the array, parse the
+/// inner op once, push the resulting binding. Lower stores the label
+/// name in `ll.field` and the inner op in `ll.inner` (carrying its
+/// own `field` already deduped against the label's fresh inner scope).
+/// `elem` is the matching surface `Label(lab)` with `lab.list == true`
+/// — consulted only by `sync_name_counts_for_label` to keep the
+/// outer scope's dedup counters consistent with surface emitters that
+/// still inspect `name_counts`.
+fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    if let Label(lab) = elem {
+        sync_name_counts_for_list_label(lab, name_counts);
+    } else {
+        panic("gen_op_list_label: ListLabel op mapped to non-Label element");
+    }
+    let inner_type = op_field_type(&ll.inner);
+    w.line(`let mut {ll.field}: Array<{inner_type}> = [];`);
+    let inner_field = op_field(&ll.inner);
+    if op_is_leaf(&ll.inner) {
+        if let Label(lab) = elem {
+            gen_op_leaf(w, &ll.inner, &lab.element, ctx, name_counts);
+        } else {
+            panic("gen_op_list_label: surface element is not a Label");
+        }
+    } else {
+        panic("gen_op_list_label: non-leaf list-label inner is not yet migrated (Phase 2-B)");
+    }
+    w.line(`{ll.field}.push({inner_field});`);
+}
+
+/// Mirror `gen_element`'s Label arm side-effects on `name_counts`:
+/// bump for the label's own name and recurse into the inner leaf so
+/// any sibling that still routes through the surface walker observes
+/// lower-consistent dedup state.
+fn sync_name_counts_for_list_label(lab: &LabelElement, name_counts: &mut Array<[String, i32]>) {
+    let _ = dedup_name(&lab.field_name, name_counts);
+    sync_name_counts_for_leaf(&lab.element, name_counts);
+}
+
+/// Read the deduped field name from any `Op`. Mirrors the
+/// `<variant>.field` lookups inlined throughout the emit body.
+fn op_field(op: &Op) -> String {
+    return match op {
+        Token(t) => t.field,
+        Literal(l) => l.field,
+        RuleCall(r) => r.field,
+        Wildcard(w) => w.field,
+        Excluded(e) => e.field,
+        Repeat(r) => r.field,
+        Group(g) => match &g.shape {
+            Transparent => panic("op_field: Transparent group has no own field"),
+            TokenOnly(to) => to.field,
+            SimpleCst(scst) => scst.field,
+            SingleAlt(sa) => sa.field,
+            General(gen) => gen.field,
+        },
+        ListLabel(ll) => ll.field,
+    };
+}
+
+/// Type string the op contributes to its containing struct field.
+/// Mirrors `element_field_info`'s second return value for the matching
+/// surface element. Today this is consulted by `gen_op_list_label`'s
+/// `Array<…>` declaration; other call sites read the FieldDecl directly.
+fn op_field_type(op: &Op) -> String {
+    return match op {
+        Token(_) | Literal(_) | Wildcard(_) | Excluded(_) => "Token",
+        RuleCall(r) => rule_type_name(&r.target_name),
+        Group(g) => match &g.shape {
+            SimpleCst(scst) => scst.type_name,
+            TokenOnly(_) => "Token",
+            SingleAlt(sa) => sa.struct_name,
+            General(gen) => gen.variant_type,
+            Transparent => panic("op_field_type: Transparent groups have no own field type"),
+        },
+        Repeat(_) => panic("op_field_type: Repeat ops do not surface as a single typed field at this site"),
+        ListLabel(ll) => `Array<{op_field_type(&ll.inner)}>`,
+    };
 }
 
 /// Render the `p.match_not([…])` expression for an `Op::Excluded`.
