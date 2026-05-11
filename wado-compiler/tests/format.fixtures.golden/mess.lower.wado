@@ -4605,10 +4605,10 @@ pub fn parse(d: u64, p: i32) -> f64 {
 }
 
 pub fn parse_text_range(s: String, start: i32, end: i32) -> Option<f64> {
-    let len: i32 = end;
-    if (start >= end) {
+    if (((start < 0) || (end > s.String::len())) || (start >= end)) {
         return null;
     }
+    let len: i32 = end;
     let mut sign: f64 = 1.0;
     let mut i: i32 = start;
     let first: u8 = s.String::get_byte(start);
@@ -6558,8 +6558,12 @@ fn digit_value(b: u8) -> i32 {
     return -1;
 }
 
+fn range_in_bounds(s: String, start: i32, end: i32) -> bool {
+    return (((start >= 0) && (end <= s.String::len())) && (start <= end));
+}
+
 pub fn parse_u64_digits(s: String, start: i32, end: i32, radix: u32) -> Result<u64, IntErrorKind> {
-    if (start >= end) {
+    if (!"core::prelude/intparse.wado::range_in_bounds"(s, start, end) || (start == end)) {
         return Result<u64, IntErrorKind>::Err(IntErrorKind::Empty);
     }
     let r: u64 = radix as u64;
@@ -6591,7 +6595,7 @@ pub fn parse_u64_digits(s: String, start: i32, end: i32, radix: u32) -> Result<u
 }
 
 pub fn parse_u128_digits(s: String, start: i32, end: i32, radix: u32) -> Result<u128, IntErrorKind> {
-    if (start >= end) {
+    if (!"core::prelude/intparse.wado::range_in_bounds"(s, start, end) || (start == end)) {
         return Result<u128, IntErrorKind>::Err(IntErrorKind::Empty);
     }
     let r: u128 = "core::prelude/int128.wado::u128::from_u64"(radix as u64);
@@ -6625,7 +6629,7 @@ pub fn parse_u128_digits(s: String, start: i32, end: i32, radix: u32) -> Result<
 }
 
 pub fn parse_signed_prefix_range(s: String, start: i32, end: i32) -> Result<[bool, i32], IntErrorKind> {
-    if (start >= end) {
+    if (!"core::prelude/intparse.wado::range_in_bounds"(s, start, end) || (start == end)) {
         return Result<[bool, i32], IntErrorKind>::Err(IntErrorKind::Empty);
     }
     let first: u8 = s.String::get_byte(start);
@@ -6643,7 +6647,7 @@ pub fn parse_signed_prefix_range(s: String, start: i32, end: i32) -> Result<[boo
 }
 
 pub fn parse_unsigned_prefix_range(s: String, start: i32, end: i32) -> Result<i32, IntErrorKind> {
-    if (start >= end) {
+    if (!"core::prelude/intparse.wado::range_in_bounds"(s, start, end) || (start == end)) {
         return Result<i32, IntErrorKind>::Err(IntErrorKind::Empty);
     }
     let first: u8 = s.String::get_byte(start);
@@ -6716,7 +6720,7 @@ pub fn parse_u64_radix_range(s: String, start: i32, end: i32, radix: u32, max: u
 }
 
 pub fn parse_f64_from_str_range(s: String, start: i32, end: i32) -> Result<f64, ParseFloatError> {
-    if (start >= end) {
+    if (!"core::prelude/intparse.wado::range_in_bounds"(s, start, end) || (start == end)) {
         return Result<f64, ParseFloatError>::Err("core::prelude/intparse.wado::ParseFloatError::new"(FloatErrorKind::Empty));
     }
     return match "core::prelude/fpfmt.wado::parse_text_range"(s, start, end) {

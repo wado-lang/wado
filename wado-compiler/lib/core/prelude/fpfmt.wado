@@ -860,16 +860,18 @@ pub fn parse(d: u64, p: i32) -> f64 {
 
 // parse_text_range parses a decimal string slice and returns the nearest
 // f64. Parses `s[start..end)` without allocating a substring.
-// Returns null if the input is malformed.
+// Returns null if the input is malformed or the range is out of bounds.
 // Accepts: optional sign, decimal digits, optional fractional part, optional exponent,
 //          "inf"/"infinity" (case-insensitive), "nan" (case-insensitive).
 // Rejects: leading dot (".5"), trailing dot ("5."), empty input.
 // Examples: "3.14", "1e2", "0.5", "123", "+1.5e-3", "-42", "inf", "NaN"
 pub fn parse_text_range(s: String, start: i32, end: i32) -> Option<f64> {
-    let len = end;
-    if start >= end {
+    // Bounds check keeps the public surface total: an out-of-range slice
+    // is treated the same as malformed input.
+    if start < 0 || end > s.len() || start >= end {
         return null;
     }
+    let len = end;
 
     // Parse optional sign
     let mut sign = 1.0;

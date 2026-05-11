@@ -1,22 +1,14 @@
-// BUG: `Type::trait_method(args)` fails to resolve a trait static method
-// whose body comes from the trait's *default* implementation. Required
-// methods resolve fine via `Type::method(args)`; only the defaulted-and-
-// not-overridden form is broken.
+// Regression test for resolving a defaulted trait method via the concrete
+// `Type::method(args)` form. Previously the resolver only walked the impl
+// block's `methods`; default methods (whose body lives on the trait, not
+// the impl) were invisible to `Type::method` even though generic dispatch
+// `T::method()` already found them.
 //
-// Repro pattern:
-//   - Define a trait with two static methods: one required (`primary`)
-//     and one defaulted that calls `Self::primary()` (`secondary`).
-//   - Implement the trait for a concrete type, providing only `primary`.
-//   - Call `Type::secondary()` from any non-generic site.
-//
-// Discovered while removing the inherent `from_str` from primitive types
-// in favour of relying on `FromStr`'s defaulted `from_str`. After removal,
-// `i32::from_str("42")` failed to resolve, forcing us to keep the inherent
-// methods alongside the trait impls (duplicated logic).
-//
-// Expected after fix: compile and print "hi" — the resolver should look
-// through the trait's default implementations the same way it looks
-// through required methods.
+// The fix extends `locate_static_method_impl`, `is_static_method`, and
+// `lookup_static_method_return_type` to fall back to
+// `find_trait_decl_methods` when the impl block does not override the
+// method. This mirrors the path that generic dispatch already uses via
+// `find_method_type_param_names`.
 
 use { println, Stdout } from "core:cli";
 
@@ -41,15 +33,12 @@ impl Greeter for MyType {
 }
 
 export fn run() with Stdout {
-    // Sanity check: required trait method resolves via `Type::method()`.
-    let a = MyType::primary();
-    println(a);
+    // Sanity: required trait method resolves via `Type::method()`.
+    println(MyType::primary());
 
-    // Bug surface: defaulted trait method fails to resolve.
-    // Currently: `error: unknown function 'MyType::secondary'`.
-    let b = MyType::secondary();
-    println(b);
+    // Regression: defaulted trait method now resolves the same way.
+    println(MyType::secondary());
 }
 
 __DATA__
-{"compile_error": "unknown function 'MyType::secondary'"}
+{"stdout": "hi\nhi\n"}
