@@ -191,8 +191,7 @@ fn analyze_expr(expr: &NirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
         NirExprKind::ClosureToCanonical { functor, .. } => {
             analyze_expr(functor, usage, type_table);
         }
-        NirExprKind::FieldAccess { expr: inner, .. }
-        => analyze_expr(inner, usage, type_table),
+        NirExprKind::FieldAccess { expr: inner, .. } => analyze_expr(inner, usage, type_table),
         NirExprKind::Index {
             expr: inner, index, ..
         } => {

@@ -25,7 +25,6 @@ use crate::tir::{
     TirVariantCase, TirVariantDecl,
 };
 
-
 /// Convert a [`FlatPackage`] (TIR-shaped) into a [`NirPackage`] (NIR-shaped).
 ///
 /// TIR and NIR body types are structurally identical; this is a field-for-field
@@ -838,4 +837,3 @@ fn convert_variant_case(case: &TirVariantCase) -> NirVariantCase {
         span: case.span,
     }
 }
-

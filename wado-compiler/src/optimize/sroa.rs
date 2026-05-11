@@ -606,8 +606,7 @@ impl NirRefVisitor for EscapeChecker<'_> {
         match &expr.kind {
             // FieldAccess on a candidate local is safe — don't mark the base local as
             // escaped and don't recurse into the base (which is the local itself).
-            NirExprKind::FieldAccess { expr: inner, .. }
-            => {
+            NirExprKind::FieldAccess { expr: inner, .. } => {
                 if is_candidate_local(inner, self.candidates).is_some() {
                     return;
                 }
@@ -712,8 +711,7 @@ struct FieldAccessChecker<'a> {
 impl NirRefVisitor for FieldAccessChecker<'_> {
     fn visit_expr(&mut self, expr: &NirExpr) {
         match &expr.kind {
-            NirExprKind::FieldAccess { expr: inner, .. }
-            => {
+            NirExprKind::FieldAccess { expr: inner, .. } => {
                 if let Some(idx) = is_candidate_local(inner, self.candidates) {
                     self.has_access.insert(idx);
                     return;
@@ -774,8 +772,7 @@ impl NirRefVisitor for SoftEscapeChecker<'_> {
         let soft = std::mem::replace(&mut self.soft_allowed, false);
         match &expr.kind {
             // FieldAccess on candidate is always safe — skip recursion into the base.
-            NirExprKind::FieldAccess { expr: inner, .. }
-            => {
+            NirExprKind::FieldAccess { expr: inner, .. } => {
                 if is_candidate_local(inner, self.candidates).is_some() {
                     return;
                 }
@@ -1224,8 +1221,7 @@ fn rewrite_expr(
 
     // Recurse into child expressions
     match &mut expr.kind {
-        NirExprKind::FieldAccess { expr: inner, .. }
-        => {
+        NirExprKind::FieldAccess { expr: inner, .. } => {
             rewrite_expr(
                 inner,
                 safe_set,
@@ -1567,8 +1563,7 @@ fn rewrite_expr(
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. }
-        => {}
+        | NirExprKind::EnumConstruct { .. } => {}
     }
 }
 

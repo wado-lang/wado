@@ -33,8 +33,7 @@ fn count_expr(expr: &NirExpr) -> usize {
         NirExprKind::MethodCall { receiver, args, .. } => {
             count_expr(receiver) + args.iter().map(|a| count_expr(&a.expr)).sum::<usize>()
         }
-        NirExprKind::FieldAccess { expr, .. }
-        => count_expr(expr),
+        NirExprKind::FieldAccess { expr, .. } => count_expr(expr),
         NirExprKind::Index { expr, index, .. } => count_expr(expr) + count_expr(index),
         NirExprKind::TupleLiteral { elements } => elements.iter().map(count_expr).sum(),
         NirExprKind::StructLiteral { fields, .. } => {
@@ -525,8 +524,7 @@ fn collect_callees_from_expr(expr: &NirExpr, callees: &mut IndexSet<String>) {
         NirExprKind::Cast { expr, .. } => {
             collect_callees_from_expr(expr, callees);
         }
-        NirExprKind::FieldAccess { expr, .. }
-        => {
+        NirExprKind::FieldAccess { expr, .. } => {
             collect_callees_from_expr(expr, callees);
         }
         NirExprKind::Index { expr, index } => {
@@ -2171,8 +2169,7 @@ fn inline_calls_in_expr(
                 );
             }
         }
-        NirExprKind::FieldAccess { expr: inner, .. }
-        => {
+        NirExprKind::FieldAccess { expr: inner, .. } => {
             inline_calls_in_expr(
                 inner,
                 candidates,

@@ -329,8 +329,7 @@ fn mark_local_as_fully_modified(expr: &NirExpr, modified: &mut ModifiedVars) {
         NirExprKind::Local { index, .. } => {
             modified.insert_full(*index);
         }
-        NirExprKind::FieldAccess { expr: inner, .. }
-        => {
+        NirExprKind::FieldAccess { expr: inner, .. } => {
             mark_local_as_fully_modified(inner, modified);
         }
         NirExprKind::Unary { expr: inner, .. } => {
@@ -521,8 +520,7 @@ fn collect_modified_vars_in_expr(
                 collect_modified_vars_in_expr(arg, modified, type_table);
             }
         }
-        NirExprKind::FieldAccess { expr, .. }
-        => {
+        NirExprKind::FieldAccess { expr, .. } => {
             collect_modified_vars_in_expr(expr, modified, type_table);
         }
         NirExprKind::Index { expr, index } => {
@@ -750,8 +748,7 @@ fn collect_licm_ref_bindings_in_expr(
         NirExprKind::Unary { expr: inner, .. } => {
             collect_licm_ref_bindings_in_expr(inner, type_table, bindings);
         }
-        NirExprKind::FieldAccess { expr: inner, .. }
-        => {
+        NirExprKind::FieldAccess { expr: inner, .. } => {
             collect_licm_ref_bindings_in_expr(inner, type_table, bindings);
         }
         NirExprKind::Index { expr: inner, index } => {
@@ -1522,8 +1519,7 @@ fn replace_hoisted_in_expr(
 
     // Recurse into sub-expressions
     match &mut expr.kind {
-        NirExprKind::FieldAccess { expr: inner, .. }
-        => {
+        NirExprKind::FieldAccess { expr: inner, .. } => {
             replace_hoisted_in_expr(inner, candidates, ref_bindings);
         }
         NirExprKind::Binary { left, right, .. } => {

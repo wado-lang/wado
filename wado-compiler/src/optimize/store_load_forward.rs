@@ -549,8 +549,7 @@ fn collect_unsafe_in_expr(expr: &NirExpr, unsafe_locals: &mut IndexSet<u32>) {
         NirExprKind::ClosureToCanonical { functor, .. } => {
             collect_unsafe_in_expr(functor, unsafe_locals);
         }
-        NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::Cast { expr: inner, .. } => {
+        NirExprKind::FieldAccess { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
             collect_unsafe_in_expr(inner, unsafe_locals);
         }
         NirExprKind::Index {
@@ -834,8 +833,7 @@ fn forward_in_expr(
         NirExprKind::ClosureToCanonical { functor, .. } => {
             changed |= forward_in_expr(functor, known, unsafe_locals, type_table, cache);
         }
-        NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::Cast { expr: inner, .. } => {
+        NirExprKind::FieldAccess { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
             changed |= forward_in_expr(inner, known, unsafe_locals, type_table, cache);
         }
         NirExprKind::Index {

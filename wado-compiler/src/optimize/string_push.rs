@@ -151,8 +151,7 @@ fn try_split_stmt(expr: &NirExpr, ctx: &Ctx) -> Option<Vec<NirStmt>> {
 /// they to appear here, cloning them would still be sound.
 fn is_duplicable_receiver(e: &NirExpr) -> bool {
     match &e.kind {
-        NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. } => true,
+        NirExprKind::Local { .. } | NirExprKind::GlobalVarGet { .. } => true,
         NirExprKind::FieldAccess { expr: inner, .. } => is_duplicable_receiver(inner),
         NirExprKind::Unary {
             op: NirUnaryOp::Deref | NirUnaryOp::Ref | NirUnaryOp::MutRef,

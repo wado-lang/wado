@@ -278,8 +278,7 @@ fn collect_escaping_in_expr(expr: &NirExpr, escaping: &mut IndexSet<u32>) {
         NirExprKind::Unary { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
             collect_escaping_in_expr(inner, escaping);
         }
-        NirExprKind::FieldAccess { expr: inner, .. }
-        => {
+        NirExprKind::FieldAccess { expr: inner, .. } => {
             collect_escaping_in_expr(inner, escaping);
         }
         NirExprKind::If {
@@ -660,8 +659,7 @@ fn transform_expr(
                 );
             }
         }
-        NirExprKind::FieldAccess { expr: inner, .. }
-        => {
+        NirExprKind::FieldAccess { expr: inner, .. } => {
             transform_expr(
                 inner,
                 escaping_locals,

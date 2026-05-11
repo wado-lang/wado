@@ -908,7 +908,6 @@ fn nir_unary_op_str(op: NirUnaryOp) -> &'static str {
     }
 }
 
-
 /// Public function to unparse NIR module to pseudo-Wado source
 pub fn unparse_nir(module: &NirModule) -> String {
     let type_table_ref = module.type_table.borrow();

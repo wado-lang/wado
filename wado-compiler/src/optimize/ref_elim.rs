@@ -137,8 +137,7 @@ fn analyze_uses_in_expr(expr: &NirExpr, refs: &mut IndexMap<u32, RefInfo>) {
     match &expr.kind {
         // Field access on a tracked ref local: this is the pattern we want to optimize.
         // The use is acceptable (field-access-only), so we DON'T mark it as non-eliminable.
-        NirExprKind::FieldAccess { expr: inner, .. }
-        => {
+        NirExprKind::FieldAccess { expr: inner, .. } => {
             if let NirExprKind::Local { index, .. } = &inner.kind
                 && refs.contains_key(index)
             {
@@ -317,8 +316,7 @@ fn transform_stmt(stmt: &mut NirStmt, eliminable: &IndexMap<u32, RefInfo>) {
 
 fn transform_expr(expr: &mut NirExpr, eliminable: &IndexMap<u32, RefInfo>) {
     match &mut expr.kind {
-        NirExprKind::FieldAccess { expr: inner, .. }
-        => {
+        NirExprKind::FieldAccess { expr: inner, .. } => {
             // Check if the inner expression is a local that should be replaced
             if let NirExprKind::Local { index, .. } = &inner.kind
                 && let Some(info) = eliminable.get(index)
@@ -631,8 +629,7 @@ fn check_deref_only_uses_in_expr(expr: &NirExpr, refs: &mut IndexMap<u32, DerefO
             }
             collect_deref_only_refs_in_block(default, refs);
         }
-        NirExprKind::FieldAccess { expr: inner, .. }
-        => {
+        NirExprKind::FieldAccess { expr: inner, .. } => {
             check_deref_only_uses_in_expr(inner, refs);
         }
         NirExprKind::IntLiteral { .. }
@@ -850,8 +847,9 @@ fn rewrite_deref_only_refs_in_expr(
             changed |= rewrite_deref_only_refs_in_block(default, eliminable);
             changed
         }
-        NirExprKind::FieldAccess { expr: inner, .. }
-        => rewrite_deref_only_refs_in_expr(inner, eliminable),
+        NirExprKind::FieldAccess { expr: inner, .. } => {
+            rewrite_deref_only_refs_in_expr(inner, eliminable)
+        }
         NirExprKind::Local { .. }
         | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
@@ -862,8 +860,7 @@ fn rewrite_deref_only_refs_in_expr(
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. }
-        => false,
+        | NirExprKind::EnumConstruct { .. } => false,
     }
 }
 

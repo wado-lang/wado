@@ -175,7 +175,6 @@ impl NirExprKind {
     /// constructions flow through `Resolver::build_tir_method_call`;
     /// post-resolve rewriters thread already-checked TIR through this
     /// function too so the variant's `invariant` field stays coherent.
-    #[allow(dead_code)]
     pub(crate) fn method_call(
         receiver: Box<NirExpr>,
         func: FunctionRef,
@@ -411,7 +410,6 @@ pub enum NirExprKind {
         /// Default arm for values outside the range
         default: NirBlock,
     },
-
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

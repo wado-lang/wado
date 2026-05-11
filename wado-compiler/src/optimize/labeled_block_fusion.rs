@@ -1507,8 +1507,7 @@ fn transform_lb_in_expr(
         | NirExprKind::CharLiteral(_)
         | NirExprKind::Null
         | NirExprKind::Unit
-        | NirExprKind::EnumConstruct { .. }
-        => {}
+        | NirExprKind::EnumConstruct { .. } => {}
     }
 }
 

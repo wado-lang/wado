@@ -1288,8 +1288,7 @@ fn visit_expr_for_alias(
         | NirExprKind::Unit
         | NirExprKind::Local { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. }
-        => {}
+        | NirExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -1357,10 +1356,7 @@ fn collect_locals_introduced_in_block(block: &NirBlock) -> IndexSet<u32> {
             // the enclosing function. Recursing into them would mistake
             // closure-local indices for outer-function locals and over-
             // exclude unrelated outer locals from scalarization.
-            if matches!(
-                expr.kind,
-                NirExprKind::ClosureToCanonical { .. }
-            ) {
+            if matches!(expr.kind, NirExprKind::ClosureToCanonical { .. }) {
                 return;
             }
             if let NirExprKind::Match { arms, .. } = &expr.kind {
@@ -2554,8 +2550,7 @@ fn walk_other_expr_kinds(
 ) {
     let span = expr.span;
     match &mut expr.kind {
-        NirExprKind::FieldAccess { expr: inner, .. }
-        => {
+        NirExprKind::FieldAccess { expr: inner, .. } => {
             walk_expr(inner, states, true, out, ctx);
         }
         NirExprKind::Binary { left, right, .. } => {

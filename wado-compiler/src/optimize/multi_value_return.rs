@@ -866,8 +866,7 @@ fn recurse_children(
         | NirExprKind::LabeledBlock { .. }
         | NirExprKind::If { .. }
         | NirExprKind::Match { .. }
-        | NirExprKind::Switch { .. }
-        => {
+        | NirExprKind::Switch { .. } => {
             // Outer match should have routed these directly; if we reach
             // here something's wrong.
             unreachable!(
