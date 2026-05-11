@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778490918325,
+  "lastUpdate": 1778501716521,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21133,6 +21133,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5b33fc9148afbdc1d6b510eabeef3cca51b347ae"
         },
         "date": 1778490918183,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 512036,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "45fa6b651e4c6ff0687871d4d8d32a5c0fca192e",
+          "message": "Merge pull request #1047 from wado-lang/claude/desugar-phase-decision-JYBjW\n\ndocs(wep): propose Normalized IR (NIR) layer at the lower boundary",
+          "timestamp": "2026-05-11T21:08:34+09:00",
+          "tree_id": "ad91087d53fcfefe9d97d954365c33a10ebc0c02",
+          "url": "https://github.com/wado-lang/wado/commit/45fa6b651e4c6ff0687871d4d8d32a5c0fca192e"
+        },
+        "date": 1778501716274,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
