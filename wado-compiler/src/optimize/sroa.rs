@@ -23,15 +23,13 @@
 //! This is the single most impactful optimization for WasmGC-targeting compilers,
 //! as struct allocations are GC-managed heap objects.
 
-use crate::flat_package::FlatPackage;
+use crate::nir_package::NirPackage;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::tir::{
-    FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt, TirStmtKind,
-    TirStructField, TirUnaryOp, TypeId, TypeTable,
-};
-use crate::tir_visitor::TirRefVisitor;
+use crate::tir::{TypeId, TypeTable};
+use crate::nir::{FunctionRef, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind, NirStructField, NirUnaryOp};
+use crate::nir_visitor::NirRefVisitor;
 use crate::token::Span;
 
 /// Maps (`module_source`, `func_name`) → set of parameter indices that have `stores` declared.
@@ -54,7 +52,7 @@ struct SroaCandidate {
 }
 
 /// Build a lookup table mapping (`module_source`, `func_name`) → set of stored param indices.
-fn build_stores_lookup(project: &FlatPackage) -> StoresLookup {
+fn build_stores_lookup(project: &NirPackage) -> StoresLookup {
     let mut lookup = StoresLookup::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
@@ -79,7 +77,7 @@ fn build_stores_lookup(project: &FlatPackage) -> StoresLookup {
 }
 
 /// Apply SROA to all functions in the project.
-pub fn scalar_replace_aggregates(project: &mut FlatPackage) -> bool {
+pub fn scalar_replace_aggregates(project: &mut NirPackage) -> bool {
     let stores_lookup = build_stores_lookup(project);
     let type_table = project.type_table.borrow();
     let mut changed = false;
@@ -93,7 +91,7 @@ pub fn scalar_replace_aggregates(project: &mut FlatPackage) -> bool {
 
 /// Apply SROA within a single function.
 fn sroa_in_function(
-    func: &mut TirFunction,
+    func: &mut NirFunction,
     type_table: &TypeTable,
     stores_lookup: &StoresLookup,
     current_module: &ModuleSource,
@@ -163,7 +161,7 @@ fn sroa_in_function(
                 (candidate.local_index, i as u32),
                 (new_name.clone(), *field_type),
             );
-            func.locals.push(TirLocal {
+            func.locals.push(NirLocal {
                 name: new_name,
                 type_id: *field_type,
                 is_mut: candidate.is_mut,
@@ -214,7 +212,7 @@ fn sroa_in_function(
 /// When SROA decomposes a struct with `&local` field values, mark those locals
 /// as stores-aliased to prevent future SROA from decomposing them.
 fn mark_ref_field_locals_as_aliased(
-    body: &TirBlock,
+    body: &NirBlock,
     decomposed: &IndexSet<u32>,
     stores_aliased: &mut IndexSet<u32>,
 ) {
@@ -224,12 +222,12 @@ fn mark_ref_field_locals_as_aliased(
 }
 
 fn mark_ref_fields_in_stmt(
-    stmt: &TirStmt,
+    stmt: &NirStmt,
     decomposed: &IndexSet<u32>,
     stores_aliased: &mut IndexSet<u32>,
 ) {
     match &stmt.kind {
-        TirStmtKind::Let {
+        NirStmtKind::Let {
             local_index, value, ..
         } => {
             if decomposed.contains(local_index) {
@@ -238,15 +236,15 @@ fn mark_ref_fields_in_stmt(
             }
             mark_ref_fields_in_expr(value, decomposed, stores_aliased);
         }
-        TirStmtKind::Expr(expr) => {
+        NirStmtKind::Expr(expr) => {
             mark_ref_fields_in_expr(expr, decomposed, stores_aliased);
         }
-        TirStmtKind::Return { value } => {
+        NirStmtKind::Return { value } => {
             if let Some(v) = value {
                 mark_ref_fields_in_expr(v, decomposed, stores_aliased);
             }
         }
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -257,10 +255,10 @@ fn mark_ref_fields_in_stmt(
                 mark_ref_field_locals_as_aliased(eb, decomposed, stores_aliased);
             }
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             mark_ref_field_locals_as_aliased(body, decomposed, stores_aliased);
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -272,34 +270,34 @@ fn mark_ref_fields_in_stmt(
                 mark_ref_field_locals_as_aliased(eb, decomposed, stores_aliased);
             }
         }
-        TirStmtKind::Break { value, .. } => {
+        NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 mark_ref_fields_in_expr(v, decomposed, stores_aliased);
             }
         }
-        TirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::LetDestructure { value, .. } => {
             mark_ref_fields_in_expr(value, decomposed, stores_aliased);
         }
-        TirStmtKind::Continue => {}
-        TirStmtKind::TaskReturn { .. } => {
+        NirStmtKind::Continue => {}
+        NirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
-        TirStmtKind::VariadicForOf { .. } => {
+        NirStmtKind::VariadicForOf { .. } => {
             unreachable!("VariadicForOf should be expanded during monomorphization")
         }
     }
 }
 
 fn mark_ref_fields_in_expr(
-    expr: &TirExpr,
+    expr: &NirExpr,
     decomposed: &IndexSet<u32>,
     stores_aliased: &mut IndexSet<u32>,
 ) {
     match &expr.kind {
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             mark_ref_field_locals_as_aliased(block, decomposed, stores_aliased);
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -310,7 +308,7 @@ fn mark_ref_fields_in_expr(
                 mark_ref_field_locals_as_aliased(eb, decomposed, stores_aliased);
             }
         }
-        TirExprKind::Match { expr: inner, arms } => {
+        NirExprKind::Match { expr: inner, arms } => {
             mark_ref_fields_in_expr(inner, decomposed, stores_aliased);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
@@ -319,7 +317,7 @@ fn mark_ref_fields_in_expr(
                 mark_ref_fields_in_expr(&arm.body, decomposed, stores_aliased);
             }
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -331,93 +329,93 @@ fn mark_ref_fields_in_expr(
             }
             mark_ref_field_locals_as_aliased(default, decomposed, stores_aliased);
         }
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             mark_ref_fields_in_expr(left, decomposed, stores_aliased);
             mark_ref_fields_in_expr(right, decomposed, stores_aliased);
         }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
+        NirExprKind::Unary { expr: inner, .. }
+        | NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::TupleSpread { expr: inner }
+        | NirExprKind::TupleZip { expr: inner }
+        | NirExprKind::TypePackExpansion {
             call_expr: inner, ..
         }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+        | NirExprKind::Cast { expr: inner, .. }
+        | NirExprKind::VariantTag { expr: inner }
+        | NirExprKind::VariantTest { expr: inner, .. }
+        | NirExprKind::VariantPayload { expr: inner, .. }
+        | NirExprKind::ClosureToCanonical { functor: inner, .. } => {
             mark_ref_fields_in_expr(inner, decomposed, stores_aliased);
         }
-        TirExprKind::Assign { target, value } => {
+        NirExprKind::Assign { target, value } => {
             mark_ref_fields_in_expr(target, decomposed, stores_aliased);
             mark_ref_fields_in_expr(value, decomposed, stores_aliased);
         }
-        TirExprKind::Index { expr: inner, index } => {
+        NirExprKind::Index { expr: inner, index } => {
             mark_ref_fields_in_expr(inner, decomposed, stores_aliased);
             mark_ref_fields_in_expr(index, decomposed, stores_aliased);
         }
-        TirExprKind::Call { args, .. } => {
+        NirExprKind::Call { args, .. } => {
             for arg in args {
                 mark_ref_fields_in_expr(&arg.expr, decomposed, stores_aliased);
             }
         }
-        TirExprKind::CmRawCall { args, .. } => {
+        NirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 mark_ref_fields_in_expr(arg, decomposed, stores_aliased);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             mark_ref_fields_in_expr(receiver, decomposed, stores_aliased);
             for arg in args {
                 mark_ref_fields_in_expr(&arg.expr, decomposed, stores_aliased);
             }
         }
-        TirExprKind::IndirectCall { callee, args } => {
+        NirExprKind::IndirectCall { callee, args } => {
             mark_ref_fields_in_expr(callee, decomposed, stores_aliased);
             for arg in args {
                 mark_ref_fields_in_expr(arg, decomposed, stores_aliased);
             }
         }
-        TirExprKind::StructLiteral { fields, .. } => {
+        NirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
                 mark_ref_fields_in_expr(&field.value, decomposed, stores_aliased);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 mark_ref_fields_in_expr(elem, decomposed, stores_aliased);
             }
         }
-        TirExprKind::VariantConstruct { payload, .. } => {
+        NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 mark_ref_fields_in_expr(p, decomposed, stores_aliased);
             }
         }
-        TirExprKind::Closure { body, .. } => {
+        NirExprKind::Closure { body, .. } => {
             mark_ref_fields_in_expr(body, decomposed, stores_aliased);
         }
-        TirExprKind::GlobalVarSet { value, .. } => {
+        NirExprKind::GlobalVarSet { value, .. } => {
             mark_ref_fields_in_expr(value, decomposed, stores_aliased);
         }
         // Leaf nodes
-        TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::EnumConstruct { .. } => {}
-        TirExprKind::TemplateString { .. } => {
+        NirExprKind::Local { .. }
+        | NirExprKind::FuncRef { .. }
+        | NirExprKind::GlobalVarGet { .. }
+        | NirExprKind::Capture { .. }
+        | NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::StringLiteral(_)
+        | NirExprKind::BytesLiteral(_)
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::Null
+        | NirExprKind::Unit
+        | NirExprKind::EnumConstruct { .. } => {}
+        NirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
             unreachable!(
                 "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
             )
@@ -426,14 +424,14 @@ fn mark_ref_fields_in_expr(
 }
 
 /// Collect local indices from `&local` expressions in struct/tuple literal fields.
-fn collect_ref_locals_in_fields(expr: &TirExpr, stores_aliased: &mut IndexSet<u32>) {
+fn collect_ref_locals_in_fields(expr: &NirExpr, stores_aliased: &mut IndexSet<u32>) {
     match &expr.kind {
-        TirExprKind::StructLiteral { fields, .. } => {
+        NirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
                 extract_ref_local(&field.value, stores_aliased);
             }
         }
-        TirExprKind::TupleLiteral { elements, .. } => {
+        NirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 extract_ref_local(elem, stores_aliased);
             }
@@ -443,10 +441,10 @@ fn collect_ref_locals_in_fields(expr: &TirExpr, stores_aliased: &mut IndexSet<u3
 }
 
 /// If `expr` is `&local` or `&mut local`, add the local index to the set.
-fn extract_ref_local(expr: &TirExpr, stores_aliased: &mut IndexSet<u32>) {
-    if let TirExprKind::Unary { op, expr: inner } = &expr.kind
-        && matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
-        && let TirExprKind::Local { index, .. } = &inner.kind
+fn extract_ref_local(expr: &NirExpr, stores_aliased: &mut IndexSet<u32>) {
+    if let NirExprKind::Unary { op, expr: inner } = &expr.kind
+        && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
+        && let NirExprKind::Local { index, .. } = &inner.kind
     {
         stores_aliased.insert(*index);
     }
@@ -460,14 +458,14 @@ struct ReconstructInfo {
 }
 
 /// Collect SROA candidates from `Let` statements binding struct/tuple literals.
-fn collect_candidates(stmts: &[TirStmt], type_table: &TypeTable) -> Vec<SroaCandidate> {
+fn collect_candidates(stmts: &[NirStmt], type_table: &TypeTable) -> Vec<SroaCandidate> {
     let mut candidates = Vec::new();
     collect_candidates_in_stmts(stmts, type_table, &mut candidates);
     candidates
 }
 
 fn collect_candidates_in_stmts(
-    stmts: &[TirStmt],
+    stmts: &[NirStmt],
     type_table: &TypeTable,
     candidates: &mut Vec<SroaCandidate>,
 ) {
@@ -477,12 +475,12 @@ fn collect_candidates_in_stmts(
 }
 
 fn collect_candidates_in_stmt(
-    stmt: &TirStmt,
+    stmt: &NirStmt,
     type_table: &TypeTable,
     candidates: &mut Vec<SroaCandidate>,
 ) {
     match &stmt.kind {
-        TirStmtKind::Let {
+        NirStmtKind::Let {
             name,
             local_index,
             is_mut,
@@ -490,7 +488,7 @@ fn collect_candidates_in_stmt(
             ..
         } => {
             match &value.kind {
-                TirExprKind::StructLiteral {
+                NirExprKind::StructLiteral {
                     struct_name,
                     fields,
                     ..
@@ -508,7 +506,7 @@ fn collect_candidates_in_stmt(
                         struct_name: struct_name.clone(),
                     });
                 }
-                TirExprKind::TupleLiteral { elements, .. } => {
+                NirExprKind::TupleLiteral { elements, .. } => {
                     let field_info: Vec<(String, TypeId)> = elements
                         .iter()
                         .enumerate()
@@ -528,15 +526,15 @@ fn collect_candidates_in_stmt(
             // Also recurse into the value expression (for nested blocks etc.)
             collect_candidates_in_expr(value, type_table, candidates);
         }
-        TirStmtKind::Expr(expr) => {
+        NirStmtKind::Expr(expr) => {
             collect_candidates_in_expr(expr, type_table, candidates);
         }
-        TirStmtKind::Return { value } => {
+        NirStmtKind::Return { value } => {
             if let Some(v) = value {
                 collect_candidates_in_expr(v, type_table, candidates);
             }
         }
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -547,13 +545,13 @@ fn collect_candidates_in_stmt(
                 collect_candidates_in_stmts(&eb.stmts, type_table, candidates);
             }
         }
-        TirStmtKind::Loop { body } => {
+        NirStmtKind::Loop { body } => {
             collect_candidates_in_stmts(&body.stmts, type_table, candidates);
         }
-        TirStmtKind::LabeledBlock { block, .. } => {
+        NirStmtKind::LabeledBlock { block, .. } => {
             collect_candidates_in_stmts(&block.stmts, type_table, candidates);
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -565,34 +563,34 @@ fn collect_candidates_in_stmt(
                 collect_candidates_in_stmts(&eb.stmts, type_table, candidates);
             }
         }
-        TirStmtKind::Break { value, .. } => {
+        NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 collect_candidates_in_expr(v, type_table, candidates);
             }
         }
-        TirStmtKind::Continue => {}
-        TirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => {
             collect_candidates_in_expr(value, type_table, candidates);
         }
-        TirStmtKind::TaskReturn { .. } => {
+        NirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
-        TirStmtKind::VariadicForOf { .. } => {
+        NirStmtKind::VariadicForOf { .. } => {
             unreachable!("VariadicForOf should be expanded during monomorphization")
         }
     }
 }
 
 fn collect_candidates_in_expr(
-    expr: &TirExpr,
+    expr: &NirExpr,
     type_table: &TypeTable,
     candidates: &mut Vec<SroaCandidate>,
 ) {
     match &expr.kind {
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             collect_candidates_in_stmts(&block.stmts, type_table, candidates);
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -603,7 +601,7 @@ fn collect_candidates_in_expr(
                 collect_candidates_in_stmts(&eb.stmts, type_table, candidates);
             }
         }
-        TirExprKind::Match { expr: inner, arms } => {
+        NirExprKind::Match { expr: inner, arms } => {
             collect_candidates_in_expr(inner, type_table, candidates);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
@@ -612,7 +610,7 @@ fn collect_candidates_in_expr(
                 collect_candidates_in_expr(&arm.body, type_table, candidates);
             }
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -624,7 +622,7 @@ fn collect_candidates_in_expr(
             }
             collect_candidates_in_stmts(&default.stmts, type_table, candidates);
         }
-        TirExprKind::Closure { body, .. } => {
+        NirExprKind::Closure { body, .. } => {
             collect_candidates_in_expr(body, type_table, candidates);
         }
         // Other expression kinds don't contain Let statements
@@ -633,7 +631,7 @@ fn collect_candidates_in_expr(
 }
 
 /// Escape analysis: find all candidate locals that escape (used in non-field-access positions).
-fn find_escaped_locals(body: &TirBlock, candidates: &[SroaCandidate]) -> IndexSet<u32> {
+fn find_escaped_locals(body: &NirBlock, candidates: &[SroaCandidate]) -> IndexSet<u32> {
     let candidate_set: IndexSet<u32> = candidates.iter().map(|c| c.local_index).collect();
     let mut checker = EscapeChecker {
         candidates: &candidate_set,
@@ -657,27 +655,27 @@ struct EscapeChecker<'a> {
     escaped: IndexSet<u32>,
 }
 
-impl TirRefVisitor for EscapeChecker<'_> {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
+impl NirRefVisitor for EscapeChecker<'_> {
+    fn visit_stmt(&mut self, stmt: &NirStmt) {
         match &stmt.kind {
-            TirStmtKind::TaskReturn { .. } => {
+            NirStmtKind::TaskReturn { .. } => {
                 unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
-            TirStmtKind::VariadicForOf { .. } => {
+            NirStmtKind::VariadicForOf { .. } => {
                 unreachable!("VariadicForOf should be expanded during monomorphization")
             }
             _ => self.walk_stmt(stmt),
         }
     }
 
-    fn visit_expr(&mut self, expr: &TirExpr) {
+    fn visit_expr(&mut self, expr: &NirExpr) {
         match &expr.kind {
             // FieldAccess on a candidate local is safe — don't mark the base local as
             // escaped and don't recurse into the base (which is the local itself).
-            TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner }
-            | TirExprKind::TypePackExpansion {
+            NirExprKind::FieldAccess { expr: inner, .. }
+            | NirExprKind::TupleSpread { expr: inner }
+            | NirExprKind::TupleZip { expr: inner }
+            | NirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             } => {
                 if is_candidate_local(inner, self.candidates).is_some() {
@@ -686,11 +684,11 @@ impl TirRefVisitor for EscapeChecker<'_> {
                 self.visit_expr(inner);
             }
             // Assign to a field of a candidate is safe for the target side.
-            TirExprKind::Assign { target, value } => {
-                if let TirExprKind::FieldAccess { expr: inner, .. }
-                | TirExprKind::TupleSpread { expr: inner }
-                | TirExprKind::TupleZip { expr: inner }
-                | TirExprKind::TypePackExpansion {
+            NirExprKind::Assign { target, value } => {
+                if let NirExprKind::FieldAccess { expr: inner, .. }
+                | NirExprKind::TupleSpread { expr: inner }
+                | NirExprKind::TupleZip { expr: inner }
+                | NirExprKind::TypePackExpansion {
                     call_expr: inner, ..
                 } = &target.kind
                     && is_candidate_local(inner, self.candidates).is_some()
@@ -702,15 +700,15 @@ impl TirRefVisitor for EscapeChecker<'_> {
                 self.visit_expr(value);
             }
             // A bare Local reference to a candidate in any other position → escape.
-            TirExprKind::Local { index, .. } => {
+            NirExprKind::Local { index, .. } => {
                 if self.candidates.contains(index) {
                     self.escaped.insert(*index);
                 }
             }
             // Address taken → definitely escape.
-            TirExprKind::Unary { op, expr: inner } => {
-                if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
-                    && let TirExprKind::Local { index, .. } = &inner.kind
+            NirExprKind::Unary { op, expr: inner } => {
+                if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
+                    && let NirExprKind::Local { index, .. } = &inner.kind
                     && self.candidates.contains(index)
                 {
                     self.escaped.insert(*index);
@@ -719,7 +717,7 @@ impl TirRefVisitor for EscapeChecker<'_> {
                 self.visit_expr(inner);
             }
             // Closure captures → escape.
-            TirExprKind::Closure { body, captures, .. } => {
+            NirExprKind::Closure { body, captures, .. } => {
                 for capture in captures {
                     if self.candidates.contains(&capture.outer_index) {
                         self.escaped.insert(capture.outer_index);
@@ -727,7 +725,7 @@ impl TirRefVisitor for EscapeChecker<'_> {
                 }
                 self.visit_expr(body);
             }
-            TirExprKind::TemplateString { .. } => {
+            NirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should be expanded before this phase")
             }
             _ => self.walk_expr(expr),
@@ -744,7 +742,7 @@ impl TirRefVisitor for EscapeChecker<'_> {
 /// These can be handled by reconstructing the struct literal from SROA'd fields.
 /// Candidates with hard escapes (address taken, closure capture, etc.) are excluded.
 fn find_soft_escaped_locals(
-    body: &TirBlock,
+    body: &NirBlock,
     candidates: &[SroaCandidate],
     escaped: &IndexSet<u32>,
     stores_lookup: &StoresLookup,
@@ -798,23 +796,23 @@ struct FieldAccessChecker<'a> {
     has_access: IndexSet<u32>,
 }
 
-impl TirRefVisitor for FieldAccessChecker<'_> {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
+impl NirRefVisitor for FieldAccessChecker<'_> {
+    fn visit_stmt(&mut self, stmt: &NirStmt) {
         match &stmt.kind {
             // The original walker ignored these stmt kinds entirely — preserve.
-            TirStmtKind::LetDestructure { .. }
-            | TirStmtKind::TaskReturn { .. }
-            | TirStmtKind::VariadicForOf { .. } => {}
+            NirStmtKind::LetDestructure { .. }
+            | NirStmtKind::TaskReturn { .. }
+            | NirStmtKind::VariadicForOf { .. } => {}
             _ => self.walk_stmt(stmt),
         }
     }
 
-    fn visit_expr(&mut self, expr: &TirExpr) {
+    fn visit_expr(&mut self, expr: &NirExpr) {
         match &expr.kind {
-            TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner }
-            | TirExprKind::TypePackExpansion {
+            NirExprKind::FieldAccess { expr: inner, .. }
+            | NirExprKind::TupleSpread { expr: inner }
+            | NirExprKind::TupleZip { expr: inner }
+            | NirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             } => {
                 if let Some(idx) = is_candidate_local(inner, self.candidates) {
@@ -823,11 +821,11 @@ impl TirRefVisitor for FieldAccessChecker<'_> {
                 }
                 self.visit_expr(inner);
             }
-            TirExprKind::Assign { target, value } => {
-                if let TirExprKind::FieldAccess { expr: inner, .. }
-                | TirExprKind::TupleSpread { expr: inner }
-                | TirExprKind::TupleZip { expr: inner }
-                | TirExprKind::TypePackExpansion {
+            NirExprKind::Assign { target, value } => {
+                if let NirExprKind::FieldAccess { expr: inner, .. }
+                | NirExprKind::TupleSpread { expr: inner }
+                | NirExprKind::TupleZip { expr: inner }
+                | NirExprKind::TypePackExpansion {
                     call_expr: inner, ..
                 } = &target.kind
                     && let Some(idx) = is_candidate_local(inner, self.candidates)
@@ -839,7 +837,7 @@ impl TirRefVisitor for FieldAccessChecker<'_> {
                 self.visit_expr(target);
                 self.visit_expr(value);
             }
-            TirExprKind::TemplateString { .. } => {
+            NirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should be expanded before this phase")
             }
             _ => self.walk_expr(expr),
@@ -866,35 +864,35 @@ struct SoftEscapeChecker<'a> {
     soft_allowed: bool,
 }
 
-impl TirRefVisitor for SoftEscapeChecker<'_> {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
+impl NirRefVisitor for SoftEscapeChecker<'_> {
+    fn visit_stmt(&mut self, stmt: &NirStmt) {
         match &stmt.kind {
-            TirStmtKind::Return { value: Some(v) } | TirStmtKind::Break { value: Some(v), .. } => {
+            NirStmtKind::Return { value: Some(v) } | NirStmtKind::Break { value: Some(v), .. } => {
                 self.soft_allowed = true;
                 self.visit_expr(v);
                 self.soft_allowed = false;
             }
-            TirStmtKind::TaskReturn { .. } => {
+            NirStmtKind::TaskReturn { .. } => {
                 unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
-            TirStmtKind::VariadicForOf { .. } => {
+            NirStmtKind::VariadicForOf { .. } => {
                 unreachable!("VariadicForOf should be expanded during monomorphization")
             }
             _ => self.walk_stmt(stmt),
         }
     }
 
-    fn visit_expr(&mut self, expr: &TirExpr) {
+    fn visit_expr(&mut self, expr: &NirExpr) {
         // Consume the soft-context flag at the top of the first visit only.
         // All recursive visits see soft=false, mirroring the original walker's
         // `in_soft_context=false` for non-top-level children.
         let soft = std::mem::replace(&mut self.soft_allowed, false);
         match &expr.kind {
             // FieldAccess on candidate is always safe — skip recursion into the base.
-            TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner }
-            | TirExprKind::TypePackExpansion {
+            NirExprKind::FieldAccess { expr: inner, .. }
+            | NirExprKind::TupleSpread { expr: inner }
+            | NirExprKind::TupleZip { expr: inner }
+            | NirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             } => {
                 if is_candidate_local(inner, self.candidates).is_some() {
@@ -903,11 +901,11 @@ impl TirRefVisitor for SoftEscapeChecker<'_> {
                 self.visit_expr(inner);
             }
             // Assign to field of candidate is safe — only recurse into value.
-            TirExprKind::Assign { target, value } => {
-                if let TirExprKind::FieldAccess { expr: inner, .. }
-                | TirExprKind::TupleSpread { expr: inner }
-                | TirExprKind::TupleZip { expr: inner }
-                | TirExprKind::TypePackExpansion {
+            NirExprKind::Assign { target, value } => {
+                if let NirExprKind::FieldAccess { expr: inner, .. }
+                | NirExprKind::TupleSpread { expr: inner }
+                | NirExprKind::TupleZip { expr: inner }
+                | NirExprKind::TypePackExpansion {
                     call_expr: inner, ..
                 } = &target.kind
                     && is_candidate_local(inner, self.candidates).is_some()
@@ -920,7 +918,7 @@ impl TirRefVisitor for SoftEscapeChecker<'_> {
             }
             // Bare Local in a soft context (return/break value) is OK.
             // Bare Local anywhere else → hard escape.
-            TirExprKind::Local { index, .. } => {
+            NirExprKind::Local { index, .. } => {
                 if self.candidates.contains(index) && !soft {
                     self.hard_escaped.insert(*index);
                 }
@@ -928,9 +926,9 @@ impl TirRefVisitor for SoftEscapeChecker<'_> {
             // Address taken → hard escape.  The `&candidate` as a non-stores call
             // argument exception is handled by the Call/MethodCall arms below,
             // which skip visiting such args entirely.
-            TirExprKind::Unary { op, expr: inner } => {
-                if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
-                    && let TirExprKind::Local { index, .. } = &inner.kind
+            NirExprKind::Unary { op, expr: inner } => {
+                if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
+                    && let NirExprKind::Local { index, .. } = &inner.kind
                     && self.candidates.contains(index)
                 {
                     self.hard_escaped.insert(*index);
@@ -939,7 +937,7 @@ impl TirRefVisitor for SoftEscapeChecker<'_> {
                 self.visit_expr(inner);
             }
             // Closure captures → hard escape.
-            TirExprKind::Closure { body, captures, .. } => {
+            NirExprKind::Closure { body, captures, .. } => {
                 for capture in captures {
                     if self.candidates.contains(&capture.outer_index) {
                         self.hard_escaped.insert(capture.outer_index);
@@ -948,7 +946,7 @@ impl TirRefVisitor for SoftEscapeChecker<'_> {
                 self.visit_expr(body);
             }
             // Call / MethodCall: skip `&candidate` args to non-stores callees.
-            TirExprKind::Call { func, args, .. } => {
+            NirExprKind::Call { func, args, .. } => {
                 for (i, arg) in args.iter().enumerate() {
                     if is_immut_ref_to_candidate(&arg.expr, self.candidates)
                         && !callee_stores_param_at(func, i, self.current_module, self.stores_lookup)
@@ -958,7 +956,7 @@ impl TirRefVisitor for SoftEscapeChecker<'_> {
                     self.visit_expr(&arg.expr);
                 }
             }
-            TirExprKind::MethodCall {
+            NirExprKind::MethodCall {
                 receiver,
                 func,
                 args,
@@ -984,7 +982,7 @@ impl TirRefVisitor for SoftEscapeChecker<'_> {
                     self.visit_expr(&arg.expr);
                 }
             }
-            TirExprKind::TemplateString { .. } => {
+            NirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should be expanded before this phase")
             }
             _ => self.walk_expr(expr),
@@ -993,10 +991,10 @@ impl TirRefVisitor for SoftEscapeChecker<'_> {
 }
 
 /// Check if an expression is `&candidate` (immutable ref to a candidate local).
-fn is_immut_ref_to_candidate(expr: &TirExpr, candidates: &IndexSet<u32>) -> bool {
-    if let TirExprKind::Unary { op, expr: inner } = &expr.kind
-        && matches!(op, TirUnaryOp::Ref)
-        && let TirExprKind::Local { index, .. } = &inner.kind
+fn is_immut_ref_to_candidate(expr: &NirExpr, candidates: &IndexSet<u32>) -> bool {
+    if let NirExprKind::Unary { op, expr: inner } = &expr.kind
+        && matches!(op, NirUnaryOp::Ref)
+        && let NirExprKind::Local { index, .. } = &inner.kind
         && candidates.contains(index)
     {
         return true;
@@ -1025,8 +1023,8 @@ fn callee_stores_param_at(
 }
 
 /// Check if an expression is a `Local` node referencing a candidate.
-fn is_candidate_local(expr: &TirExpr, candidates: &IndexSet<u32>) -> Option<u32> {
-    if let TirExprKind::Local { index, .. } = &expr.kind
+fn is_candidate_local(expr: &NirExpr, candidates: &IndexSet<u32>) -> Option<u32> {
+    if let NirExprKind::Local { index, .. } = &expr.kind
         && candidates.contains(index)
     {
         return Some(*index);
@@ -1036,7 +1034,7 @@ fn is_candidate_local(expr: &TirExpr, candidates: &IndexSet<u32>) -> Option<u32>
 
 /// Rewrite a block: expand Let statements for candidates and replace field accesses.
 fn rewrite_block(
-    block: &mut TirBlock,
+    block: &mut NirBlock,
     safe_set: &IndexSet<u32>,
     field_map: &IndexMap<(u32, u32), u32>,
     info_map: &IndexMap<(u32, u32), (String, TypeId)>,
@@ -1048,7 +1046,7 @@ fn rewrite_block(
     let mut new_stmts = Vec::with_capacity(old_stmts.len());
 
     for mut stmt in old_stmts {
-        if let TirStmtKind::Let { local_index, .. } = &stmt.kind
+        if let NirStmtKind::Let { local_index, .. } = &stmt.kind
             && safe_set.contains(local_index)
         {
             let local_idx = *local_index;
@@ -1057,7 +1055,7 @@ fn rewrite_block(
 
             // Expand into per-field Let statements
             match stmt.kind {
-                TirStmtKind::Let { value, .. } => {
+                NirStmtKind::Let { value, .. } => {
                     expand_struct_let(
                         value,
                         local_idx,
@@ -1093,7 +1091,7 @@ fn rewrite_block(
 
 /// Expand a Let value (`StructLiteral`, `TupleLiteral`, or Move-wrapped) into per-field Lets.
 fn expand_struct_let(
-    value: TirExpr,
+    value: NirExpr,
     local_idx: u32,
     is_mut: bool,
     span: Span,
@@ -1102,10 +1100,10 @@ fn expand_struct_let(
     info_map: &IndexMap<(u32, u32), (String, TypeId)>,
     candidate_mut: &IndexMap<u32, bool>,
     reconstruct_info: &IndexMap<u32, ReconstructInfo>,
-    new_stmts: &mut Vec<TirStmt>,
+    new_stmts: &mut Vec<NirStmt>,
 ) {
     match value.kind {
-        TirExprKind::StructLiteral { fields, .. } => {
+        NirExprKind::StructLiteral { fields, .. } => {
             let mut sorted_fields: Vec<_> = fields.into_iter().collect();
             sorted_fields.sort_by_key(|f| f.field_index);
             for mut field in sorted_fields {
@@ -1120,8 +1118,8 @@ fn expand_struct_let(
                 let key = (local_idx, field.field_index);
                 let new_local = field_map[&key];
                 let (new_name, field_type) = &info_map[&key];
-                new_stmts.push(TirStmt::new(
-                    TirStmtKind::Let {
+                new_stmts.push(NirStmt::new(
+                    NirStmtKind::Let {
                         name: new_name.clone(),
                         local_index: new_local,
                         is_mut,
@@ -1139,7 +1137,7 @@ fn expand_struct_let(
                 ));
             }
         }
-        TirExprKind::TupleLiteral { elements, .. } => {
+        NirExprKind::TupleLiteral { elements, .. } => {
             for (i, mut elem) in elements.into_iter().enumerate() {
                 rewrite_expr(
                     &mut elem,
@@ -1152,8 +1150,8 @@ fn expand_struct_let(
                 let key = (local_idx, i as u32);
                 let new_local = field_map[&key];
                 let (new_name, field_type) = &info_map[&key];
-                new_stmts.push(TirStmt::new(
-                    TirStmtKind::Let {
+                new_stmts.push(NirStmt::new(
+                    NirStmtKind::Let {
                         name: new_name.clone(),
                         local_index: new_local,
                         is_mut,
@@ -1171,7 +1169,7 @@ fn expand_struct_let(
 }
 
 fn rewrite_stmt(
-    stmt: &mut TirStmt,
+    stmt: &mut NirStmt,
     safe_set: &IndexSet<u32>,
     field_map: &IndexMap<(u32, u32), u32>,
     info_map: &IndexMap<(u32, u32), (String, TypeId)>,
@@ -1179,7 +1177,7 @@ fn rewrite_stmt(
     reconstruct_info: &IndexMap<u32, ReconstructInfo>,
 ) {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } => {
+        NirStmtKind::Let { value, .. } => {
             rewrite_expr(
                 value,
                 safe_set,
@@ -1189,7 +1187,7 @@ fn rewrite_stmt(
                 reconstruct_info,
             );
         }
-        TirStmtKind::Expr(expr) => {
+        NirStmtKind::Expr(expr) => {
             rewrite_expr(
                 expr,
                 safe_set,
@@ -1199,7 +1197,7 @@ fn rewrite_stmt(
                 reconstruct_info,
             );
         }
-        TirStmtKind::Return { value } => {
+        NirStmtKind::Return { value } => {
             if let Some(v) = value {
                 rewrite_expr(
                     v,
@@ -1211,7 +1209,7 @@ fn rewrite_stmt(
                 );
             }
         }
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -1243,7 +1241,7 @@ fn rewrite_stmt(
                 );
             }
         }
-        TirStmtKind::Loop { body } => {
+        NirStmtKind::Loop { body } => {
             rewrite_block(
                 body,
                 safe_set,
@@ -1253,7 +1251,7 @@ fn rewrite_stmt(
                 reconstruct_info,
             );
         }
-        TirStmtKind::LabeledBlock { block, .. } => {
+        NirStmtKind::LabeledBlock { block, .. } => {
             rewrite_block(
                 block,
                 safe_set,
@@ -1263,7 +1261,7 @@ fn rewrite_stmt(
                 reconstruct_info,
             );
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -1296,7 +1294,7 @@ fn rewrite_stmt(
                 );
             }
         }
-        TirStmtKind::Break { value, .. } => {
+        NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 rewrite_expr(
                     v,
@@ -1308,8 +1306,8 @@ fn rewrite_stmt(
                 );
             }
         }
-        TirStmtKind::Continue => {}
-        TirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => {
             rewrite_expr(
                 value,
                 safe_set,
@@ -1319,10 +1317,10 @@ fn rewrite_stmt(
                 reconstruct_info,
             );
         }
-        TirStmtKind::TaskReturn { .. } => {
+        NirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
-        TirStmtKind::VariadicForOf { .. } => {
+        NirStmtKind::VariadicForOf { .. } => {
             unreachable!("VariadicForOf should be expanded during monomorphization")
         }
     }
@@ -1331,7 +1329,7 @@ fn rewrite_stmt(
 /// Rewrite an expression: replace `s.field` with the corresponding scalar local,
 /// and reconstruct struct literals at soft-escape sites.
 fn rewrite_expr(
-    expr: &mut TirExpr,
+    expr: &mut NirExpr,
     safe_set: &IndexSet<u32>,
     field_map: &IndexMap<(u32, u32), u32>,
     info_map: &IndexMap<(u32, u32), (String, TypeId)>,
@@ -1339,7 +1337,7 @@ fn rewrite_expr(
     reconstruct_info: &IndexMap<u32, ReconstructInfo>,
 ) {
     // Check for field access on a candidate local: s.field → scalar local
-    if let TirExprKind::FieldAccess {
+    if let NirExprKind::FieldAccess {
         expr: inner,
         field_index,
         ..
@@ -1350,7 +1348,7 @@ fn rewrite_expr(
             let key = (local_idx, *field_index);
             if let Some(&new_local) = field_map.get(&key) {
                 let (new_name, _) = &info_map[&key];
-                expr.kind = TirExprKind::Local {
+                expr.kind = NirExprKind::Local {
                     index: new_local,
                     name: new_name.clone(),
                 };
@@ -1360,8 +1358,8 @@ fn rewrite_expr(
     }
 
     // Check for field write: candidate.field = value → scalar_local = value
-    if let TirExprKind::Assign { target, value } = &mut expr.kind
-        && let TirExprKind::FieldAccess {
+    if let NirExprKind::Assign { target, value } = &mut expr.kind
+        && let NirExprKind::FieldAccess {
             expr: inner,
             field_index,
             ..
@@ -1372,7 +1370,7 @@ fn rewrite_expr(
         if let Some(&new_local) = field_map.get(&key) {
             let (new_name, _) = &info_map[&key];
             // Rewrite: Assign { target: FieldAccess, value } → Assign { target: Local, value }
-            target.kind = TirExprKind::Local {
+            target.kind = NirExprKind::Local {
                 index: new_local,
                 name: new_name.clone(),
             };
@@ -1389,7 +1387,7 @@ fn rewrite_expr(
     }
 
     // Reconstruct: bare Local reference to a soft-escape candidate → re-materialize struct/tuple
-    if let TirExprKind::Local { index, .. } = &expr.kind
+    if let NirExprKind::Local { index, .. } = &expr.kind
         && let Some(info) = reconstruct_info.get(index)
     {
         let idx = *index;
@@ -1400,10 +1398,10 @@ fn rewrite_expr(
 
     // Recurse into child expressions
     match &mut expr.kind {
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
+        NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::TupleSpread { expr: inner }
+        | NirExprKind::TupleZip { expr: inner }
+        | NirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
             rewrite_expr(
@@ -1415,7 +1413,7 @@ fn rewrite_expr(
                 reconstruct_info,
             );
         }
-        TirExprKind::Assign { target, value } => {
+        NirExprKind::Assign { target, value } => {
             rewrite_expr(
                 target,
                 safe_set,
@@ -1433,7 +1431,7 @@ fn rewrite_expr(
                 reconstruct_info,
             );
         }
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             rewrite_expr(
                 left,
                 safe_set,
@@ -1451,7 +1449,7 @@ fn rewrite_expr(
                 reconstruct_info,
             );
         }
-        TirExprKind::Unary { expr: inner, .. } => {
+        NirExprKind::Unary { expr: inner, .. } => {
             rewrite_expr(
                 inner,
                 safe_set,
@@ -1461,7 +1459,7 @@ fn rewrite_expr(
                 reconstruct_info,
             );
         }
-        TirExprKind::Cast { expr: inner, .. } => {
+        NirExprKind::Cast { expr: inner, .. } => {
             rewrite_expr(
                 inner,
                 safe_set,
@@ -1471,7 +1469,7 @@ fn rewrite_expr(
                 reconstruct_info,
             );
         }
-        TirExprKind::Call { args, .. } => {
+        NirExprKind::Call { args, .. } => {
             for arg in args {
                 rewrite_expr(
                     &mut arg.expr,
@@ -1483,7 +1481,7 @@ fn rewrite_expr(
                 );
             }
         }
-        TirExprKind::CmRawCall { args, .. } => {
+        NirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 rewrite_expr(
                     arg,
@@ -1495,7 +1493,7 @@ fn rewrite_expr(
                 );
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             rewrite_expr(
                 receiver,
                 safe_set,
@@ -1515,7 +1513,7 @@ fn rewrite_expr(
                 );
             }
         }
-        TirExprKind::IndirectCall { callee, args, .. } => {
+        NirExprKind::IndirectCall { callee, args, .. } => {
             rewrite_expr(
                 callee,
                 safe_set,
@@ -1535,7 +1533,7 @@ fn rewrite_expr(
                 );
             }
         }
-        TirExprKind::ClosureToCanonical { functor, .. } => {
+        NirExprKind::ClosureToCanonical { functor, .. } => {
             rewrite_expr(
                 functor,
                 safe_set,
@@ -1545,7 +1543,7 @@ fn rewrite_expr(
                 reconstruct_info,
             );
         }
-        TirExprKind::Index {
+        NirExprKind::Index {
             expr: inner, index, ..
         } => {
             rewrite_expr(
@@ -1565,7 +1563,7 @@ fn rewrite_expr(
                 reconstruct_info,
             );
         }
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             rewrite_block(
                 block,
                 safe_set,
@@ -1575,7 +1573,7 @@ fn rewrite_expr(
                 reconstruct_info,
             );
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -1607,7 +1605,7 @@ fn rewrite_expr(
                 );
             }
         }
-        TirExprKind::Match { expr: inner, arms } => {
+        NirExprKind::Match { expr: inner, arms } => {
             rewrite_expr(
                 inner,
                 safe_set,
@@ -1637,7 +1635,7 @@ fn rewrite_expr(
                 );
             }
         }
-        TirExprKind::StructLiteral { fields, .. } => {
+        NirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
                 rewrite_expr(
                     &mut field.value,
@@ -1649,7 +1647,7 @@ fn rewrite_expr(
                 );
             }
         }
-        TirExprKind::TupleLiteral { elements, .. } => {
+        NirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 rewrite_expr(
                     elem,
@@ -1661,7 +1659,7 @@ fn rewrite_expr(
                 );
             }
         }
-        TirExprKind::VariantConstruct { payload, .. } => {
+        NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 rewrite_expr(
                     p,
@@ -1673,7 +1671,7 @@ fn rewrite_expr(
                 );
             }
         }
-        TirExprKind::Closure { body, .. } => {
+        NirExprKind::Closure { body, .. } => {
             rewrite_expr(
                 body,
                 safe_set,
@@ -1683,7 +1681,7 @@ fn rewrite_expr(
                 reconstruct_info,
             );
         }
-        TirExprKind::GlobalVarSet { value, .. } => {
+        NirExprKind::GlobalVarSet { value, .. } => {
             rewrite_expr(
                 value,
                 safe_set,
@@ -1693,7 +1691,7 @@ fn rewrite_expr(
                 reconstruct_info,
             );
         }
-        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
+        NirExprKind::VariantTag { expr } | NirExprKind::VariantTest { expr, .. } => {
             rewrite_expr(
                 expr,
                 safe_set,
@@ -1703,7 +1701,7 @@ fn rewrite_expr(
                 reconstruct_info,
             );
         }
-        TirExprKind::VariantPayload { expr, .. } => {
+        NirExprKind::VariantPayload { expr, .. } => {
             rewrite_expr(
                 expr,
                 safe_set,
@@ -1713,7 +1711,7 @@ fn rewrite_expr(
                 reconstruct_info,
             );
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -1747,21 +1745,21 @@ fn rewrite_expr(
             );
         }
         // Leaf nodes — nothing to rewrite
-        TirExprKind::Local { .. }
-        | TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. }
-        | TirExprKind::TemplateString { .. } => {}
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+        NirExprKind::Local { .. }
+        | NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::StringLiteral(_)
+        | NirExprKind::BytesLiteral(_)
+        | NirExprKind::Null
+        | NirExprKind::Unit
+        | NirExprKind::FuncRef { .. }
+        | NirExprKind::GlobalVarGet { .. }
+        | NirExprKind::Capture { .. }
+        | NirExprKind::EnumConstruct { .. }
+        | NirExprKind::TemplateString { .. } => {}
+        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
             unreachable!(
                 "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
             )
@@ -1771,7 +1769,7 @@ fn rewrite_expr(
 
 /// Build a reconstructed struct or tuple literal from SROA'd scalar locals.
 fn reconstruct_aggregate(
-    expr: &mut TirExpr,
+    expr: &mut NirExpr,
     local_idx: u32,
     info: &ReconstructInfo,
     field_map: &IndexMap<(u32, u32), u32>,
@@ -1780,7 +1778,7 @@ fn reconstruct_aggregate(
 ) {
     if info.struct_name.is_empty() {
         // Tuple reconstruction
-        let elements: Vec<TirExpr> = info
+        let elements: Vec<NirExpr> = info
             .fields
             .iter()
             .enumerate()
@@ -1788,8 +1786,8 @@ fn reconstruct_aggregate(
                 let key = (local_idx, i as u32);
                 let field_local = field_map[&key];
                 let (field_name, _) = &info_map[&key];
-                TirExpr {
-                    kind: TirExprKind::Local {
+                NirExpr {
+                    kind: NirExprKind::Local {
                         index: field_local,
                         name: field_name.clone(),
                     },
@@ -1798,10 +1796,10 @@ fn reconstruct_aggregate(
                 }
             })
             .collect();
-        expr.kind = TirExprKind::TupleLiteral { elements };
+        expr.kind = NirExprKind::TupleLiteral { elements };
     } else {
         // Struct reconstruction
-        let fields: Vec<TirStructField> = info
+        let fields: Vec<NirStructField> = info
             .fields
             .iter()
             .enumerate()
@@ -1809,10 +1807,10 @@ fn reconstruct_aggregate(
                 let key = (local_idx, i as u32);
                 let field_local = field_map[&key];
                 let (field_name, _) = &info_map[&key];
-                TirStructField {
+                NirStructField {
                     name: name.clone(),
-                    value: TirExpr {
-                        kind: TirExprKind::Local {
+                    value: NirExpr {
+                        kind: NirExprKind::Local {
                             index: field_local,
                             name: field_name.clone(),
                         },
@@ -1823,7 +1821,7 @@ fn reconstruct_aggregate(
                 }
             })
             .collect();
-        expr.kind = TirExprKind::StructLiteral {
+        expr.kind = NirExprKind::StructLiteral {
             struct_type: info.aggregate_type_id,
             struct_name: info.struct_name.clone(),
             fields,

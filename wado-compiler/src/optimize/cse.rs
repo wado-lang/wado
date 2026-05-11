@@ -23,15 +23,13 @@
 //! }
 //! ```
 
-use crate::flat_package::FlatPackage;
+use crate::nir_package::NirPackage;
 use crate::hashmap::IndexSet;
-use crate::tir::{
-    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt, TirStmtKind,
-    TypeId,
-};
+use crate::tir::{TypeId};
+use crate::nir::{NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind};
 use crate::token::Span;
 
-pub fn eliminate_common_subexprs(project: &mut FlatPackage) -> bool {
+pub fn eliminate_common_subexprs(project: &mut NirPackage) -> bool {
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
@@ -40,7 +38,7 @@ pub fn eliminate_common_subexprs(project: &mut FlatPackage) -> bool {
     changed
 }
 
-fn cse_function(func: &mut TirFunction) -> bool {
+fn cse_function(func: &mut NirFunction) -> bool {
     let Some(body) = &mut func.body else {
         return false;
     };
@@ -50,9 +48,9 @@ fn cse_function(func: &mut TirFunction) -> bool {
 }
 
 fn cse_in_block(
-    block: &mut TirBlock,
+    block: &mut NirBlock,
     local_count: &mut u32,
-    locals: &mut Vec<TirLocal>,
+    locals: &mut Vec<NirLocal>,
     changed: &mut bool,
 ) {
     for stmt in &mut block.stmts {
@@ -61,19 +59,19 @@ fn cse_in_block(
 }
 
 fn cse_in_stmt(
-    stmt: &mut TirStmt,
+    stmt: &mut NirStmt,
     local_count: &mut u32,
-    locals: &mut Vec<TirLocal>,
+    locals: &mut Vec<NirLocal>,
     changed: &mut bool,
 ) {
     match &mut stmt.kind {
-        TirStmtKind::Loop { body } => {
+        NirStmtKind::Loop { body } => {
             // First recurse into inner loops
             cse_in_block(body, local_count, locals, changed);
             // Then apply CSE to this loop body
             *changed |= cse_loop_body(body, local_count, locals);
         }
-        TirStmtKind::If {
+        NirStmtKind::If {
             then_block,
             else_block,
             ..
@@ -83,10 +81,10 @@ fn cse_in_stmt(
                 cse_in_block(eb, local_count, locals, changed);
             }
         }
-        TirStmtKind::LabeledBlock { block, .. } => {
+        NirStmtKind::LabeledBlock { block, .. } => {
             cse_in_block(block, local_count, locals, changed);
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             then_block,
             else_block,
             ..
@@ -104,7 +102,7 @@ fn cse_in_stmt(
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum CseKey {
     Binary {
-        op: TirBinaryOp,
+        op: NirBinaryOp,
         left: Box<CseKey>,
         right: Box<CseKey>,
     },
@@ -117,9 +115,9 @@ enum CseKey {
 }
 
 /// Try to build a `CseKey` from a TIR expression (only for pure expressions).
-fn expr_to_key(expr: &TirExpr) -> Option<CseKey> {
+fn expr_to_key(expr: &NirExpr) -> Option<CseKey> {
     match &expr.kind {
-        TirExprKind::Binary { left, op, right } => {
+        NirExprKind::Binary { left, op, right } => {
             let left_key = expr_to_key(left)?;
             let right_key = expr_to_key(right)?;
             Some(CseKey::Binary {
@@ -128,8 +126,8 @@ fn expr_to_key(expr: &TirExpr) -> Option<CseKey> {
                 right: Box::new(right_key),
             })
         }
-        TirExprKind::Local { index, .. } => Some(CseKey::Local { index: *index }),
-        TirExprKind::IntLiteral { value, .. } => Some(CseKey::IntLiteral { value: *value }),
+        NirExprKind::Local { index, .. } => Some(CseKey::Local { index: *index }),
+        NirExprKind::IntLiteral { value, .. } => Some(CseKey::IntLiteral { value: *value }),
         _ => None,
     }
 }
@@ -151,7 +149,7 @@ fn key_locals(key: &CseKey, locals: &mut IndexSet<u32>) {
 /// Apply CSE to a loop body. Looks for a pure binary subexpression that appears
 /// in the loop guard and again in the loop body, with no modification to operands
 /// between occurrences.
-fn cse_loop_body(body: &mut TirBlock, local_count: &mut u32, locals: &mut Vec<TirLocal>) -> bool {
+fn cse_loop_body(body: &mut NirBlock, local_count: &mut u32, locals: &mut Vec<NirLocal>) -> bool {
     // Pattern: first stmt is `if !(cond) { break; }` — extract subexprs from cond
     if body.stmts.is_empty() {
         return false;
@@ -159,14 +157,14 @@ fn cse_loop_body(body: &mut TirBlock, local_count: &mut u32, locals: &mut Vec<Ti
 
     // Extract the guard condition expression
     let guard_expr = match &body.stmts[0].kind {
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             ..
         } => {
             // Check this is a break guard: if !(cond) { break; }
             let is_break_guard = then_block.stmts.len() == 1
-                && matches!(then_block.stmts[0].kind, TirStmtKind::Break { .. });
+                && matches!(then_block.stmts[0].kind, NirStmtKind::Break { .. });
             if !is_break_guard {
                 return false;
             }
@@ -200,7 +198,7 @@ fn cse_loop_body(body: &mut TirBlock, local_count: &mut u32, locals: &mut Vec<Ti
             let cse_local_idx = *local_count;
             *local_count += 1;
             let cse_local_name = format!("__cse_{cse_local_idx}");
-            locals.push(TirLocal {
+            locals.push(NirLocal {
                 name: cse_local_name.clone(),
                 type_id: *type_id,
                 is_mut: false,
@@ -208,8 +206,8 @@ fn cse_loop_body(body: &mut TirBlock, local_count: &mut u32, locals: &mut Vec<Ti
 
             // Build the Let statement for the CSE local (clone the expression from guard)
             let cse_expr = extract_matching_expr(guard_expr, key).unwrap();
-            let let_stmt = TirStmt::new(
-                TirStmtKind::Let {
+            let let_stmt = NirStmt::new(
+                NirStmtKind::Let {
                     name: cse_local_name.clone(),
                     local_index: cse_local_idx,
                     is_mut: false,
@@ -222,7 +220,7 @@ fn cse_loop_body(body: &mut TirBlock, local_count: &mut u32, locals: &mut Vec<Ti
             );
 
             // Replace the expression in the guard condition
-            let cse_local_expr_kind = TirExprKind::Local {
+            let cse_local_expr_kind = NirExprKind::Local {
                 index: cse_local_idx,
                 name: cse_local_name,
             };
@@ -244,14 +242,14 @@ fn cse_loop_body(body: &mut TirBlock, local_count: &mut u32, locals: &mut Vec<Ti
 }
 
 /// Collect all pure binary subexpressions from an expression.
-fn collect_binary_subexprs(expr: &TirExpr) -> Vec<(CseKey, TypeId, Span)> {
+fn collect_binary_subexprs(expr: &NirExpr) -> Vec<(CseKey, TypeId, Span)> {
     let mut result = Vec::new();
     collect_binary_subexprs_rec(expr, &mut result);
     result
 }
 
-fn collect_binary_subexprs_rec(expr: &TirExpr, result: &mut Vec<(CseKey, TypeId, Span)>) {
-    if let TirExprKind::Binary { left, right, .. } = &expr.kind {
+fn collect_binary_subexprs_rec(expr: &NirExpr, result: &mut Vec<(CseKey, TypeId, Span)>) {
+    if let NirExprKind::Binary { left, right, .. } = &expr.kind {
         if let Some(key) = expr_to_key(expr) {
             result.push((key, expr.type_id, expr.span));
         }
@@ -259,14 +257,14 @@ fn collect_binary_subexprs_rec(expr: &TirExpr, result: &mut Vec<(CseKey, TypeId,
         collect_binary_subexprs_rec(right, result);
     }
     // Also recurse into Unary (e.g., `!(p * p <= limit)`)
-    if let TirExprKind::Unary { expr: inner, .. } = &expr.kind {
+    if let NirExprKind::Unary { expr: inner, .. } = &expr.kind {
         collect_binary_subexprs_rec(inner, result);
     }
 }
 
 /// Check if any statement in the list contains the same expression,
 /// and the used locals are not modified before that occurrence.
-fn has_matching_expr(stmts: &[TirStmt], key: &CseKey, used_locals: &IndexSet<u32>) -> bool {
+fn has_matching_expr(stmts: &[NirStmt], key: &CseKey, used_locals: &IndexSet<u32>) -> bool {
     for stmt in stmts {
         // Check if this statement modifies any of the used locals
         if stmt_modifies_any(stmt, used_locals) {
@@ -286,11 +284,11 @@ fn has_matching_expr(stmts: &[TirStmt], key: &CseKey, used_locals: &IndexSet<u32
 }
 
 /// Check if a statement modifies any of the given locals.
-fn stmt_modifies_any(stmt: &TirStmt, locals: &IndexSet<u32>) -> bool {
+fn stmt_modifies_any(stmt: &NirStmt, locals: &IndexSet<u32>) -> bool {
     match &stmt.kind {
-        TirStmtKind::Expr(e) => expr_modifies_any(e, locals),
-        TirStmtKind::Let { value, .. } => expr_modifies_any(value, locals),
-        TirStmtKind::If {
+        NirStmtKind::Expr(e) => expr_modifies_any(e, locals),
+        NirStmtKind::Let { value, .. } => expr_modifies_any(value, locals),
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -301,13 +299,13 @@ fn stmt_modifies_any(stmt: &TirStmt, locals: &IndexSet<u32>) -> bool {
                     .as_ref()
                     .is_some_and(|eb| block_modifies_any(eb, locals))
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             block_modifies_any(body, locals)
         }
-        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
             value.as_ref().is_some_and(|v| expr_modifies_any(v, locals))
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -319,38 +317,38 @@ fn stmt_modifies_any(stmt: &TirStmt, locals: &IndexSet<u32>) -> bool {
                     .as_ref()
                     .is_some_and(|eb| block_modifies_any(eb, locals))
         }
-        TirStmtKind::LetDestructure { value, .. } => expr_modifies_any(value, locals),
-        TirStmtKind::Continue => false,
-        TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => false,
+        NirStmtKind::LetDestructure { value, .. } => expr_modifies_any(value, locals),
+        NirStmtKind::Continue => false,
+        NirStmtKind::TaskReturn { .. } | NirStmtKind::VariadicForOf { .. } => false,
     }
 }
 
-fn block_modifies_any(block: &TirBlock, locals: &IndexSet<u32>) -> bool {
+fn block_modifies_any(block: &NirBlock, locals: &IndexSet<u32>) -> bool {
     block.stmts.iter().any(|s| stmt_modifies_any(s, locals))
 }
 
-fn expr_modifies_any(expr: &TirExpr, locals: &IndexSet<u32>) -> bool {
+fn expr_modifies_any(expr: &NirExpr, locals: &IndexSet<u32>) -> bool {
     match &expr.kind {
-        TirExprKind::Assign { target, value } => {
-            if let TirExprKind::Local { index, .. } = &target.kind
+        NirExprKind::Assign { target, value } => {
+            if let NirExprKind::Local { index, .. } = &target.kind
                 && locals.contains(index)
             {
                 return true;
             }
             expr_modifies_any(target, locals) || expr_modifies_any(value, locals)
         }
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             expr_modifies_any(left, locals) || expr_modifies_any(right, locals)
         }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. } => expr_modifies_any(inner, locals),
-        TirExprKind::Call { args, .. } => args.iter().any(|a| expr_modifies_any(&a.expr, locals)),
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::Unary { expr: inner, .. }
+        | NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::Cast { expr: inner, .. } => expr_modifies_any(inner, locals),
+        NirExprKind::Call { args, .. } => args.iter().any(|a| expr_modifies_any(&a.expr, locals)),
+        NirExprKind::MethodCall { receiver, args, .. } => {
             expr_modifies_any(receiver, locals)
                 || args.iter().any(|a| expr_modifies_any(&a.expr, locals))
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -361,16 +359,16 @@ fn expr_modifies_any(expr: &TirExpr, locals: &IndexSet<u32>) -> bool {
                     .as_ref()
                     .is_some_and(|eb| block_modifies_any(eb, locals))
         }
-        TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } => {
+        NirExprKind::Block(b) | NirExprKind::LabeledBlock { block: b, .. } => {
             block_modifies_any(b, locals)
         }
-        TirExprKind::Index {
+        NirExprKind::Index {
             expr: inner, index, ..
         } => expr_modifies_any(inner, locals) || expr_modifies_any(index, locals),
-        TirExprKind::TemplateString { .. } => {
+        NirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
             unreachable!(
                 "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
             )
@@ -380,13 +378,13 @@ fn expr_modifies_any(expr: &TirExpr, locals: &IndexSet<u32>) -> bool {
 }
 
 /// Check if a statement contains an expression matching the given key.
-fn stmt_contains_expr(stmt: &TirStmt, key: &CseKey) -> bool {
+fn stmt_contains_expr(stmt: &NirStmt, key: &CseKey) -> bool {
     match &stmt.kind {
-        TirStmtKind::Expr(e) => expr_contains(e, key),
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Expr(e) => expr_contains(e, key),
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             expr_contains(value, key)
         }
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -397,13 +395,13 @@ fn stmt_contains_expr(stmt: &TirStmt, key: &CseKey) -> bool {
                     .as_ref()
                     .is_some_and(|eb| block_contains(eb, key))
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             block_contains(body, key)
         }
-        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
             value.as_ref().is_some_and(|v| expr_contains(v, key))
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -415,34 +413,34 @@ fn stmt_contains_expr(stmt: &TirStmt, key: &CseKey) -> bool {
                     .as_ref()
                     .is_some_and(|eb| block_contains(eb, key))
         }
-        TirStmtKind::Continue => false,
-        TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => false,
+        NirStmtKind::Continue => false,
+        NirStmtKind::TaskReturn { .. } | NirStmtKind::VariadicForOf { .. } => false,
     }
 }
 
-fn block_contains(block: &TirBlock, key: &CseKey) -> bool {
+fn block_contains(block: &NirBlock, key: &CseKey) -> bool {
     block.stmts.iter().any(|s| stmt_contains_expr(s, key))
 }
 
-fn expr_contains(expr: &TirExpr, key: &CseKey) -> bool {
+fn expr_contains(expr: &NirExpr, key: &CseKey) -> bool {
     if expr_to_key(expr).as_ref() == Some(key) {
         return true;
     }
     match &expr.kind {
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             expr_contains(left, key) || expr_contains(right, key)
         }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. } => expr_contains(inner, key),
-        TirExprKind::Assign { target, value } => {
+        NirExprKind::Unary { expr: inner, .. }
+        | NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::Cast { expr: inner, .. } => expr_contains(inner, key),
+        NirExprKind::Assign { target, value } => {
             expr_contains(target, key) || expr_contains(value, key)
         }
-        TirExprKind::Call { args, .. } => args.iter().any(|a| expr_contains(&a.expr, key)),
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::Call { args, .. } => args.iter().any(|a| expr_contains(&a.expr, key)),
+        NirExprKind::MethodCall { receiver, args, .. } => {
             expr_contains(receiver, key) || args.iter().any(|a| expr_contains(&a.expr, key))
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -453,16 +451,16 @@ fn expr_contains(expr: &TirExpr, key: &CseKey) -> bool {
                     .as_ref()
                     .is_some_and(|eb| block_contains(eb, key))
         }
-        TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } => {
+        NirExprKind::Block(b) | NirExprKind::LabeledBlock { block: b, .. } => {
             block_contains(b, key)
         }
-        TirExprKind::Index {
+        NirExprKind::Index {
             expr: inner, index, ..
         } => expr_contains(inner, key) || expr_contains(index, key),
-        TirExprKind::TemplateString { .. } => {
+        NirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
             unreachable!(
                 "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
             )
@@ -472,32 +470,32 @@ fn expr_contains(expr: &TirExpr, key: &CseKey) -> bool {
 }
 
 /// Extract (clone) the first matching expression from a TIR expression tree.
-fn extract_matching_expr(expr: &TirExpr, key: &CseKey) -> Option<TirExpr> {
+fn extract_matching_expr(expr: &NirExpr, key: &CseKey) -> Option<NirExpr> {
     if expr_to_key(expr).as_ref() == Some(key) {
         return Some(expr.clone());
     }
     match &expr.kind {
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             extract_matching_expr(left, key).or_else(|| extract_matching_expr(right, key))
         }
-        TirExprKind::Unary { expr: inner, .. } => extract_matching_expr(inner, key),
+        NirExprKind::Unary { expr: inner, .. } => extract_matching_expr(inner, key),
         _ => None,
     }
 }
 
 /// Replace all occurrences of the expression matching `key` with a local reference.
 fn replace_matching_expr(
-    stmt: &mut TirStmt,
+    stmt: &mut NirStmt,
     key: &CseKey,
-    replacement: &TirExprKind,
+    replacement: &NirExprKind,
     type_id: TypeId,
 ) {
     match &mut stmt.kind {
-        TirStmtKind::Expr(e) => replace_in_expr(e, key, replacement, type_id),
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Expr(e) => replace_in_expr(e, key, replacement, type_id),
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             replace_in_expr(value, key, replacement, type_id);
         }
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -508,15 +506,15 @@ fn replace_matching_expr(
                 replace_in_block(eb, key, replacement, type_id);
             }
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             replace_in_block(body, key, replacement, type_id);
         }
-        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 replace_in_expr(v, key, replacement, type_id);
             }
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -528,15 +526,15 @@ fn replace_matching_expr(
                 replace_in_block(eb, key, replacement, type_id);
             }
         }
-        TirStmtKind::Continue => {}
-        TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => {}
+        NirStmtKind::Continue => {}
+        NirStmtKind::TaskReturn { .. } | NirStmtKind::VariadicForOf { .. } => {}
     }
 }
 
 fn replace_in_block(
-    block: &mut TirBlock,
+    block: &mut NirBlock,
     key: &CseKey,
-    replacement: &TirExprKind,
+    replacement: &NirExprKind,
     type_id: TypeId,
 ) {
     for stmt in &mut block.stmts {
@@ -544,38 +542,38 @@ fn replace_in_block(
     }
 }
 
-fn replace_in_expr(expr: &mut TirExpr, key: &CseKey, replacement: &TirExprKind, type_id: TypeId) {
+fn replace_in_expr(expr: &mut NirExpr, key: &CseKey, replacement: &NirExprKind, type_id: TypeId) {
     if expr_to_key(expr).as_ref() == Some(key) {
         expr.kind = replacement.clone();
         expr.type_id = type_id;
         return;
     }
     match &mut expr.kind {
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             replace_in_expr(left, key, replacement, type_id);
             replace_in_expr(right, key, replacement, type_id);
         }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. } => {
+        NirExprKind::Unary { expr: inner, .. }
+        | NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::Cast { expr: inner, .. } => {
             replace_in_expr(inner, key, replacement, type_id);
         }
-        TirExprKind::Assign { target, value } => {
+        NirExprKind::Assign { target, value } => {
             replace_in_expr(target, key, replacement, type_id);
             replace_in_expr(value, key, replacement, type_id);
         }
-        TirExprKind::Call { args, .. } => {
+        NirExprKind::Call { args, .. } => {
             for arg in args {
                 replace_in_expr(&mut arg.expr, key, replacement, type_id);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             replace_in_expr(receiver, key, replacement, type_id);
             for arg in args {
                 replace_in_expr(&mut arg.expr, key, replacement, type_id);
             }
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -586,37 +584,37 @@ fn replace_in_expr(expr: &mut TirExpr, key: &CseKey, replacement: &TirExprKind, 
                 replace_in_block(eb, key, replacement, type_id);
             }
         }
-        TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } => {
+        NirExprKind::Block(b) | NirExprKind::LabeledBlock { block: b, .. } => {
             replace_in_block(b, key, replacement, type_id);
         }
-        TirExprKind::Index {
+        NirExprKind::Index {
             expr: inner, index, ..
         } => {
             replace_in_expr(inner, key, replacement, type_id);
             replace_in_expr(index, key, replacement, type_id);
         }
-        TirExprKind::IndirectCall { callee, args, .. } => {
+        NirExprKind::IndirectCall { callee, args, .. } => {
             replace_in_expr(callee, key, replacement, type_id);
             for arg in args {
                 replace_in_expr(arg, key, replacement, type_id);
             }
         }
-        TirExprKind::StructLiteral { fields, .. } => {
+        NirExprKind::StructLiteral { fields, .. } => {
             for f in fields {
                 replace_in_expr(&mut f.value, key, replacement, type_id);
             }
         }
-        TirExprKind::TupleLiteral { elements, .. } => {
+        NirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 replace_in_expr(elem, key, replacement, type_id);
             }
         }
-        TirExprKind::VariantConstruct { payload, .. } => {
+        NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 replace_in_expr(p, key, replacement, type_id);
             }
         }
-        TirExprKind::Match { expr: inner, arms } => {
+        NirExprKind::Match { expr: inner, arms } => {
             replace_in_expr(inner, key, replacement, type_id);
             for arm in arms {
                 if let Some(guard) = &mut arm.guard {
@@ -625,7 +623,7 @@ fn replace_in_expr(expr: &mut TirExpr, key: &CseKey, replacement: &TirExprKind, 
                 replace_in_expr(&mut arm.body, key, replacement, type_id);
             }
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -637,18 +635,18 @@ fn replace_in_expr(expr: &mut TirExpr, key: &CseKey, replacement: &TirExprKind, 
             }
             replace_in_block(default, key, replacement, type_id);
         }
-        TirExprKind::GlobalVarSet { value, .. } => {
+        NirExprKind::GlobalVarSet { value, .. } => {
             replace_in_expr(value, key, replacement, type_id);
         }
-        TirExprKind::CmRawCall { args, .. } => {
+        NirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 replace_in_expr(arg, key, replacement, type_id);
             }
         }
-        TirExprKind::TemplateString { .. } => {
+        NirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
             unreachable!(
                 "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
             )

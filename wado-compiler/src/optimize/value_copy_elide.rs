@@ -9,15 +9,13 @@
 //! inline. Helpers whose remaining call sites are all elided are removed by
 //! the post-elision DCE pass.
 
-use crate::flat_package::FlatPackage;
+use crate::nir_package::NirPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{
-    ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
-    TypeTable,
-};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::nir::{NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind, NirUnaryOp};
 
-pub fn elide_synthesized_value_copies(project: &mut FlatPackage) {
+pub fn elide_synthesized_value_copies(project: &mut NirPackage) {
     let value_copy_set: IndexMap<(ModuleSource, String), TypeId> = project
         .functions
         .iter()
@@ -69,30 +67,30 @@ impl LocalUsage {
     }
 }
 
-fn analyze_usage(body: &TirBlock, type_table: &TypeTable) -> IndexMap<u32, LocalUsage> {
+fn analyze_usage(body: &NirBlock, type_table: &TypeTable) -> IndexMap<u32, LocalUsage> {
     let mut usage: IndexMap<u32, LocalUsage> = IndexMap::default();
     analyze_block(body, &mut usage, type_table);
     usage
 }
 
-fn analyze_block(block: &TirBlock, usage: &mut IndexMap<u32, LocalUsage>, type_table: &TypeTable) {
+fn analyze_block(block: &NirBlock, usage: &mut IndexMap<u32, LocalUsage>, type_table: &TypeTable) {
     for stmt in &block.stmts {
         analyze_stmt(stmt, usage, type_table);
     }
 }
 
-fn analyze_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>, type_table: &TypeTable) {
+fn analyze_stmt(stmt: &NirStmt, usage: &mut IndexMap<u32, LocalUsage>, type_table: &TypeTable) {
     match &stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             analyze_expr(value, usage, type_table);
         }
-        TirStmtKind::Expr(expr) => analyze_expr(expr, usage, type_table),
-        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+        NirStmtKind::Expr(expr) => analyze_expr(expr, usage, type_table),
+        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 analyze_expr(v, usage, type_table);
             }
         }
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -103,10 +101,10 @@ fn analyze_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
                 analyze_block(eb, usage, type_table);
             }
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             analyze_block(body, usage, type_table);
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -118,9 +116,9 @@ fn analyze_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
                 analyze_block(eb, usage, type_table);
             }
         }
-        TirStmtKind::Continue
-        | TirStmtKind::TaskReturn { .. }
-        | TirStmtKind::VariadicForOf { .. } => {}
+        NirStmtKind::Continue
+        | NirStmtKind::TaskReturn { .. }
+        | NirStmtKind::VariadicForOf { .. } => {}
     }
 }
 
@@ -130,45 +128,45 @@ fn analyze_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
 /// `mark_potentially_mutated_local` and conservatively tracks the
 /// receiver / mut-ref-arg paths through which a callee can mutate
 /// caller state.
-fn mark_root_field_mutated(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>) {
+fn mark_root_field_mutated(expr: &NirExpr, usage: &mut IndexMap<u32, LocalUsage>) {
     match &expr.kind {
-        TirExprKind::Local { index, .. } => {
+        NirExprKind::Local { index, .. } => {
             usage.entry(*index).or_default().has_field_mutation = true;
         }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. } => {
+        NirExprKind::Unary { expr: inner, .. }
+        | NirExprKind::Cast { expr: inner, .. }
+        | NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::VariantPayload { expr: inner, .. } => {
             mark_root_field_mutated(inner, usage);
         }
         _ => {}
     }
 }
 
-fn analyze_expr(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_table: &TypeTable) {
+fn analyze_expr(expr: &NirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_table: &TypeTable) {
     match &expr.kind {
-        TirExprKind::Local { .. } => {}
-        TirExprKind::Assign { target, value } => {
-            if let TirExprKind::Local { index, .. } = &target.kind {
+        NirExprKind::Local { .. } => {}
+        NirExprKind::Assign { target, value } => {
+            if let NirExprKind::Local { index, .. } = &target.kind {
                 usage.entry(*index).or_default().assign_count += 1;
             }
-            if let TirExprKind::FieldAccess { expr: inner, .. } = &target.kind {
+            if let NirExprKind::FieldAccess { expr: inner, .. } = &target.kind {
                 mark_root_field_mutated(inner, usage);
             }
             analyze_expr(target, usage, type_table);
             analyze_expr(value, usage, type_table);
         }
-        TirExprKind::Unary { op, expr: inner } => {
-            if matches!(op, TirUnaryOp::MutRef) {
+        NirExprKind::Unary { op, expr: inner } => {
+            if matches!(op, NirUnaryOp::MutRef) {
                 mark_root_field_mutated(inner, usage);
             }
             analyze_expr(inner, usage, type_table);
         }
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             analyze_expr(left, usage, type_table);
             analyze_expr(right, usage, type_table);
         }
-        TirExprKind::Call { args, .. } => {
+        NirExprKind::Call { args, .. } => {
             for arg in args {
                 if arg.is_mut || is_mut_ref_type(arg.expr.type_id, type_table) {
                     mark_root_field_mutated(&arg.expr, usage);
@@ -176,12 +174,12 @@ fn analyze_expr(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
                 analyze_expr(&arg.expr, usage, type_table);
             }
         }
-        TirExprKind::CmRawCall { args, .. } => {
+        NirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 analyze_expr(arg, usage, type_table);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             // Auto-ref: the receiver expression carries `T` even for
             // `&mut self` methods, so a precise check needs the callee's
             // first-param type. Be conservative and treat any local
@@ -195,7 +193,7 @@ fn analyze_expr(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
                 analyze_expr(&arg.expr, usage, type_table);
             }
         }
-        TirExprKind::IndirectCall { callee, args, .. } => {
+        NirExprKind::IndirectCall { callee, args, .. } => {
             analyze_expr(callee, usage, type_table);
             for arg in args {
                 if is_mut_ref_type(arg.type_id, type_table) {
@@ -204,26 +202,26 @@ fn analyze_expr(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
                 analyze_expr(arg, usage, type_table);
             }
         }
-        TirExprKind::ClosureToCanonical { functor, .. } => {
+        NirExprKind::ClosureToCanonical { functor, .. } => {
             analyze_expr(functor, usage, type_table);
         }
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
+        NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::TupleSpread { expr: inner }
+        | NirExprKind::TupleZip { expr: inner }
+        | NirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => analyze_expr(inner, usage, type_table),
-        TirExprKind::Index {
+        NirExprKind::Index {
             expr: inner, index, ..
         } => {
             analyze_expr(inner, usage, type_table);
             analyze_expr(index, usage, type_table);
         }
-        TirExprKind::Cast { expr: inner, .. } => analyze_expr(inner, usage, type_table),
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::Cast { expr: inner, .. } => analyze_expr(inner, usage, type_table),
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             analyze_block(block, usage, type_table);
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -234,28 +232,28 @@ fn analyze_expr(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
                 analyze_block(eb, usage, type_table);
             }
         }
-        TirExprKind::StructLiteral { fields, .. } => {
+        NirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
                 analyze_expr(&field.value, usage, type_table);
             }
         }
-        TirExprKind::TupleLiteral { elements, .. } => {
+        NirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 analyze_expr(elem, usage, type_table);
             }
         }
-        TirExprKind::VariantConstruct { payload, .. } => {
+        NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 analyze_expr(p, usage, type_table);
             }
         }
-        TirExprKind::Closure { body, captures, .. } => {
+        NirExprKind::Closure { body, captures, .. } => {
             for capture in captures {
                 usage.entry(capture.outer_index).or_default().is_captured = true;
             }
             analyze_expr(body, usage, type_table);
         }
-        TirExprKind::Match { expr: inner, arms } => {
+        NirExprKind::Match { expr: inner, arms } => {
             analyze_expr(inner, usage, type_table);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
@@ -264,11 +262,11 @@ fn analyze_expr(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
                 analyze_expr(&arm.body, usage, type_table);
             }
         }
-        TirExprKind::GlobalVarSet { value, .. } => analyze_expr(value, usage, type_table),
-        TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. }
-        | TirExprKind::VariantPayload { expr, .. } => analyze_expr(expr, usage, type_table),
-        TirExprKind::Switch {
+        NirExprKind::GlobalVarSet { value, .. } => analyze_expr(value, usage, type_table),
+        NirExprKind::VariantTag { expr }
+        | NirExprKind::VariantTest { expr, .. }
+        | NirExprKind::VariantPayload { expr, .. } => analyze_expr(expr, usage, type_table),
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -280,22 +278,22 @@ fn analyze_expr(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
             }
             analyze_block(default, usage, type_table);
         }
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. } => {}
-        TirExprKind::TemplateString { .. } => {
+        NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::StringLiteral(_)
+        | NirExprKind::BytesLiteral(_)
+        | NirExprKind::Null
+        | NirExprKind::Unit
+        | NirExprKind::FuncRef { .. }
+        | NirExprKind::GlobalVarGet { .. }
+        | NirExprKind::Capture { .. }
+        | NirExprKind::EnumConstruct { .. } => {}
+        NirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
             unreachable!(
                 "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
             )
@@ -304,10 +302,10 @@ fn analyze_expr(expr: &TirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
 }
 
 fn is_value_copy_call(
-    expr: &TirExpr,
+    expr: &NirExpr,
     value_copy_set: &IndexMap<(ModuleSource, String), TypeId>,
 ) -> bool {
-    if let TirExprKind::Call { func, args, .. } = &expr.kind
+    if let NirExprKind::Call { func, args, .. } = &expr.kind
         && args.len() == 1
     {
         value_copy_set.contains_key(&(func.module_source.clone(), func.name.clone()))
@@ -333,19 +331,19 @@ fn is_value_copy_call(
 /// literals, struct/variant constructors) — those produce new GC
 /// values that cannot be aliased from outside, so elision is always
 /// safe regardless of the surrounding state.
-fn arg_source_root(expr: &TirExpr) -> Option<u32> {
+fn arg_source_root(expr: &NirExpr) -> Option<u32> {
     match &expr.kind {
-        TirExprKind::Local { index, .. } => Some(*index),
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::Unary { expr: inner, .. } => arg_source_root(inner),
+        NirExprKind::Local { index, .. } => Some(*index),
+        NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::VariantPayload { expr: inner, .. }
+        | NirExprKind::Cast { expr: inner, .. }
+        | NirExprKind::Unary { expr: inner, .. } => arg_source_root(inner),
         _ => None,
     }
 }
 
 fn strip_in_block(
-    block: &mut TirBlock,
+    block: &mut NirBlock,
     value_copy_set: &IndexMap<(ModuleSource, String), TypeId>,
     usage: &IndexMap<u32, LocalUsage>,
 ) {
@@ -360,7 +358,7 @@ fn strip_in_block(
 fn elision_safe(
     target_index: u32,
     target_assign_limit: u32,
-    value: &TirExpr,
+    value: &NirExpr,
     value_copy_set: &IndexMap<(ModuleSource, String), TypeId>,
     usage: &IndexMap<u32, LocalUsage>,
 ) -> bool {
@@ -374,7 +372,7 @@ fn elision_safe(
     if !target_ok {
         return false;
     }
-    let TirExprKind::Call { args, .. } = &value.kind else {
+    let NirExprKind::Call { args, .. } = &value.kind else {
         return false;
     };
     let Some(arg) = args.first() else {
@@ -391,12 +389,12 @@ fn elision_safe(
 
 /// Replace `value` (a `$value_copy$T(arg)` call) with `arg` in place,
 /// extracting the call's single argument and dropping the wrapper.
-fn strip_wrapper(value: &mut TirExpr) {
-    if let TirExprKind::Call { args, .. } = &mut value.kind
+fn strip_wrapper(value: &mut NirExpr) {
+    if let NirExprKind::Call { args, .. } = &mut value.kind
         && let Some(arg) = args.first_mut()
     {
         let span = value.span;
-        let mut taken = TirExpr::new(TirExprKind::Unit, value.type_id, span);
+        let mut taken = NirExpr::new(NirExprKind::Unit, value.type_id, span);
         std::mem::swap(&mut arg.expr, &mut taken);
         taken.span = span;
         *value = taken;
@@ -404,7 +402,7 @@ fn strip_wrapper(value: &mut TirExpr) {
 }
 
 fn strip_in_stmt(
-    stmt: &mut TirStmt,
+    stmt: &mut NirStmt,
     value_copy_set: &IndexMap<(ModuleSource, String), TypeId>,
     usage: &IndexMap<u32, LocalUsage>,
 ) {
@@ -412,7 +410,7 @@ fn strip_in_stmt(
         // `let x = $value_copy$T(arg)` — Let establishes a fresh binding,
         // so any subsequent assignment to `x` invalidates the snapshot;
         // require `assign_count == 0`.
-        TirStmtKind::Let {
+        NirStmtKind::Let {
             local_index,
             value,
             is_mut,
@@ -433,16 +431,16 @@ fn strip_in_stmt(
                 strip_in_expr(value, value_copy_set, usage);
             }
         }
-        TirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::LetDestructure { value, .. } => {
             strip_in_expr(value, value_copy_set, usage);
         }
         // `x = $value_copy$T(arg)` as a top-level statement — the Assign
         // *is* the binding. Allow elision when this is the only
         // assignment to `x` (`assign_count == 1`); a second assignment
         // would invalidate the snapshot just like a re-bound Let.
-        TirStmtKind::Expr(expr) => {
-            if let TirExprKind::Assign { target, value } = &mut expr.kind
-                && let TirExprKind::Local { index, .. } = &target.kind
+        NirStmtKind::Expr(expr) => {
+            if let NirExprKind::Assign { target, value } = &mut expr.kind
+                && let NirExprKind::Local { index, .. } = &target.kind
                 && elision_safe(*index, 1, value, value_copy_set, usage)
             {
                 strip_wrapper(value);
@@ -450,7 +448,7 @@ fn strip_in_stmt(
                 strip_in_expr(expr, value_copy_set, usage);
             }
         }
-        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 strip_in_expr(v, value_copy_set, usage);
             }
@@ -458,7 +456,7 @@ fn strip_in_stmt(
         _ => {}
     }
     match &mut stmt.kind {
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -469,10 +467,10 @@ fn strip_in_stmt(
                 strip_in_block(eb, value_copy_set, usage);
             }
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             strip_in_block(body, value_copy_set, usage);
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -488,23 +486,23 @@ fn strip_in_stmt(
     }
 }
 
-/// Walk a `TirExpr` tree looking for nested blocks whose statements may
+/// Walk a `NirExpr` tree looking for nested blocks whose statements may
 /// be Let / Assign / Return / Break / If-stmt forms holding strippable
 /// `$value_copy$T(...)` wrappers. The traversal mirrors `analyze_expr`
-/// — visit every child that can syntactically embed a `TirBlock`. The
+/// — visit every child that can syntactically embed a `NirBlock`. The
 /// rewrite stays purely structural; safety is still gated by the
 /// per-Let `elision_safe` checks inside `strip_in_stmt` /
 /// `strip_in_block`.
 fn strip_in_expr(
-    expr: &mut TirExpr,
+    expr: &mut NirExpr,
     value_copy_set: &IndexMap<(ModuleSource, String), TypeId>,
     usage: &IndexMap<u32, LocalUsage>,
 ) {
     match &mut expr.kind {
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             strip_in_block(block, value_copy_set, usage);
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -515,7 +513,7 @@ fn strip_in_expr(
                 strip_in_block(eb, value_copy_set, usage);
             }
         }
-        TirExprKind::Match { expr: scrut, arms } => {
+        NirExprKind::Match { expr: scrut, arms } => {
             strip_in_expr(scrut, value_copy_set, usage);
             for arm in arms {
                 if let Some(guard) = &mut arm.guard {
@@ -524,7 +522,7 @@ fn strip_in_expr(
                 strip_in_expr(&mut arm.body, value_copy_set, usage);
             }
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -536,90 +534,90 @@ fn strip_in_expr(
             }
             strip_in_block(default, value_copy_set, usage);
         }
-        TirExprKind::Call { args, .. } => {
+        NirExprKind::Call { args, .. } => {
             for arg in args {
                 strip_in_expr(&mut arg.expr, value_copy_set, usage);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             strip_in_expr(receiver, value_copy_set, usage);
             for arg in args {
                 strip_in_expr(&mut arg.expr, value_copy_set, usage);
             }
         }
-        TirExprKind::CmRawCall { args, .. } => {
+        NirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 strip_in_expr(arg, value_copy_set, usage);
             }
         }
-        TirExprKind::IndirectCall { callee, args, .. } => {
+        NirExprKind::IndirectCall { callee, args, .. } => {
             strip_in_expr(callee, value_copy_set, usage);
             for arg in args {
                 strip_in_expr(arg, value_copy_set, usage);
             }
         }
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             strip_in_expr(left, value_copy_set, usage);
             strip_in_expr(right, value_copy_set, usage);
         }
-        TirExprKind::Assign { target, value } => {
+        NirExprKind::Assign { target, value } => {
             strip_in_expr(target, value_copy_set, usage);
             strip_in_expr(value, value_copy_set, usage);
         }
-        TirExprKind::Index { expr: inner, index } => {
+        NirExprKind::Index { expr: inner, index } => {
             strip_in_expr(inner, value_copy_set, usage);
             strip_in_expr(index, value_copy_set, usage);
         }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
+        NirExprKind::Unary { expr: inner, .. }
+        | NirExprKind::Cast { expr: inner, .. }
+        | NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::TupleSpread { expr: inner }
+        | NirExprKind::TupleZip { expr: inner }
+        | NirExprKind::TypePackExpansion {
             call_expr: inner, ..
         }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::GlobalVarSet { value: inner, .. }
-        | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+        | NirExprKind::VariantTag { expr: inner }
+        | NirExprKind::VariantTest { expr: inner, .. }
+        | NirExprKind::VariantPayload { expr: inner, .. }
+        | NirExprKind::GlobalVarSet { value: inner, .. }
+        | NirExprKind::ClosureToCanonical { functor: inner, .. } => {
             strip_in_expr(inner, value_copy_set, usage);
         }
-        TirExprKind::StructLiteral { fields, .. } => {
+        NirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
                 strip_in_expr(&mut field.value, value_copy_set, usage);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 strip_in_expr(elem, value_copy_set, usage);
             }
         }
-        TirExprKind::VariantConstruct { payload, .. } => {
+        NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 strip_in_expr(p, value_copy_set, usage);
             }
         }
-        TirExprKind::Closure { body, .. } => {
+        NirExprKind::Closure { body, .. } => {
             strip_in_expr(body, value_copy_set, usage);
         }
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. } => {}
-        TirExprKind::TemplateString { .. } => {
+        NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::StringLiteral(_)
+        | NirExprKind::BytesLiteral(_)
+        | NirExprKind::Null
+        | NirExprKind::Unit
+        | NirExprKind::Local { .. }
+        | NirExprKind::FuncRef { .. }
+        | NirExprKind::GlobalVarGet { .. }
+        | NirExprKind::Capture { .. }
+        | NirExprKind::EnumConstruct { .. } => {}
+        NirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
             unreachable!(
                 "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
             )

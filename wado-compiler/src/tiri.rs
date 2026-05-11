@@ -1,14 +1,14 @@
 //! TIR Interpreter (tiri).
 //!
 //! Compile-time partial evaluator for Wado TIR. The public entry point is
-//! [`Interpreter::reduce`], which takes a [`TirExpr`] and returns the most
+//! [`Interpreter::reduce`], which takes a [`NirExpr`] and returns the most
 //! reduced form possible (a literal node when the expression is fully
 //! known, the original tree otherwise). Constant folding is the first
 //! consumer; future passes (branch pruning, constant propagation,
 //! compile-time function evaluation) will reuse the same engine.
 //!
 //! ```text
-//! Interpreter::new(type_table).reduce(&expr) -> TirExpr
+//! Interpreter::new(type_table).reduce(&expr) -> NirExpr
 //! ```
 //!
 //! `reduce` is **idempotent** — `reduce(reduce(e))` is structurally equal
@@ -105,10 +105,10 @@ use std::rc::Rc;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::tir::{
-    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
-    TypeTable,
+use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::nir::{
+    NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirLiteralPattern, NirMatchArm,
+    NirPattern, NirStmt, NirStmtKind, NirUnaryOp,
 };
 
 /// Three-state lattice over compile-time evaluation results.
@@ -247,7 +247,7 @@ impl Value {
         }
     }
 
-    /// Project a [`TirExpr`] to a `Value` when it's a primitive
+    /// Project a [`NirExpr`] to a `Value` when it's a primitive
     /// literal whose type id resolves to a tracked primitive. Returns
     /// `None` for non-literal shapes (`Local`, `Call`, `Binary`, …),
     /// for `String` / `Bytes` / `Null` / `Unit` (no `Value` carrier),
@@ -261,16 +261,16 @@ impl Value {
     /// (`obj.f = 5`) into [`Interpreter::bind_field`] /
     /// [`Interpreter::field_env`] entries.
     #[must_use]
-    pub fn from_literal_expr(expr: &TirExpr, type_table: &TypeTable) -> Option<Self> {
+    pub fn from_literal_expr(expr: &NirExpr, type_table: &TypeTable) -> Option<Self> {
         match &expr.kind {
-            TirExprKind::IntLiteral { value, .. } => {
+            NirExprKind::IntLiteral { value, .. } => {
                 let prim = prim_of(expr.type_id, type_table).filter(|p| is_int_prim(*p))?;
                 Some(Self::Int {
                     value: *value,
                     prim,
                 })
             }
-            TirExprKind::FloatLiteral { value, .. } => {
+            NirExprKind::FloatLiteral { value, .. } => {
                 let prim = prim_of(expr.type_id, type_table)
                     .filter(|p| matches!(p, PrimitiveType::F32 | PrimitiveType::F64))?;
                 Some(Self::Float {
@@ -278,8 +278,8 @@ impl Value {
                     prim,
                 })
             }
-            TirExprKind::BoolLiteral(b) => Some(Self::Bool(*b)),
-            TirExprKind::CharLiteral(c) => Some(Self::Char(*c)),
+            NirExprKind::BoolLiteral(b) => Some(Self::Bool(*b)),
+            NirExprKind::CharLiteral(c) => Some(Self::Char(*c)),
             _ => None,
         }
     }
@@ -296,7 +296,7 @@ pub type CalleeKey = (ModuleSource, String);
 
 /// Map of CTFE-eligible callees, keyed by `(module_source, full_name)`.
 ///
-/// Values are [`Rc<RefCell<TirFunction>>`] handles aliased with
+/// Values are [`Rc<RefCell<NirFunction>>`] handles aliased with
 /// [`crate::flat_package::FlatPackage::functions`], not body clones, so
 /// rebuilding the map every optimizer iteration costs only refcount
 /// bumps. The interpreter reads each callee via
@@ -312,14 +312,14 @@ pub type CalleeKey = (ModuleSource, String);
 /// it. Body-shape and per-call validity (arity match, all args
 /// reduce, single recognized tail expression) are checked at fold
 /// time, not here.
-pub type CalleeMap = IndexMap<CalleeKey, Rc<RefCell<TirFunction>>>;
+pub type CalleeMap = IndexMap<CalleeKey, Rc<RefCell<NirFunction>>>;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Global env
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// Identity of a global variable in the [`GlobalEnv`]. Mirrors the
-/// `(module_source, name)` shape carried by `TirExprKind::GlobalVarGet`
+/// `(module_source, name)` shape carried by `NirExprKind::GlobalVarGet`
 /// so the interpreter can look up a `GlobalVarGet` node directly.
 pub type GlobalKey = (ModuleSource, String);
 
@@ -411,7 +411,7 @@ pub struct FieldSnapshot {
 /// - `type_params` and `impl_type_params` empty — CTFE runs after
 ///   monomorphization, so concrete bodies only.
 #[must_use]
-pub fn is_ctfe_eligible(func: &TirFunction) -> bool {
+pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
     func.effects.is_empty()
         && func.body.is_some()
         && !func.is_cm_binding
@@ -420,7 +420,7 @@ pub fn is_ctfe_eligible(func: &TirFunction) -> bool {
         && !func.is_async
         && func.task_return_type.is_none()
         && func.stores.is_empty()
-        && func.inline_hint != crate::tir::InlineHint::Never
+        && func.inline_hint != crate::nir::InlineHint::Never
         && func.type_params.is_empty()
         && func.impl_type_params.is_empty()
 }
@@ -429,7 +429,7 @@ pub fn is_ctfe_eligible(func: &TirFunction) -> bool {
 // Interpreter
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Partial evaluator over [`TirExpr`].
+/// Partial evaluator over [`NirExpr`].
 ///
 /// Holds the type table needed to resolve operand widths, a per-function
 /// `env` mapping local indices to lattice values, an optional
@@ -440,7 +440,7 @@ pub struct Interpreter<'a> {
     /// Lattice values for `let`-bound locals in the *current function*.
     /// Populated by the driving visitor via [`bind_local`] /
     /// [`invalidate_local`]; cleared via [`enter_function`]. Reads of
-    /// `TirExprKind::Local` consult this map during folding.
+    /// `NirExprKind::Local` consult this map during folding.
     ///
     /// Locals not present in the map default to [`Lattice::Unevaluated`].
     ///
@@ -754,10 +754,10 @@ impl<'a> Interpreter<'a> {
 
     /// Reduce `expr` as far as possible.
     ///
-    /// Always returns a (possibly structurally-identical) [`TirExpr`].
+    /// Always returns a (possibly structurally-identical) [`NirExpr`].
     /// Literal leaves are preserved verbatim so their lexical repr
     /// (e.g. `0xFF`) survives a no-op pass.
-    pub fn reduce(&mut self, expr: &TirExpr) -> TirExpr {
+    pub fn reduce(&mut self, expr: &NirExpr) -> NirExpr {
         let mut owned = expr.clone();
         self.reduce_in_place(&mut owned);
         owned
@@ -774,19 +774,19 @@ impl<'a> Interpreter<'a> {
     ///
     /// [`reduce`]: Self::reduce
     /// [`reduce_local`]: Self::reduce_local
-    fn reduce_in_place(&mut self, expr: &mut TirExpr) -> bool {
+    fn reduce_in_place(&mut self, expr: &mut NirExpr) -> bool {
         // Bottom-up: recurse into children first so the local rewrite
         // step at this node sees fully-reduced operands.
         let mut changed = match &mut expr.kind {
-            TirExprKind::Binary { left, right, .. } => {
+            NirExprKind::Binary { left, right, .. } => {
                 let l = self.reduce_in_place(left);
                 let r = self.reduce_in_place(right);
                 l || r
             }
-            TirExprKind::Unary { expr: inner, .. } | TirExprKind::Cast { expr: inner, .. } => {
+            NirExprKind::Unary { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
                 self.reduce_in_place(inner)
             }
-            TirExprKind::If {
+            NirExprKind::If {
                 condition,
                 then_branch,
                 else_branch,
@@ -798,7 +798,7 @@ impl<'a> Interpreter<'a> {
                 }
                 c
             }
-            TirExprKind::Match {
+            NirExprKind::Match {
                 expr: scrutinee,
                 arms,
             } => {
@@ -822,7 +822,7 @@ impl<'a> Interpreter<'a> {
     /// Used by [`reduce_in_place`] to walk into `if` arms when the
     /// engine is invoked through the owning [`reduce`] entry point
     /// (the visitor-driven path walks blocks itself).
-    fn reduce_in_place_block(&mut self, block: &mut TirBlock) -> bool {
+    fn reduce_in_place_block(&mut self, block: &mut NirBlock) -> bool {
         let mut changed = false;
         for stmt in &mut block.stmts {
             changed |= self.reduce_in_place_stmt(stmt);
@@ -831,16 +831,16 @@ impl<'a> Interpreter<'a> {
         changed
     }
 
-    fn reduce_in_place_stmt(&mut self, stmt: &mut TirStmt) -> bool {
+    fn reduce_in_place_stmt(&mut self, stmt: &mut NirStmt) -> bool {
         match &mut stmt.kind {
-            TirStmtKind::Expr(e) => self.reduce_in_place(e),
-            TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+            NirStmtKind::Expr(e) => self.reduce_in_place(e),
+            NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
                 self.reduce_in_place(value)
             }
-            TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+            NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
                 value.as_mut().is_some_and(|v| self.reduce_in_place(v))
             }
-            TirStmtKind::If {
+            NirStmtKind::If {
                 condition,
                 then_block,
                 else_block,
@@ -852,9 +852,9 @@ impl<'a> Interpreter<'a> {
                 }
                 c
             }
-            TirStmtKind::Loop { body } => self.reduce_in_place_block(body),
-            TirStmtKind::LabeledBlock { block, .. } => self.reduce_in_place_block(block),
-            TirStmtKind::IfLet {
+            NirStmtKind::Loop { body } => self.reduce_in_place_block(body),
+            NirStmtKind::LabeledBlock { block, .. } => self.reduce_in_place_block(block),
+            NirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -867,9 +867,9 @@ impl<'a> Interpreter<'a> {
                 }
                 c
             }
-            TirStmtKind::Continue
-            | TirStmtKind::TaskReturn { .. }
-            | TirStmtKind::VariadicForOf { .. } => false,
+            NirStmtKind::Continue
+            | NirStmtKind::TaskReturn { .. }
+            | NirStmtKind::VariadicForOf { .. } => false,
         }
     }
 
@@ -897,12 +897,12 @@ impl<'a> Interpreter<'a> {
     /// `target`) — only its sub-expressions are read positions. See
     /// `optimize::const_folding::ConstFoldVisitor::visit_expr` for the
     /// concrete guard.
-    pub fn reduce_local(&mut self, expr: &mut TirExpr) -> bool {
+    pub fn reduce_local(&mut self, expr: &mut NirExpr) -> bool {
         if let Lattice::Const(v) = self.try_fold(expr) {
             expr.kind = value_to_expr_kind(v);
             return true;
         }
-        if let TirExprKind::GlobalVarGet {
+        if let NirExprKind::GlobalVarGet {
             module_source,
             name,
         } = &expr.kind
@@ -911,12 +911,12 @@ impl<'a> Interpreter<'a> {
             expr.kind = value_to_expr_kind(v);
             return true;
         }
-        if let TirExprKind::FieldAccess {
+        if let NirExprKind::FieldAccess {
             expr: inner,
             field_name,
             ..
         } = &expr.kind
-            && let TirExprKind::Local { index, .. } = &inner.kind
+            && let NirExprKind::Local { index, .. } = &inner.kind
             && let Some(v) = self
                 .field_env
                 .get(index)
@@ -951,12 +951,12 @@ impl<'a> Interpreter<'a> {
     /// Returns `true` when the block was rewritten. The caller (driving
     /// visitor) is expected to have walked into each stmt's children
     /// before calling this so the conditions are already folded.
-    pub fn reduce_local_block(&mut self, block: &mut TirBlock) -> bool {
+    pub fn reduce_local_block(&mut self, block: &mut NirBlock) -> bool {
         let has_constant_if = block.stmts.iter().any(|s| {
             matches!(
                 &s.kind,
-                TirStmtKind::If { condition, .. }
-                    if matches!(condition.kind, TirExprKind::BoolLiteral(_))
+                NirStmtKind::If { condition, .. }
+                    if matches!(condition.kind, NirExprKind::BoolLiteral(_))
             )
         });
         if !has_constant_if {
@@ -964,10 +964,10 @@ impl<'a> Interpreter<'a> {
         }
         let old_stmts = std::mem::take(&mut block.stmts);
         for stmt in old_stmts {
-            if let TirStmtKind::If { ref condition, .. } = stmt.kind
-                && let TirExprKind::BoolLiteral(value) = condition.kind
+            if let NirStmtKind::If { ref condition, .. } = stmt.kind
+                && let NirExprKind::BoolLiteral(value) = condition.kind
             {
-                let TirStmtKind::If {
+                let NirStmtKind::If {
                     then_block,
                     else_block,
                     ..
@@ -991,8 +991,8 @@ impl<'a> Interpreter<'a> {
     /// the node to the chosen arm's block; a non-constant but
     /// speculatable condition with both arms reducing to the same
     /// `Const(v)` collapses to that literal.
-    fn rewrite_if_expr(&mut self, expr: &mut TirExpr) -> bool {
-        let TirExprKind::If {
+    fn rewrite_if_expr(&mut self, expr: &mut NirExpr) -> bool {
+        let NirExprKind::If {
             condition,
             then_branch: _,
             else_branch: _,
@@ -1007,20 +1007,20 @@ impl<'a> Interpreter<'a> {
         // trapping `else { panic(…) }` does not contaminate the result —
         // this is the SCCP "infeasible edge" treatment.
         if let Lattice::Const(Value::Bool(b)) = cond_lat {
-            let TirExprKind::If {
+            let NirExprKind::If {
                 then_branch,
                 else_branch,
                 ..
-            } = std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+            } = std::mem::replace(&mut expr.kind, NirExprKind::Unit)
             else {
                 unreachable!();
             };
             if b {
-                expr.kind = TirExprKind::Block(then_branch);
+                expr.kind = NirExprKind::Block(then_branch);
             } else if let Some(eb) = else_branch {
-                expr.kind = TirExprKind::Block(eb);
+                expr.kind = NirExprKind::Block(eb);
             }
-            // false without else: TirExprKind::Unit is already in place.
+            // false without else: NirExprKind::Unit is already in place.
             return true;
         }
 
@@ -1037,7 +1037,7 @@ impl<'a> Interpreter<'a> {
         // value not known", not "unreachable"). Match `Const(_)` on
         // both sides explicitly so an arm we couldn't analyze never
         // erases the surrounding `if`.
-        let TirExprKind::If {
+        let NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -1075,8 +1075,8 @@ impl<'a> Interpreter<'a> {
     ///    `Const(v)`, rewrite the whole match to that literal. The
     ///    same `is_speculatable` gate as the `if` rule applies, since
     ///    we're dropping the scrutinee's evaluation.
-    fn rewrite_match_expr(&mut self, expr: &mut TirExpr) -> bool {
-        let TirExprKind::Match {
+    fn rewrite_match_expr(&mut self, expr: &mut NirExpr) -> bool {
+        let NirExprKind::Match {
             expr: scrutinee,
             arms,
         } = &expr.kind
@@ -1107,8 +1107,8 @@ impl<'a> Interpreter<'a> {
             let Some(idx) = chosen else {
                 return false;
             };
-            let TirExprKind::Match { arms, .. } =
-                std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+            let NirExprKind::Match { arms, .. } =
+                std::mem::replace(&mut expr.kind, NirExprKind::Unit)
             else {
                 unreachable!();
             };
@@ -1118,8 +1118,8 @@ impl<'a> Interpreter<'a> {
                 .expect("chosen index in range")
                 .body;
             let span = body.span;
-            expr.kind = TirExprKind::Block(TirBlock::new(
-                vec![TirStmt::new(TirStmtKind::Expr(body), span)],
+            expr.kind = NirExprKind::Block(NirBlock::new(
+                vec![NirStmt::new(NirStmtKind::Expr(body), span)],
                 span,
             ));
             return true;
@@ -1172,7 +1172,7 @@ impl<'a> Interpreter<'a> {
     ///   NaN-producing float op, `i32::MIN / -1`)
     /// - [`Lattice::Unevaluated`] when the engine can't yet decide
     ///   (un-bound `Local`, unsupported kind such as `Call` or `Block`)
-    pub fn reduce_to_lattice(&mut self, expr: &TirExpr) -> Lattice {
+    pub fn reduce_to_lattice(&mut self, expr: &NirExpr) -> Lattice {
         // First reduce children in place — a Const-Const fold inside a
         // child is observable as a literal at the parent. This may turn
         // a Binary into a literal (Const) or leave it as Binary if the
@@ -1192,7 +1192,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Map a (possibly already-reduced) `TirExpr` to a `Lattice`. For
+    /// Map a (possibly already-reduced) `NirExpr` to a `Lattice`. For
     /// literal leaves this is straightforward; for a `Local` node the
     /// env is consulted; for an `if` node the SCCP-style join over the
     /// arm lattices is taken (with the unreachable arm of a
@@ -1200,11 +1200,11 @@ impl<'a> Interpreter<'a> {
     /// only the simple case of a single tail expression is modelled
     /// (anything richer falls through to `Unevaluated`); for everything
     /// else the result is `Unevaluated`.
-    fn expr_to_lattice(&self, expr: &TirExpr) -> Lattice {
+    fn expr_to_lattice(&self, expr: &NirExpr) -> Lattice {
         match &expr.kind {
-            TirExprKind::BoolLiteral(b) => Lattice::Const(Value::Bool(*b)),
-            TirExprKind::CharLiteral(c) => Lattice::Const(Value::Char(*c)),
-            TirExprKind::IntLiteral { value, .. } => {
+            NirExprKind::BoolLiteral(b) => Lattice::Const(Value::Bool(*b)),
+            NirExprKind::CharLiteral(c) => Lattice::Const(Value::Char(*c)),
+            NirExprKind::IntLiteral { value, .. } => {
                 let Some(prim) = prim_of(expr.type_id, self.type_table).filter(|p| is_int_prim(*p))
                 else {
                     return Lattice::Unevaluated;
@@ -1214,7 +1214,7 @@ impl<'a> Interpreter<'a> {
                     prim,
                 })
             }
-            TirExprKind::FloatLiteral { value, .. } => {
+            NirExprKind::FloatLiteral { value, .. } => {
                 let prim = if is_f32_type(expr.type_id, self.type_table) {
                     PrimitiveType::F32
                 } else {
@@ -1225,10 +1225,10 @@ impl<'a> Interpreter<'a> {
                     prim,
                 })
             }
-            TirExprKind::Local { index, .. } => {
+            NirExprKind::Local { index, .. } => {
                 self.env.get(index).copied().unwrap_or(Lattice::Unevaluated)
             }
-            TirExprKind::FieldAccess {
+            NirExprKind::FieldAccess {
                 expr: inner,
                 field_name,
                 ..
@@ -1236,7 +1236,7 @@ impl<'a> Interpreter<'a> {
                 // `outer.f` where `outer` is a plain local is the only
                 // shape `field_env` indexes; nested field access
                 // (`outer.inner.f`) and `(*p).f` stay `Unevaluated`.
-                TirExprKind::Local { index, .. } => self
+                NirExprKind::Local { index, .. } => self
                     .field_env
                     .get(index)
                     .and_then(|m| m.get(field_name.as_str()))
@@ -1244,12 +1244,12 @@ impl<'a> Interpreter<'a> {
                     .map_or(Lattice::Unevaluated, Lattice::Const),
                 _ => Lattice::Unevaluated,
             },
-            TirExprKind::GlobalVarGet {
+            NirExprKind::GlobalVarGet {
                 module_source,
                 name,
             } => self.global_lattice(module_source, name),
-            TirExprKind::Block(b) => self.block_lattice(b),
-            TirExprKind::If {
+            NirExprKind::Block(b) => self.block_lattice(b),
+            NirExprKind::If {
                 condition,
                 then_branch,
                 else_branch,
@@ -1286,7 +1286,7 @@ impl<'a> Interpreter<'a> {
                     }
                 }
             }
-            TirExprKind::Match {
+            NirExprKind::Match {
                 expr: scrutinee,
                 arms,
             } => self.match_lattice(scrutinee, arms),
@@ -1309,7 +1309,7 @@ impl<'a> Interpreter<'a> {
     ///   join all of them, promoting `Unevaluated` arm values to
     ///   `NonConst` first (the same fix as the `If` non-const-condition
     ///   path — an arm we couldn't analyze is reachable, not infeasible).
-    fn match_lattice(&self, scrutinee: &TirExpr, arms: &[TirMatchArm]) -> Lattice {
+    fn match_lattice(&self, scrutinee: &NirExpr, arms: &[NirMatchArm]) -> Lattice {
         let scrut_const = self.expr_to_lattice(scrutinee).as_const();
 
         // No-arm match shouldn't be syntactically possible, but guard
@@ -1392,37 +1392,37 @@ impl<'a> Interpreter<'a> {
 
     /// Decide whether `pat` matches the constant scrutinee `value`.
     /// Returns `Unknown` for any pattern shape Phase A doesn't model.
-    fn pattern_matches(&self, value: &Value, pat: &TirPattern) -> PatternMatch {
+    fn pattern_matches(&self, value: &Value, pat: &NirPattern) -> PatternMatch {
         match pat {
-            TirPattern::Wildcard => PatternMatch::Yes,
-            TirPattern::Literal(lit) => match (lit, value) {
-                (TirLiteralPattern::I128(p), Value::Int { value: v, prim }) => {
+            NirPattern::Wildcard => PatternMatch::Yes,
+            NirPattern::Literal(lit) => match (lit, value) {
+                (NirLiteralPattern::I128(p), Value::Int { value: v, prim }) => {
                     bool_to_match(int_value_matches_i128(*v, *prim, *p))
                 }
-                (TirLiteralPattern::U128(p), Value::Int { value: v, prim }) => {
+                (NirLiteralPattern::U128(p), Value::Int { value: v, prim }) => {
                     bool_to_match(int_value_matches_u128(*v, *prim, *p))
                 }
-                (TirLiteralPattern::Bool(p), Value::Bool(v)) => bool_to_match(p == v),
-                (TirLiteralPattern::Char(p), Value::Char(v)) => bool_to_match(p == v),
+                (NirLiteralPattern::Bool(p), Value::Bool(v)) => bool_to_match(p == v),
+                (NirLiteralPattern::Char(p), Value::Char(v)) => bool_to_match(p == v),
                 // Type mismatch between pattern and value: definite No.
                 // (The resolver should already reject ill-typed
                 // patterns; if one slips through, returning No is safe
                 // since the arm cannot fire at runtime either.)
                 (
-                    TirLiteralPattern::I128(_)
-                    | TirLiteralPattern::U128(_)
-                    | TirLiteralPattern::Bool(_)
-                    | TirLiteralPattern::Char(_),
+                    NirLiteralPattern::I128(_)
+                    | NirLiteralPattern::U128(_)
+                    | NirLiteralPattern::Bool(_)
+                    | NirLiteralPattern::Char(_),
                     _,
                 ) => PatternMatch::No,
                 // String / Null patterns: tiri's `Value` doesn't carry
                 // string/null info, so we can't decide. Unknown leaves
                 // the arm in play.
-                (TirLiteralPattern::String(_) | TirLiteralPattern::Null, _) => {
+                (NirLiteralPattern::String(_) | NirLiteralPattern::Null, _) => {
                     PatternMatch::Unknown
                 }
             },
-            TirPattern::Or(alts) => {
+            NirPattern::Or(alts) => {
                 let mut any_unknown = false;
                 for alt in alts {
                     match self.pattern_matches(value, alt) {
@@ -1437,7 +1437,7 @@ impl<'a> Interpreter<'a> {
                     PatternMatch::No
                 }
             }
-            TirPattern::Range {
+            NirPattern::Range {
                 start,
                 end,
                 inclusive,
@@ -1461,7 +1461,7 @@ impl<'a> Interpreter<'a> {
                 }
                 _ => PatternMatch::No,
             },
-            TirPattern::ConstantValue { expr } => match self.expr_to_lattice(expr).as_const() {
+            NirPattern::ConstantValue { expr } => match self.expr_to_lattice(expr).as_const() {
                 Some(v) if &v == value => PatternMatch::Yes,
                 Some(_) => PatternMatch::No,
                 None => PatternMatch::Unknown,
@@ -1469,11 +1469,11 @@ impl<'a> Interpreter<'a> {
             // Phase A out-of-scope patterns. Treat as Unknown so they
             // never wrongly commit a match (Yes) and never wrongly drop
             // a later arm (No).
-            TirPattern::Binding { .. }
-            | TirPattern::Tuple(_, _)
-            | TirPattern::Variant { .. }
-            | TirPattern::Enum { .. }
-            | TirPattern::Struct { .. } => PatternMatch::Unknown,
+            NirPattern::Binding { .. }
+            | NirPattern::Tuple(_, _)
+            | NirPattern::Variant { .. }
+            | NirPattern::Enum { .. }
+            | NirPattern::Struct { .. } => PatternMatch::Unknown,
         }
     }
 
@@ -1489,11 +1489,11 @@ impl<'a> Interpreter<'a> {
     /// the surrounding `if` stays foldable when the *other* arm is a
     /// constant — an arm we couldn't evaluate is treated like an
     /// infeasible edge, not a contradicting Const.
-    fn block_lattice(&self, block: &TirBlock) -> Lattice {
+    fn block_lattice(&self, block: &NirBlock) -> Lattice {
         match block.stmts.as_slice() {
             [] => Lattice::Unevaluated,
             [single] => match &single.kind {
-                TirStmtKind::Expr(e) => self.expr_to_lattice(e),
+                NirStmtKind::Expr(e) => self.expr_to_lattice(e),
                 _ => Lattice::Unevaluated,
             },
             _ => Lattice::Unevaluated,
@@ -1505,9 +1505,9 @@ impl<'a> Interpreter<'a> {
     /// returned lattice mirrors operand state: any `Unevaluated` /
     /// `NonConst` operand short-circuits the result, and an op-level
     /// failure (div-by-zero, NaN, unsupported pair) is `NonConst`.
-    fn try_fold(&self, expr: &TirExpr) -> Lattice {
+    fn try_fold(&self, expr: &NirExpr) -> Lattice {
         match &expr.kind {
-            TirExprKind::Binary { left, op, right } => {
+            NirExprKind::Binary { left, op, right } => {
                 let l = match self.expr_to_lattice(left) {
                     Lattice::Const(v) => v,
                     other => return other,
@@ -1518,14 +1518,14 @@ impl<'a> Interpreter<'a> {
                 };
                 option_to_lattice(eval_binary(l, *op, r))
             }
-            TirExprKind::Unary { op, expr: inner } => {
+            NirExprKind::Unary { op, expr: inner } => {
                 let v = match self.expr_to_lattice(inner) {
                     Lattice::Const(v) => v,
                     other => return other,
                 };
                 option_to_lattice(eval_unary(*op, v))
             }
-            TirExprKind::Cast { expr: inner, .. } => {
+            NirExprKind::Cast { expr: inner, .. } => {
                 let Some(target) = prim_of(expr.type_id, self.type_table) else {
                     return Lattice::Unevaluated;
                 };
@@ -1596,11 +1596,11 @@ impl<'a> Interpreter<'a> {
     /// walked); `call_stack` blocks CTFE-internal re-entry into a
     /// callee whose body we are already evaluating, since `try_borrow`
     /// permits concurrent immutable borrows.
-    fn try_call_fold(&mut self, expr: &TirExpr) -> Lattice {
+    fn try_call_fold(&mut self, expr: &NirExpr) -> Lattice {
         let Some(callees) = self.callees else {
             return Lattice::Unevaluated;
         };
-        let TirExprKind::Call { func, args, .. } = &expr.kind else {
+        let NirExprKind::Call { func, args, .. } = &expr.kind else {
             return Lattice::Unevaluated;
         };
         // Synthesise the lookup key only after we know a CalleeMap is
@@ -1662,7 +1662,7 @@ impl<'a> Interpreter<'a> {
         // Push call frame, swap env to a fresh one bound to the
         // arguments. Local indices `0..params.len()` shadow the
         // parameters — the same convention the rest of the compiler
-        // uses (`TirFunction::locals[0..params.len()]`).
+        // uses (`NirFunction::locals[0..params.len()]`).
         self.call_stack.push(key);
         let saved_env = std::mem::take(&mut self.env);
         for (i, v) in bound.iter().enumerate() {
@@ -1704,13 +1704,13 @@ impl<'a> Interpreter<'a> {
 /// Anything else (zero or multiple stmts, intermediate Let / If / Loop /
 /// Break / Return without value, …) reports `None`. The caller treats
 /// `None` as "do not fold this call", preserving the runtime call.
-fn single_tail_expression(func: &TirFunction) -> Option<&TirExpr> {
+fn single_tail_expression(func: &NirFunction) -> Option<&NirExpr> {
     let body = func.body.as_ref()?;
     let [single] = body.stmts.as_slice() else {
         return None;
     };
     match &single.kind {
-        TirStmtKind::Return { value: Some(e) } | TirStmtKind::Expr(e) => Some(e),
+        NirStmtKind::Return { value: Some(e) } | NirStmtKind::Expr(e) => Some(e),
         _ => None,
     }
 }
@@ -1726,7 +1726,7 @@ fn option_to_lattice(opt: Option<Value>) -> Lattice {
     }
 }
 
-/// Outcome of testing a [`TirPattern`] against a constant scrutinee
+/// Outcome of testing a [`NirPattern`] against a constant scrutinee
 /// [`Value`]. The three states mirror the pattern's contribution to
 /// SCCP feasibility in [`Interpreter::match_lattice`]:
 ///
@@ -1761,15 +1761,15 @@ fn bool_to_match(b: bool) -> PatternMatch {
 /// coverage proofs are deferred until tiri models those pattern shapes
 /// structurally; treating them as non-exhaustive here is the safe
 /// answer (it costs an optimization, not correctness).
-fn is_provably_exhaustive(arms: &[TirMatchArm]) -> bool {
+fn is_provably_exhaustive(arms: &[NirMatchArm]) -> bool {
     arms.iter()
         .any(|a| a.guard.is_none() && pattern_is_catch_all(&a.pattern))
 }
 
-fn pattern_is_catch_all(pat: &TirPattern) -> bool {
+fn pattern_is_catch_all(pat: &NirPattern) -> bool {
     match pat {
-        TirPattern::Wildcard | TirPattern::Binding { .. } => true,
-        TirPattern::Or(alts) => alts.iter().any(pattern_is_catch_all),
+        NirPattern::Wildcard | NirPattern::Binding { .. } => true,
+        NirPattern::Or(alts) => alts.iter().any(pattern_is_catch_all),
         _ => false,
     }
 }
@@ -1906,45 +1906,45 @@ fn arm_lattice_for_feasible_join(lat: Lattice) -> Lattice {
 ///   different values across invocations (e.g. `random.next()` is
 ///   marked pure-by-effect in Wado but is not idempotent in the SCCP
 ///   sense), and tiri does not yet inline pure calls.
-fn is_speculatable(expr: &TirExpr) -> bool {
+fn is_speculatable(expr: &NirExpr) -> bool {
     match &expr.kind {
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::Local { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::Unit => true,
-        TirExprKind::Binary { left, op, right } => {
-            !matches!(op, TirBinaryOp::Div | TirBinaryOp::Mod)
+        NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::Local { .. }
+        | NirExprKind::Capture { .. }
+        | NirExprKind::Unit => true,
+        NirExprKind::Binary { left, op, right } => {
+            !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
                 && is_speculatable(left)
                 && is_speculatable(right)
         }
-        TirExprKind::Unary { op, expr: inner } => {
-            !matches!(op, TirUnaryOp::Deref) && is_speculatable(inner)
+        NirExprKind::Unary { op, expr: inner } => {
+            !matches!(op, NirUnaryOp::Deref) && is_speculatable(inner)
         }
-        TirExprKind::Cast { expr: inner, .. } => is_speculatable(inner),
-        TirExprKind::FieldAccess { expr: inner, .. } => is_speculatable(inner),
+        NirExprKind::Cast { expr: inner, .. } => is_speculatable(inner),
+        NirExprKind::FieldAccess { expr: inner, .. } => is_speculatable(inner),
         _ => false,
     }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// TirExpr <-> Value bridge
+// NirExpr <-> Value bridge
 // ──────────────────────────────────────────────────────────────────────────────
 
-fn value_to_expr_kind(v: Value) -> TirExprKind {
+fn value_to_expr_kind(v: Value) -> NirExprKind {
     match v {
-        Value::Int { value, prim } => TirExprKind::IntLiteral {
+        Value::Int { value, prim } => NirExprKind::IntLiteral {
             repr: format_int_repr(value, prim),
             value,
         },
-        Value::Float { value, .. } => TirExprKind::FloatLiteral {
+        Value::Float { value, .. } => NirExprKind::FloatLiteral {
             repr: format_float_repr(value),
             value,
         },
-        Value::Bool(b) => TirExprKind::BoolLiteral(b),
-        Value::Char(c) => TirExprKind::CharLiteral(c),
+        Value::Bool(b) => NirExprKind::BoolLiteral(b),
+        Value::Char(c) => NirExprKind::CharLiteral(c),
     }
 }
 
@@ -1959,17 +1959,17 @@ fn value_to_expr_kind(v: Value) -> TirExprKind {
 /// semantically defensible — this engine stays conservative and leaves
 /// those rewrites to a future side-effect-aware pass. Mirrors the
 /// previous in-visitor behaviour.
-fn rewrite_short_circuit(expr: &mut TirExpr) -> bool {
+fn rewrite_short_circuit(expr: &mut NirExpr) -> bool {
     enum Pick {
         Left,
         Right,
     }
     let pick = match &expr.kind {
-        TirExprKind::Binary { left, op, right } => match (&left.kind, *op, &right.kind) {
-            (TirExprKind::BoolLiteral(false), TirBinaryOp::Or, _)
-            | (TirExprKind::BoolLiteral(true), TirBinaryOp::And, _) => Pick::Right,
-            (_, TirBinaryOp::Or, TirExprKind::BoolLiteral(false))
-            | (_, TirBinaryOp::And, TirExprKind::BoolLiteral(true)) => Pick::Left,
+        NirExprKind::Binary { left, op, right } => match (&left.kind, *op, &right.kind) {
+            (NirExprKind::BoolLiteral(false), NirBinaryOp::Or, _)
+            | (NirExprKind::BoolLiteral(true), NirBinaryOp::And, _) => Pick::Right,
+            (_, NirBinaryOp::Or, NirExprKind::BoolLiteral(false))
+            | (_, NirBinaryOp::And, NirExprKind::BoolLiteral(true)) => Pick::Left,
             _ => return false,
         },
         _ => return false,
@@ -1977,8 +1977,8 @@ fn rewrite_short_circuit(expr: &mut TirExpr) -> bool {
     // Take ownership of the Binary by swapping its `kind` out. The
     // placeholder is local to this function and overwritten before we
     // return, so no caller observes a partially-updated `expr`.
-    let TirExprKind::Binary { left, right, .. } =
-        std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+    let NirExprKind::Binary { left, right, .. } =
+        std::mem::replace(&mut expr.kind, NirExprKind::Unit)
     else {
         unreachable!("matched Binary above");
     };
@@ -1994,7 +1994,7 @@ fn rewrite_short_circuit(expr: &mut TirExpr) -> bool {
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// Evaluate a binary op on two compile-time values.
-fn eval_binary(left: Value, op: TirBinaryOp, right: Value) -> Option<Value> {
+fn eval_binary(left: Value, op: NirBinaryOp, right: Value) -> Option<Value> {
     match (left, right) {
         (Value::Bool(l), Value::Bool(r)) => eval_bool_binary(l, op, r),
         (Value::Char(l), Value::Char(r)) => eval_char_binary(l, op, r),
@@ -2009,9 +2009,9 @@ fn eval_binary(left: Value, op: TirBinaryOp, right: Value) -> Option<Value> {
 }
 
 /// Evaluate a unary op on a compile-time value.
-fn eval_unary(op: TirUnaryOp, operand: Value) -> Option<Value> {
+fn eval_unary(op: NirUnaryOp, operand: Value) -> Option<Value> {
     match op {
-        TirUnaryOp::Neg => match operand {
+        NirUnaryOp::Neg => match operand {
             Value::Int { value, prim } => {
                 eval_int_neg(value, prim).map(|v| Value::Int { value: v, prim })
             }
@@ -2024,18 +2024,18 @@ fn eval_unary(op: TirUnaryOp, operand: Value) -> Option<Value> {
             }
             Value::Bool(_) | Value::Char(_) => None,
         },
-        TirUnaryOp::Not => match operand {
+        NirUnaryOp::Not => match operand {
             Value::Bool(b) => Some(Value::Bool(!b)),
             _ => None,
         },
-        TirUnaryOp::BitNot => match operand {
+        NirUnaryOp::BitNot => match operand {
             Value::Int { value, prim } => Some(Value::Int {
                 value: truncate_int(!value, prim),
                 prim,
             }),
             _ => None,
         },
-        TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref => None,
+        NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref => None,
     }
 }
 
@@ -2206,107 +2206,107 @@ fn trunc_sat_to_int(value: f64, target: PrimitiveType) -> u64 {
     }
 }
 
-fn eval_bool_binary(l: bool, op: TirBinaryOp, r: bool) -> Option<Value> {
+fn eval_bool_binary(l: bool, op: NirBinaryOp, r: bool) -> Option<Value> {
     match op {
-        TirBinaryOp::And => Some(Value::Bool(l && r)),
-        TirBinaryOp::Or => Some(Value::Bool(l || r)),
-        TirBinaryOp::Eq => Some(Value::Bool(l == r)),
-        TirBinaryOp::NotEq => Some(Value::Bool(l != r)),
+        NirBinaryOp::And => Some(Value::Bool(l && r)),
+        NirBinaryOp::Or => Some(Value::Bool(l || r)),
+        NirBinaryOp::Eq => Some(Value::Bool(l == r)),
+        NirBinaryOp::NotEq => Some(Value::Bool(l != r)),
         // bool implements Ord with `false < true`. Spelled with `&&`
         // rather than `<` to satisfy clippy's `bool_comparison` lint
         // without tripping `needless_bitwise_bool`.
-        TirBinaryOp::Lt => Some(Value::Bool(!l && r)),
-        TirBinaryOp::LtEq => Some(Value::Bool(l <= r)),
-        TirBinaryOp::Gt => Some(Value::Bool(l && !r)),
-        TirBinaryOp::GtEq => Some(Value::Bool(l >= r)),
+        NirBinaryOp::Lt => Some(Value::Bool(!l && r)),
+        NirBinaryOp::LtEq => Some(Value::Bool(l <= r)),
+        NirBinaryOp::Gt => Some(Value::Bool(l && !r)),
+        NirBinaryOp::GtEq => Some(Value::Bool(l >= r)),
         _ => None,
     }
 }
 
 /// `char` comparisons. char implements `Eq` and `Ord` (codepoint
 /// order); arithmetic / bitwise ops are not defined.
-fn eval_char_binary(l: char, op: TirBinaryOp, r: char) -> Option<Value> {
+fn eval_char_binary(l: char, op: NirBinaryOp, r: char) -> Option<Value> {
     match op {
-        TirBinaryOp::Eq => Some(Value::Bool(l == r)),
-        TirBinaryOp::NotEq => Some(Value::Bool(l != r)),
-        TirBinaryOp::Lt => Some(Value::Bool(l < r)),
-        TirBinaryOp::LtEq => Some(Value::Bool(l <= r)),
-        TirBinaryOp::Gt => Some(Value::Bool(l > r)),
-        TirBinaryOp::GtEq => Some(Value::Bool(l >= r)),
+        NirBinaryOp::Eq => Some(Value::Bool(l == r)),
+        NirBinaryOp::NotEq => Some(Value::Bool(l != r)),
+        NirBinaryOp::Lt => Some(Value::Bool(l < r)),
+        NirBinaryOp::LtEq => Some(Value::Bool(l <= r)),
+        NirBinaryOp::Gt => Some(Value::Bool(l > r)),
+        NirBinaryOp::GtEq => Some(Value::Bool(l >= r)),
         _ => None,
     }
 }
 
-fn eval_int_binary(lval: u64, op: TirBinaryOp, rval: u64, prim: PrimitiveType) -> Option<Value> {
+fn eval_int_binary(lval: u64, op: NirBinaryOp, rval: u64, prim: PrimitiveType) -> Option<Value> {
     match op {
-        TirBinaryOp::Add => Some(Value::Int {
+        NirBinaryOp::Add => Some(Value::Int {
             value: truncate_int(lval.wrapping_add(rval), prim),
             prim,
         }),
-        TirBinaryOp::Sub => Some(Value::Int {
+        NirBinaryOp::Sub => Some(Value::Int {
             value: truncate_int(lval.wrapping_sub(rval), prim),
             prim,
         }),
-        TirBinaryOp::Mul => Some(Value::Int {
+        NirBinaryOp::Mul => Some(Value::Int {
             value: truncate_int(lval.wrapping_mul(rval), prim),
             prim,
         }),
-        TirBinaryOp::Div => eval_int_div(lval, rval, prim).map(|value| Value::Int { value, prim }),
-        TirBinaryOp::Mod => eval_int_mod(lval, rval, prim).map(|value| Value::Int { value, prim }),
+        NirBinaryOp::Div => eval_int_div(lval, rval, prim).map(|value| Value::Int { value, prim }),
+        NirBinaryOp::Mod => eval_int_mod(lval, rval, prim).map(|value| Value::Int { value, prim }),
 
-        TirBinaryOp::Eq
-        | TirBinaryOp::NotEq
-        | TirBinaryOp::Lt
-        | TirBinaryOp::LtEq
-        | TirBinaryOp::Gt
-        | TirBinaryOp::GtEq => Some(Value::Bool(eval_int_cmp(lval, op, rval, prim))),
+        NirBinaryOp::Eq
+        | NirBinaryOp::NotEq
+        | NirBinaryOp::Lt
+        | NirBinaryOp::LtEq
+        | NirBinaryOp::Gt
+        | NirBinaryOp::GtEq => Some(Value::Bool(eval_int_cmp(lval, op, rval, prim))),
 
-        TirBinaryOp::BitAnd => Some(Value::Int {
+        NirBinaryOp::BitAnd => Some(Value::Int {
             value: truncate_int(lval & rval, prim),
             prim,
         }),
-        TirBinaryOp::BitOr => Some(Value::Int {
+        NirBinaryOp::BitOr => Some(Value::Int {
             value: truncate_int(lval | rval, prim),
             prim,
         }),
-        TirBinaryOp::BitXor => Some(Value::Int {
+        NirBinaryOp::BitXor => Some(Value::Int {
             value: truncate_int(lval ^ rval, prim),
             prim,
         }),
-        TirBinaryOp::Shl => Some(Value::Int {
+        NirBinaryOp::Shl => Some(Value::Int {
             value: eval_int_shl(lval, rval, prim),
             prim,
         }),
-        TirBinaryOp::Shr => Some(Value::Int {
+        NirBinaryOp::Shr => Some(Value::Int {
             value: eval_int_shr(lval, rval, prim),
             prim,
         }),
 
-        TirBinaryOp::And | TirBinaryOp::Or | TirBinaryOp::RefEq | TirBinaryOp::RefNotEq => None,
+        NirBinaryOp::And | NirBinaryOp::Or | NirBinaryOp::RefEq | NirBinaryOp::RefNotEq => None,
     }
 }
 
-fn eval_int_cmp(lval: u64, op: TirBinaryOp, rval: u64, prim: PrimitiveType) -> bool {
+fn eval_int_cmp(lval: u64, op: NirBinaryOp, rval: u64, prim: PrimitiveType) -> bool {
     if is_signed_int(prim) {
         let l = lval as i64;
         let r = rval as i64;
         match op {
-            TirBinaryOp::Eq => l == r,
-            TirBinaryOp::NotEq => l != r,
-            TirBinaryOp::Lt => l < r,
-            TirBinaryOp::LtEq => l <= r,
-            TirBinaryOp::Gt => l > r,
-            TirBinaryOp::GtEq => l >= r,
+            NirBinaryOp::Eq => l == r,
+            NirBinaryOp::NotEq => l != r,
+            NirBinaryOp::Lt => l < r,
+            NirBinaryOp::LtEq => l <= r,
+            NirBinaryOp::Gt => l > r,
+            NirBinaryOp::GtEq => l >= r,
             _ => unreachable!(),
         }
     } else {
         match op {
-            TirBinaryOp::Eq => lval == rval,
-            TirBinaryOp::NotEq => lval != rval,
-            TirBinaryOp::Lt => lval < rval,
-            TirBinaryOp::LtEq => lval <= rval,
-            TirBinaryOp::Gt => lval > rval,
-            TirBinaryOp::GtEq => lval >= rval,
+            NirBinaryOp::Eq => lval == rval,
+            NirBinaryOp::NotEq => lval != rval,
+            NirBinaryOp::Lt => lval < rval,
+            NirBinaryOp::LtEq => lval <= rval,
+            NirBinaryOp::Gt => lval > rval,
+            NirBinaryOp::GtEq => lval >= rval,
             _ => unreachable!(),
         }
     }
@@ -2419,7 +2419,7 @@ fn eval_int_neg(value: u64, prim: PrimitiveType) -> Option<u64> {
     }
 }
 
-fn eval_float_binary(lval: f64, op: TirBinaryOp, rval: f64, prim: PrimitiveType) -> Option<Value> {
+fn eval_float_binary(lval: f64, op: NirBinaryOp, rval: f64, prim: PrimitiveType) -> Option<Value> {
     match prim {
         PrimitiveType::F32 => eval_f32_binary(lval, op, rval),
         PrimitiveType::F64 => eval_f64_binary(lval, op, rval),
@@ -2427,42 +2427,42 @@ fn eval_float_binary(lval: f64, op: TirBinaryOp, rval: f64, prim: PrimitiveType)
     }
 }
 
-fn eval_f64_binary(lval: f64, op: TirBinaryOp, rval: f64) -> Option<Value> {
+fn eval_f64_binary(lval: f64, op: NirBinaryOp, rval: f64) -> Option<Value> {
     match op {
-        TirBinaryOp::Add => non_nan_float(lval + rval, PrimitiveType::F64),
-        TirBinaryOp::Sub => non_nan_float(lval - rval, PrimitiveType::F64),
-        TirBinaryOp::Mul => non_nan_float(lval * rval, PrimitiveType::F64),
-        TirBinaryOp::Div => non_nan_float(lval / rval, PrimitiveType::F64),
+        NirBinaryOp::Add => non_nan_float(lval + rval, PrimitiveType::F64),
+        NirBinaryOp::Sub => non_nan_float(lval - rval, PrimitiveType::F64),
+        NirBinaryOp::Mul => non_nan_float(lval * rval, PrimitiveType::F64),
+        NirBinaryOp::Div => non_nan_float(lval / rval, PrimitiveType::F64),
         _ => eval_float_comparison(lval, op, rval),
     }
 }
 
-fn eval_f32_binary(lval: f64, op: TirBinaryOp, rval: f64) -> Option<Value> {
+fn eval_f32_binary(lval: f64, op: NirBinaryOp, rval: f64) -> Option<Value> {
     let l = lval as f32;
     let r = rval as f32;
     match op {
-        TirBinaryOp::Add => non_nan_float(f64::from(l + r), PrimitiveType::F32),
-        TirBinaryOp::Sub => non_nan_float(f64::from(l - r), PrimitiveType::F32),
-        TirBinaryOp::Mul => non_nan_float(f64::from(l * r), PrimitiveType::F32),
-        TirBinaryOp::Div => non_nan_float(f64::from(l / r), PrimitiveType::F32),
-        TirBinaryOp::Eq => Some(Value::Bool(l == r)),
-        TirBinaryOp::NotEq => Some(Value::Bool(l != r)),
-        TirBinaryOp::Lt => Some(Value::Bool(l < r)),
-        TirBinaryOp::LtEq => Some(Value::Bool(l <= r)),
-        TirBinaryOp::Gt => Some(Value::Bool(l > r)),
-        TirBinaryOp::GtEq => Some(Value::Bool(l >= r)),
+        NirBinaryOp::Add => non_nan_float(f64::from(l + r), PrimitiveType::F32),
+        NirBinaryOp::Sub => non_nan_float(f64::from(l - r), PrimitiveType::F32),
+        NirBinaryOp::Mul => non_nan_float(f64::from(l * r), PrimitiveType::F32),
+        NirBinaryOp::Div => non_nan_float(f64::from(l / r), PrimitiveType::F32),
+        NirBinaryOp::Eq => Some(Value::Bool(l == r)),
+        NirBinaryOp::NotEq => Some(Value::Bool(l != r)),
+        NirBinaryOp::Lt => Some(Value::Bool(l < r)),
+        NirBinaryOp::LtEq => Some(Value::Bool(l <= r)),
+        NirBinaryOp::Gt => Some(Value::Bool(l > r)),
+        NirBinaryOp::GtEq => Some(Value::Bool(l >= r)),
         _ => None,
     }
 }
 
-fn eval_float_comparison(lval: f64, op: TirBinaryOp, rval: f64) -> Option<Value> {
+fn eval_float_comparison(lval: f64, op: NirBinaryOp, rval: f64) -> Option<Value> {
     match op {
-        TirBinaryOp::Eq => Some(Value::Bool(lval == rval)),
-        TirBinaryOp::NotEq => Some(Value::Bool(lval != rval)),
-        TirBinaryOp::Lt => Some(Value::Bool(lval < rval)),
-        TirBinaryOp::LtEq => Some(Value::Bool(lval <= rval)),
-        TirBinaryOp::Gt => Some(Value::Bool(lval > rval)),
-        TirBinaryOp::GtEq => Some(Value::Bool(lval >= rval)),
+        NirBinaryOp::Eq => Some(Value::Bool(lval == rval)),
+        NirBinaryOp::NotEq => Some(Value::Bool(lval != rval)),
+        NirBinaryOp::Lt => Some(Value::Bool(lval < rval)),
+        NirBinaryOp::LtEq => Some(Value::Bool(lval <= rval)),
+        NirBinaryOp::Gt => Some(Value::Bool(lval > rval)),
+        NirBinaryOp::GtEq => Some(Value::Bool(lval >= rval)),
         _ => None,
     }
 }
@@ -2542,7 +2542,7 @@ pub(crate) fn format_int_repr(value: u64, prim: PrimitiveType) -> String {
 
 /// Render a `char` as a Wado-friendly literal repr (`'A'`, `'\n'`,
 /// `'\u{1F600}'`, …). Used when re-emitting a folded `char` value as a
-/// `TirExprKind::CharLiteral`.
+/// `NirExprKind::CharLiteral`.
 #[must_use]
 pub(crate) fn format_char_repr(c: char) -> String {
     match c {

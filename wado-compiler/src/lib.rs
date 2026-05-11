@@ -529,27 +529,28 @@ fn compile_after_load<H: CompilerHost>(
         flat.type_table.borrow_mut().erase_newtypes_and_flags();
     }
 
-    // === Phase 10: Lower (FlatPackage → NirPackage → FlatPackage) ===
+    // === Phase 10: Lower (FlatPackage → NirPackage) ===
     // Phase 2 of WEP `wep-2026-05-11-nir.md`: `lower` now returns `NirPackage`.
-    // Downstream (optimize, wir_build) still consume `FlatPackage`, so a
-    // temporary adapter (`nir_to_flat`) round-trips. Phase 3 / 4 will retire it.
-    let flat = {
+    let nir = {
         let _span = logger.span("lower");
-        let nir = lower(flat);
-        nir_convert::nir_to_flat(&nir)
+        lower(flat)
     };
 
-    // === Phase 11: Optimize (FlatPackage → FlatPackage) ===
-    let flat = {
+    // === Phase 11: Optimize (NirPackage → NirPackage) ===
+    let nir = {
         let _span = logger.span("optimize");
         optimize(
-            flat,
+            nir,
             options.opt_level,
             options.inline_threshold,
             options.opt_iterations,
             logger,
         )
     };
+
+    // Temporary NirPackage → FlatPackage adapter. Phase 4 retires this when
+    // `wir_build` migrates to consume NIR directly.
+    let flat = nir_convert::nir_to_flat(&nir);
 
     // === Phase 12: Build WIR (FlatPackage → WirPackage) ===
     let mut wir_package = {
@@ -836,23 +837,23 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Snapshot monomorphized state (only unparse; Debug format is deferred)
             let mono_text = Some(unparse::unparse_flat_package(&flat));
 
-            // Lower (FlatPackage → NirPackage → FlatPackage)
-            // See WEP `wep-2026-05-11-nir.md` Phase 2: lower now produces NIR;
-            // downstream consumers still expect FlatPackage, so we round-trip
-            // through the temporary `nir_to_flat` adapter for now.
-            let flat = {
+            // Lower (FlatPackage → NirPackage)
+            // See WEP `wep-2026-05-11-nir.md` Phase 3: optimize now consumes NIR;
+            // wir_build still expects FlatPackage, so we round-trip through the
+            // temporary `nir_to_flat` adapter for now.
+            let nir = {
                 let _span = logger.span("lower");
-                let nir = lower(flat);
-                nir_convert::nir_to_flat(&nir)
+                lower(flat)
             };
             // Snapshot lowered state (only unparse; Debug format is deferred)
-            let lower_text = Some(unparse::unparse_flat_package(&flat));
+            let lower_text = Some(unparse::unparse_flat_package(&nir_convert::nir_to_flat(&nir)));
 
             // Optimize
-            let flat = {
+            let nir = {
                 let _span = logger.span("optimize");
-                optimize(flat, opt_level, inline_threshold, opt_iterations, &logger)
+                optimize(nir, opt_level, inline_threshold, opt_iterations, &logger)
             };
+            let flat = nir_convert::nir_to_flat(&nir);
 
             // WIR: Translate optimized FlatPackage to WirPackage for inspection.
             let wir_package = Some({

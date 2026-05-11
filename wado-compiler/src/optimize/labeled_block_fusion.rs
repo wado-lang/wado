@@ -38,13 +38,12 @@
 //! This eliminates the GC-allocated `temp: Option<T>` entirely. Subsequent passes
 //! (copy propagation, DCE) clean up the remaining `break '__fused_L;` bookkeeping.
 
-use crate::flat_package::FlatPackage;
-use crate::tir::{
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt, TirStmtKind, TypeId,
-};
-use crate::tir_visitor::expr_has_break_to;
+use crate::nir_package::NirPackage;
+use crate::tir::{TypeId};
+use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind};
+use crate::nir_visitor::expr_has_break_to;
 
-pub fn fuse_labeled_blocks(project: &mut FlatPackage) -> bool {
+pub fn fuse_labeled_blocks(project: &mut NirPackage) -> bool {
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
@@ -53,7 +52,7 @@ pub fn fuse_labeled_blocks(project: &mut FlatPackage) -> bool {
     changed
 }
 
-fn fuse_in_function(func: &mut TirFunction) -> bool {
+fn fuse_in_function(func: &mut NirFunction) -> bool {
     let Some(body) = &mut func.body else {
         return false;
     };
@@ -73,10 +72,10 @@ fn fuse_in_function(func: &mut TirFunction) -> bool {
 /// block's type from the if's value type to Unit, since the fused labeled block's
 /// breaks carry no value.
 fn fuse_in_block(
-    block: &mut TirBlock,
+    block: &mut NirBlock,
     yields_value: bool,
     local_count: &mut u32,
-    locals: &mut Vec<TirLocal>,
+    locals: &mut Vec<NirLocal>,
 ) -> bool {
     // Recurse first into any nested blocks/stmts.
     let mut changed = false;
@@ -94,15 +93,15 @@ fn fuse_in_block(
 }
 
 fn fuse_in_stmt(
-    stmt: &mut TirStmt,
+    stmt: &mut NirStmt,
     yields_value: bool,
     local_count: &mut u32,
-    locals: &mut Vec<TirLocal>,
+    locals: &mut Vec<NirLocal>,
 ) -> bool {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } => fuse_in_expr(value, local_count, locals),
-        TirStmtKind::Expr(expr) => fuse_in_expr(expr, local_count, locals),
-        TirStmtKind::If {
+        NirStmtKind::Let { value, .. } => fuse_in_expr(value, local_count, locals),
+        NirStmtKind::Expr(expr) => fuse_in_expr(expr, local_count, locals),
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -116,15 +115,15 @@ fn fuse_in_stmt(
             }
             changed
         }
-        TirStmtKind::Loop { body } => {
+        NirStmtKind::Loop { body } => {
             // Loop bodies don't fall through with a value.
             fuse_in_block(body, false, local_count, locals)
         }
-        TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::LabeledBlock { block: body, .. } => {
             // A statement-level labeled block discards its value.
             fuse_in_block(body, false, local_count, locals)
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -137,24 +136,24 @@ fn fuse_in_stmt(
             }
             changed
         }
-        TirStmtKind::Break { value, .. } => {
+        NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 fuse_in_expr(v, local_count, locals)
             } else {
                 false
             }
         }
-        TirStmtKind::Return { value } => {
+        NirStmtKind::Return { value } => {
             if let Some(v) = value {
                 fuse_in_expr(v, local_count, locals)
             } else {
                 false
             }
         }
-        TirStmtKind::LetDestructure { value, .. } => fuse_in_expr(value, local_count, locals),
-        TirStmtKind::Continue
-        | TirStmtKind::TaskReturn { .. }
-        | TirStmtKind::VariadicForOf { .. } => false,
+        NirStmtKind::LetDestructure { value, .. } => fuse_in_expr(value, local_count, locals),
+        NirStmtKind::Continue
+        | NirStmtKind::TaskReturn { .. }
+        | NirStmtKind::VariadicForOf { .. } => false,
     }
 }
 
@@ -165,14 +164,14 @@ fn fuse_in_stmt(
 /// ```text
 /// label: { break label: expr }  →  expr
 /// ```
-fn try_inline_trivial_labeled_block(expr: &mut TirExpr) -> bool {
-    let TirExprKind::LabeledBlock { label, block, .. } = &mut expr.kind else {
+fn try_inline_trivial_labeled_block(expr: &mut NirExpr) -> bool {
+    let NirExprKind::LabeledBlock { label, block, .. } = &mut expr.kind else {
         return false;
     };
     if block.stmts.len() != 1 {
         return false;
     }
-    let TirStmtKind::Break {
+    let NirStmtKind::Break {
         label: Some(break_label),
         value: Some(break_value),
     } = &block.stmts[0].kind
@@ -190,16 +189,16 @@ fn try_inline_trivial_labeled_block(expr: &mut TirExpr) -> bool {
         return false;
     }
     // Extract the break value, replacing expr in place.
-    let TirStmtKind::Break {
+    let NirStmtKind::Break {
         value: Some(break_value),
         ..
-    } = std::mem::replace(&mut block.stmts[0].kind, TirStmtKind::Continue)
+    } = std::mem::replace(&mut block.stmts[0].kind, NirStmtKind::Continue)
     else {
         unreachable!()
     };
     let span = expr.span;
     let type_id = expr.type_id;
-    *expr = TirExpr {
+    *expr = NirExpr {
         kind: break_value.kind,
         type_id,
         span,
@@ -207,19 +206,19 @@ fn try_inline_trivial_labeled_block(expr: &mut TirExpr) -> bool {
     true
 }
 
-fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, locals: &mut Vec<TirLocal>) -> bool {
+fn fuse_in_expr(expr: &mut NirExpr, local_count: &mut u32, locals: &mut Vec<NirLocal>) -> bool {
     match &mut expr.kind {
-        TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::LabeledBlock { block, .. } => {
             // Expression-level labeled block: its terminal value is consumed.
             let changed = fuse_in_block(block, /* yields_value */ true, local_count, locals);
             // Then check if this became a trivial single-break block
             try_inline_trivial_labeled_block(expr) || changed
         }
-        TirExprKind::Block(block) => {
+        NirExprKind::Block(block) => {
             // Expression-level block: terminal value is consumed.
             fuse_in_block(block, /* yields_value */ true, local_count, locals)
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -232,82 +231,82 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, locals: &mut Vec<TirL
             }
             changed
         }
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             fuse_in_expr(left, local_count, locals) | fuse_in_expr(right, local_count, locals)
         }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. } => {
+        NirExprKind::Unary { expr: inner, .. }
+        | NirExprKind::Cast { expr: inner, .. }
+        | NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::VariantTag { expr: inner }
+        | NirExprKind::VariantTest { expr: inner, .. }
+        | NirExprKind::VariantPayload { expr: inner, .. } => {
             fuse_in_expr(inner, local_count, locals)
         }
-        TirExprKind::Assign { target, value } => {
+        NirExprKind::Assign { target, value } => {
             fuse_in_expr(target, local_count, locals) | fuse_in_expr(value, local_count, locals)
         }
-        TirExprKind::Call { args, .. } => {
+        NirExprKind::Call { args, .. } => {
             let mut changed = false;
             for arg in args {
                 changed |= fuse_in_expr(&mut arg.expr, local_count, locals);
             }
             changed
         }
-        TirExprKind::CmRawCall { args, .. } => {
+        NirExprKind::CmRawCall { args, .. } => {
             let mut changed = false;
             for arg in args {
                 changed |= fuse_in_expr(arg, local_count, locals);
             }
             changed
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             let mut changed = fuse_in_expr(receiver, local_count, locals);
             for arg in args {
                 changed |= fuse_in_expr(&mut arg.expr, local_count, locals);
             }
             changed
         }
-        TirExprKind::IndirectCall { callee, args } => {
+        NirExprKind::IndirectCall { callee, args } => {
             let mut changed = fuse_in_expr(callee, local_count, locals);
             for arg in args {
                 changed |= fuse_in_expr(arg, local_count, locals);
             }
             changed
         }
-        TirExprKind::Index { expr: inner, index } => {
+        NirExprKind::Index { expr: inner, index } => {
             fuse_in_expr(inner, local_count, locals) | fuse_in_expr(index, local_count, locals)
         }
-        TirExprKind::StructLiteral { fields, .. } => {
+        NirExprKind::StructLiteral { fields, .. } => {
             let mut changed = false;
             for f in fields {
                 changed |= fuse_in_expr(&mut f.value, local_count, locals);
             }
             changed
         }
-        TirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } => {
             let mut changed = false;
             for e in elements {
                 changed |= fuse_in_expr(e, local_count, locals);
             }
             changed
         }
-        TirExprKind::VariantConstruct { payload, .. } => {
+        NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 fuse_in_expr(p, local_count, locals)
             } else {
                 false
             }
         }
-        TirExprKind::ClosureToCanonical { functor, .. } => {
+        NirExprKind::ClosureToCanonical { functor, .. } => {
             fuse_in_expr(functor, local_count, locals)
         }
-        TirExprKind::GlobalVarSet { value, .. } => fuse_in_expr(value, local_count, locals),
-        TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
+        NirExprKind::GlobalVarSet { value, .. } => fuse_in_expr(value, local_count, locals),
+        NirExprKind::TupleSpread { expr: inner }
+        | NirExprKind::TupleZip { expr: inner }
+        | NirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => fuse_in_expr(inner, local_count, locals),
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -321,7 +320,7 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, locals: &mut Vec<TirL
             changed |= fuse_in_block(default, true, local_count, locals);
             changed
         }
-        TirExprKind::Match { expr, arms } => {
+        NirExprKind::Match { expr, arms } => {
             let mut changed = fuse_in_expr(expr, local_count, locals);
             for arm in arms {
                 changed |= fuse_in_expr(&mut arm.body, local_count, locals);
@@ -331,25 +330,25 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, locals: &mut Vec<TirL
             }
             changed
         }
-        TirExprKind::Closure { body, .. } => fuse_in_expr(body, local_count, locals),
+        NirExprKind::Closure { body, .. } => fuse_in_expr(body, local_count, locals),
         // Leaf nodes
-        TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::EnumConstruct { .. } => false,
-        TirExprKind::TemplateString { .. } => {
+        NirExprKind::Local { .. }
+        | NirExprKind::FuncRef { .. }
+        | NirExprKind::GlobalVarGet { .. }
+        | NirExprKind::Capture { .. }
+        | NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::StringLiteral(_)
+        | NirExprKind::BytesLiteral(_)
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::Null
+        | NirExprKind::Unit
+        | NirExprKind::EnumConstruct { .. } => false,
+        NirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
             unreachable!(
                 "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
             )
@@ -365,10 +364,10 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, locals: &mut Vec<TirL
 /// silently turn the block's type into Unit, since the fused labeled block's breaks
 /// carry no value.
 fn fuse_adjacent_pairs(
-    block: &mut TirBlock,
+    block: &mut NirBlock,
     yields_value: bool,
     local_count: &mut u32,
-    locals: &mut Vec<TirLocal>,
+    locals: &mut Vec<NirLocal>,
 ) -> bool {
     let stmts = std::mem::take(&mut block.stmts);
     let mut new_stmts = Vec::with_capacity(stmts.len());
@@ -418,9 +417,9 @@ struct FusionInfo {
 }
 
 /// Returns `Some(FusionInfo)` when the pair can be fused, `None` otherwise.
-fn check_fusion_preconditions(let_stmt: &TirStmt, if_stmt: &TirStmt) -> Option<FusionInfo> {
+fn check_fusion_preconditions(let_stmt: &NirStmt, if_stmt: &NirStmt) -> Option<FusionInfo> {
     // --- Stmt 1: Let { value: LabeledBlock { label, block } } ---
-    let TirStmtKind::Let {
+    let NirStmtKind::Let {
         local_index: temp_local,
         value: let_value,
         ..
@@ -428,7 +427,7 @@ fn check_fusion_preconditions(let_stmt: &TirStmt, if_stmt: &TirStmt) -> Option<F
     else {
         return None;
     };
-    let TirExprKind::LabeledBlock {
+    let NirExprKind::LabeledBlock {
         label,
         block: lb_block,
         ..
@@ -438,7 +437,7 @@ fn check_fusion_preconditions(let_stmt: &TirStmt, if_stmt: &TirStmt) -> Option<F
     };
 
     // --- Stmt 2: If { condition: VariantTest(Local(X), case=C), then_block, else_block } ---
-    let TirStmtKind::If {
+    let NirStmtKind::If {
         condition,
         then_block,
         else_block,
@@ -446,7 +445,7 @@ fn check_fusion_preconditions(let_stmt: &TirStmt, if_stmt: &TirStmt) -> Option<F
     else {
         return None;
     };
-    let TirExprKind::VariantTest {
+    let NirExprKind::VariantTest {
         expr: vt_expr,
         case_index,
         ..
@@ -454,7 +453,7 @@ fn check_fusion_preconditions(let_stmt: &TirStmt, if_stmt: &TirStmt) -> Option<F
     else {
         return None;
     };
-    let TirExprKind::Local {
+    let NirExprKind::Local {
         index: tested_idx, ..
     } = &vt_expr.kind
     else {
@@ -519,7 +518,7 @@ fn check_fusion_preconditions(let_stmt: &TirStmt, if_stmt: &TirStmt) -> Option<F
 /// found, or from a `VariantPayload(_, C)` expression if the matching break has
 /// no payload (which shouldn't happen for a typed payload variant).
 fn check_lb_breaks_and_get_payload(
-    block: &TirBlock,
+    block: &NirBlock,
     label: &str,
     case_index: u32,
 ) -> Option<TypeId> {
@@ -535,7 +534,7 @@ fn check_lb_breaks_and_get_payload(
 /// Returns `false` if any `break L: v` in the block has an unexpected `v`.
 /// Fills `payload_type` from the first matching `VariantConstruct(case=C, payload)` seen.
 fn check_lb_breaks_in_block(
-    block: &TirBlock,
+    block: &NirBlock,
     label: &str,
     case_index: u32,
     payload_type: &mut Option<TypeId>,
@@ -547,21 +546,21 @@ fn check_lb_breaks_in_block(
 }
 
 fn check_lb_breaks_in_stmt(
-    stmt: &TirStmt,
+    stmt: &NirStmt,
     label: &str,
     case_index: u32,
     payload_type: &mut Option<TypeId>,
 ) -> bool {
     match &stmt.kind {
-        TirStmtKind::Break {
+        NirStmtKind::Break {
             label: Some(l),
             value,
         } if l == label => {
             match value.as_ref().map(|v| &v.kind) {
                 // null → None case, always valid
-                None | Some(TirExprKind::Null) => true,
+                None | Some(NirExprKind::Null) => true,
                 // VariantConstruct → valid if payload doesn't contain breaks to this label
-                Some(TirExprKind::VariantConstruct {
+                Some(NirExprKind::VariantConstruct {
                     case_index: ci,
                     payload,
                     ..
@@ -586,9 +585,9 @@ fn check_lb_breaks_in_stmt(
         }
         // Don't cross into nested labeled blocks with the same label (shouldn't occur in practice
         // since labels are unique, but be safe).
-        TirStmtKind::LabeledBlock { label: l, .. } if l == label => true,
+        NirStmtKind::LabeledBlock { label: l, .. } if l == label => true,
         // Recurse into other statement kinds.
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -599,10 +598,10 @@ fn check_lb_breaks_in_stmt(
                     .as_ref()
                     .is_none_or(|eb| check_lb_breaks_in_block(eb, label, case_index, payload_type))
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             check_lb_breaks_in_block(body, label, case_index, payload_type)
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -614,13 +613,13 @@ fn check_lb_breaks_in_stmt(
                     .as_ref()
                     .is_none_or(|eb| check_lb_breaks_in_block(eb, label, case_index, payload_type))
         }
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             check_lb_breaks_in_expr(value, label, case_index, payload_type)
         }
-        TirStmtKind::Break { value, .. } => value
+        NirStmtKind::Break { value, .. } => value
             .as_ref()
             .is_none_or(|v| check_lb_breaks_in_expr(v, label, case_index, payload_type)),
-        TirStmtKind::Return { value } => value
+        NirStmtKind::Return { value } => value
             .as_ref()
             .is_none_or(|v| check_lb_breaks_in_expr(v, label, case_index, payload_type)),
         _ => true,
@@ -628,13 +627,13 @@ fn check_lb_breaks_in_stmt(
 }
 
 fn check_lb_breaks_in_expr(
-    expr: &TirExpr,
+    expr: &NirExpr,
     label: &str,
     case_index: u32,
     payload_type: &mut Option<TypeId>,
 ) -> bool {
     match &expr.kind {
-        TirExprKind::LabeledBlock {
+        NirExprKind::LabeledBlock {
             label: l, block, ..
         } => {
             if l == label {
@@ -644,10 +643,10 @@ fn check_lb_breaks_in_expr(
                 check_lb_breaks_in_block(block, label, case_index, payload_type)
             }
         }
-        TirExprKind::Block(block) => {
+        NirExprKind::Block(block) => {
             check_lb_breaks_in_block(block, label, case_index, payload_type)
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -667,7 +666,7 @@ fn check_lb_breaks_in_expr(
 }
 
 /// Count all occurrences of `Local { index: local_idx }` in a block.
-fn count_local_uses_in_block(block: &TirBlock, local_idx: u32) -> usize {
+fn count_local_uses_in_block(block: &NirBlock, local_idx: u32) -> usize {
     block
         .stmts
         .iter()
@@ -675,16 +674,16 @@ fn count_local_uses_in_block(block: &TirBlock, local_idx: u32) -> usize {
         .sum()
 }
 
-fn count_local_uses_in_stmt(stmt: &TirStmt, local_idx: u32) -> usize {
+fn count_local_uses_in_stmt(stmt: &NirStmt, local_idx: u32) -> usize {
     match &stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             count_local_uses_in_expr(value, local_idx)
         }
-        TirStmtKind::Expr(expr) => count_local_uses_in_expr(expr, local_idx),
-        TirStmtKind::Return { value } => value
+        NirStmtKind::Expr(expr) => count_local_uses_in_expr(expr, local_idx),
+        NirStmtKind::Return { value } => value
             .as_ref()
             .map_or(0, |v| count_local_uses_in_expr(v, local_idx)),
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -695,10 +694,10 @@ fn count_local_uses_in_stmt(stmt: &TirStmt, local_idx: u32) -> usize {
                     .as_ref()
                     .map_or(0, |eb| count_local_uses_in_block(eb, local_idx))
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             count_local_uses_in_block(body, local_idx)
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -710,74 +709,74 @@ fn count_local_uses_in_stmt(stmt: &TirStmt, local_idx: u32) -> usize {
                     .as_ref()
                     .map_or(0, |eb| count_local_uses_in_block(eb, local_idx))
         }
-        TirStmtKind::Break { value, .. } => value
+        NirStmtKind::Break { value, .. } => value
             .as_ref()
             .map_or(0, |v| count_local_uses_in_expr(v, local_idx)),
-        TirStmtKind::Continue
-        | TirStmtKind::TaskReturn { .. }
-        | TirStmtKind::VariadicForOf { .. } => 0,
+        NirStmtKind::Continue
+        | NirStmtKind::TaskReturn { .. }
+        | NirStmtKind::VariadicForOf { .. } => 0,
     }
 }
 
-fn count_local_uses_in_expr(expr: &TirExpr, local_idx: u32) -> usize {
+fn count_local_uses_in_expr(expr: &NirExpr, local_idx: u32) -> usize {
     match &expr.kind {
-        TirExprKind::Local { index, .. } => usize::from(*index == local_idx),
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Local { index, .. } => usize::from(*index == local_idx),
+        NirExprKind::Binary { left, right, .. } => {
             count_local_uses_in_expr(left, local_idx) + count_local_uses_in_expr(right, local_idx)
         }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::ClosureToCanonical { functor: inner, .. }
-        | TirExprKind::GlobalVarSet { value: inner, .. } => {
+        NirExprKind::Unary { expr: inner, .. }
+        | NirExprKind::Cast { expr: inner, .. }
+        | NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::VariantTag { expr: inner }
+        | NirExprKind::VariantTest { expr: inner, .. }
+        | NirExprKind::VariantPayload { expr: inner, .. }
+        | NirExprKind::ClosureToCanonical { functor: inner, .. }
+        | NirExprKind::GlobalVarSet { value: inner, .. } => {
             count_local_uses_in_expr(inner, local_idx)
         }
-        TirExprKind::Assign { target, value } => {
+        NirExprKind::Assign { target, value } => {
             count_local_uses_in_expr(target, local_idx) + count_local_uses_in_expr(value, local_idx)
         }
-        TirExprKind::Index { expr: inner, index } => {
+        NirExprKind::Index { expr: inner, index } => {
             count_local_uses_in_expr(inner, local_idx) + count_local_uses_in_expr(index, local_idx)
         }
-        TirExprKind::Call { args, .. } => args
+        NirExprKind::Call { args, .. } => args
             .iter()
             .map(|a| count_local_uses_in_expr(&a.expr, local_idx))
             .sum(),
-        TirExprKind::CmRawCall { args, .. } => args
+        NirExprKind::CmRawCall { args, .. } => args
             .iter()
             .map(|a| count_local_uses_in_expr(a, local_idx))
             .sum(),
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             count_local_uses_in_expr(receiver, local_idx)
                 + args
                     .iter()
                     .map(|a| count_local_uses_in_expr(&a.expr, local_idx))
                     .sum::<usize>()
         }
-        TirExprKind::IndirectCall { callee, args } => {
+        NirExprKind::IndirectCall { callee, args } => {
             count_local_uses_in_expr(callee, local_idx)
                 + args
                     .iter()
                     .map(|a| count_local_uses_in_expr(a, local_idx))
                     .sum::<usize>()
         }
-        TirExprKind::StructLiteral { fields, .. } => fields
+        NirExprKind::StructLiteral { fields, .. } => fields
             .iter()
             .map(|f| count_local_uses_in_expr(&f.value, local_idx))
             .sum(),
-        TirExprKind::TupleLiteral { elements } => elements
+        NirExprKind::TupleLiteral { elements } => elements
             .iter()
             .map(|e| count_local_uses_in_expr(e, local_idx))
             .sum(),
-        TirExprKind::VariantConstruct { payload, .. } => payload
+        NirExprKind::VariantConstruct { payload, .. } => payload
             .as_ref()
             .map_or(0, |p| count_local_uses_in_expr(p, local_idx)),
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             count_local_uses_in_block(block, local_idx)
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -788,7 +787,7 @@ fn count_local_uses_in_expr(expr: &TirExpr, local_idx: u32) -> usize {
                     .as_ref()
                     .map_or(0, |eb| count_local_uses_in_block(eb, local_idx))
         }
-        TirExprKind::Match { expr, arms } => {
+        NirExprKind::Match { expr, arms } => {
             count_local_uses_in_expr(expr, local_idx)
                 + arms
                     .iter()
@@ -801,7 +800,7 @@ fn count_local_uses_in_expr(expr: &TirExpr, local_idx: u32) -> usize {
                     })
                     .sum::<usize>()
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -814,29 +813,29 @@ fn count_local_uses_in_expr(expr: &TirExpr, local_idx: u32) -> usize {
                     .sum::<usize>()
                 + count_local_uses_in_block(default, local_idx)
         }
-        TirExprKind::Closure { body, .. } => count_local_uses_in_expr(body, local_idx),
-        TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
+        NirExprKind::Closure { body, .. } => count_local_uses_in_expr(body, local_idx),
+        NirExprKind::TupleSpread { expr: inner }
+        | NirExprKind::TupleZip { expr: inner }
+        | NirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => count_local_uses_in_expr(inner, local_idx),
         // Leaf nodes
-        TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::EnumConstruct { .. } => 0,
-        TirExprKind::TemplateString { .. } => {
+        NirExprKind::FuncRef { .. }
+        | NirExprKind::GlobalVarGet { .. }
+        | NirExprKind::Capture { .. }
+        | NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::StringLiteral(_)
+        | NirExprKind::BytesLiteral(_)
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::Null
+        | NirExprKind::Unit
+        | NirExprKind::EnumConstruct { .. } => 0,
+        NirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
             unreachable!(
                 "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
             )
@@ -845,7 +844,7 @@ fn count_local_uses_in_expr(expr: &TirExpr, local_idx: u32) -> usize {
 }
 
 /// Count `VariantPayload { expr: Local(local_idx), case_index }` in a block.
-fn count_variant_payload_uses_in_block(block: &TirBlock, local_idx: u32, case_index: u32) -> usize {
+fn count_variant_payload_uses_in_block(block: &NirBlock, local_idx: u32, case_index: u32) -> usize {
     block
         .stmts
         .iter()
@@ -853,16 +852,16 @@ fn count_variant_payload_uses_in_block(block: &TirBlock, local_idx: u32, case_in
         .sum()
 }
 
-fn count_variant_payload_uses_in_stmt(stmt: &TirStmt, local_idx: u32, case_index: u32) -> usize {
+fn count_variant_payload_uses_in_stmt(stmt: &NirStmt, local_idx: u32, case_index: u32) -> usize {
     match &stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             count_variant_payload_uses_in_expr(value, local_idx, case_index)
         }
-        TirStmtKind::Expr(expr) => count_variant_payload_uses_in_expr(expr, local_idx, case_index),
-        TirStmtKind::Return { value } => value.as_ref().map_or(0, |v| {
+        NirStmtKind::Expr(expr) => count_variant_payload_uses_in_expr(expr, local_idx, case_index),
+        NirStmtKind::Return { value } => value.as_ref().map_or(0, |v| {
             count_variant_payload_uses_in_expr(v, local_idx, case_index)
         }),
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -873,10 +872,10 @@ fn count_variant_payload_uses_in_stmt(stmt: &TirStmt, local_idx: u32, case_index
                     count_variant_payload_uses_in_block(eb, local_idx, case_index)
                 })
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             count_variant_payload_uses_in_block(body, local_idx, case_index)
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -888,87 +887,87 @@ fn count_variant_payload_uses_in_stmt(stmt: &TirStmt, local_idx: u32, case_index
                     count_variant_payload_uses_in_block(eb, local_idx, case_index)
                 })
         }
-        TirStmtKind::Break { value, .. } => value.as_ref().map_or(0, |v| {
+        NirStmtKind::Break { value, .. } => value.as_ref().map_or(0, |v| {
             count_variant_payload_uses_in_expr(v, local_idx, case_index)
         }),
-        TirStmtKind::Continue
-        | TirStmtKind::TaskReturn { .. }
-        | TirStmtKind::VariadicForOf { .. } => 0,
+        NirStmtKind::Continue
+        | NirStmtKind::TaskReturn { .. }
+        | NirStmtKind::VariadicForOf { .. } => 0,
     }
 }
 
-fn count_variant_payload_uses_in_expr(expr: &TirExpr, local_idx: u32, case_index: u32) -> usize {
+fn count_variant_payload_uses_in_expr(expr: &NirExpr, local_idx: u32, case_index: u32) -> usize {
     match &expr.kind {
-        TirExprKind::VariantPayload {
+        NirExprKind::VariantPayload {
             expr: inner,
             case_index: ci,
             ..
         } if *ci == case_index => {
-            if matches!(inner.kind, TirExprKind::Local { index, .. } if index == local_idx) {
+            if matches!(inner.kind, NirExprKind::Local { index, .. } if index == local_idx) {
                 return 1;
             }
             count_variant_payload_uses_in_expr(inner, local_idx, case_index)
         }
-        TirExprKind::Local { .. } => 0,
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Local { .. } => 0,
+        NirExprKind::Binary { left, right, .. } => {
             count_variant_payload_uses_in_expr(left, local_idx, case_index)
                 + count_variant_payload_uses_in_expr(right, local_idx, case_index)
         }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::ClosureToCanonical { functor: inner, .. }
-        | TirExprKind::GlobalVarSet { value: inner, .. } => {
+        NirExprKind::Unary { expr: inner, .. }
+        | NirExprKind::Cast { expr: inner, .. }
+        | NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::VariantTag { expr: inner }
+        | NirExprKind::VariantTest { expr: inner, .. }
+        | NirExprKind::VariantPayload { expr: inner, .. }
+        | NirExprKind::ClosureToCanonical { functor: inner, .. }
+        | NirExprKind::GlobalVarSet { value: inner, .. } => {
             count_variant_payload_uses_in_expr(inner, local_idx, case_index)
         }
-        TirExprKind::Assign { target, value } => {
+        NirExprKind::Assign { target, value } => {
             count_variant_payload_uses_in_expr(target, local_idx, case_index)
                 + count_variant_payload_uses_in_expr(value, local_idx, case_index)
         }
-        TirExprKind::Index { expr: inner, index } => {
+        NirExprKind::Index { expr: inner, index } => {
             count_variant_payload_uses_in_expr(inner, local_idx, case_index)
                 + count_variant_payload_uses_in_expr(index, local_idx, case_index)
         }
-        TirExprKind::Call { args, .. } => args
+        NirExprKind::Call { args, .. } => args
             .iter()
             .map(|a| count_variant_payload_uses_in_expr(&a.expr, local_idx, case_index))
             .sum(),
-        TirExprKind::CmRawCall { args, .. } => args
+        NirExprKind::CmRawCall { args, .. } => args
             .iter()
             .map(|a| count_variant_payload_uses_in_expr(a, local_idx, case_index))
             .sum(),
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             count_variant_payload_uses_in_expr(receiver, local_idx, case_index)
                 + args
                     .iter()
                     .map(|a| count_variant_payload_uses_in_expr(&a.expr, local_idx, case_index))
                     .sum::<usize>()
         }
-        TirExprKind::IndirectCall { callee, args } => {
+        NirExprKind::IndirectCall { callee, args } => {
             count_variant_payload_uses_in_expr(callee, local_idx, case_index)
                 + args
                     .iter()
                     .map(|a| count_variant_payload_uses_in_expr(a, local_idx, case_index))
                     .sum::<usize>()
         }
-        TirExprKind::StructLiteral { fields, .. } => fields
+        NirExprKind::StructLiteral { fields, .. } => fields
             .iter()
             .map(|f| count_variant_payload_uses_in_expr(&f.value, local_idx, case_index))
             .sum(),
-        TirExprKind::TupleLiteral { elements } => elements
+        NirExprKind::TupleLiteral { elements } => elements
             .iter()
             .map(|e| count_variant_payload_uses_in_expr(e, local_idx, case_index))
             .sum(),
-        TirExprKind::VariantConstruct { payload, .. } => payload.as_ref().map_or(0, |p| {
+        NirExprKind::VariantConstruct { payload, .. } => payload.as_ref().map_or(0, |p| {
             count_variant_payload_uses_in_expr(p, local_idx, case_index)
         }),
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             count_variant_payload_uses_in_block(block, local_idx, case_index)
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -979,7 +978,7 @@ fn count_variant_payload_uses_in_expr(expr: &TirExpr, local_idx: u32, case_index
                     count_variant_payload_uses_in_block(eb, local_idx, case_index)
                 })
         }
-        TirExprKind::Match { expr, arms } => {
+        NirExprKind::Match { expr, arms } => {
             count_variant_payload_uses_in_expr(expr, local_idx, case_index)
                 + arms
                     .iter()
@@ -991,7 +990,7 @@ fn count_variant_payload_uses_in_expr(expr: &TirExpr, local_idx: u32, case_index
                     })
                     .sum::<usize>()
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -1004,31 +1003,31 @@ fn count_variant_payload_uses_in_expr(expr: &TirExpr, local_idx: u32, case_index
                     .sum::<usize>()
                 + count_variant_payload_uses_in_block(default, local_idx, case_index)
         }
-        TirExprKind::Closure { body, .. } => {
+        NirExprKind::Closure { body, .. } => {
             count_variant_payload_uses_in_expr(body, local_idx, case_index)
         }
-        TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
+        NirExprKind::TupleSpread { expr: inner }
+        | NirExprKind::TupleZip { expr: inner }
+        | NirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => count_variant_payload_uses_in_expr(inner, local_idx, case_index),
         // Leaf nodes
-        TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::EnumConstruct { .. } => 0,
-        TirExprKind::TemplateString { .. } => {
+        NirExprKind::FuncRef { .. }
+        | NirExprKind::GlobalVarGet { .. }
+        | NirExprKind::Capture { .. }
+        | NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::StringLiteral(_)
+        | NirExprKind::BytesLiteral(_)
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::Null
+        | NirExprKind::Unit
+        | NirExprKind::EnumConstruct { .. } => 0,
+        NirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
             unreachable!(
                 "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
             )
@@ -1040,22 +1039,22 @@ fn count_variant_payload_uses_in_expr(expr: &TirExpr, local_idx: u32, case_index
 ///
 /// Consumes the two matched statements and produces the fused labeled block statement(s).
 fn perform_fusion(
-    let_stmt: TirStmt,
-    if_stmt: TirStmt,
+    let_stmt: NirStmt,
+    if_stmt: NirStmt,
     info: FusionInfo,
     local_count: &mut u32,
-    locals: &mut Vec<TirLocal>,
-) -> Vec<TirStmt> {
+    locals: &mut Vec<NirLocal>,
+) -> Vec<NirStmt> {
     let span = let_stmt.span;
 
     // Extract the LabeledBlock body from the Let statement.
-    let TirStmtKind::Let {
+    let NirStmtKind::Let {
         value: let_value, ..
     } = let_stmt.kind
     else {
         unreachable!()
     };
-    let TirExprKind::LabeledBlock {
+    let NirExprKind::LabeledBlock {
         block: lb_block, ..
     } = let_value.kind
     else {
@@ -1063,7 +1062,7 @@ fn perform_fusion(
     };
 
     // Extract the then/else blocks from the If statement.
-    let TirStmtKind::If {
+    let NirStmtKind::If {
         then_block,
         else_block,
         ..
@@ -1074,10 +1073,10 @@ fn perform_fusion(
 
     // Allocate a fresh local for the payload value. The pasted-in `Let`
     // statements created below name the slot `__fused_payload_N`; mirror
-    // that on the `TirLocal` so wir_build's local-name lookup matches.
+    // that on the `NirLocal` so wir_build's local-name lookup matches.
     let payload_local = *local_count;
     *local_count += 1;
-    locals.push(TirLocal {
+    locals.push(NirLocal {
         name: format!("__fused_payload_{payload_local}"),
         type_id: info.payload_type,
         is_mut: false,
@@ -1099,10 +1098,10 @@ fn perform_fusion(
         span,
     );
 
-    vec![TirStmt::new(
-        TirStmtKind::LabeledBlock {
+    vec![NirStmt::new(
+        NirStmtKind::LabeledBlock {
             label: fused_label,
-            block: TirBlock {
+            block: NirBlock {
                 stmts: fused_stmts,
                 span,
             },
@@ -1116,17 +1115,17 @@ fn perform_fusion(
 /// - `break orig_label: VariantConstruct(case=C, v)` → `{ let __payload = v; THEN_SUBST; break fused_label; }`
 /// - `break orig_label: VariantConstruct(case≠C)` → `{ ELSE; break fused_label; }`
 fn transform_lb_stmts(
-    stmts: Vec<TirStmt>,
+    stmts: Vec<NirStmt>,
     orig_label: &str,
     fused_label: &str,
     case_index: u32,
     temp_local: u32,
     payload_local: u32,
     payload_type: TypeId,
-    then_block: &TirBlock,
-    else_block: Option<&TirBlock>,
+    then_block: &NirBlock,
+    else_block: Option<&NirBlock>,
     span: crate::token::Span,
-) -> Vec<TirStmt> {
+) -> Vec<NirStmt> {
     let mut out = Vec::new();
     for stmt in stmts {
         transform_lb_stmt(
@@ -1147,45 +1146,45 @@ fn transform_lb_stmts(
 }
 
 fn transform_lb_stmt(
-    stmt: TirStmt,
+    stmt: NirStmt,
     orig_label: &str,
     fused_label: &str,
     case_index: u32,
     temp_local: u32,
     payload_local: u32,
     payload_type: TypeId,
-    then_block: &TirBlock,
-    else_block: Option<&TirBlock>,
+    then_block: &NirBlock,
+    else_block: Option<&NirBlock>,
     span: crate::token::Span,
-    out: &mut Vec<TirStmt>,
+    out: &mut Vec<NirStmt>,
 ) {
     // Check for `break orig_label: v` first.
     let is_orig_label_break = matches!(&stmt.kind,
-        TirStmtKind::Break { label: Some(l), .. } if l == orig_label);
+        NirStmtKind::Break { label: Some(l), .. } if l == orig_label);
 
     if is_orig_label_break {
-        let TirStmtKind::Break { value, .. } = stmt.kind else {
+        let NirStmtKind::Break { value, .. } = stmt.kind else {
             unreachable!()
         };
         let is_some_case = match &value {
             Some(v) => matches!(&v.kind,
-                TirExprKind::VariantConstruct { case_index: ci, .. } if *ci == case_index),
+                NirExprKind::VariantConstruct { case_index: ci, .. } if *ci == case_index),
             _ => false,
         };
 
         if is_some_case {
             // Extract payload expression from the VariantConstruct.
             let Some(v) = value else { unreachable!() };
-            let TirExprKind::VariantConstruct { payload, .. } = v.kind else {
+            let NirExprKind::VariantConstruct { payload, .. } = v.kind else {
                 unreachable!()
             };
             let payload_expr = payload
                 .map(|p| *p)
-                .unwrap_or_else(|| TirExpr::new(TirExprKind::Unit, payload_type, span));
+                .unwrap_or_else(|| NirExpr::new(NirExprKind::Unit, payload_type, span));
 
             // Emit: let __payload = payload_expr;
-            out.push(TirStmt::new(
-                TirStmtKind::Let {
+            out.push(NirStmt::new(
+                NirStmtKind::Let {
                     name: format!("__fused_payload_{payload_local}"),
                     local_index: payload_local,
                     is_mut: false,
@@ -1214,12 +1213,12 @@ fn transform_lb_stmt(
         let last_terminates = out.last().is_some_and(|s| {
             matches!(
                 s.kind,
-                TirStmtKind::Break { .. } | TirStmtKind::Return { .. } | TirStmtKind::Continue
+                NirStmtKind::Break { .. } | NirStmtKind::Return { .. } | NirStmtKind::Continue
             )
         });
         if !last_terminates {
-            out.push(TirStmt::new(
-                TirStmtKind::Break {
+            out.push(NirStmt::new(
+                NirStmtKind::Break {
                     label: Some(fused_label.to_owned()),
                     value: None,
                 },
@@ -1232,12 +1231,12 @@ fn transform_lb_stmt(
     // For any other statement, recursively transform nested blocks.
     let stmt_span = stmt.span;
     match stmt.kind {
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block: tb,
             else_block: eb,
         } => {
-            let new_then = TirBlock {
+            let new_then = NirBlock {
                 stmts: transform_lb_stmts(
                     tb.stmts,
                     orig_label,
@@ -1252,7 +1251,7 @@ fn transform_lb_stmt(
                 ),
                 span: tb.span,
             };
-            let new_else = eb.map(|e| TirBlock {
+            let new_else = eb.map(|e| NirBlock {
                 stmts: transform_lb_stmts(
                     e.stmts,
                     orig_label,
@@ -1267,8 +1266,8 @@ fn transform_lb_stmt(
                 ),
                 span: e.span,
             });
-            out.push(TirStmt::new(
-                TirStmtKind::If {
+            out.push(NirStmt::new(
+                NirStmtKind::If {
                     condition,
                     then_block: new_then,
                     else_block: new_else,
@@ -1276,8 +1275,8 @@ fn transform_lb_stmt(
                 stmt_span,
             ));
         }
-        TirStmtKind::Loop { body } => {
-            let new_body = TirBlock {
+        NirStmtKind::Loop { body } => {
+            let new_body = NirBlock {
                 stmts: transform_lb_stmts(
                     body.stmts,
                     orig_label,
@@ -1292,17 +1291,17 @@ fn transform_lb_stmt(
                 ),
                 span: body.span,
             };
-            out.push(TirStmt::new(
-                TirStmtKind::Loop { body: new_body },
+            out.push(NirStmt::new(
+                NirStmtKind::Loop { body: new_body },
                 stmt_span,
             ));
         }
-        TirStmtKind::LabeledBlock {
+        NirStmtKind::LabeledBlock {
             label: ref l,
             block: inner,
         } if l != orig_label => {
             let l = l.clone();
-            let new_inner = TirBlock {
+            let new_inner = NirBlock {
                 stmts: transform_lb_stmts(
                     inner.stmts,
                     orig_label,
@@ -1317,21 +1316,21 @@ fn transform_lb_stmt(
                 ),
                 span: inner.span,
             };
-            out.push(TirStmt::new(
-                TirStmtKind::LabeledBlock {
+            out.push(NirStmt::new(
+                NirStmtKind::LabeledBlock {
                     label: l,
                     block: new_inner,
                 },
                 stmt_span,
             ));
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             pattern,
             then_block: tb,
             else_block: eb,
         } => {
-            let new_then = TirBlock {
+            let new_then = NirBlock {
                 stmts: transform_lb_stmts(
                     tb.stmts,
                     orig_label,
@@ -1346,7 +1345,7 @@ fn transform_lb_stmt(
                 ),
                 span: tb.span,
             };
-            let new_else = eb.map(|e| TirBlock {
+            let new_else = eb.map(|e| NirBlock {
                 stmts: transform_lb_stmts(
                     e.stmts,
                     orig_label,
@@ -1361,8 +1360,8 @@ fn transform_lb_stmt(
                 ),
                 span: e.span,
             });
-            out.push(TirStmt::new(
-                TirStmtKind::IfLet {
+            out.push(NirStmt::new(
+                NirStmtKind::IfLet {
                     scrutinee,
                     pattern,
                     then_block: new_then,
@@ -1385,30 +1384,30 @@ fn transform_lb_stmt(
                 else_block,
                 span,
             );
-            out.push(TirStmt::new(other, stmt_span));
+            out.push(NirStmt::new(other, stmt_span));
         }
     }
 }
 
-/// Walk a `TirStmtKind` and apply label transformation to any nested block expressions
+/// Walk a `NirStmtKind` and apply label transformation to any nested block expressions
 /// that may contain `break orig_label`.
 fn transform_lb_in_stmt_kind(
-    kind: &mut TirStmtKind,
+    kind: &mut NirStmtKind,
     orig_label: &str,
     fused_label: &str,
     case_index: u32,
     temp_local: u32,
     payload_local: u32,
     payload_type: TypeId,
-    then_block: &TirBlock,
-    else_block: Option<&TirBlock>,
+    then_block: &NirBlock,
+    else_block: Option<&NirBlock>,
     span: crate::token::Span,
 ) {
     match kind {
-        TirStmtKind::Let { value, .. }
-        | TirStmtKind::LetDestructure { value, .. }
-        | TirStmtKind::Expr(value)
-        | TirStmtKind::TaskReturn { value } => {
+        NirStmtKind::Let { value, .. }
+        | NirStmtKind::LetDestructure { value, .. }
+        | NirStmtKind::Expr(value)
+        | NirStmtKind::TaskReturn { value } => {
             transform_lb_in_expr(
                 value,
                 orig_label,
@@ -1422,7 +1421,7 @@ fn transform_lb_in_stmt_kind(
                 span,
             );
         }
-        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 transform_lb_in_expr(
                     v,
@@ -1440,31 +1439,31 @@ fn transform_lb_in_stmt_kind(
         }
         // If/Loop/LabeledBlock/IfLet are handled before this function is called (in
         // transform_lb_stmt). The remaining kinds carry no expressions to transform.
-        TirStmtKind::If { .. }
-        | TirStmtKind::Loop { .. }
-        | TirStmtKind::LabeledBlock { .. }
-        | TirStmtKind::IfLet { .. }
-        | TirStmtKind::Continue
-        | TirStmtKind::VariadicForOf { .. } => {}
+        NirStmtKind::If { .. }
+        | NirStmtKind::Loop { .. }
+        | NirStmtKind::LabeledBlock { .. }
+        | NirStmtKind::IfLet { .. }
+        | NirStmtKind::Continue
+        | NirStmtKind::VariadicForOf { .. } => {}
     }
 }
 
-/// Recursively walk a `TirExpr` to find and transform blocks that contain
+/// Recursively walk a `NirExpr` to find and transform blocks that contain
 /// `break orig_label` statements.
 fn transform_lb_in_expr(
-    expr: &mut TirExpr,
+    expr: &mut NirExpr,
     orig_label: &str,
     fused_label: &str,
     case_index: u32,
     temp_local: u32,
     payload_local: u32,
     payload_type: TypeId,
-    then_block: &TirBlock,
-    else_block: Option<&TirBlock>,
+    then_block: &NirBlock,
+    else_block: Option<&NirBlock>,
     span: crate::token::Span,
 ) {
     match &mut expr.kind {
-        TirExprKind::Block(block) => {
+        NirExprKind::Block(block) => {
             transform_lb_in_block(
                 block,
                 orig_label,
@@ -1478,7 +1477,7 @@ fn transform_lb_in_expr(
                 span,
             );
         }
-        TirExprKind::LabeledBlock {
+        NirExprKind::LabeledBlock {
             label: l, block, ..
         } => {
             if l.as_str() != orig_label {
@@ -1496,7 +1495,7 @@ fn transform_lb_in_expr(
                 );
             }
         }
-        TirExprKind::Match {
+        NirExprKind::Match {
             expr: scrutinee,
             arms,
         } => {
@@ -1541,7 +1540,7 @@ fn transform_lb_in_expr(
                 }
             }
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -1585,7 +1584,7 @@ fn transform_lb_in_expr(
                 );
             }
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -1633,43 +1632,43 @@ fn transform_lb_in_expr(
         // These expression kinds cannot contain `break orig_label` that reaches the outer
         // scope, because check_lb_breaks_in_expr conservatively rejects fusion when a
         // break to the target label is found inside any of these expressions.
-        TirExprKind::Binary { .. }
-        | TirExprKind::Unary { .. }
-        | TirExprKind::Cast { .. }
-        | TirExprKind::FieldAccess { .. }
-        | TirExprKind::TupleSpread { .. }
-        | TirExprKind::TupleZip { .. }
-        | TirExprKind::TypePackExpansion { .. }
-        | TirExprKind::Assign { .. }
-        | TirExprKind::Index { .. }
-        | TirExprKind::Call { .. }
-        | TirExprKind::CmRawCall { .. }
-        | TirExprKind::MethodCall { .. }
-        | TirExprKind::IndirectCall { .. }
-        | TirExprKind::StructLiteral { .. }
-        | TirExprKind::TupleLiteral { .. }
-        | TirExprKind::VariantConstruct { .. }
-        | TirExprKind::VariantTag { .. }
-        | TirExprKind::VariantTest { .. }
-        | TirExprKind::VariantPayload { .. }
-        | TirExprKind::Closure { .. }
-        | TirExprKind::ClosureToCanonical { .. }
-        | TirExprKind::GlobalVarSet { .. }
-        | TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::EnumConstruct { .. }
-        | TirExprKind::TemplateString { .. } => {}
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+        NirExprKind::Binary { .. }
+        | NirExprKind::Unary { .. }
+        | NirExprKind::Cast { .. }
+        | NirExprKind::FieldAccess { .. }
+        | NirExprKind::TupleSpread { .. }
+        | NirExprKind::TupleZip { .. }
+        | NirExprKind::TypePackExpansion { .. }
+        | NirExprKind::Assign { .. }
+        | NirExprKind::Index { .. }
+        | NirExprKind::Call { .. }
+        | NirExprKind::CmRawCall { .. }
+        | NirExprKind::MethodCall { .. }
+        | NirExprKind::IndirectCall { .. }
+        | NirExprKind::StructLiteral { .. }
+        | NirExprKind::TupleLiteral { .. }
+        | NirExprKind::VariantConstruct { .. }
+        | NirExprKind::VariantTag { .. }
+        | NirExprKind::VariantTest { .. }
+        | NirExprKind::VariantPayload { .. }
+        | NirExprKind::Closure { .. }
+        | NirExprKind::ClosureToCanonical { .. }
+        | NirExprKind::GlobalVarSet { .. }
+        | NirExprKind::Local { .. }
+        | NirExprKind::FuncRef { .. }
+        | NirExprKind::GlobalVarGet { .. }
+        | NirExprKind::Capture { .. }
+        | NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::StringLiteral(_)
+        | NirExprKind::BytesLiteral(_)
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::Null
+        | NirExprKind::Unit
+        | NirExprKind::EnumConstruct { .. }
+        | NirExprKind::TemplateString { .. } => {}
+        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
             unreachable!(
                 "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
             )
@@ -1679,15 +1678,15 @@ fn transform_lb_in_expr(
 
 /// Transform break statements within a block's stmts in-place.
 fn transform_lb_in_block(
-    block: &mut TirBlock,
+    block: &mut NirBlock,
     orig_label: &str,
     fused_label: &str,
     case_index: u32,
     temp_local: u32,
     payload_local: u32,
     payload_type: TypeId,
-    then_block: &TirBlock,
-    else_block: Option<&TirBlock>,
+    then_block: &NirBlock,
+    else_block: Option<&NirBlock>,
     span: crate::token::Span,
 ) {
     let old_stmts = std::mem::take(&mut block.stmts);
@@ -1708,7 +1707,7 @@ fn transform_lb_in_block(
 /// Replace `VariantPayload { expr: Local(temp_local), case_index }` with `Local(payload_local)`
 /// throughout a block.
 fn subst_variant_payload_in_block(
-    block: &mut TirBlock,
+    block: &mut NirBlock,
     temp_local: u32,
     case_index: u32,
     payload_local: u32,
@@ -1719,24 +1718,24 @@ fn subst_variant_payload_in_block(
 }
 
 fn subst_variant_payload_in_stmt(
-    stmt: &mut TirStmt,
+    stmt: &mut NirStmt,
     temp_local: u32,
     case_index: u32,
     payload_local: u32,
 ) {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             subst_variant_payload_in_expr(value, temp_local, case_index, payload_local);
         }
-        TirStmtKind::Expr(expr) => {
+        NirStmtKind::Expr(expr) => {
             subst_variant_payload_in_expr(expr, temp_local, case_index, payload_local);
         }
-        TirStmtKind::Return { value } => {
+        NirStmtKind::Return { value } => {
             if let Some(v) = value {
                 subst_variant_payload_in_expr(v, temp_local, case_index, payload_local);
             }
         }
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -1747,10 +1746,10 @@ fn subst_variant_payload_in_stmt(
                 subst_variant_payload_in_block(eb, temp_local, case_index, payload_local);
             }
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             subst_variant_payload_in_block(body, temp_local, case_index, payload_local);
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -1762,34 +1761,34 @@ fn subst_variant_payload_in_stmt(
                 subst_variant_payload_in_block(eb, temp_local, case_index, payload_local);
             }
         }
-        TirStmtKind::Break { value, .. } => {
+        NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 subst_variant_payload_in_expr(v, temp_local, case_index, payload_local);
             }
         }
-        TirStmtKind::Continue
-        | TirStmtKind::TaskReturn { .. }
-        | TirStmtKind::VariadicForOf { .. } => {}
+        NirStmtKind::Continue
+        | NirStmtKind::TaskReturn { .. }
+        | NirStmtKind::VariadicForOf { .. } => {}
     }
 }
 
 fn subst_variant_payload_in_expr(
-    expr: &mut TirExpr,
+    expr: &mut NirExpr,
     temp_local: u32,
     case_index: u32,
     payload_local: u32,
 ) {
     // Match the target pattern first (top-down, before recursing).
-    if let TirExprKind::VariantPayload {
+    if let NirExprKind::VariantPayload {
         expr: inner,
         case_index: ci,
         ..
     } = &expr.kind
         && *ci == case_index
-        && let TirExprKind::Local { index, .. } = inner.kind
+        && let NirExprKind::Local { index, .. } = inner.kind
         && index == temp_local
     {
-        expr.kind = TirExprKind::Local {
+        expr.kind = NirExprKind::Local {
             index: payload_local,
             name: format!("__fused_payload_{payload_local}"),
         };
@@ -1798,70 +1797,70 @@ fn subst_variant_payload_in_expr(
 
     // Recurse into sub-expressions.
     match &mut expr.kind {
-        TirExprKind::Local { .. } => {}
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Local { .. } => {}
+        NirExprKind::Binary { left, right, .. } => {
             subst_variant_payload_in_expr(left, temp_local, case_index, payload_local);
             subst_variant_payload_in_expr(right, temp_local, case_index, payload_local);
         }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::ClosureToCanonical { functor: inner, .. }
-        | TirExprKind::GlobalVarSet { value: inner, .. } => {
+        NirExprKind::Unary { expr: inner, .. }
+        | NirExprKind::Cast { expr: inner, .. }
+        | NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::VariantTag { expr: inner }
+        | NirExprKind::VariantTest { expr: inner, .. }
+        | NirExprKind::VariantPayload { expr: inner, .. }
+        | NirExprKind::ClosureToCanonical { functor: inner, .. }
+        | NirExprKind::GlobalVarSet { value: inner, .. } => {
             subst_variant_payload_in_expr(inner, temp_local, case_index, payload_local);
         }
-        TirExprKind::Assign { target, value } => {
+        NirExprKind::Assign { target, value } => {
             subst_variant_payload_in_expr(target, temp_local, case_index, payload_local);
             subst_variant_payload_in_expr(value, temp_local, case_index, payload_local);
         }
-        TirExprKind::Index { expr: inner, index } => {
+        NirExprKind::Index { expr: inner, index } => {
             subst_variant_payload_in_expr(inner, temp_local, case_index, payload_local);
             subst_variant_payload_in_expr(index, temp_local, case_index, payload_local);
         }
-        TirExprKind::Call { args, .. } => {
+        NirExprKind::Call { args, .. } => {
             for arg in args {
                 subst_variant_payload_in_expr(&mut arg.expr, temp_local, case_index, payload_local);
             }
         }
-        TirExprKind::CmRawCall { args, .. } => {
+        NirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 subst_variant_payload_in_expr(arg, temp_local, case_index, payload_local);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             subst_variant_payload_in_expr(receiver, temp_local, case_index, payload_local);
             for arg in args {
                 subst_variant_payload_in_expr(&mut arg.expr, temp_local, case_index, payload_local);
             }
         }
-        TirExprKind::IndirectCall { callee, args } => {
+        NirExprKind::IndirectCall { callee, args } => {
             subst_variant_payload_in_expr(callee, temp_local, case_index, payload_local);
             for arg in args {
                 subst_variant_payload_in_expr(arg, temp_local, case_index, payload_local);
             }
         }
-        TirExprKind::StructLiteral { fields, .. } => {
+        NirExprKind::StructLiteral { fields, .. } => {
             for f in fields {
                 subst_variant_payload_in_expr(&mut f.value, temp_local, case_index, payload_local);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } => {
             for e in elements {
                 subst_variant_payload_in_expr(e, temp_local, case_index, payload_local);
             }
         }
-        TirExprKind::VariantConstruct { payload, .. } => {
+        NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 subst_variant_payload_in_expr(p, temp_local, case_index, payload_local);
             }
         }
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             subst_variant_payload_in_block(block, temp_local, case_index, payload_local);
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -1872,7 +1871,7 @@ fn subst_variant_payload_in_expr(
                 subst_variant_payload_in_block(eb, temp_local, case_index, payload_local);
             }
         }
-        TirExprKind::Match { expr, arms } => {
+        NirExprKind::Match { expr, arms } => {
             subst_variant_payload_in_expr(expr, temp_local, case_index, payload_local);
             for arm in arms {
                 subst_variant_payload_in_expr(&mut arm.body, temp_local, case_index, payload_local);
@@ -1881,7 +1880,7 @@ fn subst_variant_payload_in_expr(
                 }
             }
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -1893,33 +1892,33 @@ fn subst_variant_payload_in_expr(
             }
             subst_variant_payload_in_block(default, temp_local, case_index, payload_local);
         }
-        TirExprKind::Closure { body, .. } => {
+        NirExprKind::Closure { body, .. } => {
             subst_variant_payload_in_expr(body, temp_local, case_index, payload_local);
         }
-        TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
+        NirExprKind::TupleSpread { expr: inner }
+        | NirExprKind::TupleZip { expr: inner }
+        | NirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
             subst_variant_payload_in_expr(inner, temp_local, case_index, payload_local);
         }
         // Leaf nodes carry no sub-expressions to substitute into.
-        TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::EnumConstruct { .. } => {}
-        TirExprKind::TemplateString { .. } => {
+        NirExprKind::FuncRef { .. }
+        | NirExprKind::GlobalVarGet { .. }
+        | NirExprKind::Capture { .. }
+        | NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::StringLiteral(_)
+        | NirExprKind::BytesLiteral(_)
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::Null
+        | NirExprKind::Unit
+        | NirExprKind::EnumConstruct { .. } => {}
+        NirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
             unreachable!(
                 "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
             )
@@ -1932,20 +1931,20 @@ fn subst_variant_payload_in_expr(
 /// This is used to determine whether `labeled_block_fusion` would introduce a
 /// new loop nesting that could confuse free unlabeled `break`/`continue` in
 /// the THEN/ELSE blocks being merged.
-fn block_contains_loop(block: &TirBlock) -> bool {
+fn block_contains_loop(block: &NirBlock) -> bool {
     block.stmts.iter().any(stmt_contains_loop)
 }
 
-fn stmt_contains_loop(stmt: &TirStmt) -> bool {
+fn stmt_contains_loop(stmt: &NirStmt) -> bool {
     match &stmt.kind {
-        TirStmtKind::Loop { .. } => true,
-        TirStmtKind::LabeledBlock { block, .. } => block.stmts.iter().any(stmt_contains_loop),
-        TirStmtKind::If {
+        NirStmtKind::Loop { .. } => true,
+        NirStmtKind::LabeledBlock { block, .. } => block.stmts.iter().any(stmt_contains_loop),
+        NirStmtKind::If {
             then_block,
             else_block,
             ..
         }
-        | TirStmtKind::IfLet {
+        | NirStmtKind::IfLet {
             then_block,
             else_block,
             ..
@@ -1955,17 +1954,17 @@ fn stmt_contains_loop(stmt: &TirStmt) -> bool {
                     .as_ref()
                     .is_some_and(|b| b.stmts.iter().any(stmt_contains_loop))
         }
-        TirStmtKind::Let { value, .. }
-        | TirStmtKind::LetDestructure { value, .. }
-        | TirStmtKind::Expr(value)
-        | TirStmtKind::Return { value: Some(value) } => expr_contains_loop(value),
+        NirStmtKind::Let { value, .. }
+        | NirStmtKind::LetDestructure { value, .. }
+        | NirStmtKind::Expr(value)
+        | NirStmtKind::Return { value: Some(value) } => expr_contains_loop(value),
         _ => false,
     }
 }
 
-fn expr_contains_loop(expr: &TirExpr) -> bool {
+fn expr_contains_loop(expr: &NirExpr) -> bool {
     match &expr.kind {
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             block.stmts.iter().any(stmt_contains_loop)
         }
         _ => false,
@@ -1982,26 +1981,26 @@ fn expr_contains_loop(expr: &TirExpr) -> bool {
 ///
 /// Breaks/continues nested inside a `loop {}` within the block are safe: they
 /// target that inner loop, not any outer loop.
-fn block_has_free_unlabeled_loop_exit(block: &TirBlock) -> bool {
+fn block_has_free_unlabeled_loop_exit(block: &NirBlock) -> bool {
     stmts_have_free_unlabeled_loop_exit(&block.stmts, 0)
 }
 
-fn stmts_have_free_unlabeled_loop_exit(stmts: &[TirStmt], loop_depth: u32) -> bool {
+fn stmts_have_free_unlabeled_loop_exit(stmts: &[NirStmt], loop_depth: u32) -> bool {
     stmts
         .iter()
         .any(|s| stmt_has_free_unlabeled_loop_exit(s, loop_depth))
 }
 
-fn stmt_has_free_unlabeled_loop_exit(stmt: &TirStmt, loop_depth: u32) -> bool {
+fn stmt_has_free_unlabeled_loop_exit(stmt: &NirStmt, loop_depth: u32) -> bool {
     match &stmt.kind {
-        TirStmtKind::Break { label: None, .. } | TirStmtKind::Continue => loop_depth == 0,
-        TirStmtKind::Loop { body } => {
+        NirStmtKind::Break { label: None, .. } | NirStmtKind::Continue => loop_depth == 0,
+        NirStmtKind::Loop { body } => {
             stmts_have_free_unlabeled_loop_exit(&body.stmts, loop_depth + 1)
         }
-        TirStmtKind::LabeledBlock { block, .. } => {
+        NirStmtKind::LabeledBlock { block, .. } => {
             stmts_have_free_unlabeled_loop_exit(&block.stmts, loop_depth)
         }
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -2012,7 +2011,7 @@ fn stmt_has_free_unlabeled_loop_exit(stmt: &TirStmt, loop_depth: u32) -> bool {
                     .as_ref()
                     .is_some_and(|b| stmts_have_free_unlabeled_loop_exit(&b.stmts, loop_depth))
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -2024,24 +2023,24 @@ fn stmt_has_free_unlabeled_loop_exit(stmt: &TirStmt, loop_depth: u32) -> bool {
                     .as_ref()
                     .is_some_and(|b| stmts_have_free_unlabeled_loop_exit(&b.stmts, loop_depth))
         }
-        TirStmtKind::Let { value, .. }
-        | TirStmtKind::LetDestructure { value, .. }
-        | TirStmtKind::Expr(value)
-        | TirStmtKind::Return { value: Some(value) }
-        | TirStmtKind::Break {
+        NirStmtKind::Let { value, .. }
+        | NirStmtKind::LetDestructure { value, .. }
+        | NirStmtKind::Expr(value)
+        | NirStmtKind::Return { value: Some(value) }
+        | NirStmtKind::Break {
             value: Some(value), ..
         }
-        | TirStmtKind::TaskReturn { value } => expr_has_free_unlabeled_loop_exit(value, loop_depth),
+        | NirStmtKind::TaskReturn { value } => expr_has_free_unlabeled_loop_exit(value, loop_depth),
         _ => false,
     }
 }
 
-fn expr_has_free_unlabeled_loop_exit(expr: &TirExpr, loop_depth: u32) -> bool {
+fn expr_has_free_unlabeled_loop_exit(expr: &NirExpr, loop_depth: u32) -> bool {
     match &expr.kind {
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             stmts_have_free_unlabeled_loop_exit(&block.stmts, loop_depth)
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -2052,63 +2051,63 @@ fn expr_has_free_unlabeled_loop_exit(expr: &TirExpr, loop_depth: u32) -> bool {
                     .as_ref()
                     .is_some_and(|b| stmts_have_free_unlabeled_loop_exit(&b.stmts, loop_depth))
         }
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             expr_has_free_unlabeled_loop_exit(left, loop_depth)
                 || expr_has_free_unlabeled_loop_exit(right, loop_depth)
         }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::ClosureToCanonical { functor: inner, .. }
-        | TirExprKind::GlobalVarSet { value: inner, .. } => {
+        NirExprKind::Unary { expr: inner, .. }
+        | NirExprKind::Cast { expr: inner, .. }
+        | NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::VariantTag { expr: inner }
+        | NirExprKind::VariantTest { expr: inner, .. }
+        | NirExprKind::VariantPayload { expr: inner, .. }
+        | NirExprKind::ClosureToCanonical { functor: inner, .. }
+        | NirExprKind::GlobalVarSet { value: inner, .. } => {
             expr_has_free_unlabeled_loop_exit(inner, loop_depth)
         }
-        TirExprKind::Assign { target, value } => {
+        NirExprKind::Assign { target, value } => {
             expr_has_free_unlabeled_loop_exit(target, loop_depth)
                 || expr_has_free_unlabeled_loop_exit(value, loop_depth)
         }
-        TirExprKind::Call { args, .. } => args
+        NirExprKind::Call { args, .. } => args
             .iter()
             .any(|a| expr_has_free_unlabeled_loop_exit(&a.expr, loop_depth)),
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             expr_has_free_unlabeled_loop_exit(receiver, loop_depth)
                 || args
                     .iter()
                     .any(|a| expr_has_free_unlabeled_loop_exit(&a.expr, loop_depth))
         }
-        TirExprKind::IndirectCall { callee, args } => {
+        NirExprKind::IndirectCall { callee, args } => {
             expr_has_free_unlabeled_loop_exit(callee, loop_depth)
                 || args
                     .iter()
                     .any(|a| expr_has_free_unlabeled_loop_exit(a, loop_depth))
         }
-        TirExprKind::CmRawCall { args, .. } => args
+        NirExprKind::CmRawCall { args, .. } => args
             .iter()
             .any(|a| expr_has_free_unlabeled_loop_exit(a, loop_depth)),
-        TirExprKind::Index { expr: inner, index } => {
+        NirExprKind::Index { expr: inner, index } => {
             expr_has_free_unlabeled_loop_exit(inner, loop_depth)
                 || expr_has_free_unlabeled_loop_exit(index, loop_depth)
         }
-        TirExprKind::StructLiteral { fields, .. } => fields
+        NirExprKind::StructLiteral { fields, .. } => fields
             .iter()
             .any(|f| expr_has_free_unlabeled_loop_exit(&f.value, loop_depth)),
-        TirExprKind::TupleLiteral { elements } => elements
+        NirExprKind::TupleLiteral { elements } => elements
             .iter()
             .any(|e| expr_has_free_unlabeled_loop_exit(e, loop_depth)),
-        TirExprKind::VariantConstruct { payload, .. } => payload
+        NirExprKind::VariantConstruct { payload, .. } => payload
             .as_deref()
             .is_some_and(|p| expr_has_free_unlabeled_loop_exit(p, loop_depth)),
-        TirExprKind::Closure { body, .. } => expr_has_free_unlabeled_loop_exit(body, loop_depth),
-        TirExprKind::Match { expr, arms } => {
+        NirExprKind::Closure { body, .. } => expr_has_free_unlabeled_loop_exit(body, loop_depth),
+        NirExprKind::Match { expr, arms } => {
             expr_has_free_unlabeled_loop_exit(expr, loop_depth)
                 || arms
                     .iter()
                     .any(|arm| expr_has_free_unlabeled_loop_exit(&arm.body, loop_depth))
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,

@@ -19,24 +19,23 @@
 //!   so we never have to reason about an implicit trailing-value return.
 //! - Requires every other `Return` in the body to also carry a pure value.
 //! - Requires every call site to appear as a top-level statement
-//!   (`TirStmtKind::Expr(Call(f, ...))` or `TirStmtKind::Expr(MethodCall(f,
+//!   (`NirStmtKind::Expr(Call(f, ...))` or `NirStmtKind::Expr(MethodCall(f,
 //!   ...))`); any nested or `Let`-bound use disqualifies the candidate.
 //! - Requires at least one observed call site (otherwise DCE will delete
 //!   the function anyway and there is nothing to optimise).
 
-use crate::flat_package::FlatPackage;
+use crate::nir_package::NirPackage;
 use crate::hashmap::IndexSet;
-use crate::tir::{
-    FunctionKind, ResolvedType, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TypeTable,
-};
-use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::tir::{ResolvedType, TypeTable};
+use crate::nir::{FunctionKind, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind};
+use crate::nir_visitor::{NirMutVisitor, NirRefVisitor};
 
 use super::dae;
 use super::elide_local::is_pure_expr;
 
 type FnKey = dae::FnKey;
 
-pub fn eliminate_dead_return_values(project: &mut FlatPackage) -> bool {
+pub fn eliminate_dead_return_values(project: &mut NirPackage) -> bool {
     let pinned = collect_pinned(project);
     let type_table = project.type_table.borrow();
 
@@ -64,7 +63,7 @@ pub fn eliminate_dead_return_values(project: &mut FlatPackage) -> bool {
     true
 }
 
-fn is_eligible(func: &TirFunction, pinned: &IndexSet<FnKey>, type_table: &TypeTable) -> bool {
+fn is_eligible(func: &NirFunction, pinned: &IndexSet<FnKey>, type_table: &TypeTable) -> bool {
     if func.body.is_none() {
         return false;
     }
@@ -119,14 +118,14 @@ fn is_heap_alloc_return(type_id: crate::tir::TypeId, type_table: &TypeTable) -> 
     )
 }
 
-fn has_only_pure_returns_with_explicit_tail(func: &TirFunction) -> bool {
+fn has_only_pure_returns_with_explicit_tail(func: &NirFunction) -> bool {
     let body = func.body.as_ref().unwrap();
     // The last stmt must be `Return { value: Some(_) }` so we never have to
     // think about an implicit trailing-value return path.
     let Some(last) = body.stmts.last() else {
         return false;
     };
-    let TirStmtKind::Return { value: Some(_) } = &last.kind else {
+    let NirStmtKind::Return { value: Some(_) } = &last.kind else {
         return false;
     };
     // Every return in the function (including the tail) must carry a pure
@@ -142,35 +141,35 @@ struct ReturnPurityChecker {
     ok: bool,
 }
 
-impl TirRefVisitor for ReturnPurityChecker {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
+impl NirRefVisitor for ReturnPurityChecker {
+    fn visit_stmt(&mut self, stmt: &NirStmt) {
         if !self.ok {
             return;
         }
         match &stmt.kind {
-            TirStmtKind::Return { value: None } => self.ok = false,
-            TirStmtKind::Return { value: Some(v) } if !is_pure_expr(v) => self.ok = false,
+            NirStmtKind::Return { value: None } => self.ok = false,
+            NirStmtKind::Return { value: Some(v) } if !is_pure_expr(v) => self.ok = false,
             _ => self.walk_stmt(stmt),
         }
     }
 
-    fn visit_expr(&mut self, expr: &TirExpr) {
+    fn visit_expr(&mut self, expr: &NirExpr) {
         // Closure bodies are a separate function scope. Their `Return`
         // statements belong to the closure, not to the candidate we are
         // evaluating; do not descend into them. This mirrors the closure
         // skip in `ReturnVoidRewriter`.
-        if matches!(&expr.kind, TirExprKind::Closure { .. }) {
+        if matches!(&expr.kind, NirExprKind::Closure { .. }) {
             return;
         }
         self.walk_expr(expr);
     }
 }
 
-fn collect_pinned(project: &FlatPackage) -> IndexSet<FnKey> {
+fn collect_pinned(project: &NirPackage) -> IndexSet<FnKey> {
     dae::collect_pinned(project)
 }
 
-fn validate_call_sites(project: &FlatPackage, mut candidates: IndexSet<FnKey>) -> IndexSet<FnKey> {
+fn validate_call_sites(project: &NirPackage, mut candidates: IndexSet<FnKey>) -> IndexSet<FnKey> {
     let mut validator = CallValidator {
         candidates: &candidates,
         rejected: IndexSet::default(),
@@ -214,11 +213,11 @@ struct CallValidator<'a> {
     observed: IndexSet<FnKey>,
 }
 
-impl TirRefVisitor for CallValidator<'_> {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
-        if let TirStmtKind::Expr(expr) = &stmt.kind {
+impl NirRefVisitor for CallValidator<'_> {
+    fn visit_stmt(&mut self, stmt: &NirStmt) {
+        if let NirStmtKind::Expr(expr) = &stmt.kind {
             match &expr.kind {
-                TirExprKind::Call { func, args, .. } => {
+                NirExprKind::Call { func, args, .. } => {
                     let key = (func.module_source.clone(), func.name.clone());
                     if self.candidates.contains(&key) {
                         self.observed.insert(key);
@@ -232,7 +231,7 @@ impl TirRefVisitor for CallValidator<'_> {
                     }
                     return;
                 }
-                TirExprKind::MethodCall {
+                NirExprKind::MethodCall {
                     func,
                     receiver,
                     args,
@@ -270,8 +269,8 @@ impl TirRefVisitor for CallValidator<'_> {
         self.walk_stmt(stmt);
     }
 
-    fn visit_expr(&mut self, expr: &TirExpr) {
-        // Outside drop-position stmts, the value of every TirExpr is
+    fn visit_expr(&mut self, expr: &NirExpr) {
+        // Outside drop-position stmts, the value of every NirExpr is
         // observable. Hand off to `UseScanner` so any nested candidate call
         // is treated as a use.
         let mut scanner = UseScanner {
@@ -290,10 +289,10 @@ struct UseScanner<'a> {
     rejected: &'a mut IndexSet<FnKey>,
 }
 
-impl TirRefVisitor for UseScanner<'_> {
-    fn visit_expr(&mut self, expr: &TirExpr) {
+impl NirRefVisitor for UseScanner<'_> {
+    fn visit_expr(&mut self, expr: &NirExpr) {
         match &expr.kind {
-            TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => {
+            NirExprKind::Call { func, .. } | NirExprKind::MethodCall { func, .. } => {
                 let key = (func.module_source.clone(), func.name.clone());
                 if self.candidates.contains(&key) {
                     self.rejected.insert(key);
@@ -305,7 +304,7 @@ impl TirRefVisitor for UseScanner<'_> {
     }
 }
 
-fn apply_drve(project: &mut FlatPackage, confirmed: &IndexSet<FnKey>) {
+fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) {
     // Step A: convert each candidate to void return. The candidate filter
     // guarantees every reachable `Return { value: Some(_) }` carries a pure
     // expression, so dropping its value is observably equivalent.
@@ -344,10 +343,10 @@ struct CallRetyper<'a> {
     confirmed: &'a IndexSet<FnKey>,
 }
 
-impl TirMutVisitor for CallRetyper<'_> {
-    fn visit_expr(&mut self, expr: &mut TirExpr) {
+impl NirMutVisitor for CallRetyper<'_> {
+    fn visit_expr(&mut self, expr: &mut NirExpr) {
         match &expr.kind {
-            TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => {
+            NirExprKind::Call { func, .. } | NirExprKind::MethodCall { func, .. } => {
                 let key = (func.module_source.clone(), func.name.clone());
                 if self.confirmed.contains(&key) {
                     expr.type_id = TypeTable::UNIT;
@@ -364,17 +363,17 @@ impl TirMutVisitor for CallRetyper<'_> {
 /// own function scope, which DRVE evaluates separately if at all.
 struct ReturnVoidRewriter;
 
-impl TirMutVisitor for ReturnVoidRewriter {
-    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
-        if let TirStmtKind::Return { value } = &mut stmt.kind {
+impl NirMutVisitor for ReturnVoidRewriter {
+    fn visit_stmt(&mut self, stmt: &mut NirStmt) {
+        if let NirStmtKind::Return { value } = &mut stmt.kind {
             *value = None;
             return;
         }
         self.walk_stmt(stmt);
     }
 
-    fn visit_expr(&mut self, expr: &mut TirExpr) {
-        if matches!(&expr.kind, TirExprKind::Closure { .. }) {
+    fn visit_expr(&mut self, expr: &mut NirExpr) {
+        if matches!(&expr.kind, NirExprKind::Closure { .. }) {
             return;
         }
         self.walk_expr(expr);

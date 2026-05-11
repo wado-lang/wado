@@ -3,7 +3,7 @@
 //! Decides which aggregate-returning user functions should use the
 //! multi-value Wasm return ABI (each tuple element / struct field a
 //! separate Wasm result) instead of the default heap-struct ABI. The
-//! decision is recorded on [`TirFunction.return_abi`] and consumed by
+//! decision is recorded on [`NirFunction.return_abi`] and consumed by
 //! `wir_build`:
 //! - `wir_build::functions` emits the multi-value Wasm signature on the
 //!   function definition.
@@ -56,14 +56,12 @@
 //! `MultiValue { result_types, field_names }` carrying the per-field
 //! TIR types and names.
 
-use crate::flat_package::FlatPackage;
+use crate::nir_package::NirPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::{
-    FunctionKind, ResolvedType, ReturnAbi, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt,
-    TirStmtKind, TirStruct, TypeId, TypeTable,
-};
-use crate::tir_visitor::TirRefVisitor;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::nir::{FunctionKind, ReturnAbi, NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind, NirStruct};
+use crate::nir_visitor::NirRefVisitor;
 
 /// Per-candidate body-only info: the per-field TIR types and field names
 /// (in declaration order). For tuples, `field_names` is `["0", "1", ...]`.
@@ -84,11 +82,11 @@ struct CandidateInfo {
 /// and the escape detector (a candidate call appearing in any other
 /// position is an escape — the result flows somewhere we can't rewrite).
 fn candidate_call_idx(
-    expr: &TirExpr,
+    expr: &NirExpr,
     candidate_names: &IndexMap<(String, ModuleSource), usize>,
 ) -> Option<usize> {
     let func = match &expr.kind {
-        TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => func,
+        NirExprKind::Call { func, .. } | NirExprKind::MethodCall { func, .. } => func,
         _ => return None,
     };
     candidate_names
@@ -101,19 +99,19 @@ fn candidate_call_idx(
 /// own ABI is already accepted by the caller (it's the safe `let __tmp =
 /// Call` shape) — only the args need recursive validation.
 fn walk_call_args_for_uses(
-    expr: &TirExpr,
+    expr: &NirExpr,
     candidate_names: &IndexMap<(String, ModuleSource), usize>,
     candidates: &IndexMap<usize, CandidateInfo>,
     invalid: &mut IndexSet<usize>,
     tracked: &IndexMap<u32, usize>,
 ) {
     match &expr.kind {
-        TirExprKind::Call { args, .. } => {
+        NirExprKind::Call { args, .. } => {
             for arg in args {
                 walk_expr_for_uses(&arg.expr, candidate_names, candidates, invalid, tracked);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             walk_expr_for_uses(receiver, candidate_names, candidates, invalid, tracked);
             for arg in args {
                 walk_expr_for_uses(&arg.expr, candidate_names, candidates, invalid, tracked);
@@ -126,7 +124,7 @@ fn walk_call_args_for_uses(
 /// Classify aggregate-returning functions and set `return_abi` on those
 /// whose every return statement and every call site permit the
 /// multi-value ABI.
-pub fn classify_multi_value_returns(project: &mut FlatPackage) {
+pub fn classify_multi_value_returns(project: &mut NirPackage) {
     let type_table = project.type_table.borrow();
     let structs = &project.structs;
 
@@ -185,9 +183,9 @@ pub fn classify_multi_value_returns(project: &mut FlatPackage) {
 /// body-eligible (return type is tuple-or-struct, arity 2-4, all fields
 /// eligible, every return statement matches the shape).
 fn candidate_info(
-    func: &TirFunction,
+    func: &NirFunction,
     type_table: &TypeTable,
-    structs: &[TirStruct],
+    structs: &[NirStruct],
 ) -> Option<CandidateInfo> {
     // Restrict to ordinary (Regular) functions. Synthesised stubs
     // (`ValueCopy`, `FnCanonicalDispatch`) and the dispatch wrappers used
@@ -273,7 +271,7 @@ fn candidate_info(
 fn aggregate_field_info(
     return_type: TypeId,
     type_table: &TypeTable,
-    structs: &[TirStruct],
+    structs: &[NirStruct],
 ) -> Option<(Vec<TypeId>, Vec<String>, bool)> {
     if let Some(elems) = type_table.as_tuple(return_type) {
         let names: Vec<String> = (0..elems.len()).map(|i| i.to_string()).collect();
@@ -346,18 +344,18 @@ struct ExpectedShape {
 
 /// Check that every `return` statement in `block` (recursively, through
 /// nested blocks) carries a fresh aggregate literal of the expected shape.
-fn all_returns_match_shape(block: &TirBlock, expected: &ExpectedShape) -> bool {
+fn all_returns_match_shape(block: &NirBlock, expected: &ExpectedShape) -> bool {
     block
         .stmts
         .iter()
         .all(|stmt| stmt_returns_match(stmt, expected))
 }
 
-fn stmt_returns_match(stmt: &TirStmt, expected: &ExpectedShape) -> bool {
+fn stmt_returns_match(stmt: &NirStmt, expected: &ExpectedShape) -> bool {
     match &stmt.kind {
-        TirStmtKind::Return { value: None } => false, // void return on aggregate-return fn
-        TirStmtKind::Return { value: Some(v) } => expr_returns_match(v, expected),
-        TirStmtKind::If {
+        NirStmtKind::Return { value: None } => false, // void return on aggregate-return fn
+        NirStmtKind::Return { value: Some(v) } => expr_returns_match(v, expected),
+        NirStmtKind::If {
             then_block,
             else_block,
             ..
@@ -367,10 +365,10 @@ fn stmt_returns_match(stmt: &TirStmt, expected: &ExpectedShape) -> bool {
                     .as_ref()
                     .is_none_or(|b| all_returns_match_shape(b, expected))
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             all_returns_match_shape(body, expected)
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             then_block,
             else_block,
             ..
@@ -382,28 +380,28 @@ fn stmt_returns_match(stmt: &TirStmt, expected: &ExpectedShape) -> bool {
         }
         // Let / Expr / Break / Continue / TaskReturn / VariadicForOf — no
         // explicit Return; recurse into nested blocks via expression walks.
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             nested_returns_in_expr_match(value, expected)
         }
-        TirStmtKind::Expr(e) => nested_returns_in_expr_match(e, expected),
-        TirStmtKind::Break { value, .. } => value
+        NirStmtKind::Expr(e) => nested_returns_in_expr_match(e, expected),
+        NirStmtKind::Break { value, .. } => value
             .as_ref()
             .is_none_or(|v| nested_returns_in_expr_match(v, expected)),
-        TirStmtKind::Continue => true,
-        TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => true,
+        NirStmtKind::Continue => true,
+        NirStmtKind::TaskReturn { .. } | NirStmtKind::VariadicForOf { .. } => true,
     }
 }
 
 /// Walk an expression tree, asserting every nested explicit `Return`
 /// (e.g. inside a labelled block / match arm) carries a matching
 /// aggregate literal.
-fn nested_returns_in_expr_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
+fn nested_returns_in_expr_match(expr: &NirExpr, expected: &ExpectedShape) -> bool {
     struct Walker<'a> {
         expected: &'a ExpectedShape,
         ok: bool,
     }
-    impl TirRefVisitor for Walker<'_> {
-        fn visit_stmt(&mut self, stmt: &TirStmt) {
+    impl NirRefVisitor for Walker<'_> {
+        fn visit_stmt(&mut self, stmt: &NirStmt) {
             if !self.ok {
                 return;
             }
@@ -426,7 +424,7 @@ fn nested_returns_in_expr_match(expr: &TirExpr, expected: &ExpectedShape) -> boo
 /// build's Return arm recursively unwraps leaf `StructNew`s in nested
 /// blocks / conditionals when the function's `ReturnAbi::MultiValue` is
 /// set.
-fn expr_returns_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
+fn expr_returns_match(expr: &NirExpr, expected: &ExpectedShape) -> bool {
     // Diverging arms (`_ => unreachable()`, etc.) carry control flow away
     // before the function-level Return is reached, so they don't need to
     // produce a fresh aggregate. Accept them so e.g. `pow10_coarse`'s
@@ -435,10 +433,10 @@ fn expr_returns_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
         return true;
     }
     match &expr.kind {
-        TirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } => {
             expected.struct_type.is_none() && elements.len() == expected.arity
         }
-        TirExprKind::StructLiteral {
+        NirExprKind::StructLiteral {
             struct_type,
             fields,
             ..
@@ -446,12 +444,12 @@ fn expr_returns_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
             Some(t) => *struct_type == t && fields.len() == expected.arity,
             None => false,
         },
-        TirExprKind::Block(b) => {
+        NirExprKind::Block(b) => {
             // Plain block: only the tail expression flows out (no
             // `break` can target an unlabelled block from outside).
             all_returns_match_shape(b, expected) && block_tail_returns_match(b, expected)
         }
-        TirExprKind::LabeledBlock { block: b, .. } => {
+        NirExprKind::LabeledBlock { block: b, .. } => {
             // Labelled block: tail expression *and* every `break`
             // targeting this label flow out as the function's return
             // value. Without label-tracking we can't tell which inner
@@ -465,7 +463,7 @@ fn expr_returns_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
                 && block_tail_returns_match(b, expected)
                 && all_break_values_match_shape(b, expected)
         }
-        TirExprKind::If {
+        NirExprKind::If {
             then_branch,
             else_branch,
             ..
@@ -476,10 +474,10 @@ fn expr_returns_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
                     all_returns_match_shape(b, expected) && block_tail_returns_match(b, expected)
                 })
         }
-        TirExprKind::Match { arms, .. } => arms
+        NirExprKind::Match { arms, .. } => arms
             .iter()
             .all(|arm| expr_returns_match(&arm.body, expected)),
-        TirExprKind::Switch { arms, default, .. } => {
+        NirExprKind::Switch { arms, default, .. } => {
             arms.iter().all(|arm| {
                 all_returns_match_shape(arm, expected) && block_tail_returns_match(arm, expected)
             }) && all_returns_match_shape(default, expected)
@@ -502,24 +500,24 @@ fn expr_returns_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
 /// for every break. Functions whose inner breaks carry computed values
 /// stay on the heap-struct ABI; that's the same trade-off as rejecting
 /// `return match { … }` arms whose tail isn't a literal.
-fn all_break_values_match_shape(block: &TirBlock, expected: &ExpectedShape) -> bool {
+fn all_break_values_match_shape(block: &NirBlock, expected: &ExpectedShape) -> bool {
     block
         .stmts
         .iter()
         .all(|stmt| stmt_break_values_match(stmt, expected))
 }
 
-fn stmt_break_values_match(stmt: &TirStmt, expected: &ExpectedShape) -> bool {
+fn stmt_break_values_match(stmt: &NirStmt, expected: &ExpectedShape) -> bool {
     match &stmt.kind {
-        TirStmtKind::Break { value: Some(v), .. } => {
+        NirStmtKind::Break { value: Some(v), .. } => {
             // The break value flows out as the labelled block's value.
             // It must itself be a fresh aggregate literal matching the
             // expected shape, AND its sub-expressions must not contain
             // further breaks with non-literal values.
             expr_returns_match(v, expected) && expr_break_values_match(v, expected)
         }
-        TirStmtKind::Break { value: None, .. } | TirStmtKind::Continue => true,
-        TirStmtKind::If {
+        NirStmtKind::Break { value: None, .. } | NirStmtKind::Continue => true,
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -530,7 +528,7 @@ fn stmt_break_values_match(stmt: &TirStmt, expected: &ExpectedShape) -> bool {
                     .as_ref()
                     .is_none_or(|b| all_break_values_match_shape(b, expected))
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -542,28 +540,28 @@ fn stmt_break_values_match(stmt: &TirStmt, expected: &ExpectedShape) -> bool {
                     .as_ref()
                     .is_none_or(|b| all_break_values_match_shape(b, expected))
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             all_break_values_match_shape(body, expected)
         }
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             expr_break_values_match(value, expected)
         }
-        TirStmtKind::Expr(e) | TirStmtKind::Return { value: Some(e) } => {
+        NirStmtKind::Expr(e) | NirStmtKind::Return { value: Some(e) } => {
             expr_break_values_match(e, expected)
         }
-        TirStmtKind::Return { value: None }
-        | TirStmtKind::TaskReturn { .. }
-        | TirStmtKind::VariadicForOf { .. } => true,
+        NirStmtKind::Return { value: None }
+        | NirStmtKind::TaskReturn { .. }
+        | NirStmtKind::VariadicForOf { .. } => true,
     }
 }
 
-fn expr_break_values_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
+fn expr_break_values_match(expr: &NirExpr, expected: &ExpectedShape) -> bool {
     struct Walker<'a> {
         expected: &'a ExpectedShape,
         ok: bool,
     }
-    impl TirRefVisitor for Walker<'_> {
-        fn visit_stmt(&mut self, stmt: &TirStmt) {
+    impl NirRefVisitor for Walker<'_> {
+        fn visit_stmt(&mut self, stmt: &NirStmt) {
             if !self.ok {
                 return;
             }
@@ -583,16 +581,16 @@ fn expr_break_values_match(expr: &TirExpr, expected: &ExpectedShape) -> bool {
 /// expression (or break-value) must itself be a fresh aggregate literal
 /// (or further-nested control flow that ends in one). Statements before
 /// the tail are already validated by `all_returns_match_shape`.
-fn block_tail_returns_match(block: &TirBlock, expected: &ExpectedShape) -> bool {
+fn block_tail_returns_match(block: &NirBlock, expected: &ExpectedShape) -> bool {
     let Some(last) = block.stmts.last() else {
         return false;
     };
     match &last.kind {
-        TirStmtKind::Expr(e) => expr_returns_match(e, expected),
-        TirStmtKind::Break { value: Some(v), .. } => expr_returns_match(v, expected),
+        NirStmtKind::Expr(e) => expr_returns_match(e, expected),
+        NirStmtKind::Break { value: Some(v), .. } => expr_returns_match(v, expected),
         // An explicit Return at tail position is fine — `all_returns_match_shape`
         // already validates its value.
-        TirStmtKind::Return { .. } => true,
+        NirStmtKind::Return { .. } => true,
         _ => false,
     }
 }
@@ -601,7 +599,7 @@ fn block_tail_returns_match(block: &TirBlock, expected: &ExpectedShape) -> bool 
 /// result in any way other than `let __tmp = Call(f); …
 /// FieldAccess(LocalGet(__tmp), name) …`.
 fn validate_uses_in_block(
-    block: &TirBlock,
+    block: &NirBlock,
     candidate_names: &IndexMap<(String, ModuleSource), usize>,
     candidates: &IndexMap<usize, CandidateInfo>,
     invalid: &mut IndexSet<usize>,
@@ -618,14 +616,14 @@ fn validate_uses_in_block(
 }
 
 fn validate_stmt(
-    stmt: &TirStmt,
+    stmt: &NirStmt,
     candidate_names: &IndexMap<(String, ModuleSource), usize>,
     candidates: &IndexMap<usize, CandidateInfo>,
     invalid: &mut IndexSet<usize>,
     tracked: &mut IndexMap<u32, usize>,
 ) {
     match &stmt.kind {
-        TirStmtKind::Let {
+        NirStmtKind::Let {
             local_index,
             value,
             is_mut,
@@ -646,19 +644,19 @@ fn validate_stmt(
             // can't rewrite) and (b) bare references to tracked locals.
             walk_expr_for_uses(value, candidate_names, candidates, invalid, tracked);
         }
-        TirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::LetDestructure { value, .. } => {
             walk_expr_for_uses(value, candidate_names, candidates, invalid, tracked);
         }
-        TirStmtKind::Expr(e) | TirStmtKind::Return { value: Some(e) } => {
+        NirStmtKind::Expr(e) | NirStmtKind::Return { value: Some(e) } => {
             walk_expr_for_uses(e, candidate_names, candidates, invalid, tracked);
         }
-        TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
-        TirStmtKind::Break { value, .. } => {
+        NirStmtKind::Return { value: None } | NirStmtKind::Continue => {}
+        NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 walk_expr_for_uses(v, candidate_names, candidates, invalid, tracked);
             }
         }
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -677,13 +675,13 @@ fn validate_stmt(
                 }
             }
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             let mut inner = tracked.clone();
             for stmt in &body.stmts {
                 validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
             }
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -701,7 +699,7 @@ fn validate_stmt(
                 }
             }
         }
-        TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => {}
+        NirStmtKind::TaskReturn { .. } | NirStmtKind::VariadicForOf { .. } => {}
     }
 }
 
@@ -710,7 +708,7 @@ fn validate_stmt(
 /// `FieldAccess(LocalGet(tracked), name)` access where `name` is one of
 /// the candidate's known field names.
 fn walk_expr_for_uses(
-    expr: &TirExpr,
+    expr: &NirExpr,
     candidate_names: &IndexMap<(String, ModuleSource), usize>,
     candidates: &IndexMap<usize, CandidateInfo>,
     invalid: &mut IndexSet<usize>,
@@ -721,12 +719,12 @@ fn walk_expr_for_uses(
         // where `name` is one of the candidate's field names. Don't
         // recurse into the inner Local — that would mark it as a
         // bare reference.
-        TirExprKind::FieldAccess {
+        NirExprKind::FieldAccess {
             expr: source,
             field_name,
             ..
         } => {
-            if let TirExprKind::Local { index, .. } = &source.kind
+            if let NirExprKind::Local { index, .. } = &source.kind
                 && let Some(&candidate_idx) = tracked.get(index)
                 && let Some(info) = candidates.get(&candidate_idx)
                 && info.field_name_set.contains(field_name)
@@ -736,7 +734,7 @@ fn walk_expr_for_uses(
             walk_expr_for_uses(source, candidate_names, candidates, invalid, tracked);
         }
         // Bare local reference of a tracked candidate result → escape.
-        TirExprKind::Local { index, .. } => {
+        NirExprKind::Local { index, .. } => {
             if let Some(&candidate_idx) = tracked.get(index) {
                 invalid.insert(candidate_idx);
             }
@@ -745,7 +743,7 @@ fn walk_expr_for_uses(
         // doesn't get bound and projected; it flows somewhere we can't
         // rewrite). Both `Call` and `MethodCall` can resolve to a
         // candidate after monomorphisation.
-        TirExprKind::Call { func, args, .. } => {
+        NirExprKind::Call { func, args, .. } => {
             if let Some(&candidate_idx) =
                 candidate_names.get(&(func.name.clone(), func.module_source.clone()))
             {
@@ -755,7 +753,7 @@ fn walk_expr_for_uses(
                 walk_expr_for_uses(&arg.expr, candidate_names, candidates, invalid, tracked);
             }
         }
-        TirExprKind::MethodCall {
+        NirExprKind::MethodCall {
             receiver,
             func,
             args,
@@ -771,24 +769,24 @@ fn walk_expr_for_uses(
                 walk_expr_for_uses(&arg.expr, candidate_names, candidates, invalid, tracked);
             }
         }
-        TirExprKind::CmRawCall { args, .. } => {
+        NirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 walk_expr_for_uses(arg, candidate_names, candidates, invalid, tracked);
             }
         }
-        TirExprKind::IndirectCall { callee, args } => {
+        NirExprKind::IndirectCall { callee, args } => {
             walk_expr_for_uses(callee, candidate_names, candidates, invalid, tracked);
             for arg in args {
                 walk_expr_for_uses(arg, candidate_names, candidates, invalid, tracked);
             }
         }
-        TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } => {
+        NirExprKind::Block(b) | NirExprKind::LabeledBlock { block: b, .. } => {
             let mut inner = tracked.clone();
             for stmt in &b.stmts {
                 validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
             }
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -805,7 +803,7 @@ fn walk_expr_for_uses(
                 }
             }
         }
-        TirExprKind::Match { expr: scrut, arms } => {
+        NirExprKind::Match { expr: scrut, arms } => {
             walk_expr_for_uses(scrut, candidate_names, candidates, invalid, tracked);
             for arm in arms {
                 if let Some(g) = &arm.guard {
@@ -814,7 +812,7 @@ fn walk_expr_for_uses(
                 walk_expr_for_uses(&arm.body, candidate_names, candidates, invalid, tracked);
             }
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -832,7 +830,7 @@ fn walk_expr_for_uses(
                 validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
             }
         }
-        TirExprKind::Closure { body, .. } => {
+        NirExprKind::Closure { body, .. } => {
             // Closure captures wouldn't refer to outer-tracked locals
             // through a `Local` arm — captures use `Capture { index }`.
             // But a closure body that itself calls a candidate must still
@@ -849,67 +847,67 @@ fn walk_expr_for_uses(
 
 /// Visit every direct child expression of `expr` with `walk_expr_for_uses`.
 fn recurse_children(
-    expr: &TirExpr,
+    expr: &NirExpr,
     candidate_names: &IndexMap<(String, ModuleSource), usize>,
     candidates: &IndexMap<usize, CandidateInfo>,
     invalid: &mut IndexSet<usize>,
     tracked: &IndexMap<u32, usize>,
 ) {
     match &expr.kind {
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             walk_expr_for_uses(left, candidate_names, candidates, invalid, tracked);
             walk_expr_for_uses(right, candidate_names, candidates, invalid, tracked);
         }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
+        NirExprKind::Unary { expr: inner, .. }
+        | NirExprKind::Cast { expr: inner, .. }
+        | NirExprKind::TupleSpread { expr: inner }
+        | NirExprKind::TupleZip { expr: inner }
+        | NirExprKind::TypePackExpansion {
             call_expr: inner, ..
         }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+        | NirExprKind::VariantTag { expr: inner }
+        | NirExprKind::VariantTest { expr: inner, .. }
+        | NirExprKind::VariantPayload { expr: inner, .. }
+        | NirExprKind::ClosureToCanonical { functor: inner, .. } => {
             walk_expr_for_uses(inner, candidate_names, candidates, invalid, tracked);
         }
-        TirExprKind::Assign { target, value }
-        | TirExprKind::Index {
+        NirExprKind::Assign { target, value }
+        | NirExprKind::Index {
             expr: target,
             index: value,
         } => {
             walk_expr_for_uses(target, candidate_names, candidates, invalid, tracked);
             walk_expr_for_uses(value, candidate_names, candidates, invalid, tracked);
         }
-        TirExprKind::StructLiteral { fields, .. } => {
+        NirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
                 walk_expr_for_uses(&field.value, candidate_names, candidates, invalid, tracked);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 walk_expr_for_uses(elem, candidate_names, candidates, invalid, tracked);
             }
         }
-        TirExprKind::VariantConstruct { payload, .. } => {
+        NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 walk_expr_for_uses(p, candidate_names, candidates, invalid, tracked);
             }
         }
-        TirExprKind::GlobalVarSet { value, .. } => {
+        NirExprKind::GlobalVarSet { value, .. } => {
             walk_expr_for_uses(value, candidate_names, candidates, invalid, tracked);
         }
-        TirExprKind::TemplateString { parts } => {
+        NirExprKind::TemplateString { parts } => {
             for part in parts {
-                if let crate::tir::TirTemplatePart::Interpolation { expr: e, .. } = part {
+                if let crate::nir::NirTemplatePart::Interpolation { expr: e, .. } = part {
                     walk_expr_for_uses(e, candidate_names, candidates, invalid, tracked);
                 }
             }
         }
-        TirExprKind::Resume { value } => {
+        NirExprKind::Resume { value } => {
             walk_expr_for_uses(value, candidate_names, candidates, invalid, tracked);
         }
-        TirExprKind::WithHandler { bindings, body, .. } => {
+        NirExprKind::WithHandler { bindings, body, .. } => {
             for b in bindings {
                 walk_expr_for_uses(&b.handler, candidate_names, candidates, invalid, tracked);
             }
@@ -919,31 +917,31 @@ fn recurse_children(
             }
         }
         // Leaf nodes — no nested expressions.
-        TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::EnumConstruct { .. } => {}
+        NirExprKind::Local { .. }
+        | NirExprKind::FuncRef { .. }
+        | NirExprKind::GlobalVarGet { .. }
+        | NirExprKind::Capture { .. }
+        | NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::StringLiteral(_)
+        | NirExprKind::BytesLiteral(_)
+        | NirExprKind::Null
+        | NirExprKind::Unit
+        | NirExprKind::EnumConstruct { .. } => {}
         // Already handled in `walk_expr_for_uses` outer match.
-        TirExprKind::FieldAccess { .. }
-        | TirExprKind::Call { .. }
-        | TirExprKind::MethodCall { .. }
-        | TirExprKind::CmRawCall { .. }
-        | TirExprKind::IndirectCall { .. }
-        | TirExprKind::Block(_)
-        | TirExprKind::LabeledBlock { .. }
-        | TirExprKind::If { .. }
-        | TirExprKind::Match { .. }
-        | TirExprKind::Switch { .. }
-        | TirExprKind::Closure { .. } => {
+        NirExprKind::FieldAccess { .. }
+        | NirExprKind::Call { .. }
+        | NirExprKind::MethodCall { .. }
+        | NirExprKind::CmRawCall { .. }
+        | NirExprKind::IndirectCall { .. }
+        | NirExprKind::Block(_)
+        | NirExprKind::LabeledBlock { .. }
+        | NirExprKind::If { .. }
+        | NirExprKind::Match { .. }
+        | NirExprKind::Switch { .. }
+        | NirExprKind::Closure { .. } => {
             // Outer match should have routed these directly; if we reach
             // here something's wrong.
             unreachable!(

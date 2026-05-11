@@ -1696,33 +1696,5 @@ impl NirProgram {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_primitive_constants() {
-        let table = TypeTable::new();
-        assert!(matches!(
-            table.get(TypeTable::I32),
-            ResolvedType::Primitive(PrimitiveType::I32)
-        ));
-        assert!(matches!(
-            table.get(TypeTable::BOOL),
-            ResolvedType::Primitive(PrimitiveType::Bool)
-        ));
-        // Note: String is now a user-defined struct, not a builtin type
-        assert!(matches!(table.get(TypeTable::UNIT), ResolvedType::Unit));
-    }
-
-    #[test]
-    fn test_intern_deduplication() {
-        let mut table = TypeTable::new();
-        // Test that interning the same type returns the same TypeId
-        let arr1 = table.make_array(TypeTable::I32);
-        let arr2 = table.make_array(TypeTable::I32);
-        assert_eq!(arr1, arr2);
-        // Verify as_array works
-        assert_eq!(table.as_array(arr1), Some(TypeTable::I32));
-    }
-}
+// (Type-system unit tests live in `crate::tir`'s test module; NIR shares
+// the TIR `TypeTable` and has nothing additional to assert here yet.)

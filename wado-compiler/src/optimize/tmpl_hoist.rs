@@ -34,16 +34,14 @@
 //! the result must be bound to a Let variable that is only used as a method
 //! receiver (`self`), never passed as a regular function argument.
 
-use crate::flat_package::FlatPackage;
+use crate::nir_package::NirPackage;
 use crate::hashmap::IndexSet;
-use crate::tir::{
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, TypeTable,
-};
+use crate::tir::{TypeId, TypeTable};
+use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind, NirUnaryOp};
 use crate::token::Span;
 
 /// Apply template string buffer hoisting to all functions in the project.
-pub fn hoist_template_buffers(project: &mut FlatPackage) -> bool {
+pub fn hoist_template_buffers(project: &mut NirPackage) -> bool {
     let mut changed = false;
     let type_table = project.type_table.clone();
     for func_rc in &project.functions {
@@ -53,7 +51,7 @@ pub fn hoist_template_buffers(project: &mut FlatPackage) -> bool {
     changed
 }
 
-fn hoist_in_function(func: &mut TirFunction, type_table: &std::cell::RefCell<TypeTable>) -> bool {
+fn hoist_in_function(func: &mut NirFunction, type_table: &std::cell::RefCell<TypeTable>) -> bool {
     let Some(ref mut body) = func.body else {
         return false;
     };
@@ -66,9 +64,9 @@ fn hoist_in_function(func: &mut TirFunction, type_table: &std::cell::RefCell<Typ
 }
 
 fn hoist_in_block(
-    block: &mut TirBlock,
+    block: &mut NirBlock,
     local_count: &mut u32,
-    locals: &mut Vec<TirLocal>,
+    locals: &mut Vec<NirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
 ) -> bool {
     let mut changed = false;
@@ -76,7 +74,7 @@ fn hoist_in_block(
 
     for mut stmt in std::mem::take(&mut block.stmts) {
         match &mut stmt.kind {
-            TirStmtKind::Loop { body } => {
+            NirStmtKind::Loop { body } => {
                 // Recurse into loop body first (for nested loops)
                 changed |= hoist_in_block(body, local_count, locals, type_table);
 
@@ -88,7 +86,7 @@ fn hoist_in_block(
                 }
                 new_stmts.push(stmt);
             }
-            TirStmtKind::If {
+            NirStmtKind::If {
                 then_block,
                 else_block,
                 ..
@@ -99,11 +97,11 @@ fn hoist_in_block(
                 }
                 new_stmts.push(stmt);
             }
-            TirStmtKind::LabeledBlock { block: inner, .. } => {
+            NirStmtKind::LabeledBlock { block: inner, .. } => {
                 changed |= hoist_in_block(inner, local_count, locals, type_table);
                 new_stmts.push(stmt);
             }
-            TirStmtKind::IfLet {
+            NirStmtKind::IfLet {
                 then_block,
                 else_block,
                 ..
@@ -129,7 +127,7 @@ struct TmplCandidate {
     /// Index of the `__r` local in the `__tmpl` block
     buf_local_index: u32,
     /// The initial value expression (e.g., `String { repr: array_new(N), used: 0 }`)
-    init_value: TirExpr,
+    init_value: NirExpr,
     /// The String type ID
     string_type: TypeId,
     /// The span of the original expression
@@ -143,7 +141,7 @@ struct FmtCandidate {
     /// The local index being assigned to (e.g., `__local_13`)
     fmt_local_index: u32,
     /// The Formatter struct literal expression
-    init_value: TirExpr,
+    init_value: NirExpr,
     /// The Formatter type ID
     formatter_type: TypeId,
     /// Index of the `indent` field in the Formatter struct
@@ -155,11 +153,11 @@ struct FmtCandidate {
 /// Scan a loop body for `__tmpl` labeled blocks and hoist their buffer allocations.
 /// Returns hoisting statements to prepend before the loop.
 fn hoist_tmpl_from_loop(
-    loop_body: &mut TirBlock,
+    loop_body: &mut NirBlock,
     local_count: &mut u32,
-    locals: &mut Vec<TirLocal>,
+    locals: &mut Vec<NirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
-) -> Vec<TirStmt> {
+) -> Vec<NirStmt> {
     // Phase 1: Collect all Let bindings whose value is a __tmpl LabeledBlock,
     // and check if the bound variable escapes (used as a non-self argument).
     let escaping_locals = collect_escaping_locals(loop_body);
@@ -179,7 +177,7 @@ fn hoist_tmpl_from_loop(
 
 /// Collect local indices that "escape" — used as a non-receiver function argument
 /// or stored in a struct/array/collection.
-fn collect_escaping_locals(block: &TirBlock) -> IndexSet<u32> {
+fn collect_escaping_locals(block: &NirBlock) -> IndexSet<u32> {
     let mut escaping = IndexSet::default();
     for stmt in &block.stmts {
         collect_escaping_in_stmt(stmt, &mut escaping);
@@ -187,20 +185,20 @@ fn collect_escaping_locals(block: &TirBlock) -> IndexSet<u32> {
     escaping
 }
 
-fn collect_escaping_in_stmt(stmt: &TirStmt, escaping: &mut IndexSet<u32>) {
+fn collect_escaping_in_stmt(stmt: &NirStmt, escaping: &mut IndexSet<u32>) {
     match &stmt.kind {
-        TirStmtKind::Let { value, .. } => {
+        NirStmtKind::Let { value, .. } => {
             collect_escaping_in_expr(value, escaping);
         }
-        TirStmtKind::Expr(expr) => {
+        NirStmtKind::Expr(expr) => {
             collect_escaping_in_expr(expr, escaping);
         }
-        TirStmtKind::Return { value: Some(expr) } => {
+        NirStmtKind::Return { value: Some(expr) } => {
             // Returning a value means it escapes the loop
             collect_local_refs(expr, escaping);
             collect_escaping_in_expr(expr, escaping);
         }
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -215,12 +213,12 @@ fn collect_escaping_in_stmt(stmt: &TirStmt, escaping: &mut IndexSet<u32>) {
                 }
             }
         }
-        TirStmtKind::LabeledBlock { block, .. } => {
+        NirStmtKind::LabeledBlock { block, .. } => {
             for s in &block.stmts {
                 collect_escaping_in_stmt(s, escaping);
             }
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -236,41 +234,41 @@ fn collect_escaping_in_stmt(stmt: &TirStmt, escaping: &mut IndexSet<u32>) {
                 }
             }
         }
-        TirStmtKind::Loop { body } => {
+        NirStmtKind::Loop { body } => {
             for s in &body.stmts {
                 collect_escaping_in_stmt(s, escaping);
             }
         }
-        TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
-        TirStmtKind::Break { value, .. } => {
+        NirStmtKind::Return { value: None } | NirStmtKind::Continue => {}
+        NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 collect_local_refs(v, escaping);
                 collect_escaping_in_expr(v, escaping);
             }
         }
-        TirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::LetDestructure { value, .. } => {
             collect_escaping_in_expr(value, escaping);
         }
-        TirStmtKind::TaskReturn { .. } => {
+        NirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
-        TirStmtKind::VariadicForOf { .. } => {
+        NirStmtKind::VariadicForOf { .. } => {
             unreachable!("VariadicForOf should be expanded during monomorphization")
         }
     }
 }
 
 /// Mark all locals that appear as non-receiver function arguments as escaping.
-fn collect_escaping_in_expr(expr: &TirExpr, escaping: &mut IndexSet<u32>) {
+fn collect_escaping_in_expr(expr: &NirExpr, escaping: &mut IndexSet<u32>) {
     match &expr.kind {
         // Function call: args (not receiver) escape
-        TirExprKind::Call { args, .. } => {
+        NirExprKind::Call { args, .. } => {
             for arg in args {
                 collect_local_refs(&arg.expr, escaping);
                 collect_escaping_in_expr(&arg.expr, escaping);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             // Receiver (self) doesn't escape — only non-self args escape
             collect_escaping_in_expr(receiver, escaping);
             for arg in args {
@@ -278,7 +276,7 @@ fn collect_escaping_in_expr(expr: &TirExpr, escaping: &mut IndexSet<u32>) {
                 collect_escaping_in_expr(&arg.expr, escaping);
             }
         }
-        TirExprKind::IndirectCall { callee, args } => {
+        NirExprKind::IndirectCall { callee, args } => {
             collect_escaping_in_expr(callee, escaping);
             for arg in args {
                 collect_local_refs(arg, escaping);
@@ -286,40 +284,40 @@ fn collect_escaping_in_expr(expr: &TirExpr, escaping: &mut IndexSet<u32>) {
             }
         }
         // Assignment: the value escapes (stored in target location)
-        TirExprKind::Assign { target, value } => {
+        NirExprKind::Assign { target, value } => {
             collect_local_refs(value, escaping);
             collect_escaping_in_expr(target, escaping);
             collect_escaping_in_expr(value, escaping);
         }
         // Struct literal fields: all field values escape
-        TirExprKind::StructLiteral { fields, .. } => {
+        NirExprKind::StructLiteral { fields, .. } => {
             for f in fields {
                 collect_local_refs(&f.value, escaping);
                 collect_escaping_in_expr(&f.value, escaping);
             }
         }
         // Index expressions: the index value may escape (used in indexing)
-        TirExprKind::Index { expr: inner, index } => {
+        NirExprKind::Index { expr: inner, index } => {
             collect_escaping_in_expr(inner, escaping);
             collect_escaping_in_expr(index, escaping);
         }
         // Binary/unary: recurse
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             collect_escaping_in_expr(left, escaping);
             collect_escaping_in_expr(right, escaping);
         }
-        TirExprKind::Unary { expr: inner, .. } | TirExprKind::Cast { expr: inner, .. } => {
+        NirExprKind::Unary { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
             collect_escaping_in_expr(inner, escaping);
         }
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
+        NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::TupleSpread { expr: inner }
+        | NirExprKind::TupleZip { expr: inner }
+        | NirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
             collect_escaping_in_expr(inner, escaping);
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -334,17 +332,17 @@ fn collect_escaping_in_expr(expr: &TirExpr, escaping: &mut IndexSet<u32>) {
                 }
             }
         }
-        TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::LabeledBlock { block, .. } => {
             for s in &block.stmts {
                 collect_escaping_in_stmt(s, escaping);
             }
         }
-        TirExprKind::Block(block) => {
+        NirExprKind::Block(block) => {
             for s in &block.stmts {
                 collect_escaping_in_stmt(s, escaping);
             }
         }
-        TirExprKind::Match { expr: inner, arms } => {
+        NirExprKind::Match { expr: inner, arms } => {
             collect_escaping_in_expr(inner, escaping);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
@@ -353,7 +351,7 @@ fn collect_escaping_in_expr(expr: &TirExpr, escaping: &mut IndexSet<u32>) {
                 collect_escaping_in_expr(&arm.body, escaping);
             }
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -369,59 +367,59 @@ fn collect_escaping_in_expr(expr: &TirExpr, escaping: &mut IndexSet<u32>) {
                 collect_escaping_in_stmt(s, escaping);
             }
         }
-        TirExprKind::Closure { body, captures, .. } => {
+        NirExprKind::Closure { body, captures, .. } => {
             // Closure captures: the captured variables escape
             for capture in captures {
                 escaping.insert(capture.outer_index);
             }
             collect_escaping_in_expr(body, escaping);
         }
-        TirExprKind::CmRawCall { args, .. } => {
+        NirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_local_refs(arg, escaping);
                 collect_escaping_in_expr(arg, escaping);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 collect_local_refs(elem, escaping);
                 collect_escaping_in_expr(elem, escaping);
             }
         }
-        TirExprKind::VariantConstruct { payload, .. } => {
+        NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 collect_local_refs(p, escaping);
                 collect_escaping_in_expr(p, escaping);
             }
         }
-        TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+        NirExprKind::VariantTag { expr: inner }
+        | NirExprKind::VariantTest { expr: inner, .. }
+        | NirExprKind::VariantPayload { expr: inner, .. }
+        | NirExprKind::ClosureToCanonical { functor: inner, .. } => {
             collect_escaping_in_expr(inner, escaping);
         }
-        TirExprKind::GlobalVarSet { value, .. } => {
+        NirExprKind::GlobalVarSet { value, .. } => {
             collect_local_refs(value, escaping);
             collect_escaping_in_expr(value, escaping);
         }
         // Leaf nodes
-        TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::EnumConstruct { .. } => {}
-        TirExprKind::TemplateString { .. } => {
+        NirExprKind::Local { .. }
+        | NirExprKind::FuncRef { .. }
+        | NirExprKind::GlobalVarGet { .. }
+        | NirExprKind::Capture { .. }
+        | NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::StringLiteral(_)
+        | NirExprKind::BytesLiteral(_)
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::Null
+        | NirExprKind::Unit
+        | NirExprKind::EnumConstruct { .. } => {}
+        NirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
             unreachable!(
                 "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
             )
@@ -433,15 +431,15 @@ fn collect_escaping_in_expr(expr: &TirExpr, escaping: &mut IndexSet<u32>) {
 /// Does NOT follow through `FieldAccess`: `s.repr` as a struct field value does
 /// not mark `s` as escaping, since field extraction is typically for temporary
 /// iterators/formatters consumed within the same scope.
-fn collect_local_refs(expr: &TirExpr, locals: &mut IndexSet<u32>) {
+fn collect_local_refs(expr: &NirExpr, locals: &mut IndexSet<u32>) {
     match &expr.kind {
-        TirExprKind::Local { index, .. } => {
+        NirExprKind::Local { index, .. } => {
             locals.insert(*index);
         }
-        TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::LabeledBlock { block, .. } => {
             // The block result is the break value — check those
             for s in &block.stmts {
-                if let TirStmtKind::Break {
+                if let NirStmtKind::Break {
                     value: Some(val), ..
                 } = &s.kind
                 {
@@ -449,7 +447,7 @@ fn collect_local_refs(expr: &TirExpr, locals: &mut IndexSet<u32>) {
                 }
             }
         }
-        TirExprKind::Unary { expr: inner, .. } | TirExprKind::Cast { expr: inner, .. } => {
+        NirExprKind::Unary { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
             collect_local_refs(inner, locals);
         }
         // FieldAccess (e.g., s.repr) — accessing a subfield doesn't mean the whole
@@ -460,11 +458,11 @@ fn collect_local_refs(expr: &TirExpr, locals: &mut IndexSet<u32>) {
 
 /// Recursively transform statements, looking for Let bindings with __tmpl blocks.
 fn transform_stmts_in_block(
-    block: &mut TirBlock,
+    block: &mut NirBlock,
     escaping_locals: &IndexSet<u32>,
-    hoist_stmts: &mut Vec<TirStmt>,
+    hoist_stmts: &mut Vec<NirStmt>,
     local_count: &mut u32,
-    locals: &mut Vec<TirLocal>,
+    locals: &mut Vec<NirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
 ) {
     for stmt in &mut block.stmts {
@@ -480,22 +478,22 @@ fn transform_stmts_in_block(
 }
 
 fn transform_stmt(
-    stmt: &mut TirStmt,
+    stmt: &mut NirStmt,
     escaping_locals: &IndexSet<u32>,
-    hoist_stmts: &mut Vec<TirStmt>,
+    hoist_stmts: &mut Vec<NirStmt>,
     local_count: &mut u32,
-    locals: &mut Vec<TirLocal>,
+    locals: &mut Vec<NirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
 ) {
     match &mut stmt.kind {
-        TirStmtKind::Let {
+        NirStmtKind::Let {
             local_index,
             value,
             skip_value_copy,
             ..
         } => {
             // Check if this Let binds a __tmpl block result
-            if let TirExprKind::LabeledBlock { label, block, .. } = &mut value.kind
+            if let NirExprKind::LabeledBlock { label, block, .. } = &mut value.kind
                 && label == "__tmpl"
                 && !escaping_locals.contains(local_index)
                 && let Some(candidate) = extract_tmpl_candidate(block)
@@ -522,7 +520,7 @@ fn transform_stmt(
                 type_table,
             );
         }
-        TirStmtKind::Expr(expr) => {
+        NirStmtKind::Expr(expr) => {
             transform_expr(
                 expr,
                 escaping_locals,
@@ -532,7 +530,7 @@ fn transform_stmt(
                 type_table,
             );
         }
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -564,7 +562,7 @@ fn transform_stmt(
                 );
             }
         }
-        TirStmtKind::LabeledBlock { block, .. } => {
+        NirStmtKind::LabeledBlock { block, .. } => {
             transform_stmts_in_block(
                 block,
                 escaping_locals,
@@ -574,7 +572,7 @@ fn transform_stmt(
                 type_table,
             );
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -607,7 +605,7 @@ fn transform_stmt(
                 );
             }
         }
-        TirStmtKind::Break {
+        NirStmtKind::Break {
             value: Some(expr), ..
         } => {
             transform_expr(
@@ -620,24 +618,24 @@ fn transform_stmt(
             );
         }
         // Don't recurse into nested loops
-        TirStmtKind::Loop { .. } => {}
+        NirStmtKind::Loop { .. } => {}
         _ => {}
     }
 }
 
 fn transform_expr(
-    expr: &mut TirExpr,
+    expr: &mut NirExpr,
     escaping_locals: &IndexSet<u32>,
-    hoist_stmts: &mut Vec<TirStmt>,
+    hoist_stmts: &mut Vec<NirStmt>,
     local_count: &mut u32,
-    locals: &mut Vec<TirLocal>,
+    locals: &mut Vec<NirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
 ) {
     match &mut expr.kind {
         // Recurse into sub-expressions
         // Note: __tmpl in non-Let contexts (e.g. directly as function arguments like
         // `map[\`key{i}\`] = v`) are NOT hoisted because we can't track if the result escapes.
-        TirExprKind::Call { args, .. } => {
+        NirExprKind::Call { args, .. } => {
             for arg in args {
                 transform_expr(
                     &mut arg.expr,
@@ -649,7 +647,7 @@ fn transform_expr(
                 );
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             transform_expr(
                 receiver,
                 escaping_locals,
@@ -669,7 +667,7 @@ fn transform_expr(
                 );
             }
         }
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             transform_expr(
                 left,
                 escaping_locals,
@@ -687,7 +685,7 @@ fn transform_expr(
                 type_table,
             );
         }
-        TirExprKind::Unary { expr: inner, .. } | TirExprKind::Cast { expr: inner, .. } => {
+        NirExprKind::Unary { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
             transform_expr(
                 inner,
                 escaping_locals,
@@ -697,7 +695,7 @@ fn transform_expr(
                 type_table,
             );
         }
-        TirExprKind::Assign { target, value } => {
+        NirExprKind::Assign { target, value } => {
             transform_expr(
                 target,
                 escaping_locals,
@@ -715,7 +713,7 @@ fn transform_expr(
                 type_table,
             );
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -747,10 +745,10 @@ fn transform_expr(
                 );
             }
         }
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
+        NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::TupleSpread { expr: inner }
+        | NirExprKind::TupleZip { expr: inner }
+        | NirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
             transform_expr(
@@ -762,7 +760,7 @@ fn transform_expr(
                 type_table,
             );
         }
-        TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::LabeledBlock { block, .. } => {
             transform_stmts_in_block(
                 block,
                 escaping_locals,
@@ -772,7 +770,7 @@ fn transform_expr(
                 type_table,
             );
         }
-        TirExprKind::Block(block) => {
+        NirExprKind::Block(block) => {
             transform_stmts_in_block(
                 block,
                 escaping_locals,
@@ -782,10 +780,10 @@ fn transform_expr(
                 type_table,
             );
         }
-        TirExprKind::TemplateString { .. } => {
+        NirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
             unreachable!(
                 "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
             )
@@ -804,11 +802,11 @@ fn transform_expr(
 ///
 /// Both end with:
 ///   `break __tmpl: __r;`
-fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
+fn extract_tmpl_candidate(block: &NirBlock) -> Option<TmplCandidate> {
     // First statement must be: let mut __r = ...
     let first_stmt = block.stmts.first()?;
     let (buf_local_index, string_type, init_value, span) = match &first_stmt.kind {
-        TirStmtKind::Let {
+        NirStmtKind::Let {
             name,
             local_index,
             value,
@@ -816,7 +814,7 @@ fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
             ..
         } if name == "__r" => {
             // Try pre-lowered form: String::with_capacity(N)
-            if let TirExprKind::Call { func, .. } = &value.kind
+            if let NirExprKind::Call { func, .. } = &value.kind
                 && func.method_info.is_some()
                 && func.name.clone() == "String::with_capacity"
             {
@@ -828,7 +826,7 @@ fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
                 });
             }
             // Try post-lowered form: String { repr: array_new<u8>(N), used: 0 }
-            if let TirExprKind::StructLiteral {
+            if let NirExprKind::StructLiteral {
                 struct_name,
                 fields,
                 ..
@@ -842,7 +840,7 @@ fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
                     let used_field = fields.iter().find(|f| f.name == "used")?;
                     if !matches!(
                         &used_field.value.kind,
-                        TirExprKind::IntLiteral { value: 0, .. }
+                        NirExprKind::IntLiteral { value: 0, .. }
                     ) {
                         return None;
                     }
@@ -860,11 +858,11 @@ fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
     // Last statement must be: break __tmpl: __r
     let last_stmt = block.stmts.last()?;
     match &last_stmt.kind {
-        TirStmtKind::Break {
+        NirStmtKind::Break {
             label: Some(label),
             value: Some(val),
         } if label == "__tmpl" => match &val.kind {
-            TirExprKind::Local { index, .. } if *index == buf_local_index => {}
+            NirExprKind::Local { index, .. } if *index == buf_local_index => {}
             _ => return None,
         },
         _ => return None,
@@ -887,7 +885,7 @@ fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
 ///      `let __f = label: { let buf = &mut __tmpl_buf; break: Formatter { ..., buf } }`
 ///      or `__local_N = label: { ... break: Formatter { ... } }`
 fn extract_fmt_candidates(
-    block: &TirBlock,
+    block: &NirBlock,
     hoisted_buf_index: u32,
     type_table: &std::cell::RefCell<TypeTable>,
 ) -> Vec<FmtCandidate> {
@@ -900,17 +898,17 @@ fn extract_fmt_candidates(
         }
 
         // Try to extract (local_index, value_expr) from the statement
-        let (fmt_local_index, value_expr): (u32, &TirExpr) = match &stmt.kind {
-            TirStmtKind::Expr(expr) => {
-                let TirExprKind::Assign { target, value } = &expr.kind else {
+        let (fmt_local_index, value_expr): (u32, &NirExpr) = match &stmt.kind {
+            NirStmtKind::Expr(expr) => {
+                let NirExprKind::Assign { target, value } = &expr.kind else {
                     continue;
                 };
-                let TirExprKind::Local { index, .. } = &target.kind else {
+                let NirExprKind::Local { index, .. } = &target.kind else {
                     continue;
                 };
                 (*index, value)
             }
-            TirStmtKind::Let {
+            NirStmtKind::Let {
                 local_index, value, ..
             } => (*local_index, value),
             _ => continue,
@@ -956,13 +954,13 @@ fn extract_fmt_candidates(
             .map(|f| {
                 if f.name == "buf" {
                     // Normalize buf to &mut __tmpl_buf
-                    crate::tir::TirStructField {
+                    crate::nir::NirStructField {
                         name: f.name.clone(),
-                        value: TirExpr::new(
-                            TirExprKind::Unary {
-                                op: TirUnaryOp::MutRef,
-                                expr: Box::new(TirExpr::new(
-                                    TirExprKind::Local {
+                        value: NirExpr::new(
+                            NirExprKind::Unary {
+                                op: NirUnaryOp::MutRef,
+                                expr: Box::new(NirExpr::new(
+                                    NirExprKind::Local {
                                         index: hoisted_buf_index,
                                         name: format!("__tmpl_buf_{hoisted_buf_index}"),
                                     },
@@ -984,8 +982,8 @@ fn extract_fmt_candidates(
         candidates.push(FmtCandidate {
             stmt_index: i,
             fmt_local_index,
-            init_value: TirExpr::new(
-                TirExprKind::StructLiteral {
+            init_value: NirExpr::new(
+                NirExprKind::StructLiteral {
                     struct_type,
                     struct_name: struct_name.to_string(),
                     fields: init_fields,
@@ -1008,11 +1006,11 @@ fn extract_fmt_candidates(
 ///   - `LabeledBlock { let buf = ...; break: StructLiteral { ..., buf } }`
 ///     where the intermediate `buf` local traces back to the hoisted buffer
 fn extract_formatter_fields(
-    value: &TirExpr,
+    value: &NirExpr,
     hoisted_buf_index: u32,
-) -> Option<(&str, &[crate::tir::TirStructField], TypeId, TypeId, Span)> {
+) -> Option<(&str, &[crate::nir::NirStructField], TypeId, TypeId, Span)> {
     match &value.kind {
-        TirExprKind::StructLiteral {
+        NirExprKind::StructLiteral {
             struct_name,
             fields,
             struct_type,
@@ -1023,15 +1021,15 @@ fn extract_formatter_fields(
             }
             Some((struct_name, fields, *struct_type, value.type_id, value.span))
         }
-        TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::LabeledBlock { block, .. } => {
             // Pattern: { let buf = &mut __tmpl_buf; break label: Formatter { ..., buf } }
             // or: { __local = __tmpl_buf; break: Formatter { ..., buf: ref.as_non_null(__local) } }
             let break_stmt = block.stmts.last()?;
             let break_value = match &break_stmt.kind {
-                TirStmtKind::Break { value: Some(v), .. } => v,
+                NirStmtKind::Break { value: Some(v), .. } => v,
                 _ => return None,
             };
-            let TirExprKind::StructLiteral {
+            let NirExprKind::StructLiteral {
                 struct_name,
                 fields,
                 struct_type,
@@ -1050,7 +1048,7 @@ fn extract_formatter_fields(
             let buf_inner_local = extract_local_from_ref(&buf_field.value)?;
             for stmt in &block.stmts {
                 match &stmt.kind {
-                    TirStmtKind::Let {
+                    NirStmtKind::Let {
                         local_index,
                         value: let_value,
                         ..
@@ -1065,9 +1063,9 @@ fn extract_formatter_fields(
                             ));
                         }
                     }
-                    TirStmtKind::Expr(expr) => {
-                        if let TirExprKind::Assign { target, value: av } = &expr.kind
-                            && let TirExprKind::Local { index, .. } = &target.kind
+                    NirStmtKind::Expr(expr) => {
+                        if let NirExprKind::Assign { target, value: av } = &expr.kind
+                            && let NirExprKind::Local { index, .. } = &target.kind
                             && *index == buf_inner_local
                             && references_local(av, hoisted_buf_index)
                         {
@@ -1091,19 +1089,19 @@ fn extract_formatter_fields(
 
 /// Extract the local index from a reference expression.
 /// Handles `&mut Local(N)`, `Local(N)`, and `ref.as_non_null(Local(N))`.
-fn extract_local_from_ref(expr: &TirExpr) -> Option<u32> {
+fn extract_local_from_ref(expr: &NirExpr) -> Option<u32> {
     match &expr.kind {
-        TirExprKind::Local { index, .. } => Some(*index),
-        TirExprKind::Unary {
-            op: TirUnaryOp::MutRef | TirUnaryOp::Ref,
+        NirExprKind::Local { index, .. } => Some(*index),
+        NirExprKind::Unary {
+            op: NirUnaryOp::MutRef | NirUnaryOp::Ref,
             expr: inner,
         } => match &inner.kind {
-            TirExprKind::Local { index, .. } => Some(*index),
+            NirExprKind::Local { index, .. } => Some(*index),
             _ => None,
         },
-        TirExprKind::Call { func, args, .. } if func.name.contains("ref.as_non_null") => {
+        NirExprKind::Call { func, args, .. } if func.name.contains("ref.as_non_null") => {
             args.first().and_then(|a| match &a.expr.kind {
-                TirExprKind::Local { index, .. } => Some(*index),
+                NirExprKind::Local { index, .. } => Some(*index),
                 _ => None,
             })
         }
@@ -1112,11 +1110,11 @@ fn extract_local_from_ref(expr: &TirExpr) -> Option<u32> {
 }
 
 /// Check if an expression references a specific local (possibly through &mut).
-fn references_local(expr: &TirExpr, local_index: u32) -> bool {
+fn references_local(expr: &NirExpr, local_index: u32) -> bool {
     match &expr.kind {
-        TirExprKind::Local { index, .. } => *index == local_index,
-        TirExprKind::Unary {
-            op: TirUnaryOp::MutRef,
+        NirExprKind::Local { index, .. } => *index == local_index,
+        NirExprKind::Unary {
+            op: NirUnaryOp::MutRef,
             expr: inner,
         } => references_local(inner, local_index),
         _ => false,
@@ -1125,38 +1123,38 @@ fn references_local(expr: &TirExpr, local_index: u32) -> bool {
 
 /// Check if a `buf` field expression references the given local (the hoisted String buffer).
 /// Handles both `&mut local` (TIR form) and `ref.as_non_null(local)` patterns.
-fn buf_field_references_local(expr: &TirExpr, local_index: u32) -> bool {
+fn buf_field_references_local(expr: &NirExpr, local_index: u32) -> bool {
     match &expr.kind {
         // &mut __tmpl_buf (TIR level)
-        TirExprKind::Unary {
-            op: TirUnaryOp::MutRef,
+        NirExprKind::Unary {
+            op: NirUnaryOp::MutRef,
             expr: inner,
-        } => matches!(&inner.kind, TirExprKind::Local { index, .. } if *index == local_index),
+        } => matches!(&inner.kind, NirExprKind::Local { index, .. } if *index == local_index),
         // ref.as_non_null(__tmpl_buf) (WIR level / after lowering)
-        TirExprKind::Call { func, args, .. } => {
+        NirExprKind::Call { func, args, .. } => {
             func.name.contains("ref.as_non_null")
                 && args.len() == 1
-                && matches!(&args[0].expr.kind, TirExprKind::Local { index, .. } if *index == local_index)
+                && matches!(&args[0].expr.kind, NirExprKind::Local { index, .. } if *index == local_index)
         }
         _ => false,
     }
 }
 
 /// Check if an expression is a compile-time constant (literal).
-fn is_constant_expr(expr: &TirExpr) -> bool {
+fn is_constant_expr(expr: &NirExpr) -> bool {
     matches!(
         &expr.kind,
-        TirExprKind::IntLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::EnumConstruct { .. }
+        NirExprKind::IntLiteral { .. }
+            | NirExprKind::BoolLiteral(_)
+            | NirExprKind::CharLiteral(_)
+            | NirExprKind::EnumConstruct { .. }
     )
 }
 
 /// Extract the capacity argument from an `array_new<u8>(N)` call.
-fn extract_array_new_capacity(expr: &TirExpr) -> Option<TirExpr> {
+fn extract_array_new_capacity(expr: &NirExpr) -> Option<NirExpr> {
     match &expr.kind {
-        TirExprKind::Call { func, args, .. } => {
+        NirExprKind::Call { func, args, .. } => {
             let name = func.name.clone();
             if name.contains("array_new") {
                 args.first().map(|a| a.expr.clone())
@@ -1176,11 +1174,11 @@ fn extract_array_new_capacity(expr: &TirExpr) -> Option<TirExpr> {
 /// renamed to `__tmpl_buf`. The outer Let binding gets `skip_value_copy = true`
 /// so the bound variable aliases the hoisted String directly.
 fn transform_tmpl_block(
-    block: &mut TirBlock,
+    block: &mut NirBlock,
     candidate: &TmplCandidate,
-    hoist_stmts: &mut Vec<TirStmt>,
+    hoist_stmts: &mut Vec<NirStmt>,
     local_count: &mut u32,
-    locals: &mut Vec<TirLocal>,
+    locals: &mut Vec<NirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
 ) {
     let span = candidate.span;
@@ -1190,15 +1188,15 @@ fn transform_tmpl_block(
     let buf_local_index = *local_count;
     *local_count += 1;
     let buf_local_name = format!("__tmpl_buf_{buf_local_index}");
-    locals.push(TirLocal {
+    locals.push(NirLocal {
         name: buf_local_name.clone(),
         type_id: string_type,
         is_mut: true,
     });
 
     // Hoist statement: let mut __tmpl_buf_N = String { repr: array_new(N), used: 0 };
-    hoist_stmts.push(TirStmt::new(
-        TirStmtKind::Let {
+    hoist_stmts.push(NirStmt::new(
+        NirStmtKind::Let {
             name: buf_local_name.clone(),
             local_index: buf_local_index,
             is_mut: true,
@@ -1212,13 +1210,13 @@ fn transform_tmpl_block(
 
     // Replace the first statement (let mut __r = String { ... }) with a field reset:
     // __tmpl_buf_N.used = 0;
-    let reset_stmt = TirStmt::new(
-        TirStmtKind::Expr(TirExpr::new(
-            TirExprKind::Assign {
-                target: Box::new(TirExpr::new(
-                    TirExprKind::FieldAccess {
-                        expr: Box::new(TirExpr::new(
-                            TirExprKind::Local {
+    let reset_stmt = NirStmt::new(
+        NirStmtKind::Expr(NirExpr::new(
+            NirExprKind::Assign {
+                target: Box::new(NirExpr::new(
+                    NirExprKind::FieldAccess {
+                        expr: Box::new(NirExpr::new(
+                            NirExprKind::Local {
                                 index: buf_local_index,
                                 name: buf_local_name.clone(),
                             },
@@ -1231,8 +1229,8 @@ fn transform_tmpl_block(
                     TypeTable::I32,
                     span,
                 )),
-                value: Box::new(TirExpr::new(
-                    TirExprKind::IntLiteral {
+                value: Box::new(NirExpr::new(
+                    NirExprKind::IntLiteral {
                         value: 0,
                         repr: "0".to_string(),
                     },
@@ -1271,11 +1269,11 @@ fn transform_tmpl_block(
 /// Processes candidates in reverse order so that `stmt_index` values remain valid
 /// as we replace statements.
 fn transform_fmts_in_tmpl_block(
-    block: &mut TirBlock,
+    block: &mut NirBlock,
     candidates: &[FmtCandidate],
-    hoist_stmts: &mut Vec<TirStmt>,
+    hoist_stmts: &mut Vec<NirStmt>,
     local_count: &mut u32,
-    locals: &mut Vec<TirLocal>,
+    locals: &mut Vec<NirLocal>,
 ) {
     // Sort by stmt_index ascending to compute rename ranges
     let mut sorted_candidates: Vec<_> = candidates.iter().collect();
@@ -1295,7 +1293,7 @@ fn transform_fmts_in_tmpl_block(
         old_fmt_index: u32,
         formatter_type: TypeId,
         indent_field_index: u32,
-        init_value: TirExpr,
+        init_value: NirExpr,
         span: Span,
     }
     let block_len = block.stmts.len();
@@ -1309,7 +1307,7 @@ fn transform_fmts_in_tmpl_block(
         // `Let`s by local index, with `tir_func.locals[idx].name` used as a
         // fallback when no `Let` is found, so matching names mainly
         // improves fallback / debug output consistency.
-        locals.push(TirLocal {
+        locals.push(NirLocal {
             name: format!("__fmt_buf_{fmt_local_index}"),
             type_id: candidate.formatter_type,
             is_mut: true,
@@ -1338,8 +1336,8 @@ fn transform_fmts_in_tmpl_block(
 
     for info in &hoist_infos {
         // Hoist statement: let mut __fmt_buf_N = Formatter { fill: ..., buf: ... };
-        hoist_stmts.push(TirStmt::new(
-            TirStmtKind::Let {
+        hoist_stmts.push(NirStmt::new(
+            NirStmtKind::Let {
                 name: info.hoisted_name.clone(),
                 local_index: info.hoisted_index,
                 is_mut: true,
@@ -1358,13 +1356,13 @@ fn transform_fmts_in_tmpl_block(
         // (especially pretty-print with `:#?`) may modify the `indent` field
         // during formatting. Without this reset, the indent value would
         // accumulate across loop iterations, causing incorrect indentation.
-        let indent_reset_stmt = TirStmt::new(
-            TirStmtKind::Expr(TirExpr::new(
-                TirExprKind::Assign {
-                    target: Box::new(TirExpr::new(
-                        TirExprKind::FieldAccess {
-                            expr: Box::new(TirExpr::new(
-                                TirExprKind::Local {
+        let indent_reset_stmt = NirStmt::new(
+            NirStmtKind::Expr(NirExpr::new(
+                NirExprKind::Assign {
+                    target: Box::new(NirExpr::new(
+                        NirExprKind::FieldAccess {
+                            expr: Box::new(NirExpr::new(
+                                NirExprKind::Local {
                                     index: info.hoisted_index,
                                     name: info.hoisted_name.clone(),
                                 },
@@ -1377,8 +1375,8 @@ fn transform_fmts_in_tmpl_block(
                         TypeTable::I32,
                         info.span,
                     )),
-                    value: Box::new(TirExpr::new(
-                        TirExprKind::IntLiteral {
+                    value: Box::new(NirExpr::new(
+                        NirExprKind::IntLiteral {
                             value: 0,
                             repr: "0".to_string(),
                         },
@@ -1407,18 +1405,18 @@ fn transform_fmts_in_tmpl_block(
     }
 }
 
-fn rename_local_in_stmt(stmt: &mut TirStmt, old_index: u32, new_index: u32, new_name: &str) {
+fn rename_local_in_stmt(stmt: &mut NirStmt, old_index: u32, new_index: u32, new_name: &str) {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } => {
+        NirStmtKind::Let { value, .. } => {
             rename_local_in_expr(value, old_index, new_index, new_name);
         }
-        TirStmtKind::Expr(expr) => {
+        NirStmtKind::Expr(expr) => {
             rename_local_in_expr(expr, old_index, new_index, new_name);
         }
-        TirStmtKind::Return { value: Some(expr) } => {
+        NirStmtKind::Return { value: Some(expr) } => {
             rename_local_in_expr(expr, old_index, new_index, new_name);
         }
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -1429,18 +1427,18 @@ fn rename_local_in_stmt(stmt: &mut TirStmt, old_index: u32, new_index: u32, new_
                 rename_local_in_block(eb, old_index, new_index, new_name);
             }
         }
-        TirStmtKind::LabeledBlock { block, .. } => {
+        NirStmtKind::LabeledBlock { block, .. } => {
             rename_local_in_block(block, old_index, new_index, new_name);
         }
-        TirStmtKind::Loop { body } => {
+        NirStmtKind::Loop { body } => {
             rename_local_in_block(body, old_index, new_index, new_name);
         }
-        TirStmtKind::Break {
+        NirStmtKind::Break {
             value: Some(expr), ..
         } => {
             rename_local_in_expr(expr, old_index, new_index, new_name);
         }
-        TirStmtKind::IfLet {
+        NirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -1456,60 +1454,60 @@ fn rename_local_in_stmt(stmt: &mut TirStmt, old_index: u32, new_index: u32, new_
     }
 }
 
-fn rename_local_in_block(block: &mut TirBlock, old_index: u32, new_index: u32, new_name: &str) {
+fn rename_local_in_block(block: &mut NirBlock, old_index: u32, new_index: u32, new_name: &str) {
     for stmt in &mut block.stmts {
         rename_local_in_stmt(stmt, old_index, new_index, new_name);
     }
 }
 
-fn rename_local_in_expr(expr: &mut TirExpr, old_index: u32, new_index: u32, new_name: &str) {
+fn rename_local_in_expr(expr: &mut NirExpr, old_index: u32, new_index: u32, new_name: &str) {
     match &mut expr.kind {
-        TirExprKind::Local { index, name } if *index == old_index => {
+        NirExprKind::Local { index, name } if *index == old_index => {
             *index = new_index;
             *name = new_name.to_string();
         }
-        TirExprKind::Call { args, .. } => {
+        NirExprKind::Call { args, .. } => {
             for arg in args {
                 rename_local_in_expr(&mut arg.expr, old_index, new_index, new_name);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             rename_local_in_expr(receiver, old_index, new_index, new_name);
             for arg in args {
                 rename_local_in_expr(&mut arg.expr, old_index, new_index, new_name);
             }
         }
-        TirExprKind::IndirectCall { callee, args } => {
+        NirExprKind::IndirectCall { callee, args } => {
             rename_local_in_expr(callee, old_index, new_index, new_name);
             for arg in args {
                 rename_local_in_expr(arg, old_index, new_index, new_name);
             }
         }
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             rename_local_in_expr(left, old_index, new_index, new_name);
             rename_local_in_expr(right, old_index, new_index, new_name);
         }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. } => {
+        NirExprKind::Unary { expr: inner, .. }
+        | NirExprKind::Cast { expr: inner, .. }
+        | NirExprKind::FieldAccess { expr: inner, .. } => {
             rename_local_in_expr(inner, old_index, new_index, new_name);
         }
-        TirExprKind::Assign { target, value } => {
+        NirExprKind::Assign { target, value } => {
             rename_local_in_expr(target, old_index, new_index, new_name);
             rename_local_in_expr(value, old_index, new_index, new_name);
         }
-        TirExprKind::StructLiteral { fields, .. } => {
+        NirExprKind::StructLiteral { fields, .. } => {
             for f in fields {
                 rename_local_in_expr(&mut f.value, old_index, new_index, new_name);
             }
         }
-        TirExprKind::Index {
+        NirExprKind::Index {
             expr: inner, index, ..
         } => {
             rename_local_in_expr(inner, old_index, new_index, new_name);
             rename_local_in_expr(index, old_index, new_index, new_name);
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -1520,16 +1518,16 @@ fn rename_local_in_expr(expr: &mut TirExpr, old_index: u32, new_index: u32, new_
                 rename_local_in_block(eb, old_index, new_index, new_name);
             }
         }
-        TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::LabeledBlock { block, .. } => {
             rename_local_in_block(block, old_index, new_index, new_name);
         }
-        TirExprKind::Block(block) => {
+        NirExprKind::Block(block) => {
             rename_local_in_block(block, old_index, new_index, new_name);
         }
-        TirExprKind::TemplateString { .. } => {
+        NirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
+        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
             unreachable!(
                 "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
             )

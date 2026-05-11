@@ -14,25 +14,25 @@
 //! `tiri` instead so the lattice-driven engine stays the single source
 //! of truth.
 
-use crate::flat_package::FlatPackage;
+use crate::nir_package::NirPackage;
 use crate::hashmap::IndexMap;
-use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
+use crate::nir::{NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind};
 
-use crate::tir_visitor::{
-    TirMutVisitor, TirOptVisitor, TirRefVisitor, block_has_break_to, expr_has_break_to,
+use crate::nir_visitor::{
+    NirMutVisitor, NirOptVisitor, NirRefVisitor, block_has_break_to, expr_has_break_to,
     opt_walk_block, opt_walk_expr, visit_project_functions,
 };
 
 /// Prune constant branches and simplify trivial blocks in all functions.
-pub fn prune_constant_branches(project: &mut FlatPackage) -> bool {
+pub fn prune_constant_branches(project: &mut NirPackage) -> bool {
     let mut visitor = BranchPruner;
     visit_project_functions(project, &mut visitor)
 }
 
 struct BranchPruner;
 
-impl TirOptVisitor for BranchPruner {
-    fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
+impl NirOptVisitor for BranchPruner {
+    fn visit_expr(&mut self, expr: &mut NirExpr) -> bool {
         // Bottom-up: walk children first
         let mut changed = opt_walk_expr(self, expr);
         // Inline leading copy bindings inside labeled blocks before pruning
@@ -42,7 +42,7 @@ impl TirOptVisitor for BranchPruner {
         changed
     }
 
-    fn visit_block(&mut self, block: &mut TirBlock) -> bool {
+    fn visit_block(&mut self, block: &mut NirBlock) -> bool {
         // Bottom-up: walk stmts first
         let mut changed = opt_walk_block(self, block);
         // Then eliminate dead stmts
@@ -55,19 +55,19 @@ impl TirOptVisitor for BranchPruner {
 ///
 /// Constant-condition `if` folding lives in `tiri` (Stage 2 of the TIR
 /// interpreter); this function deliberately does not handle that case.
-fn prune_expr(expr: &mut TirExpr) -> bool {
+fn prune_expr(expr: &mut NirExpr) -> bool {
     let mut changed = false;
 
     // Simplify `{ expr; }` → `expr` (single-expression unlabeled block)
-    if let TirExprKind::Block(block) = &expr.kind
+    if let NirExprKind::Block(block) = &expr.kind
         && block.stmts.len() == 1
-        && let TirStmtKind::Expr(_) = &block.stmts[0].kind
+        && let NirStmtKind::Expr(_) = &block.stmts[0].kind
     {
-        let TirExprKind::Block(block) = std::mem::replace(&mut expr.kind, TirExprKind::Unit) else {
+        let NirExprKind::Block(block) = std::mem::replace(&mut expr.kind, NirExprKind::Unit) else {
             unreachable!();
         };
         let mut stmts = block.stmts;
-        let TirStmtKind::Expr(inner) = stmts.remove(0).kind else {
+        let NirStmtKind::Expr(inner) = stmts.remove(0).kind else {
             unreachable!();
         };
         *expr = inner;
@@ -75,9 +75,9 @@ fn prune_expr(expr: &mut TirExpr) -> bool {
     }
 
     // Simplify `label: { break label: val; }` → `val`
-    if let TirExprKind::LabeledBlock { label, block, .. } = &expr.kind
+    if let NirExprKind::LabeledBlock { label, block, .. } = &expr.kind
         && block.stmts.len() == 1
-        && let TirStmtKind::Break {
+        && let NirStmtKind::Break {
             label: Some(brk_label),
             value: brk_value,
         } = &block.stmts[0].kind
@@ -86,13 +86,13 @@ fn prune_expr(expr: &mut TirExpr) -> bool {
         // to the same label (e.g., from try-op error paths in nested expressions).
         && !brk_value.as_ref().is_some_and(|v| expr_has_break_to(label, v))
     {
-        let TirExprKind::LabeledBlock { block, .. } =
-            std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+        let NirExprKind::LabeledBlock { block, .. } =
+            std::mem::replace(&mut expr.kind, NirExprKind::Unit)
         else {
             unreachable!();
         };
         let mut stmts = block.stmts;
-        let TirStmtKind::Break { value, .. } = stmts.remove(0).kind else {
+        let NirStmtKind::Break { value, .. } = stmts.remove(0).kind else {
             unreachable!();
         };
         if let Some(inner) = value {
@@ -103,9 +103,9 @@ fn prune_expr(expr: &mut TirExpr) -> bool {
     }
 
     // Simplify `[label:] { }` → `()` (empty block, with or without label)
-    if matches!(&expr.kind, TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } if b.stmts.is_empty())
+    if matches!(&expr.kind, NirExprKind::Block(b) | NirExprKind::LabeledBlock { block: b, .. } if b.stmts.is_empty())
     {
-        expr.kind = TirExprKind::Unit;
+        expr.kind = NirExprKind::Unit;
         changed = true;
     }
 
@@ -120,18 +120,18 @@ fn prune_expr(expr: &mut TirExpr) -> bool {
 /// Constant-condition `if` statement folding (`if true { … }` →
 /// inline branch) lives in `tiri::Interpreter::reduce_local_block`
 /// and runs as part of the `const_folding` pass.
-fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
-    let dominated = |s: &TirStmt| {
+fn eliminate_dead_stmts(block: &mut NirBlock) -> bool {
+    let dominated = |s: &NirStmt| {
         matches!(
             &s.kind,
-            TirStmtKind::LabeledBlock { label, block }
+            NirStmtKind::LabeledBlock { label, block }
                 if block.stmts.is_empty() || !block_has_break_to(label, block)
         ) || matches!(
             &s.kind,
-            TirStmtKind::Expr(e) if matches!(e.kind, TirExprKind::Unit | TirExprKind::Block(_))
+            NirStmtKind::Expr(e) if matches!(e.kind, NirExprKind::Unit | NirExprKind::Block(_))
         ) || matches!(
             &s.kind,
-            TirStmtKind::Expr(e) if matches!(&e.kind, TirExprKind::LabeledBlock { label, block, .. } if !block_has_break_to(label, block))
+            NirStmtKind::Expr(e) if matches!(&e.kind, NirExprKind::LabeledBlock { label, block, .. } if !block_has_break_to(label, block))
         )
     };
     if !block.stmts.iter().any(dominated) {
@@ -141,44 +141,44 @@ fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
     let old_stmts = std::mem::take(&mut block.stmts);
     for stmt in old_stmts {
         // Labeled block with unused label → flatten stmts into parent
-        if let TirStmtKind::LabeledBlock {
+        if let NirStmtKind::LabeledBlock {
             ref label,
             block: ref inner,
         } = stmt.kind
             && !block_has_break_to(label, inner)
         {
-            let TirStmtKind::LabeledBlock { block: inner, .. } = stmt.kind else {
+            let NirStmtKind::LabeledBlock { block: inner, .. } = stmt.kind else {
                 unreachable!();
             };
             block.stmts.extend(inner.stmts);
             continue;
         }
         // Unit expression → drop (side-effect free)
-        if let TirStmtKind::Expr(e) = &stmt.kind
-            && matches!(e.kind, TirExprKind::Unit)
+        if let NirStmtKind::Expr(e) = &stmt.kind
+            && matches!(e.kind, NirExprKind::Unit)
         {
             continue;
         }
         // Void block expression → flatten stmts into parent
-        if let TirStmtKind::Expr(e) = &stmt.kind
-            && matches!(e.kind, TirExprKind::Block(_))
+        if let NirStmtKind::Expr(e) = &stmt.kind
+            && matches!(e.kind, NirExprKind::Block(_))
         {
-            let TirStmtKind::Expr(e) = stmt.kind else {
+            let NirStmtKind::Expr(e) = stmt.kind else {
                 unreachable!();
             };
-            let TirExprKind::Block(inner) = e.kind else {
+            let NirExprKind::Block(inner) = e.kind else {
                 unreachable!();
             };
             block.stmts.extend(inner.stmts);
             continue;
         }
-        if let TirStmtKind::Expr(e) = &stmt.kind
-            && matches!(&e.kind, TirExprKind::LabeledBlock { label, block, .. } if !block_has_break_to(label, block))
+        if let NirStmtKind::Expr(e) = &stmt.kind
+            && matches!(&e.kind, NirExprKind::LabeledBlock { label, block, .. } if !block_has_break_to(label, block))
         {
-            let TirStmtKind::Expr(e) = stmt.kind else {
+            let NirStmtKind::Expr(e) = stmt.kind else {
                 unreachable!();
             };
-            let TirExprKind::LabeledBlock { block: inner, .. } = e.kind else {
+            let NirExprKind::LabeledBlock { block: inner, .. } = e.kind else {
                 unreachable!();
             };
             block.stmts.extend(inner.stmts);
@@ -197,8 +197,8 @@ fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
 ///
 /// This handles residual copies left by function inlining (e.g., inlined parameter
 /// bindings like `let index = p`).
-fn inline_labeled_block_copies(expr: &mut TirExpr) -> bool {
-    let TirExprKind::LabeledBlock { block, .. } = &mut expr.kind else {
+fn inline_labeled_block_copies(expr: &mut NirExpr) -> bool {
+    let NirExprKind::LabeledBlock { block, .. } = &mut expr.kind else {
         return false;
     };
 
@@ -207,14 +207,14 @@ fn inline_labeled_block_copies(expr: &mut TirExpr) -> bool {
     // that may be mutated independently (e.g., `fn f(mut s: String) { s.push_str("!"); }`).
     let mut copies: Vec<(u32, u32, String)> = Vec::new(); // (target_idx, source_idx, source_name)
     for stmt in &block.stmts {
-        if let TirStmtKind::Let {
+        if let NirStmtKind::Let {
             local_index,
             is_mut,
             value,
             ..
         } = &stmt.kind
             && !is_mut
-            && let TirExprKind::Local { index, name } = &value.kind
+            && let NirExprKind::Local { index, name } = &value.kind
         {
             copies.push((*local_index, *index, name.clone()));
         } else {
@@ -277,23 +277,23 @@ struct MutationChecker {
     found: bool,
 }
 
-impl TirRefVisitor for MutationChecker {
-    fn visit_expr(&mut self, expr: &TirExpr) {
+impl NirRefVisitor for MutationChecker {
+    fn visit_expr(&mut self, expr: &NirExpr) {
         if self.found {
             return;
         }
         match &expr.kind {
             // Direct assignment: `y = ...`
-            TirExprKind::Assign { target, .. } => {
-                if let TirExprKind::Local { index, .. } = &target.kind
+            NirExprKind::Assign { target, .. } => {
+                if let NirExprKind::Local { index, .. } = &target.kind
                     && self.locals.contains(index)
                 {
                     self.found = true;
                     return;
                 }
                 // Field assignment: `y.field = ...`
-                if let TirExprKind::FieldAccess { expr: inner, .. } = &target.kind
-                    && let TirExprKind::Local { index, .. } = &inner.kind
+                if let NirExprKind::FieldAccess { expr: inner, .. } = &target.kind
+                    && let NirExprKind::Local { index, .. } = &inner.kind
                     && self.locals.contains(index)
                 {
                     self.found = true;
@@ -301,11 +301,11 @@ impl TirRefVisitor for MutationChecker {
                 }
             }
             // Mutable reference: `&mut y`
-            TirExprKind::Unary {
-                op: crate::tir::TirUnaryOp::MutRef,
+            NirExprKind::Unary {
+                op: crate::nir::NirUnaryOp::MutRef,
                 expr: inner,
             } => {
-                if let TirExprKind::Local { index, .. } = &inner.kind
+                if let NirExprKind::Local { index, .. } = &inner.kind
                     && self.locals.contains(index)
                 {
                     self.found = true;
@@ -314,8 +314,8 @@ impl TirRefVisitor for MutationChecker {
             }
             // Method call receiver may be mutated by the callee (`s.push_str(...)`).
             // Be conservative and treat receiver use as a potential mutation.
-            TirExprKind::MethodCall { receiver, .. } => {
-                if let TirExprKind::Local { index, .. } = &receiver.kind
+            NirExprKind::MethodCall { receiver, .. } => {
+                if let NirExprKind::Local { index, .. } = &receiver.kind
                     && self.locals.contains(index)
                 {
                     self.found = true;
@@ -323,10 +323,10 @@ impl TirRefVisitor for MutationChecker {
                 }
             }
             // Mutable call arguments can mutate the tracked local.
-            TirExprKind::Call { args, .. } => {
+            NirExprKind::Call { args, .. } => {
                 for arg in args {
                     if arg.is_mut
-                        && let TirExprKind::Local { index, .. } = &arg.expr.kind
+                        && let NirExprKind::Local { index, .. } = &arg.expr.kind
                         && self.locals.contains(index)
                     {
                         self.found = true;
@@ -339,7 +339,7 @@ impl TirRefVisitor for MutationChecker {
         self.walk_expr(expr);
     }
 
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
+    fn visit_stmt(&mut self, stmt: &NirStmt) {
         if self.found {
             return;
         }
@@ -353,9 +353,9 @@ struct LocalSubstituter {
     subs: IndexMap<u32, (u32, String)>,
 }
 
-impl TirMutVisitor for LocalSubstituter {
-    fn visit_expr(&mut self, expr: &mut TirExpr) {
-        if let TirExprKind::Local { index, name } = &mut expr.kind
+impl NirMutVisitor for LocalSubstituter {
+    fn visit_expr(&mut self, expr: &mut NirExpr) {
+        if let NirExprKind::Local { index, name } = &mut expr.kind
             && let Some((src_idx, src_name)) = self.subs.get(index)
         {
             *index = *src_idx;
