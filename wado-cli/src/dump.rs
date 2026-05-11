@@ -17,10 +17,9 @@ pub struct DumpOptions {
     pub show_symbols: bool,
     pub show_modules: bool,
     pub show_types: bool,
-    pub show_tir: bool,
     pub show_tir_resolved: bool,
     pub show_tir_monomorphized: bool,
-    pub show_tir_lowered: bool,
+    pub show_nir_lowered: bool,
     pub show_nir: bool,
     pub show_wir: bool,
     pub opt_level: OptLevel,
@@ -36,10 +35,9 @@ enum Opt {
     Modules,
     Symbols,
     Types,
-    Tir,
     TirResolved,
     TirMonomorphized,
-    TirLowered,
+    NirLowered,
     Nir,
     Wir,
     OptLevel,
@@ -56,10 +54,9 @@ impl Opt {
         Self::Modules,
         Self::Symbols,
         Self::Types,
-        Self::Tir,
         Self::TirResolved,
         Self::TirMonomorphized,
-        Self::TirLowered,
+        Self::NirLowered,
         Self::Nir,
         Self::Wir,
         Self::OptLevel,
@@ -106,12 +103,6 @@ impl Opt {
                 value: None,
                 desc: "Show type table (all resolved types)",
             },
-            Self::Tir => args::OptSpec {
-                long: Some("tir"),
-                short: None,
-                value: None,
-                desc: "Show final TIR (after optimization, affected by -Ox)",
-            },
             Self::TirResolved => args::OptSpec {
                 long: Some("tir-resolved"),
                 short: None,
@@ -124,17 +115,17 @@ impl Opt {
                 value: None,
                 desc: "Show TIR after monomorphization",
             },
-            Self::TirLowered => args::OptSpec {
-                long: Some("tir-lowered"),
+            Self::NirLowered => args::OptSpec {
+                long: Some("nir-lowered"),
                 short: None,
                 value: None,
-                desc: "Show TIR after lowering (before optimization)",
+                desc: "Show NIR right after lowering (before optimization)",
             },
             Self::Nir => args::OptSpec {
                 long: Some("nir"),
                 short: None,
                 value: None,
-                desc: "Show NIR (after optimization, affected by -Ox)",
+                desc: "Show final NIR (after optimization, affected by -Ox)",
             },
             Self::Wir => args::OptSpec {
                 long: Some("wir"),
@@ -146,7 +137,7 @@ impl Opt {
                 long: None,
                 short: Some('O'),
                 value: Some("<n>"),
-                desc: "Optimization level (affects --tir and --wir output)",
+                desc: "Optimization level (affects --nir and --wir output)",
             },
             Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
@@ -184,8 +175,7 @@ fn format_usage() -> String {
                 Opt::Types,
                 Opt::TirResolved,
                 Opt::TirMonomorphized,
-                Opt::TirLowered,
-                Opt::Tir,
+                Opt::NirLowered,
                 Opt::Nir,
                 Opt::Wir,
             ],
@@ -233,10 +223,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut show_symbols = false;
     let mut show_modules = false;
     let mut show_types = false;
-    let mut show_tir = false;
     let mut show_tir_resolved = false;
     let mut show_tir_monomorphized = false;
-    let mut show_tir_lowered = false;
+    let mut show_nir_lowered = false;
     let mut show_nir = false;
     let mut show_wir = false;
     let mut opt_level = OptLevel::O2;
@@ -271,10 +260,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                     show_types = true;
                     any_phase = true;
                 }
-                Opt::Tir => {
-                    show_tir = true;
-                    any_phase = true;
-                }
                 Opt::TirResolved => {
                     show_tir_resolved = true;
                     any_phase = true;
@@ -283,8 +268,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                     show_tir_monomorphized = true;
                     any_phase = true;
                 }
-                Opt::TirLowered => {
-                    show_tir_lowered = true;
+                Opt::NirLowered => {
+                    show_nir_lowered = true;
                     any_phase = true;
                 }
                 Opt::Nir => {
@@ -348,10 +333,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         show_symbols,
         show_modules,
         show_types,
-        show_tir,
         show_tir_resolved,
         show_tir_monomorphized,
-        show_tir_lowered,
+        show_nir_lowered,
         show_nir,
         show_wir,
         opt_level,
@@ -646,33 +630,27 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         }
     }
 
-    // TIR lowered section (after lowering, before optimization)
-    if opts.show_tir_lowered {
-        if let Some(ref text) = result.lowered_tir_text {
-            println!("=== TIR Lowered ===");
+    // NIR lowered section (NIR right after `lower`, before optimize).
+    if opts.show_nir_lowered {
+        if let Some(ref text) = result.lowered_nir_text {
+            println!("=== NIR Lowered ===");
             println!("{text}");
         } else {
-            println!("=== TIR Lowered ===");
-            println!("(TIR lowering failed or not available)");
+            println!("=== NIR Lowered ===");
+            println!("(NIR lowering failed or not available)");
             println!();
         }
     }
 
-    // Final TIR / NIR section (after optimization).
-    //
-    // Post-optimize, the package is `NirPackage` and there is no `FlatPackage`
-    // to render. `--tir` and `--nir` both render the same post-optimize NIR
-    // via `nir_unparse`. The `--tir` alias is preserved for backward
-    // compatibility; trim it in a follow-up if desired.
-    if opts.show_tir || opts.show_nir {
-        let header = if opts.show_nir { "NIR" } else { "TIR" };
+    // Final NIR section (after optimization).
+    if opts.show_nir {
         if let Some(ref project) = result.optimized_package {
-            println!("=== {header} ===");
+            println!("=== NIR ===");
             let unparsed = wado_compiler::nir_unparse::unparse_nir_package(project);
             println!("{unparsed}");
             println!();
         } else {
-            println!("=== {header} ===");
+            println!("=== NIR ===");
             println!("(Optimization failed or not available)");
             println!();
         }

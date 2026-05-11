@@ -144,7 +144,7 @@ pub struct DumpResult {
     /// Monomorphized TIR snapshot (unparsed text)
     pub monomorphized_tir_text: Option<String>,
     /// Lowered TIR snapshot (unparsed text)
-    pub lowered_tir_text: Option<String>,
+    pub lowered_nir_text: Option<String>,
     /// Optimized NIR package — the post-`optimize` body IR consumed by
     /// `wir_build` and `codegen`. See WEP `wep-2026-05-11-nir.md`.
     pub optimized_package: Option<nir_package::NirPackage>,
@@ -736,7 +736,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
     // Create Package early so CM binding synthesis runs before monomorphize,
     // matching the compile_with_options pipeline.
-    let (monomorphized_tir_text, lowered_tir_text, optimized_package, wir_package) =
+    let (monomorphized_tir_text, lowered_nir_text, optimized_package, wir_package) =
         if let Some(resolved_modules) = tir_modules_by_source.clone() {
             let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
@@ -870,7 +870,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         entry_module_source: load_result.entry_module_source,
         tir_modules: tir_modules_by_source,
         monomorphized_tir_text,
-        lowered_tir_text,
+        lowered_nir_text,
         optimized_package,
         wir_package,
         trivia,

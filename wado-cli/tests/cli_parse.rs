@@ -572,7 +572,7 @@ fn dump_basic() {
     // Default: show WIR only
     assert!(!opts.show_tokens);
     assert!(!opts.show_ast);
-    assert!(!opts.show_tir);
+    assert!(!opts.show_nir);
     assert!(opts.show_wir);
 }
 
@@ -582,14 +582,14 @@ fn dump_single_phase() {
     let opts = wado_cli::dump::parse_args(parser).unwrap();
     assert!(opts.show_ast);
     assert!(!opts.show_tokens);
-    assert!(!opts.show_tir);
+    assert!(!opts.show_nir);
 }
 
 #[test]
 fn dump_opt_level() {
-    let parser = Parser::from_args(&["--tir", "-O3", "input.wado"]);
+    let parser = Parser::from_args(&["--nir", "-O3", "input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();
-    assert!(opts.show_tir);
+    assert!(opts.show_nir);
     assert_eq!(opts.opt_level, wado_compiler::OptLevel::O3);
 }
 
@@ -599,7 +599,7 @@ fn dump_tokens() {
     let opts = wado_cli::dump::parse_args(parser).unwrap();
     assert!(opts.show_tokens);
     assert!(!opts.show_ast);
-    assert!(!opts.show_tir);
+    assert!(!opts.show_nir);
 }
 
 #[test]
@@ -627,10 +627,10 @@ fn dump_symbols() {
 }
 
 #[test]
-fn dump_tir() {
-    let parser = Parser::from_args(&["--tir", "input.wado"]);
+fn dump_nir() {
+    let parser = Parser::from_args(&["--nir", "input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();
-    assert!(opts.show_tir);
+    assert!(opts.show_nir);
     assert!(!opts.show_wir);
 }
 
@@ -639,14 +639,14 @@ fn dump_tir_resolved() {
     let parser = Parser::from_args(&["--tir-resolved", "input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();
     assert!(opts.show_tir_resolved);
-    assert!(!opts.show_tir_lowered);
+    assert!(!opts.show_nir_lowered);
 }
 
 #[test]
-fn dump_tir_lowered() {
-    let parser = Parser::from_args(&["--tir-lowered", "input.wado"]);
+fn dump_nir_lowered() {
+    let parser = Parser::from_args(&["--nir-lowered", "input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();
-    assert!(opts.show_tir_lowered);
+    assert!(opts.show_nir_lowered);
     assert!(!opts.show_tir_monomorphized);
 }
 
@@ -655,7 +655,7 @@ fn dump_wir() {
     let parser = Parser::from_args(&["--wir", "input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();
     assert!(opts.show_wir);
-    assert!(!opts.show_tir);
+    assert!(!opts.show_nir);
 }
 
 #[test]

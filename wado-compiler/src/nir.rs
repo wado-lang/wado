@@ -173,7 +173,7 @@ impl NirExprKind {
     /// Callers are expected to have typechecked `args` against the callee's
     /// declared parameter types before reaching here.  Resolver-side
     /// constructions flow through `Resolver::build_tir_method_call`;
-    /// post-resolve rewriters thread already-checked TIR through this
+    /// post-resolve rewriters thread already-checked NIR through this
     /// function too so the variant's `invariant` field stays coherent.
     pub(crate) fn method_call(
         receiver: Box<NirExpr>,
@@ -249,7 +249,7 @@ pub enum NirExprKind {
     /// `None` → free function, `Some(_)` → static method.
     /// Both map to the same `WirInstr::Call` and share identical semantics.
     Call {
-        /// Function reference (resolved TIR function or external)
+        /// Function reference (resolved NIR function or external)
         func: FunctionRef,
         /// Explicit type arguments for generic functions: `identity::<i32>(x)`
         type_args: Vec<TypeId>,
@@ -268,7 +268,7 @@ pub enum NirExprKind {
     },
     MethodCall {
         receiver: Box<NirExpr>,
-        /// Method reference (resolved TIR function or external)
+        /// Method reference (resolved NIR function or external)
         func: FunctionRef,
         /// Explicit type arguments for generic methods: `obj.method::<i32>()`
         type_args: Vec<TypeId>,
@@ -621,7 +621,7 @@ pub enum NirStmtKind {
     },
 }
 
-/// Generic type parameter in TIR (from AST `GenericParam`)
+/// Generic type parameter in NIR (from AST `GenericParam`)
 #[derive(Debug, Clone)]
 pub struct NirTypeParam {
     pub name: String,
@@ -648,7 +648,7 @@ pub struct MonomorphInfo {
     pub is_blanket: bool,
 }
 
-/// Global variable declaration in TIR
+/// Global variable declaration in NIR
 #[derive(Debug, Clone)]
 pub struct NirGlobal {
     pub name: String,
@@ -695,7 +695,7 @@ pub struct NirGlobal {
 pub struct NirFunction {
     pub name: String,
     /// Module this function belongs to. Set by the link phase when flattening
-    /// per-module TIR into flat lists; before link, the `module_source` is
+    /// per-module body data into flat lists; before link, the `module_source` is
     /// carried implicitly by the parent `NirModule`.
     pub module_source: ModuleSource,
     pub is_pub: bool,
@@ -779,7 +779,7 @@ pub struct NirFunction {
     pub allocator_tag: Option<String>,
 
     /// Categorizes the function for kind-specific optimizations. Most functions
-    /// are `Regular`; synthesis passes set specialized kinds so the TIR
+    /// are `Regular`; synthesis passes set specialized kinds so the NIR
     /// optimizer can apply targeted transformations (e.g. freshness-based
     /// elision for `ValueCopy`).
     pub kind: FunctionKind,
@@ -797,21 +797,21 @@ pub struct NirFunction {
 /// How a function delivers its return value at the Wasm level.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum ReturnAbi {
-    /// Single Wasm return value. The function's TIR `return_type` is taken
+    /// Single Wasm return value. The function's NIR `return_type` is taken
     /// as-is; tuple / user-struct types lower to a heap struct ref.
     #[default]
     Single,
     /// Multi-value Wasm return: each tuple element / struct field becomes a
-    /// separate Wasm result. Carries the per-element TIR type ids and field
+    /// separate Wasm result. Carries the per-element NIR type ids and field
     /// names for WIR-build's signature emission and call-site split-local
-    /// generation. The function's TIR `return_type` is unchanged (it remains
+    /// generation. The function's NIR `return_type` is unchanged (it remains
     /// the tuple / struct type) — only the WIR-level ABI shifts.
     ///
     /// For tuple returns, `field_names` is `["0", "1", ...]` (matching the
     /// numeric field names tuple structs carry). For user-struct returns,
     /// `field_names` is the struct's fields in declaration order.
     MultiValue {
-        /// TIR types of each result, in declaration order.
+        /// NIR types of each result, in declaration order.
         result_types: Vec<TypeId>,
         /// Field names matching the source aggregate's declaration order.
         /// Used by WIR build to look up the right split local from a
@@ -846,7 +846,7 @@ pub enum FunctionKind {
     /// Auto-derived `Fn<arity, return_type>^Inspect::inspect` (or
     /// `^InspectAlt::inspect_alt`) dispatch stub.
     ///
-    /// The TIR body is `unreachable()` — a placeholder that exists
+    /// The NIR body is `unreachable()` — a placeholder that exists
     /// only so the function is registered and the call is resolvable
     /// from templates and from user code. WIR build recognises this
     /// kind and supplies the real body: a `call_ref` through the
@@ -1038,7 +1038,7 @@ pub struct NirEnum {
     pub span: Span,
 }
 
-/// A case in a TIR enum.
+/// A case in an NIR enum.
 /// Unlike `NirVariantCase`, enum cases have no payload.
 #[derive(Debug, Clone)]
 pub struct NirEnumCase {
@@ -1158,7 +1158,7 @@ pub struct NirEffectOp {
     pub cm_name: Option<String>,
 }
 
-/// Resource declaration captured in TIR for effect propagation.
+/// Resource declaration captured in NIR for effect propagation.
 ///
 /// Resources are effects in Wado's effect system: every operation on a
 /// resource type requires the resource to be in scope. The `operations`

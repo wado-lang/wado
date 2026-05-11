@@ -458,7 +458,7 @@ async fn compile_one(
             }
         }
         Phase::TirLowered => {
-            if let Some(ref text) = result.lowered_tir_text {
+            if let Some(ref text) = result.lowered_nir_text {
                 write!(output, "{text}").unwrap();
             }
         }
