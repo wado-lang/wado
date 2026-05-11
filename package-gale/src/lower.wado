@@ -210,9 +210,19 @@ fn lower_variant_rules(
                 null => panic(`lower_variant_rules: rule '{entry.rule_name}' not found — intern_follow_variant should reject unknown rules`),
             };
             let saved_mask = ctx.current_follow_mask;
+            let saved_outer = ctx.current_outer_follow;
             ctx.current_follow_mask = entry.mask;
+            // Mirror `emit_follow_variant_from_gir` — `compute_call_site_follow`
+            // consults `current_outer_follow` to propagate the variant's
+            // promise into per-element follows inside the variant body.
+            // Without this, the body re-lowers with `outer_follow = []`
+            // and misses interning the secondary variants emit would
+            // register at its `intern_follow_variant` call sites — which
+            // `gen_parser` now treats as a hard assertion.
+            ctx.current_outer_follow = entry.mask;
             let mut lowered = lower_rule(rule, ctx);
             ctx.current_follow_mask = saved_mask;
+            ctx.current_outer_follow = saved_outer;
             // Tag the lowered rule's header so emit can route the
             // variant to its `__follow_<id>` function name.
             attach_variant_header(&mut lowered, FollowVariant {
@@ -2152,22 +2162,28 @@ fn union_arrays(a: &Array<String>, b: &Array<String>) -> Array<String> {
     return result;
 }
 
-/// Follow set for the element at index `i` in `elements`, taking
-/// the surrounding `outer_follow` as the propagation when the
-/// suffix `elements[i+1..]` is nullable. Mirrors what the legacy
-/// `parser_gen` computes per-position at its non-greedy / variant
-/// call sites.
+/// Follow set for the element at index `i` in `elements`. Delegates
+/// to `ctx.compute_call_site_follow`, which is the single source of
+/// truth shared with `parser_gen` emit's per-position follow
+/// computation (formerly `compute_ruleref_call_follow`). The
+/// `_outer_follow` parameter is retained for caller readability —
+/// it always equals what the surrounding `ctx.current_outer_follow`
+/// would carry — but the actual lookup goes through ctx so lower and
+/// emit register the same follow-aware variants.
+///
+/// Soundness: the `deep_suffix_is_first_exact` guard inside
+/// `compute_call_site_follow` is strictly stricter than the previous
+/// "always-union when nullable" rule. For regular (non-variant)
+/// bodies it produces the same value (the local outer follow is
+/// `[]`); for variant bodies (where `ctx.current_outer_follow` is
+/// the variant's mask) it now propagates the mask, matching emit.
 fn inner_follow_at(
     elements: &Array<Element>,
     i: i32,
-    outer_follow: &Array<String>,
+    _outer_follow: &Array<String>,
     ctx: &mut GenContext,
 ) -> Array<String> {
-    let suffix_first = ctx.first_of_elements_from(elements, i + 1);
-    if ctx.tail_is_nullable_deep(elements, i + 1) {
-        return union_arrays(&suffix_first, outer_follow);
-    }
-    return suffix_first;
+    return ctx.compute_call_site_follow(elements, i);
 }
 
 /// True iff `elem` is a list-label (`+=`). Used by

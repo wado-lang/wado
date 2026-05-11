@@ -1064,15 +1064,16 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
         gen_parse_fn(w, rule, lowered_rule, ctx);
     }
     // Phase 4 — variant emission consumes `lowered.variant_rules`
-    // as its primary source. The fixed-point loop walks the
-    // follow-variant registry in id order: for ids in
-    // `lowered.variant_rules.len()`'s range, drive from the GIR
-    // (proving lower's variant pre-pass is the consumer); for
-    // higher ids — entries that emit-time intern registered
-    // because lower's `inner_follow_at` uses a looser nullable
-    // rule than the legacy `compute_ruleref_call_follow` — fall
-    // back to the entry-driven path so codegen never leaks a
-    // dangling `__follow_<id>` reference.
+    // as its primary source. Every entry registered in the follow-
+    // variant registry by emit-time `intern_follow_variant` calls
+    // must already exist in `lowered.variant_rules` at the same
+    // index: lower's pre-pass uses `ctx.compute_call_site_follow`,
+    // the same single-source-of-truth helper emit consults, so the
+    // two halves agree on every (rule, mask) tuple they intern. The
+    // assertion below catches any future drift early — a stray
+    // emit-time intern call that lower didn't run would otherwise
+    // leak a dangling `__follow_<id>` function reference into the
+    // generated source.
     let mut emitted_count = 0;
     loop {
         let entries = ctx.follow_variants();
@@ -1081,23 +1082,36 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
             break;
         }
         for let mut idx = emitted_count; idx < cur; idx += 1 {
-            if idx < lowered.variant_rules.len() {
-                emit_follow_variant_from_gir(w, &lowered.variant_rules[idx], ctx);
-            } else {
-                emit_follow_variant(w, &entries[idx], ctx);
+            if idx >= lowered.variant_rules.len() {
+                let entry = &entries[idx];
+                panic(
+                    `gen_parser: follow-variant entry #{idx} ({entry.rule_name} mask=[{join_kinds(&entry.mask)}]) was registered during emit but not by lower's pre-pass — lower and emit must agree via compute_call_site_follow`,
+                );
             }
+            emit_follow_variant_from_gir(w, &lowered.variant_rules[idx], ctx);
         }
         emitted_count = cur;
     }
     gen_parse_entry(w, lowered);
 }
 
+fn join_kinds(kinds: &Array<String>) -> String {
+    let mut result = String::with_capacity(64);
+    for let mut i = 0; i < kinds.len(); i += 1 {
+        if i > 0 {
+            result.push_str(", ");
+        }
+        result.push_str(kinds[i]);
+    }
+    return result;
+}
+
 /// Emit one follow-aware rule variant from its lowered `Rule`. The
 /// variant's `FollowVariant` lives on `header.variant_of` (attached
 /// by `lower::attach_variant_header`); we extract it, look the base
-/// surface `ParserRule` up by name, and call the same emit core the
-/// legacy `emit_follow_variant` used. ctx state is saved / restored
-/// across the call so subsequent variants and the trailing
+/// surface `ParserRule` up by name, and call the same emit core used
+/// for the regular rule body. ctx state is saved / restored across
+/// the call so subsequent variants and the trailing
 /// `gen_parse_entry` see clean state.
 fn emit_follow_variant_from_gir(w: &mut CodeWriter, variant_rule: &Rule, ctx: &mut GenContext) {
     let entry_opt = match *variant_rule {
@@ -1117,52 +1131,6 @@ fn emit_follow_variant_from_gir(w: &mut CodeWriter, variant_rule: &Rule, ctx: &m
     } else {
         panic(
             `emit_follow_variant_from_gir: rule '{entry.rule_name}' not found`,
-        );
-    };
-
-    let saved_rule_name = ctx.current_rule_name;
-    let saved_group_counter = ctx.group_counter;
-    let saved_alt_gc_starts = ctx.alt_gc_starts;
-    let saved_mask = ctx.current_follow_mask;
-    let saved_outer = ctx.current_outer_follow;
-
-    ctx.current_follow_mask = entry.mask;
-    ctx.current_outer_follow = entry.mask;
-
-    let scan_name = `scan_{rule.snake_name}__follow_{entry.id}`;
-    let parse_name = `parse_{rule.snake_name}__follow_{entry.id}`;
-    if entry.scan_used {
-        gen_scan_function_named(w, rule, ctx, &scan_name, /*allow_lr_split=*/ true);
-    }
-    if entry.parse_used {
-        gen_parse_fn_named(w, rule, ctx, &parse_name, &scan_name, /*emit_visibility=*/ false);
-    }
-
-    ctx.current_rule_name = saved_rule_name;
-    ctx.group_counter = saved_group_counter;
-    ctx.alt_gc_starts = saved_alt_gc_starts;
-    ctx.current_follow_mask = saved_mask;
-    ctx.current_outer_follow = saved_outer;
-}
-
-/// Emit one follow-aware rule variant. Routes through the unified
-/// `gen_scan_function_named` / `gen_parse_fn_named` body emitters with
-/// the variant's mask installed in `ctx.current_follow_mask` and
-/// `ctx.current_outer_follow`. Saves and restores every `ctx` field
-/// the body emitters mutate so the trailing `gen_parse_entry` and any
-/// subsequent variant emit see clean state.
-///
-/// The unknown-rule branch panics on contract violation:
-/// `intern_follow_variant` already rejects unknown rules, so reaching
-/// the panic indicates a registry / emit mismatch — silently
-/// returning here would leak dangling `__follow_<id>` references into
-/// the generated source.
-fn emit_follow_variant(w: &mut CodeWriter, entry: &FollowVariantEntry, ctx: &mut GenContext) {
-    let rule = if let Some(r) = ctx.find_rule(&entry.rule_name) {
-        r;
-    } else {
-        panic(
-            `emit_follow_variant: rule '{entry.rule_name}' not found; intern_follow_variant should reject unknown rules`,
         );
     };
 
@@ -3616,14 +3584,7 @@ fn gen_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenC
 ///   `package-gale/CLAUDE.md` "Failed Approaches" #3 for the
 ///   historical narrative of how this guard was narrowed back.
 fn compute_ruleref_call_follow(elements: &Array<Element>, i: i32, ctx: &mut GenContext) -> Array<String> {
-    let first = ctx.first_of_elements_from(elements, i + 1);
-    if !ctx.tail_is_nullable_deep(elements, i + 1) {
-        return first;
-    }
-    if ctx.deep_suffix_is_first_exact(elements, i + 1) {
-        return union_sets(&first, &ctx.current_outer_follow);
-    }
-    return ctx.current_outer_follow;
+    return ctx.compute_call_site_follow(elements, i);
 }
 
 fn union_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
