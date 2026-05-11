@@ -23,10 +23,10 @@
 //! Pass 2 (transform): Single traversal to replace eliminable field accesses
 //!   and remove dead let statements.
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::IndexMap;
-use crate::tir::{TypeTable};
 use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind, NirUnaryOp};
+use crate::nir_package::NirPackage;
+use crate::tir::TypeTable;
 
 /// Per-binding analysis state, keyed by the ref local index.
 struct RefInfo {

@@ -1239,4 +1239,3 @@ pub fn unparse_nir_package(package: &crate::nir_package::NirPackage) -> String {
 
     unparser.output
 }
-

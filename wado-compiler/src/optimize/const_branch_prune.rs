@@ -14,9 +14,9 @@
 //! `tiri` instead so the lattice-driven engine stays the single source
 //! of truth.
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::IndexMap;
 use crate::nir::{NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind};
+use crate::nir_package::NirPackage;
 
 use crate::nir_visitor::{
     NirMutVisitor, NirOptVisitor, NirRefVisitor, block_has_break_to, expr_has_break_to,

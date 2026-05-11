@@ -6,10 +6,11 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::flat_package::FlatPackage;
 use crate::module_source::ModuleSource;
 use crate::name::StructName;
-use crate::tir::{TirFunction, TypeId, TypeTable};
+use crate::nir::NirFunction;
+use crate::nir_package::NirPackage;
+use crate::tir::{TypeId, TypeTable};
 use crate::wir::{
     CanonicalIntrinsic, WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction,
     WirGlobal, WirImport, WirImportDesc, WirName, WirNames, WirPackage, WirType, WirTypeDef,
@@ -28,7 +29,7 @@ pub const DEFINED_FUNC_BASE: u32 = 0x8000_0000;
 /// type and function references during translation.
 pub struct WirContext<'a> {
     /// Reference to the linked package data.
-    pub package: &'a FlatPackage,
+    pub package: &'a NirPackage,
 
     /// All type definitions in registration order.
     pub types: Vec<WirTypeDef>,
@@ -125,7 +126,7 @@ pub struct WirContext<'a> {
     /// Functions/globals from these modules are extracted into separate wasm core modules.
     pub wasm_module_sources: IndexMap<ModuleSource, String>,
 
-    /// Pending function bodies: (function index in self.functions, `TirFunction` ref, `TypeTable` ref)
+    /// Pending function bodies: (function index in self.functions, `NirFunction` ref, `TypeTable` ref)
     pub pending_bodies: Vec<PendingFunctionBody>,
 
     /// CM canonical imports registered lazily by WIR synthesis functions via `ensure_canonical`.
@@ -151,7 +152,7 @@ pub struct PendingFunctionBody {
     /// Index into WirContext.functions
     pub wir_func_index: usize,
     /// The TIR function to translate
-    pub tir_func: Rc<RefCell<TirFunction>>,
+    pub tir_func: Rc<RefCell<NirFunction>>,
     /// The type table for this function's module
     pub type_table: Rc<RefCell<TypeTable>>,
 }
@@ -166,7 +167,7 @@ pub struct PendingFunctionBody {
 /// unreachable functions, the survivors here drive the per-
 /// `(N, Ret)` schema gate so canonical closures whose signature is
 /// never inspected stay slim.
-fn compute_inspectable_fn_dispatch(package: &FlatPackage) -> IndexSet<(usize, TypeId)> {
+fn compute_inspectable_fn_dispatch(package: &NirPackage) -> IndexSet<(usize, TypeId)> {
     let mut set: IndexSet<(usize, TypeId)> = IndexSet::default();
     for func_rc in &package.functions {
         let Ok(func) = func_rc.try_borrow() else {
@@ -205,8 +206,8 @@ pub struct ClosureWrapperFuncs {
 }
 
 impl<'a> WirContext<'a> {
-    /// Create a new `WirContext` from a `FlatPackage`.
-    pub fn new(package: &'a FlatPackage) -> Self {
+    /// Create a new `WirContext` from a `NirPackage`.
+    pub fn new(package: &'a NirPackage) -> Self {
         // Collect string literals (deduped)
         let mut seen: IndexSet<&str> = IndexSet::default();
         let mut string_literals = Vec::new();
@@ -247,7 +248,7 @@ impl<'a> WirContext<'a> {
                 .iter()
                 .filter_map(|f| {
                     let f = f.try_borrow().ok()?;
-                    if let crate::tir::ReturnAbi::MultiValue {
+                    if let crate::nir::ReturnAbi::MultiValue {
                         result_types,
                         field_names,
                     } = &f.return_abi
@@ -993,7 +994,7 @@ impl<'a> WirContext<'a> {
     pub fn find_tuple_type_for_elements(
         &self,
         type_table: &crate::tir::TypeTable,
-        elements: &[crate::tir::TirExpr],
+        elements: &[crate::nir::NirExpr],
     ) -> Option<WirTypeId> {
         let elem_wir_types: Vec<WirType> = elements
             .iter()
@@ -1022,7 +1023,7 @@ impl<'a> WirContext<'a> {
     pub fn define_tuple_struct_for_elements(
         &mut self,
         type_table: &crate::tir::TypeTable,
-        elements: &[crate::tir::TirExpr],
+        elements: &[crate::nir::NirExpr],
     ) -> Option<WirTypeId> {
         let elem_wir_types: Vec<WirType> = elements
             .iter()

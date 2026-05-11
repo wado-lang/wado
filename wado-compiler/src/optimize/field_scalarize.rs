@@ -70,11 +70,14 @@
 //!   block when convergence sync must run after the value-producing
 //!   expression.
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::nir::{
+    FunctionRef, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirPattern, NirStmt,
+    NirStmtKind, NirUnaryOp,
+};
+use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
-use crate::nir::{FunctionRef, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirPattern, NirStmt, NirStmtKind, NirUnaryOp};
 
 const MIN_ACCESS_COUNT: usize = 4;
 

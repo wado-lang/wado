@@ -23,13 +23,16 @@
 //! This is the single most impactful optimization for WasmGC-targeting compilers,
 //! as struct allocations are GC-managed heap objects.
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::tir::{TypeId, TypeTable};
-use crate::nir::{FunctionRef, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind, NirStructField, NirUnaryOp};
+use crate::nir::{
+    FunctionRef, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind,
+    NirStructField, NirUnaryOp,
+};
+use crate::nir_package::NirPackage;
 use crate::nir_visitor::NirRefVisitor;
+use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 /// Maps (`module_source`, `func_name`) → set of parameter indices that have `stores` declared.

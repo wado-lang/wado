@@ -11,9 +11,11 @@
 //! This subsumes the WIR-level `bounds_check` pass, handling both strict `<`
 //! and inclusive `<=` guard patterns.
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::IndexMap;
-use crate::nir::{NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind, NirUnaryOp};
+use crate::nir::{
+    NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind, NirUnaryOp,
+};
+use crate::nir_package::NirPackage;
 use crate::nir_visitor::{NirOptVisitor, opt_walk_expr, opt_walk_stmt};
 
 struct LoopGuard {

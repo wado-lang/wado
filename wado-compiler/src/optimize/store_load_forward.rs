@@ -22,10 +22,10 @@
 //! invalidated (selective invalidation), allowing known values for unmodified
 //! locals to survive through assert branches and similar patterns.
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::tir::{TypeTable};
 use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind, NirUnaryOp};
+use crate::nir_package::NirPackage;
+use crate::tir::TypeTable;
 
 /// Precomputed modified-locals cache, keyed by block raw pointer.
 ///

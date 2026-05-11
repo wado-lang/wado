@@ -105,11 +105,11 @@ use std::rc::Rc;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::nir::{
     NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirLiteralPattern, NirMatchArm,
     NirPattern, NirStmt, NirStmtKind, NirUnaryOp,
 };
+use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// Three-state lattice over compile-time evaluation results.
 ///

@@ -104,7 +104,7 @@ pub struct TestExportPlan {
 /// Build a `ComponentPlan` from pre-link data.
 ///
 /// Scans entry module tests and world registry to determine what the component needs.
-/// Called by [`crate::link::link`] before constructing `FlatPackage`.
+/// Called by [`crate::link::link`] before constructing `NirPackage`.
 ///
 /// Canonical intrinsics are NOT collected here — they are discovered lazily
 /// during WIR translation via `WirContext::ensure_canonical`.

@@ -23,10 +23,12 @@
 //! }
 //! ```
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::IndexSet;
-use crate::tir::{TypeId};
-use crate::nir::{NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind};
+use crate::nir::{
+    NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind,
+};
+use crate::nir_package::NirPackage;
+use crate::tir::TypeId;
 use crate::token::Span;
 
 pub fn eliminate_common_subexprs(project: &mut NirPackage) -> bool {

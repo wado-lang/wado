@@ -34,10 +34,12 @@
 //! the result must be bound to a Let variable that is only used as a method
 //! receiver (`self`), never passed as a regular function argument.
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::IndexSet;
+use crate::nir::{
+    NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind, NirUnaryOp,
+};
+use crate::nir_package::NirPackage;
 use crate::tir::{TypeId, TypeTable};
-use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind, NirUnaryOp};
 use crate::token::Span;
 
 /// Apply template string buffer hoisting to all functions in the project.

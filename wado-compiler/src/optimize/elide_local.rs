@@ -10,9 +10,9 @@
 //! freshly dead expressions to the rest of the fixed-point loop
 //! (`copy_prop` / `const_fold` / `dce`), which the WIR-level pass cannot.
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::IndexSet;
 use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind};
+use crate::nir_package::NirPackage;
 use crate::nir_visitor::{NirMutVisitor, NirRefVisitor};
 
 pub fn elide_write_only_locals(project: &mut NirPackage) -> bool {

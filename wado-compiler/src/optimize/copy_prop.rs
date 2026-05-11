@@ -12,12 +12,12 @@
 //! - For value types: the source is dead after the binding (`read_count` is 1)
 //! - For ref/mut-ref copies: the target is single-use and the source is not reassigned
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind, NirUnaryOp};
+use crate::nir_package::NirPackage;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Information about a copy binding that may be eliminable.
 /// Pattern: `let x: T = y` where y is a local variable, simple literal, or `&y`/`&mut y`

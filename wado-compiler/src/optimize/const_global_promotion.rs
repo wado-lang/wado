@@ -11,10 +11,10 @@
 //! 2. Updates the global's initializer and marks it immutable
 //! 3. Removes all `GlobalVarSet` to promoted globals from all functions
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::nir::{NirBlock, NirExpr, NirExprKind, NirStmtKind};
+use crate::nir_package::NirPackage;
 
 use crate::nir_visitor::{NirOptVisitor, opt_walk_block, opt_walk_expr};
 

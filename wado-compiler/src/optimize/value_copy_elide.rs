@@ -9,11 +9,11 @@
 //! inline. Helpers whose remaining call sites are all elided are removed by
 //! the post-elision DCE pass.
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::nir::{NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind, NirUnaryOp};
+use crate::nir_package::NirPackage;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 pub fn elide_synthesized_value_copies(project: &mut NirPackage) {
     let value_copy_set: IndexMap<(ModuleSource, String), TypeId> = project

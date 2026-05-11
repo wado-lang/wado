@@ -21,11 +21,11 @@
 //!
 //! [`recognize_value_copy`] is the single-call recognizer.
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::nir::{NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind, NirUnaryOp};
+use crate::nir_package::NirPackage;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::tiri::AliasInfo;
 
 /// Build the `(module_source, func_name) → struct type id` map of

@@ -56,12 +56,15 @@
 //! `MultiValue { result_types, field_names }` carrying the per-field
 //! TIR types and names.
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
-use crate::nir::{FunctionKind, ReturnAbi, NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind, NirStruct};
+use crate::nir::{
+    FunctionKind, NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind, NirStruct,
+    ReturnAbi,
+};
+use crate::nir_package::NirPackage;
 use crate::nir_visitor::NirRefVisitor;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Per-candidate body-only info: the per-field TIR types and field names
 /// (in declaration order). For tuples, `field_names` is `["0", "1", ...]`.

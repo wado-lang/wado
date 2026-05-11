@@ -24,9 +24,11 @@
 //!
 //! Empty literals are also skipped: `push_str("")` is a no-op already.
 
+use crate::nir::{
+    CallArg, FunctionRef, NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind, NirUnaryOp,
+};
 use crate::nir_package::NirPackage;
-use crate::tir::{TypeTable};
-use crate::nir::{CallArg, FunctionRef, NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind, NirUnaryOp};
+use crate::tir::TypeTable;
 use crate::wir::{COMP_FEATURE_STRING_PUSH_CHAR, COMP_FEATURE_STRING_PUSH_STR};
 
 /// Maximum byte length of the literal that triggers the rewrite.

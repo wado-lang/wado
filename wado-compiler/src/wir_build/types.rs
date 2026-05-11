@@ -7,7 +7,8 @@
 
 use crate::module_source::ModuleSource;
 use crate::name::StructName;
-use crate::tir::{ResolvedType, TirStruct, TirVariantDecl, TypeId, TypeTable};
+use crate::nir::{NirStruct, NirVariantDecl};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::wir::{
     WirArrayType, WirEnumCase, WirEnumType, WirField, WirGenericOrigin, WirMeta, WirName,
     WirStructType, WirType, WirTypeDef, WirVariantCase, WirVariantRepr, WirVariantType,
@@ -19,8 +20,8 @@ use super::context::WirContext;
 
 /// A type declaration in topological order (struct or variant).
 pub enum TypeDecl<'a> {
-    Struct(&'a TirStruct),
-    Variant(&'a TirVariantDecl),
+    Struct(&'a NirStruct),
+    Variant(&'a NirVariantDecl),
 }
 
 /// Get type dependencies (FQ `"{module_source}//{name}"` keys) for a given type.
@@ -64,8 +65,8 @@ fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String>
 /// before dependents. This handles mutual dependencies between structs and variants
 /// (e.g., struct with variant field, variant with struct payload).
 fn sort_types_topologically<'a>(
-    structs: &'a [TirStruct],
-    variants: &'a [TirVariantDecl],
+    structs: &'a [NirStruct],
+    variants: &'a [NirVariantDecl],
     type_table: &TypeTable,
 ) -> Vec<TypeDecl<'a>> {
     // Use FQ keys ("{module_source}//{name}") to distinguish same-named types
@@ -151,11 +152,11 @@ fn sort_types_topologically<'a>(
         }
     }
 
-    let key_to_struct: IndexMap<String, &TirStruct> = structs
+    let key_to_struct: IndexMap<String, &NirStruct> = structs
         .iter()
         .map(|s| (fq_key(&s.module_source, &s.name), s))
         .collect();
-    let key_to_variant: IndexMap<String, &TirVariantDecl> = variants
+    let key_to_variant: IndexMap<String, &NirVariantDecl> = variants
         .iter()
         .map(|v| (fq_key(&v.module_source, &v.name), v))
         .collect();
@@ -172,7 +173,7 @@ fn sort_types_topologically<'a>(
         .collect()
 }
 
-/// Register all types from the `FlatPackage` into the `WirContext`.
+/// Register all types from the `NirPackage` into the `WirContext`.
 ///
 /// This follows a multi-phase registration order to ensure type dependencies
 /// are satisfied.
@@ -235,11 +236,11 @@ pub fn register_types(ctx: &mut WirContext<'_>) {
 /// Register a single struct type.
 fn register_struct(
     ctx: &mut WirContext<'_>,
-    tir_struct: &TirStruct,
+    tir_struct: &NirStruct,
     type_table: &TypeTable,
     module_source: &ModuleSource,
 ) {
-    // Use the TirStruct's own module_source directly.  The monomorphizer sets
+    // Use the NirStruct's own module_source directly.  The monomorphizer sets
     // this to the module where the generic struct is *defined* (via InstantiationKey),
     // and link.rs dedup ensures only the defining-module copy survives.
     let effective_module = module_source.clone();
@@ -358,7 +359,7 @@ fn register_struct(
 /// Register a single variant type.
 fn register_variant(
     ctx: &mut WirContext<'_>,
-    variant: &TirVariantDecl,
+    variant: &NirVariantDecl,
     type_table: &TypeTable,
     module_source: &ModuleSource,
 ) {

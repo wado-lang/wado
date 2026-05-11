@@ -957,10 +957,7 @@ pub fn expr_has_break_to(label: &str, expr: &NirExpr) -> bool {
 }
 
 /// Apply a visitor to all function bodies in a project.
-pub fn visit_project_functions(
-    project: &mut NirPackage,
-    visitor: &mut impl NirOptVisitor,
-) -> bool {
+pub fn visit_project_functions(project: &mut NirPackage, visitor: &mut impl NirOptVisitor) -> bool {
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();

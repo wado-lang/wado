@@ -6,13 +6,16 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
-use crate::nir::{CallArg, InlineHint, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirPattern, NirStmt, NirStmtKind, NirUnaryOp};
+use crate::nir::{
+    CallArg, InlineHint, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirPattern,
+    NirStmt, NirStmtKind, NirUnaryOp,
+};
+use crate::nir_package::NirPackage;
 use crate::nir_visitor::block_has_break_to;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 // The inline threshold is based on expression count, which provides a more

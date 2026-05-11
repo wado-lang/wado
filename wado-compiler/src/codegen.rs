@@ -1,12 +1,12 @@
 //! Wasm code generation — emits a WIR module as a Wasm component binary.
 //!
-//! Takes a linked `FlatPackage` and a `WirPackage` and produces the final
+//! Takes a linked `NirPackage` and a `WirPackage` and produces the final
 //! Wasm component bytes.
 //!
 //! Pipeline: `WirPackage` → `emit` (core bytes) → `component` (wrapped) → `Vec<u8>`
 
-use crate::flat_package::FlatPackage;
 use crate::module_source::ModuleSource;
+use crate::nir_package::NirPackage;
 use crate::wir::WirPackage;
 
 mod component;
@@ -15,7 +15,7 @@ mod emit;
 mod postprocess;
 
 /// Emit a Wasm component binary from a linked package and its WIR module.
-pub fn emit_wasm(package: &FlatPackage, wir_package: &WirPackage) -> Vec<u8> {
+pub fn emit_wasm(package: &NirPackage, wir_package: &WirPackage) -> Vec<u8> {
     // Step 1: Emit core module bytes from WirPackage
     let core_module = emit::emit_core_module(wir_package, package.strip_names);
 

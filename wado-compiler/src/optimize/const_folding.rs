@@ -23,15 +23,15 @@
 //! [`super::alias::build_value_copy_helpers`] for the per-function
 //! alias / helper computations the visitor consumes.
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::tir::{TypeId, TypeTable};
 use crate::nir::{FunctionRef, NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind, NirUnaryOp};
+use crate::nir_package::NirPackage;
 use crate::nir_visitor::{
     NirOptVisitor, NirRefVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt,
 };
+use crate::tir::{TypeId, TypeTable};
 use crate::tiri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
 
 use super::alias::{build_alias_info, build_value_copy_helpers, recognize_value_copy};

@@ -41,10 +41,12 @@
 //! `^InspectAlt` impls, where the matching wrapper adapts to the
 //! shrunken signature. Everything else flows through the general path.
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionKind, NirExpr, NirExprKind, NirFunction, NirPattern, NirStmt, NirStmtKind};
+use crate::nir::{
+    FunctionKind, NirExpr, NirExprKind, NirFunction, NirPattern, NirStmt, NirStmtKind,
+};
+use crate::nir_package::NirPackage;
 use crate::nir_visitor::{NirMutVisitor, NirRefVisitor};
 
 use super::elide_local::is_pure_expr;

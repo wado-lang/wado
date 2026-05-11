@@ -38,10 +38,10 @@
 //! This eliminates the GC-allocated `temp: Option<T>` entirely. Subsequent passes
 //! (copy propagation, DCE) clean up the remaining `break '__fused_L;` bookkeeping.
 
-use crate::nir_package::NirPackage;
-use crate::tir::{TypeId};
 use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind};
+use crate::nir_package::NirPackage;
 use crate::nir_visitor::expr_has_break_to;
+use crate::tir::TypeId;
 
 pub fn fuse_labeled_blocks(project: &mut NirPackage) -> bool {
     let mut changed = false;

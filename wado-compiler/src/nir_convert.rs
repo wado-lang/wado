@@ -35,8 +35,10 @@ pub fn flat_to_nir(flat: &FlatPackage) -> NirPackage {
     // `ClosureFunctor::call_method` can reuse the same fresh `Rc` instead of
     // allocating a sibling — the optimizer's closure-type DCE pass keys on
     // `Rc::ptr_eq` between `functor.call_method` and `project.functions[i]`.
-    let mut func_map: std::collections::HashMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>> =
-        std::collections::HashMap::with_capacity(flat.functions.len());
+    let mut func_map: std::collections::HashMap<
+        *const RefCell<TirFunction>,
+        Rc<RefCell<NirFunction>>,
+    > = std::collections::HashMap::with_capacity(flat.functions.len());
     let functions: Vec<Rc<RefCell<NirFunction>>> = flat
         .functions
         .iter()
@@ -222,9 +224,7 @@ fn convert_closure_functor(
     let call_method = func_map
         .get(&Rc::as_ptr(&cf.call_method))
         .cloned()
-        .unwrap_or_else(|| {
-            Rc::new(RefCell::new(convert_function(&cf.call_method.borrow())))
-        });
+        .unwrap_or_else(|| Rc::new(RefCell::new(convert_function(&cf.call_method.borrow()))));
     nir::ClosureFunctor {
         module_source: cf.module_source.clone(),
         id: cf.id,
@@ -608,10 +608,9 @@ fn convert_pattern(pattern: &TirPattern) -> NirPattern {
             type_id: *type_id,
         },
         TirPattern::Literal(lit) => NirPattern::Literal(convert_literal_pattern(lit)),
-        TirPattern::Tuple(patterns, has_rest) => NirPattern::Tuple(
-            patterns.iter().map(convert_pattern).collect(),
-            *has_rest,
-        ),
+        TirPattern::Tuple(patterns, has_rest) => {
+            NirPattern::Tuple(patterns.iter().map(convert_pattern).collect(), *has_rest)
+        }
         TirPattern::Variant {
             enum_type,
             variant_name,
@@ -641,9 +640,7 @@ fn convert_pattern(pattern: &TirPattern) -> NirPattern {
             fields: fields.iter().map(convert_struct_pattern_field).collect(),
             has_rest: *has_rest,
         },
-        TirPattern::Or(patterns) => {
-            NirPattern::Or(patterns.iter().map(convert_pattern).collect())
-        }
+        TirPattern::Or(patterns) => NirPattern::Or(patterns.iter().map(convert_pattern).collect()),
         TirPattern::ConstantValue { expr } => NirPattern::ConstantValue {
             expr: Box::new(convert_expr(expr)),
         },
@@ -837,9 +834,9 @@ fn convert_call_arg(arg: &CallArg) -> nir::CallArg {
 fn convert_function_kind(kind: &tir::FunctionKind) -> nir::FunctionKind {
     match kind {
         tir::FunctionKind::Regular => nir::FunctionKind::Regular,
-        tir::FunctionKind::ValueCopy { type_id } => nir::FunctionKind::ValueCopy {
-            type_id: *type_id,
-        },
+        tir::FunctionKind::ValueCopy { type_id } => {
+            nir::FunctionKind::ValueCopy { type_id: *type_id }
+        }
         tir::FunctionKind::FnCanonicalDispatch {
             trait_kind,
             arity,
@@ -937,8 +934,10 @@ fn convert_variant_case(case: &TirVariantCase) -> NirVariantCase {
 pub fn nir_to_flat(nir: &NirPackage) -> FlatPackage {
     // Same identity preservation as `flat_to_nir` — closure functors must
     // reuse the same Rc as the corresponding package function.
-    let mut func_map: std::collections::HashMap<*const RefCell<NirFunction>, Rc<RefCell<TirFunction>>> =
-        std::collections::HashMap::with_capacity(nir.functions.len());
+    let mut func_map: std::collections::HashMap<
+        *const RefCell<NirFunction>,
+        Rc<RefCell<TirFunction>>,
+    > = std::collections::HashMap::with_capacity(nir.functions.len());
     let functions: Vec<Rc<RefCell<TirFunction>>> = nir
         .functions
         .iter()
@@ -1137,7 +1136,9 @@ fn convert_closure_functor_back(
         .get(&Rc::as_ptr(&cf.call_method))
         .cloned()
         .unwrap_or_else(|| {
-            Rc::new(RefCell::new(convert_function_back(&cf.call_method.borrow())))
+            Rc::new(RefCell::new(convert_function_back(
+                &cf.call_method.borrow(),
+            )))
         });
     ClosureFunctor {
         module_source: cf.module_source.clone(),
@@ -1760,7 +1761,10 @@ fn convert_function_ref_back(func: &nir::FunctionRef) -> FunctionRef {
     FunctionRef {
         module_source: func.module_source.clone(),
         name: func.name.clone(),
-        monomorph_info: func.monomorph_info.as_ref().map(convert_monomorph_info_back),
+        monomorph_info: func
+            .monomorph_info
+            .as_ref()
+            .map(convert_monomorph_info_back),
         method_info: func.method_info.clone(),
     }
 }
@@ -1777,9 +1781,9 @@ fn convert_call_arg_back(arg: &nir::CallArg) -> CallArg {
 fn convert_function_kind_back(kind: &nir::FunctionKind) -> tir::FunctionKind {
     match kind {
         nir::FunctionKind::Regular => tir::FunctionKind::Regular,
-        nir::FunctionKind::ValueCopy { type_id } => tir::FunctionKind::ValueCopy {
-            type_id: *type_id,
-        },
+        nir::FunctionKind::ValueCopy { type_id } => {
+            tir::FunctionKind::ValueCopy { type_id: *type_id }
+        }
         nir::FunctionKind::FnCanonicalDispatch {
             trait_kind,
             arity,

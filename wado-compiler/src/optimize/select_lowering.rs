@@ -5,10 +5,12 @@
 //! Both branches must be pure (no side effects, no traps) since `select` evaluates both
 //! operands eagerly.
 
-use crate::nir_package::NirPackage;
 use crate::module_source::ModuleSource;
+use crate::nir::{
+    CallArg, FunctionRef, MonomorphInfo, NirBlock, NirExpr, NirExprKind, NirStmtKind,
+};
+use crate::nir_package::NirPackage;
 use crate::tir::{TypeId, TypeTable};
-use crate::nir::{CallArg, FunctionRef, MonomorphInfo, NirBlock, NirExpr, NirExprKind, NirStmtKind};
 
 use crate::nir_visitor::{NirOptVisitor, opt_walk_expr};
 

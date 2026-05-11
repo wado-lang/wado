@@ -4,11 +4,14 @@
 //! It identifies field accesses on variables that don't change within a loop and moves
 //! those accesses before the loop.
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
+use crate::nir::{
+    NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirPattern, NirStmt, NirStmtKind,
+    NirUnaryOp,
+};
+use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
-use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirPattern, NirStmt, NirStmtKind, NirUnaryOp};
 
 /// Tracks which variables and fields are modified within a loop.
 ///

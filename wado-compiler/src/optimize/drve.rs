@@ -24,11 +24,11 @@
 //! - Requires at least one observed call site (otherwise DCE will delete
 //!   the function anyway and there is nothing to optimise).
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::IndexSet;
-use crate::tir::{ResolvedType, TypeTable};
 use crate::nir::{FunctionKind, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind};
+use crate::nir_package::NirPackage;
 use crate::nir_visitor::{NirMutVisitor, NirRefVisitor};
+use crate::tir::{ResolvedType, TypeTable};
 
 use super::dae;
 use super::elide_local::is_pure_expr;

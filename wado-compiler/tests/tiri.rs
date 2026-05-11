@@ -14,12 +14,12 @@ use std::rc::Rc;
 use wado_compiler::Span;
 use wado_compiler::hashmap::IndexSet;
 use wado_compiler::module_source::ModuleSource;
-use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
 use wado_compiler::nir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, NirBinaryOp, NirBlock, NirExpr, NirExprKind,
     NirFunction, NirLiteralPattern, NirLocal, NirMatchArm, NirParam, NirPattern, NirStmt,
     NirStmtKind, NirUnaryOp, ReturnAbi,
 };
+use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
 use wado_compiler::tiri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
 
 fn char_lit(c: char) -> NirExpr {

@@ -10,15 +10,15 @@
 
 use crate::hashmap::IndexSet;
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
     FreeFunctionName, FunctionId, MethodName, mangle_generic_name, mangle_local_method,
     mangle_local_trait_method, mangle_method_generic,
 };
-use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirImport, NirStmt, NirStmtKind};
+use crate::nir_package::NirPackage;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;

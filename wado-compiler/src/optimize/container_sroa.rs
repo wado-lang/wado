@@ -50,12 +50,15 @@
 //! lets container SROA pick up new `Array<Tuple<...>>` locals exposed by
 //! earlier-iteration inlining of helper functions.
 
-use crate::nir_package::NirPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
-use crate::nir::{CallArg, FunctionRef, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind, NirStruct};
+use crate::nir::{
+    CallArg, FunctionRef, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt,
+    NirStmtKind, NirStruct,
+};
+use crate::nir_package::NirPackage;
 use crate::nir_visitor::NirRefVisitor;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 /// Signature key for a monomorphized `Array<T>` method: (`trait_name`, `method_name`).
