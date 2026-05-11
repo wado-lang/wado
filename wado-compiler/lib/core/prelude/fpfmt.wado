@@ -865,20 +865,25 @@ pub fn parse(d: u64, p: i32) -> f64 {
 // Rejects: leading dot (".5"), trailing dot ("5."), empty string.
 // Examples: "3.14", "1e2", "0.5", "123", "+1.5e-3", "-42", "inf", "NaN"
 pub fn parse_text(s: String) -> Option<f64> {
-    let len = s.len();
-    if len == 0 {
+    return parse_text_range(s, 0, s.len());
+}
+
+// Range variant of parse_text. Parses `s[start..end]` without allocating a substring.
+pub fn parse_text_range(s: String, start: i32, end: i32) -> Option<f64> {
+    let len = end;
+    if start >= end {
         return null;
     }
 
     // Parse optional sign
     let mut sign = 1.0;
-    let mut i = 0;
-    let first = s.get_byte(0);
+    let mut i = start;
+    let first = s.get_byte(start);
     if first == '-' as u8 {
         sign = -1.0;
-        i = 1;
+        i = start + 1;
     } else if first == '+' as u8 {
-        i = 1;
+        i = start + 1;
     }
 
     if i >= len {

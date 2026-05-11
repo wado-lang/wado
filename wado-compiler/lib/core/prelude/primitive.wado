@@ -66,7 +66,10 @@ use {
     assert_radix,
     parse_i64_radix,
     parse_u64_radix,
+    parse_i64_radix_range,
+    parse_u64_radix_range,
     parse_f64_from_str,
+    parse_f64_from_str_range,
 } from "core:prelude/intparse.wado";
 
 /// Copy bytes from linear memory to a new GC array (internal helper)
@@ -445,6 +448,16 @@ impl i8 {
     }
 }
 
+impl FromStr for i8 {
+    type Err = ParseIntError;
+    fn from_str_range(s: String, start: i32, end: i32) -> Result<i8, ParseIntError> {
+        return match parse_i64_radix_range(s, start, end, 10, 127, 128) {
+            Ok(v) => Result::Ok(v as i8),
+            Err(e) => Result::Err(e),
+        };
+    }
+}
+
 impl u8 {
     pub const MAX: u8 = 255;
     pub const MIN: u8 = 0;
@@ -478,6 +491,16 @@ impl u8 {
 
     pub fn from_str_radix(s: String, radix: u32) -> Result<u8, ParseIntError> {
         return match parse_u64_radix(s, radix, 255) {
+            Ok(v) => Result::Ok(v as u8),
+            Err(e) => Result::Err(e),
+        };
+    }
+}
+
+impl FromStr for u8 {
+    type Err = ParseIntError;
+    fn from_str_range(s: String, start: i32, end: i32) -> Result<u8, ParseIntError> {
+        return match parse_u64_radix_range(s, start, end, 10, 255) {
             Ok(v) => Result::Ok(v as u8),
             Err(e) => Result::Err(e),
         };
@@ -523,6 +546,16 @@ impl i16 {
     }
 }
 
+impl FromStr for i16 {
+    type Err = ParseIntError;
+    fn from_str_range(s: String, start: i32, end: i32) -> Result<i16, ParseIntError> {
+        return match parse_i64_radix_range(s, start, end, 10, 32767, 32768) {
+            Ok(v) => Result::Ok(v as i16),
+            Err(e) => Result::Err(e),
+        };
+    }
+}
+
 impl u16 {
     pub const MAX: u16 = 65535;
     pub const MIN: u16 = 0;
@@ -556,6 +589,16 @@ impl u16 {
 
     pub fn from_str_radix(s: String, radix: u32) -> Result<u16, ParseIntError> {
         return match parse_u64_radix(s, radix, 65535) {
+            Ok(v) => Result::Ok(v as u16),
+            Err(e) => Result::Err(e),
+        };
+    }
+}
+
+impl FromStr for u16 {
+    type Err = ParseIntError;
+    fn from_str_range(s: String, start: i32, end: i32) -> Result<u16, ParseIntError> {
+        return match parse_u64_radix_range(s, start, end, 10, 65535) {
             Ok(v) => Result::Ok(v as u16),
             Err(e) => Result::Err(e),
         };
@@ -624,6 +667,16 @@ impl i32 {
     }
 }
 
+impl FromStr for i32 {
+    type Err = ParseIntError;
+    fn from_str_range(s: String, start: i32, end: i32) -> Result<i32, ParseIntError> {
+        return match parse_i64_radix_range(s, start, end, 10, 2147483647, 2147483648) {
+            Ok(v) => Result::Ok(v as i32),
+            Err(e) => Result::Err(e),
+        };
+    }
+}
+
 impl u32 {
     pub const MAX: u32 = 4294967295;
     pub const MIN: u32 = 0;
@@ -665,6 +718,16 @@ impl u32 {
 
     pub fn from_str_radix(s: String, radix: u32) -> Result<u32, ParseIntError> {
         return match parse_u64_radix(s, radix, 4294967295) {
+            Ok(v) => Result::Ok(v as u32),
+            Err(e) => Result::Err(e),
+        };
+    }
+}
+
+impl FromStr for u32 {
+    type Err = ParseIntError;
+    fn from_str_range(s: String, start: i32, end: i32) -> Result<u32, ParseIntError> {
+        return match parse_u64_radix_range(s, start, end, 10, 4294967295) {
             Ok(v) => Result::Ok(v as u32),
             Err(e) => Result::Err(e),
         };
@@ -747,6 +810,13 @@ impl i64 {
 
     pub fn from_str_radix(s: String, radix: u32) -> Result<i64, ParseIntError> {
         return parse_i64_radix(s, radix, 9223372036854775807, 9223372036854775808);
+    }
+}
+
+impl FromStr for i64 {
+    type Err = ParseIntError;
+    fn from_str_range(s: String, start: i32, end: i32) -> Result<i64, ParseIntError> {
+        return parse_i64_radix_range(s, start, end, 10, 9223372036854775807, 9223372036854775808);
     }
 }
 
@@ -858,6 +928,13 @@ impl u64 {
 
     pub fn from_str_radix(s: String, radix: u32) -> Result<u64, ParseIntError> {
         return parse_u64_radix(s, radix, u64::MAX);
+    }
+}
+
+impl FromStr for u64 {
+    type Err = ParseIntError;
+    fn from_str_range(s: String, start: i32, end: i32) -> Result<u64, ParseIntError> {
+        return parse_u64_radix_range(s, start, end, 10, u64::MAX);
     }
 }
 
@@ -1155,6 +1232,16 @@ impl f32 {
     /// Creates an f32 from its bit representation.
     pub fn from_bits(bits: i32) -> f32 {
         return builtin::f32_reinterpret_i32(bits);
+    }
+}
+
+impl FromStr for f32 {
+    type Err = ParseFloatError;
+    fn from_str_range(s: String, start: i32, end: i32) -> Result<f32, ParseFloatError> {
+        return match parse_f64_from_str_range(s, start, end) {
+            Ok(v) => Result::Ok(v as f32),
+            Err(e) => Result::Err(e),
+        };
     }
 }
 
@@ -1495,6 +1582,13 @@ impl f64 {
     /// Creates an f64 from its bit representation.
     pub fn from_bits(bits: i64) -> f64 {
         return builtin::f64_reinterpret_i64(bits);
+    }
+}
+
+impl FromStr for f64 {
+    type Err = ParseFloatError;
+    fn from_str_range(s: String, start: i32, end: i32) -> Result<f64, ParseFloatError> {
+        return parse_f64_from_str_range(s, start, end);
     }
 }
 

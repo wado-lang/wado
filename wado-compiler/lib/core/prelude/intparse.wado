@@ -7,7 +7,7 @@
 #![no_prelude]
 #![stdlib("core:prelude/intparse.wado")]
 
-use { parse_text } from "core:prelude/fpfmt.wado";
+use { parse_text_range } from "core:prelude/fpfmt.wado";
 
 /// Kind of failure returned by integer parsing.
 pub enum IntErrorKind {
@@ -135,35 +135,45 @@ pub fn parse_u128_digits(s: String, start: i32, end: i32, radix: u32) -> Result<
 /// Strip the leading sign and return `[is_negative, value_start]` for a signed integer parse.
 /// Rejects lone `"+"`, `"-"` and empty input as `Empty`; reserves per-type bound checks for the caller.
 pub fn parse_signed_prefix(s: String) -> Result<[bool, i32], IntErrorKind> {
-    let len = s.len();
-    if len == 0 {
+    return parse_signed_prefix_range(s, 0, s.len());
+}
+
+/// Range variant of `parse_signed_prefix`. The returned `start` is an absolute
+/// offset into `s` (not relative to the input range).
+pub fn parse_signed_prefix_range(s: String, start: i32, end: i32) -> Result<[bool, i32], IntErrorKind> {
+    if start >= end {
         return Result::Err(IntErrorKind::Empty);
     }
-    let first = s.get_byte(0);
+    let first = s.get_byte(start);
     let is_negative = first == '-' as u8;
     let has_sign = is_negative || first == '+' as u8;
-    if has_sign && len == 1 {
+    if has_sign && start + 1 >= end {
         return Result::Err(IntErrorKind::InvalidDigit);
     }
-    let start = if has_sign { 1 } else { 0 };
-    return Result::Ok([is_negative, start]);
+    let value_start = if has_sign { start + 1 } else { start };
+    return Result::Ok([is_negative, value_start]);
 }
 
 /// Strip the leading `+` (if any) for an unsigned integer parse.
 /// Rejects `-`-prefixed input as `InvalidDigit` per Rust's behaviour.
 pub fn parse_unsigned_prefix(s: String) -> Result<i32, IntErrorKind> {
-    let len = s.len();
-    if len == 0 {
+    return parse_unsigned_prefix_range(s, 0, s.len());
+}
+
+/// Range variant of `parse_unsigned_prefix`. The returned offset is an
+/// absolute index into `s` (not relative to the input range).
+pub fn parse_unsigned_prefix_range(s: String, start: i32, end: i32) -> Result<i32, IntErrorKind> {
+    if start >= end {
         return Result::Err(IntErrorKind::Empty);
     }
-    let first = s.get_byte(0);
+    let first = s.get_byte(start);
     if first == '+' as u8 {
-        if len == 1 {
+        if start + 1 >= end {
             return Result::Err(IntErrorKind::InvalidDigit);
         }
-        return Result::Ok(1);
+        return Result::Ok(start + 1);
     }
-    return Result::Ok(0);
+    return Result::Ok(start);
 }
 
 /// Check that the radix is supported (2..=36); panic otherwise.
@@ -178,14 +188,20 @@ pub fn assert_radix(radix: u32) {
 /// most negative representable value (e.g. for i32, `max = 2147483647`,
 /// `min_abs = 2147483648`). Handles the optional leading `+`/`-` sign.
 pub fn parse_i64_radix(s: String, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
+    return parse_i64_radix_range(s, 0, s.len(), radix, max, min_abs);
+}
+
+/// Range variant of `parse_i64_radix`. Parses `s[start..end]` without
+/// allocating a substring.
+pub fn parse_i64_radix_range(s: String, start: i32, end: i32, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
     assert_radix(radix);
-    let [is_negative, start] = match parse_signed_prefix(s) {
+    let [is_negative, digit_start] = match parse_signed_prefix_range(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result::Err(ParseIntError::new(k));
         },
     };
-    return match parse_u64_digits(s, start, s.len(), radix) {
+    return match parse_u64_digits(s, digit_start, end, radix) {
         Ok(v) => if is_negative {
             if v > min_abs {
                 Result::Err(ParseIntError::new(IntErrorKind::NegOverflow));
@@ -207,14 +223,20 @@ pub fn parse_i64_radix(s: String, radix: u32, max: i64, min_abs: u64) -> Result<
 
 /// Parse an unsigned integer in the given radix, clamped to `[0, max]`.
 pub fn parse_u64_radix(s: String, radix: u32, max: u64) -> Result<u64, ParseIntError> {
+    return parse_u64_radix_range(s, 0, s.len(), radix, max);
+}
+
+/// Range variant of `parse_u64_radix`. Parses `s[start..end]` without
+/// allocating a substring.
+pub fn parse_u64_radix_range(s: String, start: i32, end: i32, radix: u32, max: u64) -> Result<u64, ParseIntError> {
     assert_radix(radix);
-    let start = match parse_unsigned_prefix(s) {
+    let digit_start = match parse_unsigned_prefix_range(s, start, end) {
         Ok(i) => i,
         Err(k) => {
             return Result::Err(ParseIntError::new(k));
         },
     };
-    return match parse_u64_digits(s, start, s.len(), radix) {
+    return match parse_u64_digits(s, digit_start, end, radix) {
         Ok(v) => if v > max { Result::Err(ParseIntError::new(IntErrorKind::PosOverflow)) } else { Result::Ok(v) },
         Err(k) => Result::Err(ParseIntError::new(k)),
     };
@@ -222,10 +244,16 @@ pub fn parse_u64_radix(s: String, radix: u32, max: u64) -> Result<u64, ParseIntE
 
 /// Wrap a float-parsing failure into a `ParseFloatError`.
 pub fn parse_f64_from_str(s: String) -> Result<f64, ParseFloatError> {
-    if s.len() == 0 {
+    return parse_f64_from_str_range(s, 0, s.len());
+}
+
+/// Range variant of `parse_f64_from_str`. Parses `s[start..end]` without
+/// allocating a substring.
+pub fn parse_f64_from_str_range(s: String, start: i32, end: i32) -> Result<f64, ParseFloatError> {
+    if start >= end {
         return Result::Err(ParseFloatError::new(FloatErrorKind::Empty));
     }
-    return match parse_text(s) {
+    return match parse_text_range(s, start, end) {
         Some(v) => Result::Ok(v),
         None => Result::Err(ParseFloatError::new(FloatErrorKind::Invalid)),
     };

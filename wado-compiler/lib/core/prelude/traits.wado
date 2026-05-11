@@ -778,3 +778,21 @@ impl<T: SequenceLiteralBuilder<Output = T>> SequenceLiteral for T {
     type Element = T::Element;
     type Builder = T;
 }
+
+/// Parse a value from a string.
+///
+/// `from_str_range` is the fundamental operation: it parses `s[start..end)`
+/// without allocating a substring. Implementors must provide it. The
+/// `from_str` convenience method is a thin wrapper that parses the entire
+/// string and is provided as a default.
+pub trait FromStr {
+    type Err;
+
+    /// Parse the byte range `s[start..end)` as `Self`.
+    fn from_str_range(s: String, start: i32, end: i32) -> Result<Self, Self::Err>;
+
+    /// Parse the entire string as `Self`. Delegates to `from_str_range`.
+    fn from_str(s: String) -> Result<Self, Self::Err> {
+        return Self::from_str_range(s, 0, s.len());
+    }
+}

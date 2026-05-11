@@ -35,7 +35,7 @@ use { Serialize } from "core:serde";
 use { Url } from "core:url";
 use { log_stderr } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
-use { Router } from "core:router";
+use { Router, PathParams } from "core:router";
 use json from "core:json";
 
 struct RequestInfo {
@@ -87,7 +87,7 @@ struct RouteResponse {
     allow: Option<String>,
 }
 
-type Handler = fn(Request, TreeMap<String, String>) -> RouteResponse;
+type Handler = fn(Request, PathParams) -> RouteResponse;
 
 fn scheme_name(s: Option<Scheme>) -> String {
     return match s {

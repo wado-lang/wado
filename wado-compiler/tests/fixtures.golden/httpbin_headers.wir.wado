@@ -679,7 +679,7 @@ type "functype//core:prelude/fpfmt.wado/pack64" = fn(u64, i32) -> f64;  // TypeI
 
 type "functype//core:prelude/fpfmt.wado/parse" = fn(u64, i32) -> f64;  // TypeId(169)
 
-type "functype//core:prelude/fpfmt.wado/parse_text" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Option<f64>";  // TypeId(170)
+type "functype//core:prelude/fpfmt.wado/parse_text_range" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<f64>";  // TypeId(170)
 
 type "functype//core:prelude/primitive.wado/write_base_digits" = fn(ref builtin::array<u8>, i32, i64, i32, i32, bool);  // TypeId(171)
 
@@ -785,7 +785,7 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//./sub/httpbin_handler.wado/parse_status_code" = fn(ref "core:prelude/string.wado//String") -> [i32, u16];  // TypeId(222)
 
-type "functype//core:prelude/intparse.wado/parse_f64_from_str" = fn(ref "core:prelude/string.wado//String") -> [i32, f64, ref null "core:prelude/intparse.wado//ParseFloatError"];  // TypeId(223)
+type "functype//core:prelude/intparse.wado/parse_f64_from_str_range" = fn(ref "core:prelude/string.wado//String", i32, i32) -> [i32, f64, ref null "core:prelude/intparse.wado//ParseFloatError"];  // TypeId(223)
 
 type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(224)
 
@@ -1961,7 +1961,7 @@ fn "./sub/httpbin_handler.wado/parse_status_code"(s) {
     let __sroa___pattern_temp_0_discriminant: i32;
     let __sroa___pattern_temp_0_case0_payload_0: f64;
     let __sroa___pattern_temp_0_case1_payload_0: ref null "core:prelude/intparse.wado//ParseFloatError";
-    multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_case0_payload_0, __sroa___pattern_temp_0_case1_payload_0] = "core:prelude/intparse.wado/parse_f64_from_str"(s);
+    multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_case0_payload_0, __sroa___pattern_temp_0_case1_payload_0] = "core:prelude/intparse.wado/parse_f64_from_str_range"(s, 0, s.used);
     if __sroa___pattern_temp_0_discriminant == 0 {
         f = __sroa___pattern_temp_0_case0_payload_0;
         code = builtin::i32_trunc_f64_s(f);
@@ -4358,22 +4358,21 @@ fn "core:prelude/fpfmt.wado/parse"(d, p) {
     return "core:prelude/fpfmt.wado/pack64"(((u_8 + 1_i64) + ((u_8 >>u 2_i64) & 1_i64)) >>u 2_i64, 0 - e);
 }
 
-fn "core:prelude/fpfmt.wado/parse_text"(s) {
-    let len: i32;
+fn "core:prelude/fpfmt.wado/parse_text_range"(s, start, end) {
     let sign: f64;
     let i: i32;
     let first: u8;
     let remaining: i32;
     let c0: u8;
-    let c1_7: u8;
-    let c2_8: u8;
+    let c1_9: u8;
+    let c2_10: u8;
     let c3: u8;
     let c4: u8;
     let c5: u8;
     let c6: u8;
     let c7: u8;
-    let c1_14: u8;
-    let c2_15: u8;
+    let c1_16: u8;
+    let c2_17: u8;
     let d: u64;
     let frac: i32;
     let digit_start: i32;
@@ -4385,35 +4384,34 @@ fn "core:prelude/fpfmt.wado/parse_text"(s) {
     let exp_start: i32;
     let eff_p: i32;
     let val: f64;
-    let index_34: i32;
-    let index_36: i32;
-    let index_38: i32;
-    let index_40: i32;
-    let index_42: i32;
-    let index_44: i32;
-    let index_46: i32;
-    let index_48: i32;
-    let index_50: i32;
-    let _licm_repr_79: ref builtin::array<u8>;
+    let index_35: i32;
+    let index_37: i32;
+    let index_39: i32;
+    let index_41: i32;
+    let index_43: i32;
+    let index_45: i32;
+    let index_47: i32;
+    let index_49: i32;
+    let index_51: i32;
     let _licm_repr_80: ref builtin::array<u8>;
     let _licm_repr_81: ref builtin::array<u8>;
-    len = s.used;
-    if len == 0 {
+    let _licm_repr_82: ref builtin::array<u8>;
+    if start >= end {
         return struct.new "core:prelude/types.wado//Option<f64>" { 1 };
     }
     sign = 1;
-    i = 0;
-    first = builtin::array_get_u8(s.repr, 0);
+    i = start;
+    first = builtin::array_get_u8(s.repr, start);
     if first == 45 {
         sign = -1;
-        i = 1;
+        i = start + 1;
     } else if first == 43 {
-        i = 1;
+        i = start + 1;
     }
-    if i >= len {
+    if i >= end {
         return struct.new "core:prelude/types.wado//Option<f64>" { 1 };
     }
-    remaining = len - i;
+    remaining = end - i;
     c0 = builtin::array_get_u8(s.repr, i);
     if (if (if c0 == 105 -> i32 {
         1;
@@ -4424,25 +4422,25 @@ fn "core:prelude/fpfmt.wado/parse_text"(s) {
     } else {
         0;
     }) {
-        c1_7 = __inline_String__get_byte_3: block -> u8 {
-            index_34 = i + 1;
-            break __inline_String__get_byte_3: builtin::array_get_u8(s.repr, index_34);
+        c1_9 = __inline_String__get_byte_2: block -> u8 {
+            index_35 = i + 1;
+            break __inline_String__get_byte_2: builtin::array_get_u8(s.repr, index_35);
             unreachable;
         };
-        c2_8 = __inline_String__get_byte_4: block -> u8 {
-            index_36 = i + 2;
-            break __inline_String__get_byte_4: builtin::array_get_u8(s.repr, index_36);
+        c2_10 = __inline_String__get_byte_3: block -> u8 {
+            index_37 = i + 2;
+            break __inline_String__get_byte_3: builtin::array_get_u8(s.repr, index_37);
             unreachable;
         };
-        if (if (if c1_7 == 110 -> i32 {
+        if (if (if c1_9 == 110 -> i32 {
             1;
         } else {
-            c1_7 == 78;
+            c1_9 == 78;
         }) -> i32 {
-            if c2_8 == 102 -> i32 {
+            if c2_10 == 102 -> i32 {
                 1;
             } else {
-                c2_8 == 70;
+                c2_10 == 70;
             }
         } else {
             0;
@@ -4451,29 +4449,29 @@ fn "core:prelude/fpfmt.wado/parse_text"(s) {
                 return struct.new "core:prelude/types.wado//Option<f64>::Some" { discriminant: 0, payload_0: f64.copysign(inf, sign) };
             }
             if remaining == 8 {
-                c3 = __inline_String__get_byte_5: block -> u8 {
-                    index_38 = i + 3;
-                    break __inline_String__get_byte_5: builtin::array_get_u8(s.repr, index_38);
+                c3 = __inline_String__get_byte_4: block -> u8 {
+                    index_39 = i + 3;
+                    break __inline_String__get_byte_4: builtin::array_get_u8(s.repr, index_39);
                     unreachable;
                 };
-                c4 = __inline_String__get_byte_6: block -> u8 {
-                    index_40 = i + 4;
-                    break __inline_String__get_byte_6: builtin::array_get_u8(s.repr, index_40);
+                c4 = __inline_String__get_byte_5: block -> u8 {
+                    index_41 = i + 4;
+                    break __inline_String__get_byte_5: builtin::array_get_u8(s.repr, index_41);
                     unreachable;
                 };
-                c5 = __inline_String__get_byte_7: block -> u8 {
-                    index_42 = i + 5;
-                    break __inline_String__get_byte_7: builtin::array_get_u8(s.repr, index_42);
+                c5 = __inline_String__get_byte_6: block -> u8 {
+                    index_43 = i + 5;
+                    break __inline_String__get_byte_6: builtin::array_get_u8(s.repr, index_43);
                     unreachable;
                 };
-                c6 = __inline_String__get_byte_8: block -> u8 {
-                    index_44 = i + 6;
-                    break __inline_String__get_byte_8: builtin::array_get_u8(s.repr, index_44);
+                c6 = __inline_String__get_byte_7: block -> u8 {
+                    index_45 = i + 6;
+                    break __inline_String__get_byte_7: builtin::array_get_u8(s.repr, index_45);
                     unreachable;
                 };
-                c7 = __inline_String__get_byte_9: block -> u8 {
-                    index_46 = i + 7;
-                    break __inline_String__get_byte_9: builtin::array_get_u8(s.repr, index_46);
+                c7 = __inline_String__get_byte_8: block -> u8 {
+                    index_47 = i + 7;
+                    break __inline_String__get_byte_8: builtin::array_get_u8(s.repr, index_47);
                     unreachable;
                 };
                 if (if (if (if (if (if c3 == 105 -> i32 {
@@ -4528,25 +4526,25 @@ fn "core:prelude/fpfmt.wado/parse_text"(s) {
     } else {
         0;
     }) {
-        c1_14 = __inline_String__get_byte_10: block -> u8 {
-            index_48 = i + 1;
-            break __inline_String__get_byte_10: builtin::array_get_u8(s.repr, index_48);
+        c1_16 = __inline_String__get_byte_9: block -> u8 {
+            index_49 = i + 1;
+            break __inline_String__get_byte_9: builtin::array_get_u8(s.repr, index_49);
             unreachable;
         };
-        c2_15 = __inline_String__get_byte_11: block -> u8 {
-            index_50 = i + 2;
-            break __inline_String__get_byte_11: builtin::array_get_u8(s.repr, index_50);
+        c2_17 = __inline_String__get_byte_10: block -> u8 {
+            index_51 = i + 2;
+            break __inline_String__get_byte_10: builtin::array_get_u8(s.repr, index_51);
             unreachable;
         };
-        if (if (if c1_14 == 97 -> i32 {
+        if (if (if c1_16 == 97 -> i32 {
             1;
         } else {
-            c1_14 == 65;
+            c1_16 == 65;
         }) -> i32 {
-            if c2_15 == 110 -> i32 {
+            if c2_17 == 110 -> i32 {
                 1;
             } else {
-                c2_15 == 78;
+                c2_17 == 78;
             }
         } else {
             0;
@@ -4559,28 +4557,28 @@ fn "core:prelude/fpfmt.wado/parse_text"(s) {
     frac = 0;
     digit_start = i;
     __for_0: block {
-        _licm_repr_79 = s.repr;
+        _licm_repr_80 = s.repr;
         block {
             l374: loop {
-                if (if (if i < len -> i32 {
-                    builtin::array_get_u8(_licm_repr_79, i) >=u 48;
+                if (if (if i < end -> i32 {
+                    builtin::array_get_u8(_licm_repr_80, i) >=u 48;
                 } else {
                     0;
                 }) -> i32 {
-                    builtin::array_get_u8(_licm_repr_79, i) <=u 57;
+                    builtin::array_get_u8(_licm_repr_80, i) <=u 57;
                 } else {
                     0;
                 }) == 0 {
                     break __for_0;
                 }
-                d = (d * 10_i64) + builtin::i64_extend_i32_u((builtin::array_get_u8(_licm_repr_79, i) - 48) & 255);
+                d = (d * 10_i64) + builtin::i64_extend_i32_u((builtin::array_get_u8(_licm_repr_80, i) - 48) & 255);
                 i = i + 1;
                 continue l374;
             };
         };
     };
     int_digits = i - digit_start;
-    if (if i < len -> i32 {
+    if (if i < end -> i32 {
         builtin::array_get_u8(s.repr, i) == 46;
     } else {
         0;
@@ -4591,21 +4589,21 @@ fn "core:prelude/fpfmt.wado/parse_text"(s) {
         i = i + 1;
         frac_start = i;
         __for_1: block {
-            _licm_repr_80 = s.repr;
+            _licm_repr_81 = s.repr;
             block {
                 l382: loop {
-                    if (if (if i < len -> i32 {
-                        builtin::array_get_u8(_licm_repr_80, i) >=u 48;
+                    if (if (if i < end -> i32 {
+                        builtin::array_get_u8(_licm_repr_81, i) >=u 48;
                     } else {
                         0;
                     }) -> i32 {
-                        builtin::array_get_u8(_licm_repr_80, i) <=u 57;
+                        builtin::array_get_u8(_licm_repr_81, i) <=u 57;
                     } else {
                         0;
                     }) == 0 {
                         break __for_1;
                     }
-                    d = (d * 10_i64) + builtin::i64_extend_i32_u((builtin::array_get_u8(_licm_repr_80, i) - 48) & 255);
+                    d = (d * 10_i64) + builtin::i64_extend_i32_u((builtin::array_get_u8(_licm_repr_81, i) - 48) & 255);
                     frac = frac + 1;
                     i = i + 1;
                     continue l382;
@@ -4625,7 +4623,7 @@ fn "core:prelude/fpfmt.wado/parse_text"(s) {
         return struct.new "core:prelude/types.wado//Option<f64>" { 1 };
     }
     p = 0;
-    if (if i < len -> i32 {
+    if (if i < end -> i32 {
         if builtin::array_get_u8(s.repr, i) == 101 -> i32 {
             1;
         } else {
@@ -4636,7 +4634,7 @@ fn "core:prelude/fpfmt.wado/parse_text"(s) {
     }) {
         i = i + 1;
         exp_sign = 1;
-        if i < len {
+        if i < end {
             if builtin::array_get_u8(s.repr, i) == 45 {
                 exp_sign = -1;
                 i = i + 1;
@@ -4645,29 +4643,29 @@ fn "core:prelude/fpfmt.wado/parse_text"(s) {
             }
         }
         exp_start = i;
-        if (if i >= len -> i32 {
+        if (if i >= end -> i32 {
             1;
         } else {
-            (len - i) > 3;
+            (end - i) > 3;
         }) {
             return struct.new "core:prelude/types.wado//Option<f64>" { 1 };
         }
         __for_2: block {
-            _licm_repr_81 = s.repr;
+            _licm_repr_82 = s.repr;
             block {
                 l397: loop {
-                    if (if (if i < len -> i32 {
-                        builtin::array_get_u8(_licm_repr_81, i) >=u 48;
+                    if (if (if i < end -> i32 {
+                        builtin::array_get_u8(_licm_repr_82, i) >=u 48;
                     } else {
                         0;
                     }) -> i32 {
-                        builtin::array_get_u8(_licm_repr_81, i) <=u 57;
+                        builtin::array_get_u8(_licm_repr_82, i) <=u 57;
                     } else {
                         0;
                     }) == 0 {
                         break __for_2;
                     }
-                    p = (p * 10) + ((builtin::array_get_u8(_licm_repr_81, i) - 48) & 255);
+                    p = (p * 10) + ((builtin::array_get_u8(_licm_repr_82, i) - 48) & 255);
                     i = i + 1;
                     continue l397;
                 };
@@ -4678,7 +4676,7 @@ fn "core:prelude/fpfmt.wado/parse_text"(s) {
         }
         p = p * exp_sign;
     }
-    if i != len {
+    if i != end {
         return struct.new "core:prelude/types.wado//Option<f64>" { 1 };
     }
     if d == 0_i64 {
@@ -4695,28 +4693,28 @@ fn "core:prelude/fpfmt.wado/parse_text"(s) {
     return struct.new "core:prelude/types.wado//Option<f64>::Some" { discriminant: 0, payload_0: f64.copysign(val, sign) };
 }
 
-fn "core:prelude/intparse.wado/parse_f64_from_str"(s) {
+fn "core:prelude/intparse.wado/parse_f64_from_str_range"(s, start, end) {
     let v: f64;
-    let kind_3: "core:prelude/intparse.wado//enum:FloatErrorKind";
     let kind_4: "core:prelude/intparse.wado//enum:FloatErrorKind";
-    if s.used == 0 {
-        return 1, 0, ref.as_non_null(__inline_ParseFloatError__new_1: block -> ref "core:prelude/intparse.wado//ParseFloatError" {
-            kind_3 = 0;
-            break __inline_ParseFloatError__new_1: struct.new "core:prelude/intparse.wado//ParseFloatError" { kind: kind_3 };
+    let kind_5: "core:prelude/intparse.wado//enum:FloatErrorKind";
+    if start >= end {
+        return 1, 0, ref.as_non_null(__inline_ParseFloatError__new_0: block -> ref "core:prelude/intparse.wado//ParseFloatError" {
+            kind_4 = 0;
+            break __inline_ParseFloatError__new_0: struct.new "core:prelude/intparse.wado//ParseFloatError" { kind: kind_4 };
             unreachable;
         });
     }
     let __match_scrut_0: ref "core:prelude/types.wado//Option<f64>";
-    __match_scrut_0 = "core:prelude/fpfmt.wado/parse_text"(s);
+    __match_scrut_0 = "core:prelude/fpfmt.wado/parse_text_range"(s, start, end);
     if ref.test "core:prelude/types.wado//Option<f64>::Some"(__match_scrut_0) {
         let __cast_1: ref "core:prelude/types.wado//Option<f64>::Some";
         __cast_1 = ref.cast "core:prelude/types.wado//Option<f64>::Some"(__match_scrut_0);
         v = __cast_1.payload_0;
         return 0, v, ref.null none;
     } else {
-        return 1, 0, ref.as_non_null(__inline_ParseFloatError__new_2: block -> ref "core:prelude/intparse.wado//ParseFloatError" {
-            kind_4 = 1;
-            break __inline_ParseFloatError__new_2: struct.new "core:prelude/intparse.wado//ParseFloatError" { kind: kind_4 };
+        return 1, 0, ref.as_non_null(__inline_ParseFloatError__new_1: block -> ref "core:prelude/intparse.wado//ParseFloatError" {
+            kind_5 = 1;
+            break __inline_ParseFloatError__new_1: struct.new "core:prelude/intparse.wado//ParseFloatError" { kind: kind_5 };
             unreachable;
         });
     }

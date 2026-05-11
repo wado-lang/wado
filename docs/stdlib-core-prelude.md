@@ -1056,6 +1056,10 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `pub fn from_str_radix(s: String, radix: u32) -> Result<i8, ParseIntError>`
 
+#### `impl FromStr for i8`
+
+##### `fn from_str_range(s: String, start: i32, end: i32) -> Result<i8, ParseIntError>`
+
 #### `impl Display for i8`
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1146,6 +1150,10 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `pub fn from_str_radix(s: String, radix: u32) -> Result<u8, ParseIntError>`
 
+#### `impl FromStr for u8`
+
+##### `fn from_str_range(s: String, start: i32, end: i32) -> Result<u8, ParseIntError>`
+
 #### `impl Display for u8`
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1231,6 +1239,10 @@ Encodes this character as UTF-8, returning the bytes.
 #### `pub fn from_str_hex(s: String) -> Result<i16, ParseIntError>`
 
 #### `pub fn from_str_radix(s: String, radix: u32) -> Result<i16, ParseIntError>`
+
+#### `impl FromStr for i16`
+
+##### `fn from_str_range(s: String, start: i32, end: i32) -> Result<i16, ParseIntError>`
 
 #### `impl Display for i16`
 
@@ -1325,6 +1337,10 @@ Encodes this character as UTF-8, returning the bytes.
 #### `pub fn from_str_hex(s: String) -> Result<u16, ParseIntError>`
 
 #### `pub fn from_str_radix(s: String, radix: u32) -> Result<u16, ParseIntError>`
+
+#### `impl FromStr for u16`
+
+##### `fn from_str_range(s: String, start: i32, end: i32) -> Result<u16, ParseIntError>`
 
 #### `impl Display for u16`
 
@@ -1423,6 +1439,10 @@ Counts the number of set bits (population count).
 #### `pub fn from_str_hex(s: String) -> Result<i32, ParseIntError>`
 
 #### `pub fn from_str_radix(s: String, radix: u32) -> Result<i32, ParseIntError>`
+
+#### `impl FromStr for i32`
+
+##### `fn from_str_range(s: String, start: i32, end: i32) -> Result<i32, ParseIntError>`
 
 #### `impl Display for i32`
 
@@ -1525,6 +1545,10 @@ Counts the number of set bits (population count).
 #### `pub fn from_str_hex(s: String) -> Result<u32, ParseIntError>`
 
 #### `pub fn from_str_radix(s: String, radix: u32) -> Result<u32, ParseIntError>`
+
+#### `impl FromStr for u32`
+
+##### `fn from_str_range(s: String, start: i32, end: i32) -> Result<u32, ParseIntError>`
 
 #### `impl Display for u32`
 
@@ -1636,6 +1660,10 @@ Counts the number of set bits (population count).
 
 #### `pub fn from_str_radix(s: String, radix: u32) -> Result<i64, ParseIntError>`
 
+#### `impl FromStr for i64`
+
+##### `fn from_str_range(s: String, start: i32, end: i32) -> Result<i64, ParseIntError>`
+
 #### `impl Display for i64`
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1745,6 +1773,10 @@ Counts the number of set bits (population count).
 #### `pub fn from_str_hex(s: String) -> Result<u64, ParseIntError>`
 
 #### `pub fn from_str_radix(s: String, radix: u32) -> Result<u64, ParseIntError>`
+
+#### `impl FromStr for u64`
+
+##### `fn from_str_range(s: String, start: i32, end: i32) -> Result<u64, ParseIntError>`
 
 #### `impl Display for u64`
 
@@ -2004,6 +2036,10 @@ Reinterprets the bits of this f32 as an i32.
 
 Creates an f32 from its bit representation.
 
+#### `impl FromStr for f32`
+
+##### `fn from_str_range(s: String, start: i32, end: i32) -> Result<f32, ParseFloatError>`
+
 #### `impl Display for f32`
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
@@ -2229,6 +2265,10 @@ Reinterprets the bits of this f64 as an i64.
 #### `pub fn from_bits(bits: i64) -> f64`
 
 Creates an f64 from its bit representation.
+
+#### `impl FromStr for f64`
+
+##### `fn from_str_range(s: String, start: i32, end: i32) -> Result<f64, ParseFloatError>`
 
 #### `impl Display for f64`
 
@@ -2541,6 +2581,11 @@ Parse a hexadecimal `u128` from a string (equivalent to `from_str_radix(s, 16)`)
 
 Parse a `u128` from a string in the given radix. `radix` must be in 2..=36.
 
+#### `pub fn from_str_radix_range(s: String, start: i32, end: i32, radix: u32) -> Result<u128, ParseIntError>`
+
+Range variant of `from_str_radix`. Parses `s[start..end)` as a `u128`
+in the given radix without allocating a substring.
+
 #### `pub fn zero() -> u128`
 
 Creates a zero u128
@@ -2582,6 +2627,10 @@ Set the bit at position i to 1, returning a new u128
 #### `pub fn to_string(&self) -> String`
 
 Convert u128 to String (for template string interpolation)
+
+#### `impl FromStr for u128`
+
+##### `fn from_str_range(s: String, start: i32, end: i32) -> Result<u128, ParseIntError>`
 
 #### `impl Display for u128`
 
@@ -2737,6 +2786,11 @@ Parse a hexadecimal `i128` from a string (equivalent to `from_str_radix(s, 16)`)
 
 Parse an `i128` from a string in the given radix. `radix` must be in 2..=36.
 
+#### `pub fn from_str_radix_range(s: String, start: i32, end: i32, radix: u32) -> Result<i128, ParseIntError>`
+
+Range variant of `from_str_radix`. Parses `s[start..end)` as an `i128`
+in the given radix without allocating a substring.
+
 #### `pub fn zero() -> i128`
 
 Creates a zero i128
@@ -2789,6 +2843,10 @@ Uses signed division semantics:
 #### `pub fn to_string(&self) -> String`
 
 Convert i128 to String (for template string interpolation)
+
+#### `impl FromStr for i128`
+
+##### `fn from_str_range(s: String, start: i32, end: i32) -> Result<i128, ParseIntError>`
 
 #### `impl Display for i128`
 

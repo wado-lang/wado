@@ -13,18 +13,65 @@ literal, then `:param`, then `*wildcard`. Once a terminal (or wildcard)
 is reached, method dispatch tries the specific-method list first, then
 falls back to the optional `any` slot.
 
+Static routes (no `:param`, no `*wildcard`) are routed through a sorted
+side-table with pre-built `RouteMatch` shells. Hits on a static route
+return a reference into the table, which (assuming `Option<&T>` niche
+optimization) costs zero heap allocations per match.
+
+Captured parameters are accessible either by name via `params["id"]`
+(`IndexValue<String>`) or as a typed struct via
+`params.deserialize::<T>()` (`T: Deserialize`). The latter parses
+directly from byte ranges of the path string without intermediate
+substring allocations for scalar fields.
+
 See `docs/wep-2026-05-06-core-router.md`.
 
 ## Structs
 
+### `pub struct PathParams`
+
+Captured path parameters for a matched route.
+
+`PathParams` is a thin handle of references into router-owned data:
+`path` is the request path that produced the match, `names` is the
+parameter-name list shared with the matched terminal state, and
+`ranges` is a flat `[start0, end0, start1, end1, ...]` of byte ranges
+into `path`. Empty for static-route matches; in that case all three
+fields point at shared empty singletons.
+
+_Fields are private._
+
+#### `pub fn len(&self) -> i32`
+
+Number of captured parameters (0 for static routes).
+
+#### `pub fn is_empty(&self) -> bool`
+
+True when no parameters were captured.
+
+#### `pub fn get(&self, name: String) -> Option<String>`
+
+Look up a captured parameter by name. Returns `None` if absent.
+The returned `String` is freshly allocated from the matched
+byte range of the path.
+
+#### `pub fn deserialize<T: Deserialize>(&self) -> Result<T, DeserializeError>`
+
+Deserialize captured parameters into a typed struct `T`. Scalar
+fields parse directly from path bytes; only `String` fields incur
+a substring allocation.
+
+#### `impl IndexValue<String> for PathParams`
+
+##### `fn index_value(&self, name: String) -> String`
+
 ### `pub struct RouteMatch<H>`
 
-Result of a successful match. `params` is keyed by parameter name; for
-a wildcard route the captured tail is stored under the wildcard name.
+Result of a successful route match.
 
 #### `handler: H`
 
-#### `params: TreeMap<String, String>`
+#### `params: PathParams`
 
 ### `pub struct Router<H>`
 
@@ -57,7 +104,7 @@ Registers a handler that matches any HTTP method (including
 `Method::Other(_)`) at `pattern`. Specific-method handlers at the
 same pattern take precedence; `any` is the fallback.
 
-#### `pub fn match_path(&self, method: Method, path: &String) -> Option<RouteMatch<H>>`
+#### `pub fn match_path(&self, method: Method, path: &String) -> Option<&RouteMatch<H>>`
 
 Matches `(method, path)`. The path argument must be a URL path
 (no query string, no fragment).
@@ -67,7 +114,39 @@ Matches `(method, path)`. The path argument must be a URL path
 Returns the specific methods registered for `path`. `any` does not
 contribute. Empty array on a 404 or when only `any` is registered.
 
-#### `pub fn match_request(&self, request: &Request) -> Option<RouteMatch<H>>`
+#### `pub fn match_request(&self, request: &Request) -> Option<&RouteMatch<H>>`
 
 Matches against a `wasi:http` `Request`. Strips `?query` / `#frag`
 from the path before matching.
+
+### `pub struct PathParamsSeqStub`
+
+#### `impl DeserializeSeq for PathParamsSeqStub`
+
+##### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct PathParamsMapStub`
+
+#### `impl DeserializeMap for PathParamsMapStub`
+
+##### `fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>`
+
+##### `fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct PathParamsVariantStub`
+
+#### `impl DeserializeVariant for PathParamsVariantStub`
+
+##### `fn variant_name(&mut self) -> Result<String, DeserializeError>`
+
+##### `fn disc(&mut self) -> Result<i32, DeserializeError>`
+
+##### `fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn is_unit(&mut self) -> Result<bool, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
