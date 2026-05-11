@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Regenerate format fixture golden files:
 #   - Formatted (clean) version of each dirty fixture
-#   - Compiler phase outputs (TIR, lower, optimize, WIR, WAT) for compilable fixtures
+#   - Compiler phase outputs (NIR, lower, optimize, WIR, WAT) for compilable fixtures
 #
 # Expects binaries to be pre-built (on-task-done builds them before calling this).
 
@@ -27,9 +27,9 @@ done
 # --skip-empty handles no_prelude files that produce empty output
 IN="$FIXTURES_DIR/{name}.dirty.wado"
 
-$DUMP golden-dump --in "$IN" --out "$GOLDEN_DIR/{name}.tir.wado"      --phase tir         --skip-empty
-$DUMP golden-dump --in "$IN" --out "$GOLDEN_DIR/{name}.lower.wado"    --phase tir-lowered  --skip-empty
-$DUMP golden-dump --in "$IN" --out "$GOLDEN_DIR/{name}.optimize.wado" --phase tir         -O2 --skip-empty
+$DUMP golden-dump --in "$IN" --out "$GOLDEN_DIR/{name}.nir.wado"      --phase nir         --skip-empty
+$DUMP golden-dump --in "$IN" --out "$GOLDEN_DIR/{name}.lower.wado"    --phase nir-lowered --skip-empty
+$DUMP golden-dump --in "$IN" --out "$GOLDEN_DIR/{name}.optimize.wado" --phase nir         -O2 --skip-empty
 $DUMP golden-dump --in "$IN" --out "$GOLDEN_DIR/{name}.wir.wado"      --phase wir         -O2 --skip-empty
 $DUMP golden-dump --in "$IN" --out "$GOLDEN_DIR/{name}.wat"           --phase wat         -O2 --skip-empty
 

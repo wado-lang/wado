@@ -46,10 +46,10 @@ fn golden_dump(mut parser: lexopt::Parser) {
                 let val = parser.value().unwrap().to_string_lossy().into_owned();
                 phase = match val.as_str() {
                     "wir" => pipeline::Phase::Wir,
-                    "tir" => pipeline::Phase::Tir,
-                    "tir-lowered" => pipeline::Phase::TirLowered,
+                    "nir" => pipeline::Phase::Nir,
+                    "nir-lowered" => pipeline::Phase::NirLowered,
                     "wat" => pipeline::Phase::Wat,
-                    _ => panic!("unknown phase: {val} (expected wir, tir, tir-lowered, or wat)"),
+                    _ => panic!("unknown phase: {val} (expected wir, nir, nir-lowered, or wat)"),
                 };
             }
             Short('O') => {
