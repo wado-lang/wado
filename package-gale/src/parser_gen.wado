@@ -3236,13 +3236,12 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
         return match &g_op.shape {
             TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, name_counts),
             SingleAlt(sa) => gen_consume_single_alt_group_op(w, sa, &g_op.alts[0], &g_elem.alternatives[0], ctx, name_counts, &([] as Array<String>)),
+            SimpleCst(scst) => gen_consume_group_store_optional_op(w, Option::<&SimpleCstShape>::Some(scst), &g_elem.alternatives, ctx, name_counts),
             _ => {
                 // The remaining shapes still need their dedicated
                 // `_op` helpers; until then dispatch back to the
                 // surface walker so behaviour is unchanged.
-                if is_simple_cst_group(&g_elem.alternatives) {
-                    gen_consume_group_store_optional(w, &g_elem.alternatives, ctx, name_counts);
-                } else if is_general_group(&g_elem.alternatives) {
+                if is_general_group(&g_elem.alternatives) {
                     gen_general_group_store_optional(w, &g_elem.alternatives, ctx, name_counts);
                 } else {
                     gen_consume_group(w, &g_elem.alternatives, ctx, name_counts);
@@ -5012,8 +5011,28 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32
 }
 
 fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    let var_name = dedup_name(&group_field_base_name(alts), name_counts);
-    let type_name = group_variant_type_name(alts);
+    gen_consume_group_store_optional_op(w, null, alts, ctx, name_counts);
+}
+
+/// GIR-aware twin of `gen_consume_group_store_optional`. When the
+/// caller has the lowered `SimpleCstShape` (top-level alt walker
+/// reaches the group through `Op::Group(g_op)`), pass it as `Some` so
+/// emit reads the outer field name and variant type from lower
+/// directly. The internal dispatch (overlap groups, scan helpers,
+/// per-alt RuleRef calls) still walks surface IR until
+/// `gen_elements_with_non_greedy` consumes `body.ops`.
+fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: Option<&SimpleCstShape>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    let var_name = if let Some(s) = scst {
+        let _ = dedup_name(&group_field_base_name(alts), name_counts);
+        s.field;
+    } else {
+        dedup_name(&group_field_base_name(alts), name_counts);
+    };
+    let type_name = if let Some(s) = scst {
+        s.type_name;
+    } else {
+        group_variant_type_name(alts);
+    };
 
     let mut first_sets: Array<Array<String>> = [];
     for let alt of alts {
