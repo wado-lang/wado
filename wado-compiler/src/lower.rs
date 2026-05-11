@@ -24,6 +24,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 
 use crate::module_source::ModuleSource;
+use crate::nir_convert;
+use crate::nir_package::NirPackage;
 use crate::tir::TirModule;
 
 use boxing::BoxLowerer;
@@ -64,11 +66,18 @@ fn lower_post_boxing(module: &mut TirModule) {
     module.function_method_info = function_method_info;
 }
 
-/// Lower a `FlatPackage` in place.
+/// Lower a `FlatPackage` and return a `NirPackage`.
 ///
 /// This is the main entry point for the lower phase. It creates a temporary
-/// `TirModule` from the flat data, runs lowering, and writes results back.
-pub fn lower(flat: &mut FlatPackage) {
+/// `TirModule` from the flat data, runs lowering, writes results back, then
+/// converts the lowered TIR into NIR — the post-lower body IR consumed by
+/// `optimize` and `wir_build`. See `docs/wep-2026-05-11-nir.md`.
+pub fn lower(mut flat: FlatPackage) -> NirPackage {
+    lower_in_place(&mut flat);
+    nir_convert::flat_to_nir(&flat)
+}
+
+fn lower_in_place(flat: &mut FlatPackage) {
     let entry_module_source = flat.entry_module_source.clone();
 
     // Create a temporary TirModule with all flat data for lowering.

@@ -529,11 +529,15 @@ fn compile_after_load<H: CompilerHost>(
         flat.type_table.borrow_mut().erase_newtypes_and_flags();
     }
 
-    // === Phase 10: Lower (FlatPackage → FlatPackage) ===
-    {
+    // === Phase 10: Lower (FlatPackage → NirPackage → FlatPackage) ===
+    // Phase 2 of WEP `wep-2026-05-11-nir.md`: `lower` now returns `NirPackage`.
+    // Downstream (optimize, wir_build) still consume `FlatPackage`, so a
+    // temporary adapter (`nir_to_flat`) round-trips. Phase 3 / 4 will retire it.
+    let flat = {
         let _span = logger.span("lower");
-        lower(&mut flat);
-    }
+        let nir = lower(flat);
+        nir_convert::nir_to_flat(&nir)
+    };
 
     // === Phase 11: Optimize (FlatPackage → FlatPackage) ===
     let flat = {
@@ -832,11 +836,15 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Snapshot monomorphized state (only unparse; Debug format is deferred)
             let mono_text = Some(unparse::unparse_flat_package(&flat));
 
-            // Lower
-            {
+            // Lower (FlatPackage → NirPackage → FlatPackage)
+            // See WEP `wep-2026-05-11-nir.md` Phase 2: lower now produces NIR;
+            // downstream consumers still expect FlatPackage, so we round-trip
+            // through the temporary `nir_to_flat` adapter for now.
+            let flat = {
                 let _span = logger.span("lower");
-                lower(&mut flat);
-            }
+                let nir = lower(flat);
+                nir_convert::nir_to_flat(&nir)
+            };
             // Snapshot lowered state (only unparse; Debug format is deferred)
             let lower_text = Some(unparse::unparse_flat_package(&flat));
 
