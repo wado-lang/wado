@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778473546091,
+  "lastUpdate": 1778490918325,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21089,6 +21089,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/752e52114cc4eb347c19b5f9ae61ecec556bbb34"
         },
         "date": 1778473545728,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 512036,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5b33fc9148afbdc1d6b510eabeef3cca51b347ae",
+          "message": "Merge pull request #1044 from wado-lang/claude/refactor-parser-architecture-1O11l\n\nrefactor(gale): introduce GIR lower(Grammar) -> LoweredGrammar and wire codegen through it",
+          "timestamp": "2026-05-11T18:08:35+09:00",
+          "tree_id": "d47f44139c78e5db3d94839ba0ba070a92c0651b",
+          "url": "https://github.com/wado-lang/wado/commit/5b33fc9148afbdc1d6b510eabeef3cca51b347ae"
+        },
+        "date": 1778490918183,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
