@@ -984,7 +984,7 @@ __DATA__
 }
 
 /// A `#[TODO]` test that returns Ok must surface as a hard failure rather than
-/// being swallowed as "pending" by the outer `#![TODO]` catch_unwind path.
+/// being swallowed as "pending" by the outer `#![TODO]` `catch_unwind` path.
 /// We exercise the runner end-to-end: compile a synthetic source whose only
 /// test is `#[TODO]` and passes, then call `run_test_world` and assert that
 /// the resulting panic payload carries the `TodoResolved` sentinel.
