@@ -464,12 +464,10 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
             non_lr_indices.push(i);
         }
     }
-    if non_lr_indices.is_empty() {
-        panic(`LR rule '{rule.name}' has no non-LR alt — ANTLR4 requires at least one atom alt`);
-    }
-    if lr_indices.is_empty() {
-        panic(`LR rule '{rule.name}' has no LR alt — should not have reached lower_lr_rule`);
-    }
+    assert !non_lr_indices.is_empty(),
+        `LR rule '{rule.name}' has no non-LR alt — ANTLR4 requires at least one atom alt`;
+    assert !lr_indices.is_empty(),
+        `LR rule '{rule.name}' has no LR alt — should not have reached lower_lr_rule`;
 
     let total_lr: i32 = lr_indices.len();
     let atom = lower_lr_atom(rule, &non_lr_indices, ctx);
@@ -537,9 +535,8 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &Array<i32>, ctx: &mut GenCo
 /// computed by the caller and stored verbatim.
 fn lower_lr_alt(rule: &ParserRule, alt_idx: i32, own_prec: i32, conflict_min: i32, ctx: &mut GenContext) -> LrAlt {
     let alt = &rule.alternatives[alt_idx];
-    if alt.elements.is_empty() {
-        panic(`LR alt {alt_idx} of '{rule.name}' is empty — should not be classified LR`);
-    }
+    assert !alt.elements.is_empty(),
+        `LR alt {alt_idx} of '{rule.name}' is empty — should not be classified LR`;
 
     // Build per-alt CST identifiers. `case_name` mirrors
     // `case_names_for_rule`, and `struct_name` follows the
@@ -866,9 +863,8 @@ fn build_overlap_dispatch(ctx_name: &String, alts: &Array<Alternative>, indices:
 
     for let idx of indices {
         let mut visiting: Array<String> = [];
-        if !ctx.is_alt_scannable(&alts[*idx].elements, &mut visiting) {
-            panic(`{*ctx_name}: alt {*idx} is not fully scannable; Tournament dispatch needs all alts scannable`);
-        }
+        assert ctx.is_alt_scannable(&alts[*idx].elements, &mut visiting),
+            `{*ctx_name}: alt {*idx} is not fully scannable; Tournament dispatch needs all alts scannable`;
     }
 
     let mut sorted: Array<i32> = [];
@@ -1042,14 +1038,12 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &Array
 /// multi-alt token-only groups dispatch on token kind.
 fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &Array<String>) -> ScanElement {
     let alts = &g.alternatives;
-    if alts.len() == 0 {
-        panic("Group with no alts is not a valid scan-lowering input");
-    }
+    assert alts.len() > 0,
+        "Group with no alts is not a valid scan-lowering input";
     if alts.len() == 1 {
         let alt = &alts[0];
-        if alt.elements.len() == 0 {
-            panic("Group with empty alt is not a valid scan-lowering input");
-        }
+        assert alt.elements.len() > 0,
+            "Group with empty alt is not a valid scan-lowering input";
         if alt.elements.len() == 1 {
             // Transparent (scan side) — nested inner allowed. The
             // group's only element inherits the surrounding follow.
@@ -1323,14 +1317,12 @@ fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>, rule_name: &
 /// * Phase 2.x.general — multi-alt non-trivial → `GroupShape::General`
 fn lower_group_op(g: &GroupElement, name_counts: &mut Array<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &Array<String>) -> Op {
     let alts = &g.alternatives;
-    if alts.len() == 0 {
-        panic("Group with no alts is not a valid lowering input");
-    }
+    assert alts.len() > 0,
+        "Group with no alts is not a valid lowering input";
     if alts.len() == 1 {
         let alt = &alts[0];
-        if alt.elements.len() == 0 {
-            panic("Group with empty alt is not a valid lowering input");
-        }
+        assert alt.elements.len() > 0,
+            "Group with empty alt is not a valid lowering input";
         if alt.elements.len() == 1 {
             return lower_transparent_group(&alt.elements[0], name_counts, rule_name, ctx, group_counter, outer_follow);
         }
@@ -2456,9 +2448,8 @@ fn collect_excluded_kinds(inner: &Element) -> Array<String> {
 fn collect_excluded_kinds_from_group(g: &GroupElement) -> Array<String> {
     let mut kinds: Array<String> = [];
     for let alt of &g.alternatives {
-        if alt.elements.len() != 1 {
-            panic("collect_excluded_kinds: ~ Group alt must be a single token / literal");
-        }
+        assert alt.elements.len() == 1,
+            "collect_excluded_kinds: ~ Group alt must be a single token / literal";
         let elem = &alt.elements[0];
         match *elem {
             TokenRef(t) => kinds.push(`TK_{t.name}`),

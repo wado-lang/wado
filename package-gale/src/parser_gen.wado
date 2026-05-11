@@ -1101,12 +1101,9 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
             break;
         }
         for let mut idx = emitted_count; idx < cur; idx += 1 {
-            if idx >= lowered.variant_rules.len() {
-                let entry = &entries[idx];
-                panic(
-                    `gen_parser: follow-variant entry #{idx} ({entry.rule_name} mask=[{join_kinds(&entry.mask)}]) was registered during emit but not by lower's pre-pass — lower and emit must agree via compute_call_site_follow`,
-                );
-            }
+            let entry = &entries[idx];
+            assert idx < lowered.variant_rules.len(),
+                `gen_parser: follow-variant entry #{idx} ({entry.rule_name} mask=[{join_kinds(&entry.mask)}]) was registered during emit but not by lower's pre-pass — lower and emit must agree via compute_call_site_follow`;
             emit_follow_variant_from_gir(w, &lowered.variant_rules[idx], ctx);
         }
         emitted_count = cur;
@@ -3029,14 +3026,14 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
 
 fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<Op>, ctx: &mut GenContext) {
     // gen_alt_elements requires 1:1 correspondence between
-    // `elements` and `ops` — full-alt body bodies (Simple / MultiAlt
-    // / LR atom). LR-suffix bodies strip the leading self-ref op and
+    // `elements` and `ops` — full-alt bodies (Simple / MultiAlt /
+    // LR atom). LR-suffix bodies strip the leading self-ref op and
     // flow through `gen_alt_body_skip`, which carries its own offset
-    // calculation; that path never reaches here. A length mismatch
-    // is a caller bug; the assert surfaces it with a targeted
-    // message instead of an out-of-bounds panic at an arbitrary
-    // index. `assert` survives release builds.
-    assert ops.len() == elements.len(), `gen_alt_elements: ops.len() ({ops.len()}) != elements.len() ({elements.len()}) — LR-suffix bodies must use gen_alt_body_skip`;
+    // calculation; that path never reaches here. Wado's power-assert
+    // surfaces the lengths automatically — the contract note in the
+    // message points callers at the right entry point.
+    assert ops.len() == elements.len(),
+        "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies must use gen_alt_body_skip";
     let saved_mask = ctx.current_follow_mask;
     let saved_call_follow = ctx.ruleref_call_follow;
     let mut name_counts: Array<[String, i32]> = [];
@@ -4312,11 +4309,8 @@ fn gen_optional_with_scan_guard(w: &mut CodeWriter, inner: &Element, ctx: &mut G
     // RuleRefs). Backtracking has been removed; an unscannable inner is a
     // codegen-time error.
     let mut visiting: Array<String> = [];
-    if !ctx.is_element_scannable(inner, &mut visiting) {
-        panic(
-            "gen_optional_with_scan_guard: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')",
-        );
-    }
+    assert ctx.is_element_scannable(inner, &mut visiting),
+        "gen_optional_with_scan_guard: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
     let scan_pos_var = emit_opt_scan_guard(w, inner, ctx, name_counts);
     w.begin(`if {scan_pos_var} >= 0`);
     let mut nc: Array<[String, i32]> = [];
@@ -4496,11 +4490,8 @@ fn gen_storable_optional_with_scan_guard(w: &mut CodeWriter, inner: &Element, ct
     // Scan-based guard: the inner must be fully scannable. Backtracking has
     // been removed; an unscannable inner is a codegen-time error.
     let mut visiting: Array<String> = [];
-    if !ctx.is_element_scannable(inner, &mut visiting) {
-        panic(
-            "gen_storable_optional_with_scan_guard: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')",
-        );
-    }
+    assert ctx.is_element_scannable(inner, &mut visiting),
+        "gen_storable_optional_with_scan_guard: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
     let scan_pos_var = emit_opt_scan_guard(w, inner, ctx, name_counts);
     w.begin(`let {opt_name}: Option<{type_str}> = if {scan_pos_var} >= 0`);
 
@@ -4952,11 +4943,8 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
                 let mut sorted_group = group.sorted();
                 sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
 
-                if !rule_ref_group_all_scannable(&sorted_group, alts, ctx) {
-                    panic(
-                        "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')",
-                    );
-                }
+                assert rule_ref_group_all_scannable(&sorted_group, alts, ctx),
+                    "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
                 gen_rule_ref_group_scan_dispatch(w, &sorted_group, alts, &opt_var, type_name, ctx, name_counts);
             }
         }
@@ -5111,11 +5099,8 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: Option<&SimpleC
             let mut sorted_group = group.sorted();
             sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
 
-            if !rule_ref_group_all_scannable(&sorted_group, alts, ctx) {
-                panic(
-                    "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')",
-                );
-            }
+            assert rule_ref_group_all_scannable(&sorted_group, alts, ctx),
+                "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
             gen_rule_ref_group_scan_dispatch(w, &sorted_group, alts, &inner_var, type_name, ctx, name_counts);
         }
     }
@@ -5379,11 +5364,8 @@ fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, alt_
 /// `gen_general_group_scan_dispatch`. Backtracking has been removed; an
 /// unscannable alt is a codegen-time error.
 fn gen_general_group_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
-    if !general_group_all_scannable(sorted_group, alts, ctx) {
-        panic(
-            "general group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')",
-        );
-    }
+    assert general_group_all_scannable(sorted_group, alts, ctx),
+        "general group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
     gen_general_group_scan_dispatch(w, alts, sorted_group, type_name, inner_var, ctx, name_counts, group_index);
 }
 
@@ -5552,11 +5534,8 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
 
         // Every alt's remaining elements must be fully scannable. Backtracking
         // has been removed; an unscannable suffix is a codegen-time error.
-        if !ambiguous_node_all_scannable(&sorted, alts, ctx, skip) {
-            panic(
-                "prediction Ambiguous node has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')",
-            );
-        }
+        assert ambiguous_node_all_scannable(&sorted, alts, ctx, skip),
+            "prediction Ambiguous node has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
         gen_group_scan_dispatch(w, &sorted, alts, ctx, name_counts, skip);
         return;
     }
