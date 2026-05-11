@@ -1734,8 +1734,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // trait default body's return type (e.g. FromStr's
                 // `Result<Self, Self::Err>`). Pull the bindings from the
                 // impl block that connects this trait to this type.
-                let impl_assoc_types =
-                    scope.find_impl_assoc_types(struct_name, &trait_name);
+                let impl_assoc_types = scope.find_impl_assoc_types(struct_name, &trait_name);
                 for binding in &impl_assoc_types {
                     let type_id = scope.resolve_type(&binding.ty);
                     scope
