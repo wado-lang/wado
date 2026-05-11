@@ -861,7 +861,7 @@ pub trait DisplayAlt { fn fmt_alt(&self, f: &mut Formatter); }  // for # (alt) f
 // string. Implementors only write the efficient range version.
 pub trait FromStr {
     type Err;
-    fn from_str_range(s: String, start: i32, end: i32) -> Result<Self, Self::Err>;
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<Self, Self::Err>;
     fn from_str(s: String) -> Result<Self, Self::Err> { /* default */ }
 }
 ```

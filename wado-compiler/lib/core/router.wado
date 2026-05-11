@@ -234,21 +234,11 @@ impl<H> Router<H> {
     fn insert_static(&mut self, method_opt: Option<Method>, pattern: String, handler: H)
         with stores[handler]
     {
-        // Last-write-wins for the same (pattern, method) key.
-        let n = self.static_entries.len();
-        for let mut i = 0; i < n; i += 1 {
-            if self.static_entries[i].pattern == pattern
-                && method_opt_eq(&self.static_entries[i].method, &method_opt)
-            {
-                self.static_entries[i].rm = RouteMatch {
-                    handler,
-                    params: empty_path_params(),
-                };
-                return;
-            }
-        }
-        // Find the insertion position to keep `static_entries` sorted by
-        // (pattern, method-rank) so `match_static` can do a binary search.
+        // `static_entries` is kept sorted by `static_entry_cmp` so both
+        // `match_static` and this last-write-wins lookup can locate an
+        // existing entry in O(log n). The narrow `[lo, hi)` range covers
+        // the patterns equal to `pattern`; methods within it are still
+        // scanned linearly (one entry per HTTP method, so single digits).
         let new_entry = StaticEntry {
             method: method_opt,
             pattern,
@@ -257,8 +247,18 @@ impl<H> Router<H> {
                 params: empty_path_params(),
             },
         };
-        let mut pos: i32 = 0;
-        while pos < n && static_entry_cmp(&self.static_entries[pos], &new_entry) matches { Less } {
+        let [lo, hi] = bsearch_pattern_range(&self.static_entries, &new_entry.pattern);
+        for let mut i = lo; i < hi; i += 1 {
+            if method_opt_eq(&self.static_entries[i].method, &new_entry.method) {
+                self.static_entries[i].rm = new_entry.rm;
+                return;
+            }
+        }
+        // No existing (pattern, method) match: insert at the position that
+        // keeps the table sorted. Within the equal-pattern band that means
+        // the slot where the method-rank order places the new entry.
+        let mut pos = lo;
+        while pos < hi && static_entry_cmp(&self.static_entries[pos], &new_entry) matches { Less } {
             pos += 1;
         }
         self.static_entries.insert(pos, new_entry);
