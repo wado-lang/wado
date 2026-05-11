@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778536690718,
+  "lastUpdate": 1778541646856,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21221,6 +21221,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/702c97c8d5332ad39919db09ef3059ed106a8c37"
         },
         "date": 1778536690381,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 512036,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c796cc783fb20c41c109de31411b1e8dbe8fd1b0",
+          "message": "Merge pull request #1050 from wado-lang/claude/refactor-gale-eFpqT\n\nrefactor(gale): drive CST emission and parser_gen leaves from GIR",
+          "timestamp": "2026-05-12T08:13:34+09:00",
+          "tree_id": "8fb9ec0914e433d69bdaea8038df021ac72dce7b",
+          "url": "https://github.com/wado-lang/wado/commit/c796cc783fb20c41c109de31411b1e8dbe8fd1b0"
+        },
+        "date": 1778541646489,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
