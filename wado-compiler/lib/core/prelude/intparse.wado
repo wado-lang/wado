@@ -77,7 +77,7 @@ fn digit_value(b: u8) -> i32 {
     return -1;
 }
 
-/// Parse the bytes `s[start..end]` as an unsigned integer in the given radix.
+/// Parse the bytes `s[start..end)` as an unsigned integer in the given radix.
 /// Caller is responsible for stripping any sign. `radix` must be in 2..=36.
 ///
 /// Returns `Err(Empty)` if the range is empty, `Err(InvalidDigit)` on bad
@@ -105,7 +105,7 @@ pub fn parse_u64_digits(s: String, start: i32, end: i32, radix: u32) -> Result<u
     return Result::Ok(acc);
 }
 
-/// Parse the bytes `s[start..end]` as an unsigned integer in the given radix,
+/// Parse the bytes `s[start..end)` as an unsigned integer in the given radix,
 /// accumulating into a `u128`. Caller strips any sign.
 pub fn parse_u128_digits(s: String, start: i32, end: i32, radix: u32) -> Result<u128, IntErrorKind> {
     if start >= end {
@@ -133,7 +133,9 @@ pub fn parse_u128_digits(s: String, start: i32, end: i32, radix: u32) -> Result<
 }
 
 /// Strip the leading sign and return `[is_negative, value_start]` for a signed integer parse.
-/// Rejects lone `"+"`, `"-"` and empty input as `Empty`; reserves per-type bound checks for the caller.
+/// Rejects empty input as `Empty` and a sign with no following digits
+/// (e.g. lone `"+"` or `"-"`) as `InvalidDigit`. Per-type bound checks are
+/// reserved for the caller.
 pub fn parse_signed_prefix(s: String) -> Result<[bool, i32], IntErrorKind> {
     return parse_signed_prefix_range(s, 0, s.len());
 }
@@ -191,7 +193,7 @@ pub fn parse_i64_radix(s: String, radix: u32, max: i64, min_abs: u64) -> Result<
     return parse_i64_radix_range(s, 0, s.len(), radix, max, min_abs);
 }
 
-/// Range variant of `parse_i64_radix`. Parses `s[start..end]` without
+/// Range variant of `parse_i64_radix`. Parses `s[start..end)` without
 /// allocating a substring.
 pub fn parse_i64_radix_range(s: String, start: i32, end: i32, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
     assert_radix(radix);
@@ -226,7 +228,7 @@ pub fn parse_u64_radix(s: String, radix: u32, max: u64) -> Result<u64, ParseIntE
     return parse_u64_radix_range(s, 0, s.len(), radix, max);
 }
 
-/// Range variant of `parse_u64_radix`. Parses `s[start..end]` without
+/// Range variant of `parse_u64_radix`. Parses `s[start..end)` without
 /// allocating a substring.
 pub fn parse_u64_radix_range(s: String, start: i32, end: i32, radix: u32, max: u64) -> Result<u64, ParseIntError> {
     assert_radix(radix);
@@ -247,7 +249,7 @@ pub fn parse_f64_from_str(s: String) -> Result<f64, ParseFloatError> {
     return parse_f64_from_str_range(s, 0, s.len());
 }
 
-/// Range variant of `parse_f64_from_str`. Parses `s[start..end]` without
+/// Range variant of `parse_f64_from_str`. Parses `s[start..end)` without
 /// allocating a substring.
 pub fn parse_f64_from_str_range(s: String, start: i32, end: i32) -> Result<f64, ParseFloatError> {
     if start >= end {
