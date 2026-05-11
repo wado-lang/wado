@@ -2883,7 +2883,7 @@ fn emit_field_assignments_from_fields(w: &mut CodeWriter, fields: &Array<FieldDe
     }
 }
 
-fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Option<String>, struct_name: Option<String>, alt: &Alternative, ctx: &mut GenContext, skip: i32) {
+fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Option<String>, struct_name: Option<String>, alt: &Alternative, body: &AltBody, ctx: &mut GenContext, skip: i32) {
     let gc_start = ctx.group_counter;
     // Parse elements from `skip` onward (prefix already consumed).
     // Replay name counter for consumed elements so dedup_name stays in sync.
@@ -2938,14 +2938,14 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
         w.indent();
         emit_clamped_span_field(w);
-        gen_field_assignments(w, &alt.elements, ctx);
+        emit_field_assignments_from_fields(w, &body.fields);
         w.dedent();
         w.line("}));");
     } else {
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
         w.indent();
         emit_clamped_span_field(w);
-        gen_field_assignments(w, &alt.elements, ctx);
+        emit_field_assignments_from_fields(w, &body.fields);
         w.dedent();
         w.line("});");
     }
@@ -5837,12 +5837,12 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
     w.end();  // loop
 }
 
-fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &Array<Alternative>, type_name: &String, ctx: &mut GenContext) {
+fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &Array<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext) {
     let mut nc: Array<[String, i32]> = [];
-    gen_prediction_code_inner(w, node, fn_name, alts, type_name, ctx, 0, &mut nc);
+    gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, &mut nc);
 }
 
-fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &Array<Alternative>, type_name: &String, ctx: &mut GenContext, skip: i32, name_counts: &mut Array<[String, i32]>) {
+fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &Array<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, skip: i32, name_counts: &mut Array<[String, i32]>) {
     if let Leaf(idx) = node {
         if skip == 0 {
             w.line(`return {*fn_name}_bt_{idx}(p);`);
@@ -5856,12 +5856,14 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
             if let Some(rule) = ctx.find_rule(&ctx.current_rule_name) {
                 ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec(rule, *idx);
             }
+            let body = rule_alt_body(lowered_rule, *idx).unwrap();
             gen_alt_body_skip(
                 w,
                 type_name,
                 Option::<String>::Some(alt_case_names[*idx]),
                 Option::<String>::Some(sname),
                 alt,
+                body,
                 ctx,
                 skip,
             );
@@ -5878,11 +5880,11 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
         let elem_matches = elements_match(&c.element, &alts[0].elements[skip]);
         if elem_matches {
             gen_element(w, &c.element, ctx, name_counts);
-            gen_prediction_code_inner(w, &c.child, fn_name, alts, type_name, ctx, skip + 1, name_counts);
+            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, skip + 1, name_counts);
         } else {
             // Element mismatch — prediction consumed a later element.
             // Don't emit the consume or increment skip; treat as skip=0 at the Leaf.
-            gen_prediction_code_inner(w, &c.child, fn_name, alts, type_name, ctx, 0, name_counts);
+            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, 0, name_counts);
         }
         return;
     }
@@ -6029,6 +6031,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                 &branch.child,
                 fn_name,
                 alts,
+                lowered_rule,
                 type_name,
                 ctx,
                 skip,
@@ -6109,7 +6112,7 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
                 pred_elements.push(rule.alternatives[real_idx].elements);
             }
             let tree = build_prediction(&pred_indices, &pred_firsts, &pred_elements, 0, 5, ctx);
-            gen_prediction_code(w, &tree, &fn_name, &rule.alternatives, type_name, ctx);
+            gen_prediction_code(w, &tree, &fn_name, &rule.alternatives, lowered_rule, type_name, ctx);
         }
 
         w.end();
