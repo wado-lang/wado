@@ -3237,15 +3237,13 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
             TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, name_counts),
             SingleAlt(sa) => gen_consume_single_alt_group_op(w, sa, &g_op.alts[0], &g_elem.alternatives[0], ctx, name_counts, &([] as Array<String>)),
             SimpleCst(scst) => gen_consume_group_store_optional_op(w, Option::<&SimpleCstShape>::Some(scst), &g_elem.alternatives, ctx, name_counts),
-            _ => {
-                // The remaining shapes still need their dedicated
-                // `_op` helpers; until then dispatch back to the
-                // surface walker so behaviour is unchanged.
-                if is_general_group(&g_elem.alternatives) {
-                    gen_general_group_store_optional(w, &g_elem.alternatives, ctx, name_counts);
-                } else {
-                    gen_consume_group(w, &g_elem.alternatives, ctx, name_counts);
-                }
+            General(gen_shape) => gen_general_group_store_optional_op(w, Option::<&GeneralShape>::Some(gen_shape), &g_elem.alternatives, ctx, name_counts),
+            Transparent => {
+                // Transparent groups inline their inner alt; emit
+                // walks the alt's elements directly with no struct
+                // construction. The surface fallback already does
+                // this via `gen_consume_group(alts.len() == 1)`.
+                gen_consume_group(w, &g_elem.alternatives, ctx, name_counts);
             },
         };
     } else {
@@ -5134,11 +5132,39 @@ fn gen_consume_single_alt_group(w: &mut CodeWriter, alt: &Alternative, ctx: &mut
 
 /// Generate a general group store with Option wrapper (standalone Group in an alternative).
 fn gen_general_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    let group_index = ctx.group_counter;
-    ctx.group_counter += 1;
+    gen_general_group_store_optional_op(w, null, alts, ctx, name_counts);
+}
+
+/// GIR-aware twin of `gen_general_group_store_optional`. When the
+/// caller has the lowered `GeneralShape` (top-level alt walker
+/// reaches the group through `Op::Group(g_op)`), pass it as `Some`
+/// so emit reads the outer field name, variant type, and group
+/// index from lower's pre-baked shape — matching the values
+/// `gen_cst_types` already emitted for the corresponding enum.
+fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: Option<&GeneralShape>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    let group_index = if let Some(g) = gs {
+        // Lower already assigned a stable index in the shape; keep
+        // emit's running counter aligned for the surface-IR helpers
+        // that still consult it (e.g. nested general groups inside).
+        ctx.group_counter = g.group_index + 1;
+        g.group_index;
+    } else {
+        let idx = ctx.group_counter;
+        ctx.group_counter += 1;
+        idx;
+    };
     let gc_after_self = ctx.group_counter;
-    let var_name = dedup_name(&general_group_field_name(group_index), name_counts);
-    let type_name = general_group_type_name(&ctx.current_rule_name, group_index);
+    let var_name = if let Some(g) = gs {
+        let _ = dedup_name(&general_group_field_name(group_index), name_counts);
+        g.field;
+    } else {
+        dedup_name(&general_group_field_name(group_index), name_counts);
+    };
+    let type_name = if let Some(g) = gs {
+        g.variant_type;
+    } else {
+        general_group_type_name(&ctx.current_rule_name, group_index);
+    };
 
     let mut first_sets: Array<Array<String>> = [];
     for let alt of alts {
