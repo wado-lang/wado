@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778458478954,
+  "lastUpdate": 1778473546091,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21045,6 +21045,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7ce086204ece99a5a3ce08a8bd0f8761fb07b9ee"
         },
         "date": 1778458478584,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 512036,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "752e52114cc4eb347c19b5f9ae61ecec556bbb34",
+          "message": "Merge pull request #1045 from wado-lang/claude/intern-module-source-MJRo1\n\nrefactor(name): split interning and `ModuleSource` out of `name.rs`",
+          "timestamp": "2026-05-11T13:19:18+09:00",
+          "tree_id": "bf9463aa9d1e4722e5a356f61e58011cc14cc1d9",
+          "url": "https://github.com/wado-lang/wado/commit/752e52114cc4eb347c19b5f9ae61ecec556bbb34"
+        },
+        "date": 1778473545728,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
