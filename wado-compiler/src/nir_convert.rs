@@ -1,0 +1,906 @@
+//! `FlatPackage` → `NirPackage` conversion.
+//!
+//! Field-for-field reconstruction: TIR and NIR body types have identical
+//! shapes (NIR is a renamed copy of TIR). See `docs/wep-2026-05-11-nir.md`.
+
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::flat_package::FlatPackage;
+use crate::nir;
+use crate::nir::{
+    NirBlock, NirCapture, NirEnum, NirEnumCase, NirExpr, NirExprKind, NirField, NirFlags,
+    NirFlagsMember, NirFunction, NirGlobal, NirHandlerBinding, NirImport, NirLiteralPattern,
+    NirLocal, NirMatchArm, NirParam, NirPattern, NirStmt, NirStmtKind, NirStruct, NirStructField,
+    NirStructPatternField, NirTemplatePart, NirTest, NirTypeParam, NirVariantCase, NirVariantDecl,
+};
+use crate::nir_package::NirPackage;
+use crate::tir;
+use crate::tir::{
+    CallArg, ClosureFunctor, FunctionRef, MonomorphInfo, TirBlock, TirCapture, TirEnum,
+    TirEnumCase, TirExpr, TirExprKind, TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
+    TirHandlerBinding, TirImport, TirLiteralPattern, TirLocal, TirMatchArm, TirParam, TirPattern,
+    TirStmt, TirStmtKind, TirStruct, TirStructField, TirStructPatternField, TirTemplatePart,
+    TirTest, TirTypeParam, TirVariantCase, TirVariantDecl,
+};
+
+/// Convert a [`FlatPackage`] (TIR-shaped) into a [`NirPackage`] (NIR-shaped).
+///
+/// TIR and NIR body types are structurally identical; this is a field-for-field
+/// reconstruction that recurses into nested expressions, statements, and
+/// patterns. Shared type-system data (`TypeTable`, registries, plans) is
+/// `.clone()`-d directly.
+pub fn flat_to_nir(flat: &FlatPackage) -> NirPackage {
+    NirPackage {
+        entry_module_source: flat.entry_module_source.clone(),
+        type_table: Rc::clone(&flat.type_table),
+        functions: flat
+            .functions
+            .iter()
+            .map(|func_rc| {
+                let func = func_rc.borrow();
+                Rc::new(RefCell::new(convert_function(&func)))
+            })
+            .collect(),
+        structs: flat.structs.iter().map(convert_struct).collect(),
+        enums: flat.enums.iter().map(convert_enum).collect(),
+        variants: flat.variants.iter().map(convert_variant_decl).collect(),
+        variant_index: flat.variant_index.clone(),
+        flags: flat.flags.iter().map(convert_flags).collect(),
+        globals: flat.globals.iter().map(convert_global).collect(),
+        imports: flat.imports.iter().map(convert_import).collect(),
+        tests: flat.tests.iter().map(convert_test).collect(),
+        string_literals: flat.string_literals.clone(),
+        bytes_literals: flat.bytes_literals.clone(),
+        closure_functors: flat
+            .closure_functors
+            .iter()
+            .map(convert_closure_functor)
+            .collect(),
+        function_strings: flat.function_strings.clone(),
+        function_method_info: flat.function_method_info.clone(),
+        wasm_module_sources: flat.wasm_module_sources.clone(),
+        module_name: flat.module_name.clone(),
+        wasi_registry: flat.wasi_registry,
+        world_registry: flat.world_registry,
+        used_wasi_functions: flat.used_wasi_functions.clone(),
+        strip_names: flat.strip_names,
+        skip_validation: flat.skip_validation,
+        target_world: flat.target_world.clone(),
+        has_http_handler_export: flat.has_http_handler_export,
+        export_binding_names: flat.export_binding_names.clone(),
+        component_plan: flat.component_plan.clone(),
+        builtin_registry: flat.builtin_registry.clone(),
+        task_return_flat_params: flat.task_return_flat_params.clone(),
+        wasm_assets: flat.wasm_assets.clone(),
+        trait_env: std::sync::Arc::clone(&flat.trait_env),
+    }
+}
+
+fn convert_function(func: &TirFunction) -> NirFunction {
+    NirFunction {
+        name: func.name.clone(),
+        module_source: func.module_source.clone(),
+        is_pub: func.is_pub,
+        is_export: func.is_export,
+        is_async: func.is_async,
+        type_params: func.type_params.iter().map(convert_type_param).collect(),
+        impl_type_params: func
+            .impl_type_params
+            .iter()
+            .map(convert_type_param)
+            .collect(),
+        monomorph_info: func.monomorph_info.as_ref().map(convert_monomorph_info),
+        method_info: func.method_info.clone(),
+        params: func.params.iter().map(convert_param).collect(),
+        return_type: func.return_type,
+        task_return_type: func.task_return_type,
+        effects: func.effects.clone(),
+        stores: func.stores.clone(),
+        body: func.body.as_ref().map(convert_block),
+        span: func.span,
+        local_count: func.local_count,
+        locals: func.locals.iter().map(convert_local).collect(),
+        address_taken_locals: func.address_taken_locals.clone(),
+        stores_aliased_locals: func.stores_aliased_locals.clone(),
+        is_cm_binding: func.is_cm_binding,
+        is_dispatch_wrapper: func.is_dispatch_wrapper,
+        is_cm_export: func.is_cm_export,
+        is_ambient: func.is_ambient,
+        inline_hint: convert_inline_hint(func.inline_hint),
+        comp_features: func.comp_features,
+        export_name: func.export_name.clone(),
+        allocator_tag: func.allocator_tag.clone(),
+        kind: convert_function_kind(&func.kind),
+        return_abi: convert_return_abi(&func.return_abi),
+    }
+}
+
+fn convert_global(global: &TirGlobal) -> NirGlobal {
+    NirGlobal {
+        name: global.name.clone(),
+        ty: global.ty,
+        initializer: convert_expr(&global.initializer),
+        mutable: global.mutable,
+        wado_mutable: global.wado_mutable,
+        is_pub: global.is_pub,
+        module_source: global.module_source.clone(),
+        span: global.span,
+        is_nullable: global.is_nullable,
+        lazy_init: global.lazy_init,
+        locals: global.locals.iter().map(convert_local).collect(),
+    }
+}
+
+fn convert_test(test: &TirTest) -> NirTest {
+    NirTest {
+        name: test.name.clone(),
+        function_name: test.function_name.clone(),
+        line: test.line,
+        span: test.span,
+        expect_trap: test.expect_trap,
+        is_todo: test.is_todo,
+        timeout_ms: test.timeout_ms,
+    }
+}
+
+fn convert_struct(s: &TirStruct) -> NirStruct {
+    NirStruct {
+        name: s.name.clone(),
+        module_source: s.module_source.clone(),
+        is_pub: s.is_pub,
+        type_params: s.type_params.iter().map(convert_type_param).collect(),
+        monomorph_info: s.monomorph_info.as_ref().map(convert_monomorph_info),
+        fields: s.fields.iter().map(convert_field).collect(),
+        span: s.span,
+        serde_rename_all: s.serde_rename_all.clone(),
+    }
+}
+
+fn convert_enum(e: &TirEnum) -> NirEnum {
+    NirEnum {
+        name: e.name.clone(),
+        module_source: e.module_source.clone(),
+        is_pub: e.is_pub,
+        type_params: e.type_params.iter().map(convert_type_param).collect(),
+        monomorph_info: e.monomorph_info.as_ref().map(convert_monomorph_info),
+        cases: e.cases.iter().map(convert_enum_case).collect(),
+        span: e.span,
+    }
+}
+
+fn convert_flags(f: &TirFlags) -> NirFlags {
+    NirFlags {
+        name: f.name.clone(),
+        module_source: f.module_source.clone(),
+        is_pub: f.is_pub,
+        type_id: f.type_id,
+        members: f.members.iter().map(convert_flags_member).collect(),
+        span: f.span,
+    }
+}
+
+fn convert_variant_decl(v: &TirVariantDecl) -> NirVariantDecl {
+    NirVariantDecl {
+        name: v.name.clone(),
+        module_source: v.module_source.clone(),
+        is_pub: v.is_pub,
+        type_params: v.type_params.iter().map(convert_type_param).collect(),
+        cases: v.cases.iter().map(convert_variant_case).collect(),
+        comp_features: v.comp_features,
+        span: v.span,
+    }
+}
+
+fn convert_import(i: &TirImport) -> NirImport {
+    NirImport {
+        namespace: i.namespace.clone(),
+        canonical_name: i.canonical_name.clone(),
+        func_name: i.func_name.clone(),
+        params: i.params.clone(),
+        return_type: i.return_type,
+    }
+}
+
+fn convert_closure_functor(cf: &ClosureFunctor) -> nir::ClosureFunctor {
+    let call_method_converted = {
+        let m = cf.call_method.borrow();
+        convert_function(&m)
+    };
+    nir::ClosureFunctor {
+        module_source: cf.module_source.clone(),
+        id: cf.id,
+        struct_name: cf.struct_name.clone(),
+        struct_type_id: cf.struct_type_id,
+        ref_type_id: cf.ref_type_id,
+        call_method: Rc::new(RefCell::new(call_method_converted)),
+        captures: cf.captures.iter().map(convert_capture).collect(),
+        canonical_user_params: cf.canonical_user_params.clone(),
+        canonical_return: cf.canonical_return,
+    }
+}
+
+fn convert_block(block: &TirBlock) -> NirBlock {
+    NirBlock {
+        stmts: block.stmts.iter().map(convert_stmt).collect(),
+        span: block.span,
+    }
+}
+
+fn convert_stmt(stmt: &TirStmt) -> NirStmt {
+    NirStmt {
+        kind: convert_stmt_kind(&stmt.kind),
+        span: stmt.span,
+    }
+}
+
+fn convert_stmt_kind(kind: &TirStmtKind) -> NirStmtKind {
+    match kind {
+        TirStmtKind::Let {
+            name,
+            local_index,
+            is_mut,
+            is_reactive,
+            type_id,
+            value,
+            skip_value_copy,
+        } => NirStmtKind::Let {
+            name: name.clone(),
+            local_index: *local_index,
+            is_mut: *is_mut,
+            is_reactive: *is_reactive,
+            type_id: *type_id,
+            value: convert_expr(value),
+            skip_value_copy: *skip_value_copy,
+        },
+        TirStmtKind::Expr(expr) => NirStmtKind::Expr(convert_expr(expr)),
+        TirStmtKind::Return { value } => NirStmtKind::Return {
+            value: value.as_ref().map(convert_expr),
+        },
+        TirStmtKind::TaskReturn { value } => NirStmtKind::TaskReturn {
+            value: convert_expr(value),
+        },
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => NirStmtKind::If {
+            condition: convert_expr(condition),
+            then_block: convert_block(then_block),
+            else_block: else_block.as_ref().map(convert_block),
+        },
+        TirStmtKind::Loop { body } => NirStmtKind::Loop {
+            body: convert_block(body),
+        },
+        TirStmtKind::Break { label, value } => NirStmtKind::Break {
+            label: label.clone(),
+            value: value.as_ref().map(convert_expr),
+        },
+        TirStmtKind::Continue => NirStmtKind::Continue,
+        TirStmtKind::LabeledBlock { label, block } => NirStmtKind::LabeledBlock {
+            label: label.clone(),
+            block: convert_block(block),
+        },
+        TirStmtKind::IfLet {
+            scrutinee,
+            pattern,
+            then_block,
+            else_block,
+        } => NirStmtKind::IfLet {
+            scrutinee: convert_expr(scrutinee),
+            pattern: convert_pattern(pattern),
+            then_block: convert_block(then_block),
+            else_block: else_block.as_ref().map(convert_block),
+        },
+        TirStmtKind::LetDestructure {
+            pattern,
+            is_mut,
+            value,
+        } => NirStmtKind::LetDestructure {
+            pattern: convert_pattern(pattern),
+            is_mut: *is_mut,
+            value: convert_expr(value),
+        },
+        TirStmtKind::VariadicForOf {
+            iterable,
+            binding_name,
+            binding_local,
+            is_mut,
+            body,
+            unique_id,
+        } => NirStmtKind::VariadicForOf {
+            iterable: convert_expr(iterable),
+            binding_name: binding_name.clone(),
+            binding_local: *binding_local,
+            is_mut: *is_mut,
+            body: convert_block(body),
+            unique_id: *unique_id,
+        },
+    }
+}
+
+fn convert_expr(expr: &TirExpr) -> NirExpr {
+    NirExpr {
+        kind: convert_expr_kind(&expr.kind),
+        type_id: expr.type_id,
+        span: expr.span,
+    }
+}
+
+fn convert_expr_kind(kind: &TirExprKind) -> NirExprKind {
+    match kind {
+        TirExprKind::IntLiteral { value, repr } => NirExprKind::IntLiteral {
+            value: *value,
+            repr: repr.clone(),
+        },
+        TirExprKind::FloatLiteral { value, repr } => NirExprKind::FloatLiteral {
+            value: *value,
+            repr: repr.clone(),
+        },
+        TirExprKind::BoolLiteral(b) => NirExprKind::BoolLiteral(*b),
+        TirExprKind::CharLiteral(c) => NirExprKind::CharLiteral(*c),
+        TirExprKind::StringLiteral(s) => NirExprKind::StringLiteral(s.clone()),
+        TirExprKind::BytesLiteral(b) => NirExprKind::BytesLiteral(b.clone()),
+        TirExprKind::Null => NirExprKind::Null,
+        TirExprKind::Unit => NirExprKind::Unit,
+        TirExprKind::Local { index, name } => NirExprKind::Local {
+            index: *index,
+            name: name.clone(),
+        },
+        TirExprKind::FuncRef {
+            module_source,
+            name,
+        } => NirExprKind::FuncRef {
+            module_source: module_source.clone(),
+            name: name.clone(),
+        },
+        TirExprKind::GlobalVarGet {
+            module_source,
+            name,
+        } => NirExprKind::GlobalVarGet {
+            module_source: module_source.clone(),
+            name: name.clone(),
+        },
+        TirExprKind::GlobalVarSet {
+            module_source,
+            name,
+            value,
+        } => NirExprKind::GlobalVarSet {
+            module_source: module_source.clone(),
+            name: name.clone(),
+            value: Box::new(convert_expr(value)),
+        },
+        TirExprKind::Binary { left, op, right } => NirExprKind::Binary {
+            left: Box::new(convert_expr(left)),
+            op: convert_binary_op(*op),
+            right: Box::new(convert_expr(right)),
+        },
+        TirExprKind::Unary { op, expr } => NirExprKind::Unary {
+            op: convert_unary_op(*op),
+            expr: Box::new(convert_expr(expr)),
+        },
+        TirExprKind::Assign { target, value } => NirExprKind::Assign {
+            target: Box::new(convert_expr(target)),
+            value: Box::new(convert_expr(value)),
+        },
+        TirExprKind::Cast { expr, target_type } => NirExprKind::Cast {
+            expr: Box::new(convert_expr(expr)),
+            target_type: *target_type,
+        },
+        TirExprKind::Call {
+            func,
+            type_args,
+            args,
+        } => NirExprKind::Call {
+            func: convert_function_ref(func),
+            type_args: type_args.clone(),
+            args: args.iter().map(convert_call_arg).collect(),
+        },
+        TirExprKind::CmRawCall { local_name, args } => NirExprKind::CmRawCall {
+            local_name: local_name.clone(),
+            args: args.iter().map(convert_expr).collect(),
+        },
+        TirExprKind::MethodCall {
+            receiver,
+            func,
+            type_args,
+            args,
+            ..
+        } => NirExprKind::method_call(
+            Box::new(convert_expr(receiver)),
+            convert_function_ref(func),
+            type_args.clone(),
+            args.iter().map(convert_call_arg).collect(),
+        ),
+        TirExprKind::FieldAccess {
+            expr,
+            field_index,
+            field_name,
+        } => NirExprKind::FieldAccess {
+            expr: Box::new(convert_expr(expr)),
+            field_index: *field_index,
+            field_name: field_name.clone(),
+        },
+        TirExprKind::Index { expr, index } => NirExprKind::Index {
+            expr: Box::new(convert_expr(expr)),
+            index: Box::new(convert_expr(index)),
+        },
+        TirExprKind::Block(block) => NirExprKind::Block(convert_block(block)),
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => NirExprKind::If {
+            condition: Box::new(convert_expr(condition)),
+            then_branch: convert_block(then_branch),
+            else_branch: else_branch.as_ref().map(convert_block),
+        },
+        TirExprKind::Match { expr, arms } => NirExprKind::Match {
+            expr: Box::new(convert_expr(expr)),
+            arms: arms.iter().map(convert_match_arm).collect(),
+        },
+        TirExprKind::StructLiteral {
+            struct_type,
+            struct_name,
+            fields,
+        } => NirExprKind::StructLiteral {
+            struct_type: *struct_type,
+            struct_name: struct_name.clone(),
+            fields: fields.iter().map(convert_struct_field).collect(),
+        },
+        TirExprKind::TupleLiteral { elements } => NirExprKind::TupleLiteral {
+            elements: elements.iter().map(convert_expr).collect(),
+        },
+        TirExprKind::TupleSpread { expr } => NirExprKind::TupleSpread {
+            expr: Box::new(convert_expr(expr)),
+        },
+        TirExprKind::TupleZip { expr } => NirExprKind::TupleZip {
+            expr: Box::new(convert_expr(expr)),
+        },
+        TirExprKind::TypePackExpansion {
+            call_expr,
+            pack_type_id,
+        } => NirExprKind::TypePackExpansion {
+            call_expr: Box::new(convert_expr(call_expr)),
+            pack_type_id: *pack_type_id,
+        },
+        TirExprKind::Capture { index, name } => NirExprKind::Capture {
+            index: *index,
+            name: name.clone(),
+        },
+        TirExprKind::Closure {
+            params,
+            body,
+            captures,
+            functor_id,
+            address_taken_locals,
+            body_locals,
+        } => NirExprKind::Closure {
+            params: params.clone(),
+            body: Box::new(convert_expr(body)),
+            captures: captures.iter().map(convert_capture).collect(),
+            functor_id: *functor_id,
+            address_taken_locals: address_taken_locals.clone(),
+            body_locals: body_locals.iter().map(convert_local).collect(),
+        },
+        TirExprKind::IndirectCall { callee, args } => NirExprKind::IndirectCall {
+            callee: Box::new(convert_expr(callee)),
+            args: args.iter().map(convert_expr).collect(),
+        },
+        TirExprKind::ClosureToCanonical {
+            functor,
+            functor_id,
+            target_fn_type,
+            closure_module,
+        } => NirExprKind::ClosureToCanonical {
+            functor: Box::new(convert_expr(functor)),
+            functor_id: *functor_id,
+            target_fn_type: *target_fn_type,
+            closure_module: closure_module.clone(),
+        },
+        TirExprKind::VariantConstruct {
+            variant_type,
+            case_index,
+            case_name,
+            payload,
+        } => NirExprKind::VariantConstruct {
+            variant_type: *variant_type,
+            case_index: *case_index,
+            case_name: case_name.clone(),
+            payload: payload.as_ref().map(|p| Box::new(convert_expr(p))),
+        },
+        TirExprKind::EnumConstruct {
+            enum_type,
+            case_index,
+            case_name,
+        } => NirExprKind::EnumConstruct {
+            enum_type: *enum_type,
+            case_index: *case_index,
+            case_name: case_name.clone(),
+        },
+        TirExprKind::LabeledBlock {
+            label,
+            block,
+            result_type,
+        } => NirExprKind::LabeledBlock {
+            label: label.clone(),
+            block: convert_block(block),
+            result_type: *result_type,
+        },
+        TirExprKind::VariantTag { expr } => NirExprKind::VariantTag {
+            expr: Box::new(convert_expr(expr)),
+        },
+        TirExprKind::VariantTest {
+            expr,
+            case_index,
+            case_name,
+        } => NirExprKind::VariantTest {
+            expr: Box::new(convert_expr(expr)),
+            case_index: *case_index,
+            case_name: case_name.clone(),
+        },
+        TirExprKind::VariantPayload {
+            expr,
+            case_index,
+            payload_type,
+        } => NirExprKind::VariantPayload {
+            expr: Box::new(convert_expr(expr)),
+            case_index: *case_index,
+            payload_type: *payload_type,
+        },
+        TirExprKind::Switch {
+            scrutinee,
+            min_value,
+            arms,
+            default,
+        } => NirExprKind::Switch {
+            scrutinee: Box::new(convert_expr(scrutinee)),
+            min_value: *min_value,
+            arms: arms.iter().map(convert_block).collect(),
+            default: convert_block(default),
+        },
+        TirExprKind::TemplateString { parts } => NirExprKind::TemplateString {
+            parts: parts.iter().map(convert_template_part).collect(),
+        },
+        TirExprKind::WithHandler {
+            bindings,
+            body,
+            result_type,
+        } => NirExprKind::WithHandler {
+            bindings: bindings.iter().map(convert_handler_binding).collect(),
+            body: convert_block(body),
+            result_type: *result_type,
+        },
+        TirExprKind::Resume { value } => NirExprKind::Resume {
+            value: Box::new(convert_expr(value)),
+        },
+    }
+}
+
+fn convert_pattern(pattern: &TirPattern) -> NirPattern {
+    match pattern {
+        TirPattern::Wildcard => NirPattern::Wildcard,
+        TirPattern::Binding {
+            name,
+            local_index,
+            type_id,
+        } => NirPattern::Binding {
+            name: name.clone(),
+            local_index: *local_index,
+            type_id: *type_id,
+        },
+        TirPattern::Literal(lit) => NirPattern::Literal(convert_literal_pattern(lit)),
+        TirPattern::Tuple(patterns, has_rest) => NirPattern::Tuple(
+            patterns.iter().map(convert_pattern).collect(),
+            *has_rest,
+        ),
+        TirPattern::Variant {
+            enum_type,
+            variant_name,
+            bindings,
+            payload_type,
+        } => NirPattern::Variant {
+            enum_type: *enum_type,
+            variant_name: variant_name.clone(),
+            bindings: bindings.iter().map(convert_pattern).collect(),
+            payload_type: *payload_type,
+        },
+        TirPattern::Enum {
+            enum_type,
+            case_name,
+            case_index,
+        } => NirPattern::Enum {
+            enum_type: *enum_type,
+            case_name: case_name.clone(),
+            case_index: *case_index,
+        },
+        TirPattern::Struct {
+            struct_type,
+            fields,
+            has_rest,
+        } => NirPattern::Struct {
+            struct_type: *struct_type,
+            fields: fields.iter().map(convert_struct_pattern_field).collect(),
+            has_rest: *has_rest,
+        },
+        TirPattern::Or(patterns) => {
+            NirPattern::Or(patterns.iter().map(convert_pattern).collect())
+        }
+        TirPattern::ConstantValue { expr } => NirPattern::ConstantValue {
+            expr: Box::new(convert_expr(expr)),
+        },
+        TirPattern::Range {
+            start,
+            end,
+            inclusive,
+            is_unsigned,
+        } => NirPattern::Range {
+            start: *start,
+            end: *end,
+            inclusive: *inclusive,
+            is_unsigned: *is_unsigned,
+        },
+    }
+}
+
+fn convert_struct_pattern_field(field: &TirStructPatternField) -> NirStructPatternField {
+    NirStructPatternField {
+        field_name: field.field_name.clone(),
+        field_index: field.field_index,
+        pattern: convert_pattern(&field.pattern),
+    }
+}
+
+fn convert_literal_pattern(lit: &TirLiteralPattern) -> NirLiteralPattern {
+    match lit {
+        TirLiteralPattern::I128(v) => NirLiteralPattern::I128(*v),
+        TirLiteralPattern::U128(v) => NirLiteralPattern::U128(*v),
+        TirLiteralPattern::Bool(b) => NirLiteralPattern::Bool(*b),
+        TirLiteralPattern::Char(c) => NirLiteralPattern::Char(*c),
+        TirLiteralPattern::String(s) => NirLiteralPattern::String(s.clone()),
+        TirLiteralPattern::Null => NirLiteralPattern::Null,
+    }
+}
+
+fn convert_match_arm(arm: &TirMatchArm) -> NirMatchArm {
+    NirMatchArm {
+        pattern: convert_pattern(&arm.pattern),
+        guard: arm.guard.as_ref().map(convert_expr),
+        body: convert_expr(&arm.body),
+        span: arm.span,
+    }
+}
+
+fn convert_handler_binding(binding: &TirHandlerBinding) -> NirHandlerBinding {
+    NirHandlerBinding {
+        effect: binding.effect.clone(),
+        trait_type_args: binding.trait_type_args.clone(),
+        handler: convert_expr(&binding.handler),
+        handler_type: binding.handler_type,
+        span: binding.span,
+        bundle_group: binding.bundle_group,
+    }
+}
+
+fn convert_struct_field(field: &TirStructField) -> NirStructField {
+    NirStructField {
+        name: field.name.clone(),
+        value: convert_expr(&field.value),
+        field_index: field.field_index,
+    }
+}
+
+fn convert_capture(c: &TirCapture) -> NirCapture {
+    NirCapture {
+        name: c.name.clone(),
+        outer_index: c.outer_index,
+        type_id: c.type_id,
+        is_mut: c.is_mut,
+    }
+}
+
+fn convert_template_part(part: &TirTemplatePart) -> NirTemplatePart {
+    match part {
+        TirTemplatePart::Literal(s) => NirTemplatePart::Literal(s.clone()),
+        TirTemplatePart::Interpolation { expr, format_spec } => NirTemplatePart::Interpolation {
+            expr: Box::new(convert_expr(expr)),
+            format_spec: format_spec.as_ref().map(convert_template_format_spec),
+        },
+    }
+}
+
+fn convert_template_format_spec(spec: &tir::TemplateFormatSpec) -> nir::TemplateFormatSpec {
+    nir::TemplateFormatSpec {
+        fill: spec.fill,
+        align: spec.align,
+        sign_plus: spec.sign_plus,
+        alternate: spec.alternate,
+        zero_pad: spec.zero_pad,
+        width: spec.width,
+        precision: spec.precision,
+        type_char: spec.type_char,
+    }
+}
+
+fn convert_binary_op(op: tir::TirBinaryOp) -> nir::NirBinaryOp {
+    match op {
+        tir::TirBinaryOp::Add => nir::NirBinaryOp::Add,
+        tir::TirBinaryOp::Sub => nir::NirBinaryOp::Sub,
+        tir::TirBinaryOp::Mul => nir::NirBinaryOp::Mul,
+        tir::TirBinaryOp::Div => nir::NirBinaryOp::Div,
+        tir::TirBinaryOp::Mod => nir::NirBinaryOp::Mod,
+        tir::TirBinaryOp::Eq => nir::NirBinaryOp::Eq,
+        tir::TirBinaryOp::NotEq => nir::NirBinaryOp::NotEq,
+        tir::TirBinaryOp::Lt => nir::NirBinaryOp::Lt,
+        tir::TirBinaryOp::LtEq => nir::NirBinaryOp::LtEq,
+        tir::TirBinaryOp::Gt => nir::NirBinaryOp::Gt,
+        tir::TirBinaryOp::GtEq => nir::NirBinaryOp::GtEq,
+        tir::TirBinaryOp::And => nir::NirBinaryOp::And,
+        tir::TirBinaryOp::Or => nir::NirBinaryOp::Or,
+        tir::TirBinaryOp::BitAnd => nir::NirBinaryOp::BitAnd,
+        tir::TirBinaryOp::BitOr => nir::NirBinaryOp::BitOr,
+        tir::TirBinaryOp::BitXor => nir::NirBinaryOp::BitXor,
+        tir::TirBinaryOp::Shl => nir::NirBinaryOp::Shl,
+        tir::TirBinaryOp::Shr => nir::NirBinaryOp::Shr,
+        tir::TirBinaryOp::RefEq => nir::NirBinaryOp::RefEq,
+        tir::TirBinaryOp::RefNotEq => nir::NirBinaryOp::RefNotEq,
+    }
+}
+
+fn convert_unary_op(op: tir::TirUnaryOp) -> nir::NirUnaryOp {
+    match op {
+        tir::TirUnaryOp::Neg => nir::NirUnaryOp::Neg,
+        tir::TirUnaryOp::Not => nir::NirUnaryOp::Not,
+        tir::TirUnaryOp::BitNot => nir::NirUnaryOp::BitNot,
+        tir::TirUnaryOp::Ref => nir::NirUnaryOp::Ref,
+        tir::TirUnaryOp::MutRef => nir::NirUnaryOp::MutRef,
+        tir::TirUnaryOp::Deref => nir::NirUnaryOp::Deref,
+    }
+}
+
+fn convert_local(local: &TirLocal) -> NirLocal {
+    NirLocal {
+        name: local.name.clone(),
+        type_id: local.type_id,
+        is_mut: local.is_mut,
+    }
+}
+
+fn convert_param(param: &TirParam) -> NirParam {
+    NirParam {
+        name: param.name.clone(),
+        type_id: param.type_id,
+        local_index: param.local_index,
+        is_mut: param.is_mut,
+        default_expr: param
+            .default_expr
+            .as_ref()
+            .map(|e| Box::new(convert_expr(e))),
+        span: param.span,
+    }
+}
+
+fn convert_type_param(tp: &TirTypeParam) -> NirTypeParam {
+    NirTypeParam {
+        name: tp.name.clone(),
+        is_effect: tp.is_effect,
+        is_pack: tp.is_pack,
+        bounds: tp.bounds.clone(),
+        default: tp.default,
+        index: tp.index,
+    }
+}
+
+fn convert_monomorph_info(info: &MonomorphInfo) -> nir::MonomorphInfo {
+    nir::MonomorphInfo {
+        generic_name: info.generic_name.clone(),
+        impl_type_args: info.impl_type_args.clone(),
+        method_type_args: info.method_type_args.clone(),
+        is_blanket: info.is_blanket,
+    }
+}
+
+fn convert_function_ref(func: &FunctionRef) -> nir::FunctionRef {
+    nir::FunctionRef {
+        module_source: func.module_source.clone(),
+        name: func.name.clone(),
+        monomorph_info: func.monomorph_info.as_ref().map(convert_monomorph_info),
+        method_info: func.method_info.clone(),
+    }
+}
+
+fn convert_call_arg(arg: &CallArg) -> nir::CallArg {
+    nir::CallArg {
+        expr: convert_expr(&arg.expr),
+        is_mut: arg.is_mut,
+    }
+}
+
+fn convert_function_kind(kind: &tir::FunctionKind) -> nir::FunctionKind {
+    match kind {
+        tir::FunctionKind::Regular => nir::FunctionKind::Regular,
+        tir::FunctionKind::ValueCopy { type_id } => nir::FunctionKind::ValueCopy {
+            type_id: *type_id,
+        },
+        tir::FunctionKind::FnCanonicalDispatch {
+            trait_kind,
+            arity,
+            return_type,
+        } => nir::FunctionKind::FnCanonicalDispatch {
+            trait_kind: convert_fn_dispatch_trait(*trait_kind),
+            arity: *arity,
+            return_type: *return_type,
+        },
+    }
+}
+
+fn convert_inline_hint(hint: tir::InlineHint) -> nir::InlineHint {
+    match hint {
+        tir::InlineHint::Auto => nir::InlineHint::Auto,
+        tir::InlineHint::Hint => nir::InlineHint::Hint,
+        tir::InlineHint::Always => nir::InlineHint::Always,
+        tir::InlineHint::Never => nir::InlineHint::Never,
+    }
+}
+
+fn convert_return_abi(abi: &tir::ReturnAbi) -> nir::ReturnAbi {
+    match abi {
+        tir::ReturnAbi::Single => nir::ReturnAbi::Single,
+        tir::ReturnAbi::MultiValue {
+            result_types,
+            field_names,
+        } => nir::ReturnAbi::MultiValue {
+            result_types: result_types.clone(),
+            field_names: field_names.clone(),
+        },
+    }
+}
+
+fn convert_fn_dispatch_trait(kind: tir::FnDispatchTrait) -> nir::FnDispatchTrait {
+    match kind {
+        tir::FnDispatchTrait::Inspect => nir::FnDispatchTrait::Inspect,
+        tir::FnDispatchTrait::InspectAlt => nir::FnDispatchTrait::InspectAlt,
+    }
+}
+
+fn convert_field(field: &TirField) -> NirField {
+    NirField {
+        name: field.name.clone(),
+        is_pub: field.is_pub,
+        type_id: field.type_id,
+        index: field.index,
+        span: field.span,
+        is_hidden: field.is_hidden,
+        serde_rename: field.serde_rename.clone(),
+        serde_default: field.serde_default,
+        default_expr: field
+            .default_expr
+            .as_ref()
+            .map(|e| Box::new(convert_expr(e))),
+    }
+}
+
+fn convert_enum_case(case: &TirEnumCase) -> NirEnumCase {
+    NirEnumCase {
+        name: case.name.clone(),
+        index: case.index,
+        span: case.span,
+    }
+}
+
+fn convert_flags_member(m: &TirFlagsMember) -> NirFlagsMember {
+    NirFlagsMember {
+        name: m.name.clone(),
+        bitmask: m.bitmask,
+        span: m.span,
+    }
+}
+
+fn convert_variant_case(case: &TirVariantCase) -> NirVariantCase {
+    NirVariantCase {
+        name: case.name.clone(),
+        index: case.index,
+        payload: case.payload,
+        span: case.span,
+    }
+}

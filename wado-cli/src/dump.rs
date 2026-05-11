@@ -21,6 +21,7 @@ pub struct DumpOptions {
     pub show_tir_resolved: bool,
     pub show_tir_monomorphized: bool,
     pub show_tir_lowered: bool,
+    pub show_nir: bool,
     pub show_wir: bool,
     pub opt_level: OptLevel,
     pub inline_threshold: Option<usize>,
@@ -39,6 +40,7 @@ enum Opt {
     TirResolved,
     TirMonomorphized,
     TirLowered,
+    Nir,
     Wir,
     OptLevel,
     InlineThreshold,
@@ -58,6 +60,7 @@ impl Opt {
         Self::TirResolved,
         Self::TirMonomorphized,
         Self::TirLowered,
+        Self::Nir,
         Self::Wir,
         Self::OptLevel,
         Self::InlineThreshold,
@@ -127,6 +130,12 @@ impl Opt {
                 value: None,
                 desc: "Show TIR after lowering (before optimization)",
             },
+            Self::Nir => args::OptSpec {
+                long: Some("nir"),
+                short: None,
+                value: None,
+                desc: "Show NIR (after optimization, affected by -Ox)",
+            },
             Self::Wir => args::OptSpec {
                 long: Some("wir"),
                 short: None,
@@ -177,6 +186,7 @@ fn format_usage() -> String {
                 Opt::TirMonomorphized,
                 Opt::TirLowered,
                 Opt::Tir,
+                Opt::Nir,
                 Opt::Wir,
             ],
             |o| o.spec(),
@@ -227,6 +237,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut show_tir_resolved = false;
     let mut show_tir_monomorphized = false;
     let mut show_tir_lowered = false;
+    let mut show_nir = false;
     let mut show_wir = false;
     let mut opt_level = OptLevel::O2;
     let mut inline_threshold: Option<usize> = None;
@@ -274,6 +285,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                 }
                 Opt::TirLowered => {
                     show_tir_lowered = true;
+                    any_phase = true;
+                }
+                Opt::Nir => {
+                    show_nir = true;
                     any_phase = true;
                 }
                 Opt::Wir => {
@@ -337,6 +352,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         show_tir_resolved,
         show_tir_monomorphized,
         show_tir_lowered,
+        show_nir,
         show_wir,
         opt_level,
         inline_threshold,
@@ -651,6 +667,22 @@ async fn run_single(opts: &DumpOptions, input: &str) {
             println!();
         } else {
             println!("=== TIR ===");
+            println!("(Optimization failed or not available)");
+            println!();
+        }
+    }
+
+    // NIR section (post-optimize, converted from FlatPackage).
+    // Once lower returns NirPackage natively, this conversion goes away.
+    if opts.show_nir {
+        if let Some(ref project) = result.optimized_package {
+            println!("=== NIR ===");
+            let nir = wado_compiler::nir_convert::flat_to_nir(project);
+            let unparsed = wado_compiler::nir_unparse::unparse_nir_package(&nir);
+            println!("{unparsed}");
+            println!();
+        } else {
+            println!("=== NIR ===");
             println!("(Optimization failed or not available)");
             println!();
         }
