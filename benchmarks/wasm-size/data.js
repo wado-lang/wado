@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778501716521,
+  "lastUpdate": 1778536690718,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21177,6 +21177,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/45fa6b651e4c6ff0687871d4d8d32a5c0fca192e"
         },
         "date": 1778501716274,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 512036,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "702c97c8d5332ad39919db09ef3059ed106a8c37",
+          "message": "Merge pull request #1049 from wado-lang/claude/review-nir-web-cAGWC\n\nfeat(compiler): introduce NIR (Normalized IR) layer",
+          "timestamp": "2026-05-12T06:49:43+09:00",
+          "tree_id": "c69673fa8bdffdd9fde3a649bb86f215de6833de",
+          "url": "https://github.com/wado-lang/wado/commit/702c97c8d5332ad39919db09ef3059ed106a8c37"
+        },
+        "date": 1778536690381,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
