@@ -123,19 +123,6 @@ fn fuse_in_stmt(
             // A statement-level labeled block discards its value.
             fuse_in_block(body, false, local_count, locals)
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            let mut changed = fuse_in_expr(scrutinee, local_count, locals);
-            changed |= fuse_in_block(then_block, yields_value, local_count, locals);
-            if let Some(eb) = else_block {
-                changed |= fuse_in_block(eb, yields_value, local_count, locals);
-            }
-            changed
-        }
         NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 fuse_in_expr(v, local_count, locals)
@@ -150,10 +137,7 @@ fn fuse_in_stmt(
                 false
             }
         }
-        NirStmtKind::LetDestructure { value, .. } => fuse_in_expr(value, local_count, locals),
-        NirStmtKind::Continue
-        | NirStmtKind::TaskReturn { .. }
-        | NirStmtKind::VariadicForOf { .. } => false,
+        NirStmtKind::Continue => false,
     }
 }
 
@@ -301,11 +285,6 @@ fn fuse_in_expr(expr: &mut NirExpr, local_count: &mut u32, locals: &mut Vec<NirL
             fuse_in_expr(functor, local_count, locals)
         }
         NirExprKind::GlobalVarSet { value, .. } => fuse_in_expr(value, local_count, locals),
-        NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => fuse_in_expr(inner, local_count, locals),
         NirExprKind::Switch {
             scrutinee,
             arms,
@@ -330,12 +309,9 @@ fn fuse_in_expr(expr: &mut NirExpr, local_count: &mut u32, locals: &mut Vec<NirL
             }
             changed
         }
-        NirExprKind::Closure { body, .. } => fuse_in_expr(body, local_count, locals),
         // Leaf nodes
         NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::StringLiteral(_)
@@ -345,14 +321,6 @@ fn fuse_in_expr(expr: &mut NirExpr, local_count: &mut u32, locals: &mut Vec<NirL
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::EnumConstruct { .. } => false,
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 
@@ -601,19 +569,7 @@ fn check_lb_breaks_in_stmt(
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             check_lb_breaks_in_block(body, label, case_index, payload_type)
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            check_lb_breaks_in_expr(scrutinee, label, case_index, payload_type)
-                && check_lb_breaks_in_block(then_block, label, case_index, payload_type)
-                && else_block
-                    .as_ref()
-                    .is_none_or(|eb| check_lb_breaks_in_block(eb, label, case_index, payload_type))
-        }
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Let { value, .. } => {
             check_lb_breaks_in_expr(value, label, case_index, payload_type)
         }
         NirStmtKind::Break { value, .. } => value
@@ -676,9 +632,7 @@ fn count_local_uses_in_block(block: &NirBlock, local_idx: u32) -> usize {
 
 fn count_local_uses_in_stmt(stmt: &NirStmt, local_idx: u32) -> usize {
     match &stmt.kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
-            count_local_uses_in_expr(value, local_idx)
-        }
+        NirStmtKind::Let { value, .. } => count_local_uses_in_expr(value, local_idx),
         NirStmtKind::Expr(expr) => count_local_uses_in_expr(expr, local_idx),
         NirStmtKind::Return { value } => value
             .as_ref()
@@ -697,24 +651,10 @@ fn count_local_uses_in_stmt(stmt: &NirStmt, local_idx: u32) -> usize {
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             count_local_uses_in_block(body, local_idx)
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            count_local_uses_in_expr(scrutinee, local_idx)
-                + count_local_uses_in_block(then_block, local_idx)
-                + else_block
-                    .as_ref()
-                    .map_or(0, |eb| count_local_uses_in_block(eb, local_idx))
-        }
         NirStmtKind::Break { value, .. } => value
             .as_ref()
             .map_or(0, |v| count_local_uses_in_expr(v, local_idx)),
-        NirStmtKind::Continue
-        | NirStmtKind::TaskReturn { .. }
-        | NirStmtKind::VariadicForOf { .. } => 0,
+        NirStmtKind::Continue => 0,
     }
 }
 
@@ -813,16 +753,8 @@ fn count_local_uses_in_expr(expr: &NirExpr, local_idx: u32) -> usize {
                     .sum::<usize>()
                 + count_local_uses_in_block(default, local_idx)
         }
-        NirExprKind::Closure { body, .. } => count_local_uses_in_expr(body, local_idx),
-        NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => count_local_uses_in_expr(inner, local_idx),
         // Leaf nodes
-        NirExprKind::FuncRef { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
+        NirExprKind::GlobalVarGet { .. }
         | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::StringLiteral(_)
@@ -832,14 +764,6 @@ fn count_local_uses_in_expr(expr: &NirExpr, local_idx: u32) -> usize {
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::EnumConstruct { .. } => 0,
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 
@@ -854,7 +778,7 @@ fn count_variant_payload_uses_in_block(block: &NirBlock, local_idx: u32, case_in
 
 fn count_variant_payload_uses_in_stmt(stmt: &NirStmt, local_idx: u32, case_index: u32) -> usize {
     match &stmt.kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Let { value, .. } => {
             count_variant_payload_uses_in_expr(value, local_idx, case_index)
         }
         NirStmtKind::Expr(expr) => count_variant_payload_uses_in_expr(expr, local_idx, case_index),
@@ -875,24 +799,10 @@ fn count_variant_payload_uses_in_stmt(stmt: &NirStmt, local_idx: u32, case_index
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             count_variant_payload_uses_in_block(body, local_idx, case_index)
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            count_variant_payload_uses_in_expr(scrutinee, local_idx, case_index)
-                + count_variant_payload_uses_in_block(then_block, local_idx, case_index)
-                + else_block.as_ref().map_or(0, |eb| {
-                    count_variant_payload_uses_in_block(eb, local_idx, case_index)
-                })
-        }
         NirStmtKind::Break { value, .. } => value.as_ref().map_or(0, |v| {
             count_variant_payload_uses_in_expr(v, local_idx, case_index)
         }),
-        NirStmtKind::Continue
-        | NirStmtKind::TaskReturn { .. }
-        | NirStmtKind::VariadicForOf { .. } => 0,
+        NirStmtKind::Continue => 0,
     }
 }
 
@@ -1003,18 +913,8 @@ fn count_variant_payload_uses_in_expr(expr: &NirExpr, local_idx: u32, case_index
                     .sum::<usize>()
                 + count_variant_payload_uses_in_block(default, local_idx, case_index)
         }
-        NirExprKind::Closure { body, .. } => {
-            count_variant_payload_uses_in_expr(body, local_idx, case_index)
-        }
-        NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => count_variant_payload_uses_in_expr(inner, local_idx, case_index),
         // Leaf nodes
-        NirExprKind::FuncRef { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
+        NirExprKind::GlobalVarGet { .. }
         | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::StringLiteral(_)
@@ -1024,14 +924,6 @@ fn count_variant_payload_uses_in_expr(expr: &NirExpr, local_idx: u32, case_index
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::EnumConstruct { .. } => 0,
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 
@@ -1324,52 +1216,6 @@ fn transform_lb_stmt(
                 stmt_span,
             ));
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            pattern,
-            then_block: tb,
-            else_block: eb,
-        } => {
-            let new_then = NirBlock {
-                stmts: transform_lb_stmts(
-                    tb.stmts,
-                    orig_label,
-                    fused_label,
-                    case_index,
-                    temp_local,
-                    payload_local,
-                    payload_type,
-                    then_block,
-                    else_block,
-                    span,
-                ),
-                span: tb.span,
-            };
-            let new_else = eb.map(|e| NirBlock {
-                stmts: transform_lb_stmts(
-                    e.stmts,
-                    orig_label,
-                    fused_label,
-                    case_index,
-                    temp_local,
-                    payload_local,
-                    payload_type,
-                    then_block,
-                    else_block,
-                    span,
-                ),
-                span: e.span,
-            });
-            out.push(NirStmt::new(
-                NirStmtKind::IfLet {
-                    scrutinee,
-                    pattern,
-                    then_block: new_then,
-                    else_block: new_else,
-                },
-                stmt_span,
-            ));
-        }
         // Statements that contain expressions: recurse into expressions to find nested breaks.
         mut other => {
             transform_lb_in_stmt_kind(
@@ -1404,10 +1250,7 @@ fn transform_lb_in_stmt_kind(
     span: crate::token::Span,
 ) {
     match kind {
-        NirStmtKind::Let { value, .. }
-        | NirStmtKind::LetDestructure { value, .. }
-        | NirStmtKind::Expr(value)
-        | NirStmtKind::TaskReturn { value } => {
+        NirStmtKind::Let { value, .. } | NirStmtKind::Expr(value) => {
             transform_lb_in_expr(
                 value,
                 orig_label,
@@ -1437,14 +1280,12 @@ fn transform_lb_in_stmt_kind(
                 );
             }
         }
-        // If/Loop/LabeledBlock/IfLet are handled before this function is called (in
+        // If/Loop/LabeledBlock are handled before this function is called (in
         // transform_lb_stmt). The remaining kinds carry no expressions to transform.
         NirStmtKind::If { .. }
         | NirStmtKind::Loop { .. }
         | NirStmtKind::LabeledBlock { .. }
-        | NirStmtKind::IfLet { .. }
-        | NirStmtKind::Continue
-        | NirStmtKind::VariadicForOf { .. } => {}
+        | NirStmtKind::Continue => {}
     }
 }
 
@@ -1636,9 +1477,6 @@ fn transform_lb_in_expr(
         | NirExprKind::Unary { .. }
         | NirExprKind::Cast { .. }
         | NirExprKind::FieldAccess { .. }
-        | NirExprKind::TupleSpread { .. }
-        | NirExprKind::TupleZip { .. }
-        | NirExprKind::TypePackExpansion { .. }
         | NirExprKind::Assign { .. }
         | NirExprKind::Index { .. }
         | NirExprKind::Call { .. }
@@ -1651,13 +1489,10 @@ fn transform_lb_in_expr(
         | NirExprKind::VariantTag { .. }
         | NirExprKind::VariantTest { .. }
         | NirExprKind::VariantPayload { .. }
-        | NirExprKind::Closure { .. }
         | NirExprKind::ClosureToCanonical { .. }
         | NirExprKind::GlobalVarSet { .. }
         | NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::StringLiteral(_)
@@ -1667,12 +1502,7 @@ fn transform_lb_in_expr(
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::EnumConstruct { .. }
-        | NirExprKind::TemplateString { .. } => {}
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
+        => {}
     }
 }
 
@@ -1724,7 +1554,7 @@ fn subst_variant_payload_in_stmt(
     payload_local: u32,
 ) {
     match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Let { value, .. } => {
             subst_variant_payload_in_expr(value, temp_local, case_index, payload_local);
         }
         NirStmtKind::Expr(expr) => {
@@ -1749,26 +1579,12 @@ fn subst_variant_payload_in_stmt(
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             subst_variant_payload_in_block(body, temp_local, case_index, payload_local);
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            subst_variant_payload_in_expr(scrutinee, temp_local, case_index, payload_local);
-            subst_variant_payload_in_block(then_block, temp_local, case_index, payload_local);
-            if let Some(eb) = else_block {
-                subst_variant_payload_in_block(eb, temp_local, case_index, payload_local);
-            }
-        }
         NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 subst_variant_payload_in_expr(v, temp_local, case_index, payload_local);
             }
         }
-        NirStmtKind::Continue
-        | NirStmtKind::TaskReturn { .. }
-        | NirStmtKind::VariadicForOf { .. } => {}
+        NirStmtKind::Continue => {}
     }
 }
 
@@ -1892,20 +1708,8 @@ fn subst_variant_payload_in_expr(
             }
             subst_variant_payload_in_block(default, temp_local, case_index, payload_local);
         }
-        NirExprKind::Closure { body, .. } => {
-            subst_variant_payload_in_expr(body, temp_local, case_index, payload_local);
-        }
-        NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => {
-            subst_variant_payload_in_expr(inner, temp_local, case_index, payload_local);
-        }
         // Leaf nodes carry no sub-expressions to substitute into.
-        NirExprKind::FuncRef { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
+        NirExprKind::GlobalVarGet { .. }
         | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::StringLiteral(_)
@@ -1915,14 +1719,6 @@ fn subst_variant_payload_in_expr(
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 
@@ -1943,11 +1739,6 @@ fn stmt_contains_loop(stmt: &NirStmt) -> bool {
             then_block,
             else_block,
             ..
-        }
-        | NirStmtKind::IfLet {
-            then_block,
-            else_block,
-            ..
         } => {
             then_block.stmts.iter().any(stmt_contains_loop)
                 || else_block
@@ -1955,7 +1746,6 @@ fn stmt_contains_loop(stmt: &NirStmt) -> bool {
                     .is_some_and(|b| b.stmts.iter().any(stmt_contains_loop))
         }
         NirStmtKind::Let { value, .. }
-        | NirStmtKind::LetDestructure { value, .. }
         | NirStmtKind::Expr(value)
         | NirStmtKind::Return { value: Some(value) } => expr_contains_loop(value),
         _ => false,
@@ -2011,26 +1801,12 @@ fn stmt_has_free_unlabeled_loop_exit(stmt: &NirStmt, loop_depth: u32) -> bool {
                     .as_ref()
                     .is_some_and(|b| stmts_have_free_unlabeled_loop_exit(&b.stmts, loop_depth))
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            expr_has_free_unlabeled_loop_exit(scrutinee, loop_depth)
-                || stmts_have_free_unlabeled_loop_exit(&then_block.stmts, loop_depth)
-                || else_block
-                    .as_ref()
-                    .is_some_and(|b| stmts_have_free_unlabeled_loop_exit(&b.stmts, loop_depth))
-        }
         NirStmtKind::Let { value, .. }
-        | NirStmtKind::LetDestructure { value, .. }
         | NirStmtKind::Expr(value)
         | NirStmtKind::Return { value: Some(value) }
         | NirStmtKind::Break {
             value: Some(value), ..
-        }
-        | NirStmtKind::TaskReturn { value } => expr_has_free_unlabeled_loop_exit(value, loop_depth),
+        } => expr_has_free_unlabeled_loop_exit(value, loop_depth),
         _ => false,
     }
 }
@@ -2100,7 +1876,6 @@ fn expr_has_free_unlabeled_loop_exit(expr: &NirExpr, loop_depth: u32) -> bool {
         NirExprKind::VariantConstruct { payload, .. } => payload
             .as_deref()
             .is_some_and(|p| expr_has_free_unlabeled_loop_exit(p, loop_depth)),
-        NirExprKind::Closure { body, .. } => expr_has_free_unlabeled_loop_exit(body, loop_depth),
         NirExprKind::Match { expr, arms } => {
             expr_has_free_unlabeled_loop_exit(expr, loop_depth)
                 || arms

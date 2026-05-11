@@ -123,29 +123,12 @@ fn analyze_uses_in_stmt(stmt: &NirStmt, refs: &mut IndexMap<u32, RefInfo>) {
         }
         NirStmtKind::Loop { body } => analyze_refs_in_block(body, refs),
         NirStmtKind::LabeledBlock { block, .. } => analyze_refs_in_block(block, refs),
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            analyze_uses_in_expr(scrutinee, refs);
-            analyze_refs_in_block(then_block, refs);
-            if let Some(eb) = else_block {
-                analyze_refs_in_block(eb, refs);
-            }
-        }
         NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 analyze_uses_in_expr(v, refs);
             }
         }
         NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => analyze_uses_in_expr(value, refs),
-        NirStmtKind::TaskReturn { .. } => {}
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     }
 }
 
@@ -154,11 +137,7 @@ fn analyze_uses_in_expr(expr: &NirExpr, refs: &mut IndexMap<u32, RefInfo>) {
         // Field access on a tracked ref local: this is the pattern we want to optimize.
         // The use is acceptable (field-access-only), so we DON'T mark it as non-eliminable.
         NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => {
+        => {
             if let NirExprKind::Local { index, .. } = &inner.kind
                 && refs.contains_key(index)
             {
@@ -249,9 +228,6 @@ fn analyze_uses_in_expr(expr: &NirExpr, refs: &mut IndexMap<u32, RefInfo>) {
                 analyze_uses_in_expr(payload_expr, refs);
             }
         }
-        NirExprKind::Closure { body, .. } => {
-            analyze_uses_in_expr(body, refs);
-        }
         NirExprKind::Match { expr: inner, arms } => {
             analyze_uses_in_expr(inner, refs);
             for arm in arms {
@@ -282,18 +258,8 @@ fn analyze_uses_in_expr(expr: &NirExpr, refs: &mut IndexMap<u32, RefInfo>) {
         | NirExprKind::BytesLiteral(_)
         | NirExprKind::Null
         | NirExprKind::Unit
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 
@@ -338,40 +304,19 @@ fn transform_stmt(stmt: &mut NirStmt, eliminable: &IndexMap<u32, RefInfo>) {
         }
         NirStmtKind::Loop { body } => transform_block(body, eliminable),
         NirStmtKind::LabeledBlock { block, .. } => transform_block(block, eliminable),
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            transform_expr(scrutinee, eliminable);
-            transform_block(then_block, eliminable);
-            if let Some(eb) = else_block {
-                transform_block(eb, eliminable);
-            }
-        }
         NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 transform_expr(v, eliminable);
             }
         }
         NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => transform_expr(value, eliminable),
-        NirStmtKind::TaskReturn { .. } => {}
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     }
 }
 
 fn transform_expr(expr: &mut NirExpr, eliminable: &IndexMap<u32, RefInfo>) {
     match &mut expr.kind {
         NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => {
+        => {
             // Check if the inner expression is a local that should be replaced
             if let NirExprKind::Local { index, .. } = &inner.kind
                 && let Some(info) = eliminable.get(index)
@@ -462,9 +407,6 @@ fn transform_expr(expr: &mut NirExpr, eliminable: &IndexMap<u32, RefInfo>) {
                 transform_expr(payload_expr, eliminable);
             }
         }
-        NirExprKind::Closure { body, .. } => {
-            transform_expr(body, eliminable);
-        }
         NirExprKind::Match { expr: inner, arms } => {
             transform_expr(inner, eliminable);
             for arm in arms {
@@ -496,18 +438,8 @@ fn transform_expr(expr: &mut NirExpr, eliminable: &IndexMap<u32, RefInfo>) {
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 
@@ -570,29 +502,12 @@ fn check_deref_only_uses_in_stmt(stmt: &NirStmt, refs: &mut IndexMap<u32, DerefO
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             collect_deref_only_refs_in_block(body, refs);
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            check_deref_only_uses_in_expr(scrutinee, refs);
-            collect_deref_only_refs_in_block(then_block, refs);
-            if let Some(eb) = else_block {
-                collect_deref_only_refs_in_block(eb, refs);
-            }
-        }
         NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 check_deref_only_uses_in_expr(v, refs);
             }
         }
         NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => check_deref_only_uses_in_expr(value, refs),
-        NirStmtKind::TaskReturn { .. } => {}
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     }
 }
 
@@ -692,9 +607,6 @@ fn check_deref_only_uses_in_expr(expr: &NirExpr, refs: &mut IndexMap<u32, DerefO
                 check_deref_only_uses_in_expr(p, refs);
             }
         }
-        NirExprKind::Closure { body, .. } => {
-            check_deref_only_uses_in_expr(body, refs);
-        }
         NirExprKind::Match { expr: inner, arms } => {
             check_deref_only_uses_in_expr(inner, refs);
             for arm in arms {
@@ -717,11 +629,7 @@ fn check_deref_only_uses_in_expr(expr: &NirExpr, refs: &mut IndexMap<u32, DerefO
             collect_deref_only_refs_in_block(default, refs);
         }
         NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => {
+        => {
             check_deref_only_uses_in_expr(inner, refs);
         }
         NirExprKind::IntLiteral { .. }
@@ -732,18 +640,8 @@ fn check_deref_only_uses_in_expr(expr: &NirExpr, refs: &mut IndexMap<u32, DerefO
         | NirExprKind::BytesLiteral(_)
         | NirExprKind::Null
         | NirExprKind::Unit
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 
@@ -798,19 +696,6 @@ fn rewrite_deref_only_refs_in_stmt(
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             rewrite_deref_only_refs_in_block(body, eliminable)
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            let mut changed = rewrite_deref_only_refs_in_expr(scrutinee, eliminable);
-            changed |= rewrite_deref_only_refs_in_block(then_block, eliminable);
-            if let Some(eb) = else_block {
-                changed |= rewrite_deref_only_refs_in_block(eb, eliminable);
-            }
-            changed
-        }
         NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 rewrite_deref_only_refs_in_expr(v, eliminable)
@@ -819,13 +704,6 @@ fn rewrite_deref_only_refs_in_stmt(
             }
         }
         NirStmtKind::Continue => false,
-        NirStmtKind::LetDestructure { value, .. } => {
-            rewrite_deref_only_refs_in_expr(value, eliminable)
-        }
-        NirStmtKind::TaskReturn { .. } => false,
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     }
 }
 
@@ -943,7 +821,6 @@ fn rewrite_deref_only_refs_in_expr(
                 false
             }
         }
-        NirExprKind::Closure { body, .. } => rewrite_deref_only_refs_in_expr(body, eliminable),
         NirExprKind::Match { expr: inner, arms } => {
             let mut changed = rewrite_deref_only_refs_in_expr(inner, eliminable);
             for arm in arms {
@@ -968,11 +845,7 @@ fn rewrite_deref_only_refs_in_expr(
             changed
         }
         NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => rewrite_deref_only_refs_in_expr(inner, eliminable),
+        => rewrite_deref_only_refs_in_expr(inner, eliminable),
         NirExprKind::Local { .. }
         | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
@@ -982,16 +855,9 @@ fn rewrite_deref_only_refs_in_expr(
         | NirExprKind::BytesLiteral(_)
         | NirExprKind::Null
         | NirExprKind::Unit
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. }
-        | NirExprKind::TemplateString { .. } => false,
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
+        => false,
     }
 }
 

@@ -154,13 +154,8 @@ impl NirRefVisitor for ReturnPurityChecker {
     }
 
     fn visit_expr(&mut self, expr: &NirExpr) {
-        // Closure bodies are a separate function scope. Their `Return`
-        // statements belong to the closure, not to the candidate we are
-        // evaluating; do not descend into them. This mirrors the closure
-        // skip in `ReturnVoidRewriter`.
-        if matches!(&expr.kind, NirExprKind::Closure { .. }) {
-            return;
-        }
+        // Closures are lowered to functor `StructLiteral`s before NIR is
+        // built, so there is no longer a body to skip past at this level.
         self.walk_expr(expr);
     }
 }
@@ -358,9 +353,9 @@ impl NirMutVisitor for CallRetyper<'_> {
     }
 }
 
-/// Rewrites every reachable `Return { value: Some(_) }` to `Return { value: None }`
-/// while leaving closure bodies alone — their `Return`s belong to the closure's
-/// own function scope, which DRVE evaluates separately if at all.
+/// Rewrites every reachable `Return { value: Some(_) }` to `Return { value: None }`.
+/// Closures are lowered to functor structs before NIR is built, so there is no
+/// inner closure-body function scope to skip past here.
 struct ReturnVoidRewriter;
 
 impl NirMutVisitor for ReturnVoidRewriter {
@@ -370,12 +365,5 @@ impl NirMutVisitor for ReturnVoidRewriter {
             return;
         }
         self.walk_stmt(stmt);
-    }
-
-    fn visit_expr(&mut self, expr: &mut NirExpr) {
-        if matches!(&expr.kind, NirExprKind::Closure { .. }) {
-            return;
-        }
-        self.walk_expr(expr);
     }
 }

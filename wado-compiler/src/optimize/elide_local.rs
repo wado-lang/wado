@@ -89,15 +89,6 @@ impl NirRefVisitor for ReadCollector<'_> {
                 self.visit_expr(value);
                 return;
             }
-            NirExprKind::Closure { captures, .. } => {
-                for cap in captures {
-                    self.kept.insert(cap.outer_index);
-                }
-                // Walking the body is a conservative over-mark: closure-locals
-                // share the index namespace numerically but refer to a
-                // different function's locals, so any matches will only
-                // suppress elision (never produce a wrong transform).
-            }
             _ => {}
         }
         self.walk_expr(expr);
@@ -181,9 +172,7 @@ pub(super) fn is_pure_expr(expr: &NirExpr) -> bool {
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => true,
         NirExprKind::Binary { left, right, .. } => is_pure_expr(left) && is_pure_expr(right),
         NirExprKind::Unary { expr: inner, op } => {

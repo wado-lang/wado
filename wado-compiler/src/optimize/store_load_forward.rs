@@ -81,31 +81,12 @@ fn precompute_modified_stmt(
         NirStmtKind::LabeledBlock { block, .. } => {
             modified.extend(precompute_modified_block(block, cache));
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            precompute_modified_expr(scrutinee, modified, cache);
-            modified.extend(precompute_modified_block(then_block, cache));
-            if let Some(eb) = else_block {
-                modified.extend(precompute_modified_block(eb, cache));
-            }
-        }
         NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 precompute_modified_expr(v, modified, cache);
             }
         }
         NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => {
-            precompute_modified_expr(value, modified, cache);
-        }
-        NirStmtKind::TaskReturn { .. } => {}
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     }
 }
 
@@ -119,12 +100,7 @@ fn precompute_modified_expr(
             if let NirExprKind::Local { index, .. } = &target.kind {
                 modified.insert(*index);
             }
-            if let NirExprKind::FieldAccess { expr: inner, .. }
-            | NirExprKind::TupleSpread { expr: inner }
-            | NirExprKind::TupleZip { expr: inner }
-            | NirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            } = &target.kind
+            if let NirExprKind::FieldAccess { expr: inner, .. } = &target.kind
                 && let NirExprKind::Local { index, .. } = &inner.kind
             {
                 modified.insert(*index);
@@ -137,11 +113,6 @@ fn precompute_modified_expr(
         }
         NirExprKind::Unary { expr: inner, .. }
         | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
         | NirExprKind::Cast { expr: inner, .. } => {
             precompute_modified_expr(inner, modified, cache);
         }
@@ -204,9 +175,6 @@ fn precompute_modified_expr(
             if let Some(p) = payload {
                 precompute_modified_expr(p, modified, cache);
             }
-        }
-        NirExprKind::Closure { body, .. } => {
-            precompute_modified_expr(body, modified, cache);
         }
         NirExprKind::Match { expr: inner, arms } => {
             precompute_modified_expr(inner, modified, cache);
@@ -354,29 +322,12 @@ fn collect_modified_in_stmt(stmt: &NirStmt, modified: &mut IndexSet<u32>) {
         NirStmtKind::LabeledBlock { block, .. } => {
             modified.extend(collect_modified_locals(block));
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_modified_in_expr(scrutinee, modified);
-            modified.extend(collect_modified_locals(then_block));
-            if let Some(eb) = else_block {
-                modified.extend(collect_modified_locals(eb));
-            }
-        }
         NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 collect_modified_in_expr(v, modified);
             }
         }
         NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => collect_modified_in_expr(value, modified),
-        NirStmtKind::TaskReturn { .. } => {}
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     }
 }
 
@@ -386,12 +337,7 @@ fn collect_modified_in_expr(expr: &NirExpr, modified: &mut IndexSet<u32>) {
             if let NirExprKind::Local { index, .. } = &target.kind {
                 modified.insert(*index);
             }
-            if let NirExprKind::FieldAccess { expr: inner, .. }
-            | NirExprKind::TupleSpread { expr: inner }
-            | NirExprKind::TupleZip { expr: inner }
-            | NirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            } = &target.kind
+            if let NirExprKind::FieldAccess { expr: inner, .. } = &target.kind
                 && let NirExprKind::Local { index, .. } = &inner.kind
             {
                 modified.insert(*index);
@@ -404,11 +350,6 @@ fn collect_modified_in_expr(expr: &NirExpr, modified: &mut IndexSet<u32>) {
         }
         NirExprKind::Unary { expr: inner, .. }
         | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
         | NirExprKind::Cast { expr: inner, .. } => {
             collect_modified_in_expr(inner, modified);
         }
@@ -471,9 +412,6 @@ fn collect_modified_in_expr(expr: &NirExpr, modified: &mut IndexSet<u32>) {
             if let Some(p) = payload {
                 collect_modified_in_expr(p, modified);
             }
-        }
-        NirExprKind::Closure { body, .. } => {
-            collect_modified_in_expr(body, modified);
         }
         NirExprKind::Match { expr: inner, arms } => {
             collect_modified_in_expr(inner, modified);
@@ -549,31 +487,12 @@ fn collect_unsafe_in_stmt(stmt: &NirStmt, unsafe_locals: &mut IndexSet<u32>) {
         NirStmtKind::LabeledBlock { block, .. } => {
             collect_unsafe_in_block(block, unsafe_locals);
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_unsafe_in_expr(scrutinee, unsafe_locals);
-            collect_unsafe_in_block(then_block, unsafe_locals);
-            if let Some(eb) = else_block {
-                collect_unsafe_in_block(eb, unsafe_locals);
-            }
-        }
         NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 collect_unsafe_in_expr(v, unsafe_locals);
             }
         }
         NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => collect_unsafe_in_expr(value, unsafe_locals),
-        NirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     }
 }
 
@@ -626,11 +545,6 @@ fn collect_unsafe_in_expr(expr: &NirExpr, unsafe_locals: &mut IndexSet<u32>) {
             collect_unsafe_in_expr(functor, unsafe_locals);
         }
         NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
         | NirExprKind::Cast { expr: inner, .. } => {
             collect_unsafe_in_expr(inner, unsafe_locals);
         }
@@ -669,13 +583,6 @@ fn collect_unsafe_in_expr(expr: &NirExpr, unsafe_locals: &mut IndexSet<u32>) {
                 collect_unsafe_in_expr(p, unsafe_locals);
             }
         }
-        NirExprKind::Closure { captures, body, .. } => {
-            // All captured outer locals are unsafe
-            for capture in captures {
-                unsafe_locals.insert(capture.outer_index);
-            }
-            collect_unsafe_in_expr(body, unsafe_locals);
-        }
         NirExprKind::Match { expr: inner, arms } => {
             collect_unsafe_in_expr(inner, unsafe_locals);
             for arm in arms {
@@ -707,9 +614,7 @@ fn collect_unsafe_in_expr(expr: &NirExpr, unsafe_locals: &mut IndexSet<u32>) {
         }
         // Leaf nodes
         NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::StringLiteral(_)
@@ -719,14 +624,6 @@ fn collect_unsafe_in_expr(expr: &NirExpr, unsafe_locals: &mut IndexSet<u32>) {
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 
@@ -866,32 +763,6 @@ fn forward_in_stmt(
             known.invalidate_modified(&modified);
             changed
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            let mut changed = forward_in_expr(scrutinee, known, unsafe_locals, type_table, cache);
-            let mut modified = lookup_modified(cache, then_block);
-            if let Some(eb) = else_block.as_ref() {
-                modified.extend(lookup_modified(cache, eb));
-            }
-            let mut then_known = known.clone();
-            changed |= forward_in_block(
-                then_block,
-                &mut then_known,
-                unsafe_locals,
-                type_table,
-                cache,
-            );
-            if let Some(eb) = else_block {
-                let mut else_known = known.clone();
-                changed |= forward_in_block(eb, &mut else_known, unsafe_locals, type_table, cache);
-            }
-            known.invalidate_modified(&modified);
-            changed
-        }
         NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 forward_in_expr(v, known, unsafe_locals, type_table, cache)
@@ -900,15 +771,6 @@ fn forward_in_stmt(
             }
         }
         NirStmtKind::Continue => false,
-        NirStmtKind::LetDestructure { value, .. } => {
-            forward_in_expr(value, known, unsafe_locals, type_table, cache)
-        }
-        NirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     }
 }
 
@@ -965,11 +827,6 @@ fn forward_in_expr(
             changed |= forward_in_expr(functor, known, unsafe_locals, type_table, cache);
         }
         NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
         | NirExprKind::Cast { expr: inner, .. } => {
             changed |= forward_in_expr(inner, known, unsafe_locals, type_table, cache);
         }
@@ -1027,9 +884,6 @@ fn forward_in_expr(
             if let Some(p) = payload {
                 changed |= forward_in_expr(p, known, unsafe_locals, type_table, cache);
             }
-        }
-        NirExprKind::Closure { .. } => {
-            // Don't propagate into closures
         }
         NirExprKind::Match { expr: inner, arms } => {
             changed |= forward_in_expr(inner, known, unsafe_locals, type_table, cache);
@@ -1092,9 +946,7 @@ fn forward_in_expr(
         }
         // Leaf nodes
         NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::StringLiteral(_)
@@ -1104,14 +956,6 @@ fn forward_in_expr(
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 
     changed

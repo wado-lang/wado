@@ -196,22 +196,6 @@ impl NirOptVisitor for ConstFoldVisitor<'_> {
                 self.interpreter.clear_fields();
                 return changed;
             }
-            NirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                let mut changed = self.visit_expr(scrutinee);
-                let snap = self.interpreter.snapshot_fields();
-                changed |= self.visit_block(then_block);
-                self.interpreter.restore_fields(snap);
-                if let Some(eb) = else_block {
-                    changed |= self.visit_block(eb);
-                }
-                self.interpreter.clear_fields();
-                return changed;
-            }
             _ => {}
         }
 
@@ -309,17 +293,6 @@ impl NirOptVisitor for ConstFoldVisitor<'_> {
             }
             NirExprKind::LabeledBlock { block, .. } => {
                 let mut changed = self.visit_block(block);
-                self.interpreter.clear_fields();
-                changed |= self.interpreter.reduce_local(expr);
-                return changed;
-            }
-            NirExprKind::Closure { body, .. } => {
-                // Closure body executes in its own scope; clear
-                // before walking so the body sees a clean slate, and
-                // clear again after so outer code doesn't pick up
-                // anything leaked.
-                self.interpreter.clear_fields();
-                let mut changed = self.visit_expr(body);
                 self.interpreter.clear_fields();
                 changed |= self.interpreter.reduce_local(expr);
                 return changed;
@@ -524,13 +497,6 @@ impl ConstFoldVisitor<'_> {
                 self.interpreter.bind_local(*local_index, lat);
                 self.update_field_env_from_let(*local_index, value);
             }
-            // LetDestructure binds multiple locals via pattern matching
-            // (`let [a, b] = tuple`). Tuple-aware lattice values aren't
-            // modelled yet, so leave the destructured locals
-            // Unevaluated. They'll resolve to NonConst the first time
-            // they're observed in env, which is the correct
-            // conservative answer.
-            NirStmtKind::LetDestructure { .. } => {}
             _ => {}
         }
     }

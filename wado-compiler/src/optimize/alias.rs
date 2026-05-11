@@ -212,9 +212,6 @@ fn collect_alias_edges_in_stmt(
             }
             collect_alias_edges_in_expr(value, type_table, edges);
         }
-        NirStmtKind::LetDestructure { value, .. } => {
-            collect_alias_edges_in_expr(value, type_table, edges);
-        }
         NirStmtKind::Expr(expr) => {
             if let NirExprKind::Assign { target, value } = &expr.kind
                 && let NirExprKind::Local { index: dst, .. } = &target.kind
@@ -244,18 +241,6 @@ fn collect_alias_edges_in_stmt(
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             collect_alias_edges_in_block(body, type_table, edges);
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_alias_edges_in_expr(scrutinee, type_table, edges);
-            collect_alias_edges_in_block(then_block, type_table, edges);
-            if let Some(eb) = else_block {
-                collect_alias_edges_in_block(eb, type_table, edges);
-            }
-        }
         _ => {}
     }
 }
@@ -281,11 +266,6 @@ fn expr_for_each_child(expr: &NirExpr, f: &mut dyn FnMut(&NirExpr)) {
         NirExprKind::Unary { expr: inner, .. }
         | NirExprKind::FieldAccess { expr: inner, .. }
         | NirExprKind::Cast { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
         | NirExprKind::VariantTag { expr: inner }
         | NirExprKind::VariantTest { expr: inner, .. }
         | NirExprKind::VariantPayload { expr: inner, .. } => f(inner),
@@ -354,7 +334,6 @@ fn expr_for_each_child(expr: &NirExpr, f: &mut dyn FnMut(&NirExpr)) {
                 f(p);
             }
         }
-        NirExprKind::Closure { body, .. } => f(body),
         NirExprKind::Match { expr: inner, arms } => {
             f(inner);
             for arm in arms {
@@ -382,9 +361,7 @@ fn expr_for_each_child(expr: &NirExpr, f: &mut dyn FnMut(&NirExpr)) {
             }
         }
         NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::StringLiteral(_)
@@ -394,20 +371,12 @@ fn expr_for_each_child(expr: &NirExpr, f: &mut dyn FnMut(&NirExpr)) {
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 
 fn stmt_for_each_child(stmt: &NirStmt, f: &mut dyn FnMut(&NirExpr)) {
     match &stmt.kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => f(value),
+        NirStmtKind::Let { value, .. } => f(value),
         NirStmtKind::Expr(e) => f(e),
         NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
@@ -432,22 +401,6 @@ fn stmt_for_each_child(stmt: &NirStmt, f: &mut dyn FnMut(&NirExpr)) {
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             for s in &body.stmts {
                 stmt_for_each_child(s, f);
-            }
-        }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            f(scrutinee);
-            for s in &then_block.stmts {
-                stmt_for_each_child(s, f);
-            }
-            if let Some(eb) = else_block {
-                for s in &eb.stmts {
-                    stmt_for_each_child(s, f);
-                }
             }
         }
         _ => {}
@@ -477,7 +430,6 @@ fn collect_aliased_in_stmt(stmt: &NirStmt, out: &mut IndexSet<u32>) {
             }
             collect_aliased_in_expr(value, out);
         }
-        NirStmtKind::LetDestructure { value, .. } => collect_aliased_in_expr(value, out),
         NirStmtKind::Expr(expr) => {
             // `dst = src` (Assign Local→Local) — same aliasing.
             if let NirExprKind::Assign { target, value } = &expr.kind
@@ -507,18 +459,6 @@ fn collect_aliased_in_stmt(stmt: &NirStmt, out: &mut IndexSet<u32>) {
         }
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             collect_aliased_in_block(body, out);
-        }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_aliased_in_expr(scrutinee, out);
-            collect_aliased_in_block(then_block, out);
-            if let Some(eb) = else_block {
-                collect_aliased_in_block(eb, out);
-            }
         }
         _ => {}
     }
@@ -568,12 +508,6 @@ fn collect_aliased_in_expr(expr: &NirExpr, out: &mut IndexSet<u32>) {
                 collect_aliased_in_expr(arg, out);
             }
         }
-        NirExprKind::Closure { captures, body, .. } => {
-            for capture in captures {
-                out.insert(capture.outer_index);
-            }
-            collect_aliased_in_expr(body, out);
-        }
         NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             collect_aliased_in_block(block, out);
         }
@@ -610,11 +544,6 @@ fn collect_aliased_in_expr(expr: &NirExpr, out: &mut IndexSet<u32>) {
         }
         NirExprKind::FieldAccess { expr: inner, .. }
         | NirExprKind::Cast { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
         | NirExprKind::VariantTag { expr: inner }
         | NirExprKind::VariantTest { expr: inner, .. }
         | NirExprKind::VariantPayload { expr: inner, .. } => {

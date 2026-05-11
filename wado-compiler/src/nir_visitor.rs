@@ -7,9 +7,7 @@
 //!
 //! Also provides utility functions for common NIR queries like `block_has_break_to`.
 
-use crate::nir::{
-    NirBlock, NirExpr, NirExprKind, NirPattern, NirStmt, NirStmtKind, NirTemplatePart,
-};
+use crate::nir::{NirBlock, NirExpr, NirExprKind, NirPattern, NirStmt, NirStmtKind};
 use crate::nir_package::NirPackage;
 
 /// Trait for mutable traversal of NIR trees.
@@ -73,30 +71,6 @@ pub trait NirMutVisitor {
             NirStmtKind::LabeledBlock { block, .. } => {
                 self.visit_block(block);
             }
-            NirStmtKind::IfLet {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                self.visit_expr(scrutinee);
-                self.visit_pattern(pattern);
-                self.visit_block(then_block);
-                if let Some(else_blk) = else_block {
-                    self.visit_block(else_blk);
-                }
-            }
-            NirStmtKind::LetDestructure { pattern, value, .. } => {
-                self.visit_pattern(pattern);
-                self.visit_expr(value);
-            }
-            NirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase");
-            }
-            NirStmtKind::VariadicForOf { iterable, body, .. } => {
-                self.visit_expr(iterable);
-                self.visit_block(body);
-            }
         }
     }
 
@@ -140,9 +114,7 @@ pub trait NirMutVisitor {
             | NirExprKind::Null
             | NirExprKind::Unit
             | NirExprKind::Local { .. }
-            | NirExprKind::FuncRef { .. }
             | NirExprKind::GlobalVarGet { .. }
-            | NirExprKind::Capture { .. }
             | NirExprKind::EnumConstruct { .. } => {}
             NirExprKind::GlobalVarSet { value, .. } => {
                 self.visit_expr(value);
@@ -154,11 +126,6 @@ pub trait NirMutVisitor {
             NirExprKind::Unary { expr: inner, .. }
             | NirExprKind::Cast { expr: inner, .. }
             | NirExprKind::FieldAccess { expr: inner, .. }
-            | NirExprKind::TupleSpread { expr: inner }
-            | NirExprKind::TupleZip { expr: inner }
-            | NirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            }
             | NirExprKind::VariantTag { expr: inner }
             | NirExprKind::VariantTest { expr: inner, .. }
             | NirExprKind::VariantPayload { expr: inner, .. }
@@ -226,9 +193,6 @@ pub trait NirMutVisitor {
                     self.visit_expr(elem);
                 }
             }
-            NirExprKind::Closure { body, .. } => {
-                self.visit_expr(body);
-            }
             NirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload_expr) = payload {
                     self.visit_expr(payload_expr);
@@ -251,22 +215,6 @@ pub trait NirMutVisitor {
                     self.visit_block(arm);
                 }
                 self.visit_block(default);
-            }
-            NirExprKind::TemplateString { parts } => {
-                for part in parts {
-                    if let NirTemplatePart::Interpolation { expr: inner, .. } = part {
-                        self.visit_expr(inner);
-                    }
-                }
-            }
-            NirExprKind::WithHandler { bindings, body, .. } => {
-                for binding in bindings {
-                    self.visit_expr(&mut binding.handler);
-                }
-                self.visit_block(body);
-            }
-            NirExprKind::Resume { value } => {
-                self.visit_expr(value);
             }
         }
     }
@@ -362,30 +310,6 @@ pub trait NirRefVisitor {
             NirStmtKind::LabeledBlock { block, .. } => {
                 self.visit_block(block);
             }
-            NirStmtKind::IfLet {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                self.visit_expr(scrutinee);
-                self.visit_pattern(pattern);
-                self.visit_block(then_block);
-                if let Some(else_blk) = else_block {
-                    self.visit_block(else_blk);
-                }
-            }
-            NirStmtKind::LetDestructure { pattern, value, .. } => {
-                self.visit_pattern(pattern);
-                self.visit_expr(value);
-            }
-            NirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase");
-            }
-            NirStmtKind::VariadicForOf { iterable, body, .. } => {
-                self.visit_expr(iterable);
-                self.visit_block(body);
-            }
         }
     }
 
@@ -400,9 +324,7 @@ pub trait NirRefVisitor {
             | NirExprKind::Null
             | NirExprKind::Unit
             | NirExprKind::Local { .. }
-            | NirExprKind::FuncRef { .. }
             | NirExprKind::GlobalVarGet { .. }
-            | NirExprKind::Capture { .. }
             | NirExprKind::EnumConstruct { .. } => {}
             NirExprKind::GlobalVarSet { value, .. } => {
                 self.visit_expr(value);
@@ -414,11 +336,6 @@ pub trait NirRefVisitor {
             NirExprKind::Unary { expr: inner, .. }
             | NirExprKind::Cast { expr: inner, .. }
             | NirExprKind::FieldAccess { expr: inner, .. }
-            | NirExprKind::TupleSpread { expr: inner }
-            | NirExprKind::TupleZip { expr: inner }
-            | NirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            }
             | NirExprKind::VariantTag { expr: inner }
             | NirExprKind::VariantTest { expr: inner, .. }
             | NirExprKind::VariantPayload { expr: inner, .. }
@@ -486,9 +403,6 @@ pub trait NirRefVisitor {
                     self.visit_expr(elem);
                 }
             }
-            NirExprKind::Closure { body, .. } => {
-                self.visit_expr(body);
-            }
             NirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload_expr) = payload {
                     self.visit_expr(payload_expr);
@@ -511,22 +425,6 @@ pub trait NirRefVisitor {
                     self.visit_block(arm);
                 }
                 self.visit_block(default);
-            }
-            NirExprKind::TemplateString { parts } => {
-                for part in parts {
-                    if let NirTemplatePart::Interpolation { expr: inner, .. } = part {
-                        self.visit_expr(inner);
-                    }
-                }
-            }
-            NirExprKind::WithHandler { bindings, body, .. } => {
-                for binding in bindings {
-                    self.visit_expr(&binding.handler);
-                }
-                self.visit_block(body);
-            }
-            NirExprKind::Resume { value } => {
-                self.visit_expr(value);
             }
         }
     }
@@ -622,11 +520,6 @@ pub fn opt_walk_block(visitor: &mut impl NirOptVisitor, block: &mut NirBlock) ->
 pub fn opt_walk_stmt(visitor: &mut impl NirOptVisitor, stmt: &mut NirStmt) -> bool {
     match &mut stmt.kind {
         NirStmtKind::Let { value, .. } => visitor.visit_expr(value),
-        NirStmtKind::LetDestructure { pattern, value, .. } => {
-            let mut changed = visitor.visit_pattern(pattern);
-            changed |= visitor.visit_expr(value);
-            changed
-        }
         NirStmtKind::Expr(expr) => visitor.visit_expr(expr),
         NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
             value.as_mut().is_some_and(|v| visitor.visit_expr(v))
@@ -645,27 +538,7 @@ pub fn opt_walk_stmt(visitor: &mut impl NirOptVisitor, stmt: &mut NirStmt) -> bo
         }
         NirStmtKind::Loop { body } => visitor.visit_block(body),
         NirStmtKind::LabeledBlock { block, .. } => visitor.visit_block(block),
-        NirStmtKind::IfLet {
-            scrutinee,
-            pattern,
-            then_block,
-            else_block,
-        } => {
-            let mut changed = visitor.visit_expr(scrutinee);
-            changed |= visitor.visit_pattern(pattern);
-            changed |= visitor.visit_block(then_block);
-            if let Some(eb) = else_block {
-                changed |= visitor.visit_block(eb);
-            }
-            changed
-        }
         NirStmtKind::Continue => false,
-        NirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     }
 }
 
@@ -679,11 +552,6 @@ pub fn opt_walk_expr(visitor: &mut impl NirOptVisitor, expr: &mut NirExpr) -> bo
         }
         NirExprKind::Unary { expr: inner, .. }
         | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
         | NirExprKind::Cast { expr: inner, .. }
         | NirExprKind::VariantTag { expr: inner }
         | NirExprKind::VariantTest { expr: inner, .. }
@@ -762,9 +630,6 @@ pub fn opt_walk_expr(visitor: &mut impl NirOptVisitor, expr: &mut NirExpr) -> bo
                 changed |= visitor.visit_expr(p);
             }
         }
-        NirExprKind::Closure { body, .. } => {
-            changed |= visitor.visit_expr(body);
-        }
         NirExprKind::GlobalVarSet { value, .. } => {
             changed |= visitor.visit_expr(value);
         }
@@ -782,9 +647,7 @@ pub fn opt_walk_expr(visitor: &mut impl NirOptVisitor, expr: &mut NirExpr) -> bo
         }
         // Leaf nodes
         NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::StringLiteral(_)
@@ -794,14 +657,6 @@ pub fn opt_walk_expr(visitor: &mut impl NirOptVisitor, expr: &mut NirExpr) -> bo
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
     changed
 }
@@ -823,9 +678,7 @@ pub fn stmt_has_break_to(label: &str, stmt: &NirStmt) -> bool {
         NirStmtKind::Break { value, .. } => {
             value.as_ref().is_some_and(|v| expr_has_break_to(label, v))
         }
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
-            expr_has_break_to(label, value)
-        }
+        NirStmtKind::Let { value, .. } => expr_has_break_to(label, value),
         NirStmtKind::Expr(expr) => expr_has_break_to(label, expr),
         NirStmtKind::Return { value } => {
             value.as_ref().is_some_and(|v| expr_has_break_to(label, v))
@@ -844,20 +697,7 @@ pub fn stmt_has_break_to(label: &str, stmt: &NirStmt) -> bool {
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             block_has_break_to(label, body)
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            expr_has_break_to(label, scrutinee)
-                || block_has_break_to(label, then_block)
-                || else_block
-                    .as_ref()
-                    .is_some_and(|b| block_has_break_to(label, b))
-        }
         NirStmtKind::Continue => false,
-        NirStmtKind::TaskReturn { .. } | NirStmtKind::VariadicForOf { .. } => false,
     }
 }
 
@@ -902,11 +742,6 @@ pub fn expr_has_break_to(label: &str, expr: &NirExpr) -> bool {
         NirExprKind::Unary { expr, .. }
         | NirExprKind::Cast { expr, .. }
         | NirExprKind::FieldAccess { expr, .. }
-        | NirExprKind::TupleSpread { expr }
-        | NirExprKind::TupleZip { expr }
-        | NirExprKind::TypePackExpansion {
-            call_expr: expr, ..
-        }
         | NirExprKind::VariantTag { expr }
         | NirExprKind::VariantTest { expr, .. }
         | NirExprKind::VariantPayload { expr, .. }
@@ -934,13 +769,10 @@ pub fn expr_has_break_to(label: &str, expr: &NirExpr) -> bool {
         NirExprKind::IndirectCall { callee, args } => {
             expr_has_break_to(label, callee) || args.iter().any(|a| expr_has_break_to(label, a))
         }
-        NirExprKind::Closure { body, .. } => expr_has_break_to(label, body),
         NirExprKind::GlobalVarSet { value, .. } => expr_has_break_to(label, value),
         // Leaf nodes
         NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::StringLiteral(_)
@@ -950,9 +782,6 @@ pub fn expr_has_break_to(label: &str, expr: &NirExpr) -> bool {
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::EnumConstruct { .. } => false,
-        NirExprKind::TemplateString { .. } => false,
-        NirExprKind::WithHandler { body, .. } => block_has_break_to(label, body),
-        NirExprKind::Resume { value } => expr_has_break_to(label, value),
     }
 }
 

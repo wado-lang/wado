@@ -10,19 +10,20 @@ use crate::flat_package::FlatPackage;
 use crate::nir;
 use crate::nir::{
     NirBlock, NirCapture, NirEnum, NirEnumCase, NirExpr, NirExprKind, NirField, NirFlags,
-    NirFlagsMember, NirFunction, NirGlobal, NirHandlerBinding, NirImport, NirLiteralPattern,
-    NirLocal, NirMatchArm, NirParam, NirPattern, NirStmt, NirStmtKind, NirStruct, NirStructField,
-    NirStructPatternField, NirTemplatePart, NirTest, NirTypeParam, NirVariantCase, NirVariantDecl,
+    NirFlagsMember, NirFunction, NirGlobal, NirImport, NirLiteralPattern, NirLocal, NirMatchArm,
+    NirParam, NirPattern, NirStmt, NirStmtKind, NirStruct, NirStructField, NirStructPatternField,
+    NirTest, NirTypeParam, NirVariantCase, NirVariantDecl,
 };
 use crate::nir_package::NirPackage;
 use crate::tir;
 use crate::tir::{
     CallArg, ClosureFunctor, FunctionRef, MonomorphInfo, TirBlock, TirCapture, TirEnum,
     TirEnumCase, TirExpr, TirExprKind, TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
-    TirHandlerBinding, TirImport, TirLiteralPattern, TirLocal, TirMatchArm, TirParam, TirPattern,
-    TirStmt, TirStmtKind, TirStruct, TirStructField, TirStructPatternField, TirTemplatePart,
-    TirTest, TirTypeParam, TirVariantCase, TirVariantDecl,
+    TirImport, TirLiteralPattern, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirStruct, TirStructField, TirStructPatternField, TirTest, TirTypeParam,
+    TirVariantCase, TirVariantDecl,
 };
+
 
 /// Convert a [`FlatPackage`] (TIR-shaped) into a [`NirPackage`] (NIR-shaped).
 ///
@@ -275,9 +276,9 @@ fn convert_stmt_kind(kind: &TirStmtKind) -> NirStmtKind {
         TirStmtKind::Return { value } => NirStmtKind::Return {
             value: value.as_ref().map(convert_expr),
         },
-        TirStmtKind::TaskReturn { value } => NirStmtKind::TaskReturn {
-            value: convert_expr(value),
-        },
+        TirStmtKind::TaskReturn { .. } => unreachable!(
+            "TirStmtKind::TaskReturn should be eliminated by synthesis::cm_binding before nir_convert::flat_to_nir runs"
+        ),
         TirStmtKind::If {
             condition,
             then_block,
@@ -299,41 +300,15 @@ fn convert_stmt_kind(kind: &TirStmtKind) -> NirStmtKind {
             label: label.clone(),
             block: convert_block(block),
         },
-        TirStmtKind::IfLet {
-            scrutinee,
-            pattern,
-            then_block,
-            else_block,
-        } => NirStmtKind::IfLet {
-            scrutinee: convert_expr(scrutinee),
-            pattern: convert_pattern(pattern),
-            then_block: convert_block(then_block),
-            else_block: else_block.as_ref().map(convert_block),
-        },
-        TirStmtKind::LetDestructure {
-            pattern,
-            is_mut,
-            value,
-        } => NirStmtKind::LetDestructure {
-            pattern: convert_pattern(pattern),
-            is_mut: *is_mut,
-            value: convert_expr(value),
-        },
-        TirStmtKind::VariadicForOf {
-            iterable,
-            binding_name,
-            binding_local,
-            is_mut,
-            body,
-            unique_id,
-        } => NirStmtKind::VariadicForOf {
-            iterable: convert_expr(iterable),
-            binding_name: binding_name.clone(),
-            binding_local: *binding_local,
-            is_mut: *is_mut,
-            body: convert_block(body),
-            unique_id: *unique_id,
-        },
+        TirStmtKind::IfLet { .. } => unreachable!(
+            "TirStmtKind::IfLet should be lowered by lower::pattern before nir_convert::flat_to_nir runs"
+        ),
+        TirStmtKind::LetDestructure { .. } => unreachable!(
+            "TirStmtKind::LetDestructure should be lowered by lower::pattern before nir_convert::flat_to_nir runs"
+        ),
+        TirStmtKind::VariadicForOf { .. } => unreachable!(
+            "TirStmtKind::VariadicForOf should be expanded by monomorphize before nir_convert::flat_to_nir runs"
+        ),
     }
 }
 
@@ -365,13 +340,9 @@ fn convert_expr_kind(kind: &TirExprKind) -> NirExprKind {
             index: *index,
             name: name.clone(),
         },
-        TirExprKind::FuncRef {
-            module_source,
-            name,
-        } => NirExprKind::FuncRef {
-            module_source: module_source.clone(),
-            name: name.clone(),
-        },
+        TirExprKind::FuncRef { .. } => unreachable!(
+            "TirExprKind::FuncRef should be wrapped in a Closure by lower::closure before nir_convert::flat_to_nir runs"
+        ),
         TirExprKind::GlobalVarGet {
             module_source,
             name,
@@ -469,38 +440,21 @@ fn convert_expr_kind(kind: &TirExprKind) -> NirExprKind {
         TirExprKind::TupleLiteral { elements } => NirExprKind::TupleLiteral {
             elements: elements.iter().map(convert_expr).collect(),
         },
-        TirExprKind::TupleSpread { expr } => NirExprKind::TupleSpread {
-            expr: Box::new(convert_expr(expr)),
-        },
-        TirExprKind::TupleZip { expr } => NirExprKind::TupleZip {
-            expr: Box::new(convert_expr(expr)),
-        },
-        TirExprKind::TypePackExpansion {
-            call_expr,
-            pack_type_id,
-        } => NirExprKind::TypePackExpansion {
-            call_expr: Box::new(convert_expr(call_expr)),
-            pack_type_id: *pack_type_id,
-        },
-        TirExprKind::Capture { index, name } => NirExprKind::Capture {
-            index: *index,
-            name: name.clone(),
-        },
-        TirExprKind::Closure {
-            params,
-            body,
-            captures,
-            functor_id,
-            address_taken_locals,
-            body_locals,
-        } => NirExprKind::Closure {
-            params: params.clone(),
-            body: Box::new(convert_expr(body)),
-            captures: captures.iter().map(convert_capture).collect(),
-            functor_id: *functor_id,
-            address_taken_locals: address_taken_locals.clone(),
-            body_locals: body_locals.iter().map(convert_local).collect(),
-        },
+        TirExprKind::TupleSpread { .. } => unreachable!(
+            "TirExprKind::TupleSpread should be expanded by monomorphize before nir_convert::flat_to_nir runs"
+        ),
+        TirExprKind::TupleZip { .. } => unreachable!(
+            "TirExprKind::TupleZip should be expanded by monomorphize before nir_convert::flat_to_nir runs"
+        ),
+        TirExprKind::TypePackExpansion { .. } => unreachable!(
+            "TirExprKind::TypePackExpansion should be expanded by monomorphize before nir_convert::flat_to_nir runs"
+        ),
+        TirExprKind::Capture { .. } => unreachable!(
+            "TirExprKind::Capture should be lowered to FieldAccess by lower::closure before nir_convert::flat_to_nir runs"
+        ),
+        TirExprKind::Closure { .. } => unreachable!(
+            "TirExprKind::Closure should be lowered to StructLiteral/ClosureToCanonical by lower::closure before nir_convert::flat_to_nir runs"
+        ),
         TirExprKind::IndirectCall { callee, args } => NirExprKind::IndirectCall {
             callee: Box::new(convert_expr(callee)),
             args: args.iter().map(convert_expr).collect(),
@@ -577,21 +531,15 @@ fn convert_expr_kind(kind: &TirExprKind) -> NirExprKind {
             arms: arms.iter().map(convert_block).collect(),
             default: convert_block(default),
         },
-        TirExprKind::TemplateString { parts } => NirExprKind::TemplateString {
-            parts: parts.iter().map(convert_template_part).collect(),
-        },
-        TirExprKind::WithHandler {
-            bindings,
-            body,
-            result_type,
-        } => NirExprKind::WithHandler {
-            bindings: bindings.iter().map(convert_handler_binding).collect(),
-            body: convert_block(body),
-            result_type: *result_type,
-        },
-        TirExprKind::Resume { value } => NirExprKind::Resume {
-            value: Box::new(convert_expr(value)),
-        },
+        TirExprKind::TemplateString { .. } => unreachable!(
+            "TirExprKind::TemplateString should be expanded by synthesis::template before nir_convert::flat_to_nir runs"
+        ),
+        TirExprKind::WithHandler { .. } => unreachable!(
+            "TirExprKind::WithHandler should be desugared by synthesis::effect_dispatch before nir_convert::flat_to_nir runs"
+        ),
+        TirExprKind::Resume { .. } => unreachable!(
+            "TirExprKind::Resume should be desugared by synthesis::effect_dispatch before nir_convert::flat_to_nir runs"
+        ),
     }
 }
 
@@ -686,17 +634,6 @@ fn convert_match_arm(arm: &TirMatchArm) -> NirMatchArm {
     }
 }
 
-fn convert_handler_binding(binding: &TirHandlerBinding) -> NirHandlerBinding {
-    NirHandlerBinding {
-        effect: binding.effect.clone(),
-        trait_type_args: binding.trait_type_args.clone(),
-        handler: convert_expr(&binding.handler),
-        handler_type: binding.handler_type,
-        span: binding.span,
-        bundle_group: binding.bundle_group,
-    }
-}
-
 fn convert_struct_field(field: &TirStructField) -> NirStructField {
     NirStructField {
         name: field.name.clone(),
@@ -711,29 +648,6 @@ fn convert_capture(c: &TirCapture) -> NirCapture {
         outer_index: c.outer_index,
         type_id: c.type_id,
         is_mut: c.is_mut,
-    }
-}
-
-fn convert_template_part(part: &TirTemplatePart) -> NirTemplatePart {
-    match part {
-        TirTemplatePart::Literal(s) => NirTemplatePart::Literal(s.clone()),
-        TirTemplatePart::Interpolation { expr, format_spec } => NirTemplatePart::Interpolation {
-            expr: Box::new(convert_expr(expr)),
-            format_spec: format_spec.as_ref().map(convert_template_format_spec),
-        },
-    }
-}
-
-fn convert_template_format_spec(spec: &tir::TemplateFormatSpec) -> nir::TemplateFormatSpec {
-    nir::TemplateFormatSpec {
-        fill: spec.fill,
-        align: spec.align,
-        sign_plus: spec.sign_plus,
-        alternate: spec.alternate,
-        zero_pad: spec.zero_pad,
-        width: spec.width,
-        precision: spec.precision,
-        type_char: spec.type_char,
     }
 }
 

@@ -152,7 +152,6 @@ fn try_split_stmt(expr: &NirExpr, ctx: &Ctx) -> Option<Vec<NirStmt>> {
 fn is_duplicable_receiver(e: &NirExpr) -> bool {
     match &e.kind {
         NirExprKind::Local { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::GlobalVarGet { .. } => true,
         NirExprKind::FieldAccess { expr: inner, .. } => is_duplicable_receiver(inner),
         NirExprKind::Unary {
@@ -165,10 +164,10 @@ fn is_duplicable_receiver(e: &NirExpr) -> bool {
 
 fn rewrite_stmt(stmt: &mut NirStmt, ctx: &Ctx, changed: &mut bool) {
     match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Let { value, .. } => {
             *changed |= rewrite_expr(value, ctx);
         }
-        NirStmtKind::Expr(expr) | NirStmtKind::TaskReturn { value: expr } => {
+        NirStmtKind::Expr(expr) => {
             *changed |= rewrite_expr(expr, ctx);
         }
         NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
@@ -188,22 +187,6 @@ fn rewrite_stmt(stmt: &mut NirStmt, ctx: &Ctx, changed: &mut bool) {
             }
         }
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            *changed |= rewrite_block(body, ctx);
-        }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            *changed |= rewrite_expr(scrutinee, ctx);
-            *changed |= rewrite_block(then_block, ctx);
-            if let Some(eb) = else_block {
-                *changed |= rewrite_block(eb, ctx);
-            }
-        }
-        NirStmtKind::VariadicForOf { iterable, body, .. } => {
-            *changed |= rewrite_expr(iterable, ctx);
             *changed |= rewrite_block(body, ctx);
         }
         NirStmtKind::Continue => {}
@@ -294,11 +277,6 @@ fn rewrite_expr(expr: &mut NirExpr, ctx: &Ctx) -> bool {
         NirExprKind::Unary { expr: inner, .. }
         | NirExprKind::Cast { expr: inner, .. }
         | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
         | NirExprKind::VariantTag { expr: inner }
         | NirExprKind::VariantTest { expr: inner, .. }
         | NirExprKind::VariantPayload { expr: inner, .. }
@@ -325,7 +303,6 @@ fn rewrite_expr(expr: &mut NirExpr, ctx: &Ctx) -> bool {
                 false
             }
         }
-        NirExprKind::Closure { body, .. } => rewrite_expr(body, ctx),
         NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::BoolLiteral(_)
@@ -335,15 +312,7 @@ fn rewrite_expr(expr: &mut NirExpr, ctx: &Ctx) -> bool {
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => false,
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => unreachable!(
-            "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-        ),
     }
 }

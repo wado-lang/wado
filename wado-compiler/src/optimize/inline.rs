@@ -34,11 +34,7 @@ fn count_expr(expr: &NirExpr) -> usize {
             count_expr(receiver) + args.iter().map(|a| count_expr(&a.expr)).sum::<usize>()
         }
         NirExprKind::FieldAccess { expr, .. }
-        | NirExprKind::TupleSpread { expr }
-        | NirExprKind::TupleZip { expr }
-        | NirExprKind::TypePackExpansion {
-            call_expr: expr, ..
-        } => count_expr(expr),
+        => count_expr(expr),
         NirExprKind::Index { expr, index, .. } => count_expr(expr) + count_expr(index),
         NirExprKind::TupleLiteral { elements } => elements.iter().map(count_expr).sum(),
         NirExprKind::StructLiteral { fields, .. } => {
@@ -77,18 +73,13 @@ fn count_expr(expr: &NirExpr) -> usize {
         | NirExprKind::Unit
         | NirExprKind::Local { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::Null => 0,
         // Closure and effect-related expressions
-        NirExprKind::Capture { .. } | NirExprKind::EnumConstruct { .. } => 0,
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
+        NirExprKind::EnumConstruct { .. } => 0,
         NirExprKind::CmRawCall { args, .. } => args.iter().map(count_expr).sum(),
         NirExprKind::IndirectCall { callee, args } => {
             count_expr(callee) + args.iter().map(count_expr).sum::<usize>()
         }
-        NirExprKind::Closure { body, .. } => count_expr(body),
         NirExprKind::ClosureToCanonical { functor, .. } => count_expr(functor),
         NirExprKind::Switch {
             scrutinee,
@@ -105,11 +96,6 @@ fn count_expr(expr: &NirExpr) -> usize {
         | NirExprKind::VariantTest { expr, .. }
         | NirExprKind::VariantPayload { expr, .. } => count_expr(expr),
         NirExprKind::LabeledBlock { block, .. } => count_block_exprs(block),
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 
@@ -121,7 +107,6 @@ fn count_block_exprs(block: &NirBlock) -> usize {
         .map(|s| match &s.kind {
             NirStmtKind::Expr(expr) => count_expr(expr),
             NirStmtKind::Let { value, .. } => count_expr(value),
-            NirStmtKind::LetDestructure { value, .. } => count_expr(value),
             NirStmtKind::Return { value } => value.as_ref().map_or(0, count_expr),
             NirStmtKind::If {
                 condition,
@@ -133,26 +118,10 @@ fn count_block_exprs(block: &NirBlock) -> usize {
                     + count_block_exprs(then_block)
                     + else_block.as_ref().map_or(0, count_block_exprs)
             }
-            NirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                count_expr(scrutinee)
-                    + count_block_exprs(then_block)
-                    + else_block.as_ref().map_or(0, count_block_exprs)
-            }
             NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
                 count_block_exprs(body)
             }
             NirStmtKind::Break { .. } | NirStmtKind::Continue => 0,
-            NirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            NirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
-            }
         })
         .sum()
 }
@@ -225,22 +194,8 @@ fn collect_inner_labels_from_block(block: &NirBlock, labels: &mut IndexSet<Strin
                     collect_inner_labels_from_block(else_block, labels);
                 }
             }
-            NirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                collect_inner_labels_from_expr(scrutinee, labels);
-                collect_inner_labels_from_block(then_block, labels);
-                if let Some(else_block) = else_block {
-                    collect_inner_labels_from_block(else_block, labels);
-                }
-            }
             NirStmtKind::Loop { body } => collect_inner_labels_from_block(body, labels),
-            NirStmtKind::Expr(expr)
-            | NirStmtKind::Let { value: expr, .. }
-            | NirStmtKind::LetDestructure { value: expr, .. } => {
+            NirStmtKind::Expr(expr) | NirStmtKind::Let { value: expr, .. } => {
                 collect_inner_labels_from_expr(expr, labels);
             }
             NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
@@ -249,12 +204,6 @@ fn collect_inner_labels_from_block(block: &NirBlock, labels: &mut IndexSet<Strin
                 }
             }
             NirStmtKind::Continue => {}
-            NirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            NirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
-            }
         }
     }
 }
@@ -304,15 +253,10 @@ fn collect_inner_labels_from_expr(expr: &NirExpr, labels: &mut IndexSet<String>)
         }
         NirExprKind::Unary { expr, .. }
         | NirExprKind::FieldAccess { expr, .. }
-        | NirExprKind::TupleSpread { expr }
-        | NirExprKind::TupleZip { expr }
         | NirExprKind::Cast { expr, .. }
         | NirExprKind::VariantTag { expr }
         | NirExprKind::VariantTest { expr, .. }
         | NirExprKind::VariantPayload { expr, .. } => collect_inner_labels_from_expr(expr, labels),
-        NirExprKind::TypePackExpansion { call_expr, .. } => {
-            collect_inner_labels_from_expr(call_expr, labels);
-        }
         NirExprKind::Call { args, .. } => {
             for arg in args {
                 collect_inner_labels_from_expr(&arg.expr, labels);
@@ -352,7 +296,6 @@ fn collect_inner_labels_from_expr(expr: &NirExpr, labels: &mut IndexSet<String>)
             collect_inner_labels_from_expr(target, labels);
             collect_inner_labels_from_expr(value, labels);
         }
-        NirExprKind::Closure { body, .. } => collect_inner_labels_from_expr(body, labels),
         NirExprKind::IndirectCall { callee, args } => {
             collect_inner_labels_from_expr(callee, labels);
             for arg in args {
@@ -372,18 +315,8 @@ fn collect_inner_labels_from_expr(expr: &NirExpr, labels: &mut IndexSet<String>)
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 
@@ -549,28 +482,7 @@ fn collect_callees_from_stmt(stmt: &NirStmt, callees: &mut IndexSet<String>) {
         NirStmtKind::LabeledBlock { block, .. } => {
             collect_callees_from_block(block, callees);
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_callees_from_expr(scrutinee, callees);
-            collect_callees_from_block(then_block, callees);
-            if let Some(else_blk) = else_block {
-                collect_callees_from_block(else_blk, callees);
-            }
-        }
         NirStmtKind::Break { .. } | NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => {
-            collect_callees_from_expr(value, callees);
-        }
-        NirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     }
 }
 
@@ -609,11 +521,7 @@ fn collect_callees_from_expr(expr: &NirExpr, callees: &mut IndexSet<String>) {
             collect_callees_from_expr(expr, callees);
         }
         NirExprKind::FieldAccess { expr, .. }
-        | NirExprKind::TupleSpread { expr }
-        | NirExprKind::TupleZip { expr }
-        | NirExprKind::TypePackExpansion {
-            call_expr: expr, ..
-        } => {
+        => {
             collect_callees_from_expr(expr, callees);
         }
         NirExprKind::Index { expr, index } => {
@@ -643,9 +551,6 @@ fn collect_callees_from_expr(expr: &NirExpr, callees: &mut IndexSet<String>) {
             for elem in elements {
                 collect_callees_from_expr(elem, callees);
             }
-        }
-        NirExprKind::Closure { body, .. } => {
-            collect_callees_from_expr(body, callees);
         }
         NirExprKind::IndirectCall { callee, args } => {
             collect_callees_from_expr(callee, callees);
@@ -708,18 +613,8 @@ fn collect_callees_from_expr(expr: &NirExpr, callees: &mut IndexSet<String>) {
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 
@@ -1148,56 +1043,6 @@ fn inline_calls_in_block(
                     stmt.span,
                 ));
             }
-            NirStmtKind::IfLet {
-                mut scrutinee,
-                pattern,
-                mut then_block,
-                else_block,
-            } => {
-                inline_calls_in_expr(
-                    &mut scrutinee,
-                    candidates,
-                    current_module,
-                    local_count,
-                    locals,
-                    type_table,
-                    &mut new_stmts,
-                    inlined_funcs,
-                    inline_counter,
-                );
-                inline_calls_in_block(
-                    &mut then_block,
-                    candidates,
-                    current_module,
-                    local_count,
-                    locals,
-                    type_table,
-                    inlined_funcs,
-                    inline_counter,
-                );
-                let new_else = else_block.map(|mut eb| {
-                    inline_calls_in_block(
-                        &mut eb,
-                        candidates,
-                        current_module,
-                        local_count,
-                        locals,
-                        type_table,
-                        inlined_funcs,
-                        inline_counter,
-                    );
-                    eb
-                });
-                new_stmts.push(NirStmt::new(
-                    NirStmtKind::IfLet {
-                        scrutinee,
-                        pattern,
-                        then_block,
-                        else_block: new_else,
-                    },
-                    stmt.span,
-                ));
-            }
             NirStmtKind::Break { label, value } => {
                 let new_value = value.map(|mut v| {
                     inline_calls_in_expr(
@@ -1223,38 +1068,6 @@ fn inline_calls_in_block(
             }
             NirStmtKind::Continue => {
                 new_stmts.push(NirStmt::new(NirStmtKind::Continue, stmt.span));
-            }
-            NirStmtKind::LetDestructure {
-                pattern,
-                is_mut,
-                value,
-            } => {
-                let mut new_value = value;
-                inline_calls_in_expr(
-                    &mut new_value,
-                    candidates,
-                    current_module,
-                    local_count,
-                    locals,
-                    type_table,
-                    &mut new_stmts,
-                    inlined_funcs,
-                    inline_counter,
-                );
-                new_stmts.push(NirStmt::new(
-                    NirStmtKind::LetDestructure {
-                        pattern,
-                        is_mut,
-                        value: new_value,
-                    },
-                    stmt.span,
-                ));
-            }
-            NirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            NirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
             }
         }
     }
@@ -1756,22 +1569,6 @@ fn remap_local_index(
     }
 }
 
-fn remap_expr(
-    expr: &NirExpr,
-    param_to_local: &IndexMap<u32, u32>,
-    local_offset: u32,
-    param_count: u32,
-) -> NirExpr {
-    remap_expr_inner(
-        expr,
-        param_to_local,
-        local_offset,
-        param_count,
-        None,
-        &IndexMap::default(),
-    )
-}
-
 /// Remap local indices in an expression, optionally converting `return` to `break`.
 ///
 /// When `label` is `Some`, any `return` statement reachable from this expression
@@ -1875,19 +1672,6 @@ fn remap_expr_inner(
             field_index: *field_index,
             field_name: field_name.clone(),
         },
-        NirExprKind::TupleSpread { expr: inner } => NirExprKind::TupleSpread {
-            expr: re_box(inner),
-        },
-        NirExprKind::TupleZip { expr: inner } => NirExprKind::TupleZip {
-            expr: re_box(inner),
-        },
-        NirExprKind::TypePackExpansion {
-            call_expr: inner,
-            pack_type_id,
-        } => NirExprKind::TypePackExpansion {
-            call_expr: re_box(inner),
-            pack_type_id: *pack_type_id,
-        },
         NirExprKind::Index { expr: inner, index } => NirExprKind::Index {
             expr: re_box(inner),
             index: re_box(index),
@@ -1932,22 +1716,6 @@ fn remap_expr_inner(
         },
         NirExprKind::TupleLiteral { elements } => NirExprKind::TupleLiteral {
             elements: elements.iter().map(&re).collect(),
-        },
-        NirExprKind::Closure {
-            params,
-            body,
-            captures,
-            functor_id,
-            address_taken_locals,
-            body_locals,
-        } => NirExprKind::Closure {
-            params: params.clone(),
-            // Closures have their own return scope — don't propagate label
-            body: Box::new(remap_expr(body, param_to_local, local_offset, param_count)),
-            captures: captures.clone(),
-            functor_id: *functor_id,
-            address_taken_locals: address_taken_locals.clone(),
-            body_locals: body_locals.clone(),
         },
         NirExprKind::IndirectCall { callee, args } => NirExprKind::IndirectCall {
             callee: re_box(callee),
@@ -2035,18 +1803,8 @@ fn remap_expr_inner(
         | NirExprKind::BytesLiteral(_)
         | NirExprKind::Null
         | NirExprKind::Unit
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => expr.kind.clone(),
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     };
 
     NirExpr::new(kind, expr.type_id, expr.span)
@@ -2180,17 +1938,6 @@ fn remap_stmt_inner(
                 .unwrap_or_else(|| inner_label.clone()),
             block: rb(block),
         },
-        NirStmtKind::IfLet {
-            scrutinee,
-            pattern,
-            then_block,
-            else_block,
-        } => NirStmtKind::IfLet {
-            scrutinee: re(scrutinee),
-            pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
-            then_block: rb(then_block),
-            else_block: else_block.as_ref().map(rb),
-        },
         NirStmtKind::Break {
             label: break_label,
             value,
@@ -2204,21 +1951,6 @@ fn remap_stmt_inner(
             value: value.as_ref().map(&re),
         },
         NirStmtKind::Continue => NirStmtKind::Continue,
-        NirStmtKind::LetDestructure {
-            pattern,
-            is_mut,
-            value,
-        } => NirStmtKind::LetDestructure {
-            pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
-            is_mut: *is_mut,
-            value: re(value),
-        },
-        NirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     };
 
     NirStmt::new(kind, stmt.span)
@@ -2400,11 +2132,7 @@ fn inline_calls_in_expr(
             }
         }
         NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => {
+        => {
             inline_calls_in_expr(
                 inner,
                 candidates,
@@ -2641,19 +2369,6 @@ fn inline_calls_in_expr(
                 inline_counter,
             );
         }
-        NirExprKind::Closure { body, .. } => {
-            inline_calls_in_expr(
-                body,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-        }
         NirExprKind::VariantTag { expr: inner }
         | NirExprKind::VariantTest { expr: inner, .. }
         | NirExprKind::VariantPayload { expr: inner, .. } => {
@@ -2719,17 +2434,7 @@ fn inline_calls_in_expr(
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }

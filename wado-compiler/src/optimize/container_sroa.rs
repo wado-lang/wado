@@ -1067,13 +1067,6 @@ impl NirRefVisitor for WhitelistChecker<'_> {
                 }
                 self.visit_expr(inner);
             }
-            // Closure capture → escape.
-            NirExprKind::Closure { body, captures, .. } => {
-                for cap in captures {
-                    self.mark(cap.outer_index);
-                }
-                self.visit_expr(body);
-            }
             _ => self.walk_expr(expr),
         }
     }
@@ -1549,7 +1542,6 @@ fn is_duplicable_expr(e: &NirExpr) -> bool {
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::Local { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::GlobalVarGet { .. } => true,
         NirExprKind::Binary { left, right, .. } => {
             is_duplicable_expr(left) && is_duplicable_expr(right)
@@ -1585,9 +1577,6 @@ fn rewrite_stmt_recurse(stmt: &mut NirStmt, ctx: &RewriteCtx) {
                 rewrite_expr_inplace(v, ctx);
             }
         }
-        NirStmtKind::TaskReturn { value } => {
-            rewrite_expr_inplace(value, ctx);
-        }
         NirStmtKind::If {
             condition,
             then_block,
@@ -1610,25 +1599,6 @@ fn rewrite_stmt_recurse(stmt: &mut NirStmt, ctx: &RewriteCtx) {
         NirStmtKind::Continue => {}
         NirStmtKind::LabeledBlock { block, .. } => {
             rewrite_block(block, ctx);
-        }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            rewrite_expr_inplace(scrutinee, ctx);
-            rewrite_block(then_block, ctx);
-            if let Some(eb) = else_block {
-                rewrite_block(eb, ctx);
-            }
-        }
-        NirStmtKind::LetDestructure { value, .. } => {
-            rewrite_expr_inplace(value, ctx);
-        }
-        NirStmtKind::VariadicForOf { iterable, body, .. } => {
-            rewrite_expr_inplace(iterable, ctx);
-            rewrite_block(body, ctx);
         }
     }
 }
@@ -1750,9 +1720,7 @@ fn walk_expr_mut(expr: &mut NirExpr, ctx: &RewriteCtx) {
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => {}
         NirExprKind::GlobalVarSet { value, .. } => {
             rewrite_expr_inplace(value, ctx);
@@ -1764,11 +1732,6 @@ fn walk_expr_mut(expr: &mut NirExpr, ctx: &RewriteCtx) {
         NirExprKind::Unary { expr: inner, .. }
         | NirExprKind::Cast { expr: inner, .. }
         | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
         | NirExprKind::VariantTag { expr: inner }
         | NirExprKind::VariantTest { expr: inner, .. }
         | NirExprKind::VariantPayload { expr: inner, .. }
@@ -1835,9 +1798,6 @@ fn walk_expr_mut(expr: &mut NirExpr, ctx: &RewriteCtx) {
                 rewrite_expr_inplace(e, ctx);
             }
         }
-        NirExprKind::Closure { body, .. } => {
-            rewrite_expr_inplace(body, ctx);
-        }
         NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 rewrite_expr_inplace(p, ctx);
@@ -1860,18 +1820,6 @@ fn walk_expr_mut(expr: &mut NirExpr, ctx: &RewriteCtx) {
                 rewrite_block(arm, ctx);
             }
             rewrite_block(default, ctx);
-        }
-        NirExprKind::TemplateString { parts } => {
-            for part in parts {
-                if let crate::nir::NirTemplatePart::Interpolation { expr: inner, .. } = part {
-                    rewrite_expr_inplace(inner, ctx);
-                }
-            }
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
         }
     }
 }

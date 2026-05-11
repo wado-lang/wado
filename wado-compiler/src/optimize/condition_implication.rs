@@ -119,17 +119,6 @@ fn process_stmt(stmt: &mut NirStmt, defs: &mut DefMap) -> bool {
             changed
         }
         NirStmtKind::LabeledBlock { block, .. } => process_block(block, defs),
-        NirStmtKind::IfLet {
-            then_block,
-            else_block,
-            ..
-        } => {
-            let mut changed = process_block(then_block, defs);
-            if let Some(else_block) = else_block {
-                changed |= process_block(else_block, defs);
-            }
-            changed
-        }
         _ => false,
     }
 }
@@ -199,22 +188,6 @@ fn process_stmt_nested_loops(stmt: &mut NirStmt, defs: &mut DefMap) -> bool {
             let mut changed = false;
             for s in &mut block.stmts {
                 changed |= process_stmt_nested_loops(s, defs);
-            }
-            changed
-        }
-        NirStmtKind::IfLet {
-            then_block,
-            else_block,
-            ..
-        } => {
-            let mut changed = false;
-            for s in &mut then_block.stmts {
-                changed |= process_stmt_nested_loops(s, defs);
-            }
-            if let Some(else_block) = else_block {
-                for s in &mut else_block.stmts {
-                    changed |= process_stmt_nested_loops(s, defs);
-                }
             }
             changed
         }
@@ -401,42 +374,19 @@ fn record_defs_from_nested(stmt: &NirStmt, defs: &mut DefMap) {
                 }
             }
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            record_defs_from_expr(scrutinee, defs);
-            for s in &then_block.stmts {
-                record_def_from_stmt(s, defs);
-                record_defs_from_nested(s, defs);
-            }
-            if let Some(eb) = else_block {
-                for s in &eb.stmts {
-                    record_def_from_stmt(s, defs);
-                    record_defs_from_nested(s, defs);
-                }
-            }
-        }
         NirStmtKind::Return { value: Some(expr) }
         | NirStmtKind::Break {
             value: Some(expr), ..
         } => {
             record_defs_from_expr(expr, defs);
         }
-        NirStmtKind::LetDestructure { value, .. } => {
-            record_defs_from_expr(value, defs);
-        }
         // Loop bodies have their own scope handled via process_loop.
-        // Remaining kinds (Return/Break with None, Continue, TaskReturn, VariadicForOf)
-        // carry no expressions with nested definitions.
+        // Remaining kinds (Return/Break with None, Continue) carry no
+        // expressions with nested definitions.
         NirStmtKind::Loop { .. }
         | NirStmtKind::Return { value: None }
         | NirStmtKind::Break { value: None, .. }
-        | NirStmtKind::Continue
-        | NirStmtKind::TaskReturn { .. }
-        | NirStmtKind::VariadicForOf { .. } => {}
+        | NirStmtKind::Continue => {}
     }
 }
 
@@ -464,11 +414,6 @@ fn record_defs_from_expr(expr: &NirExpr, defs: &mut DefMap) {
         | NirExprKind::Cast { expr: inner, .. }
         | NirExprKind::FieldAccess { expr: inner, .. }
         | NirExprKind::GlobalVarSet { value: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
         | NirExprKind::VariantTag { expr: inner }
         | NirExprKind::VariantTest { expr: inner, .. }
         | NirExprKind::VariantPayload { expr: inner, .. }
@@ -559,13 +504,9 @@ fn record_defs_from_expr(expr: &NirExpr, defs: &mut DefMap) {
                 record_defs_from_expr(inner, defs);
             }
         }
-        // Defs inside closures are scoped to the closure body — don't record in outer scope.
-        NirExprKind::Closure { .. } => {}
         // Leaf nodes carry no sub-expressions with definitions.
         NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::StringLiteral(_)
@@ -575,14 +516,6 @@ fn record_defs_from_expr(expr: &NirExpr, defs: &mut DefMap) {
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 

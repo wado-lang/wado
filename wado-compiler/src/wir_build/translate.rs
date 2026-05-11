@@ -42,16 +42,6 @@ fn collect_let_names(names: &mut IndexMap<u32, String>, stmts: &[NirStmt]) {
                     collect_let_names(names, &eb.stmts);
                 }
             }
-            NirStmtKind::IfLet {
-                then_block,
-                else_block,
-                ..
-            } => {
-                collect_let_names(names, &then_block.stmts);
-                if let Some(eb) = else_block {
-                    collect_let_names(names, &eb.stmts);
-                }
-            }
             NirStmtKind::LabeledBlock { block, .. } => {
                 collect_let_names(names, &block.stmts);
             }
@@ -1142,16 +1132,6 @@ impl FunctionTranslator<'_, '_> {
                         self.declare_locals_from_stmts(instrs, &eb.stmts);
                     }
                 }
-                NirStmtKind::IfLet {
-                    then_block,
-                    else_block,
-                    ..
-                } => {
-                    self.declare_locals_from_stmts(instrs, &then_block.stmts);
-                    if let Some(eb) = else_block {
-                        self.declare_locals_from_stmts(instrs, &eb.stmts);
-                    }
-                }
                 NirStmtKind::LabeledBlock { block, .. } => {
                     self.declare_locals_from_stmts(instrs, &block.stmts);
                 }
@@ -1225,32 +1205,6 @@ impl FunctionTranslator<'_, '_> {
                     });
                     continue;
                 }
-                // Statement-level IfLet with else can produce a value
-                if let NirStmtKind::IfLet {
-                    scrutinee,
-                    then_block,
-                    else_block: Some(else_block),
-                    ..
-                } = &stmt.kind
-                    && let Some(result_type) = self.infer_stmts_result_type(&then_block.stmts)
-                {
-                    let scrut = self.translate_expr(scrutinee);
-                    self.label_stack.push(LabelEntry {
-                        label: None,
-                        is_loop_break: false,
-                        is_loop_continue: false,
-                    });
-                    let then_body = self.translate_stmts_as_value(&then_block.stmts);
-                    let else_body = Some(self.translate_stmts_as_value(&else_block.stmts));
-                    self.label_stack.pop();
-                    instrs.push(WirInstr::If {
-                        condition: Box::new(scrut),
-                        result: Some(result_type),
-                        then_body,
-                        else_body,
-                    });
-                    continue;
-                }
             }
             if let Some(instr) = self.translate_stmt(stmt) {
                 // In a value-producing block, a final statement that does not push
@@ -1288,11 +1242,6 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             NirStmtKind::If {
-                then_block,
-                else_block: Some(_),
-                ..
-            } => self.infer_stmts_result_type(&then_block.stmts),
-            NirStmtKind::IfLet {
                 then_block,
                 else_block: Some(_),
                 ..
@@ -1525,30 +1474,6 @@ impl FunctionTranslator<'_, '_> {
                     else_body,
                 })
             }
-            NirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                // Translate pattern matching as a simple if on the scrutinee
-                let scrut = self.translate_expr(scrutinee);
-                self.label_stack.push(LabelEntry {
-                    label: None,
-                    is_loop_break: false,
-                    is_loop_continue: false,
-                });
-                let then_body = self.translate_stmts(&then_block.stmts);
-                let else_body = else_block.as_ref().map(|b| self.translate_stmts(&b.stmts));
-                self.label_stack.pop();
-                // For now, generate a placeholder - actual pattern matching needs more work
-                Some(WirInstr::If {
-                    condition: Box::new(scrut),
-                    result: None,
-                    then_body,
-                    else_body,
-                })
-            }
             NirStmtKind::LabeledBlock { label, block } => {
                 self.label_stack.push(LabelEntry {
                     label: Some(label.clone()),
@@ -1562,15 +1487,6 @@ impl FunctionTranslator<'_, '_> {
                     result: None,
                     body: body_instrs,
                 })
-            }
-            NirStmtKind::LetDestructure { pattern, value, .. } => {
-                self.translate_let_pattern(pattern, value)
-            }
-            NirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            NirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
             }
         }
     }
@@ -1653,17 +1569,6 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     self.local_get(*index)
                 }
-            }
-            NirExprKind::FuncRef {
-                module_source,
-                name,
-            } => {
-                // FuncRef should have been converted to a Closure by the closure lowering pass.
-                // If we reach here, it means a FuncRef survived lowering (e.g., external function
-                // not in the module's func_sigs). This is a compiler bug.
-                panic!(
-                    "FuncRef '{module_source}::{name}' was not converted to a Closure during lowering"
-                );
             }
             NirExprKind::GlobalVarGet {
                 module_source,
@@ -2051,14 +1956,6 @@ impl FunctionTranslator<'_, '_> {
                 WirInstr::StructNew { type_id, fields }
             }
 
-            NirExprKind::TupleSpread { .. }
-            | NirExprKind::TupleZip { .. }
-            | NirExprKind::TypePackExpansion { .. } => {
-                panic!(
-                    "TupleSpread/TupleZip/TypePackExpansion should have been expanded during monomorphization"
-                )
-            }
-
             NirExprKind::Switch {
                 scrutinee,
                 min_value,
@@ -2155,14 +2052,6 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            NirExprKind::Closure { .. } => {
-                panic!(
-                    "[WIR] Closure should be lowered to StructLiteral or ClosureToCanonical before WIR build"
-                );
-            }
-            NirExprKind::Capture { .. } => {
-                panic!("[WIR] Capture should be lowered to FieldAccess before WIR build");
-            }
             NirExprKind::IndirectCall { callee, args } => {
                 self.translate_indirect_call(callee, args, expr.type_id)
             }
@@ -2177,16 +2066,6 @@ impl FunctionTranslator<'_, '_> {
                 *target_fn_type,
                 closure_module,
             ),
-
-            NirExprKind::TemplateString { .. } => {
-                unreachable!("TemplateString should have been expanded before WIR build")
-            }
-
-            NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-                unreachable!(
-                    "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-                )
-            }
 
             NirExprKind::LabeledBlock { label, block, .. } => {
                 let has_result = expr.type_id != TypeTable::UNIT;

@@ -103,17 +103,6 @@ fn hoist_in_block(
                 changed |= hoist_in_block(inner, local_count, locals, type_table);
                 new_stmts.push(stmt);
             }
-            NirStmtKind::IfLet {
-                then_block,
-                else_block,
-                ..
-            } => {
-                changed |= hoist_in_block(then_block, local_count, locals, type_table);
-                if let Some(eb) = else_block {
-                    changed |= hoist_in_block(eb, local_count, locals, type_table);
-                }
-                new_stmts.push(stmt);
-            }
             _ => {
                 new_stmts.push(stmt);
             }
@@ -220,22 +209,6 @@ fn collect_escaping_in_stmt(stmt: &NirStmt, escaping: &mut IndexSet<u32>) {
                 collect_escaping_in_stmt(s, escaping);
             }
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_escaping_in_expr(scrutinee, escaping);
-            for s in &then_block.stmts {
-                collect_escaping_in_stmt(s, escaping);
-            }
-            if let Some(eb) = else_block {
-                for s in &eb.stmts {
-                    collect_escaping_in_stmt(s, escaping);
-                }
-            }
-        }
         NirStmtKind::Loop { body } => {
             for s in &body.stmts {
                 collect_escaping_in_stmt(s, escaping);
@@ -247,15 +220,6 @@ fn collect_escaping_in_stmt(stmt: &NirStmt, escaping: &mut IndexSet<u32>) {
                 collect_local_refs(v, escaping);
                 collect_escaping_in_expr(v, escaping);
             }
-        }
-        NirStmtKind::LetDestructure { value, .. } => {
-            collect_escaping_in_expr(value, escaping);
-        }
-        NirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
         }
     }
 }
@@ -312,11 +276,7 @@ fn collect_escaping_in_expr(expr: &NirExpr, escaping: &mut IndexSet<u32>) {
             collect_escaping_in_expr(inner, escaping);
         }
         NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => {
+        => {
             collect_escaping_in_expr(inner, escaping);
         }
         NirExprKind::If {
@@ -369,13 +329,6 @@ fn collect_escaping_in_expr(expr: &NirExpr, escaping: &mut IndexSet<u32>) {
                 collect_escaping_in_stmt(s, escaping);
             }
         }
-        NirExprKind::Closure { body, captures, .. } => {
-            // Closure captures: the captured variables escape
-            for capture in captures {
-                escaping.insert(capture.outer_index);
-            }
-            collect_escaping_in_expr(body, escaping);
-        }
         NirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_local_refs(arg, escaping);
@@ -406,9 +359,7 @@ fn collect_escaping_in_expr(expr: &NirExpr, escaping: &mut IndexSet<u32>) {
         }
         // Leaf nodes
         NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::StringLiteral(_)
@@ -418,14 +369,6 @@ fn collect_escaping_in_expr(expr: &NirExpr, escaping: &mut IndexSet<u32>) {
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 
@@ -574,39 +517,6 @@ fn transform_stmt(
                 type_table,
             );
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            transform_expr(
-                scrutinee,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                locals,
-                type_table,
-            );
-            transform_stmts_in_block(
-                then_block,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                locals,
-                type_table,
-            );
-            if let Some(eb) = else_block {
-                transform_stmts_in_block(
-                    eb,
-                    escaping_locals,
-                    hoist_stmts,
-                    local_count,
-                    locals,
-                    type_table,
-                );
-            }
-        }
         NirStmtKind::Break {
             value: Some(expr), ..
         } => {
@@ -748,11 +658,7 @@ fn transform_expr(
             }
         }
         NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => {
+        => {
             transform_expr(
                 inner,
                 escaping_locals,
@@ -781,14 +687,6 @@ fn transform_expr(
                 locals,
                 type_table,
             );
-        }
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
         }
         _ => {}
     }
@@ -1440,18 +1338,6 @@ fn rename_local_in_stmt(stmt: &mut NirStmt, old_index: u32, new_index: u32, new_
         } => {
             rename_local_in_expr(expr, old_index, new_index, new_name);
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            rename_local_in_expr(scrutinee, old_index, new_index, new_name);
-            rename_local_in_block(then_block, old_index, new_index, new_name);
-            if let Some(eb) = else_block {
-                rename_local_in_block(eb, old_index, new_index, new_name);
-            }
-        }
         _ => {}
     }
 }
@@ -1525,14 +1411,6 @@ fn rename_local_in_expr(expr: &mut NirExpr, old_index: u32, new_index: u32, new_
         }
         NirExprKind::Block(block) => {
             rename_local_in_block(block, old_index, new_index, new_name);
-        }
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
         }
         _ => {}
     }

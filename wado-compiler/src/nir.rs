@@ -214,10 +214,6 @@ pub enum NirExprKind {
         index: u32,
         name: String,
     },
-    FuncRef {
-        module_source: ModuleSource,
-        name: String,
-    },
     /// Read a global variable
     GlobalVarGet {
         module_source: ModuleSource,
@@ -315,70 +311,6 @@ pub enum NirExprKind {
     },
     TupleLiteral {
         elements: Vec<NirExpr>,
-    },
-
-    /// Spread a tuple expression into an enclosing `TupleLiteral`.
-    /// Created by the resolver for `[..expr]` syntax. Expanded by monomorphization
-    /// into individual `FieldAccess` elements once the concrete tuple arity is known.
-    TupleSpread {
-        expr: Box<NirExpr>,
-    },
-
-    /// Transpose a tuple-of-tuples: `[a, b].zip()` → `[[a.0, b.0], [a.1, b.1], ...]`.
-    /// Created by the resolver for the `.zip()` pseudo-method on tuples.
-    /// Expanded during monomorphization once concrete tuple arities are known.
-    TupleZip {
-        expr: Box<NirExpr>,
-    },
-
-    /// Type pack expansion: `[..T::method()]` inside a `TupleLiteral`.
-    /// Expands at monomorphization to one call per concrete type in the pack:
-    /// `[T_0::method(), T_1::method(), ...]`.
-    ///
-    /// The `call_expr` is a resolved Call whose receiver/return type references
-    /// the `TypePack`. During monomorphization, the pack type is substituted
-    /// with each concrete element type to produce individual calls.
-    TypePackExpansion {
-        /// The call expression template (resolved with `TypePack` type)
-        call_expr: Box<NirExpr>,
-        /// The `TypePack` type ID (index into type table, pre-substitution)
-        pack_type_id: TypeId,
-    },
-
-    /// Access to a captured variable inside a closure body
-    Capture {
-        /// Index into the closure's captures array
-        index: u32,
-        /// Variable name (for debugging)
-        name: String,
-    },
-
-    Closure {
-        params: Vec<(String, TypeId)>,
-        body: Box<NirExpr>,
-        captures: Vec<NirCapture>,
-        /// Optional functor ID assigned during lowering.
-        /// Used by monomorphize phase to look up the corresponding `ClosureFunctor`.
-        functor_id: Option<u32>,
-        /// Closure-scope address-taken locals, captured from the
-        /// closure's resolution `FunctionContext`. The boxing pass uses
-        /// this when descending into the closure body — the body's
-        /// `Local { index: N }` references closure locals, not the
-        /// parent function's, so the parent's set would mis-box. Empty
-        /// for synthesised closures (e.g. effect-handler dispatch),
-        /// which never take addresses.
-        address_taken_locals: crate::hashmap::IndexSet<u32>,
-        /// Body-level let-bindings inside the closure, in declaration
-        /// order. Indices `0..params.len()` belong to the closure's
-        /// parameters (whose info lives in `params`); these body locals
-        /// occupy `params.len()..params.len()+body_locals.len()` in the
-        /// closure's local-index namespace.
-        ///
-        /// Captured at resolve time from the closure's `FunctionContext`
-        /// so pattern lowering can seed a closure-scoped allocator
-        /// without re-walking the body. Synthetic closures created by
-        /// `synthesis/` have an empty `body_locals`.
-        body_locals: Vec<NirLocal>,
     },
 
     /// Indirect call through a callable value (closure or funcref)
@@ -480,102 +412,6 @@ pub enum NirExprKind {
         default: NirBlock,
     },
 
-    /// Unresolved template string expression.
-    ///
-    /// Created by the resolver with resolved sub-expressions but without
-    /// expanding to formatting code. The synthesis phase (pre-monomorphize)
-    /// expands this into the `__tmpl` labeled block with `String::with_capacity`,
-    /// `push_str`, `Formatter`, and `Display`/inspect calls.
-    TemplateString {
-        parts: Vec<NirTemplatePart>,
-    },
-
-    /// Effect handler installation: `with E1 => h1, ... do { body }`.
-    /// See `docs/wep-2026-04-11-effect-handler.md`.
-    ///
-    /// Each binding installs a handler for one effect for the duration of `body`.
-    /// The block evaluates to `body`'s value; in MVP `result_type` is always Unit
-    /// because do-block bodies are statement blocks, not expression blocks.
-    WithHandler {
-        bindings: Vec<NirHandlerBinding>,
-        body: NirBlock,
-        result_type: TypeId,
-    },
-
-    /// `resume value` — control-flow expression valid only inside an effect
-    /// handler method body.
-    ///
-    /// In the MVP (no post-resume code), `resume` lowers to `Return { value }`.
-    /// The expression itself is typed as `Unit` because it does not produce a
-    /// value to its enclosing expression — it transfers control out.
-    Resume {
-        value: Box<NirExpr>,
-    },
-}
-
-/// One `Effect => handler` binding inside a `with ... do` block.
-#[derive(Debug, Clone)]
-pub struct NirHandlerBinding {
-    /// The effect being handled. The resolver always fills this in with a
-    /// concrete effect reference — the bundled `with &mut h do` form is
-    /// expanded to one binding per implemented effect, each carrying a
-    /// concrete `EffectRef`. `None` only appears transiently when an
-    /// upstream diagnostic prevented resolution.
-    pub effect: Option<EffectRef>,
-    /// Concrete `TypeId`s of the trait / resource type arguments at this
-    /// installation site (e.g. `[u8]` for `with Stream<u8> => &mut s do`,
-    /// or as derived from the impl block in a bundled `with &mut s do`
-    /// where `MockCM` implements `Stream<u8>`). Empty for non-generic
-    /// effects / resources. The dispatch synthesis projects this together
-    /// with `effect.module_source` and `effect.name` into the
-    /// `InstantiationKey` it uses to look up the per-monomorphisation
-    /// dispatch infrastructure.
-    pub trait_type_args: Vec<TypeId>,
-    /// Handler value expression (e.g., `&mut mock`).
-    pub handler: NirExpr,
-    /// The concrete struct type (after deref) implementing the effect.
-    /// Used by codegen to pick the correct `impl E for T` methods.
-    pub handler_type: TypeId,
-    pub span: Span,
-    /// If `Some(id)`, this binding came from a bundled `with &mut h do`
-    /// expansion. All bindings produced from one bundled clause share the
-    /// same `id`. The dispatch synthesis uses this to allocate a single
-    /// `__h_<bundle>` local that every per-effect closure captures, so the
-    /// handler value is evaluated once and mutations from any installed
-    /// effect are observed by the rest. `None` for explicit
-    /// `Effect => handler` bindings (each gets its own `__h_<E>` local).
-    ///
-    /// IDs are unique within a single `WithHandler` expression but are not
-    /// reused across separate `with` blocks; the synthesis pass starts
-    /// fresh for each `WithHandler` it visits.
-    pub bundle_group: Option<u32>,
-}
-
-/// A part of a resolved template string.
-#[derive(Debug, Clone)]
-pub enum NirTemplatePart {
-    /// A literal string segment.
-    Literal(String),
-    /// An interpolated expression with optional format specifier.
-    Interpolation {
-        expr: Box<NirExpr>,
-        format_spec: Option<TemplateFormatSpec>,
-    },
-}
-
-/// Parsed format specification from a template string interpolation.
-/// Syntax: `[[fill]align][sign][#][0][width][.precision]type`
-#[derive(Debug, Clone)]
-pub struct TemplateFormatSpec {
-    pub fill: Option<char>,
-    pub align: Option<char>,
-    pub sign_plus: bool,
-    pub alternate: bool,
-    pub zero_pad: bool,
-    pub width: Option<i64>,
-    pub precision: Option<i64>,
-    /// Type character: `b`, `o`, `x`, `X`, `e`, `E`, `?`
-    pub type_char: Option<char>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -749,11 +585,6 @@ pub enum NirStmtKind {
     Return {
         value: Option<NirExpr>,
     },
-    /// `task return expr;` — delivers the async task result without terminating the function.
-    /// Eliminated by `synthesis::cm_binding` before lower/optimize phases.
-    TaskReturn {
-        value: NirExpr,
-    },
     If {
         condition: NirExpr,
         then_block: NirBlock,
@@ -775,45 +606,6 @@ pub enum NirStmtKind {
     LabeledBlock {
         label: String,
         block: NirBlock,
-    },
-    /// Pattern match in if condition: `if let Some(x) = expr { ... } else { ... }`
-    IfLet {
-        /// The expression being matched against
-        scrutinee: NirExpr,
-        /// The pattern to match
-        pattern: NirPattern,
-        /// Block executed when pattern matches
-        then_block: NirBlock,
-        /// Optional else block when pattern doesn't match
-        else_block: Option<NirBlock>,
-    },
-    /// Tuple destructuring let statement: `let [a, b] = tuple_expr;`
-    LetDestructure {
-        /// The pattern to bind (e.g., [a, b, c] or [x, [y, z]])
-        pattern: NirPattern,
-        /// Whether bindings are mutable
-        is_mut: bool,
-        /// The value expression (must be a tuple)
-        value: NirExpr,
-    },
-    /// Deferred tuple for-of expansion for variadic type packs.
-    ///
-    /// Created when `for let v of iterable` where `iterable` has a tuple type containing
-    /// `TypePack` elements. The monomorphizer expands this after type substitution resolves
-    /// the `TypePack` to a concrete tuple.
-    VariadicForOf {
-        /// The tuple iterable expression (type contains `TypePack` before substitution)
-        iterable: NirExpr,
-        /// The loop variable name
-        binding_name: String,
-        /// Local index for the loop variable
-        binding_local: u32,
-        /// Whether the binding is mutable
-        is_mut: bool,
-        /// The body to execute for each element (resolved with TypePack-typed binding)
-        body: NirBlock,
-        /// Unique ID for generating labels
-        unique_id: u32,
     },
 }
 

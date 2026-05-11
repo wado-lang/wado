@@ -289,36 +289,6 @@ fn collect_param_field_usage_in_stmt(
                 type_table,
             );
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_param_field_usage_in_expr(
-                scrutinee,
-                struct_params,
-                field_sets,
-                conservative_params,
-                type_table,
-            );
-            collect_param_field_usage_in_block(
-                then_block,
-                struct_params,
-                field_sets,
-                conservative_params,
-                type_table,
-            );
-            if let Some(eb) = else_block {
-                collect_param_field_usage_in_block(
-                    eb,
-                    struct_params,
-                    field_sets,
-                    conservative_params,
-                    type_table,
-                );
-            }
-        }
         NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 collect_param_field_usage_in_expr(
@@ -330,18 +300,7 @@ fn collect_param_field_usage_in_stmt(
                 );
             }
         }
-        NirStmtKind::Continue
-        | NirStmtKind::TaskReturn { .. }
-        | NirStmtKind::VariadicForOf { .. } => {}
-        NirStmtKind::LetDestructure { value, .. } => {
-            collect_param_field_usage_in_expr(
-                value,
-                struct_params,
-                field_sets,
-                conservative_params,
-                type_table,
-            );
-        }
+        NirStmtKind::Continue => {}
     }
 }
 
@@ -592,31 +551,9 @@ fn collect_param_field_usage_in_expr(
                 );
             }
         }
-        NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => {
-            collect_param_field_usage_in_expr(
-                inner,
-                struct_params,
-                field_sets,
-                conservative_params,
-                type_table,
-            );
-        }
         NirExprKind::ClosureToCanonical { functor, .. } => {
             collect_param_field_usage_in_expr(
                 functor,
-                struct_params,
-                field_sets,
-                conservative_params,
-                type_table,
-            );
-        }
-        NirExprKind::Closure { body, .. } => {
-            collect_param_field_usage_in_expr(
-                body,
                 struct_params,
                 field_sets,
                 conservative_params,
@@ -700,9 +637,6 @@ fn collect_param_field_usage_in_expr(
                 type_table,
             );
         }
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
         NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::BoolLiteral(_)
@@ -712,9 +646,7 @@ fn collect_param_field_usage_in_expr(
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => {}
         NirExprKind::Match { expr, arms } => {
             collect_param_field_usage_in_expr(
@@ -742,11 +674,6 @@ fn collect_param_field_usage_in_expr(
                     type_table,
                 );
             }
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
         }
     }
 }
@@ -887,19 +814,6 @@ fn scalarize_block(
             }
             NirStmtKind::LabeledBlock { block: inner, .. } => {
                 changed |= scalarize_block(inner, local_count, locals, type_table, cache, analysis);
-                new_stmts.push(stmt);
-            }
-            NirStmtKind::IfLet {
-                then_block,
-                else_block,
-                ..
-            } => {
-                changed |=
-                    scalarize_block(then_block, local_count, locals, type_table, cache, analysis);
-                if let Some(eb) = else_block {
-                    changed |=
-                        scalarize_block(eb, local_count, locals, type_table, cache, analysis);
-                }
                 new_stmts.push(stmt);
             }
             _ => {
@@ -1208,10 +1122,10 @@ fn visit_block_for_alias(block: &NirBlock, type_table: &TypeTable, out: &mut Ind
 
 fn visit_stmt_for_alias(stmt: &NirStmt, type_table: &TypeTable, out: &mut IndexSet<u32>) {
     match &stmt.kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Let { value, .. } => {
             visit_expr_for_alias(value, false, type_table, out);
         }
-        NirStmtKind::Expr(expr) | NirStmtKind::TaskReturn { value: expr } => {
+        NirStmtKind::Expr(expr) => {
             visit_expr_for_alias(expr, false, type_table, out);
         }
         NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
@@ -1233,23 +1147,7 @@ fn visit_stmt_for_alias(stmt: &NirStmt, type_table: &TypeTable, out: &mut IndexS
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             visit_block_for_alias(body, type_table, out);
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            visit_expr_for_alias(scrutinee, false, type_table, out);
-            visit_block_for_alias(then_block, type_table, out);
-            if let Some(eb) = else_block {
-                visit_block_for_alias(eb, type_table, out);
-            }
-        }
         NirStmtKind::Continue => {}
-        NirStmtKind::VariadicForOf { iterable, body, .. } => {
-            visit_expr_for_alias(iterable, false, type_table, out);
-            visit_block_for_alias(body, type_table, out);
-        }
     }
 }
 
@@ -1314,11 +1212,6 @@ fn visit_expr_for_alias(
         }
         NirExprKind::Cast { expr, .. }
         | NirExprKind::FieldAccess { expr, .. }
-        | NirExprKind::TupleSpread { expr }
-        | NirExprKind::TupleZip { expr }
-        | NirExprKind::TypePackExpansion {
-            call_expr: expr, ..
-        }
         | NirExprKind::VariantTag { expr }
         | NirExprKind::VariantTest { expr, .. }
         | NirExprKind::VariantPayload { expr, .. }
@@ -1364,9 +1257,6 @@ fn visit_expr_for_alias(
                 visit_expr_for_alias(p, false, type_table, out);
             }
         }
-        NirExprKind::Closure { body, .. } => {
-            visit_expr_for_alias(body, false, type_table, out);
-        }
         NirExprKind::Switch {
             scrutinee,
             arms,
@@ -1388,14 +1278,9 @@ fn visit_expr_for_alias(
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. }
-        | NirExprKind::TemplateString { .. } => {}
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => unreachable!(
-            "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-        ),
+        => {}
     }
 }
 
@@ -1447,12 +1332,6 @@ fn collect_locals_introduced_in_block(block: &NirBlock) -> IndexSet<u32> {
                 NirStmtKind::Let { local_index, .. } => {
                     self.out.insert(*local_index);
                 }
-                NirStmtKind::LetDestructure { pattern, .. } => {
-                    self.visit_pattern(pattern);
-                }
-                NirStmtKind::IfLet { pattern, .. } => {
-                    self.visit_pattern(pattern);
-                }
                 NirStmtKind::Loop { .. } => {
                     // Skip nested loops: their locals are processed by their
                     // own scalarize_loop pass and are not visible at *this*
@@ -1471,7 +1350,7 @@ fn collect_locals_introduced_in_block(block: &NirBlock) -> IndexSet<u32> {
             // exclude unrelated outer locals from scalarization.
             if matches!(
                 expr.kind,
-                NirExprKind::Closure { .. } | NirExprKind::ClosureToCanonical { .. }
+                NirExprKind::ClosureToCanonical { .. }
             ) {
                 return;
             }
@@ -1541,31 +1420,12 @@ fn count_field_accesses_in_stmt(
         NirStmtKind::LabeledBlock { block, .. } => {
             count_field_accesses_in_block(block, counts, type_table);
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            count_field_accesses_in_expr(scrutinee, counts, false, false, type_table);
-            count_field_accesses_in_block(then_block, counts, type_table);
-            if let Some(eb) = else_block {
-                count_field_accesses_in_block(eb, counts, type_table);
-            }
-        }
         NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 count_field_accesses_in_expr(v, counts, false, false, type_table);
             }
         }
         NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => {
-            count_field_accesses_in_expr(value, counts, false, false, type_table);
-        }
-        NirStmtKind::TaskReturn { .. } => {}
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     }
 }
 
@@ -1720,13 +1580,6 @@ fn count_field_accesses_in_expr(
                 count_field_accesses_in_expr(elem, counts, false, false, type_table);
             }
         }
-        NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => {
-            count_field_accesses_in_expr(inner, counts, false, false, type_table);
-        }
         NirExprKind::IndirectCall { callee, args, .. } => {
             count_field_accesses_in_expr(callee, counts, false, false, type_table);
             for arg in args {
@@ -1735,9 +1588,6 @@ fn count_field_accesses_in_expr(
         }
         NirExprKind::ClosureToCanonical { functor, .. } => {
             count_field_accesses_in_expr(functor, counts, false, false, type_table);
-        }
-        NirExprKind::Closure { body, .. } => {
-            count_field_accesses_in_expr(body, counts, false, false, type_table);
         }
         NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
@@ -1776,9 +1626,7 @@ fn count_field_accesses_in_expr(
         | NirExprKind::BytesLiteral(_)
         | NirExprKind::Null
         | NirExprKind::Unit
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => {}
         NirExprKind::Local { index, .. } => {
             // Whole-local read of a GC-heap-typed local outside a direct
@@ -1810,12 +1658,6 @@ fn count_field_accesses_in_expr(
                 }
                 count_field_accesses_in_expr(&arm.body, counts, false, false, type_table);
             }
-        }
-        NirExprKind::TemplateString { .. } => {}
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
         }
     }
 }
@@ -2207,16 +2049,6 @@ fn walk_stmt(
             walk_branching_block_if(then_block, else_block, states, ctx, span);
             out.push(stmt);
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            walk_expr(scrutinee, states, true, out, ctx);
-            walk_branching_block_if(then_block, else_block, states, ctx, span);
-            out.push(stmt);
-        }
         NirStmtKind::Loop { body } => {
             walk_nested_loop(body, states, out, ctx, span);
             out.push(stmt);
@@ -2276,19 +2108,9 @@ fn walk_stmt(
             walk_expr(value, states, true, out, ctx);
             out.push(stmt);
         }
-        NirStmtKind::LetDestructure { value, .. } => {
-            walk_expr(value, states, true, out, ctx);
-            out.push(stmt);
-        }
         NirStmtKind::Expr(expr) => {
             walk_expr(expr, states, false, out, ctx);
             out.push(stmt);
-        }
-        NirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be desugared by synthesis::cm_binding before HFS")
-        }
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
         }
     }
 }
@@ -2717,11 +2539,7 @@ fn walk_other_expr_kinds(
     let span = expr.span;
     match &mut expr.kind {
         NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => {
+        => {
             walk_expr(inner, states, true, out, ctx);
         }
         NirExprKind::Binary { left, right, .. } => {
@@ -2762,21 +2580,6 @@ fn walk_other_expr_kinds(
         NirExprKind::ClosureToCanonical { functor, .. } => {
             walk_expr(functor, states, true, out, ctx);
         }
-        NirExprKind::Closure { body: _, .. } => {
-            // A closure body executes when the closure is *called*, not
-            // here. Recursing with the surrounding `out` and `states`
-            // would land any sync stmts emitted from inside the closure
-            // at the wrong scope, and propagate state transitions into
-            // the surrounding code path that does not actually run them.
-            //
-            // Today this is harmless because outer locals appear inside
-            // closure bodies as `Capture`, not `Local`, so
-            // `field_*_to_candidate` and `extract_gc_local_index` all
-            // miss; nothing fires. Skipping the recursion makes that
-            // implicit guarantee an explicit one — a future inliner
-            // change that surfaces a captured local as `Local` would
-            // not silently miscompile.
-        }
         NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 walk_expr(p, states, true, out, ctx);
@@ -2810,13 +2613,6 @@ fn walk_other_expr_kinds(
             walk_expr(scrutinee, states, true, out, ctx);
             walk_expr_branches_match(arms, states, result_used, ctx, span);
         }
-        NirExprKind::TemplateString { parts } => {
-            for part in parts {
-                if let crate::nir::NirTemplatePart::Interpolation { expr, .. } = part {
-                    walk_expr(expr, states, true, out, ctx);
-                }
-            }
-        }
         NirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 walk_expr(arg, states, true, out, ctx);
@@ -2831,9 +2627,7 @@ fn walk_other_expr_kinds(
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => {}
         NirExprKind::Assign { .. } => {
             unreachable!("Assign handled at the top of walk_expr")
@@ -2842,11 +2636,6 @@ fn walk_other_expr_kinds(
         | NirExprKind::MethodCall { .. }
         | NirExprKind::IndirectCall { .. } => {
             unreachable!("call exprs handled by walk_call_expr in walk_expr")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
         }
     }
 }

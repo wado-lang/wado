@@ -81,7 +81,7 @@ fn analyze_block(block: &NirBlock, usage: &mut IndexMap<u32, LocalUsage>, type_t
 
 fn analyze_stmt(stmt: &NirStmt, usage: &mut IndexMap<u32, LocalUsage>, type_table: &TypeTable) {
     match &stmt.kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Let { value, .. } => {
             analyze_expr(value, usage, type_table);
         }
         NirStmtKind::Expr(expr) => analyze_expr(expr, usage, type_table),
@@ -104,21 +104,7 @@ fn analyze_stmt(stmt: &NirStmt, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             analyze_block(body, usage, type_table);
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            analyze_expr(scrutinee, usage, type_table);
-            analyze_block(then_block, usage, type_table);
-            if let Some(eb) = else_block {
-                analyze_block(eb, usage, type_table);
-            }
-        }
-        NirStmtKind::Continue
-        | NirStmtKind::TaskReturn { .. }
-        | NirStmtKind::VariadicForOf { .. } => {}
+        NirStmtKind::Continue => {}
     }
 }
 
@@ -206,11 +192,7 @@ fn analyze_expr(expr: &NirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
             analyze_expr(functor, usage, type_table);
         }
         NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => analyze_expr(inner, usage, type_table),
+        => analyze_expr(inner, usage, type_table),
         NirExprKind::Index {
             expr: inner, index, ..
         } => {
@@ -247,12 +229,6 @@ fn analyze_expr(expr: &NirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
                 analyze_expr(p, usage, type_table);
             }
         }
-        NirExprKind::Closure { body, captures, .. } => {
-            for capture in captures {
-                usage.entry(capture.outer_index).or_default().is_captured = true;
-            }
-            analyze_expr(body, usage, type_table);
-        }
         NirExprKind::Match { expr: inner, arms } => {
             analyze_expr(inner, usage, type_table);
             for arm in arms {
@@ -286,18 +262,8 @@ fn analyze_expr(expr: &NirExpr, usage: &mut IndexMap<u32, LocalUsage>, type_tabl
         | NirExprKind::BytesLiteral(_)
         | NirExprKind::Null
         | NirExprKind::Unit
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 
@@ -431,9 +397,6 @@ fn strip_in_stmt(
                 strip_in_expr(value, value_copy_set, usage);
             }
         }
-        NirStmtKind::LetDestructure { value, .. } => {
-            strip_in_expr(value, value_copy_set, usage);
-        }
         // `x = $value_copy$T(arg)` as a top-level statement — the Assign
         // *is* the binding. Allow elision when this is the only
         // assignment to `x` (`assign_count == 1`); a second assignment
@@ -469,18 +432,6 @@ fn strip_in_stmt(
         }
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             strip_in_block(body, value_copy_set, usage);
-        }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            strip_in_expr(scrutinee, value_copy_set, usage);
-            strip_in_block(then_block, value_copy_set, usage);
-            if let Some(eb) = else_block {
-                strip_in_block(eb, value_copy_set, usage);
-            }
         }
         _ => {}
     }
@@ -571,11 +522,6 @@ fn strip_in_expr(
         NirExprKind::Unary { expr: inner, .. }
         | NirExprKind::Cast { expr: inner, .. }
         | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
         | NirExprKind::VariantTag { expr: inner }
         | NirExprKind::VariantTest { expr: inner, .. }
         | NirExprKind::VariantPayload { expr: inner, .. }
@@ -598,9 +544,6 @@ fn strip_in_expr(
                 strip_in_expr(p, value_copy_set, usage);
             }
         }
-        NirExprKind::Closure { body, .. } => {
-            strip_in_expr(body, value_copy_set, usage);
-        }
         NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::BoolLiteral(_)
@@ -610,17 +553,7 @@ fn strip_in_expr(
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }

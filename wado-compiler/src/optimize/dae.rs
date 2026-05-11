@@ -228,52 +228,18 @@ fn find_dead_params(func: &NirFunction) -> Vec<bool> {
     dead
 }
 
-pub(super) fn collect_pinned(project: &NirPackage) -> IndexSet<FnKey> {
-    let mut pinned: IndexSet<FnKey> = IndexSet::default();
-    let mut walker = FuncRefCollector { out: &mut pinned };
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        if let Some(body) = &func.body {
-            walker.visit_block(body);
-        }
-    }
-    for global in &project.globals {
-        walker.visit_expr(&global.initializer);
-    }
-    // Closure functor `__call` methods are NOT pinned wholesale.
-    //
-    // `wir_build::register_closure_wrappers` derives the function-table
-    // wrapper's external signature from `ClosureFunctor::canonical_user_params`
-    // / `canonical_return` — a snapshot taken at functor creation that DAE
-    // never mutates — and the wrapper body adapts to whichever
-    // `call_method.params` survive. So even when the closure is coerced to
-    // a typed `fn(...)` and dispatched through the table, DAE shrinking
-    // `__call.params` is safe: the table-level signature stays put, and
-    // the wrapper drops the corresponding wrapper-local from its inner
-    // call.
-    //
-    // Trait-shaped `__call`s (`^Inspect::inspect` /
-    // `^InspectAlt::inspect_alt`) are still skipped by `is_eligible`'s
-    // `trait_name` check, since their cross-impl signature contract is a
-    // separate concern from the closure-functor / wrapper boundary.
-    pinned
-}
-
-struct FuncRefCollector<'a> {
-    out: &'a mut IndexSet<FnKey>,
-}
-
-impl NirRefVisitor for FuncRefCollector<'_> {
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        if let NirExprKind::FuncRef {
-            module_source,
-            name,
-        } = &expr.kind
-        {
-            self.out.insert((module_source.clone(), name.clone()));
-        }
-        self.walk_expr(expr);
-    }
+pub(super) fn collect_pinned(_project: &NirPackage) -> IndexSet<FnKey> {
+    // `FuncRef` is lowered into a `Closure` literal (functor struct) by
+    // `lower::closure` before NIR is constructed, so there is no bare
+    // function reference left to pin. Closure functor `__call` methods are
+    // NOT pinned wholesale either — `wir_build::register_closure_wrappers`
+    // derives the function-table wrapper's external signature from
+    // `ClosureFunctor::canonical_user_params` / `canonical_return`, a
+    // snapshot taken at functor creation that DAE never mutates, and the
+    // wrapper body adapts to whichever `call_method.params` survive.
+    // Trait-shaped `__call`s (`^Inspect::inspect` / `^InspectAlt`) are
+    // skipped separately by `is_eligible`'s `trait_name` check.
+    IndexSet::default()
 }
 
 /// Walk every call site once per validation. A single impure argument at a
@@ -562,13 +528,6 @@ impl NirMutVisitor for LocalRemap<'_> {
     fn visit_expr(&mut self, expr: &mut NirExpr) {
         match &mut expr.kind {
             NirExprKind::Local { index, .. } => *index = self.lookup(*index),
-            NirExprKind::Closure { captures, .. } => {
-                for cap in captures {
-                    cap.outer_index = self.lookup(cap.outer_index);
-                }
-                // Do NOT recurse into the closure body — its `Local` nodes
-                // index the closure's own locals, not the outer function's.
-            }
             _ => self.walk_expr(expr),
         }
     }
@@ -577,10 +536,6 @@ impl NirMutVisitor for LocalRemap<'_> {
         match &mut stmt.kind {
             NirStmtKind::Let { local_index, .. } => {
                 *local_index = self.lookup(*local_index);
-                self.walk_stmt(stmt);
-            }
-            NirStmtKind::VariadicForOf { binding_local, .. } => {
-                *binding_local = self.lookup(*binding_local);
                 self.walk_stmt(stmt);
             }
             _ => self.walk_stmt(stmt),

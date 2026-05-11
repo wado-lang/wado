@@ -86,16 +86,6 @@ fn cse_in_stmt(
         NirStmtKind::LabeledBlock { block, .. } => {
             cse_in_block(block, local_count, locals, changed);
         }
-        NirStmtKind::IfLet {
-            then_block,
-            else_block,
-            ..
-        } => {
-            cse_in_block(then_block, local_count, locals, changed);
-            if let Some(eb) = else_block {
-                cse_in_block(eb, local_count, locals, changed);
-            }
-        }
         _ => {}
     }
 }
@@ -307,21 +297,7 @@ fn stmt_modifies_any(stmt: &NirStmt, locals: &IndexSet<u32>) -> bool {
         NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
             value.as_ref().is_some_and(|v| expr_modifies_any(v, locals))
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            expr_modifies_any(scrutinee, locals)
-                || block_modifies_any(then_block, locals)
-                || else_block
-                    .as_ref()
-                    .is_some_and(|eb| block_modifies_any(eb, locals))
-        }
-        NirStmtKind::LetDestructure { value, .. } => expr_modifies_any(value, locals),
         NirStmtKind::Continue => false,
-        NirStmtKind::TaskReturn { .. } | NirStmtKind::VariadicForOf { .. } => false,
     }
 }
 
@@ -367,14 +343,6 @@ fn expr_modifies_any(expr: &NirExpr, locals: &IndexSet<u32>) -> bool {
         NirExprKind::Index {
             expr: inner, index, ..
         } => expr_modifies_any(inner, locals) || expr_modifies_any(index, locals),
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
         _ => false,
     }
 }
@@ -383,9 +351,7 @@ fn expr_modifies_any(expr: &NirExpr, locals: &IndexSet<u32>) -> bool {
 fn stmt_contains_expr(stmt: &NirStmt, key: &CseKey) -> bool {
     match &stmt.kind {
         NirStmtKind::Expr(e) => expr_contains(e, key),
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
-            expr_contains(value, key)
-        }
+        NirStmtKind::Let { value, .. } => expr_contains(value, key),
         NirStmtKind::If {
             condition,
             then_block,
@@ -403,20 +369,7 @@ fn stmt_contains_expr(stmt: &NirStmt, key: &CseKey) -> bool {
         NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
             value.as_ref().is_some_and(|v| expr_contains(v, key))
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            expr_contains(scrutinee, key)
-                || block_contains(then_block, key)
-                || else_block
-                    .as_ref()
-                    .is_some_and(|eb| block_contains(eb, key))
-        }
         NirStmtKind::Continue => false,
-        NirStmtKind::TaskReturn { .. } | NirStmtKind::VariadicForOf { .. } => false,
     }
 }
 
@@ -459,14 +412,6 @@ fn expr_contains(expr: &NirExpr, key: &CseKey) -> bool {
         NirExprKind::Index {
             expr: inner, index, ..
         } => expr_contains(inner, key) || expr_contains(index, key),
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
         _ => false,
     }
 }
@@ -494,7 +439,7 @@ fn replace_matching_expr(
 ) {
     match &mut stmt.kind {
         NirStmtKind::Expr(e) => replace_in_expr(e, key, replacement, type_id),
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Let { value, .. } => {
             replace_in_expr(value, key, replacement, type_id);
         }
         NirStmtKind::If {
@@ -516,20 +461,7 @@ fn replace_matching_expr(
                 replace_in_expr(v, key, replacement, type_id);
             }
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            replace_in_expr(scrutinee, key, replacement, type_id);
-            replace_in_block(then_block, key, replacement, type_id);
-            if let Some(eb) = else_block {
-                replace_in_block(eb, key, replacement, type_id);
-            }
-        }
         NirStmtKind::Continue => {}
-        NirStmtKind::TaskReturn { .. } | NirStmtKind::VariadicForOf { .. } => {}
     }
 }
 
@@ -644,14 +576,6 @@ fn replace_in_expr(expr: &mut NirExpr, key: &CseKey, replacement: &NirExprKind, 
             for arg in args {
                 replace_in_expr(arg, key, replacement, type_id);
             }
-        }
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
         }
         _ => {}
     }

@@ -834,9 +834,7 @@ impl<'a> Interpreter<'a> {
     fn reduce_in_place_stmt(&mut self, stmt: &mut NirStmt) -> bool {
         match &mut stmt.kind {
             NirStmtKind::Expr(e) => self.reduce_in_place(e),
-            NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
-                self.reduce_in_place(value)
-            }
+            NirStmtKind::Let { value, .. } => self.reduce_in_place(value),
             NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
                 value.as_mut().is_some_and(|v| self.reduce_in_place(v))
             }
@@ -854,22 +852,7 @@ impl<'a> Interpreter<'a> {
             }
             NirStmtKind::Loop { body } => self.reduce_in_place_block(body),
             NirStmtKind::LabeledBlock { block, .. } => self.reduce_in_place_block(block),
-            NirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                let mut c = self.reduce_in_place(scrutinee);
-                c |= self.reduce_in_place_block(then_block);
-                if let Some(eb) = else_block {
-                    c |= self.reduce_in_place_block(eb);
-                }
-                c
-            }
-            NirStmtKind::Continue
-            | NirStmtKind::TaskReturn { .. }
-            | NirStmtKind::VariadicForOf { .. } => false,
+            NirStmtKind::Continue => false,
         }
     }
 
@@ -1913,7 +1896,6 @@ fn is_speculatable(expr: &NirExpr) -> bool {
         | NirExprKind::BoolLiteral(_)
         | NirExprKind::CharLiteral(_)
         | NirExprKind::Local { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::Unit => true,
         NirExprKind::Binary { left, op, right } => {
             !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)

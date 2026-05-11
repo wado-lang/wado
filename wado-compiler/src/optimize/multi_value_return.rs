@@ -371,27 +371,14 @@ fn stmt_returns_match(stmt: &NirStmt, expected: &ExpectedShape) -> bool {
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             all_returns_match_shape(body, expected)
         }
-        NirStmtKind::IfLet {
-            then_block,
-            else_block,
-            ..
-        } => {
-            all_returns_match_shape(then_block, expected)
-                && else_block
-                    .as_ref()
-                    .is_none_or(|b| all_returns_match_shape(b, expected))
-        }
-        // Let / Expr / Break / Continue / TaskReturn / VariadicForOf — no
-        // explicit Return; recurse into nested blocks via expression walks.
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
-            nested_returns_in_expr_match(value, expected)
-        }
+        // Let / Expr / Break / Continue — no explicit Return; recurse into
+        // nested blocks via expression walks.
+        NirStmtKind::Let { value, .. } => nested_returns_in_expr_match(value, expected),
         NirStmtKind::Expr(e) => nested_returns_in_expr_match(e, expected),
         NirStmtKind::Break { value, .. } => value
             .as_ref()
             .is_none_or(|v| nested_returns_in_expr_match(v, expected)),
         NirStmtKind::Continue => true,
-        NirStmtKind::TaskReturn { .. } | NirStmtKind::VariadicForOf { .. } => true,
     }
 }
 
@@ -531,30 +518,14 @@ fn stmt_break_values_match(stmt: &NirStmt, expected: &ExpectedShape) -> bool {
                     .as_ref()
                     .is_none_or(|b| all_break_values_match_shape(b, expected))
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            expr_break_values_match(scrutinee, expected)
-                && all_break_values_match_shape(then_block, expected)
-                && else_block
-                    .as_ref()
-                    .is_none_or(|b| all_break_values_match_shape(b, expected))
-        }
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             all_break_values_match_shape(body, expected)
         }
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
-            expr_break_values_match(value, expected)
-        }
+        NirStmtKind::Let { value, .. } => expr_break_values_match(value, expected),
         NirStmtKind::Expr(e) | NirStmtKind::Return { value: Some(e) } => {
             expr_break_values_match(e, expected)
         }
-        NirStmtKind::Return { value: None }
-        | NirStmtKind::TaskReturn { .. }
-        | NirStmtKind::VariadicForOf { .. } => true,
+        NirStmtKind::Return { value: None } => true,
     }
 }
 
@@ -647,9 +618,6 @@ fn validate_stmt(
             // can't rewrite) and (b) bare references to tracked locals.
             walk_expr_for_uses(value, candidate_names, candidates, invalid, tracked);
         }
-        NirStmtKind::LetDestructure { value, .. } => {
-            walk_expr_for_uses(value, candidate_names, candidates, invalid, tracked);
-        }
         NirStmtKind::Expr(e) | NirStmtKind::Return { value: Some(e) } => {
             walk_expr_for_uses(e, candidate_names, candidates, invalid, tracked);
         }
@@ -684,25 +652,6 @@ fn validate_stmt(
                 validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
             }
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            walk_expr_for_uses(scrutinee, candidate_names, candidates, invalid, tracked);
-            let mut inner = tracked.clone();
-            for stmt in &then_block.stmts {
-                validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
-            }
-            if let Some(eb) = else_block {
-                let mut inner = tracked.clone();
-                for stmt in &eb.stmts {
-                    validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
-                }
-            }
-        }
-        NirStmtKind::TaskReturn { .. } | NirStmtKind::VariadicForOf { .. } => {}
     }
 }
 
@@ -833,13 +782,6 @@ fn walk_expr_for_uses(
                 validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
             }
         }
-        NirExprKind::Closure { body, .. } => {
-            // Closure captures wouldn't refer to outer-tracked locals
-            // through a `Local` arm — captures use `Capture { index }`.
-            // But a closure body that itself calls a candidate must still
-            // be walked for invalid call positions.
-            walk_expr_for_uses(body, candidate_names, candidates, invalid, tracked);
-        }
         // For all other expressions (binary, unary, assign, struct/tuple
         // literals, etc.), walk every child with the same tracker so that
         // nested `LocalGet(p)` references are observed by the bare-Local
@@ -863,11 +805,6 @@ fn recurse_children(
         }
         NirExprKind::Unary { expr: inner, .. }
         | NirExprKind::Cast { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
         | NirExprKind::VariantTag { expr: inner }
         | NirExprKind::VariantTest { expr: inner, .. }
         | NirExprKind::VariantPayload { expr: inner, .. }
@@ -900,30 +837,9 @@ fn recurse_children(
         NirExprKind::GlobalVarSet { value, .. } => {
             walk_expr_for_uses(value, candidate_names, candidates, invalid, tracked);
         }
-        NirExprKind::TemplateString { parts } => {
-            for part in parts {
-                if let crate::nir::NirTemplatePart::Interpolation { expr: e, .. } = part {
-                    walk_expr_for_uses(e, candidate_names, candidates, invalid, tracked);
-                }
-            }
-        }
-        NirExprKind::Resume { value } => {
-            walk_expr_for_uses(value, candidate_names, candidates, invalid, tracked);
-        }
-        NirExprKind::WithHandler { bindings, body, .. } => {
-            for b in bindings {
-                walk_expr_for_uses(&b.handler, candidate_names, candidates, invalid, tracked);
-            }
-            let mut inner = tracked.clone();
-            for stmt in &body.stmts {
-                validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
-            }
-        }
         // Leaf nodes — no nested expressions.
         NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::BoolLiteral(_)
@@ -944,7 +860,7 @@ fn recurse_children(
         | NirExprKind::If { .. }
         | NirExprKind::Match { .. }
         | NirExprKind::Switch { .. }
-        | NirExprKind::Closure { .. } => {
+        => {
             // Outer match should have routed these directly; if we reach
             // here something's wrong.
             unreachable!(

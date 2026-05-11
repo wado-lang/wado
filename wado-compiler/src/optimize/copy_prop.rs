@@ -237,33 +237,12 @@ fn analyze_stmt(
         NirStmtKind::LabeledBlock { block, .. } => {
             analyze_block(block, result, type_table, first_param_types);
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            analyze_expr(scrutinee, result, type_table, first_param_types);
-            analyze_block(then_block, result, type_table, first_param_types);
-            if let Some(eb) = else_block {
-                analyze_block(eb, result, type_table, first_param_types);
-            }
-        }
         NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 analyze_expr(v, result, type_table, first_param_types);
             }
         }
         NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => {
-            analyze_expr(value, result, type_table, first_param_types);
-        }
-        NirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     }
 }
 
@@ -358,12 +337,7 @@ fn analyze_expr(
         NirExprKind::ClosureToCanonical { functor, .. } => {
             analyze_expr(functor, result, type_table, first_param_types);
         }
-        NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => {
+        NirExprKind::FieldAccess { expr: inner, .. } => {
             analyze_expr(inner, result, type_table, first_param_types);
         }
         NirExprKind::Index {
@@ -407,16 +381,6 @@ fn analyze_expr(
                 analyze_expr(payload_expr, result, type_table, first_param_types);
             }
         }
-        NirExprKind::Closure { body, captures, .. } => {
-            for capture in captures {
-                result
-                    .usage
-                    .entry(capture.outer_index)
-                    .or_default()
-                    .is_captured = true;
-            }
-            analyze_expr(body, result, type_table, first_param_types);
-        }
         NirExprKind::Match { expr: inner, arms } => {
             analyze_expr(inner, result, type_table, first_param_types);
             for arm in arms {
@@ -456,18 +420,8 @@ fn analyze_expr(
         | NirExprKind::BytesLiteral(_)
         | NirExprKind::Null
         | NirExprKind::Unit
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 
@@ -653,7 +607,7 @@ fn apply_in_stmt(
     dead_locals: &IndexSet<u32>,
 ) {
     match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+        NirStmtKind::Let { value, .. } => {
             apply_in_expr(value, substitutions, dead_locals);
         }
         NirStmtKind::Expr(expr) => {
@@ -678,25 +632,7 @@ fn apply_in_stmt(
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             apply_in_block(body, substitutions, dead_locals);
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            apply_in_expr(scrutinee, substitutions, dead_locals);
-            apply_in_block(then_block, substitutions, dead_locals);
-            if let Some(eb) = else_block {
-                apply_in_block(eb, substitutions, dead_locals);
-            }
-        }
         NirStmtKind::Continue => {}
-        NirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     }
 }
 
@@ -776,11 +712,6 @@ fn apply_in_expr(
         }
         NirExprKind::Unary { expr: inner, .. }
         | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
         | NirExprKind::Cast { expr: inner, .. } => {
             apply_in_expr(inner, substitutions, dead_locals);
         }
@@ -848,9 +779,6 @@ fn apply_in_expr(
                 apply_in_expr(p, substitutions, dead_locals);
             }
         }
-        NirExprKind::Closure { body, .. } => {
-            apply_in_expr(body, substitutions, dead_locals);
-        }
         NirExprKind::Match { expr: inner, arms } => {
             apply_in_expr(inner, substitutions, dead_locals);
             for arm in arms {
@@ -889,18 +817,8 @@ fn apply_in_expr(
         | NirExprKind::BytesLiteral(_)
         | NirExprKind::Null
         | NirExprKind::Unit
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 

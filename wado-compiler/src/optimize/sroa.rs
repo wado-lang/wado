@@ -261,33 +261,12 @@ fn mark_ref_fields_in_stmt(
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             mark_ref_field_locals_as_aliased(body, decomposed, stores_aliased);
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            mark_ref_fields_in_expr(scrutinee, decomposed, stores_aliased);
-            mark_ref_field_locals_as_aliased(then_block, decomposed, stores_aliased);
-            if let Some(eb) = else_block {
-                mark_ref_field_locals_as_aliased(eb, decomposed, stores_aliased);
-            }
-        }
         NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 mark_ref_fields_in_expr(v, decomposed, stores_aliased);
             }
         }
-        NirStmtKind::LetDestructure { value, .. } => {
-            mark_ref_fields_in_expr(value, decomposed, stores_aliased);
-        }
         NirStmtKind::Continue => {}
-        NirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     }
 }
 
@@ -338,11 +317,6 @@ fn mark_ref_fields_in_expr(
         }
         NirExprKind::Unary { expr: inner, .. }
         | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
         | NirExprKind::Cast { expr: inner, .. }
         | NirExprKind::VariantTag { expr: inner }
         | NirExprKind::VariantTest { expr: inner, .. }
@@ -395,17 +369,12 @@ fn mark_ref_fields_in_expr(
                 mark_ref_fields_in_expr(p, decomposed, stores_aliased);
             }
         }
-        NirExprKind::Closure { body, .. } => {
-            mark_ref_fields_in_expr(body, decomposed, stores_aliased);
-        }
         NirExprKind::GlobalVarSet { value, .. } => {
             mark_ref_fields_in_expr(value, decomposed, stores_aliased);
         }
         // Leaf nodes
         NirExprKind::Local { .. }
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::StringLiteral(_)
@@ -415,14 +384,6 @@ fn mark_ref_fields_in_expr(
         | NirExprKind::Null
         | NirExprKind::Unit
         | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
     }
 }
 
@@ -554,33 +515,12 @@ fn collect_candidates_in_stmt(
         NirStmtKind::LabeledBlock { block, .. } => {
             collect_candidates_in_stmts(&block.stmts, type_table, candidates);
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_candidates_in_expr(scrutinee, type_table, candidates);
-            collect_candidates_in_stmts(&then_block.stmts, type_table, candidates);
-            if let Some(eb) = else_block {
-                collect_candidates_in_stmts(&eb.stmts, type_table, candidates);
-            }
-        }
         NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 collect_candidates_in_expr(v, type_table, candidates);
             }
         }
         NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => {
-            collect_candidates_in_expr(value, type_table, candidates);
-        }
-        NirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     }
 }
 
@@ -625,9 +565,6 @@ fn collect_candidates_in_expr(
             }
             collect_candidates_in_stmts(&default.stmts, type_table, candidates);
         }
-        NirExprKind::Closure { body, .. } => {
-            collect_candidates_in_expr(body, type_table, candidates);
-        }
         // Other expression kinds don't contain Let statements
         _ => {}
     }
@@ -659,28 +596,12 @@ struct EscapeChecker<'a> {
 }
 
 impl NirRefVisitor for EscapeChecker<'_> {
-    fn visit_stmt(&mut self, stmt: &NirStmt) {
-        match &stmt.kind {
-            NirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            NirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
-            }
-            _ => self.walk_stmt(stmt),
-        }
-    }
-
     fn visit_expr(&mut self, expr: &NirExpr) {
         match &expr.kind {
             // FieldAccess on a candidate local is safe — don't mark the base local as
             // escaped and don't recurse into the base (which is the local itself).
             NirExprKind::FieldAccess { expr: inner, .. }
-            | NirExprKind::TupleSpread { expr: inner }
-            | NirExprKind::TupleZip { expr: inner }
-            | NirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            } => {
+            => {
                 if is_candidate_local(inner, self.candidates).is_some() {
                     return;
                 }
@@ -688,12 +609,7 @@ impl NirRefVisitor for EscapeChecker<'_> {
             }
             // Assign to a field of a candidate is safe for the target side.
             NirExprKind::Assign { target, value } => {
-                if let NirExprKind::FieldAccess { expr: inner, .. }
-                | NirExprKind::TupleSpread { expr: inner }
-                | NirExprKind::TupleZip { expr: inner }
-                | NirExprKind::TypePackExpansion {
-                    call_expr: inner, ..
-                } = &target.kind
+                if let NirExprKind::FieldAccess { expr: inner, .. } = &target.kind
                     && is_candidate_local(inner, self.candidates).is_some()
                 {
                     self.visit_expr(value);
@@ -718,18 +634,6 @@ impl NirRefVisitor for EscapeChecker<'_> {
                     return;
                 }
                 self.visit_expr(inner);
-            }
-            // Closure captures → escape.
-            NirExprKind::Closure { body, captures, .. } => {
-                for capture in captures {
-                    if self.candidates.contains(&capture.outer_index) {
-                        self.escaped.insert(capture.outer_index);
-                    }
-                }
-                self.visit_expr(body);
-            }
-            NirExprKind::TemplateString { .. } => {
-                unreachable!("TemplateString should be expanded before this phase")
             }
             _ => self.walk_expr(expr),
         }
@@ -800,24 +704,10 @@ struct FieldAccessChecker<'a> {
 }
 
 impl NirRefVisitor for FieldAccessChecker<'_> {
-    fn visit_stmt(&mut self, stmt: &NirStmt) {
-        match &stmt.kind {
-            // The original walker ignored these stmt kinds entirely — preserve.
-            NirStmtKind::LetDestructure { .. }
-            | NirStmtKind::TaskReturn { .. }
-            | NirStmtKind::VariadicForOf { .. } => {}
-            _ => self.walk_stmt(stmt),
-        }
-    }
-
     fn visit_expr(&mut self, expr: &NirExpr) {
         match &expr.kind {
             NirExprKind::FieldAccess { expr: inner, .. }
-            | NirExprKind::TupleSpread { expr: inner }
-            | NirExprKind::TupleZip { expr: inner }
-            | NirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            } => {
+            => {
                 if let Some(idx) = is_candidate_local(inner, self.candidates) {
                     self.has_access.insert(idx);
                     return;
@@ -825,12 +715,7 @@ impl NirRefVisitor for FieldAccessChecker<'_> {
                 self.visit_expr(inner);
             }
             NirExprKind::Assign { target, value } => {
-                if let NirExprKind::FieldAccess { expr: inner, .. }
-                | NirExprKind::TupleSpread { expr: inner }
-                | NirExprKind::TupleZip { expr: inner }
-                | NirExprKind::TypePackExpansion {
-                    call_expr: inner, ..
-                } = &target.kind
+                if let NirExprKind::FieldAccess { expr: inner, .. } = &target.kind
                     && let Some(idx) = is_candidate_local(inner, self.candidates)
                 {
                     self.has_access.insert(idx);
@@ -839,9 +724,6 @@ impl NirRefVisitor for FieldAccessChecker<'_> {
                 }
                 self.visit_expr(target);
                 self.visit_expr(value);
-            }
-            NirExprKind::TemplateString { .. } => {
-                unreachable!("TemplateString should be expanded before this phase")
             }
             _ => self.walk_expr(expr),
         }
@@ -875,12 +757,6 @@ impl NirRefVisitor for SoftEscapeChecker<'_> {
                 self.visit_expr(v);
                 self.soft_allowed = false;
             }
-            NirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            NirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
-            }
             _ => self.walk_stmt(stmt),
         }
     }
@@ -893,11 +769,7 @@ impl NirRefVisitor for SoftEscapeChecker<'_> {
         match &expr.kind {
             // FieldAccess on candidate is always safe — skip recursion into the base.
             NirExprKind::FieldAccess { expr: inner, .. }
-            | NirExprKind::TupleSpread { expr: inner }
-            | NirExprKind::TupleZip { expr: inner }
-            | NirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            } => {
+            => {
                 if is_candidate_local(inner, self.candidates).is_some() {
                     return;
                 }
@@ -905,12 +777,7 @@ impl NirRefVisitor for SoftEscapeChecker<'_> {
             }
             // Assign to field of candidate is safe — only recurse into value.
             NirExprKind::Assign { target, value } => {
-                if let NirExprKind::FieldAccess { expr: inner, .. }
-                | NirExprKind::TupleSpread { expr: inner }
-                | NirExprKind::TupleZip { expr: inner }
-                | NirExprKind::TypePackExpansion {
-                    call_expr: inner, ..
-                } = &target.kind
+                if let NirExprKind::FieldAccess { expr: inner, .. } = &target.kind
                     && is_candidate_local(inner, self.candidates).is_some()
                 {
                     self.visit_expr(value);
@@ -940,14 +807,6 @@ impl NirRefVisitor for SoftEscapeChecker<'_> {
                 self.visit_expr(inner);
             }
             // Closure captures → hard escape.
-            NirExprKind::Closure { body, captures, .. } => {
-                for capture in captures {
-                    if self.candidates.contains(&capture.outer_index) {
-                        self.hard_escaped.insert(capture.outer_index);
-                    }
-                }
-                self.visit_expr(body);
-            }
             // Call / MethodCall: skip `&candidate` args to non-stores callees.
             NirExprKind::Call { func, args, .. } => {
                 for (i, arg) in args.iter().enumerate() {
@@ -984,9 +843,6 @@ impl NirRefVisitor for SoftEscapeChecker<'_> {
                     }
                     self.visit_expr(&arg.expr);
                 }
-            }
-            NirExprKind::TemplateString { .. } => {
-                unreachable!("TemplateString should be expanded before this phase")
             }
             _ => self.walk_expr(expr),
         }
@@ -1264,39 +1120,6 @@ fn rewrite_stmt(
                 reconstruct_info,
             );
         }
-        NirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            rewrite_expr(
-                scrutinee,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-            rewrite_block(
-                then_block,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-            if let Some(eb) = else_block {
-                rewrite_block(
-                    eb,
-                    safe_set,
-                    field_map,
-                    info_map,
-                    candidate_mut,
-                    reconstruct_info,
-                );
-            }
-        }
         NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 rewrite_expr(
@@ -1310,22 +1133,6 @@ fn rewrite_stmt(
             }
         }
         NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => {
-            rewrite_expr(
-                value,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        NirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-        NirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
     }
 }
 
@@ -1402,11 +1209,7 @@ fn rewrite_expr(
     // Recurse into child expressions
     match &mut expr.kind {
         NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::TupleSpread { expr: inner }
-        | NirExprKind::TupleZip { expr: inner }
-        | NirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => {
+        => {
             rewrite_expr(
                 inner,
                 safe_set,
@@ -1674,16 +1477,6 @@ fn rewrite_expr(
                 );
             }
         }
-        NirExprKind::Closure { body, .. } => {
-            rewrite_expr(
-                body,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
         NirExprKind::GlobalVarSet { value, .. } => {
             rewrite_expr(
                 value,
@@ -1757,16 +1550,9 @@ fn rewrite_expr(
         | NirExprKind::BytesLiteral(_)
         | NirExprKind::Null
         | NirExprKind::Unit
-        | NirExprKind::FuncRef { .. }
         | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Capture { .. }
         | NirExprKind::EnumConstruct { .. }
-        | NirExprKind::TemplateString { .. } => {}
-        NirExprKind::WithHandler { .. } | NirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
+        => {}
     }
 }
 
