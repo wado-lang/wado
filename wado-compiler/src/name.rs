@@ -30,11 +30,10 @@
 //! - For projects with `wado.toml`: relative to the directory containing `wado.toml`
 //! - For standalone scripts: relative to the entry point's directory
 
-use crate::hashmap::IndexSet;
+use crate::intern::{InternedStr, StringInterner};
 use fluent_uri::UriRef;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 
 // =============================================================================
@@ -43,7 +42,8 @@ use std::sync::{Arc, LazyLock};
 //
 // `ModuleSource` is used pervasively as `IndexMap` key during monomorphization
 // and resolver lookups. To make `clone`/`eq`/`hash` O(1), every string field
-// is canonicalized into an `Arc<str>` shared via `ModuleSourceInterner`.
+// is canonicalized into an `Arc<str>` shared via `ModuleSourceInterner`,
+// which wraps the generic `StringInterner` from `crate::intern`.
 //
 // Well-known names (the targets of zero-arg constructors like
 // `ModuleSource::prelude()`) live in `LazyLock<Arc<str>>` statics so they
@@ -117,108 +117,26 @@ fn well_known_arcs() -> Vec<Arc<str>> {
     ]
 }
 
-/// Interned string used for `ModuleSource` payloads.
-///
-/// Identity is by pointer: every `InternedStr` is constructed either
-/// through a [`ModuleSourceInterner`] (which canonicalises content
-/// against its `Arc<str>` pool) or by adopting one of the well-known
-/// `LazyLock<Arc<str>>` statics. The interner adopts every well-known
-/// static on construction, so calls like
-/// `interner.core("prelude")` and `ModuleSource::prelude()` share the
-/// same `Arc` and compare equal in O(1).
-///
-/// Hash also uses pointer identity. This is sound because two values
-/// with the same content always land in the same canonical `Arc` —
-/// either through the interner or via a well-known static.
-#[derive(Debug, Clone)]
-pub struct InternedStr(Arc<str>);
-
-impl InternedStr {
-    /// Build from a raw `Arc<str>`. Restricted to this crate so external
-    /// callers cannot bypass the interner.
-    pub(crate) fn from_arc(arc: Arc<str>) -> Self {
-        Self(arc)
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Deref for InternedStr {
-    type Target = str;
-    fn deref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl AsRef<str> for InternedStr {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl PartialEq for InternedStr {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
-    }
-}
-impl Eq for InternedStr {}
-
-impl Hash for InternedStr {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        (Arc::as_ptr(&self.0).cast::<()>() as usize).hash(state);
-    }
-}
-
-impl fmt::Display for InternedStr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl PartialEq<str> for InternedStr {
-    fn eq(&self, other: &str) -> bool {
-        &*self.0 == other
-    }
-}
-
-impl PartialEq<&str> for InternedStr {
-    fn eq(&self, other: &&str) -> bool {
-        &*self.0 == *other
-    }
-}
-
-/// Interner for `ModuleSource` payloads. Owns the canonical `Arc<str>`
-/// for each interned content; clones are cheap (refcount bump).
-///
-/// `ModuleSourceInterner::new()` adopts every well-known static
-/// (`PLACEHOLDER_NAME`, `CORE_PRELUDE`, ...), so calls like
-/// `interner.core("prelude")` return the same `Arc` as the static — and
-/// therefore the same `InternedStr` as `ModuleSource::prelude()`.
+/// Interner for `ModuleSource` payloads. Wraps a generic
+/// [`StringInterner`] and adopts every well-known
+/// `LazyLock<Arc<str>>` static (`PLACEHOLDER_NAME`, `CORE_PRELUDE`, ...)
+/// at construction. As a result, calls like `interner.core("prelude")`
+/// return the same `Arc` as the static — and therefore the same
+/// [`InternedStr`] as [`ModuleSource::prelude`].
 #[derive(Debug)]
 pub struct ModuleSourceInterner {
-    strings: IndexSet<Arc<str>>,
+    strings: StringInterner,
 }
 
 impl ModuleSourceInterner {
     pub fn new() -> Self {
-        let well_known = well_known_arcs();
-        let mut strings =
-            IndexSet::with_capacity_and_hasher(well_known.len(), rustc_hash::FxBuildHasher);
-        for arc in well_known {
-            strings.insert(arc);
+        Self {
+            strings: StringInterner::with_well_known_arcs(well_known_arcs()),
         }
-        Self { strings }
     }
 
     pub fn intern(&mut self, s: &str) -> InternedStr {
-        if let Some(existing) = self.strings.get(s) {
-            return InternedStr::from_arc(existing.clone());
-        }
-        let arc: Arc<str> = Arc::from(s);
-        self.strings.insert(arc.clone());
-        InternedStr::from_arc(arc)
+        self.strings.intern(s)
     }
 
     pub fn core(&mut self, name: &str) -> ModuleSource {

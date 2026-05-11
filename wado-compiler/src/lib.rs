@@ -14,6 +14,7 @@ pub mod doc;
 pub mod effect_check;
 pub mod flat_package;
 pub mod hashmap;
+pub mod intern;
 pub mod kiln;
 pub mod lexer;
 pub mod link;
