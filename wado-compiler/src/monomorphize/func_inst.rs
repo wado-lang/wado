@@ -836,17 +836,28 @@ impl Monomorphizer {
                 is_blanket: false,
             }),
             // Update method_info with mangled struct name including impl type args
-            // and method type args (from the method's own type params)
+            // and method type args (from the method's own type params).
+            //
+            // Use `mangle_type_arg_for_generic` so the definition-side
+            // struct name matches what call-site rewrites produce via
+            // `method_instantiation_name_inner` (which also goes through
+            // `mangle_type_arg_for_generic`). Falling back to
+            // `mangle_type_name` here used to emit `Node<String>` on
+            // the function definition while the call site wrote
+            // `Node<core:prelude/string.wado/String>` — the inliner's
+            // recursive-function detection then failed to link the
+            // self-call back to its own definition, and `-O3` walked
+            // the recursive method into a stack overflow.
             method_info: generic.method_info.as_ref().map(|info| {
                 let impl_type_arg_names: Vec<String> = key
                     .impl_type_args
                     .iter()
-                    .map(|&t| type_table.mangle_type_name(t))
+                    .map(|&t| type_table.mangle_type_arg_for_generic(t))
                     .collect();
                 let method_type_arg_names: Vec<String> = key
                     .method_type_args
                     .iter()
-                    .map(|&t| type_table.mangle_type_name(t))
+                    .map(|&t| type_table.mangle_type_arg_for_generic(t))
                     .collect();
                 // Blanket impl: struct name IS the type param (e.g., "I").
                 // Replace it with the concrete type name instead of appending type args.
@@ -1144,13 +1155,17 @@ impl Monomorphizer {
                             }
                         } else {
                             // Apply the callee's own substituted type args.
+                            // Type args feeding into MethodInfo names use the
+                            // qualified mangle so call sites match the
+                            // function-definition naming
+                            // (`func_inst.rs:840+`).
                             let impl_names: Vec<String> = sub_impl_type_args
                                 .iter()
-                                .map(|&tid| type_table.mangle_type_name(tid))
+                                .map(|&tid| type_table.mangle_type_arg_for_generic(tid))
                                 .collect();
                             let method_names: Vec<String> = sub_method_type_args
                                 .iter()
-                                .map(|&tid| type_table.mangle_type_name(tid))
+                                .map(|&tid| type_table.mangle_type_arg_for_generic(tid))
                                 .collect();
                             if impl_names.is_empty() && method_names.is_empty() {
                                 info.clone()
@@ -1181,7 +1196,7 @@ impl Monomorphizer {
                             if any_changed {
                                 new_info.method_type_args = substituted_method_args
                                     .iter()
-                                    .map(|&tid| type_table.mangle_type_name(tid))
+                                    .map(|&tid| type_table.mangle_type_arg_for_generic(tid))
                                     .collect();
                             }
                         }
@@ -1772,19 +1787,22 @@ impl Monomorphizer {
                     } => {
                         if type_args.is_empty() && !substitution.is_empty() {
                             // GenericInstance with empty type_args in a substitution context
-                            // Build the name using the substitution map
+                            // Build the name using the substitution map. Type
+                            // args go through `mangle_type_arg_for_generic` so
+                            // the resulting struct name matches what the
+                            // function-definition side produces.
                             let mut sorted_entries: Vec<_> = substitution.iter().collect();
                             sorted_entries.sort_by_key(|(idx, _)| **idx);
                             let args: Vec<String> = sorted_entries
                                 .iter()
-                                .map(|(_, tid)| type_table.mangle_type_name(**tid))
+                                .map(|(_, tid)| type_table.mangle_type_arg_for_generic(**tid))
                                 .collect();
                             *struct_name = mangle_generic_name(name, &args);
                         } else {
-                            // For generic instances like Container<i32>, compute the mangled name
+                            // For generic instances like Container<i32>, compute the mangled name.
                             let args: Vec<String> = type_args
                                 .iter()
-                                .map(|arg| type_table.mangle_type_name(*arg))
+                                .map(|arg| type_table.mangle_type_arg_for_generic(*arg))
                                 .collect();
                             *struct_name = mangle_generic_name(name, &args);
                         }
@@ -3566,9 +3584,19 @@ fn try_lower_comparison(
                 // and already lowered to method calls by the resolver.
                 return None;
             }
+            // Use the qualified type-arg mangle so the call sites
+            // synthesised here (Eq / Ord operator lowering) name
+            // their target methods with the same struct-name form
+            // the monomorphizer's `method_instantiation_name_inner`
+            // and `func_inst.rs:840` use to set the function
+            // definition's `MethodInfo.struct_name`. Falling back to
+            // `mangle_type_name` here used to emit `Foo<String>::eq`
+            // call sites against `Foo<core:prelude/string.wado/String>::eq`
+            // function definitions and broke the inliner's
+            // recursive-function detection.
             let args: Vec<String> = type_args
                 .iter()
-                .map(|&t| type_table.mangle_type_name(t))
+                .map(|&t| type_table.mangle_type_arg_for_generic(t))
                 .collect();
             (name.clone(), args, Some(module_source.clone()))
         }
