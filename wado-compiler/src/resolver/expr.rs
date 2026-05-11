@@ -2247,17 +2247,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         {
             (name.clone(), self.current_module_source.clone())
         } else if let Some(symbol) = self.symbols.lookup(name) {
-            match &symbol.kind {
-                crate::symbol::SymbolKind::Struct(_) => {
-                    (symbol.name.clone(), symbol.module_source().clone())
-                }
-                _ => {
-                    let _ = self.logger.error(TypeError::UnknownType {
-                        name: name.clone(),
-                        span: struct_lit.span,
-                    });
-                    (name.clone(), self.current_module_source.clone())
-                }
+            if let crate::symbol::SymbolKind::Struct(_) = &symbol.kind {
+                (symbol.name.clone(), symbol.module_source().clone())
+            } else {
+                let _ = self.logger.error(TypeError::UnknownType {
+                    name: name.clone(),
+                    span: struct_lit.span,
+                });
+                (name.clone(), self.current_module_source.clone())
             }
         } else {
             // The struct name is neither locally defined nor imported.

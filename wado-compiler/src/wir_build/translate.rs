@@ -1840,8 +1840,7 @@ impl FunctionTranslator<'_, '_> {
                     let resolved = self.type_table.get(expr.type_id);
                     panic!(
                         "[WIR] StructLiteral expected Ref WirType, got {wir_type:?} (type_id={:?}, resolved={:?})",
-                        expr.type_id,
-                        resolved
+                        expr.type_id, resolved
                     );
                 };
                 // Unit-typed fields have no Wasm representation; skip them.
