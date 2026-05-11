@@ -377,6 +377,17 @@ impl<H> Router<H> {
         return null;
     }
 
+    /// Dynamic DFA match.
+    ///
+    /// On a hit, builds a fresh `RouteMatch` plus its `PathParams` /
+    /// `ranges` storage in this function's locals and returns a reference
+    /// to that match. Wado's escape analysis automatically heap-promotes
+    /// any local whose address escapes the function (see
+    /// `docs/wep-2026-01-12-value-semantics-and-stores.md`), so the
+    /// returned `&RouteMatch<H>` is sound: `rm`, `pp`, and `ranges` all
+    /// migrate to GC-managed storage and live as long as the caller
+    /// retains the reference. The `stores[self, path]` annotation is what
+    /// makes returning a ref derived from `&self` and `path` legal here.
     fn match_dynamic(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>>
         with stores[self, path]
     {
@@ -795,22 +806,39 @@ impl Deserializer for PathParamsDeserializer {
     fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> { return self.parse_scalar::<f32>("f32"); }
     fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> { return self.parse_scalar::<f64>("f64"); }
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
+        self.require_active_param()?;
         let [s, e] = self.current_range();
-        let slice = self.src.path.substr_bytes(s, e);
-        if slice == "true" { return Result::Ok(true); }
-        if slice == "false" { return Result::Ok(false); }
+        let len = e - s;
+        if len == 4 && self.path_bytes_eq(s, "true") {
+            return Result::Ok(true);
+        }
+        if len == 5 && self.path_bytes_eq(s, "false") {
+            return Result::Ok(false);
+        }
         return Result::Err(DeserializeError::invalid_value(self.format_error("bool"), s as i64));
     }
     fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
+        self.require_active_param()?;
         let [s, e] = self.current_range();
-        let slice = self.src.path.substr_bytes(s, e);
-        let chars = slice.chars().collect();
-        if chars.len() != 1 {
+        let len = e - s;
+        if len == 0 {
             return Result::Err(DeserializeError::invalid_value(self.format_error("char"), s as i64));
         }
-        return Result::Ok(chars[0]);
+        // Determine the UTF-8 sequence length from the leading byte and
+        // verify the captured slice encodes exactly one codepoint.
+        // `String::char_at_byte` decodes without substring allocation.
+        let b0 = self.src.path.get_byte(s);
+        let expected = if b0 < 0x80 { 1 } else if b0 < 0xC0 { 0 } else if b0 < 0xE0 { 2 } else if b0 < 0xF0 { 3 } else { 4 };
+        if expected == 0 || len != expected {
+            return Result::Err(DeserializeError::invalid_value(self.format_error("char"), s as i64));
+        }
+        return match self.src.path.char_at_byte(s) {
+            Some(c) => Result::Ok(c),
+            None => Result::Err(DeserializeError::invalid_value(self.format_error("char"), s as i64)),
+        };
     }
     fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
+        self.require_active_param()?;
         let [s, e] = self.current_range();
         return Result::Ok(self.src.path.substr_bytes(s, e));
     }
@@ -844,11 +872,40 @@ impl Deserializer for PathParamsDeserializer {
 impl PathParamsDeserializer {
     /// Byte range of the path parameter currently being deserialized.
     /// Contract: callers must arrive here through `begin_struct → next_field
-    /// → value`, which advances `cursor` past the active param. Calling
-    /// outside that flow yields a negative index and will trap.
+    /// → value`, which advances `cursor` past the active param. Use
+    /// `require_active_param` first to enforce this; raw access yields a
+    /// negative index for `cursor == 0` and would trap on the array read.
     fn current_range(&self) -> [i32, i32] {
         let i = self.cursor - 1;
         return [self.src.ranges[i * 2], self.src.ranges[i * 2 + 1]];
+    }
+
+    /// Reject a scalar `deserialize_*` call that has not been preceded by
+    /// `begin_struct → next_field`. `PathParams::deserialize::<T>()` only
+    /// supports struct roots; a `u64`-rooted call would bypass `next_field`
+    /// and underflow `cursor` here. Returning `UnexpectedType` keeps the
+    /// API total instead of trapping on `ranges[-2]`.
+    fn require_active_param(&self) -> Result<(), DeserializeError> {
+        if self.cursor == 0 {
+            return Result::Err(DeserializeError::unexpected_type(
+                "path params can only be deserialized into a struct (non-struct root not supported)",
+                -1,
+            ));
+        }
+        return Result::Ok(());
+    }
+
+    /// Byte-by-byte comparison of `path[start..start+pat.len())` with
+    /// `pat`. Used by `deserialize_bool` to avoid a substring allocation
+    /// when checking against the constants `"true"` / `"false"`.
+    fn path_bytes_eq(&self, start: i32, pat: String) -> bool {
+        let plen = pat.len();
+        for let mut i = 0; i < plen; i += 1 {
+            if self.src.path.get_byte(start + i) != pat.get_byte(i) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// Format an `invalid_value` error message including the param name and
@@ -866,8 +923,9 @@ impl PathParamsDeserializer {
     /// Shared body of every scalar `deserialize_*` arm — keeps the per-type
     /// methods to a single line each.
     fn parse_scalar<T: FromStr>(&self, type_name: String) -> Result<T, DeserializeError> {
+        self.require_active_param()?;
         let [s, e] = self.current_range();
-        return match T::from_str_range(*self.src.path, s, e) {
+        return match T::from_str_range(self.src.path, s, e) {
             Ok(v) => Result::Ok(v),
             Err(_) => Result::Err(DeserializeError::invalid_value(self.format_error(type_name), s as i64)),
         };

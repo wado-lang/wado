@@ -57,12 +57,12 @@ impl u128 {
 
     /// Parse a `u128` from a string in the given radix. `radix` must be in 2..=36.
     pub fn from_str_radix(s: String, radix: u32) -> Result<u128, ParseIntError> {
-        return u128::from_str_radix_range(s, 0, s.len(), radix);
+        return u128::from_str_radix_range(&s, 0, s.len(), radix);
     }
 
     /// Range variant of `from_str_radix`. Parses `s[start..end)` as a `u128`
     /// in the given radix without allocating a substring.
-    pub fn from_str_radix_range(s: String, start: i32, end: i32, radix: u32) -> Result<u128, ParseIntError> {
+    pub fn from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) -> Result<u128, ParseIntError> {
         assert_radix(radix);
         let prefix = parse_unsigned_prefix_range(s, start, end);
         if let Err(k) = prefix {
@@ -317,7 +317,7 @@ impl u128 {
 
 impl FromStr for u128 {
     type Err = ParseIntError;
-    fn from_str_range(s: String, start: i32, end: i32) -> Result<u128, ParseIntError> {
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<u128, ParseIntError> {
         return u128::from_str_radix_range(s, start, end, 10);
     }
 }
@@ -669,12 +669,12 @@ impl i128 {
 
     /// Parse an `i128` from a string in the given radix. `radix` must be in 2..=36.
     pub fn from_str_radix(s: String, radix: u32) -> Result<i128, ParseIntError> {
-        return i128::from_str_radix_range(s, 0, s.len(), radix);
+        return i128::from_str_radix_range(&s, 0, s.len(), radix);
     }
 
     /// Range variant of `from_str_radix`. Parses `s[start..end)` as an `i128`
     /// in the given radix without allocating a substring.
-    pub fn from_str_radix_range(s: String, start: i32, end: i32, radix: u32) -> Result<i128, ParseIntError> {
+    pub fn from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) -> Result<i128, ParseIntError> {
         assert_radix(radix);
         let [is_negative, digit_start] = match parse_signed_prefix_range(s, start, end) {
             Ok(p) => p,
@@ -933,7 +933,7 @@ impl i128 {
 
 impl FromStr for i128 {
     type Err = ParseIntError;
-    fn from_str_range(s: String, start: i32, end: i32) -> Result<i128, ParseIntError> {
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<i128, ParseIntError> {
         return i128::from_str_radix_range(s, start, end, 10);
     }
 }

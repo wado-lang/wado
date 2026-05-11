@@ -865,7 +865,7 @@ pub fn parse(d: u64, p: i32) -> f64 {
 //          "inf"/"infinity" (case-insensitive), "nan" (case-insensitive).
 // Rejects: leading dot (".5"), trailing dot ("5."), empty input.
 // Examples: "3.14", "1e2", "0.5", "123", "+1.5e-3", "-42", "inf", "NaN"
-pub fn parse_text_range(s: String, start: i32, end: i32) -> Option<f64> {
+pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     // Bounds check keeps the public surface total: an out-of-range slice
     // is treated the same as malformed input.
     if start < 0 || end > s.len() || start >= end {

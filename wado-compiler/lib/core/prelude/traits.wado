@@ -788,11 +788,14 @@ impl<T: SequenceLiteralBuilder<Output = T>> SequenceLiteral for T {
 pub trait FromStr {
     type Err;
 
-    /// Parse the byte range `s[start..end)` as `Self`.
-    fn from_str_range(s: String, start: i32, end: i32) -> Result<Self, Self::Err>;
+    /// Parse the byte range `s[start..end)` as `Self`. Takes `s` by
+    /// reference because the function only reads and the call site
+    /// (often the router's per-request path) is a hot path where a
+    /// `String` value copy would dominate the work.
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<Self, Self::Err>;
 
     /// Parse the entire string as `Self`. Delegates to `from_str_range`.
     fn from_str(s: String) -> Result<Self, Self::Err> {
-        return Self::from_str_range(s, 0, s.len());
+        return Self::from_str_range(&s, 0, s.len());
     }
 }
