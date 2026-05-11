@@ -633,7 +633,7 @@ fn lower_lr_alt_suffix(
     // self-ref).
     let outer_follow: Array<String> = [];
     for let mut i = 1; i < alt.elements.len(); i += 1 {
-        let elem_follow = inner_follow_at(&alt.elements, i, &outer_follow, ctx);
+        let elem_follow = inner_follow_at(&alt.elements, i, ctx);
         ops.push(lower_op(&alt.elements[i], &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow));
     }
 
@@ -662,7 +662,7 @@ fn lower_lr_alt_scan_suffix(
     // outer follow — empty here; Phase 2.6 may refine.
     let outer_follow: Array<String> = [];
     for let mut i = 1; i < alt.elements.len(); i += 1 {
-        let elem_follow = inner_follow_at(&alt.elements, i, &outer_follow, ctx);
+        let elem_follow = inner_follow_at(&alt.elements, i, ctx);
         elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
     }
     return ScanBody { elements };
@@ -1048,7 +1048,7 @@ fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext) -> ScanBody {
     let outer_follow: Array<String> = [];
     let mut elements: Array<ScanElement> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
-        let elem_follow = inner_follow_at(&alt.elements, i, &outer_follow, ctx);
+        let elem_follow = inner_follow_at(&alt.elements, i, ctx);
         elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
     }
     return ScanBody { elements };
@@ -1113,7 +1113,7 @@ fn lower_scan_group(
         // is lowered through the standard scan-element recursion.
         let mut elements: Array<ScanElement> = [];
         for let mut i = 0; i < alt.elements.len(); i += 1 {
-            let elem_follow = inner_follow_at(&alt.elements, i, outer_follow, ctx);
+            let elem_follow = inner_follow_at(&alt.elements, i, ctx);
             elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
         }
         return ScanElement::Group(ScanGroupElem {
@@ -1157,7 +1157,7 @@ fn lower_general_scan_group(
         let alt = &alts[ai];
         let mut elements: Array<ScanElement> = [];
         for let mut i = 0; i < alt.elements.len(); i += 1 {
-            let elem_follow = inner_follow_at(&alt.elements, i, outer_follow, ctx);
+            let elem_follow = inner_follow_at(&alt.elements, i, ctx);
             elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
         }
         bodies.push(ScanBody { elements });
@@ -1302,7 +1302,7 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
     let outer_follow: Array<String> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
-        let elem_follow = inner_follow_at(&alt.elements, i, &outer_follow, ctx);
+        let elem_follow = inner_follow_at(&alt.elements, i, ctx);
         ops.push(lower_op(elem, &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow));
     }
 
@@ -1526,7 +1526,7 @@ fn lower_single_alt_group(
         // positions, that's the first-set of the suffix in the
         // group's alt. The last position inherits the surrounding
         // alt's `outer_follow`.
-        let elem_follow = inner_follow_at(&alt.elements, i, outer_follow, ctx);
+        let elem_follow = inner_follow_at(&alt.elements, i, ctx);
         ops.push(lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow));
         scan_elements.push(lower_scan_element(elem, ctx, &elem_follow));
     }
@@ -1816,7 +1816,7 @@ fn lower_general_group(
         let mut scan_elements: Array<ScanElement> = [];
         for let mut ei = 0; ei < alt.elements.len(); ei += 1 {
             let elem = &alt.elements[ei];
-            let elem_follow = inner_follow_at(&alt.elements, ei, outer_follow, ctx);
+            let elem_follow = inner_follow_at(&alt.elements, ei, ctx);
             ops.push(lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow));
             scan_elements.push(lower_scan_element(elem, ctx, &elem_follow));
         }
@@ -2208,24 +2208,20 @@ fn union_arrays(a: &Array<String>, b: &Array<String>) -> Array<String> {
 }
 
 /// Follow set for the element at index `i` in `elements`. Delegates
-/// to `ctx.compute_call_site_follow`, which is the single source of
-/// truth shared with `parser_gen` emit's per-position follow
-/// computation (formerly `compute_ruleref_call_follow`). The
-/// `_outer_follow` parameter is retained for caller readability —
-/// it always equals what the surrounding `ctx.current_outer_follow`
-/// would carry — but the actual lookup goes through ctx so lower and
-/// emit register the same follow-aware variants.
+/// to `ctx.compute_call_site_follow`, the single source of truth
+/// shared with `parser_gen` emit's per-position follow computation
+/// (formerly `compute_ruleref_call_follow`).
 ///
-/// Soundness: the `deep_suffix_is_first_exact` guard inside
-/// `compute_call_site_follow` is strictly stricter than the previous
-/// "always-union when nullable" rule. For regular (non-variant)
-/// bodies it produces the same value (the local outer follow is
-/// `[]`); for variant bodies (where `ctx.current_outer_follow` is
-/// the variant's mask) it now propagates the mask, matching emit.
+/// `compute_call_site_follow` reads the variant mask from
+/// `ctx.current_outer_follow` — set by `lower_variant_rules` before
+/// any per-rule lowering runs — so callers do not need to pass an
+/// `outer_follow` argument here. For non-variant bodies the mask is
+/// `[]` and a deep-nullable suffix yields `[]`; for variant bodies
+/// the mask propagates through deep-nullable suffixes, matching what
+/// emit's `compute_ruleref_call_follow` produces.
 fn inner_follow_at(
     elements: &Array<Element>,
     i: i32,
-    _outer_follow: &Array<String>,
     ctx: &mut GenContext,
 ) -> Array<String> {
     return ctx.compute_call_site_follow(elements, i);
