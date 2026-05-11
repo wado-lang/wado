@@ -27,63 +27,98 @@ use crate::tir::{
 
 /// Convert a [`FlatPackage`] (TIR-shaped) into a [`NirPackage`] (NIR-shaped).
 ///
-/// TIR and NIR body types are structurally identical; this is a field-for-field
-/// reconstruction that recurses into nested expressions, statements, and
-/// patterns. Shared type-system data (`TypeTable`, registries, plans) is
-/// `.clone()`-d directly.
-pub fn flat_to_nir(flat: &FlatPackage) -> NirPackage {
-    // Convert each function once and remember the source `Rc`'s address so
-    // `ClosureFunctor::call_method` can reuse the same fresh `Rc` instead of
-    // allocating a sibling — the optimizer's closure-type DCE pass keys on
-    // `Rc::ptr_eq` between `functor.call_method` and `project.functions[i]`.
+/// Takes ownership of `flat` so owned containers (`Vec`s, `IndexMap`s,
+/// `String`s, `BuiltinRegistry`, the trait env, …) move straight into the
+/// `NirPackage` instead of being cloned. Body-shape Vecs (`structs`,
+/// `enums`, …) iterate by reference because the per-element conversion
+/// helpers (`convert_struct`, …) take `&T` and clone the few owned
+/// `String` fields they keep — a per-helper rewrite to fully-move plumbing
+/// is out of scope here. Function `Rc`s are destructured via
+/// `.borrow().clone()` because each one is shared with one or more
+/// `ClosureFunctor::call_method`; the closure-functor conversion looks up
+/// the fresh `NirFunction` `Rc` in `func_map` so the optimizer's
+/// `Rc::ptr_eq`-based closure-type DCE pass keeps matching.
+pub fn flat_to_nir(flat: FlatPackage) -> NirPackage {
+    let FlatPackage {
+        entry_module_source,
+        type_table,
+        functions,
+        structs,
+        enums,
+        variants,
+        variant_index,
+        flags,
+        globals,
+        imports,
+        tests,
+        string_literals,
+        bytes_literals,
+        closure_functors,
+        function_strings,
+        function_method_info,
+        wasm_module_sources,
+        module_name,
+        wasi_registry,
+        world_registry,
+        used_wasi_functions,
+        strip_names,
+        skip_validation,
+        target_world,
+        has_http_handler_export,
+        export_binding_names,
+        component_plan,
+        builtin_registry,
+        task_return_flat_params,
+        wasm_assets,
+        trait_env,
+    } = flat;
+
     let mut func_map: IndexMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>> =
-        IndexMap::with_capacity_and_hasher(flat.functions.len(), rustc_hash::FxBuildHasher);
-    let functions: Vec<Rc<RefCell<NirFunction>>> = flat
-        .functions
-        .iter()
+        IndexMap::with_capacity_and_hasher(functions.len(), rustc_hash::FxBuildHasher);
+    let functions: Vec<Rc<RefCell<NirFunction>>> = functions
+        .into_iter()
         .map(|func_rc| {
-            let ptr = Rc::as_ptr(func_rc);
+            let ptr = Rc::as_ptr(&func_rc);
             let nir_rc = Rc::new(RefCell::new(convert_function(&func_rc.borrow())));
             func_map.insert(ptr, Rc::clone(&nir_rc));
             nir_rc
         })
         .collect();
     NirPackage {
-        entry_module_source: flat.entry_module_source.clone(),
-        type_table: Rc::clone(&flat.type_table),
+        entry_module_source,
+        type_table,
         functions,
-        structs: flat.structs.iter().map(convert_struct).collect(),
-        enums: flat.enums.iter().map(convert_enum).collect(),
-        variants: flat.variants.iter().map(convert_variant_decl).collect(),
-        variant_index: flat.variant_index.clone(),
-        flags: flat.flags.iter().map(convert_flags).collect(),
-        globals: flat.globals.iter().map(convert_global).collect(),
-        imports: flat.imports.iter().map(convert_import).collect(),
-        tests: flat.tests.iter().map(convert_test).collect(),
-        string_literals: flat.string_literals.clone(),
-        bytes_literals: flat.bytes_literals.clone(),
-        closure_functors: flat
-            .closure_functors
+        structs: structs.iter().map(convert_struct).collect(),
+        enums: enums.iter().map(convert_enum).collect(),
+        variants: variants.iter().map(convert_variant_decl).collect(),
+        variant_index,
+        flags: flags.iter().map(convert_flags).collect(),
+        globals: globals.iter().map(convert_global).collect(),
+        imports: imports.iter().map(convert_import).collect(),
+        tests: tests.iter().map(convert_test).collect(),
+        string_literals,
+        bytes_literals,
+        closure_functors: closure_functors
             .iter()
             .map(|cf| convert_closure_functor(cf, &func_map))
             .collect(),
-        function_strings: flat.function_strings.clone(),
-        function_method_info: flat.function_method_info.clone(),
-        wasm_module_sources: flat.wasm_module_sources.clone(),
-        module_name: flat.module_name.clone(),
-        wasi_registry: flat.wasi_registry,
-        world_registry: flat.world_registry,
-        used_wasi_functions: flat.used_wasi_functions.clone(),
-        strip_names: flat.strip_names,
-        skip_validation: flat.skip_validation,
-        target_world: flat.target_world.clone(),
-        has_http_handler_export: flat.has_http_handler_export,
-        export_binding_names: flat.export_binding_names.clone(),
-        component_plan: flat.component_plan.clone(),
-        builtin_registry: flat.builtin_registry.clone(),
-        task_return_flat_params: flat.task_return_flat_params.clone(),
-        wasm_assets: flat.wasm_assets.clone(),
-        trait_env: std::sync::Arc::clone(&flat.trait_env),
+        function_strings,
+        function_method_info,
+        wasm_module_sources,
+        module_name,
+        wasi_registry,
+        world_registry,
+        used_wasi_functions,
+        strip_names,
+        skip_validation,
+        target_world,
+        has_http_handler_export,
+        export_binding_names,
+        component_plan,
+        builtin_registry,
+        task_return_flat_params,
+        wasm_assets,
+        trait_env,
     }
 }
 

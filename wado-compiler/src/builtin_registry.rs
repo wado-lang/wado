@@ -35,7 +35,7 @@ pub struct BuiltinFunctionInfo {
 /// Collects function signatures from core:builtin and provides:
 /// - Type lookup for `builtin::` calls
 /// - Parameter validation (future)
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct BuiltinRegistry {
     /// `function_name` -> function info
     functions: IndexMap<String, BuiltinFunctionInfo>,

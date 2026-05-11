@@ -74,7 +74,7 @@ fn lower_post_boxing(module: &mut TirModule) {
 /// `optimize` and `wir_build`. See `docs/wep-2026-05-11-nir.md`.
 pub fn lower(mut flat: FlatPackage) -> NirPackage {
     lower_in_place(&mut flat);
-    nir_convert::flat_to_nir(&flat)
+    nir_convert::flat_to_nir(flat)
 }
 
 fn lower_in_place(flat: &mut FlatPackage) {
