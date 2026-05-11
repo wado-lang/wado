@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::fmt::Write as _;
 use std::rc::Rc;
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
@@ -14,6 +15,56 @@ use crate::tir::{
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
+
+/// Result of closure planning.
+///
+/// `functor_infos` is consumed by the TIR → NIR translator to populate
+/// `NirPackage::closure_functors`. It carries per-functor metadata
+/// (struct name, `__call` method body, captures, canonical signature)
+/// that the optimizer uses for closure inlining.
+pub struct ClosurePlan {
+    pub functor_infos: Vec<ClosureFunctor>,
+}
+
+/// Run the closure planner.
+///
+/// Wraps `flat` in a transient `TirModule` so the existing
+/// [`ClosureLowerer`] can run unchanged: it expects `module.functions`,
+/// `module.structs`, `module.type_table`, and so on. The wrapper moves
+/// the data in and back out without copying.
+///
+/// The pass is TIR-mutating — it rewrites `Closure` / `FuncRef` /
+/// `Capture` / `IndirectCall` nodes in place, generates `__Closure_N`
+/// functor structs and `__call` methods, and produces specialized
+/// callees for fn-typed parameters. Splitting the call-site rewriting
+/// into the TIR → NIR translator is a deferred follow-up.
+pub fn plan(flat: &mut FlatPackage) -> ClosurePlan {
+    let entry_module_source = flat.entry_module_source.clone();
+    let mut temp_module = TirModule::new(entry_module_source);
+    temp_module.type_table = flat.type_table.clone();
+    temp_module.functions = std::mem::take(&mut flat.functions);
+    temp_module.structs = std::mem::take(&mut flat.structs);
+    temp_module.globals = std::mem::take(&mut flat.globals);
+    temp_module.variants = std::mem::take(&mut flat.variants);
+    temp_module.enums = std::mem::take(&mut flat.enums);
+    temp_module.flags = std::mem::take(&mut flat.flags);
+    temp_module.imports = std::mem::take(&mut flat.imports);
+
+    let mut closure_lowerer = ClosureLowerer::new(&temp_module.module_source);
+    closure_lowerer.lower_module(&mut temp_module);
+
+    flat.functions = temp_module.functions;
+    flat.structs = temp_module.structs;
+    flat.globals = temp_module.globals;
+    flat.variants = temp_module.variants;
+    flat.enums = temp_module.enums;
+    flat.flags = temp_module.flags;
+    flat.imports = temp_module.imports;
+
+    ClosurePlan {
+        functor_infos: std::mem::take(&mut temp_module.closure_functors),
+    }
+}
 
 /// `1` for instance methods (those whose first parameter is named `self`),
 /// `0` otherwise. Used to convert a 0-based call-site argument index into
@@ -158,7 +209,7 @@ struct FnParamSpecKey {
 /// Closures passed as function arguments are transformed via fn-param specialization:
 /// - A specialized version of the callee is generated with functor struct params
 /// - The call is updated to use the specialized function with `StructLiteral` args
-pub(super) struct ClosureLowerer {
+struct ClosureLowerer {
     /// Counter for the Phase 1 walk. Each visited `Closure` has its
     /// `functor_id` populated from this — that ID is the stable index
     /// every later pass uses to look up its `ClosureFunctor`.
@@ -182,7 +233,7 @@ pub(super) struct ClosureLowerer {
 }
 
 impl ClosureLowerer {
-    pub(super) fn new(module_source: &ModuleSource) -> Self {
+    fn new(module_source: &ModuleSource) -> Self {
         Self {
             next_closure_id: 0,
             module_source: module_source.clone(),
@@ -197,7 +248,7 @@ impl ClosureLowerer {
     }
 
     /// Lower all closures in a module
-    pub(super) fn lower_module(&mut self, module: &mut TirModule) {
+    fn lower_module(&mut self, module: &mut TirModule) {
         // Phase 0: Convert FuncRef used as values to zero-capture Closures.
         // Named functions used as values (e.g., `&double` or `double` passed to fn-type params)
         // need to become Closure nodes so the existing closure pipeline handles them.

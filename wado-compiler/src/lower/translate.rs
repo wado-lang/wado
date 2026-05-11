@@ -49,6 +49,7 @@ use crate::tir::{
 /// pass keeps matching.
 pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     let LowerPlan {
+        closure,
         value_copy,
         strings,
     } = plan;
@@ -73,7 +74,11 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         // of being threaded through `FlatPackage`.
         string_literals: _,
         bytes_literals: _,
-        closure_functors,
+        // `closure_functors` are produced by `lower::plan::closure`
+        // and live on `closure.functor_infos` (above); the
+        // `FlatPackage` field is unused and will be removed in a
+        // subsequent cleanup pass.
+        closure_functors: _,
         function_strings: _,
         function_method_info: _,
         wasm_module_sources,
@@ -118,7 +123,8 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         tests: tests.iter().map(convert_test).collect(),
         string_literals: strings.string_literals,
         bytes_literals: strings.bytes_literals,
-        closure_functors: closure_functors
+        closure_functors: closure
+            .functor_infos
             .iter()
             .map(|cf| translator.convert_closure_functor(cf, &func_map))
             .collect(),

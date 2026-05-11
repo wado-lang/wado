@@ -15,7 +15,6 @@
 //! plan. See `docs/wep-2026-05-11-nir.md`.
 
 mod boxing;
-mod closure;
 mod globals;
 mod pattern;
 pub mod plan;
@@ -30,7 +29,6 @@ use crate::nir_package::NirPackage;
 use crate::tir::TirModule;
 
 use boxing::BoxLowerer;
-use closure::ClosureLowerer;
 use globals::{generate_initialize_modules_flat, lower_global_initializers};
 use pattern::lower_patterns;
 use wide_int::lower_wide_int_match_patterns;
@@ -51,14 +49,11 @@ fn lower_pre_boxing(
 }
 
 /// Run post-boxing per-module lowering passes.
-fn lower_post_boxing(module: &mut TirModule) {
-    // Phase 3: Lower closures to functor structs
-    let mut closure_lowerer = ClosureLowerer::new(&module.module_source);
-    closure_lowerer.lower_module(module);
-
-    // String/bytes literals were previously collected here; they now live
-    // in `plan::string`, which runs after `lower_in_place`.
-}
+///
+/// Closure lowering and string/bytes literal collection used to run
+/// here; both moved into [`plan::plan`], which runs after
+/// [`lower_in_place`] returns.
+fn lower_post_boxing(_module: &mut TirModule) {}
 
 /// Lower a `FlatPackage` and return a `NirPackage`.
 ///
@@ -153,8 +148,8 @@ fn lower_in_place(flat: &mut FlatPackage) {
     flat.flags = temp_module.flags;
     flat.imports = temp_module.imports;
 
-    // Closure functors
-    flat.closure_functors = temp_module.closure_functors;
+    // Closure functors are produced by `plan::closure`, not the in-place
+    // pipeline; nothing to copy back here.
 
     // Post-processing: generate __initialize_modules
     generate_initialize_modules_flat(flat);
