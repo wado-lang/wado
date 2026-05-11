@@ -62,6 +62,11 @@ use {
     ExcludedOp,
     RepeatOp,
     GroupOp,
+    GroupShape,
+    SimpleCstShape,
+    TokenOnlyShape,
+    SingleAltShape,
+    GeneralShape,
     ListLabelOp,
     FieldDecl,
     FieldKind,
@@ -2948,6 +2953,8 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
             gen_op_leaf(w, op, elem, ctx, &mut name_counts);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
+        } else if let Group(g_op) = op {
+            gen_op_group(w, g_op, elem, ctx, &mut name_counts);
         } else {
             gen_element(w, elem, ctx, &mut name_counts);
         }
@@ -3207,6 +3214,76 @@ fn sync_name_counts_for_leaf(elem: &Element, name_counts: &mut Array<[String, i3
         let _ = dedup_name(&lab.field_name, name_counts);
         sync_name_counts_for_leaf(&lab.element, name_counts);
     }
+}
+
+/// Top-level dispatch for `Op::Group(g_op)`. Reads `g_op.shape` to
+/// pick the matching emit shape; reads the deduped field name and
+/// struct / variant type names straight from the shape payload
+/// instead of recomputing via `single_alt_group_type_name` /
+/// `token_group_field_name` / etc. Inner element emission still
+/// flows through surface `gen_elements_with_non_greedy` for now —
+/// `gen_consume_*_op` helpers consult `g_op.alts[k].fields` for the
+/// final struct-literal field list (GIR-canonical) but parse the
+/// alt body via the surface walker that hasn't migrated yet.
+///
+/// `elem` is the matching `Element::Group(g_surface)`; the surface
+/// reference flows into `gen_elements_with_non_greedy` and surface
+/// dedup so siblings continue to see lower-consistent state. The
+/// surface fallback in `gen_element`'s Group arm remains until every
+/// caller routes through `gen_op_group` (Phase 2-B follow-ups).
+fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    if let Group(g_elem) = elem {
+        return match &g_op.shape {
+            TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, name_counts),
+            SingleAlt(sa) => gen_consume_single_alt_group_op(w, sa, &g_op.alts[0], &g_elem.alternatives[0], ctx, name_counts, &([] as Array<String>)),
+            _ => {
+                // The remaining shapes still need their dedicated
+                // `_op` helpers; until then dispatch back to the
+                // surface walker so behaviour is unchanged.
+                if is_simple_cst_group(&g_elem.alternatives) {
+                    gen_consume_group_store_optional(w, &g_elem.alternatives, ctx, name_counts);
+                } else if is_general_group(&g_elem.alternatives) {
+                    gen_general_group_store_optional(w, &g_elem.alternatives, ctx, name_counts);
+                } else {
+                    gen_consume_group(w, &g_elem.alternatives, ctx, name_counts);
+                }
+            },
+        };
+    } else {
+        panic("gen_op_group: Group op mapped to non-Group element");
+    }
+}
+
+/// Token-only group emit (`(K_A | K_B | …)`): `lower` matched the
+/// shape and assigned the outer field name in
+/// `TokenOnlyShape.field`. `alts` is unused here aside from the
+/// surface-side `dedup_name` side-effect.
+fn gen_consume_token_group_op(w: &mut CodeWriter, to: &TokenOnlyShape, alts: &Array<Alternative>, name_counts: &mut Array<[String, i32]>) {
+    let _ = dedup_name(&token_group_field_name(alts), name_counts);
+    w.line(`let {to.field} = p.advance();`);
+}
+
+/// Single-alt group emit `(e1 e2 …)`: parses each inner element and
+/// then constructs the SingleAlt's CST struct. The outer field name
+/// (`sa.field`) and struct type name (`sa.struct_name`) come from the
+/// `SingleAltShape` payload; the struct-literal field list comes from
+/// `body.fields` (lower's canonical list — `gen_cst_types` emits the
+/// same shape). Inner element parsing still walks surface IR via
+/// `gen_elements_with_non_greedy` for now; that walker migrates to
+/// consume `body.ops` in a later (2) slice.
+fn gen_consume_single_alt_group_op(w: &mut CodeWriter, sa: &SingleAltShape, body: &AltBody, alt: &Alternative, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
+    let _ = dedup_name(&single_alt_group_field_name(alt), name_counts);
+    let saved_rule_name = ctx.current_rule_name;
+    ctx.current_rule_name = ctx.general_group_rule_name(&sa.struct_name);
+    let gc_start = ctx.group_counter;
+    gen_elements_with_non_greedy(w, &alt.elements, ctx, name_counts, outer_follow);
+    w.line(`let {sa.field} = {sa.struct_name} \{`);
+    w.indent();
+    ctx.group_counter = gc_start;
+    emit_field_assignments_from_fields(w, &body.fields);
+    w.dedent();
+    w.line("};");
+    ctx.current_rule_name = saved_rule_name;
 }
 
 /// Emit `name+=elem` outside a Repeat: allocate the array, parse the
