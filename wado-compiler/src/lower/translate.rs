@@ -113,12 +113,18 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         entry_module_source,
         type_table,
         functions,
-        structs: structs.iter().map(|s| translator.convert_struct(s)).collect(),
+        structs: structs
+            .iter()
+            .map(|s| translator.convert_struct(s))
+            .collect(),
         enums: enums.iter().map(convert_enum).collect(),
         variants: variants.iter().map(convert_variant_decl).collect(),
         variant_index,
         flags: flags.iter().map(convert_flags).collect(),
-        globals: globals.iter().map(|g| translator.convert_global(g)).collect(),
+        globals: globals
+            .iter()
+            .map(|g| translator.convert_global(g))
+            .collect(),
         imports: imports.iter().map(convert_import).collect(),
         tests: tests.iter().map(convert_test).collect(),
         string_literals: strings.string_literals,
@@ -233,7 +239,11 @@ impl<'a> Translator<'a> {
         let call_method = func_map
             .get(&Rc::as_ptr(&cf.call_method))
             .cloned()
-            .unwrap_or_else(|| Rc::new(RefCell::new(self.convert_function(&cf.call_method.borrow()))));
+            .unwrap_or_else(|| {
+                Rc::new(RefCell::new(
+                    self.convert_function(&cf.call_method.borrow()),
+                ))
+            });
         nir::ClosureFunctor {
             module_source: cf.module_source.clone(),
             id: cf.id,
@@ -445,7 +455,10 @@ impl<'a> Translator<'a> {
             } => NirExprKind::StructLiteral {
                 struct_type: *struct_type,
                 struct_name: struct_name.clone(),
-                fields: fields.iter().map(|f| self.convert_struct_field(f)).collect(),
+                fields: fields
+                    .iter()
+                    .map(|f| self.convert_struct_field(f))
+                    .collect(),
             },
             TirExprKind::TupleLiteral { elements } => NirExprKind::TupleLiteral {
                 elements: elements.iter().map(|e| self.convert_expr(e)).collect(),
@@ -570,8 +583,7 @@ impl<'a> Translator<'a> {
                 .monomorph_info
                 .as_ref()
                 .and_then(|mi| mi.impl_type_args.first().copied())
-            && let Some((helper_module, helper_name)) =
-                self.value_copy.name_for_type.get(&type_id)
+            && let Some((helper_module, helper_name)) = self.value_copy.name_for_type.get(&type_id)
         {
             return NirExprKind::Call {
                 func: nir::FunctionRef {

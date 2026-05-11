@@ -39,23 +39,24 @@ The driver is `compile_after_load` in `src/lib.rs`.
 | Effect Dispatch (post) | TIR             | `synthesis/effect_dispatch.rs`                   |
 | Link                   | `FlatPackage`   | `link.rs`                                        |
 | Monomorphize           | `FlatPackage`   | `monomorphize/`                                  |
-| Lower                  | `FlatPackage`   | `lower/`                                         |
-| Optimize               | `FlatPackage`   | `optimize/`                                      |
+| Lower                  | `NirPackage`    | `lower/`                                         |
+| Optimize               | `NirPackage`    | `optimize/`                                      |
 | WIR Build              | `WirPackage`    | `wir_build/`                                     |
 | WIR Optimize           | `WirPackage`    | `wir_optimize/`                                  |
 | Codegen                | Component bytes | `codegen/`                                       |
 
 ## Compilation Units and IRs
 
-| Unit                              | Layer                                                                                    |
-| --------------------------------- | ---------------------------------------------------------------------------------------- |
-| `Module` (`ast.rs`)               | Surface AST. Preserves source-level syntax to support `wado format`.                     |
-| `TirModule` (`tir.rs`)            | Typed IR. One per source module after annotate.                                          |
-| `Package` (`package.rs`)          | Per-module compilation context, used from synthesis through link.                        |
-| `FlatPackage` (`flat_package.rs`) | Flat list of all functions, types, and globals; used from monomorphize through codegen.  |
-| `WirPackage` (`wir.rs`)           | Wasm IR — closer to Wasm core instructions, used for emit-time optimization and codegen. |
+| Unit                              | Layer                                                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `Module` (`ast.rs`)               | Surface AST. Preserves source-level syntax to support `wado format`.                                         |
+| `TirModule` (`tir.rs`)            | Typed IR. One per source module after annotate.                                                              |
+| `Package` (`package.rs`)          | Per-module compilation context, used from synthesis through link.                                            |
+| `FlatPackage` (`flat_package.rs`) | Flat list of all functions, types, and globals; used from monomorphize through the lower pipeline's planner. |
+| `NirPackage` (`nir_package.rs`)   | Normalized IR. Output of lower, input to optimize / WIR build / codegen.                                     |
+| `WirPackage` (`wir.rs`)           | Wasm IR — closer to Wasm core instructions, used for emit-time optimization and codegen.                     |
 
-Codegen takes `&FlatPackage` + `&WirPackage` (`emit_wasm`) and has no knowledge of earlier phases — the rule that keeps the back end decoupled from the front.
+Codegen takes `&NirPackage` + `&WirPackage` (`emit_wasm`) and has no knowledge of earlier phases — the rule that keeps the back end decoupled from the front.
 
 ## Frontend (per-module)
 
@@ -105,25 +106,26 @@ Synthesized impls are recorded back into the shared `TraitEnv` so subsequent pha
 
 ## Lower
 
-`lower.rs` runs type-driven transformations on the flat package:
+`lower.rs` runs `FlatPackage` (TIR-shaped) → `NirPackage` in three stages: in-place TIR-mutating sub-passes, the planner, and the TIR → NIR translator. See `docs/wep-2026-05-11-nir.md`.
 
-| Sub-pass            | File                | What it does                                               |
-| ------------------- | ------------------- | ---------------------------------------------------------- |
-| Wide-int match      | `lower/wide_int.rs` | i128/u128 match patterns → if-else chains                  |
-| Pattern lowering    | `lower/pattern.rs`  | `LetDestructure` / `IfLet` → explicit Let + switch         |
-| Global initializers | `lower/globals.rs`  | Extracts non-const initializers into `__initialize_module` |
-| Boxing              | `lower/boxing.rs`   | `&primitive` / `&mut primitive` → `Box<T>` struct          |
-| Closure             | `lower/closure.rs`  | Closures → functor structs with `__call`                   |
-| String collection   | `lower/string.rs`   | Collects literals for the data section                     |
-| Value copy          | `lower/value_copy/` | Inserts and synthesizes `$value_copy$T` helpers            |
+| Sub-pass            | Stage      | File                     | What it does                                                                                                                           |
+| ------------------- | ---------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Wide-int match      | in-place   | `lower/wide_int.rs`      | i128/u128 match patterns → if-else chains                                                                                              |
+| Pattern lowering    | in-place   | `lower/pattern.rs`       | `LetDestructure` / `IfLet` → explicit Let + switch                                                                                     |
+| Global initializers | in-place   | `lower/globals.rs`       | Extracts non-const initializers into `__initialize_module`                                                                             |
+| Boxing              | in-place   | `lower/boxing.rs`        | `&primitive` / `&mut primitive` → `Box<T>` struct                                                                                      |
+| Closure             | planner    | `lower/plan/closure.rs`  | Closures → functor structs with `__call`; emits `ClosurePlan`                                                                          |
+| Value copy          | planner    | `lower/plan/value_copy/` | Inserts `copy_value::<T>(x)` markers and synthesizes `$value_copy$T` helpers; emits `ValueCopyPlan`                                    |
+| String collection   | planner    | `lower/plan/string.rs`   | Collects literals and per-function maps for the data section; emits `StringPlan`                                                       |
+| TIR → NIR           | translator | `lower/translate.rs`     | Single fold over TIR producing `NirPackage`; consumes `LowerPlan` to rewrite `copy_value` markers and assemble closure/string metadata |
 
 ## Optimize
 
-`optimize/` runs a fixed-point loop of TIR-level passes (inlining, copy propagation, SROA, LICM, DCE, …). See [optimizer.md](./optimizer.md).
+`optimize/` runs a fixed-point loop of NIR-level passes (inlining, copy propagation, SROA, LICM, DCE, …). See [optimizer.md](./optimizer.md).
 
 ## WIR Build
 
-`wir_build/build_wir_package` translates a `FlatPackage` into a `WirPackage` in three stages: register types, collect function signatures, then translate each function body via `FunctionTranslator`. The pass is split across sibling files by concern:
+`wir_build/build_wir_package` translates a `NirPackage` into a `WirPackage` in three stages: register types, collect function signatures, then translate each function body via `FunctionTranslator`. The pass is split across sibling files by concern:
 
 | File                | Concern                                                                               |
 | ------------------- | ------------------------------------------------------------------------------------- |

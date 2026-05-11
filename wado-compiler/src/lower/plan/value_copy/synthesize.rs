@@ -773,4 +773,3 @@ fn make_field_copy(
     }
     field_access
 }
-
