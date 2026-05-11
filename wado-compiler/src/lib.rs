@@ -145,8 +145,9 @@ pub struct DumpResult {
     pub monomorphized_tir_text: Option<String>,
     /// Lowered TIR snapshot (unparsed text)
     pub lowered_tir_text: Option<String>,
-    /// Linked package after optimization (contains usage analysis results)
-    pub optimized_package: Option<FlatPackage>,
+    /// Optimized NIR package — the post-`optimize` body IR consumed by
+    /// `wir_build` and `codegen`. See WEP `wep-2026-05-11-nir.md`.
+    pub optimized_package: Option<nir_package::NirPackage>,
     /// WIR module (after `tir_to_wir` translation)
     pub wir_package: Option<wir::WirPackage>,
     /// AstId-keyed trivia for unparsing the dumped AST.
@@ -530,7 +531,6 @@ fn compile_after_load<H: CompilerHost>(
     }
 
     // === Phase 10: Lower (FlatPackage → NirPackage) ===
-    // Phase 2 of WEP `wep-2026-05-11-nir.md`: `lower` now returns `NirPackage`.
     let nir = {
         let _span = logger.span("lower");
         lower(flat)
@@ -834,19 +834,12 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             let mono_text = Some(unparse::unparse_flat_package(&flat));
 
             // Lower (FlatPackage → NirPackage)
-            // See WEP `wep-2026-05-11-nir.md` Phase 4: optimize and wir_build now
-            // consume NIR. The `optimized_package` DumpResult field is still typed
-            // as `Option<FlatPackage>`, so we materialise a FlatPackage from the
-            // optimized NIR via `nir_to_flat` purely for that dump field; Phase 5
-            // will rework the field type.
             let nir = {
                 let _span = logger.span("lower");
                 lower(flat)
             };
-            // Snapshot lowered state (only unparse; Debug format is deferred)
-            let lower_text = Some(unparse::unparse_flat_package(&nir_convert::nir_to_flat(
-                &nir,
-            )));
+            // Snapshot lowered state (NIR right after lower, before optimize)
+            let lower_text = Some(nir_unparse::unparse_nir_package(&nir));
 
             // Optimize
             let nir = {
@@ -860,11 +853,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 wir_optimize::optimize_wir(&mut wir, opt_level, &logger);
                 wir
             });
-            // DumpResult.optimized_package is still `Option<FlatPackage>` — Phase 5
-            // will rework it. For now produce the FlatPackage via `nir_to_flat`.
-            let optimized = Some(nir_convert::nir_to_flat(&nir));
 
-            (mono_text, lower_text, optimized, wir_package)
+            (mono_text, lower_text, Some(nir), wir_package)
         } else {
             (None, None, None, None)
         };

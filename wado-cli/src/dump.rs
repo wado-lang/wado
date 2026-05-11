@@ -658,31 +658,21 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         }
     }
 
-    // Final TIR section (after optimization)
-    if opts.show_tir {
+    // Final TIR / NIR section (after optimization).
+    //
+    // Post-optimize, the package is `NirPackage` and there is no `FlatPackage`
+    // to render. `--tir` and `--nir` both render the same post-optimize NIR
+    // via `nir_unparse`. The `--tir` alias is preserved for backward
+    // compatibility; trim it in a follow-up if desired.
+    if opts.show_tir || opts.show_nir {
+        let header = if opts.show_nir { "NIR" } else { "TIR" };
         if let Some(ref project) = result.optimized_package {
-            println!("=== TIR ===");
-            let unparsed = wado_compiler::unparse::unparse_flat_package(project);
+            println!("=== {header} ===");
+            let unparsed = wado_compiler::nir_unparse::unparse_nir_package(project);
             println!("{unparsed}");
             println!();
         } else {
-            println!("=== TIR ===");
-            println!("(Optimization failed or not available)");
-            println!();
-        }
-    }
-
-    // NIR section (post-optimize, converted from FlatPackage).
-    // Once lower returns NirPackage natively, this conversion goes away.
-    if opts.show_nir {
-        if let Some(ref project) = result.optimized_package {
-            println!("=== NIR ===");
-            let nir = wado_compiler::nir_convert::flat_to_nir(project);
-            let unparsed = wado_compiler::nir_unparse::unparse_nir_package(&nir);
-            println!("{unparsed}");
-            println!();
-        } else {
-            println!("=== NIR ===");
+            println!("=== {header} ===");
             println!("(Optimization failed or not available)");
             println!();
         }
