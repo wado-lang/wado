@@ -108,4 +108,4 @@ It may include TODOs on WIP.
 - [Test Discovery](./wep-2026-05-02-test-discovery.md)
 - [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md)
 - [HTTP Path Router (`core:router`)](./wep-2026-05-06-core-router.md)
-- [Explicit IR (EIR) Layer](./wep-2026-05-11-eir.md)
+- [Normalized IR (NIR) Layer](./wep-2026-05-11-nir.md)
