@@ -30035,7 +30035,7 @@ fn parse_expression__follow_6_bt_0(p: &mut Parser) -> Result<ExpressionNode, Par
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
-    let expression = parse_expression(p, 22)?;
+    let expression = parse_expression__follow_6(p, 22)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::AttributedExpression(ExpressionAttributedExpression {
         span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
@@ -30340,7 +30340,7 @@ fn parse_expression__follow_6_atom(p: &mut Parser) -> Result<ExpressionNode, Par
         } else {
             null
         };
-        let expression = parse_expression(p, 15)?;
+        let expression = parse_expression__follow_6(p, 15)?;
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::BorrowExpression(ExpressionBorrowExpression {
             span: Span::new(start, i32::max(start, p.last_end())),
             and_or_andand,
@@ -30350,7 +30350,7 @@ fn parse_expression__follow_6_atom(p: &mut Parser) -> Result<ExpressionNode, Par
     }
     if kind == TK_STAR {
         let star = p.expect(TK_STAR)?;
-        let expression = parse_expression(p, 15)?;
+        let expression = parse_expression__follow_6(p, 15)?;
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::DereferenceExpression(ExpressionDereferenceExpression {
             span: Span::new(start, i32::max(start, p.last_end())),
             star,
@@ -30359,7 +30359,7 @@ fn parse_expression__follow_6_atom(p: &mut Parser) -> Result<ExpressionNode, Par
     }
     if _gale_kind_set_61(kind) {
         let minus_or_not = p.advance();
-        let expression = parse_expression(p, 15)?;
+        let expression = parse_expression__follow_6(p, 15)?;
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::NegationExpression(ExpressionNegationExpression {
             span: Span::new(start, i32::max(start, p.last_end())),
             minus_or_not,
@@ -30382,7 +30382,7 @@ fn parse_expression__follow_6_atom(p: &mut Parser) -> Result<ExpressionNode, Par
     }
     if kind == TK_DOTDOTEQ {
         let dotdoteq = p.expect(TK_DOTDOTEQ)?;
-        let expression = parse_expression(p, 4)?;
+        let expression = parse_expression__follow_6(p, 4)?;
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::RangeExpression2(ExpressionRangeExpression2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             dotdoteq,
@@ -33950,7 +33950,7 @@ fn parse_expression__follow_23_bt_0(p: &mut Parser) -> Result<ExpressionNode, Pa
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
-    let expression = parse_expression(p, 22)?;
+    let expression = parse_expression__follow_23(p, 22)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::AttributedExpression(ExpressionAttributedExpression {
         span: Span::new(start, i32::max(start, p.last_end())),
         outer_attribute_list,
@@ -34255,7 +34255,7 @@ fn parse_expression__follow_23_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
         } else {
             null
         };
-        let expression = parse_expression(p, 15)?;
+        let expression = parse_expression__follow_23(p, 15)?;
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::BorrowExpression(ExpressionBorrowExpression {
             span: Span::new(start, i32::max(start, p.last_end())),
             and_or_andand,
@@ -34265,7 +34265,7 @@ fn parse_expression__follow_23_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
     }
     if kind == TK_STAR {
         let star = p.expect(TK_STAR)?;
-        let expression = parse_expression(p, 15)?;
+        let expression = parse_expression__follow_23(p, 15)?;
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::DereferenceExpression(ExpressionDereferenceExpression {
             span: Span::new(start, i32::max(start, p.last_end())),
             star,
@@ -34274,7 +34274,7 @@ fn parse_expression__follow_23_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
     }
     if _gale_kind_set_61(kind) {
         let minus_or_not = p.advance();
-        let expression = parse_expression(p, 15)?;
+        let expression = parse_expression__follow_23(p, 15)?;
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::NegationExpression(ExpressionNegationExpression {
             span: Span::new(start, i32::max(start, p.last_end())),
             minus_or_not,
@@ -34297,7 +34297,7 @@ fn parse_expression__follow_23_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
     }
     if kind == TK_DOTDOTEQ {
         let dotdoteq = p.expect(TK_DOTDOTEQ)?;
-        let expression = parse_expression(p, 4)?;
+        let expression = parse_expression__follow_23(p, 4)?;
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::RangeExpression2(ExpressionRangeExpression2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             dotdoteq,

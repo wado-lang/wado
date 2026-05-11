@@ -1055,11 +1055,9 @@ fn parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
 
 fn parse_assign_stmt(p: &mut Parser) -> Result<AssignStmtNode, ParseError> {
     let start = p.peek().span.start;
-    let id = p.expect(TK_ID)?;
-    let key = id;
+    let key = p.expect(TK_ID)?;
     let eq = p.expect(TK_EQ)?;
-    let string = p.expect(TK_STRING)?;
-    let value = string;
+    let value = p.expect(TK_STRING)?;
     let semi = p.expect(TK_SEMI)?;
     return Result::<AssignStmtNode, ParseError>::Ok(AssignStmtNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1073,8 +1071,7 @@ fn parse_assign_stmt(p: &mut Parser) -> Result<AssignStmtNode, ParseError> {
 fn parse_pair_stmt(p: &mut Parser) -> Result<PairStmtNode, ParseError> {
     let start = p.peek().span.start;
     let pair = p.expect(TK_PAIR)?;
-    let key_rule = parse_key_rule(p)?;
-    let k = key_rule;
+    let k = parse_key_rule(p)?;
     let colon = p.expect(TK_COLON)?;
     let id = p.expect(TK_ID)?;
     let semi = p.expect(TK_SEMI)?;
@@ -1100,8 +1097,7 @@ fn parse_key_rule(p: &mut Parser) -> Result<KeyRuleNode, ParseError> {
 fn parse_mix_stmt(p: &mut Parser) -> Result<MixStmtNode, ParseError> {
     let start = p.peek().span.start;
     let list = p.expect(TK_LIST)?;
-    let id = p.expect(TK_ID)?;
-    let head = id;
+    let head = p.expect(TK_ID)?;
     let mut comma_rest_list: Array<CommaRestItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
