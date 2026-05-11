@@ -1713,8 +1713,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // must still resolve — this mirrors how generic dispatch
         // (`T::method()`) already reaches the trait default via
         // `find_method_type_param_names`.
-        if let Some(trait_name) =
-            self.find_static_method_trait(struct_name, method_name)
+        if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name)
             && let Some(trait_methods) = self.find_trait_decl_methods(&trait_name)
         {
             for default_method in &trait_methods {
@@ -2263,7 +2262,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // override a static method that the trait provides a default for,
         // `Type::method` must still resolve. `locate_static_method_impl`
         // applies the same fallback to find the trait name and module.
-        if self.locate_static_method_impl(struct_name, method_name, None).is_some() {
+        if self
+            .locate_static_method_impl(struct_name, method_name, None)
+            .is_some()
+        {
             return true;
         }
 
