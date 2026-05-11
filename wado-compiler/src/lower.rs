@@ -29,7 +29,7 @@ use crate::nir_package::NirPackage;
 use crate::tir::TirModule;
 
 use boxing::BoxLowerer;
-use closure::ClosureLowerer;
+use closure::{ClosureCanonicalSites, ClosureLowerer, apply_closure_canonical_wraps};
 use globals::{generate_initialize_modules_flat, lower_global_initializers};
 use pattern::lower_patterns;
 use string::StringCollector;
@@ -51,10 +51,14 @@ fn lower_pre_boxing(
 }
 
 /// Run post-boxing per-module lowering passes.
-fn lower_post_boxing(module: &mut TirModule) {
+///
+/// Returns the closure-canonical wrap-site side table produced by
+/// [`ClosureLowerer::lower_module`]; `lower::lower` re-applies it to the
+/// converted NIR via [`apply_closure_canonical_wraps`].
+fn lower_post_boxing(module: &mut TirModule) -> ClosureCanonicalSites {
     // Phase 3: Lower closures to functor structs
     let mut closure_lowerer = ClosureLowerer::new(&module.module_source);
-    closure_lowerer.lower_module(module);
+    let canonical_sites = closure_lowerer.lower_module(module);
 
     // Phase 3b: Collect string literals (and bytes literals) and their function mappings
     let mut collector = StringCollector::new();
@@ -64,6 +68,8 @@ fn lower_post_boxing(module: &mut TirModule) {
     module.bytes_literals = bytes;
     module.function_strings = function_strings;
     module.function_method_info = function_method_info;
+
+    canonical_sites
 }
 
 /// Lower a `FlatPackage` and return a `NirPackage`.
@@ -73,11 +79,13 @@ fn lower_post_boxing(module: &mut TirModule) {
 /// converts the lowered TIR into NIR — the post-lower body IR consumed by
 /// `optimize` and `wir_build`. See `docs/wep-2026-05-11-nir.md`.
 pub fn lower(mut flat: FlatPackage) -> NirPackage {
-    lower_in_place(&mut flat);
-    nir_convert::flat_to_nir(flat)
+    let canonical_sites = lower_in_place(&mut flat);
+    let mut nir = nir_convert::flat_to_nir(flat);
+    apply_closure_canonical_wraps(&mut nir, &canonical_sites);
+    nir
 }
 
-fn lower_in_place(flat: &mut FlatPackage) {
+fn lower_in_place(flat: &mut FlatPackage) -> ClosureCanonicalSites {
     let entry_module_source = flat.entry_module_source.clone();
 
     // Create a temporary TirModule with all flat data for lowering.
@@ -145,8 +153,11 @@ fn lower_in_place(flat: &mut FlatPackage) {
             .append(&mut box_lowerer.generated_structs);
     }
 
-    // Post-boxing passes (closures, string collection)
-    lower_post_boxing(&mut temp_module);
+    // Post-boxing passes (closures, string collection). The returned side
+    // table records every `Closure → Cast` placeholder rewrite the closure
+    // lowerer performed; `lower::lower` replays it as
+    // `NirExprKind::ClosureToCanonical` after `nir_convert`.
+    let canonical_sites = lower_post_boxing(&mut temp_module);
 
     // Write results back to FlatPackage
     flat.functions = temp_module.functions;
@@ -182,4 +193,6 @@ fn lower_in_place(flat: &mut FlatPackage) {
     // regular pass inside the optimizer fixed-point loop.
     value_copy::insert_value_copy_calls(flat);
     value_copy::synthesize_value_copy_funcs(flat);
+
+    canonical_sites
 }

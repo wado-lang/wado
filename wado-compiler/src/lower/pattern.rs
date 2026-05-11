@@ -3113,9 +3113,6 @@ impl<'a> PatternLowerer<'a> {
                 self.local_count = saved_count;
                 self.locals = saved_locals;
             }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                self.lower_expr(functor, type_table);
-            }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(p) = payload {
                     self.lower_expr(p, type_table);

@@ -655,8 +655,7 @@ impl BoxLowerer {
             }
             | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantPayload { expr: inner, .. }
-            | TirExprKind::VariantTest { expr: inner, .. }
-            | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+            | TirExprKind::VariantTest { expr: inner, .. } => {
                 Self::remap_locals_in_expr(inner, remap);
             }
             TirExprKind::Index { expr: e, index, .. } => {
@@ -1014,9 +1013,6 @@ impl BoxLowerer {
                 for arg in args {
                     self.transform_expr(arg, address_taken, type_table);
                 }
-            }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                self.transform_expr(functor, address_taken, type_table);
             }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload) = payload {

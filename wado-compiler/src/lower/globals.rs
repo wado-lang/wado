@@ -451,8 +451,7 @@ fn renumber_locals_in_expr(expr: &mut TirExpr, offset: u32) {
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+        | TirExprKind::VariantPayload { expr: inner, .. } => {
             renumber_locals_in_expr(inner, offset);
         }
         TirExprKind::Index { expr: e, index: i } => {

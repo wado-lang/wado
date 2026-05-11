@@ -436,9 +436,6 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
         TirExprKind::Closure { body, .. } => {
             lower_wide_int_in_expr(body, type_table);
         }
-        TirExprKind::ClosureToCanonical { functor, .. } => {
-            lower_wide_int_in_expr(functor, type_table);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 lower_wide_int_in_expr(p, type_table);
