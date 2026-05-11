@@ -26,14 +26,14 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-array builtin::array<String> (mut ref "core:prelude/string.wado//String");  // TypeId(4)
+array builtin::array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(4)
 
 array builtin::array<i32> (mut i32);  // TypeId(5)
 
 array builtin::array<i64> (mut i64);  // TypeId(6)
 
-struct core:prelude//Array<String> {  // TypeId(7)
-    mut repr: ref builtin::array<String>,
+struct core:prelude//Array<core:prelude/string.wado/String> {  // TypeId(7)
+    mut repr: ref "builtin::array<core:prelude/string.wado/String>",
     mut used: i32,
 }
 
@@ -171,8 +171,8 @@ fn "wado-compiler/tests/fixtures/array_append_collapse.wado/run"() with Stdout {
     let __cond_31: bool;
     let __v0_32: i64;
     let __cond_33: bool;
-    let __b_34: ref "core:prelude//Array<String>";
-    let f_35: ref "core:prelude//Array<String>";
+    let __b_34: ref "core:prelude//Array<core:prelude/string.wado/String>";
+    let f_35: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let __v0_36: i32;
     let __cond_37: bool;
     let __v0_38: ref "core:prelude/string.wado//String";
@@ -742,8 +742,8 @@ condition: e[0] == 1
         });
         unreachable;
     }
-    f_35 = __seq_lit: block -> ref "core:prelude//Array<String>" {
-        __b_34 = struct.new "core:prelude//Array<String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 }), used: 2 };
+    f_35 = __seq_lit: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
+        __b_34 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 }), used: 2 };
         break __seq_lit: __b_34;
         unreachable;
     };
@@ -778,10 +778,10 @@ condition: f.len() == 2
         });
         unreachable;
     }
-    __v0_38 = __inline_Array_String__IndexValue_i32___index_value_135: block -> ref "core:prelude/string.wado//String" {
+    __v0_38 = __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_135: block -> ref "core:prelude/string.wado//String" {
         block {
         };
-        break __inline_Array_String__IndexValue_i32___index_value_135: builtin::array_get<ref "core:prelude/string.wado//String">(f_35.repr, 0);
+        break __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_135: builtin::array_get<ref "core:prelude/string.wado//String">(f_35.repr, 0);
         unreachable;
     };
     __cond_39 = __inline_String_Eq__eq_136: block -> bool {
@@ -826,10 +826,10 @@ condition: f[0] == \"hello\"
         });
         unreachable;
     }
-    __v0_40 = __inline_Array_String__IndexValue_i32___index_value_146: block -> ref "core:prelude/string.wado//String" {
+    __v0_40 = __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_146: block -> ref "core:prelude/string.wado//String" {
         block {
         };
-        break __inline_Array_String__IndexValue_i32___index_value_146: builtin::array_get<ref "core:prelude/string.wado//String">(f_35.repr, 1);
+        break __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_146: builtin::array_get<ref "core:prelude/string.wado//String">(f_35.repr, 1);
         unreachable;
     };
     __cond_41 = __inline_String_Eq__eq_147: block -> bool {
@@ -1575,13 +1575,13 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let self_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         self_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             self_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: self_8.repr, used: self_8.used, byte_index: 0 };
             unreachable;
         };
-        break __inline_StrCharIter_IntoIterator__into_iter_1: self_7;
+        break __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: self_7;
         unreachable;
     };
     _licm_buf_33 = f.buf;

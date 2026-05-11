@@ -2042,7 +2042,7 @@ impl TypeTable {
                     .iter()
                     .map(|t| self.mangle_type_arg_for_generic(*t))
                     .collect();
-                let unqualified = crate::name::mangle_generic_name(&name, &args);
+                let unqualified = crate::name::mangle_generic_name(name, &args);
                 format!("{module_source}/{unqualified}")
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {

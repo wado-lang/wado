@@ -55,7 +55,7 @@ type "functype//wado-compiler/tests/fixtures/into_iterator_item_bound.wado/__cm_
 
 type "functype//wado-compiler/tests/fixtures/into_iterator_item_bound.wado/__cm_export__run" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/into_iterator_item_bound.wado/sum_bytes<Array<u8>>" = fn(ref "core:prelude//Array<u8>") -> i32;  // TypeId(17)
+type "functype//wado-compiler/tests/fixtures/into_iterator_item_bound.wado/sum_bytes<core:prelude/array.wado/Array<u8>>" = fn(ref "core:prelude//Array<u8>") -> i32;  // TypeId(17)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(18)
 
@@ -119,7 +119,7 @@ fn "wado-compiler/tests/fixtures/into_iterator_item_bound.wado/run"() with Stdou
         break __seq_lit: __b_0;
         unreachable;
     };
-    s = "wado-compiler/tests/fixtures/into_iterator_item_bound.wado/sum_bytes<Array<u8>>"(arr);
+    s = "wado-compiler/tests/fixtures/into_iterator_item_bound.wado/sum_bytes<core:prelude/array.wado/Array<u8>>"(arr);
     message = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
@@ -142,7 +142,7 @@ fn "wado-compiler/tests/fixtures/into_iterator_item_bound.wado/__cm_export__run"
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/into_iterator_item_bound.wado/sum_bytes<Array<u8>>"(items) {
+fn "wado-compiler/tests/fixtures/into_iterator_item_bound.wado/sum_bytes<core:prelude/array.wado/Array<u8>>"(items) {
     let total: i32;
     let iter: ref "core:prelude/array.wado//ArrayIter<u8>";
     let b: u8;

@@ -25,7 +25,7 @@ struct tuple//[i32, i32] {  // TypeId(3)
     mut 1: i32,
 }
 
-array builtin::array<Tuple<i32,i32>> (mut ref "tuple//[i32, i32]");  // TypeId(4)
+array builtin::array<core:prelude/types.wado/Tuple<i32,i32>> (mut ref "tuple//[i32, i32]");  // TypeId(4)
 
 array builtin::array<i32> (mut i32);  // TypeId(5)
 
@@ -34,8 +34,8 @@ struct core:prelude//Array<i32> {  // TypeId(6)
     mut used: i32,
 }
 
-struct core:prelude//Array<Tuple<i32,i32>> {  // TypeId(7)
-    mut repr: ref builtin::array<Tuple<i32,i32>>,
+struct core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>> {  // TypeId(7)
+    mut repr: ref "builtin::array<core:prelude/types.wado/Tuple<i32,i32>>",
     mut used: i32,
 }
 
@@ -105,9 +105,9 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(40)
 
-type "functype//core:prelude/array.wado/Array<Tuple<i32,i32>>::push" = fn(ref "core:prelude//Array<Tuple<i32,i32>>", ref "tuple//[i32, i32]");  // TypeId(41)
+type "functype//core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push" = fn(ref "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>", ref "tuple//[i32, i32]");  // TypeId(41)
 
-type "functype//core:prelude/array.wado/Array<Tuple<i32,i32>>::grow" = fn(ref "core:prelude//Array<Tuple<i32,i32>>");  // TypeId(42)
+type "functype//core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::grow" = fn(ref "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>");  // TypeId(42)
 
 type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(43)
 
@@ -164,94 +164,94 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/opaque_idx"(
 }
 
 fn "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/cross_push_with_call_idx"() {
-    let __b_0: ref "core:prelude//Array<Tuple<i32,i32>>";
-    let v: ref "core:prelude//Array<Tuple<i32,i32>>";
-    let __b_2: ref "core:prelude//Array<Tuple<i32,i32>>";
-    let w: ref "core:prelude//Array<Tuple<i32,i32>>";
+    let __b_0: ref "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>";
+    let v: ref "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>";
+    let __b_2: ref "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>";
+    let w: ref "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>";
     let index_11: i32;
     let index_13: i32;
-    v = __seq_lit: block -> ref "core:prelude//Array<Tuple<i32,i32>>" {
-        __b_0 = struct.new "core:prelude//Array<Tuple<i32,i32>>" { repr: builtin::array_new<ref "tuple//[i32, i32]">(0), used: 0 };
+    v = __seq_lit: block -> ref "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>" {
+        __b_0 = struct.new "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>" { repr: builtin::array_new<ref "tuple//[i32, i32]">(0), used: 0 };
         break __seq_lit: __b_0;
         unreachable;
     };
-    w = __seq_lit: block -> ref "core:prelude//Array<Tuple<i32,i32>>" {
-        __b_2 = struct.new "core:prelude//Array<Tuple<i32,i32>>" { repr: builtin::array_new<ref "tuple//[i32, i32]">(0), used: 0 };
+    w = __seq_lit: block -> ref "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>" {
+        __b_2 = struct.new "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>" { repr: builtin::array_new<ref "tuple//[i32, i32]">(0), used: 0 };
         break __seq_lit: __b_2;
         unreachable;
     };
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(w, multivalue_struct_new "tuple//[i32, i32]"(10; 100));
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(w, multivalue_struct_new "tuple//[i32, i32]"(20; 200));
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(w, multivalue_struct_new "tuple//[i32, i32]"(30; 300));
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_6: block -> ref "tuple//[i32, i32]" {
+    "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(w, multivalue_struct_new "tuple//[i32, i32]"(10; 100));
+    "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(w, multivalue_struct_new "tuple//[i32, i32]"(20; 200));
+    "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(w, multivalue_struct_new "tuple//[i32, i32]"(30; 300));
+    "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(v, __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_6: block -> ref "tuple//[i32, i32]" {
         index_11 = "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/opaque_idx"(1);
         if index_11 >= w.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_6: builtin::array_get<ref "tuple//[i32, i32]">(w.repr, index_11);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_6: builtin::array_get<ref "tuple//[i32, i32]">(w.repr, index_11);
         unreachable;
     });
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_7: block -> ref "tuple//[i32, i32]" {
+    "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(v, __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_7: block -> ref "tuple//[i32, i32]" {
         index_13 = "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/opaque_idx"(2);
         if index_13 >= w.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_7: builtin::array_get<ref "tuple//[i32, i32]">(w.repr, index_13);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_7: builtin::array_get<ref "tuple//[i32, i32]">(w.repr, index_13);
         unreachable;
     });
-    return ((__inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_8: block -> ref "tuple//[i32, i32]" {
+    return ((__inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_8: block -> ref "tuple//[i32, i32]" {
         if 0 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_8: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 0);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_8: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 0);
         unreachable;
-    }.0 + __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_9: block -> ref "tuple//[i32, i32]" {
+    }.0 + __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_9: block -> ref "tuple//[i32, i32]" {
         if 0 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_9: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 0);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_9: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 0);
         unreachable;
-    }.1) + __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_10: block -> ref "tuple//[i32, i32]" {
+    }.1) + __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_10: block -> ref "tuple//[i32, i32]" {
         if 1 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_10: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 1);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_10: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 1);
         unreachable;
-    }.0) + __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_11: block -> ref "tuple//[i32, i32]" {
+    }.0) + __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_11: block -> ref "tuple//[i32, i32]" {
         if 1 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_11: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 1);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_11: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 1);
         unreachable;
     }.1;
 }
 
 fn "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/slot_copy_with_call_idx"() {
-    let __b: ref "core:prelude//Array<Tuple<i32,i32>>";
-    let v: ref "core:prelude//Array<Tuple<i32,i32>>";
+    let __b: ref "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>";
+    let v: ref "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>";
     let index_6: i32;
     let value: ref "tuple//[i32, i32]";
-    v = __seq_lit: block -> ref "core:prelude//Array<Tuple<i32,i32>>" {
-        __b = struct.new "core:prelude//Array<Tuple<i32,i32>>" { repr: builtin::array_new<ref "tuple//[i32, i32]">(0), used: 0 };
+    v = __seq_lit: block -> ref "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>" {
+        __b = struct.new "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>" { repr: builtin::array_new<ref "tuple//[i32, i32]">(0), used: 0 };
         break __seq_lit: __b;
         unreachable;
     };
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(1; 10));
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(2; 20));
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(3; 30));
+    "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(1; 10));
+    "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(2; 20));
+    "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(3; 30));
     index_6 = "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/opaque_idx"(2);
-    value = __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_4: block -> ref "tuple//[i32, i32]" {
+    value = __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_4: block -> ref "tuple//[i32, i32]" {
         if 1 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_4: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 1);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_4: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 1);
         unreachable;
     };
     if index_6 >= v.used {
@@ -259,71 +259,71 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/slot_copy_wi
         unreachable;
     }
     builtin::array_set<ref "tuple//[i32, i32]">(v.repr, index_6, value);
-    return ((((__inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_5: block -> ref "tuple//[i32, i32]" {
+    return ((((__inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_5: block -> ref "tuple//[i32, i32]" {
         if 0 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_5: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 0);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_5: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 0);
         unreachable;
-    }.0 + __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_6: block -> ref "tuple//[i32, i32]" {
+    }.0 + __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_6: block -> ref "tuple//[i32, i32]" {
         if 0 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_6: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 0);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_6: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 0);
         unreachable;
-    }.1) + __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_7: block -> ref "tuple//[i32, i32]" {
+    }.1) + __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_7: block -> ref "tuple//[i32, i32]" {
         if 1 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_7: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 1);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_7: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 1);
         unreachable;
-    }.0) + __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_8: block -> ref "tuple//[i32, i32]" {
+    }.0) + __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_8: block -> ref "tuple//[i32, i32]" {
         if 1 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_8: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 1);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_8: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 1);
         unreachable;
-    }.1) + __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_9: block -> ref "tuple//[i32, i32]" {
+    }.1) + __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_9: block -> ref "tuple//[i32, i32]" {
         if 2 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_9: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 2);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_9: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 2);
         unreachable;
-    }.0) + __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_10: block -> ref "tuple//[i32, i32]" {
+    }.0) + __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_10: block -> ref "tuple//[i32, i32]" {
         if 2 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_10: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 2);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_10: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 2);
         unreachable;
     }.1;
 }
 
 fn "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/slot_copy_with_call_source_idx"() {
-    let __b: ref "core:prelude//Array<Tuple<i32,i32>>";
-    let v: ref "core:prelude//Array<Tuple<i32,i32>>";
+    let __b: ref "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>";
+    let v: ref "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>";
     let value: ref "tuple//[i32, i32]";
     let index_9: i32;
-    v = __seq_lit: block -> ref "core:prelude//Array<Tuple<i32,i32>>" {
-        __b = struct.new "core:prelude//Array<Tuple<i32,i32>>" { repr: builtin::array_new<ref "tuple//[i32, i32]">(0), used: 0 };
+    v = __seq_lit: block -> ref "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>" {
+        __b = struct.new "core:prelude//Array<core:prelude/types.wado/Tuple<i32,i32>>" { repr: builtin::array_new<ref "tuple//[i32, i32]">(0), used: 0 };
         break __seq_lit: __b;
         unreachable;
     };
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(1; 10));
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(2; 20));
-    "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(3; 30));
-    value = __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_4: block -> ref "tuple//[i32, i32]" {
+    "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(1; 10));
+    "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(2; 20));
+    "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(v, multivalue_struct_new "tuple//[i32, i32]"(3; 30));
+    value = __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_4: block -> ref "tuple//[i32, i32]" {
         index_9 = "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/opaque_idx"(2);
         if index_9 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_4: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, index_9);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_4: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, index_9);
         unreachable;
     };
     if 0 >= v.used {
@@ -331,47 +331,47 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/slot_copy_wi
         unreachable;
     }
     builtin::array_set<ref "tuple//[i32, i32]">(v.repr, 0, value);
-    return ((((__inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_5: block -> ref "tuple//[i32, i32]" {
+    return ((((__inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_5: block -> ref "tuple//[i32, i32]" {
         if 0 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_5: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 0);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_5: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 0);
         unreachable;
-    }.0 + __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_6: block -> ref "tuple//[i32, i32]" {
+    }.0 + __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_6: block -> ref "tuple//[i32, i32]" {
         if 0 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_6: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 0);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_6: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 0);
         unreachable;
-    }.1) + __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_7: block -> ref "tuple//[i32, i32]" {
+    }.1) + __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_7: block -> ref "tuple//[i32, i32]" {
         if 1 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_7: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 1);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_7: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 1);
         unreachable;
-    }.0) + __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_8: block -> ref "tuple//[i32, i32]" {
+    }.0) + __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_8: block -> ref "tuple//[i32, i32]" {
         if 1 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_8: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 1);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_8: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 1);
         unreachable;
-    }.1) + __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_9: block -> ref "tuple//[i32, i32]" {
+    }.1) + __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_9: block -> ref "tuple//[i32, i32]" {
         if 2 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_9: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 2);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_9: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 2);
         unreachable;
-    }.0) + __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_10: block -> ref "tuple//[i32, i32]" {
+    }.0) + __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_10: block -> ref "tuple//[i32, i32]" {
         if 2 >= v.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_Tuple_i32_i32___IndexValue_i32___index_value_10: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 2);
+        break __inline_Array_core_prelude_types_wado_Tuple_i32_i32___IndexValue_i32___index_value_10: builtin::array_get<ref "tuple//[i32, i32]">(v.repr, 2);
         unreachable;
     }.1;
 }
@@ -1052,21 +1052,21 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<Tuple<i32,i32>>::push"(self, value) {
+fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<Tuple<i32,i32>>::grow"(self);
+        "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::grow"(self);
     }
     builtin::array_set<ref "tuple//[i32, i32]">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<Tuple<i32,i32>>::grow"(self) {
+fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref builtin::array<Tuple<i32,i32>>;
-    let old_repr: ref builtin::array<Tuple<i32,i32>>;
+    let new_repr: ref "builtin::array<core:prelude/types.wado/Tuple<i32,i32>>";
+    let old_repr: ref "builtin::array<core:prelude/types.wado/Tuple<i32,i32>>";
     let used: i32;
     let i: i32;
     let a: i32;

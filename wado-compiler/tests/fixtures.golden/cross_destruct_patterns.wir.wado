@@ -35,16 +35,16 @@ struct wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Point {  // Ty
     mut y: i32,
 }
 
-array builtin::array<Tagged> (mut ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged");  // TypeId(6)
+array builtin::array<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged> (mut ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged");  // TypeId(6)
 
-struct core:prelude/array.wado//ArrayIter<Tagged> {  // TypeId(7)
-    mut repr: ref builtin::array<Tagged>,
+struct core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged> {  // TypeId(7)
+    mut repr: ref "builtin::array<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>",
     mut used: i32,
     mut index: i32,
 }
 
-struct core:prelude//Array<Tagged> {  // TypeId(8)
-    mut repr: ref builtin::array<Tagged>,
+struct core:prelude//Array<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged> {  // TypeId(8)
+    mut repr: ref "builtin::array<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>",
     mut used: i32,
 }
 
@@ -96,7 +96,7 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(32)
 
-type "functype//core:prelude/array.wado/ArrayIter<Tagged>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Tagged>") -> ref null "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged";  // TypeId(33)
+type "functype//core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>") -> ref null "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged";  // TypeId(33)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(34)
 
@@ -120,9 +120,9 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout {
-    let __b_8: ref "core:prelude//Array<Tagged>";
-    let items: ref "core:prelude//Array<Tagged>";
-    let __iter_10: ref "core:prelude/array.wado//ArrayIter<Tagged>";
+    let __b_8: ref "core:prelude//Array<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>";
+    let items: ref "core:prelude//Array<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>";
+    let __iter_10: ref "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>";
     let l: ref "core:prelude/string.wado//String";
     let a: i32;
     let b: i32;
@@ -218,15 +218,15 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
     handle_63 = "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/__cm_binding__Stdout_write_via_stream"(rx_61);
     "core:cli/write_to_stream"(tx_62, message_60, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_63);
-    items = __seq_lit: block -> ref "core:prelude//Array<Tagged>" {
-        __b_8 = struct.new "core:prelude//Array<Tagged>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged">(struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("P"), used: 1 }, coords: ref.as_non_null(multivalue_struct_new "tuple//[i32, i32]"(3; 4)) }, struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Q"), used: 1 }, coords: ref.as_non_null(multivalue_struct_new "tuple//[i32, i32]"(5; 6)) }), used: 2 };
+    items = __seq_lit: block -> ref "core:prelude//Array<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>" {
+        __b_8 = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged">(struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("P"), used: 1 }, coords: ref.as_non_null(multivalue_struct_new "tuple//[i32, i32]"(3; 4)) }, struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Q"), used: 1 }, coords: ref.as_non_null(multivalue_struct_new "tuple//[i32, i32]"(5; 6)) }), used: 2 };
         break __seq_lit: __b_8;
         unreachable;
     };
-    __iter_10 = struct.new "core:prelude/array.wado//ArrayIter<Tagged>" { repr: items.repr, used: 2, index: 0 };
+    __iter_10 = struct.new "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>" { repr: items.repr, used: 2, index: 0 };
     b0: block {
         l1: loop {
-            __pattern_temp_4 = "core:prelude/array.wado/ArrayIter<Tagged>^Iterator::next"(__iter_10);
+            __pattern_temp_4 = "core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>^Iterator::next"(__iter_10);
             if ref.is_null(__pattern_temp_4) == 0 {
                 __pattern_temp_5 = ref.as_non_null(__pattern_temp_4);
                 l = __pattern_temp_5.label;
@@ -690,7 +690,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/ArrayIter<Tagged>^Iterator::next"(self) {
+fn "core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>^Iterator::next"(self) {
     let item: ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged";
     if self.index >= self.used {
         return ref.null none;

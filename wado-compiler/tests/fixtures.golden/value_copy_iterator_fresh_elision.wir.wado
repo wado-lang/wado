@@ -25,16 +25,16 @@ struct wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Poin
     mut y: i32,
 }
 
-array builtin::array<Point> (mut ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point");  // TypeId(4)
+array builtin::array<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point> (mut ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point");  // TypeId(4)
 
-struct core:prelude/array.wado//ArrayIter<Point> {  // TypeId(5)
-    mut repr: ref builtin::array<Point>,
+struct core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point> {  // TypeId(5)
+    mut repr: ref "builtin::array<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>",
     mut used: i32,
     mut index: i32,
 }
 
-struct core:prelude//Array<Point> {  // TypeId(6)
-    mut repr: ref builtin::array<Point>,
+struct core:prelude//Array<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point> {  // TypeId(6)
+    mut repr: ref "builtin::array<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>",
     mut used: i32,
 }
 
@@ -86,7 +86,7 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(30)
 
-type "functype//core:prelude/array.wado/ArrayIter<Point>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Point>") -> ref null "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point";  // TypeId(31)
+type "functype//core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>") -> ref null "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point";  // TypeId(31)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
 
@@ -110,9 +110,9 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//Array<Point>";
-    let points: ref "core:prelude//Array<Point>";
-    let __iter_2: ref "core:prelude/array.wado//ArrayIter<Point>";
+    let __b_0: ref "core:prelude//Array<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>";
+    let points: ref "core:prelude//Array<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>";
+    let __iter_2: ref "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>";
     let x: i32;
     let y: i32;
     let __local_5: ref "core:prelude/string.wado//String";
@@ -125,15 +125,15 @@ fn "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/run"() w
     let handle: i32;
     let f_26: ref "core:prelude/format.wado//Formatter";
     let f_31: ref "core:prelude/format.wado//Formatter";
-    points = __seq_lit: block -> ref "core:prelude//Array<Point>" {
-        __b_0 = struct.new "core:prelude//Array<Point>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point">(struct.new "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point" { x: 3, y: 4 }), used: 2 };
+    points = __seq_lit: block -> ref "core:prelude//Array<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>" {
+        __b_0 = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point">(struct.new "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point" { x: 3, y: 4 }), used: 2 };
         break __seq_lit: __b_0;
         unreachable;
     };
-    __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<Point>" { repr: points.repr, used: 2, index: 0 };
+    __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>" { repr: points.repr, used: 2, index: 0 };
     b0: block {
         l1: loop {
-            __pattern_temp_0_7 = "core:prelude/array.wado/ArrayIter<Point>^Iterator::next"(__iter_2);
+            __pattern_temp_0_7 = "core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>^Iterator::next"(__iter_2);
             if ref.is_null(__pattern_temp_0_7) == 0 {
                 __pattern_temp_1 = ref.as_non_null(__pattern_temp_0_7);
                 x = __pattern_temp_1.x;
@@ -552,7 +552,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/ArrayIter<Point>^Iterator::next"(self) {
+fn "core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Point>^Iterator::next"(self) {
     let item: ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point";
     if self.index >= self.used {
         return ref.null none;

@@ -26,17 +26,17 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
 
 array builtin::array<i32> (mut i32);  // TypeId(4)
 
-variant core:prelude/types.wado//Result<i32,String> {  // TypeId(5)
+variant core:prelude/types.wado//Result<i32,core:prelude/string.wado/String> {  // TypeId(5)
     Ok(i32),
     Err(ref "core:prelude/string.wado//String"),
 }
 
-struct core:prelude/types.wado//Result<i32,String>::Ok {  // TypeId(6)
+struct core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok {  // TypeId(6)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct core:prelude/types.wado//Result<i32,String>::Err {  // TypeId(7)
+struct core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err {  // TypeId(7)
     discriminant: i32,
     payload_0: ref "core:prelude/string.wado//String",
 }
@@ -124,7 +124,7 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "cor
 
 type "functype//wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min" = fn(ref "core:prelude//Array<i32>") -> i32;  // TypeId(46)
 
-type "functype//wado-compiler/tests/fixtures/trait_bound_7.wado/Result<i32,String>^Eq::eq" = fn(ref "core:prelude/types.wado//Result<i32,String>", ref "core:prelude/types.wado//Result<i32,String>") -> bool;  // TypeId(47)
+type "functype//wado-compiler/tests/fixtures/trait_bound_7.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>", ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>") -> bool;  // TypeId(47)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -161,10 +161,10 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_ref_type"() with
 }
 
 fn "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_result_eq"() with Stdout {
-    let a: ref "core:prelude/types.wado//Result<i32,String>";
-    let b: ref "core:prelude/types.wado//Result<i32,String>";
-    let c: ref "core:prelude/types.wado//Result<i32,String>";
-    let d: ref "core:prelude/types.wado//Result<i32,String>";
+    let a: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
+    let b: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
+    let c: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
+    let d: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
     let message_4: ref "core:prelude/string.wado//String";
     let rx_5: i32;
     let tx_6: i32;
@@ -177,25 +177,25 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_result_eq"() wit
     let rx_17: i32;
     let tx_18: i32;
     let handle_19: i32;
-    a = struct.new "core:prelude/types.wado//Result<i32,String>::Ok" { discriminant: 0, payload_0: 42 };
-    b = struct.new "core:prelude/types.wado//Result<i32,String>::Ok" { discriminant: 0, payload_0: 42 };
-    c = struct.new "core:prelude/types.wado//Result<i32,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fail"), used: 4 } };
-    d = struct.new "core:prelude/types.wado//Result<i32,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fail"), used: 4 } };
-    if "wado-compiler/tests/fixtures/trait_bound_7.wado/Result<i32,String>^Eq::eq"(a, b) {
+    a = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: 42 };
+    b = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: 42 };
+    c = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fail"), used: 4 } };
+    d = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fail"), used: 4 } };
+    if "wado-compiler/tests/fixtures/trait_bound_7.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(a, b) {
         message_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Ok == Ok"), used: 8 };
         multivalue_bind [rx_5, tx_6] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
         handle_7 = "wado-compiler/tests/fixtures/trait_bound_7.wado/__cm_binding__Stdout_write_via_stream"(rx_5);
         "core:cli/write_to_stream"(tx_6, message_4, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_7);
     }
-    if "wado-compiler/tests/fixtures/trait_bound_7.wado/Result<i32,String>^Eq::eq"(a, c) == 0 {
+    if "wado-compiler/tests/fixtures/trait_bound_7.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(a, c) == 0 {
         message_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Ok != Err"), used: 9 };
         multivalue_bind [rx_11, tx_12] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
         handle_13 = "wado-compiler/tests/fixtures/trait_bound_7.wado/__cm_binding__Stdout_write_via_stream"(rx_11);
         "core:cli/write_to_stream"(tx_12, message_10, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_13);
     }
-    if "wado-compiler/tests/fixtures/trait_bound_7.wado/Result<i32,String>^Eq::eq"(c, d) {
+    if "wado-compiler/tests/fixtures/trait_bound_7.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(c, d) {
         message_16 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Err == Err"), used: 10 };
         multivalue_bind [rx_17, tx_18] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
         handle_19 = "wado-compiler/tests/fixtures/trait_bound_7.wado/__cm_binding__Stdout_write_via_stream"(rx_17);
@@ -727,41 +727,41 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min"(self) {
     return m;
 }
 
-fn "wado-compiler/tests/fixtures/trait_bound_7.wado/Result<i32,String>^Eq::eq"(self, other) {
+fn "wado-compiler/tests/fixtures/trait_bound_7.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(self, other) {
     let a_2: i32;
     let b_3: i32;
     let a_4: ref "core:prelude/string.wado//String";
     let b_5: ref "core:prelude/string.wado//String";
     let len_a: i32;
-    return let __match_scrut_0: ref "core:prelude/types.wado//Result<i32,String>", __match_scrut_0 = self, (if ref.test "core:prelude/types.wado//Result<i32,String>::Ok"(__match_scrut_0) -> bool {
-        let __cast_4: ref "core:prelude/types.wado//Result<i32,String>::Ok";
-        __cast_4 = ref.cast "core:prelude/types.wado//Result<i32,String>::Ok"(__match_scrut_0);
+    return let __match_scrut_0: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>", __match_scrut_0 = self, (if ref.test "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(__match_scrut_0) -> bool {
+        let __cast_4: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok";
+        __cast_4 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(__match_scrut_0);
         a_2 = __cast_4.payload_0;
-        let __match_scrut_2: ref "core:prelude/types.wado//Result<i32,String>";
+        let __match_scrut_2: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
         __match_scrut_2 = other;
-        if ref.test "core:prelude/types.wado//Result<i32,String>::Ok"(__match_scrut_2) -> bool {
-            let __cast_6: ref "core:prelude/types.wado//Result<i32,String>::Ok";
-            __cast_6 = ref.cast "core:prelude/types.wado//Result<i32,String>::Ok"(__match_scrut_2);
+        if ref.test "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(__match_scrut_2) -> bool {
+            let __cast_6: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok";
+            __cast_6 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(__match_scrut_2);
             b_3 = __cast_6.payload_0;
             a_2 == b_3;
         } else {
-            let __cast_5: ref "core:prelude/types.wado//Result<i32,String>::Err";
-            __cast_5 = ref.cast "core:prelude/types.wado//Result<i32,String>::Err"(__match_scrut_2);
+            let __cast_5: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err";
+            __cast_5 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err"(__match_scrut_2);
             0;
         }
     } else {
-        let __cast_1: ref "core:prelude/types.wado//Result<i32,String>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<i32,String>::Err"(__match_scrut_0);
+        let __cast_1: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err";
+        __cast_1 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err"(__match_scrut_0);
         a_4 = __cast_1.payload_0;
-        let __match_scrut_1: ref "core:prelude/types.wado//Result<i32,String>";
+        let __match_scrut_1: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
         __match_scrut_1 = other;
-        if ref.test "core:prelude/types.wado//Result<i32,String>::Ok"(__match_scrut_1) -> bool {
-            let __cast_3: ref "core:prelude/types.wado//Result<i32,String>::Ok";
-            __cast_3 = ref.cast "core:prelude/types.wado//Result<i32,String>::Ok"(__match_scrut_1);
+        if ref.test "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(__match_scrut_1) -> bool {
+            let __cast_3: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok";
+            __cast_3 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(__match_scrut_1);
             0;
         } else {
-            let __cast_2: ref "core:prelude/types.wado//Result<i32,String>::Err";
-            __cast_2 = ref.cast "core:prelude/types.wado//Result<i32,String>::Err"(__match_scrut_1);
+            let __cast_2: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err";
+            __cast_2 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err"(__match_scrut_1);
             b_5 = __cast_2.payload_0;
             __inline_String_Eq__eq_0: block -> bool {
                 len_a = a_4.used;

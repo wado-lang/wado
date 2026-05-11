@@ -26,17 +26,17 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-array builtin::array<String> (mut ref "core:prelude/string.wado//String");  // TypeId(4)
+array builtin::array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(4)
 
 array builtin::array<i32> (mut i32);  // TypeId(5)
 
-struct ./sub/opt_crossmod_level1.wado//Pair<String> {  // TypeId(6)
+struct ./sub/opt_crossmod_level1.wado//Pair<core:prelude/string.wado/String> {  // TypeId(6)
     mut first: ref "core:prelude/string.wado//String",
     mut second: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude//Array<String> {  // TypeId(7)
-    mut repr: ref builtin::array<String>,
+struct core:prelude//Array<core:prelude/string.wado/String> {  // TypeId(7)
+    mut repr: ref "builtin::array<core:prelude/string.wado/String>",
     mut used: i32,
 }
 
@@ -73,7 +73,7 @@ type "functype//wado-compiler/tests/fixtures/opt_crossmod_array.wado/__cm_export
 
 type "functype//./sub/opt_crossmod_level2.wado/int_triple" = fn() -> ref "core:prelude//Array<i32>";  // TypeId(22)
 
-type "functype//./sub/opt_crossmod_level2.wado/string_literals" = fn() -> ref "core:prelude//Array<String>";  // TypeId(23)
+type "functype//./sub/opt_crossmod_level2.wado/string_literals" = fn() -> ref "core:prelude//Array<core:prelude/string.wado/String>";  // TypeId(23)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(24)
 
@@ -134,7 +134,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "wado-compiler/tests/fixtures/opt_crossmod_array.wado/run"() with Stdout {
-    let sp: ref "core:prelude//Array<String>";
+    let sp: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let __v0_1: i32;
     let __cond_2: bool;
     let __v0_3: ref "core:prelude/string.wado//String";
@@ -150,7 +150,7 @@ fn "wado-compiler/tests/fixtures/opt_crossmod_array.wado/run"() with Stdout {
     let __cond_13: bool;
     let __v0_14: i32;
     let __cond_15: bool;
-    let sl: ref "core:prelude//Array<String>";
+    let sl: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let __v0_17: i32;
     let __cond_18: bool;
     let __v0_19: ref "core:prelude/string.wado//String";
@@ -196,8 +196,8 @@ fn "wado-compiler/tests/fixtures/opt_crossmod_array.wado/run"() with Stdout {
     let __local_60: ref "core:prelude/format.wado//Formatter";
     let a_62: ref "core:prelude/string.wado//String";
     let b_63: ref "core:prelude/string.wado//String";
-    let p_64: ref "./sub/opt_crossmod_level1.wado//Pair<String>";
-    let __b_65: ref "core:prelude//Array<String>";
+    let p_64: ref "./sub/opt_crossmod_level1.wado//Pair<core:prelude/string.wado/String>";
+    let __b_65: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let f_70: ref "core:prelude/format.wado//Formatter";
     let f_75: ref "core:prelude/format.wado//Formatter";
     let other_81: ref "core:prelude/string.wado//String";
@@ -236,19 +236,19 @@ fn "wado-compiler/tests/fixtures/opt_crossmod_array.wado/run"() with Stdout {
     let rx: i32;
     let tx: i32;
     let handle: i32;
-    sp = __inline___sub_opt_crossmod_level1_wado_pair_to_array_String__4: block -> ref "core:prelude//Array<String>" {
-        p_64 = __inline___sub_opt_crossmod_level1_wado_make_pair_String__3: block -> ref "./sub/opt_crossmod_level1.wado//Pair<String>" {
+    sp = __inline___sub_opt_crossmod_level1_wado_pair_to_array_core_prelude_string_wado_String__4: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
+        p_64 = __inline___sub_opt_crossmod_level1_wado_make_pair_core_prelude_string_wado_String__3: block -> ref "./sub/opt_crossmod_level1.wado//Pair<core:prelude/string.wado/String>" {
             a_62 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
             b_63 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
-            break __inline___sub_opt_crossmod_level1_wado_make_pair_String__3: struct.new "./sub/opt_crossmod_level1.wado//Pair<String>" { first: a_62, second: b_63 };
+            break __inline___sub_opt_crossmod_level1_wado_make_pair_core_prelude_string_wado_String__3: struct.new "./sub/opt_crossmod_level1.wado//Pair<core:prelude/string.wado/String>" { first: a_62, second: b_63 };
             unreachable;
         };
-        __inline___sub_opt_crossmod_level1_wado_pair_to_array_String__4____seq_lit: block -> ref "core:prelude//Array<String>" {
-            __b_65 = struct.new "core:prelude//Array<String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(p_64.first, p_64.second), used: 2 };
-            break __inline___sub_opt_crossmod_level1_wado_pair_to_array_String__4____seq_lit: __b_65;
+        __inline___sub_opt_crossmod_level1_wado_pair_to_array_core_prelude_string_wado_String__4____seq_lit: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
+            __b_65 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(p_64.first, p_64.second), used: 2 };
+            break __inline___sub_opt_crossmod_level1_wado_pair_to_array_core_prelude_string_wado_String__4____seq_lit: __b_65;
             unreachable;
         };
-        break __inline___sub_opt_crossmod_level1_wado_pair_to_array_String__4;
+        break __inline___sub_opt_crossmod_level1_wado_pair_to_array_core_prelude_string_wado_String__4;
         unreachable;
     };
     __v0_1 = sp.used;
@@ -282,12 +282,12 @@ condition: sp.len() == 2
         });
         unreachable;
     }
-    __v0_3 = __inline_Array_String__IndexValue_i32___index_value_13: block -> ref "core:prelude/string.wado//String" {
+    __v0_3 = __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_13: block -> ref "core:prelude/string.wado//String" {
         if 0 >= sp.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_String__IndexValue_i32___index_value_13: builtin::array_get<ref "core:prelude/string.wado//String">(sp.repr, 0);
+        break __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_13: builtin::array_get<ref "core:prelude/string.wado//String">(sp.repr, 0);
         unreachable;
     };
     __cond_4 = __inline_String_Eq__eq_14: block -> bool {
@@ -333,12 +333,12 @@ condition: sp[0] == \"hello\"
         });
         unreachable;
     }
-    __v0_5 = __inline_Array_String__IndexValue_i32___index_value_24: block -> ref "core:prelude/string.wado//String" {
+    __v0_5 = __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_24: block -> ref "core:prelude/string.wado//String" {
         if 1 >= sp.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_String__IndexValue_i32___index_value_24: builtin::array_get<ref "core:prelude/string.wado//String">(sp.repr, 1);
+        break __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_24: builtin::array_get<ref "core:prelude/string.wado//String">(sp.repr, 1);
         unreachable;
     };
     __cond_6 = __inline_String_Eq__eq_25: block -> bool {
@@ -580,12 +580,12 @@ condition: sl.len() == 3
         });
         unreachable;
     }
-    __v0_19 = __inline_Array_String__IndexValue_i32___index_value_75: block -> ref "core:prelude/string.wado//String" {
+    __v0_19 = __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_75: block -> ref "core:prelude/string.wado//String" {
         if 0 >= sl.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_String__IndexValue_i32___index_value_75: builtin::array_get<ref "core:prelude/string.wado//String">(sl.repr, 0);
+        break __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_75: builtin::array_get<ref "core:prelude/string.wado//String">(sl.repr, 0);
         unreachable;
     };
     __cond_20 = __inline_String_Eq__eq_76: block -> bool {
@@ -631,12 +631,12 @@ condition: sl[0] == \"alpha\"
         });
         unreachable;
     }
-    __v0_21 = __inline_Array_String__IndexValue_i32___index_value_86: block -> ref "core:prelude/string.wado//String" {
+    __v0_21 = __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_86: block -> ref "core:prelude/string.wado//String" {
         if 1 >= sl.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_String__IndexValue_i32___index_value_86: builtin::array_get<ref "core:prelude/string.wado//String">(sl.repr, 1);
+        break __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_86: builtin::array_get<ref "core:prelude/string.wado//String">(sl.repr, 1);
         unreachable;
     };
     __cond_22 = __inline_String_Eq__eq_87: block -> bool {
@@ -682,12 +682,12 @@ condition: sl[1] == \"beta\"
         });
         unreachable;
     }
-    __v0_23 = __inline_Array_String__IndexValue_i32___index_value_97: block -> ref "core:prelude/string.wado//String" {
+    __v0_23 = __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_97: block -> ref "core:prelude/string.wado//String" {
         if 2 >= sl.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_String__IndexValue_i32___index_value_97: builtin::array_get<ref "core:prelude/string.wado//String">(sl.repr, 2);
+        break __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_97: builtin::array_get<ref "core:prelude/string.wado//String">(sl.repr, 2);
         unreachable;
     };
     __cond_24 = __inline_String_Eq__eq_98: block -> bool {
@@ -879,9 +879,9 @@ fn "./sub/opt_crossmod_level2.wado/int_triple"() {
 }
 
 fn "./sub/opt_crossmod_level2.wado/string_literals"() {
-    let __b: ref "core:prelude//Array<String>";
-    return __seq_lit: block -> ref "core:prelude//Array<String>" {
-        __b = struct.new "core:prelude//Array<String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alpha"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("beta"), used: 4 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("gamma"), used: 5 }), used: 3 };
+    let __b: ref "core:prelude//Array<core:prelude/string.wado/String>";
+    return __seq_lit: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
+        __b = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alpha"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("beta"), used: 4 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("gamma"), used: 5 }), used: 3 };
         break __seq_lit: __b;
         unreachable;
     };
@@ -1374,13 +1374,13 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let self_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         self_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             self_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: self_8.repr, used: self_8.used, byte_index: 0 };
             unreachable;
         };
-        break __inline_StrCharIter_IntoIterator__into_iter_1: self_7;
+        break __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: self_7;
         unreachable;
     };
     _licm_buf_33 = f.buf;

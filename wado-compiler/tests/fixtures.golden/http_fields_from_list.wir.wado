@@ -170,7 +170,7 @@ struct tuple//[String, Array<u8>] {  // TypeId(24)
     mut 1: ref "core:prelude//Array<u8>",
 }
 
-array builtin::array<Tuple<String,Array<u8>>> (mut ref "tuple//[String, Array<u8>]");  // TypeId(25)
+array builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/array.wado/Array<u8>>> (mut ref "tuple//[String, Array<u8>]");  // TypeId(25)
 
 variant core:prelude/types.wado//Option<u16> {  // TypeId(26)
     Some(u16),
@@ -257,8 +257,8 @@ struct core:prelude//Array<u8> {  // TypeId(42)
     mut used: i32,
 }
 
-struct core:prelude//Array<Tuple<String,Array<u8>>> {  // TypeId(43)
-    mut repr: ref builtin::array<Tuple<String,Array<u8>>>,
+struct core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/array.wado/Array<u8>>> {  // TypeId(43)
+    mut repr: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/array.wado/Array<u8>>>",
     mut used: i32,
 }
 
@@ -290,7 +290,7 @@ type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  //
 
 type "functype//wado-compiler/tests/fixtures/http_fields_from_list.wado/handle" = fn();  // TypeId(57)
 
-type "functype//wado-compiler/tests/fixtures/http_fields_from_list.wado/__cm_binding__Fields_from_list" = fn(ref "core:prelude//Array<Tuple<String,Array<u8>>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>";  // TypeId(58)
+type "functype//wado-compiler/tests/fixtures/http_fields_from_list.wado/__cm_binding__Fields_from_list" = fn(ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/array.wado/Array<u8>>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>";  // TypeId(58)
 
 type "functype//wado-compiler/tests/fixtures/http_fields_from_list.wado/__cm_binding__Fields_has" = fn(i32, ref "core:prelude/string.wado//String") -> bool;  // TypeId(59)
 
@@ -368,8 +368,8 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/http_fields_from_list.wado/handle"() {
     let __b_0: ref "core:prelude//Array<u8>";
     let name_bytes: ref "core:prelude//Array<u8>";
-    let __b_2: ref "core:prelude//Array<Tuple<String,Array<u8>>>";
-    let entries: ref "core:prelude//Array<Tuple<String,Array<u8>>>";
+    let __b_2: ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/array.wado/Array<u8>>>";
+    let entries: ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/array.wado/Array<u8>>>";
     let result: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>";
     let fields: i32;
     let __v0: bool;
@@ -520,8 +520,8 @@ fn "wado-compiler/tests/fixtures/http_fields_from_list.wado/handle"() {
         break __seq_lit: __b_0;
         unreachable;
     };
-    entries = __seq_lit: block -> ref "core:prelude//Array<Tuple<String,Array<u8>>>" {
-        __b_2 = struct.new "core:prelude//Array<Tuple<String,Array<u8>>>" { repr: array.new_fixed<ref "tuple//[String, Array<u8>]">(multivalue_struct_new "tuple//[String, Array<u8>]"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-one"), used: 5 }; name_bytes)), used: 1 };
+    entries = __seq_lit: block -> ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/array.wado/Array<u8>>>" {
+        __b_2 = struct.new "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/array.wado/Array<u8>>>" { repr: array.new_fixed<ref "tuple//[String, Array<u8>]">(multivalue_struct_new "tuple//[String, Array<u8>]"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-one"), used: 5 }; name_bytes)), used: 1 };
         break __seq_lit: __b_2;
         unreachable;
     };
@@ -921,7 +921,7 @@ fn "wado-compiler/tests/fixtures/http_fields_from_list.wado/__cm_binding__Fields
     let len_25: i32;
     let arr_26: ref builtin::array<u8>;
     let _licm_used_27: i32;
-    let _licm_repr_28: ref builtin::array<Tuple<String,Array<u8>>>;
+    let _licm_repr_28: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/array.wado/Array<u8>>>";
     __entries_len = entries.used;
     __entries_base = "mem/realloc"(0, 0, 4, __entries_len * 16);
     __entries_i = 0;
@@ -933,12 +933,12 @@ fn "wado-compiler/tests/fixtures/http_fields_from_list.wado/__cm_binding__Fields
                 break b42;
             }
             __entries_addr = __entries_base + (__entries_i * 16);
-            __entries_elem = __inline_Array_Tuple_String_Array_u8____IndexValue_i32___index_value_1: block -> ref "tuple//[String, Array<u8>]" {
+            __entries_elem = __inline_Array_core_prelude_types_wado_Tuple_core_prelude_string_wado_String_core_prelude_array_wado_Array_u8____IndexValue_i32___index_value_1: block -> ref "tuple//[String, Array<u8>]" {
                 if __entries_i >= _licm_used_27 {
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
-                break __inline_Array_Tuple_String_Array_u8____IndexValue_i32___index_value_1: builtin::array_get<ref "tuple//[String, Array<u8>]">(_licm_repr_28, __entries_i);
+                break __inline_Array_core_prelude_types_wado_Tuple_core_prelude_string_wado_String_core_prelude_array_wado_Array_u8____IndexValue_i32___index_value_1: builtin::array_get<ref "tuple//[String, Array<u8>]">(_licm_repr_28, __entries_i);
                 unreachable;
             };
             __packed = "core:internal/cm_lower_string"(__entries_elem.0);

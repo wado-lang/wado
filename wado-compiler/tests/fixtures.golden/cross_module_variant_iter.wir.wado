@@ -34,7 +34,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(5)
 
 struct ./sub/cross_module_variant_iter_helper.wado//AData {  // TypeId(6)
     mut name: ref "core:prelude/string.wado//String",
-    mut children: ref "core:prelude//Array<Choice>",
+    mut children: ref "core:prelude//Array<./sub/cross_module_variant_iter_helper.wado/Choice>",
 }
 
 variant ./sub/cross_module_variant_iter_helper.wado//Choice {  // TypeId(7)
@@ -52,16 +52,16 @@ struct ./sub/cross_module_variant_iter_helper.wado//Choice::B {  // TypeId(9)
     payload_0: ref "./sub/cross_module_variant_iter_helper.wado//BData",
 }
 
-array builtin::array<Choice> (mut ref "./sub/cross_module_variant_iter_helper.wado//Choice");  // TypeId(10)
+array builtin::array<./sub/cross_module_variant_iter_helper.wado/Choice> (mut ref "./sub/cross_module_variant_iter_helper.wado//Choice");  // TypeId(10)
 
 struct core:prelude/array.wado//ArrayRefIter<./sub/cross_module_variant_iter_helper.wado/Choice> {  // TypeId(11)
-    mut repr: ref builtin::array<Choice>,
+    mut repr: ref "builtin::array<./sub/cross_module_variant_iter_helper.wado/Choice>",
     mut used: i32,
     mut index: i32,
 }
 
-struct core:prelude//Array<Choice> {  // TypeId(12)
-    mut repr: ref builtin::array<Choice>,
+struct core:prelude//Array<./sub/cross_module_variant_iter_helper.wado/Choice> {  // TypeId(12)
+    mut repr: ref "builtin::array<./sub/cross_module_variant_iter_helper.wado/Choice>",
     mut used: i32,
 }
 
@@ -127,7 +127,7 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(43)
 
-type "functype//./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<Counter>" = fn(ref "./sub/cross_module_variant_iter_helper.wado//Counter", ref "./sub/cross_module_variant_iter_helper.wado//Choice");  // TypeId(44)
+type "functype//./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>" = fn(ref "./sub/cross_module_variant_iter_helper.wado//Counter", ref "./sub/cross_module_variant_iter_helper.wado//Choice");  // TypeId(44)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -156,7 +156,7 @@ fn "wado-compiler/tests/fixtures/cross_module_variant_iter.wado/run"() {
     tree = struct.new "core:prelude/types.wado//Box<Choice>" { value: ref.as_non_null("./sub/cross_module_variant_iter_helper.wado/make_tree"()) };
     result = __inline_count_2: block -> i32 {
         counter = struct.new "./sub/cross_module_variant_iter_helper.wado//Counter" { total: 0 };
-        "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<Counter>"(counter, tree.value);
+        "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>"(counter, tree.value);
         break __inline_count_2: counter.total;
         unreachable;
     };
@@ -351,26 +351,26 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
 fn "./sub/cross_module_variant_iter_helper.wado/make_tree"() {
     let leaf1: ref "./sub/cross_module_variant_iter_helper.wado//Choice";
     let leaf2: ref "./sub/cross_module_variant_iter_helper.wado//Choice";
-    let __b: ref "core:prelude//Array<Choice>";
-    let children: ref "core:prelude//Array<Choice>";
+    let __b: ref "core:prelude//Array<./sub/cross_module_variant_iter_helper.wado/Choice>";
+    let children: ref "core:prelude//Array<./sub/cross_module_variant_iter_helper.wado/Choice>";
     leaf1 = struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::B" { discriminant: 1, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//BData" { value: 10 } };
     leaf2 = struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::B" { discriminant: 1, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//BData" { value: 20 } };
-    children = __seq_lit: block -> ref "core:prelude//Array<Choice>" {
-        __b = struct.new "core:prelude//Array<Choice>" { repr: array.new_fixed<ref "./sub/cross_module_variant_iter_helper.wado//Choice">(leaf1, leaf2), used: 2 };
+    children = __seq_lit: block -> ref "core:prelude//Array<./sub/cross_module_variant_iter_helper.wado/Choice>" {
+        __b = struct.new "core:prelude//Array<./sub/cross_module_variant_iter_helper.wado/Choice>" { repr: array.new_fixed<ref "./sub/cross_module_variant_iter_helper.wado//Choice">(leaf1, leaf2), used: 2 };
         break __seq_lit: __b;
         unreachable;
     };
     return struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::A" { discriminant: 0, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("root"), used: 4 }, children: children } };
 }
 
-fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<Counter>"(h, c) {
+fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>"(h, c) {
     let a: ref "./sub/cross_module_variant_iter_helper.wado//AData";
     let __iter_3: ref "core:prelude/array.wado//ArrayRefIter<./sub/cross_module_variant_iter_helper.wado/Choice>";
     let child: ref "core:prelude/types.wado//Box<Choice>";
     let b: ref "./sub/cross_module_variant_iter_helper.wado//BData";
     let __local_6: ref null "core:prelude/types.wado//Box<Choice>";
-    let self_7: ref "core:prelude//Array<Choice>";
-    let arr: ref "core:prelude//Array<Choice>";
+    let self_7: ref "core:prelude//Array<./sub/cross_module_variant_iter_helper.wado/Choice>";
+    let arr: ref "core:prelude//Array<./sub/cross_module_variant_iter_helper.wado/Choice>";
     let v: i32;
     let __match_scrut_0: ref "./sub/cross_module_variant_iter_helper.wado//Choice";
     __match_scrut_0 = c;
@@ -389,7 +389,7 @@ fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_
                 __local_6 = "core:prelude/array.wado/ArrayRefIter<./sub/cross_module_variant_iter_helper.wado/Choice>^Iterator::next"(__iter_3);
                 if ref.is_null(__local_6) == 0 {
                     child = ref.as_non_null(__local_6);
-                    "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<Counter>"(h, child.value);
+                    "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>"(h, child.value);
                 } else {
                     break b15;
                 }

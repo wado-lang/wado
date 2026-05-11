@@ -22,7 +22,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
 
 array builtin::array<i32> (mut i32);  // TypeId(3)
 
-array builtin::array<Array<i32>> (mut ref "core:prelude//Array<i32>");  // TypeId(4)
+array builtin::array<core:prelude/array.wado/Array<i32>> (mut ref "core:prelude//Array<i32>");  // TypeId(4)
 
 struct core:prelude/array.wado//ArrayIter<i32> {  // TypeId(5)
     mut repr: ref builtin::array<i32>,
@@ -35,8 +35,8 @@ struct core:prelude//Array<i32> {  // TypeId(6)
     mut used: i32,
 }
 
-struct core:prelude//Array<Array<i32>> {  // TypeId(7)
-    mut repr: ref builtin::array<Array<i32>>,
+struct core:prelude//Array<core:prelude/array.wado/Array<i32>> {  // TypeId(7)
+    mut repr: ref "builtin::array<core:prelude/array.wado/Array<i32>>",
     mut used: i32,
 }
 
@@ -58,9 +58,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(15)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/for_of_with_continue" = fn(ref "core:prelude//Array<Array<i32>>") -> ref "core:prelude//Array<i32>";  // TypeId(17)
+type "functype//wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/for_of_with_continue" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>") -> ref "core:prelude//Array<i32>";  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/for_of_with_break" = fn(ref "core:prelude//Array<Array<i32>>") -> ref "core:prelude//Array<i32>";  // TypeId(18)
+type "functype//wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/for_of_with_break" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>") -> ref "core:prelude//Array<i32>";  // TypeId(18)
 
 type "functype//wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/__test_0_continue_in_for_of_inside_c_style_for" = fn();  // TypeId(19)
 
@@ -137,7 +137,7 @@ fn "wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/for_of_with_cont
     let item: i32;
     let self_11: ref "core:prelude//Array<i32>";
     let _licm_used_14: i32;
-    let _licm_repr_15: ref builtin::array<Array<i32>>;
+    let _licm_repr_15: ref "builtin::array<core:prelude/array.wado/Array<i32>>";
     result = __seq_lit: block -> ref "core:prelude//Array<i32>" {
         __b = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __b;
@@ -190,7 +190,7 @@ fn "wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/for_of_with_brea
     let item: i32;
     let self_11: ref "core:prelude//Array<i32>";
     let _licm_used_14: i32;
-    let _licm_repr_15: ref builtin::array<Array<i32>>;
+    let _licm_repr_15: ref "builtin::array<core:prelude/array.wado/Array<i32>>";
     result = __seq_lit: block -> ref "core:prelude//Array<i32>" {
         __b = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __b;
@@ -236,10 +236,10 @@ fn "wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/for_of_with_brea
 }
 
 fn "wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/__test_0_continue_in_for_of_inside_c_style_for"() {
-    let __b_0: ref "core:prelude//Array<Array<i32>>";
+    let __b_0: ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>";
     let __b_1: ref "core:prelude//Array<i32>";
     let __b_2: ref "core:prelude//Array<i32>";
-    let data: ref "core:prelude//Array<Array<i32>>";
+    let data: ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>";
     let result: ref "core:prelude//Array<i32>";
     let __v0_5: i32;
     let __cond_6: bool;
@@ -267,8 +267,8 @@ fn "wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/__test_0_continu
     let f_90: ref "core:prelude/format.wado//Formatter";
     let f_98: ref "core:prelude/format.wado//Formatter";
     let f_103: ref "core:prelude/format.wado//Formatter";
-    data = __seq_lit: block -> ref "core:prelude//Array<Array<i32>>" {
-        __b_0 = struct.new "core:prelude//Array<Array<i32>>" { repr: array.new_fixed<ref "core:prelude//Array<i32>">(__seq_lit: block -> ref "core:prelude//Array<i32>" {
+    data = __seq_lit: block -> ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>" {
+        __b_0 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<i32>>" { repr: array.new_fixed<ref "core:prelude//Array<i32>">(__seq_lit: block -> ref "core:prelude//Array<i32>" {
             __b_1 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
             break __seq_lit: __b_1;
             unreachable;
@@ -431,10 +431,10 @@ condition: result[2] == 5
 }
 
 fn "wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/__test_1_break_in_for_of_inside_c_style_for"() {
-    let __b_0: ref "core:prelude//Array<Array<i32>>";
+    let __b_0: ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>";
     let __b_1: ref "core:prelude//Array<i32>";
     let __b_2: ref "core:prelude//Array<i32>";
-    let data: ref "core:prelude//Array<Array<i32>>";
+    let data: ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>";
     let result: ref "core:prelude//Array<i32>";
     let __v0_5: i32;
     let __cond_6: bool;
@@ -456,8 +456,8 @@ fn "wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/__test_1_break_i
     let f_73: ref "core:prelude/format.wado//Formatter";
     let f_81: ref "core:prelude/format.wado//Formatter";
     let f_86: ref "core:prelude/format.wado//Formatter";
-    data = __seq_lit: block -> ref "core:prelude//Array<Array<i32>>" {
-        __b_0 = struct.new "core:prelude//Array<Array<i32>>" { repr: array.new_fixed<ref "core:prelude//Array<i32>">(__seq_lit: block -> ref "core:prelude//Array<i32>" {
+    data = __seq_lit: block -> ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>" {
+        __b_0 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<i32>>" { repr: array.new_fixed<ref "core:prelude//Array<i32>">(__seq_lit: block -> ref "core:prelude//Array<i32>" {
             __b_1 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
             break __seq_lit: __b_1;
             unreachable;
@@ -584,10 +584,10 @@ condition: result[1] == 2
 }
 
 fn "wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/__test_2_continue_with_double_indexed_access"() {
-    let __b_0: ref "core:prelude//Array<Array<i32>>";
+    let __b_0: ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>";
     let __b_1: ref "core:prelude//Array<i32>";
     let __b_2: ref "core:prelude//Array<i32>";
-    let data: ref "core:prelude//Array<Array<i32>>";
+    let data: ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>";
     let __b_4: ref "core:prelude//Array<i32>";
     let indices: ref "core:prelude//Array<i32>";
     let __b_6: ref "core:prelude//Array<i32>";
@@ -626,9 +626,9 @@ fn "wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/__test_2_continu
     let _licm_used_129: i32;
     let _licm_repr_130: ref builtin::array<i32>;
     let _licm_used_131: i32;
-    let _licm_repr_132: ref builtin::array<Array<i32>>;
-    data = __seq_lit: block -> ref "core:prelude//Array<Array<i32>>" {
-        __b_0 = struct.new "core:prelude//Array<Array<i32>>" { repr: array.new_fixed<ref "core:prelude//Array<i32>">(__seq_lit: block -> ref "core:prelude//Array<i32>" {
+    let _licm_repr_132: ref "builtin::array<core:prelude/array.wado/Array<i32>>";
+    data = __seq_lit: block -> ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>" {
+        __b_0 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<i32>>" { repr: array.new_fixed<ref "core:prelude//Array<i32>">(__seq_lit: block -> ref "core:prelude//Array<i32>" {
             __b_1 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
             break __seq_lit: __b_1;
             unreachable;
@@ -662,13 +662,13 @@ fn "wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/__test_2_continu
                     break __for_2;
                 }
                 __iter_9 = __inline_Array_i32__IntoIterator__into_iter_26: block -> ref "core:prelude/array.wado//ArrayIter<i32>" {
-                    self_66 = __inline_Array_Array_i32___IndexValue_i32___index_value_28: block -> ref "core:prelude//Array<i32>" {
+                    self_66 = __inline_Array_core_prelude_array_wado_Array_i32___IndexValue_i32___index_value_28: block -> ref "core:prelude//Array<i32>" {
                         index_70 = builtin::array_get<i32>(_licm_repr_130, k);
                         if index_70 >= _licm_used_131 {
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         }
-                        break __inline_Array_Array_i32___IndexValue_i32___index_value_28: builtin::array_get<ref "core:prelude//Array<i32>">(_licm_repr_132, index_70);
+                        break __inline_Array_core_prelude_array_wado_Array_i32___IndexValue_i32___index_value_28: builtin::array_get<ref "core:prelude//Array<i32>">(_licm_repr_132, index_70);
                         unreachable;
                     };
                     break __inline_Array_i32__IntoIterator__into_iter_26: struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: self_66.repr, used: self_66.used, index: 0 };

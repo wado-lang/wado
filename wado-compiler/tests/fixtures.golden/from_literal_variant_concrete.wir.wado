@@ -20,12 +20,12 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-array builtin::array<String> (mut ref "core:prelude/string.wado//String");  // TypeId(3)
+array builtin::array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(3)
 
 array builtin::array<i32> (mut i32);  // TypeId(4)
 
-struct core:prelude//Array<String> {  // TypeId(5)
-    mut repr: ref builtin::array<String>,
+struct core:prelude//Array<core:prelude/string.wado/String> {  // TypeId(5)
+    mut repr: ref "builtin::array<core:prelude/string.wado/String>",
     mut used: i32,
 }
 
@@ -35,7 +35,7 @@ struct core:prelude//Array<i32> {  // TypeId(6)
 }
 
 struct wado-compiler/tests/fixtures/from_literal_variant_concrete.wado//StatusMap<wado-compiler/tests/fixtures/from_literal_variant_concrete.wado/Status,i32> {  // TypeId(7)
-    mut keys: ref "core:prelude//Array<String>",
+    mut keys: ref "core:prelude//Array<core:prelude/string.wado/String>",
     mut values: ref "core:prelude//Array<i32>",
 }
 
@@ -95,13 +95,13 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(35)
 
-type "functype//core:prelude/array.wado/Array<String>::grow" = fn(ref "core:prelude//Array<String>");  // TypeId(36)
+type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>");  // TypeId(36)
 
 type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(37)
 
 type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(38)
 
-type "functype//core:prelude/array.wado/Array<String>::push" = fn(ref "core:prelude//Array<String>", ref "core:prelude/string.wado//String");  // TypeId(39)
+type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(39)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
 
@@ -136,11 +136,11 @@ fn "wado-compiler/tests/fixtures/from_literal_variant_concrete.wado/run"() with 
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
-    let __b_12: ref "core:prelude//Array<String>";
+    let __b_12: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let __b_13: ref "core:prelude//Array<i32>";
     let key_21: ref "core:prelude/string.wado//String";
     let key_24: ref "core:prelude/string.wado//String";
-    let self_27: ref "core:prelude//Array<String>";
+    let self_27: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let f_31: ref "core:prelude/format.wado//Formatter";
     let f_36: ref "core:prelude/format.wado//Formatter";
     let self_39: ref "core:prelude//Array<i32>";
@@ -151,8 +151,8 @@ fn "wado-compiler/tests/fixtures/from_literal_variant_concrete.wado/run"() with 
     let tx: i32;
     let handle: i32;
     m = __kv_lit: block -> ref "wado-compiler/tests/fixtures/from_literal_variant_concrete.wado//StatusMap<wado-compiler/tests/fixtures/from_literal_variant_concrete.wado/Status,i32>" {
-        __b_0 = struct.new "wado-compiler/tests/fixtures/from_literal_variant_concrete.wado//StatusMap<wado-compiler/tests/fixtures/from_literal_variant_concrete.wado/Status,i32>" { keys: ref.as_non_null(__inline_StatusMap_wado_compiler_tests_fixtures_from_literal_variant_concrete_wado_Status_i32__KeyValueLiteralBuilder__new_literal_2____seq_lit: block -> ref "core:prelude//Array<String>" {
-            __b_12 = struct.new "core:prelude//Array<String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
+        __b_0 = struct.new "wado-compiler/tests/fixtures/from_literal_variant_concrete.wado//StatusMap<wado-compiler/tests/fixtures/from_literal_variant_concrete.wado/Status,i32>" { keys: ref.as_non_null(__inline_StatusMap_wado_compiler_tests_fixtures_from_literal_variant_concrete_wado_Status_i32__KeyValueLiteralBuilder__new_literal_2____seq_lit: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
+            __b_12 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
             break __inline_StatusMap_wado_compiler_tests_fixtures_from_literal_variant_concrete_wado_Status_i32__KeyValueLiteralBuilder__new_literal_2____seq_lit: __b_12;
             unreachable;
         }), values: ref.as_non_null(__inline_StatusMap_wado_compiler_tests_fixtures_from_literal_variant_concrete_wado_Status_i32__KeyValueLiteralBuilder__new_literal_2____seq_lit: block -> ref "core:prelude//Array<i32>" {
@@ -161,17 +161,17 @@ fn "wado-compiler/tests/fixtures/from_literal_variant_concrete.wado/run"() with 
             unreachable;
         }) };
         key_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("active"), used: 6 };
-        "core:prelude/array.wado/Array<String>::push"(__b_0.keys, key_21);
+        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(__b_0.keys, key_21);
         "core:prelude/array.wado/Array<i32>::push"(__b_0.values, 1);
         key_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("inactive"), used: 8 };
-        "core:prelude/array.wado/Array<String>::push"(__b_0.keys, key_24);
+        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(__b_0.keys, key_24);
         "core:prelude/array.wado/Array<i32>::push"(__b_0.values, 2);
         break __kv_lit: __b_0;
         unreachable;
     };
-    __v0_2 = __inline_Array_String___len_12: block -> i32 {
+    __v0_2 = __inline_Array_core_prelude_string_wado_String___len_12: block -> i32 {
         self_27 = m.keys;
-        break __inline_Array_String___len_12: self_27.used;
+        break __inline_Array_core_prelude_string_wado_String___len_12: self_27.used;
         unreachable;
     };
     __cond_3 = __v0_2 == 2;
@@ -674,11 +674,11 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<String>::grow"(self) {
+fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref builtin::array<String>;
-    let old_repr: ref builtin::array<String>;
+    let new_repr: ref "builtin::array<core:prelude/string.wado/String>";
+    let old_repr: ref "builtin::array<core:prelude/string.wado/String>";
     let used: i32;
     let i: i32;
     let a: i32;
@@ -750,11 +750,11 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/array.wado/Array<String>::push"(self, value) {
+fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<String>::grow"(self);
+        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self);
     }
     builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
     self.used = used + 1;

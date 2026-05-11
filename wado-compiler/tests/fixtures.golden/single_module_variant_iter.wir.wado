@@ -34,7 +34,7 @@ struct wado-compiler/tests/fixtures/single_module_variant_iter.wado//BData {  //
 
 struct wado-compiler/tests/fixtures/single_module_variant_iter.wado//AData {  // TypeId(6)
     mut name: ref "core:prelude/string.wado//String",
-    mut children: ref "core:prelude//Array<Choice>",
+    mut children: ref "core:prelude//Array<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Choice>",
 }
 
 variant wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice {  // TypeId(7)
@@ -52,16 +52,16 @@ struct wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::B {
     payload_0: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//BData",
 }
 
-array builtin::array<Choice> (mut ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice");  // TypeId(10)
+array builtin::array<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Choice> (mut ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice");  // TypeId(10)
 
 struct core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Choice> {  // TypeId(11)
-    mut repr: ref builtin::array<Choice>,
+    mut repr: ref "builtin::array<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Choice>",
     mut used: i32,
     mut index: i32,
 }
 
-struct core:prelude//Array<Choice> {  // TypeId(12)
-    mut repr: ref builtin::array<Choice>,
+struct core:prelude//Array<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Choice> {  // TypeId(12)
+    mut repr: ref "builtin::array<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Choice>",
     mut used: i32,
 }
 
@@ -125,7 +125,7 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(42)
 
-type "functype//wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<Counter>" = fn(ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Counter", ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice");  // TypeId(43)
+type "functype//wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Counter>" = fn(ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Counter", ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice");  // TypeId(43)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -143,8 +143,8 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/run"() {
     let leaf1: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice";
     let leaf2: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice";
-    let __b_2: ref "core:prelude//Array<Choice>";
-    let children: ref "core:prelude//Array<Choice>";
+    let __b_2: ref "core:prelude//Array<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Choice>";
+    let children: ref "core:prelude//Array<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Choice>";
     let tree: ref "core:prelude/types.wado//Box<Choice>";
     let result: i32;
     let __cond: bool;
@@ -157,15 +157,15 @@ fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/run"() {
     let f_36: ref "core:prelude/format.wado//Formatter";
     leaf1 = struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::B" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//BData" { value: 10 } };
     leaf2 = struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::B" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//BData" { value: 20 } };
-    children = __seq_lit: block -> ref "core:prelude//Array<Choice>" {
-        __b_2 = struct.new "core:prelude//Array<Choice>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice">(leaf1, leaf2), used: 2 };
+    children = __seq_lit: block -> ref "core:prelude//Array<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Choice>" {
+        __b_2 = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Choice>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice">(leaf1, leaf2), used: 2 };
         break __seq_lit: __b_2;
         unreachable;
     };
     tree = struct.new "core:prelude/types.wado//Box<Choice>" { value: struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::A" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("root"), used: 4 }, children: children } } };
     result = __inline_count_7: block -> i32 {
         counter = struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Counter" { total: 0 };
-        "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<Counter>"(counter, tree.value);
+        "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Counter>"(counter, tree.value);
         break __inline_count_7: counter.total;
         unreachable;
     };
@@ -223,14 +223,14 @@ fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/__cm_export__ru
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<Counter>"(h, c) {
+fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Counter>"(h, c) {
     let a: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//AData";
     let __iter_3: ref "core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Choice>";
     let child: ref "core:prelude/types.wado//Box<Choice>";
     let b: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//BData";
     let __local_6: ref null "core:prelude/types.wado//Box<Choice>";
-    let self_7: ref "core:prelude//Array<Choice>";
-    let arr: ref "core:prelude//Array<Choice>";
+    let self_7: ref "core:prelude//Array<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Choice>";
+    let arr: ref "core:prelude//Array<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Choice>";
     let v: i32;
     let __match_scrut_0: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice";
     __match_scrut_0 = c;
@@ -249,7 +249,7 @@ fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<Counter>"(
                 __local_6 = "core:prelude/array.wado/ArrayRefIter<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Choice>^Iterator::next"(__iter_3);
                 if ref.is_null(__local_6) == 0 {
                     child = ref.as_non_null(__local_6);
-                    "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<Counter>"(h, child.value);
+                    "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<wado-compiler/tests/fixtures/single_module_variant_iter.wado/Counter>"(h, child.value);
                 } else {
                     break b2;
                 }

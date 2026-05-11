@@ -56,16 +56,16 @@ struct wado-compiler/tests/fixtures/struct_2.wado//SDLine {  // TypeId(9)
     mut end: ref "wado-compiler/tests/fixtures/struct_2.wado//SDPoint",
 }
 
-array builtin::array<SDPoint> (mut ref "wado-compiler/tests/fixtures/struct_2.wado//SDPoint");  // TypeId(10)
+array builtin::array<wado-compiler/tests/fixtures/struct_2.wado/SDPoint> (mut ref "wado-compiler/tests/fixtures/struct_2.wado//SDPoint");  // TypeId(10)
 
-struct core:prelude/array.wado//ArrayIter<SDPoint> {  // TypeId(11)
-    mut repr: ref builtin::array<SDPoint>,
+struct core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint> {  // TypeId(11)
+    mut repr: ref "builtin::array<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>",
     mut used: i32,
     mut index: i32,
 }
 
-struct core:prelude//Array<SDPoint> {  // TypeId(12)
-    mut repr: ref builtin::array<SDPoint>,
+struct core:prelude//Array<wado-compiler/tests/fixtures/struct_2.wado/SDPoint> {  // TypeId(12)
+    mut repr: ref "builtin::array<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>",
     mut used: i32,
 }
 
@@ -135,7 +135,7 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(45)
 
-type "functype//core:prelude/array.wado/ArrayIter<SDPoint>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<SDPoint>") -> ref null "wado-compiler/tests/fixtures/struct_2.wado//SDPoint";  // TypeId(46)
+type "functype//core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>") -> ref null "wado-compiler/tests/fixtures/struct_2.wado//SDPoint";  // TypeId(46)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(47)
 
@@ -266,12 +266,12 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_basic"() with Stdout {
 }
 
 fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_for_of"() with Stdout {
-    let __b: ref "core:prelude//Array<SDPoint>";
-    let points: ref "core:prelude//Array<SDPoint>";
-    let __iter_2: ref "core:prelude/array.wado//ArrayIter<SDPoint>";
+    let __b: ref "core:prelude//Array<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>";
+    let points: ref "core:prelude//Array<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>";
+    let __iter_2: ref "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>";
     let x: i32;
     let y: i32;
-    let __iter_5: ref "core:prelude/array.wado//ArrayIter<SDPoint>";
+    let __iter_5: ref "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>";
     let a: i32;
     let b: i32;
     let __local_8: ref "core:prelude/string.wado//String";
@@ -290,15 +290,15 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_for_of"() with Stdout {
     let rx_40: i32;
     let tx_41: i32;
     let handle_42: i32;
-    points = __seq_lit: block -> ref "core:prelude//Array<SDPoint>" {
-        __b = struct.new "core:prelude//Array<SDPoint>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/struct_2.wado//SDPoint">(struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPoint" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPoint" { x: 3, y: 4 }, struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPoint" { x: 5, y: 6 }), used: 3 };
+    points = __seq_lit: block -> ref "core:prelude//Array<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>" {
+        __b = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/struct_2.wado//SDPoint">(struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPoint" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPoint" { x: 3, y: 4 }, struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPoint" { x: 5, y: 6 }), used: 3 };
         break __seq_lit: __b;
         unreachable;
     };
-    __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<SDPoint>" { repr: points.repr, used: 3, index: 0 };
+    __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>" { repr: points.repr, used: 3, index: 0 };
     b0: block {
         l1: loop {
-            __pattern_temp_0_12 = "core:prelude/array.wado/ArrayIter<SDPoint>^Iterator::next"(__iter_2);
+            __pattern_temp_0_12 = "core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>^Iterator::next"(__iter_2);
             if ref.is_null(__pattern_temp_0_12) == 0 {
                 __pattern_temp_1 = ref.as_non_null(__pattern_temp_0_12);
                 x = __pattern_temp_1.x;
@@ -320,10 +320,10 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_for_of"() with Stdout {
             continue l1;
         };
     };
-    __iter_5 = struct.new "core:prelude/array.wado//ArrayIter<SDPoint>" { repr: points.repr, used: 3, index: 0 };
+    __iter_5 = struct.new "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>" { repr: points.repr, used: 3, index: 0 };
     b3: block {
         l4: loop {
-            __pattern_temp_2 = "core:prelude/array.wado/ArrayIter<SDPoint>^Iterator::next"(__iter_5);
+            __pattern_temp_2 = "core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>^Iterator::next"(__iter_5);
             if ref.is_null(__pattern_temp_2) == 0 {
                 __pattern_temp_3 = ref.as_non_null(__pattern_temp_2);
                 a = __pattern_temp_3.x;
@@ -1438,7 +1438,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/ArrayIter<SDPoint>^Iterator::next"(self) {
+fn "core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>^Iterator::next"(self) {
     let item: ref "wado-compiler/tests/fixtures/struct_2.wado//SDPoint";
     if self.index >= self.used {
         return ref.null none;

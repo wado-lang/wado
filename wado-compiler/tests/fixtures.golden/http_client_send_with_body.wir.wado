@@ -173,7 +173,7 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(25)
 
 struct wado-compiler/tests/fixtures/http_client_send_with_body.wado//__Closure_2 {  // TypeId(26)}
 
-struct core:prelude/types.wado//AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>> {  // TypeId(27)
+struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>> {  // TypeId(27)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
@@ -313,7 +313,7 @@ type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__c
 
 type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Request_set_path_with_query" = fn(i32, ref null "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<unit,unit>";  // TypeId(66)
 
-type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Client_send" = fn(i32) -> ref "core:prelude/types.wado//AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";  // TypeId(67)
+type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Client_send" = fn(i32) -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";  // TypeId(67)
 
 type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_lift__Client_send" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(68)
 
@@ -333,7 +333,7 @@ type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//A
 
 type "functype//core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//Array<u8>";  // TypeId(76)
 
-type "functype//core:prelude/types.wado/AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(77)
+type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(77)
 
 type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(78)
 
@@ -383,7 +383,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/handle"() with 
     let trailers_tx: i32;
     let headers: i32;
     let out_req: i32;
-    let subtask: ref "core:prelude/types.wado//AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";
+    let subtask: ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";
     let result: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __tv_1: i32;
     let __tv_2: i32;
@@ -562,7 +562,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/handle"() with 
         drop("mem/realloc"(__fw_evt_3, 8, 4, 0));
     }
     drop("mem/realloc"(__fw_write_ptr_3, 40, 8, 0));
-    result = "core:prelude/types.wado/AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"(subtask);
+    result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"(subtask);
     __tv_1 = 0;
     __tv_2 = 0;
     __tv_3 = 0_i64;
@@ -1049,7 +1049,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__C
     let __subtask_packed: i32;
     __async_outptr = "mem/realloc"(0, 0, 8, 40);
     __subtask_packed = "wasi/wasi:http/Client::send"(request, __async_outptr);
-    return struct.new "core:prelude/types.wado//AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 40, __cm_align: 8, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/http_client_send_with_body.wado//__Closure_2" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/http_client_send_with_body.wado/__closure_wrapper_0") } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 40, __cm_align: 8, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/http_client_send_with_body.wado//__Closure_2" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/http_client_send_with_body.wado/__closure_wrapper_0") } };
 }
 
 fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_lift__Client_send"(__outptr) {
@@ -1545,7 +1545,7 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     return result;
 }
 
-fn "core:prelude/types.wado/AsyncCall<Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"(self) {
+fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"(self) {
     let handle_1: i32;
     let raw: i32;
     let ws_3: i32;

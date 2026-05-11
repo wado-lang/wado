@@ -98,10 +98,7 @@ pub fn lower(flat: &mut FlatPackage) {
             .iter()
             .map(|c| (c.name.clone(), c.index))
             .collect();
-        global_variant_map.insert(
-            (variant.name.clone(), variant.module_source.clone()),
-            cases,
-        );
+        global_variant_map.insert((variant.name.clone(), variant.module_source.clone()), cases);
     }
 
     // Pre-boxing passes

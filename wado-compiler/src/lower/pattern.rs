@@ -219,10 +219,7 @@ pub(super) fn lower_patterns(
             .iter()
             .map(|c| (c.name.clone(), c.index))
             .collect();
-        variant_case_map.insert(
-            (variant.name.clone(), variant.module_source.clone()),
-            cases,
-        );
+        variant_case_map.insert((variant.name.clone(), variant.module_source.clone()), cases);
     }
 
     // Build struct fields map from module structs
@@ -646,8 +643,7 @@ impl<'a> PatternLowerer<'a> {
                 };
 
                 if let Some((ref vt_name, ref vt_module)) = variant_type_info
-                    && let Some(case_index) =
-                        self.get_case_index(vt_name, vt_module, variant_name)
+                    && let Some(case_index) = self.get_case_index(vt_name, vt_module, variant_name)
                 {
                     let cond = TirExpr::new(
                         TirExprKind::VariantTest {
@@ -2389,11 +2385,11 @@ impl<'a> PatternLowerer<'a> {
                 };
 
                 let condition = if let Some((ref vt_name, ref vt_module)) = variant_type_info {
-                    let case_index =
-                        self.get_case_index(vt_name, vt_module, variant_name)
-                            .unwrap_or_else(|| {
-                                panic!("Unknown case {variant_name} for variant {vt_name}")
-                            });
+                    let case_index = self
+                        .get_case_index(vt_name, vt_module, variant_name)
+                        .unwrap_or_else(|| {
+                            panic!("Unknown case {variant_name} for variant {vt_name}")
+                        });
                     TirExpr::new(
                         TirExprKind::VariantTest {
                             expr: Box::new(scrutinee.clone()),

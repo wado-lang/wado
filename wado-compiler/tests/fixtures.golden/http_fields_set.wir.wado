@@ -165,7 +165,7 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(23)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-array builtin::array<Array<u8>> (mut ref "core:prelude//Array<u8>");  // TypeId(24)
+array builtin::array<core:prelude/array.wado/Array<u8>> (mut ref "core:prelude//Array<u8>");  // TypeId(24)
 
 variant core:prelude/types.wado//Option<u16> {  // TypeId(25)
     Some(u16),
@@ -237,8 +237,8 @@ struct core:prelude//Array<u8> {  // TypeId(38)
     mut used: i32,
 }
 
-struct core:prelude//Array<Array<u8>> {  // TypeId(39)
-    mut repr: ref builtin::array<Array<u8>>,
+struct core:prelude//Array<core:prelude/array.wado/Array<u8>> {  // TypeId(39)
+    mut repr: ref "builtin::array<core:prelude/array.wado/Array<u8>>",
     mut used: i32,
 }
 
@@ -280,9 +280,9 @@ type "functype//wado-compiler/tests/fixtures/http_fields_set.wado/__cm_binding__
 
 type "functype//wado-compiler/tests/fixtures/http_fields_set.wado/__cm_binding__Fields_has" = fn(i32, ref "core:prelude/string.wado//String") -> bool;  // TypeId(58)
 
-type "functype//wado-compiler/tests/fixtures/http_fields_set.wado/__cm_binding__Fields_set" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//Array<Array<u8>>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(59)
+type "functype//wado-compiler/tests/fixtures/http_fields_set.wado/__cm_binding__Fields_set" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(59)
 
-type "functype//wado-compiler/tests/fixtures/http_fields_set.wado/__cm_binding__Fields_get" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude//Array<Array<u8>>";  // TypeId(60)
+type "functype//wado-compiler/tests/fixtures/http_fields_set.wado/__cm_binding__Fields_get" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>";  // TypeId(60)
 
 type "functype//wado-compiler/tests/fixtures/http_fields_set.wado/__cm_export__handle" = fn(i32);  // TypeId(61)
 
@@ -320,9 +320,9 @@ type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(78)
 
-type "functype//core:prelude/Array<Array<u8>>::push" = fn(ref "core:prelude//Array<Array<u8>>", ref "core:prelude//Array<u8>");  // TypeId(79)
+type "functype//core:prelude/Array<core:prelude/array.wado/Array<u8>>::push" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>", ref "core:prelude//Array<u8>");  // TypeId(79)
 
-type "functype//core:prelude/array.wado/Array<Array<u8>>::grow" = fn(ref "core:prelude//Array<Array<u8>>");  // TypeId(80)
+type "functype//core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::grow" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>");  // TypeId(80)
 
 type "functype//core:prelude/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(81)
 
@@ -370,10 +370,10 @@ fn "wado-compiler/tests/fixtures/http_fields_set.wado/handle"() {
     let __v0_3: bool;
     let __b_5: ref "core:prelude//Array<u8>";
     let v2: ref "core:prelude//Array<u8>";
-    let __b_7: ref "core:prelude//Array<Array<u8>>";
-    let new_values: ref "core:prelude//Array<Array<u8>>";
+    let __b_7: ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>";
+    let new_values: ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>";
     let set_result: ref null "wasi:http/types.wado//HeaderError";
-    let got: ref "core:prelude//Array<Array<u8>>";
+    let got: ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>";
     let __v0_12: i32;
     let __cond_13: bool;
     let trailers_future: i32;
@@ -570,8 +570,8 @@ condition: fields.has(\"x-test\" as FieldName)
         break __seq_lit: __b_5;
         unreachable;
     };
-    new_values = __seq_lit: block -> ref "core:prelude//Array<Array<u8>>" {
-        __b_7 = struct.new "core:prelude//Array<Array<u8>>" { repr: array.new_fixed<ref "core:prelude//Array<u8>">(v2), used: 1 };
+    new_values = __seq_lit: block -> ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>" {
+        __b_7 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<u8>>" { repr: array.new_fixed<ref "core:prelude//Array<u8>">(v2), used: 1 };
         break __seq_lit: __b_7;
         unreachable;
     };
@@ -1035,7 +1035,7 @@ fn "wado-compiler/tests/fixtures/http_fields_set.wado/__cm_binding__Fields_set"(
     let len_26: i32;
     let arr_27: ref builtin::array<u8>;
     let _licm_used_28: i32;
-    let _licm_repr_29: ref builtin::array<Array<u8>>;
+    let _licm_repr_29: ref "builtin::array<core:prelude/array.wado/Array<u8>>";
     __name_packed = "core:internal/cm_lower_string"(name);
     __value_len = value.used;
     __value_base = "mem/realloc"(0, 0, 4, __value_len * 8);
@@ -1048,12 +1048,12 @@ fn "wado-compiler/tests/fixtures/http_fields_set.wado/__cm_binding__Fields_set"(
                 break b49;
             }
             __value_addr = __value_base + (__value_i * 8);
-            __value_elem = __inline_Array_Array_u8___IndexValue_i32___index_value_1: block -> ref "core:prelude//Array<u8>" {
+            __value_elem = __inline_Array_core_prelude_array_wado_Array_u8___IndexValue_i32___index_value_1: block -> ref "core:prelude//Array<u8>" {
                 if __value_i >= _licm_used_28 {
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
-                break __inline_Array_Array_u8___IndexValue_i32___index_value_1: builtin::array_get<ref "core:prelude//Array<u8>">(_licm_repr_29, __value_i);
+                break __inline_Array_core_prelude_array_wado_Array_u8___IndexValue_i32___index_value_1: builtin::array_get<ref "core:prelude//Array<u8>">(_licm_repr_29, __value_i);
                 unreachable;
             };
             __elem_packed = __inline_cm_lower_array_u8_2: block -> i64 {
@@ -1111,7 +1111,7 @@ fn "wado-compiler/tests/fixtures/http_fields_set.wado/__cm_binding__Fields_get"(
     let __outptr: i32;
     let __base_4: i32;
     let __count_5: i32;
-    let __result_6: ref "core:prelude//Array<Array<u8>>";
+    let __result_6: ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>";
     let __i_7: i32;
     let __elem_addr_8: i32;
     let __base_9: i32;
@@ -1124,7 +1124,7 @@ fn "wado-compiler/tests/fixtures/http_fields_set.wado/__cm_binding__Fields_get"(
     "wasi/wasi:http/Fields::get"(self, builtin::i32_wrap_i64(__name_packed), builtin::i32_wrap_i64(__name_packed >> 32_i64), __outptr);
     __base_4 = builtin::load_i32(__outptr);
     __count_5 = builtin::load_i32(__outptr + 4);
-    __result_6 = struct.new "core:prelude//Array<Array<u8>>" { repr: builtin::array_new<ref "core:prelude//Array<u8>">(__count_5), used: 0 };
+    __result_6 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<u8>>" { repr: builtin::array_new<ref "core:prelude//Array<u8>">(__count_5), used: 0 };
     __i_7 = 0;
     b59: block {
         l60: loop {
@@ -1150,7 +1150,7 @@ fn "wado-compiler/tests/fixtures/http_fields_set.wado/__cm_binding__Fields_get"(
             if __count_10 > 0 {
                 drop("mem/realloc"(__base_9, __count_10 * 1, 1, 0));
             }
-            "core:prelude/Array<Array<u8>>::push"(__result_6, __result_11);
+            "core:prelude/Array<core:prelude/array.wado/Array<u8>>::push"(__result_6, __result_11);
             __i_7 = __i_7 + 1;
             continue l60;
         };
@@ -1716,21 +1716,21 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/Array<Array<u8>>::push"(self, value) {
+fn "core:prelude/Array<core:prelude/array.wado/Array<u8>>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<Array<u8>>::grow"(self);
+        "core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::grow"(self);
     }
     builtin::array_set<ref "core:prelude//Array<u8>">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<Array<u8>>::grow"(self) {
+fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref builtin::array<Array<u8>>;
-    let old_repr: ref builtin::array<Array<u8>>;
+    let new_repr: ref "builtin::array<core:prelude/array.wado/Array<u8>>";
+    let old_repr: ref "builtin::array<core:prelude/array.wado/Array<u8>>";
     let used: i32;
     let i: i32;
     let a: i32;

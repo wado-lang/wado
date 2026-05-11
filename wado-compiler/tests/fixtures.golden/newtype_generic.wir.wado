@@ -20,12 +20,12 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-array builtin::array<String> (mut ref "core:prelude/string.wado//String");  // TypeId(3)
+array builtin::array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(3)
 
 array builtin::array<i32> (mut i32);  // TypeId(4)
 
-struct core:prelude//Array<String> {  // TypeId(5)
-    mut repr: ref builtin::array<String>,
+struct core:prelude//Array<core:prelude/string.wado/String> {  // TypeId(5)
+    mut repr: ref "builtin::array<core:prelude/string.wado/String>",
     mut used: i32,
 }
 
@@ -123,8 +123,8 @@ fn "wado-compiler/tests/fixtures/newtype_generic.wado/run"() with Stdout {
     let arr: ref "core:prelude//Array<i32>";
     let __b_2: ref "core:prelude//Array<i32>";
     let arr2: ref "core:prelude//Array<i32>";
-    let __b_4: ref "core:prelude//Array<String>";
-    let strs: ref "core:prelude//Array<String>";
+    let __b_4: ref "core:prelude//Array<core:prelude/string.wado/String>";
+    let strs: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __local_8: ref "core:prelude/string.wado//String";
@@ -147,7 +147,7 @@ fn "wado-compiler/tests/fixtures/newtype_generic.wado/run"() with Stdout {
     let rx_61: i32;
     let tx_62: i32;
     let handle_63: i32;
-    let v_73: ref "core:prelude//Array<String>";
+    let v_73: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let message_81: ref "core:prelude/string.wado//String";
     let rx_82: i32;
     let tx_83: i32;
@@ -224,13 +224,13 @@ fn "wado-compiler/tests/fixtures/newtype_generic.wado/run"() with Stdout {
     handle_63 = "wado-compiler/tests/fixtures/newtype_generic.wado/__cm_binding__Stdout_write_via_stream"(rx_61);
     "core:cli/write_to_stream"(tx_62, message_60, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_63);
-    strs = __inline__value_copy_T406_36: block -> ref "core:prelude//Array<String>" {
-        v_73 = __seq_lit: block -> ref "core:prelude//Array<String>" {
-            __b_4 = struct.new "core:prelude//Array<String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 }), used: 2 };
+    strs = __inline__value_copy_T406_36: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
+        v_73 = __seq_lit: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
+            __b_4 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 }), used: 2 };
             break __seq_lit: __b_4;
             unreachable;
         };
-        break __inline__value_copy_T406_36: struct.new "core:prelude//Array<String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T25*/ v_73.repr)), used: 2 };
+        break __inline__value_copy_T406_36: struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T25*/ v_73.repr)), used: 2 };
         unreachable;
     };
     message_81 = __tmpl: block -> ref "core:prelude/string.wado//String" {
