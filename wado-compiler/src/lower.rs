@@ -7,24 +7,26 @@
 //! - Boxing lowering (transform `&primitive` / `&mut primitive` to `Box<T>` struct operations)
 //! - Closure lowering (transform closures to functor structs with `__call` methods)
 //! - String literal collection (for data section)
-//! - Value-copy materialization (insert + synthesize `$value_copy$T` helpers)
+//! - Value-copy materialization (insert `$value_copy$T` markers and synthesize helpers)
 //!
-//! Note: All loop constructs are desugared at the AST level in desugar.rs.
-//! Monomorphization has been moved to a separate phase (see `monomorphize.rs`).
+//! The phase exits as a TIR → NIR translation: TIR-mutating sub-passes run first
+//! (`lower_in_place`), then [`plan::plan`] gathers analysis facts and synthesizes
+//! artefacts, then [`translate::translate`] folds the TIR into NIR consuming the
+//! plan. See `docs/wep-2026-05-11-nir.md`.
 
 mod boxing;
 mod closure;
 mod globals;
 mod pattern;
+pub mod plan;
 mod string;
-pub(crate) mod value_copy;
+pub mod translate;
 mod wide_int;
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 
 use crate::module_source::ModuleSource;
-use crate::nir_convert;
 use crate::nir_package::NirPackage;
 use crate::tir::TirModule;
 
@@ -68,13 +70,15 @@ fn lower_post_boxing(module: &mut TirModule) {
 
 /// Lower a `FlatPackage` and return a `NirPackage`.
 ///
-/// This is the main entry point for the lower phase. It creates a temporary
-/// `TirModule` from the flat data, runs lowering, writes results back, then
-/// converts the lowered TIR into NIR — the post-lower body IR consumed by
-/// `optimize` and `wir_build`. See `docs/wep-2026-05-11-nir.md`.
+/// The phase is structured as `in-place TIR mutation → planner → translator`:
+/// the in-place chain implements the historical lower sub-passes; the
+/// planner gathers analysis facts and synthesizes artefacts (currently:
+/// value-copy markers and `$value_copy$T<id>` helpers); the translator
+/// folds TIR into NIR consuming the plan.
 pub fn lower(mut flat: FlatPackage) -> NirPackage {
     lower_in_place(&mut flat);
-    nir_convert::flat_to_nir(flat)
+    let plan = plan::plan(&mut flat);
+    translate::translate(flat, plan)
 }
 
 fn lower_in_place(flat: &mut FlatPackage) {
@@ -172,14 +176,4 @@ fn lower_in_place(flat: &mut FlatPackage) {
 
     // Rebuild variant index since data may have changed
     flat.rebuild_variant_indices();
-
-    // Materialize Wado's value-copy semantics in TIR. Insertion places
-    // `builtin::copy_value::<T>(x)` wrappers at every defensive deep-copy
-    // position; synthesis replaces those wrappers with calls to per-type
-    // `$value_copy$T<id>` helpers. Both run here — before the optimizer —
-    // so that every aliasing edge downstream passes care about is explicit
-    // in the TIR fed to `optimize`. Wrapper elision happens later as a
-    // regular pass inside the optimizer fixed-point loop.
-    value_copy::insert_value_copy_calls(flat);
-    value_copy::synthesize_value_copy_funcs(flat);
 }

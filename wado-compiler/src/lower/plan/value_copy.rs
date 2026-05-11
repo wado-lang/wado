@@ -1,17 +1,22 @@
-//! Materialize Wado's value-copy semantics in TIR.
+//! Plan Wado's value-copy semantics.
 //!
-//! This pair of passes runs at the end of the lower phase, after all other
-//! TIR-shape transformations (boxing, closure lowering) and before the
-//! optimizer. By emitting `$value_copy$T` calls before the optimizer loop,
-//! every aliasing edge that downstream passes care about is explicit in
-//! the TIR fed to the optimizer — `field_forward` and other flow-sensitive
-//! analyses see a self-contained snapshot semantics.
+//! Runs as part of [`super::plan`], i.e. after the TIR-mutating sub-passes
+//! and before the TIR → NIR translator.
 //!
-//! - `insert::insert_value_copy_calls` wraps every defensive deep-copy
-//!   position in `builtin::copy_value::<T>(x)`.
-//! - `synthesize::synthesize_value_copy_funcs` replaces those wrappers
-//!   with calls to per-type `$value_copy$T<id>` helper functions whose
-//!   bodies perform a one-level shallow copy.
+//! - [`insert::insert_value_copy_calls`] wraps every defensive deep-copy
+//!   position in `builtin::copy_value::<T>(x)` (TIR-mutating).
+//! - [`synthesize::synthesize_helpers`] generates per-type
+//!   `$value_copy$T<id>` helper functions, pushes them into
+//!   [`FlatPackage::functions`], and returns the
+//!   `TypeId → (ModuleSource, helper-name)` map.
+//!
+//! The translator consumes [`ValueCopyPlan::name_for_type`] to rewrite the
+//! `builtin::copy_value::<T>(x)` markers into direct calls to the helpers
+//! during TIR → NIR translation. Marker rewriting therefore does not
+//! happen at the planner stage — the translator is the single point that
+//! turns markers into resolved calls, for both user code and synthesized
+//! helper bodies (which contain `builtin::copy_value::<NestedT>(...)` for
+//! nested value-typed fields).
 //!
 //! Wrapper elision happens later in `optimize::value_copy_elide`, which
 //! runs as a regular pass inside the optimizer fixed-point loop so that
@@ -21,10 +26,34 @@
 pub mod insert;
 pub mod synthesize;
 
-pub use insert::insert_value_copy_calls;
-pub use synthesize::synthesize_value_copy_funcs;
-
+use crate::flat_package::FlatPackage;
+use crate::hashmap::IndexMap;
+use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
+
+/// Result of value-copy planning.
+///
+/// `name_for_type` is consumed by the TIR → NIR translator to rewrite
+/// `builtin::copy_value::<T>(x)` markers into direct calls to the
+/// `$value_copy$T<id>` helper functions registered in
+/// [`FlatPackage::functions`].
+pub struct ValueCopyPlan {
+    pub name_for_type: IndexMap<TypeId, (ModuleSource, String)>,
+}
+
+/// Run the value-copy planner.
+///
+/// 1. Inserts `builtin::copy_value::<T>(x)` markers at every TIR position
+///    that requires a defensive deep-copy (TIR-mutating).
+/// 2. Walks the marked TIR, generates one `$value_copy$T<id>` helper for
+///    every type reached transitively, and registers each helper in
+///    [`FlatPackage::functions`]. Returns the map the translator uses to
+///    resolve marker calls.
+pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
+    insert::insert_value_copy_calls(flat);
+    let name_for_type = synthesize::synthesize_helpers(flat);
+    ValueCopyPlan { name_for_type }
+}
 
 /// True when a value of `type_id` must be deep-copied on assignment or
 /// parameter passing.

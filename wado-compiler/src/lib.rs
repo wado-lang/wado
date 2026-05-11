@@ -25,7 +25,6 @@ pub mod module_source;
 pub mod monomorphize;
 pub mod name;
 pub mod nir;
-pub mod nir_convert;
 pub mod nir_package;
 pub mod nir_unparse;
 pub mod nir_visitor;

@@ -130,7 +130,7 @@ impl FunctionTranslator<'_, '_> {
             ResolvedType::BuiltinArray(elem) => *elem,
             _ => return None,
         };
-        if !crate::lower::value_copy::needs_value_copy(elem, self.type_table) {
+        if !crate::lower::plan::value_copy::needs_value_copy(elem, self.type_table) {
             return None;
         }
         Some(format!("$value_copy$T{}", elem.0))

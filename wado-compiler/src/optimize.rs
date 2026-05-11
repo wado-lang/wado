@@ -20,7 +20,7 @@
 //! - Short `push_str` simplification via `string_push` module
 //!
 //! The `$value_copy$T` insertion + synthesis steps that materialize Wado's
-//! value-copy semantics live in the lower phase (`lower::value_copy`) — by
+//! value-copy semantics live in the lower phase (`lower::plan::value_copy`) — by
 //! the time TIR reaches the optimizer, every defensive deep-copy is
 //! explicit. The optimizer only *removes* redundant copies via
 //! `value_copy_elide`, which runs as a regular pass in the fixed-point loop.

@@ -1,15 +1,21 @@
-//! Replace each `builtin::copy_value::<T>(x)` call with a call to a
-//! synthesized concrete `$value_copy$T<id>` function carrying
-//! `FunctionKind::ValueCopy { type_id }`. Runs at the end of `lower`,
-//! immediately after `value_copy::insert::insert_value_copy_calls`.
+//! Generate `$value_copy$T<id>` helper functions for every type that the
+//! marker pass [`super::insert::insert_value_copy_calls`] has wrapped in
+//! `builtin::copy_value::<T>(x)`. Pushes the helpers into
+//! [`FlatPackage::functions`] and returns the
+//! `TypeId → (ModuleSource, name)` map.
 //!
 //! For struct types the body is a `StructLiteral` with field-by-field
 //! shallow projections, plus `builtin::array_clone::<T>` for raw
 //! `builtin::array<T>` fields — a one-level shallow copy that does not
-//! recurse into nested aggregates.
+//! recurse into nested aggregates. For variant / option / fall-through
+//! types the body is `return v;` (identity).
 //!
-//! For variant / option / fall-through types the body is `return v;`
-//! (identity).
+//! Rewriting the `builtin::copy_value::<T>(x)` markers into calls to the
+//! generated helpers is the translator's job (see
+//! [`crate::lower::translate`]). Both user-function bodies and the
+//! synthesized helper bodies (which themselves contain
+//! `copy_value::<NestedT>(...)` for nested value-typed fields) flow
+//! through the same TIR → NIR fold and pick up the rewrite uniformly.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -22,15 +28,15 @@ use crate::tir::{
     TirExprKind, TirField, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TirStruct,
     TirStructField, TypeId, TypeTable,
 };
-use crate::tir_visitor::{TirOptVisitor, TirRefVisitor, opt_walk_block, opt_walk_expr};
+use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
 
 use super::needs_value_copy;
 
-pub fn synthesize_value_copy_funcs(project: &mut FlatPackage) {
+pub fn synthesize_helpers(project: &mut FlatPackage) -> IndexMap<TypeId, (ModuleSource, String)> {
     let initial = collect_copy_value_types(project);
     if initial.is_empty() {
-        return;
+        return IndexMap::default();
     }
 
     let type_table_rc = project.type_table.clone();
@@ -68,27 +74,8 @@ pub fn synthesize_value_copy_funcs(project: &mut FlatPackage) {
         new_funcs.push(Rc::new(RefCell::new(func)));
     }
 
-    let mut visitor = RewriteCalls {
-        name_for_type: &name_for_type,
-    };
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        if let Some(ref mut body) = func.body {
-            visitor.visit_block(body);
-        }
-    }
-    // Synthesized bodies also contain `copy_value::<NestedT>(...)`
-    // wrappers (emitted by `make_field_copy` for nested value-typed
-    // fields) — rewrite them to call the helpers we just registered
-    // for those types.
-    for func_rc in &new_funcs {
-        let mut func = func_rc.borrow_mut();
-        if let Some(ref mut body) = func.body {
-            visitor.visit_block(body);
-        }
-    }
-
     project.functions.extend(new_funcs);
+    name_for_type
 }
 
 fn collect_copy_value_types(project: &FlatPackage) -> IndexSet<TypeId> {
@@ -710,8 +697,8 @@ fn build_struct_copy(
 }
 
 /// Wrap `expr` in `builtin::copy_value::<type_id>(expr)`. The wrapper
-/// gets resolved to the `$value_copy$T<id>` helper by [`RewriteCalls`]
-/// in the same pass.
+/// gets resolved to the `$value_copy$T<id>` helper by
+/// [`crate::lower::translate`] when the TIR is folded into NIR.
 fn wrap_copy_value(expr: TirExpr, type_id: TypeId, span: Span) -> TirExpr {
     let func = FunctionRef {
         module_source: ModuleSource::builtin(),
@@ -779,7 +766,7 @@ fn make_field_copy(
     // and the inner type's own deep-copy via its `$value_copy$T` helper
     // would never run — mutations through the copy would alias the
     // original. Emit `builtin::copy_value::<FieldT>(field)`;
-    // [`RewriteCalls`] resolves it to the helper
+    // The TIR → NIR translator resolves the marker to the helper that
     // [`generate_copy_function`] synthesizes for `FieldT`.
     if needs_value_copy(field.type_id, &type_table.borrow()) {
         return wrap_copy_value(field_access, field.type_id, span);
@@ -787,39 +774,3 @@ fn make_field_copy(
     field_access
 }
 
-struct RewriteCalls<'a> {
-    name_for_type: &'a IndexMap<TypeId, (ModuleSource, String)>,
-}
-
-impl TirOptVisitor for RewriteCalls<'_> {
-    fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
-        opt_walk_expr(self, expr);
-        if let TirExprKind::Call {
-            func,
-            args,
-            type_args,
-        } = &mut expr.kind
-            && func.module_source.is_core_builtin()
-            && func.name == "copy_value"
-            && let Some(type_id) = func
-                .monomorph_info
-                .as_ref()
-                .and_then(|mi| mi.impl_type_args.first().copied())
-            && let Some((module_source, name)) = self.name_for_type.get(&type_id)
-            && args.len() == 1
-        {
-            *func = FunctionRef {
-                module_source: module_source.clone(),
-                name: name.clone(),
-                monomorph_info: None,
-                method_info: None,
-            };
-            *type_args = vec![];
-        }
-        false
-    }
-
-    fn visit_block(&mut self, block: &mut TirBlock) -> bool {
-        opt_walk_block(self, block)
-    }
-}
