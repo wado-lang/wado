@@ -7,7 +7,7 @@
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::ModuleSource;
+use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::resolver::trait_env::TraitEnv;
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
@@ -91,7 +91,7 @@ pub struct Package {
     /// items. Dropped at the `Package → FlatPackage` boundary —
     /// downstream phases (link, monomorphize, lower, optimize, codegen)
     /// only consume existing `ModuleSource` values.
-    pub interner: std::rc::Rc<std::cell::RefCell<crate::name::ModuleSourceInterner>>,
+    pub interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
 }
 
 impl Package {
@@ -107,7 +107,7 @@ impl Package {
         wasi_registry: &'static WasiRegistry,
         world_registry: &'static WorldRegistry,
         builtin_registry: BuiltinRegistry,
-        interner: std::rc::Rc<std::cell::RefCell<crate::name::ModuleSourceInterner>>,
+        interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
     ) -> Self {
         Self {
             entry_module_source,

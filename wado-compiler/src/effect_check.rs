@@ -11,7 +11,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::compiler_host::CompilerHost;
 use crate::logger::{Bail, Logger};
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{
     CallArg, EffectRef, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction,
     TirModule, TirStmt, TirStmtKind, TirTemplatePart, TypeId, TypeTable,

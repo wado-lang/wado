@@ -2,7 +2,7 @@
 
 use crate::ast::{GenericType, Type};
 use crate::compiler_host::CompilerHost;
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 

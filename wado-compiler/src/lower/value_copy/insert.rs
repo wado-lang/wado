@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,

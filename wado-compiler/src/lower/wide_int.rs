@@ -1,7 +1,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::name::{LocalMethodName, ModuleSource};
+use crate::module_source::ModuleSource;
+use crate::name::LocalMethodName;
 use crate::tir::FunctionRef;
 use crate::tir::{
     CallArg, ResolvedType, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirModule,

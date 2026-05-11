@@ -5,6 +5,7 @@
 //! These methods are part of `FunctionTranslator`; see `translate.rs` for
 //! the struct definition and the primary translation dispatch.
 
+use crate::module_source::ModuleSource;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBlock, TirExpr, TirLiteralPattern, TirMatchArm, TirPattern,
     TypeId, TypeTable,
@@ -629,7 +630,7 @@ impl FunctionTranslator<'_, '_> {
     fn variant_case_indexer(
         &self,
         variant_name: &str,
-        module_source: &crate::name::ModuleSource,
+        module_source: &ModuleSource,
     ) -> Option<CaseIndexer> {
         let fq = format!("{module_source}//{variant_name}");
         let variant_type_id = self.ctx.type_map.get(&fq)?;

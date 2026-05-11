@@ -2,7 +2,7 @@
 //! types. Used by go-to-definition, find-references, and document highlight.
 
 use wado_compiler::annotate::Annotated;
-use wado_compiler::name::ModuleSource;
+use wado_compiler::module_source::ModuleSource;
 use wado_compiler::symbol::Symbol;
 use wado_compiler::token::Span;
 

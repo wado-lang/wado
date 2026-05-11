@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use wado_compiler::Span;
 use wado_compiler::hashmap::IndexSet;
-use wado_compiler::name::ModuleSource;
+use wado_compiler::module_source::ModuleSource;
 use wado_compiler::tir::{
     CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, PrimitiveType, ReturnAbi,
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLiteralPattern, TirLocal,

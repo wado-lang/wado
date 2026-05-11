@@ -5,7 +5,8 @@
 //!
 //! Also contains type-ordering utilities (topological sort) used during registration.
 
-use crate::name::{ModuleSource, StructName};
+use crate::module_source::ModuleSource;
+use crate::name::StructName;
 use crate::tir::{ResolvedType, TirStruct, TirVariantDecl, TypeId, TypeTable};
 use crate::wir::{
     WirArrayType, WirEnumCase, WirEnumType, WirField, WirGenericOrigin, WirMeta, WirName,

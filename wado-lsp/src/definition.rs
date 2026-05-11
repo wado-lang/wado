@@ -90,7 +90,7 @@ pub async fn find_definition<H: CompilerHost>(
 /// not on such a path.
 fn file_path_definition(
     annotated: &Annotated,
-    module: &wado_compiler::name::ModuleSource,
+    module: &wado_compiler::module_source::ModuleSource,
     line: usize,
     col: usize,
     request_uri: &str,

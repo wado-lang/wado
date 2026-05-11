@@ -9,7 +9,7 @@
 use crate::hashmap::IndexMap;
 
 use crate::ast::{AstId, CmImport};
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::token::Span;
 
 /// Canonical identity of a symbol.
@@ -469,6 +469,7 @@ impl SymbolTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::module_source::ModuleSourceInterner;
 
     #[test]
     fn test_define_and_lookup() {
@@ -525,7 +526,7 @@ mod tests {
     fn test_struct_aliases() {
         let mut table = SymbolTable::new();
 
-        let mut interner = crate::name::ModuleSourceInterner::new();
+        let mut interner = ModuleSourceInterner::new();
         let geometry = interner.local("./geometry.wado");
 
         let key = table.define(
@@ -551,7 +552,7 @@ mod tests {
     fn test_struct_aliases_same_name() {
         let mut table = SymbolTable::new();
 
-        let mut interner = crate::name::ModuleSourceInterner::new();
+        let mut interner = ModuleSourceInterner::new();
         let geometry = interner.local("./geometry.wado");
 
         let key = table.define(

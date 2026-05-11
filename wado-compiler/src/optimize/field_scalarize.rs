@@ -72,7 +72,7 @@
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirPattern,
     TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,

@@ -11,7 +11,7 @@
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
     TypeTable,

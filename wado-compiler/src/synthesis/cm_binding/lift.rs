@@ -10,7 +10,7 @@
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
 use crate::component_model::CmVariantCase;
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStructField, TypeId,
     TypeTable,

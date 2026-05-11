@@ -5,7 +5,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, AstId, Condition, Expr, IfExpr, Item, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
-use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
+use crate::module_source::ModuleSource;
+use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirMatchArm,
     TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
@@ -3371,7 +3372,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         use crate::ast::RangeKind;
-        use crate::name::ModuleSource;
+        use crate::module_source::ModuleSource;
         use crate::tir::{TirExprKind, TirStructField};
 
         // Bidirectional coercion: resolve non-literal first to infer the element type

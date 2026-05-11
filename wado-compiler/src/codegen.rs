@@ -6,6 +6,7 @@
 //! Pipeline: `WirPackage` → `emit` (core bytes) → `component` (wrapped) → `Vec<u8>`
 
 use crate::flat_package::FlatPackage;
+use crate::module_source::ModuleSource;
 use crate::wir::WirPackage;
 
 mod component;
@@ -35,7 +36,7 @@ pub fn emit_wasm(package: &FlatPackage, wir_package: &WirPackage) -> Vec<u8> {
 }
 
 /// Validate core Wasm module (before component wrapping).
-fn validate_core_module(wasm: &[u8], entry_module: &crate::name::ModuleSource) {
+fn validate_core_module(wasm: &[u8], entry_module: &ModuleSource) {
     let features = wasmparser::WasmFeatures::all();
     let mut validator = wasmparser::Validator::new_with_features(features);
     if let Err(e) = validator.validate_all(wasm) {
@@ -50,7 +51,7 @@ fn validate_core_module(wasm: &[u8], entry_module: &crate::name::ModuleSource) {
 }
 
 /// Validate generated Wasm binary using wasmparser.
-fn validate_wasm(wasm: &[u8], entry_module: &crate::name::ModuleSource) {
+fn validate_wasm(wasm: &[u8], entry_module: &ModuleSource) {
     let mut validator = wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
     if let Err(e) = validator.validate_all(wasm) {
         panic!(

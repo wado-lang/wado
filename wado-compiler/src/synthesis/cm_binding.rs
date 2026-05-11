@@ -24,7 +24,7 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::package::Package;
 use crate::tir::{ResolvedType, TirFunction, TirModule, TypeTable};
 
@@ -494,6 +494,8 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
 
 #[cfg(test)]
 mod tests {
+    use crate::module_source::ModuleSourceInterner;
+
     use super::export_adapter::synthesize_lift_from_flat_params;
     use super::types::{
         compute_export_flat_param_types, export_needs_param_lifting, param_needs_lifting,
@@ -522,7 +524,7 @@ mod tests {
     struct LiftCtxFixture {
         registry: WasiRegistry,
         type_table: std::cell::RefCell<TypeTable>,
-        interner: std::cell::RefCell<crate::name::ModuleSourceInterner>,
+        interner: std::cell::RefCell<ModuleSourceInterner>,
     }
 
     impl LiftCtxFixture {
@@ -539,7 +541,7 @@ mod tests {
             Self {
                 registry: WasiRegistry::new(),
                 type_table: std::cell::RefCell::new(tt),
-                interner: std::cell::RefCell::new(crate::name::ModuleSourceInterner::new()),
+                interner: std::cell::RefCell::new(ModuleSourceInterner::new()),
             }
         }
 
@@ -836,7 +838,7 @@ mod tests {
             ModuleSource::prelude(),
         );
         let type_table = std::cell::RefCell::new(tt);
-        let interner = std::cell::RefCell::new(crate::name::ModuleSourceInterner::new());
+        let interner = std::cell::RefCell::new(ModuleSourceInterner::new());
         let ctx = LiftContext {
             wasi_registry: registry,
             type_table: &type_table,
@@ -1069,7 +1071,7 @@ mod tests {
     #[test]
     fn param_needs_lifting_enum() {
         let mut tt = TypeTable::new();
-        let mut interner = crate::name::ModuleSourceInterner::new();
+        let mut interner = ModuleSourceInterner::new();
         let e = tt.intern(crate::tir::ResolvedType::Enum {
             name: "Color".to_string(),
             module_source: interner.entry_point("<test>"),

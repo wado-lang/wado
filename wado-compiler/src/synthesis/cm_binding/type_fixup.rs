@@ -16,7 +16,7 @@ use std::rc::Rc;
 use crate::ast::Type;
 use crate::component_model::{WasiFunctionInfo, WasiRegistry};
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{
     CallArg, FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt,
     TirStmtKind, TirTemplatePart, TypeId, TypeTable,

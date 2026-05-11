@@ -19,7 +19,7 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::token::Span;
 
 /// A complete Wasm module in WIR form.

@@ -9,7 +9,8 @@ use crate::ast::{Item, Module, UseDecl, UseItem};
 use crate::compiler_host::CompilerHost;
 use crate::loader::{resolve_wasm_asset_path, wasm_asset_kind_from_attrs};
 use crate::logger::{Bail, Logger};
-use crate::name::{ModuleSource, validate_module_path};
+use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::name::validate_module_path;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -22,7 +23,7 @@ use std::rc::Rc;
 /// `core:libm.wat` with no leading `./`); the caller emits the
 /// downstream `InvalidModulePath` diagnostic.
 fn resolve_use_decl_module_source(
-    interner: &mut crate::name::ModuleSourceInterner,
+    interner: &mut ModuleSourceInterner,
     from: &ModuleSource,
     use_decl: &UseDecl,
     entry: Option<&ModuleSource>,
@@ -227,7 +228,7 @@ pub struct Analyzer<'a, H: CompilerHost> {
     /// `ModuleSource` interner shared with the loader. Forwarded to
     /// [`resolve_use_decl_module_source`] so analyze-phase imports get
     /// canonicalized identities.
-    interner: Rc<RefCell<crate::name::ModuleSourceInterner>>,
+    interner: Rc<RefCell<ModuleSourceInterner>>,
 }
 
 impl<'a, H: CompilerHost> Analyzer<'a, H> {
@@ -239,17 +240,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             implicit_modules: crate::hashmap::IndexSet::default(),
             entry_module_source: ModuleSource::entry_point_uninitialized(),
             invocations: crate::kiln::InvocationIndex::new(),
-            interner: Rc::new(RefCell::new(crate::name::ModuleSourceInterner::new())),
+            interner: Rc::new(RefCell::new(ModuleSourceInterner::new())),
         }
     }
 
     /// Seed the analyzer with the loader's interner so import-site
     /// resolution canonicalizes module identities consistently.
     #[must_use]
-    pub fn with_interner(
-        mut self,
-        interner: Rc<RefCell<crate::name::ModuleSourceInterner>>,
-    ) -> Self {
+    pub fn with_interner(mut self, interner: Rc<RefCell<ModuleSourceInterner>>) -> Self {
         self.interner = interner;
         self
     }

@@ -1,6 +1,7 @@
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::name::{LocalMethodName, ModuleSource};
+use crate::module_source::ModuleSource;
+use crate::name::LocalMethodName;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirModule, TirStmt, TirStmtKind};
 
 pub(super) struct StringCollector {

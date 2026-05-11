@@ -19,7 +19,8 @@ use crate::ast::Type;
 use crate::cm_abi;
 use crate::component_model::{WasiFunctionInfo, WasiRegistry};
 use crate::hashmap::IndexSet;
-use crate::name::{LocalMethodName, ModuleSource};
+use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::name::LocalMethodName;
 use crate::tir::{
     CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStructField, TypeId, TypeTable,
@@ -286,7 +287,7 @@ fn synthesize_async_lift_function(
     inner_type_id: TypeId,
     wasi_registry: &WasiRegistry,
     type_table: &RefCell<TypeTable>,
-    interner: &RefCell<crate::name::ModuleSourceInterner>,
+    interner: &RefCell<ModuleSourceInterner>,
 ) -> Rc<RefCell<TirFunction>> {
     let mut next_local: u32 = 0;
     let mut locals: Vec<TirLocal> = Vec::new();
@@ -356,7 +357,7 @@ pub(super) fn synthesize_adapter(
     func_info: &WasiFunctionInfo,
     wasi_registry: &WasiRegistry,
     type_table: &RefCell<TypeTable>,
-    interner: &RefCell<crate::name::ModuleSourceInterner>,
+    interner: &RefCell<ModuleSourceInterner>,
     owner_module: &ModuleSource,
     entry_source: &ModuleSource,
 ) -> AdapterArtifacts {

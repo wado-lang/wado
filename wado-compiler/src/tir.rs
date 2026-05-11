@@ -14,7 +14,8 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::name::{LocalMethodName, ModuleSource, TypeNameInfo, format_type_name};
+use crate::module_source::ModuleSource;
+use crate::name::{LocalMethodName, TypeNameInfo, format_type_name};
 use crate::token::Span;
 
 /// Identifies the scope where a type parameter is defined

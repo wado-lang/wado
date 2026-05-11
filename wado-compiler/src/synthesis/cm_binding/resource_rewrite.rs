@@ -16,7 +16,8 @@ use std::rc::Rc;
 use crate::ast::{AstId, NamedType, Type};
 use crate::component_model::WasiRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{LocalMethodName, ModuleSource};
+use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::name::LocalMethodName;
 use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
@@ -230,7 +231,7 @@ fn synthesize_stream_read_func(
     elem_align: i32,
     wasi_registry: &WasiRegistry,
     type_table: &RefCell<TypeTable>,
-    interner: &RefCell<crate::name::ModuleSourceInterner>,
+    interner: &RefCell<ModuleSourceInterner>,
 ) -> TirFunction {
     let func_name = format!("__cm_stream_read_{elem_name}");
     let _tuple_type_id = type_table

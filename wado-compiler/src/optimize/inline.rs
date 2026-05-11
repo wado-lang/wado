@@ -9,7 +9,7 @@ use std::rc::Rc;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
-use crate::name::ModuleSource;
+use crate::module_source::ModuleSource;
 use crate::tir::{
     CallArg, InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
     TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,

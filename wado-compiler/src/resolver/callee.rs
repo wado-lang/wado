@@ -15,7 +15,7 @@
 //! `name` fields are always the name *as defined in `module`*, never a local
 //! alias.
 
-use crate::name::ModuleSource;
+use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::Symbol;
 
 /// Identity of a free function callee: the module where it is defined and the
@@ -54,10 +54,10 @@ impl CalleeRef {
     /// A callee reached through a namespace-qualified call `Prefix::name`
     /// where `Prefix` is a module path (e.g. `Stdout::write`). The
     /// `prefix` is interned through the resolver's
-    /// [`crate::name::ModuleSourceInterner`] and wrapped in a
+    /// [`crate::module_source::ModuleSourceInterner`] and wrapped in a
     /// `ModuleSource::Local`.
     pub fn local_namespace(
-        interner: &mut crate::name::ModuleSourceInterner,
+        interner: &mut ModuleSourceInterner,
         prefix: &str,
         name: impl Into<String>,
     ) -> Self {
