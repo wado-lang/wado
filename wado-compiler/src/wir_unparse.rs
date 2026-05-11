@@ -1884,18 +1884,21 @@ impl<'a> WirUnparser<'a> {
                 self.write(")");
             }
 
-            WirInstr::MultiValueStructNew { type_id, instr } => {
-                let tid = type_id.to_string();
-                self.write("multivalue_struct_new ");
-                self.write_name(&tid);
-                self.write("(");
-                self.unparse_instr_inline(instr);
-                self.write(")");
-            }
             WirInstr::MultiValueLocalBind { instr, locals } => {
                 let names: Vec<_> = locals.iter().map(|l| l.as_deref().unwrap_or("_")).collect();
                 self.write(&format!("multivalue_bind [{}] = ", names.join(", ")));
+                // Wrap multi-statement producers in parens so the trailing
+                // `; <next>` of an inner Seq doesn't read as the next
+                // top-level statement.
+                let needs_parens =
+                    matches!(instr.as_ref(), WirInstr::Seq(items) if items.len() > 1);
+                if needs_parens {
+                    self.write("(");
+                }
                 self.unparse_instr_inline(instr);
+                if needs_parens {
+                    self.write(")");
+                }
             }
 
             WirInstr::Seq(instrs) => {

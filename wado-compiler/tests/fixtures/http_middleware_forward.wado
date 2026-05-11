@@ -1,25 +1,10 @@
-// TODO: Middleware world — Handler::handle import for request forwarding.
-//
-// The middleware world imports Handler (downstream) in addition to Client.
-// This fixture would exercise the middleware pattern: receive request, forward
-// to downstream handler, return the result.
-//
-// Currently blocked:
-// 1. Using Handler effect in service world causes compiler panic
-//    ("Internal compiler error: WIR pipeline generated invalid Wasm")
-// 2. Test harness does not support `wasi:http/middleware` world
-// 3. Test harness does not provide Handler import mock
-//
-// Once middleware support is added, uncomment the code below.
+// Service-world handler: build an empty 200 OK response with default
+// `Fields`, return it via `task return`, and close the trailers future
+// with `Ok(None)`.
 
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
-// use { Handler } from "wasi:http/handler.wado";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
-    // TODO: Forward to downstream handler (middleware pattern)
-    // let result = Handler::handle(request);
-    // task return result;
-
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let headers = Fields::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);

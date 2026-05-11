@@ -421,13 +421,10 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
                 lower_wide_int_in_expr(&mut field.value, type_table);
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 lower_wide_int_in_expr(elem, type_table);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            lower_wide_int_in_expr(source, type_table);
         }
         TirExprKind::IndirectCall { callee, args } => {
             lower_wide_int_in_expr(callee, type_table);

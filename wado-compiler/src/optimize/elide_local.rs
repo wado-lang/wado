@@ -200,10 +200,7 @@ pub(super) fn is_pure_expr(expr: &TirExpr) -> bool {
         | TirExprKind::VariantPayload { expr: inner, .. } => is_pure_expr(inner),
         TirExprKind::Index { expr: e, index: i } => is_pure_expr(e) && is_pure_expr(i),
         TirExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| is_pure_expr(&f.value)),
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
-            elements.iter().all(is_pure_expr)
-        }
-        TirExprKind::MultiValueProject { source, .. } => is_pure_expr(source),
+        TirExprKind::TupleLiteral { elements } => elements.iter().all(is_pure_expr),
         TirExprKind::VariantConstruct { payload, .. } => {
             payload.as_ref().is_none_or(|p| is_pure_expr(p))
         }

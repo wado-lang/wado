@@ -2319,12 +2319,6 @@ impl<'a> WirEmitter<'a> {
                 self.emit_instr(f, b);
                 f.instruction(&Instruction::I64MulWideS);
             }
-            // Multi-value struct new: emit the multi-value instr, then struct.new
-            WirInstr::MultiValueStructNew { type_id, instr } => {
-                self.emit_instr(f, instr);
-                let wasm_idx = self.resolve_type_index(type_id.index());
-                f.instruction(&Instruction::StructNew(wasm_idx));
-            }
             // Multi-value local bind (tuple elision): emit the multi-value instr,
             // then local.set for each target in reverse order (top of stack first).
             WirInstr::MultiValueLocalBind { instr, locals } => {

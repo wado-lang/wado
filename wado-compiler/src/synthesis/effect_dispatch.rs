@@ -1323,13 +1323,10 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
                 lower_dispatch_in_expr(&mut field.value, env, ctx);
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 lower_dispatch_in_expr(elem, env, ctx);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            lower_dispatch_in_expr(source, env, ctx);
         }
         TirExprKind::Closure { params, body, .. } => {
             // Push a closure-local scope. The closure body's lets and
@@ -2082,14 +2079,10 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
                     self.visit_expr(&mut f.value);
                 }
             }
-            TirExprKind::TupleLiteral { elements }
-            | TirExprKind::MultiValueLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for e in elements {
                     self.visit_expr(e);
                 }
-            }
-            TirExprKind::MultiValueProject { source, .. } => {
-                self.visit_expr(source);
             }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(p) = payload {
@@ -2771,13 +2764,10 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 rewrite_calls_in_expr(&mut field.value, ctx);
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 rewrite_calls_in_expr(elem, ctx);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            rewrite_calls_in_expr(source, ctx);
         }
         TirExprKind::Closure { body, .. } => {
             rewrite_calls_in_expr(body, ctx);

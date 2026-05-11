@@ -586,6 +586,7 @@ pub fn walk_match_expr<V: AstVisitor>(v: &mut V, m: &MatchExpr) {
     // `walk_stmt` for `Stmt::Match`), since both share the same `MatchExpr::id`.
     v.visit_expr(&m.expr);
     for arm in &m.arms {
+        v.visit_id(arm.id, arm.span);
         v.visit_pattern(&arm.pattern);
         if let Some(guard) = &arm.guard {
             v.visit_expr(guard);
@@ -2290,6 +2291,13 @@ pub struct MatchExpr {
 
 #[derive(Debug, Clone)]
 pub struct MatchArm {
+    /// Per-arm [`AstId`]. Allocated at the start of `parse_match_arm`,
+    /// so leading comments preceding the arm — which the parser pins to
+    /// the first id allocated in that source range — land on the arm
+    /// rather than leaking into the pattern's first child id. The
+    /// formatter reads `trivia.leading_of(arm.id)` and
+    /// `trivia.trailing_of(arm.id)` to render arm-level comments.
+    pub id: AstId,
     pub pattern: Pattern,
     /// Optional guard expression (the condition after `&&`)
     pub guard: Option<Expr>,

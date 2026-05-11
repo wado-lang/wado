@@ -677,14 +677,10 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     self.check_expr(&field.value)?;
                 }
             }
-            TirExprKind::TupleLiteral { elements }
-            | TirExprKind::MultiValueLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.check_expr(elem)?;
                 }
-            }
-            TirExprKind::MultiValueProject { source, .. } => {
-                self.check_expr(source)?;
             }
             TirExprKind::TupleSpread { expr }
             | TirExprKind::TupleZip { expr }
@@ -1198,13 +1194,10 @@ fn check_pure_expr<H: CompilerHost>(
                 check_pure_expr(checker, &field.value, logger);
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::MultiValueLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 check_pure_expr(checker, elem, logger);
             }
-        }
-        TirExprKind::MultiValueProject { source, .. } => {
-            check_pure_expr(checker, source, logger);
         }
         TirExprKind::TupleSpread { expr: e }
         | TirExprKind::TupleZip { expr: e }

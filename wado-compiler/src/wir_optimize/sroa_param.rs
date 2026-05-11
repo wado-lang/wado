@@ -7,7 +7,7 @@
 use crate::hashmap::IndexSet;
 use crate::wir::{WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
 
-use super::sroa_return::is_eligible_field_type;
+use super::sroa_variant_return::is_eligible_field_type;
 use super::util::collect_pinned_func_ids;
 
 /// Box<T> parameter SROA.

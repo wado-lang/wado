@@ -2496,28 +2496,6 @@ pub enum TirExprKind {
         elements: Vec<TirExpr>,
     },
 
-    /// Multi-value aggregate. Has no heap presence; lowers to Wasm multi-value
-    /// (or `struct.new` on materialization at WIR build). Type is
-    /// `Tuple<T0, T1, ...>` (same as `TupleLiteral`).
-    ///
-    /// Distinct from `TupleLiteral` only in ABI: `MultiValueLiteral` opts out
-    /// of heap allocation when escape analysis allows it. `TupleLiteral` is the
-    /// reify form used when the aggregate must be a single heap value.
-    MultiValueLiteral {
-        elements: Vec<TirExpr>,
-    },
-
-    /// Project the i-th component out of a multi-value source.
-    /// Type is the i-th element type of the source's tuple type.
-    ///
-    /// Used in place of `FieldAccess { field_name: i.to_string() }` for
-    /// destructuring multi-value tuples without forcing the source to
-    /// materialize as a heap struct.
-    MultiValueProject {
-        source: Box<TirExpr>,
-        index: u32,
-    },
-
     /// Spread a tuple expression into an enclosing `TupleLiteral`.
     /// Created by the resolver for `[..expr]` syntax. Expanded by monomorphization
     /// into individual `FieldAccess` elements once the concrete tuple arity is known.
@@ -3183,10 +3161,11 @@ pub struct TirFunction {
 
     /// ABI for delivering the function's return value at WIR / Wasm level.
     /// Defaults to [`ReturnAbi::Single`]; an analysis pass sets
-    /// [`ReturnAbi::MultiValue`] for tuple-returning functions whose every
-    /// call site destructures the result and whose body's returns produce
-    /// `MultiValueLiteral`. WIR build then emits a multi-value Wasm result
-    /// signature (no heap struct round-trip).
+    /// [`ReturnAbi::MultiValue`] for tuple- or user-struct-returning
+    /// functions whose every call site destructures the result via
+    /// `FieldAccess` and whose body's returns produce a fresh
+    /// `TupleLiteral` / `StructLiteral`. WIR build then emits a
+    /// multi-value Wasm result signature (no heap struct round-trip).
     pub return_abi: ReturnAbi,
 }
 
@@ -3194,17 +3173,25 @@ pub struct TirFunction {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum ReturnAbi {
     /// Single Wasm return value. The function's TIR `return_type` is taken
-    /// as-is; tuple types lower to a heap struct ref.
+    /// as-is; tuple / user-struct types lower to a heap struct ref.
     #[default]
     Single,
-    /// Multi-value Wasm return: each tuple element becomes a separate Wasm
-    /// result. Carries the per-element TIR type ids for WIR-build's
-    /// signature emission. The function's TIR `return_type` is unchanged
-    /// (it remains the tuple type) — only the WIR-level ABI shifts.
+    /// Multi-value Wasm return: each tuple element / struct field becomes a
+    /// separate Wasm result. Carries the per-element TIR type ids and field
+    /// names for WIR-build's signature emission and call-site split-local
+    /// generation. The function's TIR `return_type` is unchanged (it remains
+    /// the tuple / struct type) — only the WIR-level ABI shifts.
+    ///
+    /// For tuple returns, `field_names` is `["0", "1", ...]` (matching the
+    /// numeric field names tuple structs carry). For user-struct returns,
+    /// `field_names` is the struct's fields in declaration order.
     MultiValue {
-        /// Tuple element TIR types, in element order. Length matches the
-        /// arity of the function's tuple return type.
+        /// TIR types of each result, in declaration order.
         result_types: Vec<TypeId>,
+        /// Field names matching the source aggregate's declaration order.
+        /// Used by WIR build to look up the right split local from a
+        /// `FieldAccess` access on a multi-value-bound temp.
+        field_names: Vec<String>,
     },
 }
 

@@ -78,19 +78,25 @@ type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(27)
 
 type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(28)
 
+<<<<<<< HEAD
 type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>") -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";  // TypeId(29)
+||||||| cbdce7858
+type "functype//core:prelude/types.wado/AsyncCall<Result<unit,wasi:tls/types.wado/Error>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<unit,wasi:tls/types.wado/Error>>") -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";  // TypeId(29)
+=======
+type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(29)
+>>>>>>> origin/main
 
-type "functype//wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";  // TypeId(30)
+type "functype//core:prelude/types.wado/AsyncCall<Result<unit,wasi:tls/types.wado/Error>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<Result<unit,wasi:tls/types.wado/Error>>") -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";  // TypeId(30)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(31)
+type "functype//wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";  // TypeId(31)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(32)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(33)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(34)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
 
-type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(35)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(35)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -155,7 +161,13 @@ fn "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_export__run"() 
     if __match_scrut_0.discriminant == 0 {
         block {
             message_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("connected"), used: 9 };
-            multivalue_bind [rx_4, tx_5] = let __pair_temp_3: i64; __pair_temp_3 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
+            let __pair_temp_3: i64;
+            __pair_temp_3 = "wasi/stream-new"();
+            let __mv_lo_3: i32;
+            let __mv_hi_3: i32;
+            multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
+            rx_4 = __mv_lo_3;
+            tx_5 = __mv_hi_3;
             handle_6 = "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_binding__Stdout_write_via_stream"(rx_4);
             "core:cli/write_to_stream"(tx_5, message_3, 1);
             "wasi/future-drop-readable:transmission-cli"(handle_6);
@@ -163,7 +175,13 @@ fn "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_export__run"() 
     } else {
         block {
             message_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("connect failed"), used: 14 };
-            multivalue_bind [rx_9, tx_10] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+            let __pair_temp_2: i64;
+            __pair_temp_2 = "wasi/stream-new"();
+            let __mv_lo_2: i32;
+            let __mv_hi_2: i32;
+            multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
+            rx_9 = __mv_lo_2;
+            tx_10 = __mv_hi_2;
             handle_11 = "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_binding__Stdout_write_via_stream"(rx_9);
             "core:cli/write_to_stream"(tx_10, message_8, 1);
             "wasi/future-drop-readable:transmission-cli"(handle_11);
@@ -284,11 +302,11 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:t
         });
         b8: block {
             l9: loop {
-                let __sroa_event_code: i32;
-                let __sroa_event_handle: i32;
-                let __sroa_event_payload: u32;
-                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
-                if __sroa_event_payload == 2 {
+                let event_mv_code: i32;
+                let event_mv_handle: i32;
+                let event_mv_payload: u32;
+                multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
+                if event_mv_payload == 2 {
                     break b8;
                 }
                 continue l9;

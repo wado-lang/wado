@@ -1,12 +1,7 @@
-// Test that a file with both test blocks and an HTTP export handler
-// can compile and run in test world. The HTTP handler should be
-// eliminated by DCE (no CM wrapper in test world), so HTTP-specific
-// codegen (e.g. http-fields-resource) should not be reached.
-//
-// Currently panics with "unknown component type: http-fields-resource"
-// when the HTTP handler is kept alive in test world.
-
-#![TODO]
+// A file that mixes `test` blocks with an HTTP `export async fn handle`
+// must compile and run cleanly in the test world: the HTTP handler is
+// dead code at that target, so DCE drops it before HTTP-specific CM
+// types (e.g. `http-fields-resource`) reach codegen.
 
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 

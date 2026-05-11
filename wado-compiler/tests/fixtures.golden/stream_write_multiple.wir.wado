@@ -79,7 +79,13 @@ fn "wado-compiler/tests/fixtures/stream_write_multiple.wado/run"() with Stdout {
     let rx_18: i32;
     let tx_19: i32;
     let handle: i32;
-    multivalue_bind [rx_0, tx_1] = let __pair_temp_1: i64; __pair_temp_1 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_1: i32;
+    let __mv_hi_1: i32;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
+    rx_0 = __mv_lo_1;
+    tx_1 = __mv_hi_1;
     "wasi/stream-drop-readable"(rx_0);
     chunk = __seq_lit: block -> ref "core:prelude//Array<u8>" {
         __b_2 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(65, 66, 67, 10), used: 4 };
@@ -89,7 +95,13 @@ fn "wado-compiler/tests/fixtures/stream_write_multiple.wado/run"() with Stdout {
     "core:internal/cm_stream_write_u8"(tx_1, chunk);
     "wasi/stream-drop-writable"(tx_1);
     message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("multi write ok"), used: 14 };
-    multivalue_bind [rx_18, tx_19] = let __pair_temp_2: i64; __pair_temp_2 = "wasi/stream-new"(); builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
+    let __pair_temp_2: i64;
+    __pair_temp_2 = "wasi/stream-new"();
+    let __mv_lo_2: i32;
+    let __mv_hi_2: i32;
+    multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
+    rx_18 = __mv_lo_2;
+    tx_19 = __mv_hi_2;
     handle = "wado-compiler/tests/fixtures/stream_write_multiple.wado/__cm_binding__Stdout_write_via_stream"(rx_18);
     "core:cli/write_to_stream"(tx_19, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);

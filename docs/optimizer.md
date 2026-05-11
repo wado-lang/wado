@@ -260,7 +260,7 @@ E2E: [pattern_match_exhaustive_variant_last_arm.wado](../wado-compiler/tests/fix
 
 - Nullable ref optimization — rewrites type-level representations for nullable references.
 - Pre-SROA copy propagation — inlines trivial `alias = source` so SROA can see direct variant access (RefTest/RefCast on source).
-- Multi-value return SROA — rewrites functions returning small scalar structs (2–4 fields) to use Wasm multi-value returns, eliminating the boundary GC allocation.
+- Variant-return SROA — rewrites functions returning a small variant (`(i32 disc, payload_0, ...)` lowering, total arity 2–4) to use Wasm multi-value returns, eliminating the boundary GC allocation. Tuple- and user-struct-return ABIs are decided by the TIR-level `optimize::multi_value_return` classifier; this pass handles only the variant case, whose layout (shared-vs-per-case payload offsets) is WIR-specific.
 - Single-field parameter SROA — rewrites `ref null S` parameters (single-field struct) to take the scalar field directly. Primary trigger is `Box<T>` from template string interpolation. E2E: [opt_sroa_box_parameter.wado](../wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado), [opt_sroa_single_field.wado](../wado-compiler/tests/fixtures/opt_sroa_single_field.wado).
 
 ### Phase 2: Single-Field Struct Local Elimination (Round 1)
@@ -285,7 +285,7 @@ Two complementary variants run in sequence:
 
 ### Phase 5: Peephole and Multi-Field Struct Elimination
 
-- Peephole — constant folding, multi-value struct elision at WIR level. E2E: [wir_optimize_negate_eqz.wado](../wado-compiler/tests/fixtures/wir_optimize_negate_eqz.wado), [wir_optimize_branchless_increment.wado](../wado-compiler/tests/fixtures/wir_optimize_branchless_increment.wado).
+- Peephole — constant folding and small local rewrites at WIR level. E2E: [wir_optimize_negate_eqz.wado](../wado-compiler/tests/fixtures/wir_optimize_negate_eqz.wado), [wir_optimize_branchless_increment.wado](../wado-compiler/tests/fixtures/wir_optimize_branchless_increment.wado).
 - Flatten seq assignments — exposes multi-field struct locals for elimination.
 - Multi-field struct local elimination — substitutes `StructGet(LocalGet(x), field_k)` with the corresponding field expression when all fields are accessed exactly once.
 - Labeled-block copy propagation — flattens trivial labeled blocks holding only a copy. E2E: [wir_optimize_labeled_block_copy_prop.wado](../wado-compiler/tests/fixtures/wir_optimize_labeled_block_copy_prop.wado), [wir_optimize_labeled_block_copy_prop_safety.wado](../wado-compiler/tests/fixtures/wir_optimize_labeled_block_copy_prop_safety.wado).
@@ -294,7 +294,7 @@ Two complementary variants run in sequence:
 
 DAE / DRVE were moved to TIR (`optimize::dae`, `optimize::drve`) so they can interact with `inline` / `copy_prop` / `const_fold` / `dce` inside the same fixed-point loop. The WIR-level copies are gone.
 
-Write-only-local elimination is split across both layers. The TIR pass (`optimize::elide_local`) handles locals that originate at TIR (user `let`, SROA / variant-lowering shadow temps). The WIR pass (`wir_optimize::elide_local`, kept here in Phase 6) handles locals that the WIR builder synthesises during lowering — `__match_scrut_N` for match scrutinee binding, `__pair_temp_N` for Future / Stream pair returns, multi-value temps — that no TIR pass can reach. Both passes are narrow: each rewrites `LocalSet(x, v)` to `Drop(v)` (or `Nop` when `v` is pure) only when `x` is never read.
+Write-only-local elimination is split across both layers. The TIR pass (`optimize::elide_local`) handles locals that originate at TIR (user `let`, SROA / variant-lowering shadow temps). The WIR pass (`wir_optimize::elide_local`, kept here in Phase 6) handles locals that the WIR builder synthesises during lowering — `__match_scrut_N` for match scrutinee binding, `__pair_temp_N` and `__mv_lo_N` / `__mv_hi_N` for Future / Stream pair returns and wide-int multi-value bindings — that no TIR pass can reach. Both passes are narrow: each rewrites `LocalSet(x, v)` to `Drop(v)` (or `Nop` when `v` is pure) only when `x` is never read.
 
 ### Phase 7: Global Cleanup
 

@@ -633,4 +633,125 @@ mod tests {
         let index = AstIndex::build(&module);
         assert!(index.ast_id_at(99, 1).is_none());
     }
+
+    /// Each `StructField`'s indexed span must reach to the end of its
+    /// declared type. The parser previously stored `start_span` only —
+    /// just the first token — which left descendant spans (e.g. the
+    /// `i32` `NamedType`) extending past the parent. That broke
+    /// position-keyed lookups for any cursor inside the field but
+    /// outside its descendants (the `:` punctuation, the whitespace
+    /// between name and type, etc.). This test pins the contract that
+    /// `index.span_of(field.id)` covers the whole `name: type` form.
+    #[test]
+    fn struct_field_span_reaches_type_end() {
+        let module = parse("struct Point { x: i32, y: i32 }\n");
+        let index = AstIndex::build(&module);
+        let s = match &module.items[0] {
+            Item::Struct(s) => s,
+            _ => unreachable!(),
+        };
+        for field in &s.fields {
+            let field_span = index.span_of(field.id).expect("field span");
+            let ty_span = field.ty.span();
+            assert!(
+                field_span.end >= ty_span.end,
+                "field `{}` indexed span end={} must reach the type end={}",
+                field.name,
+                field_span.end,
+                ty_span.end,
+            );
+        }
+    }
+
+    /// Same contract as [`struct_field_span_reaches_type_end`] for
+    /// `VariantCase`: a payload-bearing case must report a span that
+    /// covers the payload type, not just the case name.
+    #[test]
+    fn variant_case_span_covers_payload() {
+        let module = parse("variant Maybe<T> { Just(T), Nothing }\n");
+        let index = AstIndex::build(&module);
+        let v = match &module.items[0] {
+            Item::Variant(v) => v,
+            _ => unreachable!(),
+        };
+        let just = v
+            .cases
+            .iter()
+            .find(|c| c.name == "Just")
+            .expect("Just case");
+        let case_span = index.span_of(just.id).expect("case span");
+        let payload_span = just.payload.as_ref().expect("payload").span();
+        assert!(
+            case_span.end >= payload_span.end,
+            "variant case span end={} must cover payload end={}",
+            case_span.end,
+            payload_span.end,
+        );
+    }
+
+    /// `MatchArm` gained an `AstId` so arm-level position queries have
+    /// a stable key (previously the arm itself had no id, so a cursor
+    /// inside the arm resolved only to a descendant pattern/expression
+    /// or to the surrounding `MatchExpr`). Verify the visitor records
+    /// each arm's id with its full span.
+    #[test]
+    fn match_arm_id_is_indexed() {
+        let module = parse(concat!(
+            "fn f(x: i32) -> i32 {\n",
+            "    return match x {\n",
+            "        1 => 10,\n",
+            "        _ => 0,\n",
+            "    };\n",
+            "}\n",
+        ));
+        let index = AstIndex::build(&module);
+        let func = match &module.items[0] {
+            Item::Function(f) => f,
+            _ => unreachable!(),
+        };
+        let body = func.body.as_ref().expect("body");
+        let match_expr = body
+            .stmts
+            .iter()
+            .find_map(|s| match s {
+                Stmt::Return(r) => match r.value.as_ref()? {
+                    Expr::Match(m) => Some(m.as_ref()),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .expect("return-of-match");
+        assert_eq!(match_expr.arms.len(), 2);
+        for arm in &match_expr.arms {
+            assert_eq!(
+                index.span_of(arm.id),
+                Some(arm.span),
+                "arm id must be indexed with the arm's full span",
+            );
+        }
+    }
+
+    /// User-visible improvement: a cursor on the `:` between a struct
+    /// field's name and its type now resolves to the field rather than
+    /// to the surrounding struct, because `StructField.span` covers the
+    /// punctuation. This is the cursor-accuracy contract LSP features
+    /// (hover, document-highlight, …) ride on top of.
+    #[test]
+    fn ast_id_at_resolves_to_field_on_colon() {
+        let source = "struct Point { x: i32 }\n";
+        let module = parse(source);
+        let index = AstIndex::build(&module);
+        let s = match &module.items[0] {
+            Item::Struct(s) => s,
+            _ => unreachable!(),
+        };
+        let field = &s.fields[0];
+        // Single-line source: byte position + 1 == 1-based column.
+        let colon_col = source.find(':').expect("colon present") + 1;
+        assert_eq!(
+            index.ast_id_at(1, colon_col),
+            Some(field.id),
+            "cursor on `:` of `x: i32` should resolve to the field id",
+        );
+    }
 }

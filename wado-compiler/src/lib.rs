@@ -142,8 +142,8 @@ pub struct DumpResult {
     pub optimized_package: Option<FlatPackage>,
     /// WIR module (after `tir_to_wir` translation)
     pub wir_package: Option<wir::WirPackage>,
-    /// Comments for unparsing
-    pub comments: comment::CommentMap,
+    /// AstId-keyed trivia for unparsing the dumped AST.
+    pub trivia: comment::TriviaMap,
 }
 
 /// Compilation options for the compiler
@@ -645,17 +645,18 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         (tokens, tokens_for_dump, comments, data_section, shebang)
     };
 
-    // Build comment map
-    let comment_map = comment::CommentMap::from_comments(&comments, source);
-
     // === Phase 2: Parser ===
-    let ast = {
+    let (ast, trivia) = {
         let _span = logger.span("parse");
-        let mut parser = Parser::with_metadata(tokens, shebang, data_section);
-        parser.parse().map_err(|e| {
+        let mut parser = Parser::with_trivia(tokens, shebang, data_section, comments);
+        let ast = parser.parse().map_err(|e| {
             let _ = logger.error(e);
             Bail
-        })?
+        })?;
+        let mut trivia = parser.take_trivia();
+        comment::populate_trailing(&mut trivia, &ast);
+        comment::populate_inner_tail(&mut trivia, &ast);
+        (ast, trivia)
     };
 
     // === Phase 3: Bind ===
@@ -865,7 +866,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         lowered_tir_text,
         optimized_package,
         wir_package,
-        comments: comment_map,
+        trivia,
     })
 }
 
@@ -893,12 +894,6 @@ pub fn format(source: &str) -> Result<String, CompileError> {
     })?;
     let (data_section, comments, shebang) = lexer.into_parts();
 
-    // Position-keyed `CommentMap` backs the residual lookup paths
-    // (file-tail dangling, structural-position queries). The parser's
-    // AstId-keyed `TriviaMap` carries the leading-comment attachments
-    // that are now the primary mechanism for in-tree comments.
-    let comment_map = comment::CommentMap::from_comments(&comments, source);
-
     // Parser (with shebang, data section, and the comment stream so it
     // can attach leading comments to AST nodes as it allocates ids).
     let mut parser = Parser::with_trivia(tokens, shebang, data_section, comments);
@@ -909,20 +904,22 @@ pub fn format(source: &str) -> Result<String, CompileError> {
         filename: None,
         is_todo_module: parser.has_todo(),
     })?;
-    let trivia = parser.take_trivia();
+    let mut trivia = parser.take_trivia();
+    comment::populate_trailing(&mut trivia, &ast);
+    comment::populate_inner_tail(&mut trivia, &ast);
 
     // Unparse (no lowering - preserve high-level constructs)
-    let unparser = unparse::Unparser::new(&comment_map).with_trivia(&trivia);
+    let unparser = unparse::Unparser::new().with_trivia(&trivia);
     Ok(unparser.unparse(&ast))
 }
 
-/// Result of parsing a source file (AST + comments, no compilation)
+/// Result of parsing a source file (AST + AstId-keyed trivia, no compilation)
 pub struct ParseResult {
     pub ast: ast::Module,
-    pub comments: comment::CommentMap,
+    pub trivia: comment::TriviaMap,
 }
 
-/// Parse a Wado source file into AST and comment map.
+/// Parse a Wado source file into AST and trivia map.
 /// This is a lightweight operation that only lexes and parses.
 pub fn parse(source: &str) -> Result<ParseResult, CompileError> {
     let mut lexer = Lexer::new(source);
@@ -933,8 +930,7 @@ pub fn parse(source: &str) -> Result<ParseResult, CompileError> {
         filename: None,
     })?;
     let (data_section, comments, shebang) = lexer.into_parts();
-    let comment_map = comment::CommentMap::from_comments(&comments, source);
-    let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+    let mut parser = Parser::with_trivia(tokens, shebang, data_section, comments);
     let ast = parser.parse().map_err(|e| CompileError::Parser {
         message: e.message,
         line: e.span.line,
@@ -942,10 +938,10 @@ pub fn parse(source: &str) -> Result<ParseResult, CompileError> {
         filename: None,
         is_todo_module: parser.has_todo(),
     })?;
-    Ok(ParseResult {
-        ast,
-        comments: comment_map,
-    })
+    let mut trivia = parser.take_trivia();
+    comment::populate_trailing(&mut trivia, &ast);
+    comment::populate_inner_tail(&mut trivia, &ast);
+    Ok(ParseResult { ast, trivia })
 }
 
 /// Compilation error with structured location info

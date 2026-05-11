@@ -132,12 +132,17 @@ pub struct WirContext<'a> {
     /// Value: the `WirFuncId` for the registered import.
     pub needed_canonicals: IndexMap<CanonicalIntrinsic, WirFuncId>,
 
-    /// Set of `(function_name, module_source)` pairs whose TIR
+    /// Map of `(function_name, module_source)` for functions whose TIR
     /// `return_abi` is `MultiValue`. Names alone are not unique across
     /// modules (e.g. two `make_pair` in different `.wado` files), so the
-    /// pair is what the call-site translator queries via `is_multi_value_call`.
+    /// pair is what the call-site translator queries.
+    /// Value is the callee's per-result `(field_name, type_id)` in
+    /// declaration order — `("0", i32)` / `("1", i32)` for tuple returns,
+    /// `("x", i32)` / `("y", i32)` for user-struct returns. The
+    /// call-site translator uses this to build named split locals
+    /// without re-deriving the aggregate shape.
     /// Computed from `package.functions` at WIR-build start.
-    pub multi_value_return_funcs: IndexSet<(String, ModuleSource)>,
+    pub multi_value_return_funcs: IndexMap<(String, ModuleSource), Vec<(String, TypeId)>>,
 }
 
 /// A function body that needs to be translated from TIR to WIR.
@@ -228,24 +233,35 @@ impl<'a> WirContext<'a> {
         // slim `{ env, func }`.
         let inspectable_fn_dispatch = compute_inspectable_fn_dispatch(package);
 
-        // Pre-compute the set of multi-value-return functions (set by the
+        // Pre-compute the map of multi-value-return functions (set by the
         // TIR `optimize::multi_value_return` pass). The translator queries
         // this map at call sites to decide between `LocalSet` (single
-        // result) and `MultiValueLocalBind` (split into N locals).
-        // Keyed by `(name, module_source)` because plain names are not
-        // unique across modules.
-        let multi_value_return_funcs: IndexSet<(String, ModuleSource)> = package
-            .functions
-            .iter()
-            .filter_map(|f| {
-                let f = f.try_borrow().ok()?;
-                if matches!(f.return_abi, crate::tir::ReturnAbi::MultiValue { .. }) {
-                    Some((f.name.clone(), f.module_source.clone()))
-                } else {
-                    None
-                }
-            })
-            .collect();
+        // result) and `MultiValueLocalBind` (split into N locals), and to
+        // get the per-result `(field_name, type_id)` info for naming the
+        // split locals. Keyed by `(name, module_source)` because plain
+        // names are not unique across modules.
+        let multi_value_return_funcs: IndexMap<(String, ModuleSource), Vec<(String, TypeId)>> =
+            package
+                .functions
+                .iter()
+                .filter_map(|f| {
+                    let f = f.try_borrow().ok()?;
+                    if let crate::tir::ReturnAbi::MultiValue {
+                        result_types,
+                        field_names,
+                    } = &f.return_abi
+                    {
+                        let pairs: Vec<(String, TypeId)> = field_names
+                            .iter()
+                            .cloned()
+                            .zip(result_types.iter().copied())
+                            .collect();
+                        Some(((f.name.clone(), f.module_source.clone()), pairs))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
 
         Self {
             package,
