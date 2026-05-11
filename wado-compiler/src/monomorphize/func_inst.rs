@@ -1799,6 +1799,20 @@ impl Monomorphizer {
                     );
                 }
             }
+            TirExprKind::ClosureToCanonical {
+                functor,
+                target_fn_type,
+                ..
+            } => {
+                self.substitute_types_in_expr(
+                    functor,
+                    substitution,
+                    type_table,
+                    local_count,
+                    locals,
+                );
+                *target_fn_type = self.substitute_type(*target_fn_type, substitution, type_table);
+            }
             TirExprKind::VariantConstruct {
                 variant_type,
                 payload,

@@ -833,7 +833,8 @@ fn rewrite_cm_methods_in_expr(
         }
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. } => {
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
             rewrite_cm_methods_in_expr(inner, tt, entry_source, wasi_registry);
         }
         TirExprKind::Switch {

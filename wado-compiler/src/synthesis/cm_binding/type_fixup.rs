@@ -1451,6 +1451,9 @@ fn rewrite_calls_in_expr(
         TirExprKind::Closure { body, .. } => {
             rewrite_calls_in_expr(body, adapters, entry_source, wasi_registry, type_table);
         }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            rewrite_calls_in_expr(functor, adapters, entry_source, wasi_registry, type_table);
+        }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in &mut fields.iter_mut() {
                 rewrite_calls_in_expr(
@@ -1731,6 +1734,9 @@ fn collect_effect_calls_in_expr(
         }
         TirExprKind::Closure { body, .. } => {
             collect_effect_calls_in_expr(body, effects, wasi_registry);
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            collect_effect_calls_in_expr(functor, effects, wasi_registry);
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {

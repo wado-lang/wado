@@ -492,11 +492,22 @@ fn convert_expr_kind(kind: &TirExprKind) -> NirExprKind {
             "TirExprKind::Capture should be lowered to FieldAccess by lower::closure before nir_convert::flat_to_nir runs"
         ),
         TirExprKind::Closure { .. } => unreachable!(
-            "TirExprKind::Closure should be lowered to StructLiteral / Cast (canonical wrap) by lower::closure before nir_convert::flat_to_nir runs"
+            "TirExprKind::Closure should be lowered to StructLiteral/ClosureToCanonical by lower::closure before nir_convert::flat_to_nir runs"
         ),
         TirExprKind::IndirectCall { callee, args } => NirExprKind::IndirectCall {
             callee: Box::new(convert_expr(callee)),
             args: args.iter().map(convert_expr).collect(),
+        },
+        TirExprKind::ClosureToCanonical {
+            functor,
+            functor_id,
+            target_fn_type,
+            closure_module,
+        } => NirExprKind::ClosureToCanonical {
+            functor: Box::new(convert_expr(functor)),
+            functor_id: *functor_id,
+            target_fn_type: *target_fn_type,
+            closure_module: closure_module.clone(),
         },
         TirExprKind::VariantConstruct {
             variant_type,

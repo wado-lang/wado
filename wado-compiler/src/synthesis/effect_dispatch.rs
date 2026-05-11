@@ -1303,7 +1303,8 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
         }
         | TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. }
-        | TirExprKind::VariantPayload { expr, .. } => {
+        | TirExprKind::VariantPayload { expr, .. }
+        | TirExprKind::ClosureToCanonical { functor: expr, .. } => {
             lower_dispatch_in_expr(expr, env, ctx);
         }
         TirExprKind::Assign { target, value } => {
@@ -2038,6 +2039,7 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
             | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantTest { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::ClosureToCanonical { functor: inner, .. }
             | TirExprKind::Resume { value: inner } => {
                 self.visit_expr(inner);
             }
@@ -2742,7 +2744,8 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
         }
         | TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. }
-        | TirExprKind::VariantPayload { expr, .. } => {
+        | TirExprKind::VariantPayload { expr, .. }
+        | TirExprKind::ClosureToCanonical { functor: expr, .. } => {
             rewrite_calls_in_expr(expr, ctx);
         }
         TirExprKind::Assign { target, value } => {

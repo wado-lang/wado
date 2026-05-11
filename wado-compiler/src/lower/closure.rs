@@ -6,9 +6,6 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
-use crate::nir::{NirExpr, NirExprKind};
-use crate::nir_package::NirPackage;
-use crate::nir_visitor::NirMutVisitor;
 use crate::tir::{
     CallArg, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType, TirBlock,
     TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirImpl, TirLocal, TirModule,
@@ -17,21 +14,6 @@ use crate::tir::{
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
-
-/// Site-level metadata for a closure-to-canonical wrap that
-/// `lower::closure` records on TIR and `lower::lower` re-applies as
-/// `NirExprKind::ClosureToCanonical` after `nir_convert::flat_to_nir`.
-pub(super) struct ClosureCanonicalMeta {
-    pub functor_id: u32,
-    pub closure_module: ModuleSource,
-}
-
-/// Side table: maps `(qualified_function_name, expression_span)` to
-/// closure-canonical wrap metadata. Function names are unique
-/// post-monomorphization (each mangled instance has a unique name); spans
-/// within a function body are unique per wrap site. The two together pin
-/// down a wrap site uniquely.
-pub(super) type ClosureCanonicalSites = IndexMap<(String, Span), ClosureCanonicalMeta>;
 
 /// `1` for instance methods (those whose first parameter is named `self`),
 /// `0` otherwise. Used to convert a 0-based call-site argument index into
@@ -197,11 +179,6 @@ pub(super) struct ClosureLowerer {
     generated_structs: Vec<TirStruct>,
     generated_functions: Vec<Rc<RefCell<TirFunction>>>,
     fn_param_specializations: IndexMap<FnParamSpecKey, String>,
-    /// Side table populated as the lowerer rewrites closures into
-    /// `TirExprKind::Cast` placeholders. Consumed by
-    /// `apply_closure_canonical_wraps` after `nir_convert` to re-wrap
-    /// the matching Cast nodes as `NirExprKind::ClosureToCanonical`.
-    canonical_sites: ClosureCanonicalSites,
 }
 
 impl ClosureLowerer {
@@ -216,17 +193,11 @@ impl ClosureLowerer {
             generated_structs: Vec::new(),
             generated_functions: Vec::new(),
             fn_param_specializations: IndexMap::default(),
-            canonical_sites: ClosureCanonicalSites::default(),
         }
     }
 
-    /// Lower all closures in a module.
-    ///
-    /// Returns the [`ClosureCanonicalSites`] side table built while
-    /// rewriting `Closure` nodes into `TirExprKind::Cast` placeholders.
-    /// `lower::lower` consumes it after `nir_convert` to re-wrap the
-    /// matching Cast nodes as `NirExprKind::ClosureToCanonical`.
-    pub(super) fn lower_module(&mut self, module: &mut TirModule) -> ClosureCanonicalSites {
+    /// Lower all closures in a module
+    pub(super) fn lower_module(&mut self, module: &mut TirModule) {
         // Phase 0: Convert FuncRef used as values to zero-capture Closures.
         // Named functions used as values (e.g., `&double` or `double` passed to fn-type params)
         // need to become Closure nodes so the existing closure pipeline handles them.
@@ -369,34 +340,23 @@ impl ClosureLowerer {
             }
         }
 
-        // Phase 4: transform any remaining Closure nodes into a
-        // `TirExprKind::Cast` placeholder, recording each wrap site in the
-        // side table. These are closures that weren't specialised
-        // (fn-param stored in struct field). Walks the same set as
-        // phase 3 so cloned bodies in `__call` methods are also covered.
+        // Phase 4: transform any remaining Closure nodes to ClosureToCanonical.
+        // These are closures that weren't specialised (fn-param stored in
+        // struct field). Walks the same set as phase 3 so cloned bodies in
+        // `__call` methods are also covered.
+        let mut remaining = RemainingClosuresRewriter {
+            functor_infos: &self.functor_infos,
+            module_source: &self.module_source,
+        };
         for func_rc in &lowered_funcs {
             let mut func = func_rc.borrow_mut();
-            let func_name = func.name.clone();
             if let Some(body) = &mut func.body {
-                let mut remaining = RemainingClosuresRewriter {
-                    functor_infos: &self.functor_infos,
-                    module_source: &self.module_source,
-                    current_function: func_name,
-                    sites: &mut self.canonical_sites,
-                };
                 remaining.visit_block(body);
             }
         }
         for impl_block in &mut module.impls {
             for method in &mut impl_block.methods {
-                let method_name = method.name.clone();
                 if let Some(body) = &mut method.body {
-                    let mut remaining = RemainingClosuresRewriter {
-                        functor_infos: &self.functor_infos,
-                        module_source: &self.module_source,
-                        current_function: method_name,
-                        sites: &mut self.canonical_sites,
-                    };
                     remaining.visit_block(body);
                 }
             }
@@ -413,8 +373,6 @@ impl ClosureLowerer {
         module
             .functions
             .extend(std::mem::take(&mut self.generated_functions));
-
-        std::mem::take(&mut self.canonical_sites)
     }
 
     /// Convert `FuncRef` nodes (used as values, not in Call/MethodCall func positions) to
@@ -1041,8 +999,6 @@ impl ClosureLowerer {
                 functor_infos: &self.functor_infos,
                 module_source: &self.module_source,
                 type_table,
-                current_function: &specialized_name,
-                sites: &mut self.canonical_sites,
             }
             .visit_block(&mut cloned);
             cloned
@@ -1094,18 +1050,10 @@ impl ClosureLowerer {
 }
 
 /// Phase 4 rewriter: transform remaining `Closure` nodes (those not
-/// specialised) into `TirExprKind::Cast` placeholders, recording each
-/// wrap site in [`ClosureCanonicalSites`]. `lower::lower` later replays
-/// the recorded sites against NIR as `NirExprKind::ClosureToCanonical`.
+/// specialised) into `ClosureToCanonical`.
 struct RemainingClosuresRewriter<'a> {
     functor_infos: &'a [ClosureFunctor],
     module_source: &'a ModuleSource,
-    /// Name of the function whose body is currently being walked.
-    /// Updated by [`ClosureLowerer::lower_module`] before each call.
-    current_function: String,
-    /// Side table that records every wrap-site rewrite this visitor
-    /// performs. Consumed by [`apply_closure_canonical_wraps`].
-    sites: &'a mut ClosureCanonicalSites,
 }
 
 impl TirMutVisitor for RemainingClosuresRewriter<'_> {
@@ -1148,17 +1096,12 @@ impl TirMutVisitor for RemainingClosuresRewriter<'_> {
             span,
         );
 
-        expr.kind = TirExprKind::Cast {
-            expr: Box::new(struct_literal),
-            target_type: target_fn_type,
+        expr.kind = TirExprKind::ClosureToCanonical {
+            functor: Box::new(struct_literal),
+            functor_id: closure_id,
+            target_fn_type,
+            closure_module: self.module_source.clone(),
         };
-        self.sites.insert(
-            (self.current_function.clone(), span),
-            ClosureCanonicalMeta {
-                functor_id: closure_id,
-                closure_module: self.module_source.clone(),
-            },
-        );
         // Keep expr.type_id as the original function type for type compatibility.
     }
 }
@@ -1696,9 +1639,8 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
             self.visit_expr(value);
 
             // Update the Let's `type_id` for specializable closures.
-            // Non-specializable ones keep their `fn(...)` type for the
-            // closure-canonical wrap (a `Cast` placeholder in TIR, later
-            // re-wrapped as `NirExprKind::ClosureToCanonical`).
+            // Non-specializable ones keep their `fn(...)` type for
+            // ClosureToCanonical.
             if let Some(id) = closure_id
                 && self.specializable.contains(&id)
                 && let Some(functor) = self.functor_infos.get(id as usize)
@@ -1983,25 +1925,17 @@ impl TirRefVisitor for StructFieldFnParamCheck<'_> {
 /// - `Local { fn-param }` → keep the Local but retag its `type_id` to the
 ///   functor `&__Closure_N` so downstream code sees the new type.
 /// - `Call` / `MethodCall` arg slots: when a fn-param Local is forwarded
-///   into a callee that still expects `fn(...)`, wrap it in a
-///   `TirExprKind::Cast` placeholder (recorded in [`ClosureCanonicalSites`]
-///   for re-wrapping as `NirExprKind::ClosureToCanonical` after
-///   `nir_convert`) so the callee sees the original function type.
+///   into a callee that still expects `fn(...)`, wrap it in
+///   `ClosureToCanonical` so the callee sees the original function type.
 struct SpecializerTransformer<'a> {
     param_to_functor: &'a IndexMap<u32, TypeId>,
     functor_infos: &'a [ClosureFunctor],
     module_source: &'a ModuleSource,
     type_table: &'a mut TypeTable,
-    /// Name of the specialised function whose cloned body is being
-    /// transformed. Recorded with each wrap site so
-    /// `apply_closure_canonical_wraps` can locate the Cast in NIR.
-    current_function: &'a str,
-    /// Side table for closure-to-canonical wrap sites.
-    sites: &'a mut ClosureCanonicalSites,
 }
 
 impl SpecializerTransformer<'_> {
-    fn wrap_arg_if_needed(&mut self, arg: &mut TirExpr, original_type_id: TypeId) {
+    fn wrap_arg_if_needed(&self, arg: &mut TirExpr, original_type_id: TypeId) {
         if let TirExprKind::Local { index, .. } = &arg.kind
             && let Some(&functor_type) = self.param_to_functor.get(index)
             && matches!(
@@ -2014,23 +1948,17 @@ impl SpecializerTransformer<'_> {
                 .find(|f| f.struct_type_id == functor_type)
         {
             let span = arg.span;
-            let functor_id = functor.id;
             let inner =
                 std::mem::replace(arg, TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span));
             *arg = TirExpr::new(
-                TirExprKind::Cast {
-                    expr: Box::new(inner),
-                    target_type: original_type_id,
+                TirExprKind::ClosureToCanonical {
+                    functor: Box::new(inner),
+                    functor_id: functor.id,
+                    target_fn_type: original_type_id,
+                    closure_module: self.module_source.clone(),
                 },
                 original_type_id,
                 span,
-            );
-            self.sites.insert(
-                (self.current_function.to_string(), span),
-                ClosureCanonicalMeta {
-                    functor_id,
-                    closure_module: self.module_source.clone(),
-                },
             );
         }
     }
@@ -2102,68 +2030,5 @@ impl TirMutVisitor for SpecializerTransformer<'_> {
             }
             _ => self.walk_expr(expr),
         }
-    }
-}
-
-
-/// Walk every `NirFunction` body and replace `NirExprKind::Cast` nodes
-/// recorded in [`ClosureCanonicalSites`] with
-/// `NirExprKind::ClosureToCanonical`. This is the NIR-side completion of
-/// the placeholder rewrite that `lower::closure` performed on TIR via
-/// [`RemainingClosuresRewriter`] and [`SpecializerTransformer`].
-///
-/// `lower::globals` runs before `lower::closure` and operates on global
-/// initializers, not function bodies; closure-canonical wraps only ever
-/// land inside function bodies, so global initializers are not visited.
-pub(super) fn apply_closure_canonical_wraps(
-    nir: &mut NirPackage,
-    sites: &ClosureCanonicalSites,
-) {
-    if sites.is_empty() {
-        return;
-    }
-    let mut rewriter = CanonicalWrapApplier {
-        sites,
-        current_function: String::new(),
-    };
-    for func_rc in &nir.functions {
-        let mut func = func_rc.borrow_mut();
-        rewriter.current_function.clone_from(&func.name);
-        if let Some(body) = &mut func.body {
-            rewriter.visit_block(body);
-        }
-    }
-}
-
-struct CanonicalWrapApplier<'a> {
-    sites: &'a ClosureCanonicalSites,
-    current_function: String,
-}
-
-impl NirMutVisitor for CanonicalWrapApplier<'_> {
-    fn visit_expr(&mut self, expr: &mut NirExpr) {
-        self.walk_expr(expr);
-        // After recursing, check whether this node is a recorded Cast site
-        // and, if so, rewrite it as a ClosureToCanonical.
-        let span = expr.span;
-        let Some(meta) = self.sites.get(&(self.current_function.clone(), span)) else {
-            return;
-        };
-        // Only rewrite if it is still a Cast node — otherwise some other
-        // pass may have already consumed it (should not happen, but guard
-        // defensively).
-        let (inner, target_type) = if let NirExprKind::Cast { expr, target_type } = &mut expr.kind {
-            let dummy = NirExpr::new(NirExprKind::Unit, *target_type, span);
-            let inner = std::mem::replace(expr.as_mut(), dummy);
-            (Box::new(inner), *target_type)
-        } else {
-            return;
-        };
-        expr.kind = NirExprKind::ClosureToCanonical {
-            functor: inner,
-            functor_id: meta.functor_id,
-            target_fn_type: target_type,
-            closure_module: meta.closure_module.clone(),
-        };
     }
 }

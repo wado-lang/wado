@@ -161,7 +161,8 @@ pub trait TirMutVisitor {
             }
             | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantTest { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. } => {
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
                 self.visit_expr(inner);
             }
             TirExprKind::Assign { target, value }
@@ -420,7 +421,8 @@ pub trait TirRefVisitor {
             }
             | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantTest { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. } => {
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
                 self.visit_expr(inner);
             }
             TirExprKind::Assign { target, value }
@@ -718,6 +720,9 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
                 changed |= visitor.visit_expr(arg);
             }
         }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            changed |= visitor.visit_expr(functor);
+        }
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
             changed |= visitor.visit_block(block);
         }
@@ -904,7 +909,8 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
         }
         | TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. }
-        | TirExprKind::VariantPayload { expr, .. } => expr_has_break_to(label, expr),
+        | TirExprKind::VariantPayload { expr, .. }
+        | TirExprKind::ClosureToCanonical { functor: expr, .. } => expr_has_break_to(label, expr),
         TirExprKind::Index { expr, index }
         | TirExprKind::Assign {
             target: expr,

@@ -238,6 +238,9 @@ impl StringCollector {
                     self.collect_expr(arg);
                 }
             }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                self.collect_expr(functor);
+            }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload_expr) = payload {
                     self.collect_expr(payload_expr);
