@@ -23,23 +23,21 @@
 //! [`super::alias::build_value_copy_helpers`] for the per-function
 //! alias / helper computations the visitor consumes.
 
-use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::tir::{
-    FunctionRef, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
-    TypeTable,
+use crate::nir::{FunctionRef, NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind, NirUnaryOp};
+use crate::nir_package::NirPackage;
+use crate::nir_visitor::{
+    NirOptVisitor, NirRefVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt,
 };
-use crate::tir_visitor::{
-    TirOptVisitor, TirRefVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt,
-};
+use crate::tir::{TypeId, TypeTable};
 use crate::tiri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
 
 use super::alias::{build_alias_info, build_value_copy_helpers, recognize_value_copy};
 
 /// Apply constant folding to all functions in the project.
-pub fn fold_constants(project: &mut FlatPackage) -> bool {
+pub fn fold_constants(project: &mut NirPackage) -> bool {
     let mut changed = false;
     let type_table = project.type_table.borrow();
     // Build the CalleeMap once per pass with Rc handles aliased with
@@ -87,12 +85,12 @@ pub fn fold_constants(project: &mut FlatPackage) -> bool {
 }
 
 /// Pre-build the [`CalleeMap`] from every CTFE-eligible function in
-/// `project`. The map stores `Rc<RefCell<TirFunction>>` handles
+/// `project`. The map stores `Rc<RefCell<NirFunction>>` handles
 /// aliased with `project.functions`, so rebuilding the map every
 /// optimizer iteration costs only refcount bumps. The key shape
 /// `(module_source, full_name)` mirrors what `try_call_fold`
 /// synthesises from a `Call` node's `FunctionRef`.
-fn build_callee_map(project: &FlatPackage) -> CalleeMap {
+fn build_callee_map(project: &NirPackage) -> CalleeMap {
     let mut map = CalleeMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
@@ -117,7 +115,7 @@ fn build_callee_map(project: &FlatPackage) -> CalleeMap {
 /// `Unevaluated`. Globals whose initializer doesn't reduce are left
 /// out of the map (absent → `Lattice::Unevaluated` by default).
 fn build_global_env(
-    project: &FlatPackage,
+    project: &NirPackage,
     type_table: &TypeTable,
     callees: &CalleeMap,
 ) -> GlobalEnv {
@@ -154,8 +152,8 @@ struct ConstFoldVisitor<'a> {
     value_copy_helpers: &'a IndexMap<(ModuleSource, String), TypeId>,
 }
 
-impl TirOptVisitor for ConstFoldVisitor<'_> {
-    fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
+impl NirOptVisitor for ConstFoldVisitor<'_> {
+    fn visit_stmt(&mut self, stmt: &mut NirStmt) -> bool {
         // Control-flow stmts need branch-aware field-env handling so
         // a `local.field = …` inside a branch doesn't leak as known
         // field knowledge to code that runs only when the branch was
@@ -163,7 +161,7 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
         // channel is `let mut`, recorded preemptively as `NonConst`),
         // so the existing single-walk env handling stays intact.
         match &mut stmt.kind {
-            TirStmtKind::Loop { body } => {
+            NirStmtKind::Loop { body } => {
                 // Loop back-edge: any local assigned in the body must
                 // be `NonConst` for the body's first walk.
                 self.invalidate_locals_assigned_in(body);
@@ -174,7 +172,7 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
                 self.interpreter.clear_fields();
                 return changed;
             }
-            TirStmtKind::LabeledBlock { block, .. } => {
+            NirStmtKind::LabeledBlock { block, .. } => {
                 // Sequential scope: outer knowledge flows in, but a
                 // `break label: value` inside could skip writes that
                 // would otherwise have invalidated entries — drop on
@@ -183,28 +181,12 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
                 self.interpreter.clear_fields();
                 return changed;
             }
-            TirStmtKind::If {
+            NirStmtKind::If {
                 condition,
                 then_block,
                 else_block,
             } => {
                 let mut changed = self.visit_expr(condition);
-                let snap = self.interpreter.snapshot_fields();
-                changed |= self.visit_block(then_block);
-                self.interpreter.restore_fields(snap);
-                if let Some(eb) = else_block {
-                    changed |= self.visit_block(eb);
-                }
-                self.interpreter.clear_fields();
-                return changed;
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                let mut changed = self.visit_expr(scrutinee);
                 let snap = self.interpreter.snapshot_fields();
                 changed |= self.visit_block(then_block);
                 self.interpreter.restore_fields(snap);
@@ -224,7 +206,7 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
         changed
     }
 
-    fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
+    fn visit_expr(&mut self, expr: &mut NirExpr) -> bool {
         // `Assign { target, value }` is special-cased: the OUTER `target`
         // expression is an lvalue (write position) and tiri's leaf
         // rewrites — particularly the `FieldAccess(Local, field)`
@@ -234,7 +216,7 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
         // indexee of an `Index`) are read positions; walk those, but
         // leave the outer `target` shape opaque. After the walk,
         // observe what was assigned so the field env stays in sync.
-        if matches!(&expr.kind, TirExprKind::Assign { .. }) {
+        if matches!(&expr.kind, NirExprKind::Assign { .. }) {
             return self.visit_assign(expr);
         }
 
@@ -243,7 +225,7 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
         // field knowledge to code reachable only when another arm
         // ran.
         match &mut expr.kind {
-            TirExprKind::If {
+            NirExprKind::If {
                 condition,
                 then_branch,
                 else_branch,
@@ -259,7 +241,7 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
                 changed |= self.interpreter.reduce_local(expr);
                 return changed;
             }
-            TirExprKind::Match {
+            NirExprKind::Match {
                 expr: scrutinee,
                 arms,
             } => {
@@ -276,7 +258,7 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
                 changed |= self.interpreter.reduce_local(expr);
                 return changed;
             }
-            TirExprKind::Switch {
+            NirExprKind::Switch {
                 scrutinee,
                 arms,
                 default,
@@ -300,7 +282,7 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
                 changed |= self.interpreter.reduce_local(expr);
                 return changed;
             }
-            TirExprKind::Block(b) => {
+            NirExprKind::Block(b) => {
                 // Sequential scope; outer knowledge flows in. After
                 // the block, an interior `break label: value` could
                 // have skipped some writes, so clear conservatively.
@@ -309,19 +291,8 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
                 changed |= self.interpreter.reduce_local(expr);
                 return changed;
             }
-            TirExprKind::LabeledBlock { block, .. } => {
+            NirExprKind::LabeledBlock { block, .. } => {
                 let mut changed = self.visit_block(block);
-                self.interpreter.clear_fields();
-                changed |= self.interpreter.reduce_local(expr);
-                return changed;
-            }
-            TirExprKind::Closure { body, .. } => {
-                // Closure body executes in its own scope; clear
-                // before walking so the body sees a clean slate, and
-                // clear again after so outer code doesn't pick up
-                // anything leaked.
-                self.interpreter.clear_fields();
-                let mut changed = self.visit_expr(body);
                 self.interpreter.clear_fields();
                 changed |= self.interpreter.reduce_local(expr);
                 return changed;
@@ -338,7 +309,7 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
         changed
     }
 
-    fn visit_block(&mut self, block: &mut TirBlock) -> bool {
+    fn visit_block(&mut self, block: &mut NirBlock) -> bool {
         // Bottom-up: walk children first so each If stmt's condition is
         // already folded to a literal (when feasible) by the time we
         // ask the interpreter to splice the chosen branch into this block.
@@ -363,21 +334,21 @@ impl ConstFoldVisitor<'_> {
     /// - Any more complex target shape (`(*p).field = …`,
     ///   `arr[i] = …`, etc.): conservatively invalidate every
     ///   aliased local's fields.
-    fn visit_assign(&mut self, expr: &mut TirExpr) -> bool {
-        let TirExprKind::Assign { target, value } = &mut expr.kind else {
+    fn visit_assign(&mut self, expr: &mut NirExpr) -> bool {
+        let NirExprKind::Assign { target, value } = &mut expr.kind else {
             unreachable!("visit_assign called on non-Assign");
         };
         let mut changed = self.visit_expr(value);
         match &mut target.kind {
-            TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::Index { expr: inner, .. } => {
+            NirExprKind::FieldAccess { expr: inner, .. }
+            | NirExprKind::Index { expr: inner, .. } => {
                 changed |= self.visit_expr(inner);
             }
             _ => {}
         }
         // Field-env update based on the (post-walk) shape.
         match &target.kind {
-            TirExprKind::Local { index, .. } => {
+            NirExprKind::Local { index, .. } => {
                 // Invalidates the local's lattice AND drops any field
                 // knowledge tied to it. Captures field-knowledge
                 // transfer for `dst = src` (Local→Local copy on a ref
@@ -386,12 +357,12 @@ impl ConstFoldVisitor<'_> {
                 let dst = *index;
                 self.update_field_env_from_let(dst, value);
             }
-            TirExprKind::FieldAccess {
+            NirExprKind::FieldAccess {
                 expr: inner,
                 field_name,
                 ..
             } => match &inner.kind {
-                TirExprKind::Local { index, .. } => {
+                NirExprKind::Local { index, .. } => {
                     let local_index = *index;
                     self.interpreter.invalidate_field(local_index, field_name);
                     if let Some(v) = Value::from_literal_expr(value, self.type_table) {
@@ -420,12 +391,12 @@ impl ConstFoldVisitor<'_> {
     /// fields; `&mut local` escapes a mutable reference and drops
     /// `local`'s entry; struct / tuple / variant constructors that
     /// capture an aliased local invalidate aliased fields too.
-    fn update_field_env_from_expr(&mut self, expr: &TirExpr) {
+    fn update_field_env_from_expr(&mut self, expr: &NirExpr) {
         match &expr.kind {
-            TirExprKind::Call { args, func, .. } => {
+            NirExprKind::Call { args, func, .. } => {
                 for arg in args {
                     if arg.is_mut
-                        && let TirExprKind::Local { index, .. } = &arg.expr.kind
+                        && let NirExprKind::Local { index, .. } = &arg.expr.kind
                     {
                         self.interpreter.invalidate_local(*index);
                     }
@@ -441,35 +412,35 @@ impl ConstFoldVisitor<'_> {
                     self.interpreter.invalidate_aliased_fields();
                 }
             }
-            TirExprKind::MethodCall { receiver, args, .. } => {
+            NirExprKind::MethodCall { receiver, args, .. } => {
                 // Auto-ref hides &mut self: the receiver may have
                 // been mutated by the call.
-                if let TirExprKind::Local { index, .. } = &receiver.kind {
+                if let NirExprKind::Local { index, .. } = &receiver.kind {
                     self.interpreter.invalidate_local(*index);
                 }
                 for arg in args {
                     if arg.is_mut
-                        && let TirExprKind::Local { index, .. } = &arg.expr.kind
+                        && let NirExprKind::Local { index, .. } = &arg.expr.kind
                     {
                         self.interpreter.invalidate_local(*index);
                     }
                 }
                 self.interpreter.invalidate_aliased_fields();
             }
-            TirExprKind::IndirectCall { .. } | TirExprKind::CmRawCall { .. } => {
+            NirExprKind::IndirectCall { .. } | NirExprKind::CmRawCall { .. } => {
                 // Indirect callee is unknown — closures may capture
                 // and mutate any aliased local.
                 self.interpreter.invalidate_aliased_fields();
             }
-            TirExprKind::Unary {
-                op: TirUnaryOp::MutRef,
+            NirExprKind::Unary {
+                op: NirUnaryOp::MutRef,
                 expr: inner,
             } => {
-                if let TirExprKind::Local { index, .. } = &inner.kind {
+                if let NirExprKind::Local { index, .. } = &inner.kind {
                     self.interpreter.invalidate_local(*index);
                 }
             }
-            TirExprKind::StructLiteral { fields, .. } => {
+            NirExprKind::StructLiteral { fields, .. } => {
                 let aliased = self.interpreter.aliased_locals();
                 if fields
                     .iter()
@@ -478,7 +449,7 @@ impl ConstFoldVisitor<'_> {
                     self.interpreter.invalidate_aliased_fields();
                 }
             }
-            TirExprKind::TupleLiteral { elements, .. } => {
+            NirExprKind::TupleLiteral { elements, .. } => {
                 let aliased = self.interpreter.aliased_locals();
                 if elements
                     .iter()
@@ -487,7 +458,7 @@ impl ConstFoldVisitor<'_> {
                     self.interpreter.invalidate_aliased_fields();
                 }
             }
-            TirExprKind::VariantConstruct { payload, .. } => {
+            NirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(p) = payload
                     && value_captures_aliased_local(p, self.interpreter.aliased_locals())
                 {
@@ -500,40 +471,30 @@ impl ConstFoldVisitor<'_> {
 
     /// After a statement is walked, capture any introduced binding into
     /// the interpreter's env so subsequent uses can fold against it.
-    fn update_env_from_stmt(&mut self, stmt: &TirStmt) {
-        match &stmt.kind {
-            TirStmtKind::Let {
-                local_index,
-                is_mut,
-                value,
-                ..
-            } => {
-                let lat = if *is_mut {
-                    // `let mut x = …` — any later `x = …` would
-                    // invalidate the binding anyway. The interpreter
-                    // doesn't track flow-sensitive values for mutable
-                    // locals, so be conservative up front.
-                    Lattice::NonConst
-                } else {
-                    self.interpreter.reduce_to_lattice(value)
-                };
-                // Drop any prior knowledge keyed by this index (rare
-                // — a fresh `let` typically introduces a unique
-                // index, but defensive). This also clears stale field
-                // entries from a same-index reuse before we record
-                // new ones below.
-                self.interpreter.invalidate_local(*local_index);
-                self.interpreter.bind_local(*local_index, lat);
-                self.update_field_env_from_let(*local_index, value);
-            }
-            // LetDestructure binds multiple locals via pattern matching
-            // (`let [a, b] = tuple`). Tuple-aware lattice values aren't
-            // modelled yet, so leave the destructured locals
-            // Unevaluated. They'll resolve to NonConst the first time
-            // they're observed in env, which is the correct
-            // conservative answer.
-            TirStmtKind::LetDestructure { .. } => {}
-            _ => {}
+    fn update_env_from_stmt(&mut self, stmt: &NirStmt) {
+        if let NirStmtKind::Let {
+            local_index,
+            is_mut,
+            value,
+            ..
+        } = &stmt.kind
+        {
+            let lat = if *is_mut {
+                // `let mut x = …` — any later `x = …` would
+                // invalidate the binding anyway. The interpreter
+                // doesn't track flow-sensitive values for mutable
+                // locals, so be conservative up front.
+                Lattice::NonConst
+            } else {
+                self.interpreter.reduce_to_lattice(value)
+            };
+            // Drop any prior knowledge keyed by this index (rare —
+            // a fresh `let` typically introduces a unique index, but
+            // defensive). This also clears stale field entries from a
+            // same-index reuse before we record new ones below.
+            self.interpreter.invalidate_local(*local_index);
+            self.interpreter.bind_local(*local_index, lat);
+            self.update_field_env_from_let(*local_index, value);
         }
     }
 
@@ -555,7 +516,7 @@ impl ConstFoldVisitor<'_> {
     ///   equivalent to a deep copy. Reference-typed fields stay
     ///   un-forwarded so the shared backing they preserve doesn't
     ///   become a soundness hazard.
-    fn update_field_env_from_let(&mut self, local_index: u32, value: &TirExpr) {
+    fn update_field_env_from_let(&mut self, local_index: u32, value: &NirExpr) {
         // Unwrap a chained `$value_copy$T<id>(arg)` so the underlying
         // source's knowledge is what we read.
         let inner = match recognize_value_copy(value, self.value_copy_helpers) {
@@ -563,14 +524,14 @@ impl ConstFoldVisitor<'_> {
             None => value,
         };
         match &inner.kind {
-            TirExprKind::StructLiteral { fields, .. } => {
+            NirExprKind::StructLiteral { fields, .. } => {
                 for f in fields {
                     if let Some(v) = Value::from_literal_expr(&f.value, self.type_table) {
                         self.interpreter.bind_field(local_index, &f.name, v);
                     }
                 }
             }
-            TirExprKind::Local { index: src, .. } => {
+            NirExprKind::Local { index: src, .. } => {
                 self.interpreter.copy_fields_from(*src, local_index);
             }
             _ => {}
@@ -583,7 +544,7 @@ impl ConstFoldVisitor<'_> {
     /// the loop body is treated as making the local non-constant for
     /// the entire loop, which is the only sound choice without modelling
     /// loop iteration.
-    fn invalidate_locals_assigned_in(&mut self, block: &TirBlock) {
+    fn invalidate_locals_assigned_in(&mut self, block: &NirBlock) {
         let mut collector = AssignedLocalsCollector {
             targets: IndexSet::default(),
         };
@@ -600,15 +561,15 @@ impl ConstFoldVisitor<'_> {
 /// `field_forward` pass used inline; kept here so the const-fold
 /// visitor doesn't reach back into `optimize::alias`'s private
 /// module surface.
-fn value_captures_aliased_local(expr: &TirExpr, aliased: &IndexSet<u32>) -> bool {
+fn value_captures_aliased_local(expr: &NirExpr, aliased: &IndexSet<u32>) -> bool {
     match &expr.kind {
-        TirExprKind::Unary { op, expr: inner } => {
-            (matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
-                && matches!(inner.kind, TirExprKind::Local { .. }))
+        NirExprKind::Unary { op, expr: inner } => {
+            (matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
+                && matches!(inner.kind, NirExprKind::Local { .. }))
                 || value_captures_aliased_local(inner, aliased)
         }
-        TirExprKind::Local { index, .. } => aliased.contains(index),
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::Cast { expr: inner, .. } => {
+        NirExprKind::Local { index, .. } => aliased.contains(index),
+        NirExprKind::FieldAccess { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
             value_captures_aliased_local(inner, aliased)
         }
         _ => false,
@@ -622,10 +583,10 @@ struct AssignedLocalsCollector {
     targets: IndexSet<u32>,
 }
 
-impl TirRefVisitor for AssignedLocalsCollector {
-    fn visit_expr(&mut self, expr: &TirExpr) {
-        if let TirExprKind::Assign { target, .. } = &expr.kind
-            && let TirExprKind::Local { index, .. } = &target.kind
+impl NirRefVisitor for AssignedLocalsCollector {
+    fn visit_expr(&mut self, expr: &NirExpr) {
+        if let NirExprKind::Assign { target, .. } = &expr.kind
+            && let NirExprKind::Local { index, .. } = &target.kind
         {
             self.targets.insert(*index);
         }

@@ -5,9 +5,8 @@
 //! the struct definition and the primary translation dispatch.
 
 use crate::module_source::ModuleSource;
-use crate::tir::{
-    PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
-};
+use crate::nir::{NirBinaryOp, NirExpr, NirExprKind, NirUnaryOp};
+use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
 use super::translate::FunctionTranslator;
@@ -182,7 +181,7 @@ impl FunctionTranslator<'_, '_> {
     /// Translate a binary operation to WIR.
     pub(super) fn translate_binary_op(
         &self,
-        op: &TirBinaryOp,
+        op: &NirBinaryOp,
         left: Box<WirInstr>,
         right: Box<WirInstr>,
         left_type_id: TypeId,
@@ -190,25 +189,25 @@ impl FunctionTranslator<'_, '_> {
         let kind = PrimitiveKind::from_type_id(self.type_table, left_type_id);
 
         match op {
-            TirBinaryOp::Add => match kind {
+            NirBinaryOp::Add => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Add(left, right),
                 PrimitiveKind::F32 => WirInstr::F32Add(left, right),
                 k if k.is_i64() => WirInstr::I64Add(left, right),
                 _ => WirInstr::I32Add(left, right),
             },
-            TirBinaryOp::Sub => match kind {
+            NirBinaryOp::Sub => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Sub(left, right),
                 PrimitiveKind::F32 => WirInstr::F32Sub(left, right),
                 k if k.is_i64() => WirInstr::I64Sub(left, right),
                 _ => WirInstr::I32Sub(left, right),
             },
-            TirBinaryOp::Mul => match kind {
+            NirBinaryOp::Mul => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Mul(left, right),
                 PrimitiveKind::F32 => WirInstr::F32Mul(left, right),
                 k if k.is_i64() => WirInstr::I64Mul(left, right),
                 _ => WirInstr::I32Mul(left, right),
             },
-            TirBinaryOp::Div => match kind {
+            NirBinaryOp::Div => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Div(left, right),
                 PrimitiveKind::F32 => WirInstr::F32Div(left, right),
                 PrimitiveKind::I64Unsigned => WirInstr::I64DivU(left, right),
@@ -216,25 +215,25 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I32Unsigned => WirInstr::I32DivU(left, right),
                 _ => WirInstr::I32DivS(left, right),
             },
-            TirBinaryOp::Mod => match kind {
+            NirBinaryOp::Mod => match kind {
                 PrimitiveKind::I64Unsigned => WirInstr::I64RemU(left, right),
                 PrimitiveKind::I64Signed => WirInstr::I64RemS(left, right),
                 PrimitiveKind::I32Unsigned => WirInstr::I32RemU(left, right),
                 _ => WirInstr::I32RemS(left, right),
             },
-            TirBinaryOp::Eq => match kind {
+            NirBinaryOp::Eq => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Eq(left, right),
                 PrimitiveKind::F32 => WirInstr::F32Eq(left, right),
                 k if k.is_i64() => WirInstr::I64Eq(left, right),
                 _ => WirInstr::I32Eq(left, right),
             },
-            TirBinaryOp::NotEq => match kind {
+            NirBinaryOp::NotEq => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Ne(left, right),
                 PrimitiveKind::F32 => WirInstr::F32Ne(left, right),
                 k if k.is_i64() => WirInstr::I64Ne(left, right),
                 _ => WirInstr::I32Ne(left, right),
             },
-            TirBinaryOp::Lt => match kind {
+            NirBinaryOp::Lt => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Lt(left, right),
                 PrimitiveKind::F32 => WirInstr::F32Lt(left, right),
                 PrimitiveKind::I64Unsigned => WirInstr::I64LtU(left, right),
@@ -242,7 +241,7 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I32Unsigned => WirInstr::I32LtU(left, right),
                 _ => WirInstr::I32LtS(left, right),
             },
-            TirBinaryOp::LtEq => match kind {
+            NirBinaryOp::LtEq => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Le(left, right),
                 PrimitiveKind::F32 => WirInstr::F32Le(left, right),
                 PrimitiveKind::I64Unsigned => WirInstr::I64LeU(left, right),
@@ -250,7 +249,7 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I32Unsigned => WirInstr::I32LeU(left, right),
                 _ => WirInstr::I32LeS(left, right),
             },
-            TirBinaryOp::Gt => match kind {
+            NirBinaryOp::Gt => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Gt(left, right),
                 PrimitiveKind::F32 => WirInstr::F32Gt(left, right),
                 PrimitiveKind::I64Unsigned => WirInstr::I64GtU(left, right),
@@ -258,7 +257,7 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I32Unsigned => WirInstr::I32GtU(left, right),
                 _ => WirInstr::I32GtS(left, right),
             },
-            TirBinaryOp::GtEq => match kind {
+            NirBinaryOp::GtEq => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Ge(left, right),
                 PrimitiveKind::F32 => WirInstr::F32Ge(left, right),
                 PrimitiveKind::I64Unsigned => WirInstr::I64GeU(left, right),
@@ -266,63 +265,63 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I32Unsigned => WirInstr::I32GeU(left, right),
                 _ => WirInstr::I32GeS(left, right),
             },
-            TirBinaryOp::And | TirBinaryOp::BitAnd => {
+            NirBinaryOp::And | NirBinaryOp::BitAnd => {
                 if kind.is_i64() {
                     WirInstr::I64And(left, right)
                 } else {
                     WirInstr::I32And(left, right)
                 }
             }
-            TirBinaryOp::Or | TirBinaryOp::BitOr => {
+            NirBinaryOp::Or | NirBinaryOp::BitOr => {
                 if kind.is_i64() {
                     WirInstr::I64Or(left, right)
                 } else {
                     WirInstr::I32Or(left, right)
                 }
             }
-            TirBinaryOp::BitXor => {
+            NirBinaryOp::BitXor => {
                 if kind.is_i64() {
                     WirInstr::I64Xor(left, right)
                 } else {
                     WirInstr::I32Xor(left, right)
                 }
             }
-            TirBinaryOp::Shl => {
+            NirBinaryOp::Shl => {
                 if kind.is_i64() {
                     WirInstr::I64Shl(left, right)
                 } else {
                     WirInstr::I32Shl(left, right)
                 }
             }
-            TirBinaryOp::Shr => match kind {
+            NirBinaryOp::Shr => match kind {
                 PrimitiveKind::I64Unsigned => WirInstr::I64ShrU(left, right),
                 PrimitiveKind::I64Signed => WirInstr::I64ShrS(left, right),
                 k if k.is_unsigned() => WirInstr::I32ShrU(left, right),
                 _ => WirInstr::I32ShrS(left, right),
             },
-            TirBinaryOp::RefEq => WirInstr::RefEq(left, right),
-            TirBinaryOp::RefNotEq => WirInstr::I32Eqz(Box::new(WirInstr::RefEq(left, right))),
+            NirBinaryOp::RefEq => WirInstr::RefEq(left, right),
+            NirBinaryOp::RefNotEq => WirInstr::I32Eqz(Box::new(WirInstr::RefEq(left, right))),
         }
     }
 
     /// Translate a unary operation to WIR.
     pub(super) fn translate_unary_op(
         &self,
-        op: &TirUnaryOp,
+        op: &NirUnaryOp,
         operand: Box<WirInstr>,
         operand_type_id: TypeId,
     ) -> WirInstr {
         let kind = PrimitiveKind::from_type_id(self.type_table, operand_type_id);
 
         match op {
-            TirUnaryOp::Neg => match kind {
+            NirUnaryOp::Neg => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Neg(operand),
                 PrimitiveKind::F32 => WirInstr::F32Neg(operand),
                 k if k.is_i64() => WirInstr::I64Sub(Box::new(WirInstr::I64Const(0)), operand),
                 _ => WirInstr::I32Sub(Box::new(WirInstr::I32Const(0)), operand),
             },
-            TirUnaryOp::Not => WirInstr::I32Eqz(operand),
-            TirUnaryOp::BitNot => {
+            NirUnaryOp::Not => WirInstr::I32Eqz(operand),
+            NirUnaryOp::BitNot => {
                 if kind.is_i64() {
                     WirInstr::I64Xor(operand, Box::new(WirInstr::I64Const(-1)))
                 } else {
@@ -330,7 +329,7 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             // Ref/MutRef/Deref handled above in translate_expr
-            TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref => {
+            NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref => {
                 WirInstr::Seq(vec![*operand])
             }
         }
@@ -355,12 +354,12 @@ impl FunctionTranslator<'_, '_> {
     /// Translate a type cast.
     pub(super) fn translate_cast(
         &mut self,
-        inner: &TirExpr,
+        inner: &NirExpr,
         from_type: TypeId,
         to_type: TypeId,
     ) -> WirInstr {
         // Optimize: IntLiteral cast to i64/u64 → emit I64Const directly to avoid i32 truncation
-        if let TirExprKind::IntLiteral { value, .. } = &inner.kind
+        if let NirExprKind::IntLiteral { value, .. } = &inner.kind
             && matches!(
                 self.type_table.get(to_type),
                 ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
@@ -564,8 +563,8 @@ impl FunctionTranslator<'_, '_> {
     /// Translate array index read: `arr[i]`
     pub(super) fn translate_index(
         &mut self,
-        array_expr: &TirExpr,
-        index_expr: &TirExpr,
+        array_expr: &NirExpr,
+        index_expr: &NirExpr,
     ) -> WirInstr {
         let arr = self.translate_expr(array_expr);
         let idx = self.translate_expr(index_expr);
@@ -683,8 +682,8 @@ impl FunctionTranslator<'_, '_> {
     /// Translate array index assignment: `arr[i] = val`
     pub(super) fn translate_index_assign(
         &mut self,
-        array_expr: &TirExpr,
-        index_expr: &TirExpr,
+        array_expr: &NirExpr,
+        index_expr: &NirExpr,
         val: WirInstr,
     ) -> WirInstr {
         let arr = self.translate_expr(array_expr);

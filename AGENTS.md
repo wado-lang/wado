@@ -88,16 +88,16 @@ See `wado dump --help` for the full help.
 
 ```sh
 wado dump file.wado                  # show final WIR (default)
-wado dump --tir file.wado            # show final TIR (after optimization)
-wado dump --tir -O0 file.wado        # show TIR without optimization
+wado dump --nir file.wado            # show final NIR (after optimization)
+wado dump --nir -O0 file.wado        # show NIR without optimization
 wado dump --ast file.wado            # show parsed AST
 wado dump --desugared file.wado      # show desugared AST
 wado dump --modules file.wado        # show loaded modules
 wado dump --symbols file.wado        # show symbol table
 wado dump --types file.wado          # show type table
-wado dump --tir-resolved file.wado   # show TIR after type resolution
+wado dump --tir-resolved file.wado       # show TIR after type resolution
 wado dump --tir-monomorphized file.wado  # show TIR after monomorphization
-wado dump --tir-lowered file.wado    # show TIR after lowering
+wado dump --nir-lowered file.wado        # show NIR right after lowering (before optimize)
 ```
 
 Optimization levels: `-O0` (none), `-O1` (development), `-O2` (production, default), `-O3` (aggressive), `-Os` (`-O2` + strip symbols).

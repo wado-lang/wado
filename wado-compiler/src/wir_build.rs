@@ -1,10 +1,10 @@
-//! WIR build — translates linked TIR (`FlatPackage`) into a `WirPackage`.
+//! WIR build — translates linked TIR (`NirPackage`) into a `WirPackage`.
 //!
-//! Pipeline: `FlatPackage` → `build_wir_package` → `WirPackage`
+//! Pipeline: `NirPackage` → `build_wir_package` → `WirPackage`
 //!
 //! Emission (`WirPackage` → Wasm bytes) is handled by `codegen`.
 
-use crate::flat_package::FlatPackage;
+use crate::nir_package::NirPackage;
 use crate::wir::WirPackage;
 
 mod calls;
@@ -19,8 +19,8 @@ mod types;
 
 pub use context::DEFINED_FUNC_BASE;
 
-/// Build a `WirPackage` from a linked `FlatPackage`.
-pub fn build_wir_package(package: &FlatPackage) -> WirPackage {
+/// Build a `WirPackage` from a linked `NirPackage`.
+pub fn build_wir_package(package: &NirPackage) -> WirPackage {
     let mut ctx = context::WirContext::new(package);
 
     // Copy wasm_module attributes (already collected during link)

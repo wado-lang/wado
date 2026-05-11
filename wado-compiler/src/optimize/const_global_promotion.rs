@@ -11,17 +11,17 @@
 //! 2. Updates the global's initializer and marks it immutable
 //! 3. Removes all `GlobalVarSet` to promoted globals from all functions
 
-use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmtKind};
+use crate::nir::{NirBlock, NirExpr, NirExprKind, NirStmtKind};
+use crate::nir_package::NirPackage;
 
-use crate::tir_visitor::{TirOptVisitor, opt_walk_block, opt_walk_expr};
+use crate::nir_visitor::{NirOptVisitor, opt_walk_block, opt_walk_expr};
 
 type GlobalKey = (ModuleSource, String);
 
 /// Try to promote constant globals in the project.
-pub fn promote_constant_globals(project: &mut FlatPackage) -> bool {
+pub fn promote_constant_globals(project: &mut NirPackage) -> bool {
     // Build a lookup of promotable globals: currently Wasm-mutable but user-declared immutable
     let mut promotable: IndexMap<GlobalKey, usize> = IndexMap::default();
     for (idx, global) in project.globals.iter().enumerate() {
@@ -74,12 +74,12 @@ pub fn promote_constant_globals(project: &mut FlatPackage) -> bool {
 
 struct PromotionCollector<'a> {
     promotable: &'a IndexMap<GlobalKey, usize>,
-    promotions: IndexMap<GlobalKey, TirExprKind>,
+    promotions: IndexMap<GlobalKey, NirExprKind>,
 }
 
-impl TirOptVisitor for PromotionCollector<'_> {
-    fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
-        if let TirExprKind::GlobalVarSet {
+impl NirOptVisitor for PromotionCollector<'_> {
+    fn visit_expr(&mut self, expr: &mut NirExpr) -> bool {
+        if let NirExprKind::GlobalVarSet {
             module_source,
             name,
             value,
@@ -97,20 +97,20 @@ impl TirOptVisitor for PromotionCollector<'_> {
 }
 
 struct PromotionRemover<'a> {
-    promotions: &'a IndexMap<GlobalKey, TirExprKind>,
+    promotions: &'a IndexMap<GlobalKey, NirExprKind>,
 }
 
-impl TirOptVisitor for PromotionRemover<'_> {
-    fn visit_block(&mut self, block: &mut TirBlock) -> bool {
+impl NirOptVisitor for PromotionRemover<'_> {
+    fn visit_block(&mut self, block: &mut NirBlock) -> bool {
         // Recurse into nested blocks first
         opt_walk_block(self, block);
         // Then remove promoted GlobalVarSet stmts at this level
         let before = block.stmts.len();
         block.stmts.retain(|stmt| {
-            let TirStmtKind::Expr(expr) = &stmt.kind else {
+            let NirStmtKind::Expr(expr) = &stmt.kind else {
                 return true;
             };
-            let TirExprKind::GlobalVarSet {
+            let NirExprKind::GlobalVarSet {
                 module_source,
                 name,
                 ..
@@ -125,12 +125,12 @@ impl TirOptVisitor for PromotionRemover<'_> {
     }
 }
 
-fn is_scalar_constant(kind: &TirExprKind) -> bool {
+fn is_scalar_constant(kind: &NirExprKind) -> bool {
     matches!(
         kind,
-        TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
+        NirExprKind::IntLiteral { .. }
+            | NirExprKind::FloatLiteral { .. }
+            | NirExprKind::BoolLiteral(_)
+            | NirExprKind::CharLiteral(_)
     )
 }

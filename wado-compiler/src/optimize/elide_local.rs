@@ -10,12 +10,12 @@
 //! freshly dead expressions to the rest of the fixed-point loop
 //! (`copy_prop` / `const_fold` / `dce`), which the WIR-level pass cannot.
 
-use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
-use crate::tir::{TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind};
-use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind};
+use crate::nir_package::NirPackage;
+use crate::nir_visitor::{NirMutVisitor, NirRefVisitor};
 
-pub fn elide_write_only_locals(project: &mut FlatPackage) -> bool {
+pub fn elide_write_only_locals(project: &mut NirPackage) -> bool {
     let mut changed = false;
     let funcs = project.functions.clone();
     for func_rc in &funcs {
@@ -27,7 +27,7 @@ pub fn elide_write_only_locals(project: &mut FlatPackage) -> bool {
     changed
 }
 
-fn elide_in_function(func: &mut TirFunction) -> bool {
+fn elide_in_function(func: &mut NirFunction) -> bool {
     if func.body.is_none() {
         return false;
     }
@@ -71,32 +71,23 @@ struct ReadCollector<'a> {
     kept: &'a mut IndexSet<u32>,
 }
 
-impl TirRefVisitor for ReadCollector<'_> {
-    fn visit_expr(&mut self, expr: &TirExpr) {
+impl NirRefVisitor for ReadCollector<'_> {
+    fn visit_expr(&mut self, expr: &NirExpr) {
         match &expr.kind {
-            TirExprKind::Local { index, .. } => {
+            NirExprKind::Local { index, .. } => {
                 self.kept.insert(*index);
                 return;
             }
-            TirExprKind::Assign { target, value } => {
+            NirExprKind::Assign { target, value } => {
                 // The target's outer `Local` is a write, not a read. Recurse
                 // into nested writes (`a.field = ...`, `a[i] = ...`) to
                 // capture the read of `a`/`i`. Don't insert the bare
                 // `Local` target itself.
-                if !matches!(target.kind, TirExprKind::Local { .. }) {
+                if !matches!(target.kind, NirExprKind::Local { .. }) {
                     self.visit_expr(target);
                 }
                 self.visit_expr(value);
                 return;
-            }
-            TirExprKind::Closure { captures, .. } => {
-                for cap in captures {
-                    self.kept.insert(cap.outer_index);
-                }
-                // Walking the body is a conservative over-mark: closure-locals
-                // share the index namespace numerically but refer to a
-                // different function's locals, so any matches will only
-                // suppress elision (never produce a wrong transform).
             }
             _ => {}
         }
@@ -109,13 +100,13 @@ struct Elider<'a> {
     changed: bool,
 }
 
-impl TirMutVisitor for Elider<'_> {
-    fn visit_block(&mut self, block: &mut TirBlock) {
+impl NirMutVisitor for Elider<'_> {
+    fn visit_block(&mut self, block: &mut NirBlock) {
         let stmts = std::mem::take(&mut block.stmts);
         let mut new_stmts = Vec::with_capacity(stmts.len());
         for mut stmt in stmts {
             // `let x = expr;` where `x` is unread.
-            if let TirStmtKind::Let {
+            if let NirStmtKind::Let {
                 local_index, value, ..
             } = &mut stmt.kind
                 && !self.kept.contains(local_index)
@@ -125,7 +116,7 @@ impl TirMutVisitor for Elider<'_> {
                 if is_pure_expr(&value) {
                     continue;
                 }
-                new_stmts.push(TirStmt::new(TirStmtKind::Expr(value), stmt.span));
+                new_stmts.push(NirStmt::new(NirStmtKind::Expr(value), stmt.span));
                 continue;
             }
             // `x = value;` (Assign at stmt position) where `x` is unread.
@@ -134,9 +125,9 @@ impl TirMutVisitor for Elider<'_> {
             // then a downstream pass folds away the only read site. The
             // matching `let x;` declaration falls out at WIR cleanup once
             // every write to `x` is gone.
-            if let TirStmtKind::Expr(expr) = &mut stmt.kind
-                && let TirExprKind::Assign { target, value } = &mut expr.kind
-                && let TirExprKind::Local { index, .. } = &target.kind
+            if let NirStmtKind::Expr(expr) = &mut stmt.kind
+                && let NirExprKind::Assign { target, value } = &mut expr.kind
+                && let NirExprKind::Local { index, .. } = &target.kind
                 && !self.kept.contains(index)
             {
                 let value = std::mem::replace(value.as_mut(), dummy_unit_expr());
@@ -144,7 +135,7 @@ impl TirMutVisitor for Elider<'_> {
                 if is_pure_expr(&value) {
                     continue;
                 }
-                new_stmts.push(TirStmt::new(TirStmtKind::Expr(value), stmt.span));
+                new_stmts.push(NirStmt::new(NirStmtKind::Expr(value), stmt.span));
                 continue;
             }
             self.visit_stmt(&mut stmt);
@@ -156,7 +147,7 @@ impl TirMutVisitor for Elider<'_> {
 
 /// Public helper used by `dae` to collect locals that the function body reads
 /// (or whose addresses escape via captures). Insertion is done by `ReadCollector`.
-pub(super) fn collect_reads_in_block(block: &TirBlock, out: &mut IndexSet<u32>) {
+pub(super) fn collect_reads_in_block(block: &NirBlock, out: &mut IndexSet<u32>) {
     let mut collector = ReadCollector { kept: out };
     collector.visit_block(block);
 }
@@ -170,42 +161,40 @@ pub(super) fn collect_reads_in_block(block: &TirBlock, out: &mut IndexSet<u32>) 
 /// since the *act* of taking a reference does not mutate; only writing
 /// through the resulting reference would, and that shows up as a separate
 /// `Assign` / call. Mirrors the WIR-level `is_side_effect_free` contract.
-pub(super) fn is_pure_expr(expr: &TirExpr) -> bool {
+pub(super) fn is_pure_expr(expr: &NirExpr) -> bool {
     match &expr.kind {
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. } => true,
-        TirExprKind::Binary { left, right, .. } => is_pure_expr(left) && is_pure_expr(right),
-        TirExprKind::Unary { expr: inner, op } => {
+        NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::StringLiteral(_)
+        | NirExprKind::BytesLiteral(_)
+        | NirExprKind::Null
+        | NirExprKind::Unit
+        | NirExprKind::Local { .. }
+        | NirExprKind::GlobalVarGet { .. }
+        | NirExprKind::EnumConstruct { .. } => true,
+        NirExprKind::Binary { left, right, .. } => is_pure_expr(left) && is_pure_expr(right),
+        NirExprKind::Unary { expr: inner, op } => {
             // `&mut x` is a pure root by itself, but only meaningful when the
             // resulting reference is used; an unused MutRef has no observable
             // effect on the local because nothing reads/writes through it.
             let _ = op;
             is_pure_expr(inner)
         }
-        TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. } => is_pure_expr(inner),
-        TirExprKind::Index { expr: e, index: i } => is_pure_expr(e) && is_pure_expr(i),
-        TirExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| is_pure_expr(&f.value)),
-        TirExprKind::TupleLiteral { elements } => elements.iter().all(is_pure_expr),
-        TirExprKind::VariantConstruct { payload, .. } => {
+        NirExprKind::Cast { expr: inner, .. }
+        | NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::VariantTag { expr: inner }
+        | NirExprKind::VariantTest { expr: inner, .. }
+        | NirExprKind::VariantPayload { expr: inner, .. } => is_pure_expr(inner),
+        NirExprKind::Index { expr: e, index: i } => is_pure_expr(e) && is_pure_expr(i),
+        NirExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| is_pure_expr(&f.value)),
+        NirExprKind::TupleLiteral { elements } => elements.iter().all(is_pure_expr),
+        NirExprKind::VariantConstruct { payload, .. } => {
             payload.as_ref().is_none_or(|p| is_pure_expr(p))
         }
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => is_pure_block(block),
-        TirExprKind::If {
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => is_pure_block(block),
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -220,17 +209,17 @@ pub(super) fn is_pure_expr(expr: &TirExpr) -> bool {
     }
 }
 
-fn is_pure_block(block: &TirBlock) -> bool {
+fn is_pure_block(block: &NirBlock) -> bool {
     block.stmts.iter().all(|s| match &s.kind {
-        TirStmtKind::Expr(e) | TirStmtKind::Let { value: e, .. } => is_pure_expr(e),
+        NirStmtKind::Expr(e) | NirStmtKind::Let { value: e, .. } => is_pure_expr(e),
         _ => false,
     })
 }
 
-fn dummy_unit_expr() -> TirExpr {
+fn dummy_unit_expr() -> NirExpr {
     use crate::tir::TypeTable;
-    TirExpr::new(
-        TirExprKind::Unit,
+    NirExpr::new(
+        NirExprKind::Unit,
         TypeTable::UNIT,
         crate::token::Span::default(),
     )

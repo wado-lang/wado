@@ -6,16 +6,17 @@
 //! the struct definition and the primary translation dispatch.
 
 use crate::module_source::ModuleSource;
-use crate::tir::{CallArg, TirExpr, TirExprKind, TypeId, TypeTable};
+use crate::nir::{CallArg, NirExpr, NirExprKind};
+use crate::tir::{TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
 use super::context::WirContext;
 use super::translate::FunctionTranslator;
 
 /// Extract a compile-time constant i32 from a TIR expression (for SIMD lane indices).
-fn extract_i32_const(expr: &TirExpr) -> u8 {
+fn extract_i32_const(expr: &NirExpr) -> u8 {
     match &expr.kind {
-        TirExprKind::IntLiteral { value, .. } => *value as u8,
+        NirExprKind::IntLiteral { value, .. } => *value as u8,
         _ => panic!("SIMD lane index must be a constant integer literal"),
     }
 }
@@ -58,7 +59,7 @@ impl FunctionTranslator<'_, '_> {
     /// Resolve a TIR `FunctionRef` to a `WirFuncId`.
     pub(super) fn resolve_function_ref(
         &self,
-        func_ref: &crate::tir::FunctionRef,
+        func_ref: &crate::nir::FunctionRef,
     ) -> Option<crate::wir::WirFuncId> {
         let module_source = &func_ref.module_source;
         let name = &func_ref.name;
@@ -1746,8 +1747,8 @@ impl FunctionTranslator<'_, '_> {
     /// Translate `IndirectCall { callee, args }` to `call_ref` through canonical closure.
     pub(super) fn translate_indirect_call(
         &mut self,
-        callee: &TirExpr,
-        args: &[TirExpr],
+        callee: &NirExpr,
+        args: &[NirExpr],
         result_type: TypeId,
     ) -> WirInstr {
         let callee_wir = self.translate_expr(callee);
@@ -1866,7 +1867,7 @@ impl FunctionTranslator<'_, '_> {
     /// Translate `ClosureToCanonical` — convert a functor struct to canonical closure.
     pub(super) fn translate_closure_to_canonical(
         &mut self,
-        functor: &TirExpr,
+        functor: &NirExpr,
         functor_id: u32,
         target_fn_type: TypeId,
         closure_module: &ModuleSource,

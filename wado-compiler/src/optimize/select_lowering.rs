@@ -5,17 +5,17 @@
 //! Both branches must be pure (no side effects, no traps) since `select` evaluates both
 //! operands eagerly.
 
-use crate::flat_package::FlatPackage;
 use crate::module_source::ModuleSource;
-use crate::tir::{
-    CallArg, FunctionRef, MonomorphInfo, TirBlock, TirExpr, TirExprKind, TirStmtKind, TypeId,
-    TypeTable,
+use crate::nir::{
+    CallArg, FunctionRef, MonomorphInfo, NirBlock, NirExpr, NirExprKind, NirStmtKind,
 };
+use crate::nir_package::NirPackage;
+use crate::tir::{TypeId, TypeTable};
 
-use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
+use crate::nir_visitor::{NirOptVisitor, opt_walk_expr};
 
 /// Run select lowering on all functions.
-pub fn select_lowering(project: &mut FlatPackage) {
+pub fn select_lowering(project: &mut NirPackage) {
     let mut visitor = SelectLoweringVisitor;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
@@ -27,10 +27,10 @@ pub fn select_lowering(project: &mut FlatPackage) {
 
 struct SelectLoweringVisitor;
 
-impl TirOptVisitor for SelectLoweringVisitor {
-    fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
+impl NirOptVisitor for SelectLoweringVisitor {
+    fn visit_expr(&mut self, expr: &mut NirExpr) -> bool {
         let mut changed = false;
-        if let TirExprKind::If {
+        if let NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -48,22 +48,22 @@ impl TirOptVisitor for SelectLoweringVisitor {
     }
 }
 
-fn is_select_eligible_expr(expr: &TirExpr) -> bool {
+fn is_select_eligible_expr(expr: &NirExpr) -> bool {
     matches!(
         &expr.kind,
-        TirExprKind::Local { .. }
-            | TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
+        NirExprKind::Local { .. }
+            | NirExprKind::IntLiteral { .. }
+            | NirExprKind::FloatLiteral { .. }
+            | NirExprKind::BoolLiteral(_)
+            | NirExprKind::CharLiteral(_)
     )
 }
 
-fn try_select_value(block: &TirBlock) -> Option<&TirExpr> {
+fn try_select_value(block: &NirBlock) -> Option<&NirExpr> {
     if block.stmts.len() != 1 {
         return None;
     }
-    if let TirStmtKind::Expr(expr) = &block.stmts[0].kind
+    if let NirStmtKind::Expr(expr) = &block.stmts[0].kind
         && is_select_eligible_expr(expr)
     {
         return Some(expr);
@@ -72,12 +72,12 @@ fn try_select_value(block: &TirBlock) -> Option<&TirExpr> {
 }
 
 fn try_lower_to_select(
-    condition: &TirExpr,
-    then_branch: &TirBlock,
-    else_branch: &Option<TirBlock>,
+    condition: &NirExpr,
+    then_branch: &NirBlock,
+    else_branch: &Option<NirBlock>,
     result_type: TypeId,
     span: crate::token::Span,
-) -> Option<TirExpr> {
+) -> Option<NirExpr> {
     let else_block = else_branch.as_ref()?;
 
     if result_type == TypeTable::UNIT {
@@ -99,8 +99,8 @@ fn try_lower_to_select(
         method_info: None,
     };
 
-    Some(TirExpr::new(
-        TirExprKind::Call {
+    Some(NirExpr::new(
+        NirExprKind::Call {
             func: func_ref,
             type_args: vec![result_type],
             args: vec![

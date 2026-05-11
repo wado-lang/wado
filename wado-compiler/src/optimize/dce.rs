@@ -10,17 +10,15 @@
 
 use crate::hashmap::IndexSet;
 
-use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
     FreeFunctionName, FunctionId, MethodName, mangle_generic_name, mangle_local_method,
     mangle_local_trait_method, mangle_method_generic,
 };
-use crate::tir::{
-    ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirStmt, TirStmtKind,
-    TypeId, TypeTable,
-};
+use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirImport, NirStmt, NirStmtKind};
+use crate::nir_package::NirPackage;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;
@@ -43,7 +41,7 @@ struct FunctionAnalysis {
 /// and populates the project's `used_wasi_functions` field and the `imports`
 /// list. Returns the set of reachable functions for use by
 /// `remove_unreachable_functions`.
-pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
+pub fn analyze_project(project: &mut NirPackage) -> IndexSet<FunctionId> {
     // Phase 1a: build a provisional call graph that does NOT root the
     // per-functor `__Closure_N^Inspect[Alt]` impls from
     // `ClosureToCanonical`, then compute its reachable set. This
@@ -91,7 +89,7 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
 /// survive early DCE whenever the function flagged with `string_push_str`
 /// is reachable.
 fn extend_reachable_for_optimizer_passes(
-    project: &FlatPackage,
+    project: &NirPackage,
     call_graph: &CallGraph,
     reachable: &mut IndexSet<FunctionId>,
 ) {
@@ -136,7 +134,7 @@ fn extend_reachable_for_optimizer_passes(
         .iter()
         .filter_map(|func_rc| {
             let func = func_rc.borrow();
-            if let crate::tir::FunctionKind::ValueCopy { type_id } = func.kind {
+            if let crate::nir::FunctionKind::ValueCopy { type_id } = func.kind {
                 Some((type_id, function_id_for(&func)))
             } else {
                 None
@@ -168,18 +166,18 @@ fn extend_reachable_for_optimizer_passes(
 /// corresponding `$value_copy$T<id>` helper has to survive DCE because
 /// codegen will reach it by *name* at WIR time.
 fn collect_array_clone_element_types(
-    block: &crate::tir::TirBlock,
+    block: &crate::nir::NirBlock,
     out: &mut IndexSet<crate::tir::TypeId>,
 ) {
-    use crate::tir::{TirExpr, TirExprKind};
-    use crate::tir_visitor::TirRefVisitor;
+    use crate::nir::{NirExpr, NirExprKind};
+    use crate::nir_visitor::NirRefVisitor;
 
     struct Collector<'a> {
         out: &'a mut IndexSet<crate::tir::TypeId>,
     }
-    impl TirRefVisitor for Collector<'_> {
-        fn visit_expr(&mut self, expr: &TirExpr) {
-            if let TirExprKind::Call { func, .. } = &expr.kind
+    impl NirRefVisitor for Collector<'_> {
+        fn visit_expr(&mut self, expr: &NirExpr) {
+            if let NirExprKind::Call { func, .. } = &expr.kind
                 && func.module_source.is_core_builtin()
                 && func.name == "array_clone"
                 && let Some(mi) = func.monomorph_info.as_ref()
@@ -200,7 +198,7 @@ fn collect_array_clone_element_types(
 /// - `is_cm_export`: synthesized CM export wrappers (world-specific, always correct)
 /// - `is_export` in `wasm_module` sources: raw wasm exports with no CM wrapper
 fn compute_reachable_from_entries(
-    project: &FlatPackage,
+    project: &NirPackage,
     call_graph: &CallGraph,
 ) -> IndexSet<FunctionId> {
     let mut reachable = IndexSet::default();
@@ -229,7 +227,7 @@ fn compute_reachable_from_entries(
 /// Resolve WASI imports and populate `project.imports` and `project.used_wasi_functions`
 /// from the set of reachable functions and their effect usage.
 fn resolve_imports(
-    project: &mut FlatPackage,
+    project: &mut NirPackage,
     reachable: &IndexSet<FunctionId>,
     effect_usage: &EffectUsageMap,
 ) {
@@ -279,13 +277,13 @@ fn resolve_imports(
     }
 
     // Collect imports using registry lookup instead of hard-coded match
-    let mut imports: IndexSet<TirImport> = IndexSet::default();
+    let mut imports: IndexSet<NirImport> = IndexSet::default();
 
-    let add_import_by_name = |imports: &mut IndexSet<TirImport>, name: &str| {
+    let add_import_by_name = |imports: &mut IndexSet<NirImport>, name: &str| {
         if let Some(info) = project.builtin_registry.get(name)
             && let Some(canonical_name) = &info.canonical_name
         {
-            imports.insert(TirImport {
+            imports.insert(NirImport {
                 namespace: info.namespace.clone(),
                 canonical_name: canonical_name.clone(),
                 func_name: name.to_string(),
@@ -324,7 +322,7 @@ fn resolve_imports(
             if let Some(info) = project.builtin_registry.get("task_return")
                 && let Some(canonical_name) = &info.canonical_name
             {
-                imports.insert(TirImport {
+                imports.insert(NirImport {
                     namespace: info.namespace.clone(),
                     canonical_name: canonical_name.clone(),
                     func_name: "task_return".to_string(),
@@ -348,7 +346,7 @@ fn resolve_imports(
 }
 
 /// Filter string literals to only include strings from reachable functions.
-fn filter_string_literals(project: &mut FlatPackage, reachable: &IndexSet<FunctionId>) {
+fn filter_string_literals(project: &mut NirPackage, reachable: &IndexSet<FunctionId>) {
     // Keys are (module_source, function_name) — no collision possible.
     let mut reachable_strings: IndexSet<String> = IndexSet::default();
 
@@ -391,10 +389,10 @@ fn filter_string_literals(project: &mut FlatPackage, reachable: &IndexSet<Functi
 /// Filter bytes literals to only include bytes referenced by surviving functions.
 ///
 /// Unlike string literals (which have a `function_strings` map for per-function
-/// tracking), bytes literals are stored inline as `TirExprKind::BytesLiteral(Vec<u8>)`.
+/// tracking), bytes literals are stored inline as `NirExprKind::BytesLiteral(Vec<u8>)`.
 /// This function scans all surviving function bodies to collect referenced bytes,
 /// then retains only matching entries in `project.bytes_literals`.
-pub fn filter_bytes_literals(project: &mut FlatPackage) {
+pub fn filter_bytes_literals(project: &mut NirPackage) {
     let mut used_bytes: IndexSet<Vec<u8>> = IndexSet::default();
 
     for func_rc in &project.functions {
@@ -407,25 +405,25 @@ pub fn filter_bytes_literals(project: &mut FlatPackage) {
     project.bytes_literals.retain(|b| used_bytes.contains(b));
 }
 
-fn collect_bytes_literals_block(block: &TirBlock, used: &mut IndexSet<Vec<u8>>) {
+fn collect_bytes_literals_block(block: &NirBlock, used: &mut IndexSet<Vec<u8>>) {
     for stmt in &block.stmts {
         collect_bytes_literals_stmt(stmt, used);
     }
 }
 
-fn collect_bytes_literals_stmt(stmt: &TirStmt, used: &mut IndexSet<Vec<u8>>) {
+fn collect_bytes_literals_stmt(stmt: &NirStmt, used: &mut IndexSet<Vec<u8>>) {
     match &stmt.kind {
-        TirStmtKind::Let { value, .. }
-        | TirStmtKind::LetDestructure { value, .. }
-        | TirStmtKind::Expr(value) => {
+        NirStmtKind::Let { value, .. }
+        | NirStmtKind::LetDestructure { value, .. }
+        | NirStmtKind::Expr(value) => {
             collect_bytes_literals_expr(value, used);
         }
-        TirStmtKind::Return { value } => {
+        NirStmtKind::Return { value } => {
             if let Some(expr) = value {
                 collect_bytes_literals_expr(expr, used);
             }
         }
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -436,87 +434,68 @@ fn collect_bytes_literals_stmt(stmt: &TirStmt, used: &mut IndexSet<Vec<u8>>) {
                 collect_bytes_literals_block(else_blk, used);
             }
         }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_bytes_literals_expr(scrutinee, used);
-            collect_bytes_literals_block(then_block, used);
-            if let Some(else_blk) = else_block {
-                collect_bytes_literals_block(else_blk, used);
-            }
-        }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             collect_bytes_literals_block(body, used);
         }
-        TirStmtKind::Break { value, .. } => {
+        NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 collect_bytes_literals_expr(v, used);
             }
         }
-        TirStmtKind::Continue => {}
-        TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => {}
+        NirStmtKind::Continue => {}
     }
 }
 
-fn collect_bytes_literals_expr(expr: &TirExpr, used: &mut IndexSet<Vec<u8>>) {
+fn collect_bytes_literals_expr(expr: &NirExpr, used: &mut IndexSet<Vec<u8>>) {
     match &expr.kind {
-        TirExprKind::BytesLiteral(b) => {
+        NirExprKind::BytesLiteral(b) => {
             used.insert(b.clone());
         }
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             collect_bytes_literals_expr(left, used);
             collect_bytes_literals_expr(right, used);
         }
-        TirExprKind::Unary { expr, .. }
-        | TirExprKind::Cast { expr, .. }
-        | TirExprKind::FieldAccess { expr, .. }
-        | TirExprKind::TupleSpread { expr }
-        | TirExprKind::TupleZip { expr }
-        | TirExprKind::TypePackExpansion {
-            call_expr: expr, ..
-        }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. }
-        | TirExprKind::VariantPayload { expr, .. }
-        | TirExprKind::GlobalVarSet { value: expr, .. }
-        | TirExprKind::Closure { body: expr, .. }
-        | TirExprKind::ClosureToCanonical { functor: expr, .. } => {
+        NirExprKind::Unary { expr, .. }
+        | NirExprKind::Cast { expr, .. }
+        | NirExprKind::FieldAccess { expr, .. }
+        | NirExprKind::VariantTag { expr }
+        | NirExprKind::VariantTest { expr, .. }
+        | NirExprKind::VariantPayload { expr, .. }
+        | NirExprKind::GlobalVarSet { value: expr, .. }
+        | NirExprKind::ClosureToCanonical { functor: expr, .. } => {
             collect_bytes_literals_expr(expr, used);
         }
-        TirExprKind::Index { expr, index }
-        | TirExprKind::Assign {
+        NirExprKind::Index { expr, index }
+        | NirExprKind::Assign {
             target: expr,
             value: index,
         } => {
             collect_bytes_literals_expr(expr, used);
             collect_bytes_literals_expr(index, used);
         }
-        TirExprKind::Call { args, .. } => {
+        NirExprKind::Call { args, .. } => {
             for arg in args {
                 collect_bytes_literals_expr(&arg.expr, used);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             collect_bytes_literals_expr(receiver, used);
             for arg in args {
                 collect_bytes_literals_expr(&arg.expr, used);
             }
         }
-        TirExprKind::CmRawCall { args, .. } => {
+        NirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_bytes_literals_expr(arg, used);
             }
         }
-        TirExprKind::IndirectCall { callee, args } => {
+        NirExprKind::IndirectCall { callee, args } => {
             collect_bytes_literals_expr(callee, used);
             for arg in args {
                 collect_bytes_literals_expr(arg, used);
             }
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -527,7 +506,7 @@ fn collect_bytes_literals_expr(expr: &TirExpr, used: &mut IndexSet<Vec<u8>>) {
                 collect_bytes_literals_block(else_blk, used);
             }
         }
-        TirExprKind::Match { expr, arms } => {
+        NirExprKind::Match { expr, arms } => {
             collect_bytes_literals_expr(expr, used);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
@@ -536,25 +515,25 @@ fn collect_bytes_literals_expr(expr: &TirExpr, used: &mut IndexSet<Vec<u8>>) {
                 collect_bytes_literals_expr(&arm.body, used);
             }
         }
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             collect_bytes_literals_block(block, used);
         }
-        TirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } => {
             for e in elements {
                 collect_bytes_literals_expr(e, used);
             }
         }
-        TirExprKind::StructLiteral { fields, .. } => {
+        NirExprKind::StructLiteral { fields, .. } => {
             for f in fields {
                 collect_bytes_literals_expr(&f.value, used);
             }
         }
-        TirExprKind::VariantConstruct { payload, .. } => {
+        NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 collect_bytes_literals_expr(p, used);
             }
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -567,29 +546,21 @@ fn collect_bytes_literals_expr(expr: &TirExpr, used: &mut IndexSet<Vec<u8>>) {
             collect_bytes_literals_block(default, used);
         }
         // Leaf nodes — no children to recurse into
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::Unit
-        | TirExprKind::Null
-        | TirExprKind::Local { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. }
-        | TirExprKind::TemplateString { .. } => {}
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
+        NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::StringLiteral(_)
+        | NirExprKind::Unit
+        | NirExprKind::Null
+        | NirExprKind::Local { .. }
+        | NirExprKind::GlobalVarGet { .. }
+        | NirExprKind::EnumConstruct { .. } => {}
     }
 }
 
 /// Remove closure functors whose `__call` method was eliminated by function DCE.
-pub fn remove_unreachable_closure_functors(project: &mut FlatPackage) {
+pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
     // Build a set of surviving (module_source, func_name) pairs for O(1) lookup.
     // The __call method is named "{struct_name}::__call" (via MethodName::format_local).
     let surviving_funcs: IndexSet<(ModuleSource, String)> = project
@@ -609,7 +580,7 @@ pub fn remove_unreachable_closure_functors(project: &mut FlatPackage) {
 
 /// Build call graph and effect usage from all TIR functions
 fn build_analysis_graph_with(
-    project: &FlatPackage,
+    project: &NirPackage,
     inspectable_signatures: &InspectableSignatures,
 ) -> (CallGraph, EffectUsageMap) {
     let mut call_graph: CallGraph = IndexMap::default();
@@ -655,7 +626,7 @@ struct InspectableSignatures {
 /// to stay alive for an unrelated reachable closure of the same
 /// signature.
 fn collect_inspectable_signatures_from_reachable(
-    project: &FlatPackage,
+    project: &NirPackage,
     reachable: &IndexSet<FunctionId>,
 ) -> InspectableSignatures {
     let mut sigs = InspectableSignatures::default();
@@ -677,7 +648,7 @@ fn collect_inspectable_signatures_from_reachable(
 /// Mirrors the keying logic in `build_analysis_graph_with`; centralising
 /// it here so other passes (notably the inspectable-signatures scan)
 /// can compare against the call graph's reachable set.
-fn function_id_for(func: &TirFunction) -> FunctionId {
+fn function_id_for(func: &NirFunction) -> FunctionId {
     let module_source = &func.module_source;
     if let Some(ref info) = func.method_info {
         if let Some(monomorph_info) = &func.monomorph_info {
@@ -709,7 +680,7 @@ fn function_id_for(func: &TirFunction) -> FunctionId {
 }
 
 fn scan_inspect_signatures_block(
-    block: &TirBlock,
+    block: &NirBlock,
     type_table: &TypeTable,
     sigs: &mut InspectableSignatures,
 ) {
@@ -719,18 +690,18 @@ fn scan_inspect_signatures_block(
 }
 
 fn scan_inspect_signatures_stmt(
-    stmt: &TirStmt,
+    stmt: &NirStmt,
     type_table: &TypeTable,
     sigs: &mut InspectableSignatures,
 ) {
-    use crate::tir_visitor::TirRefVisitor;
+    use crate::nir_visitor::NirRefVisitor;
     struct Scanner<'a> {
         type_table: &'a TypeTable,
         sigs: &'a mut InspectableSignatures,
     }
-    impl TirRefVisitor for Scanner<'_> {
-        fn visit_expr(&mut self, expr: &TirExpr) {
-            if let TirExprKind::MethodCall { receiver, func, .. } = &expr.kind
+    impl NirRefVisitor for Scanner<'_> {
+        fn visit_expr(&mut self, expr: &NirExpr) {
+            if let NirExprKind::MethodCall { receiver, func, .. } = &expr.kind
                 && let Some(info) = &func.method_info
                 && info.base_struct_name == "Fn"
                 && let Some(trait_name) = info.base_trait_name.as_deref()
@@ -765,7 +736,7 @@ fn scan_inspect_signatures_stmt(
 
 /// Analyze a TIR function for callees and effect usage
 fn analyze_function(
-    func: &TirFunction,
+    func: &NirFunction,
     current_module: &ModuleSource,
     type_table: &TypeTable,
     inspectable_signatures: &InspectableSignatures,
@@ -785,7 +756,7 @@ fn analyze_function(
 }
 
 fn analyze_block(
-    block: &TirBlock,
+    block: &NirBlock,
     current_module: &ModuleSource,
     type_table: &TypeTable,
     inspectable_signatures: &InspectableSignatures,
@@ -793,7 +764,7 @@ fn analyze_block(
 ) {
     for stmt in &block.stmts {
         match &stmt.kind {
-            TirStmtKind::Let { value, .. } => {
+            NirStmtKind::Let { value, .. } => {
                 analyze_expr(
                     value,
                     current_module,
@@ -802,7 +773,7 @@ fn analyze_block(
                     analysis,
                 );
             }
-            TirStmtKind::Expr(expr) => {
+            NirStmtKind::Expr(expr) => {
                 analyze_expr(
                     expr,
                     current_module,
@@ -811,7 +782,7 @@ fn analyze_block(
                     analysis,
                 );
             }
-            TirStmtKind::Return { value } => {
+            NirStmtKind::Return { value } => {
                 if let Some(expr) = value {
                     analyze_expr(
                         expr,
@@ -822,7 +793,7 @@ fn analyze_block(
                     );
                 }
             }
-            TirStmtKind::If {
+            NirStmtKind::If {
                 condition,
                 then_block,
                 else_block,
@@ -851,7 +822,7 @@ fn analyze_block(
                     );
                 }
             }
-            TirStmtKind::Loop { body } => {
+            NirStmtKind::Loop { body } => {
                 analyze_block(
                     body,
                     current_module,
@@ -860,7 +831,7 @@ fn analyze_block(
                     analysis,
                 );
             }
-            TirStmtKind::LabeledBlock { block, .. } => {
+            NirStmtKind::LabeledBlock { block, .. } => {
                 analyze_block(
                     block,
                     current_module,
@@ -869,37 +840,7 @@ fn analyze_block(
                     analysis,
                 );
             }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                analyze_expr(
-                    scrutinee,
-                    current_module,
-                    type_table,
-                    inspectable_signatures,
-                    analysis,
-                );
-                analyze_block(
-                    then_block,
-                    current_module,
-                    type_table,
-                    inspectable_signatures,
-                    analysis,
-                );
-                if let Some(else_blk) = else_block {
-                    analyze_block(
-                        else_blk,
-                        current_module,
-                        type_table,
-                        inspectable_signatures,
-                        analysis,
-                    );
-                }
-            }
-            TirStmtKind::Break { value, .. } => {
+            NirStmtKind::Break { value, .. } => {
                 if let Some(v) = value {
                     analyze_expr(
                         v,
@@ -910,8 +851,8 @@ fn analyze_block(
                     );
                 }
             }
-            TirStmtKind::Continue => {}
-            TirStmtKind::LetDestructure { value, .. } => {
+            NirStmtKind::Continue => {}
+            NirStmtKind::LetDestructure { value, .. } => {
                 analyze_expr(
                     value,
                     current_module,
@@ -920,25 +861,19 @@ fn analyze_block(
                     analysis,
                 );
             }
-            TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            TirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
-            }
         }
     }
 }
 
 fn analyze_expr(
-    expr: &TirExpr,
+    expr: &NirExpr,
     current_module: &ModuleSource,
     type_table: &TypeTable,
     inspectable_signatures: &InspectableSignatures,
     analysis: &mut FunctionAnalysis,
 ) {
     match &expr.kind {
-        TirExprKind::Call { func, args, .. } => {
+        NirExprKind::Call { func, args, .. } => {
             let original_callee_module = func.module_source.clone();
             let func_name = func.name.clone();
 
@@ -1002,7 +937,7 @@ fn analyze_expr(
                 // Free function call
                 debug_assert!(
                     !func_name.contains("::") || func_name.starts_with("builtin::"),
-                    "TirExprKind::Call should not have method-style names: {func_name}"
+                    "NirExprKind::Call should not have method-style names: {func_name}"
                 );
 
                 let callee_module = original_callee_module.clone();
@@ -1027,7 +962,7 @@ fn analyze_expr(
                 );
             }
         }
-        TirExprKind::MethodCall {
+        NirExprKind::MethodCall {
             receiver,
             func,
             args,
@@ -1343,7 +1278,7 @@ fn analyze_expr(
                 );
             }
         }
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             analyze_expr(
                 left,
                 current_module,
@@ -1359,7 +1294,7 @@ fn analyze_expr(
                 analysis,
             );
         }
-        TirExprKind::Unary { expr, .. } => {
+        NirExprKind::Unary { expr, .. } => {
             analyze_expr(
                 expr,
                 current_module,
@@ -1368,7 +1303,7 @@ fn analyze_expr(
                 analysis,
             );
         }
-        TirExprKind::Assign { target, value } => {
+        NirExprKind::Assign { target, value } => {
             analyze_expr(
                 target,
                 current_module,
@@ -1384,7 +1319,7 @@ fn analyze_expr(
                 analysis,
             );
         }
-        TirExprKind::Cast { expr, .. } => {
+        NirExprKind::Cast { expr, .. } => {
             analyze_expr(
                 expr,
                 current_module,
@@ -1393,7 +1328,7 @@ fn analyze_expr(
                 analysis,
             );
         }
-        TirExprKind::CmRawCall { local_name, args } => {
+        NirExprKind::CmRawCall { local_name, args } => {
             // CmRawCall references a lowered WASI import function.
             // Parse the local_name (e.g., "wasi:cli/Stdout::write_via_stream")
             // to extract the interface_name and op_name for WASI import tracking.
@@ -1416,12 +1351,7 @@ fn analyze_expr(
                 );
             }
         }
-        TirExprKind::FieldAccess { expr, .. }
-        | TirExprKind::TupleSpread { expr }
-        | TirExprKind::TupleZip { expr }
-        | TirExprKind::TypePackExpansion {
-            call_expr: expr, ..
-        } => {
+        NirExprKind::FieldAccess { expr, .. } => {
             analyze_expr(
                 expr,
                 current_module,
@@ -1430,7 +1360,7 @@ fn analyze_expr(
                 analysis,
             );
         }
-        TirExprKind::Index { expr, index } => {
+        NirExprKind::Index { expr, index } => {
             analyze_expr(
                 expr,
                 current_module,
@@ -1446,7 +1376,7 @@ fn analyze_expr(
                 analysis,
             );
         }
-        TirExprKind::Block(block) => {
+        NirExprKind::Block(block) => {
             analyze_block(
                 block,
                 current_module,
@@ -1455,7 +1385,7 @@ fn analyze_expr(
                 analysis,
             );
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -1484,7 +1414,7 @@ fn analyze_expr(
                 );
             }
         }
-        TirExprKind::Match { expr, arms } => {
+        NirExprKind::Match { expr, arms } => {
             analyze_expr(
                 expr,
                 current_module,
@@ -1511,7 +1441,7 @@ fn analyze_expr(
                 );
             }
         }
-        TirExprKind::StructLiteral { fields, .. } => {
+        NirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
                 analyze_expr(
                     &field.value,
@@ -1522,7 +1452,7 @@ fn analyze_expr(
                 );
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 analyze_expr(
                     elem,
@@ -1533,16 +1463,7 @@ fn analyze_expr(
                 );
             }
         }
-        TirExprKind::Closure { body, .. } => {
-            analyze_expr(
-                body,
-                current_module,
-                type_table,
-                inspectable_signatures,
-                analysis,
-            );
-        }
-        TirExprKind::IndirectCall { callee, args } => {
+        NirExprKind::IndirectCall { callee, args } => {
             analyze_expr(
                 callee,
                 current_module,
@@ -1560,7 +1481,7 @@ fn analyze_expr(
                 );
             }
         }
-        TirExprKind::ClosureToCanonical {
+        NirExprKind::ClosureToCanonical {
             functor,
             functor_id,
             target_fn_type,
@@ -1615,7 +1536,7 @@ fn analyze_expr(
                 }
             }
         }
-        TirExprKind::VariantConstruct { payload, .. } => {
+        NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 analyze_expr(
                     payload_expr,
@@ -1626,7 +1547,7 @@ fn analyze_expr(
                 );
             }
         }
-        TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::LabeledBlock { block, .. } => {
             analyze_block(
                 block,
                 current_module,
@@ -1635,7 +1556,7 @@ fn analyze_expr(
                 analysis,
             );
         }
-        TirExprKind::GlobalVarSet { value, .. } => {
+        NirExprKind::GlobalVarSet { value, .. } => {
             analyze_expr(
                 value,
                 current_module,
@@ -1644,7 +1565,7 @@ fn analyze_expr(
                 analysis,
             );
         }
-        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
+        NirExprKind::VariantTag { expr } | NirExprKind::VariantTest { expr, .. } => {
             analyze_expr(
                 expr,
                 current_module,
@@ -1653,7 +1574,7 @@ fn analyze_expr(
                 analysis,
             );
         }
-        TirExprKind::VariantPayload { expr, .. } => {
+        NirExprKind::VariantPayload { expr, .. } => {
             analyze_expr(
                 expr,
                 current_module,
@@ -1662,7 +1583,7 @@ fn analyze_expr(
                 analysis,
             );
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -1693,27 +1614,17 @@ fn analyze_expr(
             );
         }
         // Leaf nodes - no calls
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. } => {}
-        TirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
+        NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::StringLiteral(_)
+        | NirExprKind::BytesLiteral(_)
+        | NirExprKind::Null
+        | NirExprKind::Unit
+        | NirExprKind::Local { .. }
+        | NirExprKind::GlobalVarGet { .. }
+        | NirExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -1783,7 +1694,7 @@ fn compute_reachable(
 /// After this, all remaining functions are reachable — downstream phases
 /// (`wir_build`, codegen) register every function without additional filtering.
 pub fn remove_unreachable_functions(
-    project: &mut FlatPackage,
+    project: &mut NirPackage,
     reachable_functions: &IndexSet<FunctionId>,
 ) {
     // Pre-index the reachable set by monomorphization metadata so the
@@ -1810,7 +1721,7 @@ pub fn remove_unreachable_functions(
         let func = func_rc.borrow();
         let module_source = &func.module_source;
 
-        // Use TirFunction's method_info to check if this is a method
+        // Use NirFunction's method_info to check if this is a method
         if let Some(ref info) = func.method_info {
             // Could be either:
             // - Instance method tracked as FunctionId::Method
@@ -1854,7 +1765,7 @@ pub fn remove_unreachable_functions(
 /// Compute the set of reachable types from reachable functions.
 /// A type is reachable if it's used in any reachable function's signature,
 /// locals, or expressions.
-fn compute_reachable_types(project: &FlatPackage) -> IndexSet<TypeId> {
+fn compute_reachable_types(project: &NirPackage) -> IndexSet<TypeId> {
     let mut reachable_types: IndexSet<TypeId> = IndexSet::default();
 
     // Always include primitive types (TypeId 0-17)
@@ -2031,7 +1942,7 @@ fn compute_reachable_types(project: &FlatPackage) -> IndexSet<TypeId> {
 
 /// Collect all types used in a function
 fn collect_types_from_function(
-    func: &TirFunction,
+    func: &NirFunction,
     type_table: &TypeTable,
     reachable: &mut IndexSet<TypeId>,
 ) {
@@ -2066,25 +1977,25 @@ fn collect_types_from_function(
 
 /// Collect types from a block
 fn collect_types_from_block(
-    block: &TirBlock,
+    block: &NirBlock,
     type_table: &TypeTable,
     reachable: &mut IndexSet<TypeId>,
 ) {
     for stmt in &block.stmts {
         match &stmt.kind {
-            TirStmtKind::Let { value, type_id, .. } => {
+            NirStmtKind::Let { value, type_id, .. } => {
                 collect_type_transitive(*type_id, type_table, reachable);
                 collect_types_from_expr(value, type_table, reachable);
             }
-            TirStmtKind::Expr(expr) => {
+            NirStmtKind::Expr(expr) => {
                 collect_types_from_expr(expr, type_table, reachable);
             }
-            TirStmtKind::Return { value } => {
+            NirStmtKind::Return { value } => {
                 if let Some(expr) = value {
                     collect_types_from_expr(expr, type_table, reachable);
                 }
             }
-            TirStmtKind::If {
+            NirStmtKind::If {
                 condition,
                 then_block,
                 else_block,
@@ -2095,40 +2006,21 @@ fn collect_types_from_block(
                     collect_types_from_block(else_blk, type_table, reachable);
                 }
             }
-            TirStmtKind::Loop { body } => {
+            NirStmtKind::Loop { body } => {
                 collect_types_from_block(body, type_table, reachable);
             }
-            TirStmtKind::LabeledBlock { block, .. } => {
+            NirStmtKind::LabeledBlock { block, .. } => {
                 collect_types_from_block(block, type_table, reachable);
             }
-            TirStmtKind::IfLet {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                collect_types_from_expr(scrutinee, type_table, reachable);
-                collect_types_from_pattern(pattern, type_table, reachable);
-                collect_types_from_block(then_block, type_table, reachable);
-                if let Some(else_blk) = else_block {
-                    collect_types_from_block(else_blk, type_table, reachable);
-                }
-            }
-            TirStmtKind::Break { value, .. } => {
+            NirStmtKind::Break { value, .. } => {
                 if let Some(v) = value {
                     collect_types_from_expr(v, type_table, reachable);
                 }
             }
-            TirStmtKind::Continue => {}
-            TirStmtKind::LetDestructure { pattern, value, .. } => {
+            NirStmtKind::Continue => {}
+            NirStmtKind::LetDestructure { pattern, value, .. } => {
                 collect_types_from_pattern(pattern, type_table, reachable);
                 collect_types_from_expr(value, type_table, reachable);
-            }
-            TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            TirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
             }
         }
     }
@@ -2136,7 +2028,7 @@ fn collect_types_from_block(
 
 /// Collect types from an expression
 fn collect_types_from_expr(
-    expr: &TirExpr,
+    expr: &NirExpr,
     type_table: &TypeTable,
     reachable: &mut IndexSet<TypeId>,
 ) {
@@ -2144,53 +2036,48 @@ fn collect_types_from_expr(
     collect_type_transitive(expr.type_id, type_table, reachable);
 
     match &expr.kind {
-        TirExprKind::Call { args, .. } => {
+        NirExprKind::Call { args, .. } => {
             for arg in args {
                 collect_types_from_expr(&arg.expr, type_table, reachable);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             collect_types_from_expr(receiver, type_table, reachable);
             for arg in args {
                 collect_types_from_expr(&arg.expr, type_table, reachable);
             }
         }
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             collect_types_from_expr(left, type_table, reachable);
             collect_types_from_expr(right, type_table, reachable);
         }
-        TirExprKind::Unary { expr, .. } => {
+        NirExprKind::Unary { expr, .. } => {
             collect_types_from_expr(expr, type_table, reachable);
         }
-        TirExprKind::Assign { target, value } => {
+        NirExprKind::Assign { target, value } => {
             collect_types_from_expr(target, type_table, reachable);
             collect_types_from_expr(value, type_table, reachable);
         }
-        TirExprKind::Cast { expr, target_type } => {
+        NirExprKind::Cast { expr, target_type } => {
             collect_types_from_expr(expr, type_table, reachable);
             collect_type_transitive(*target_type, type_table, reachable);
         }
-        TirExprKind::CmRawCall { args, .. } => {
+        NirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_types_from_expr(arg, type_table, reachable);
             }
         }
-        TirExprKind::FieldAccess { expr, .. }
-        | TirExprKind::TupleSpread { expr }
-        | TirExprKind::TupleZip { expr }
-        | TirExprKind::TypePackExpansion {
-            call_expr: expr, ..
-        } => {
+        NirExprKind::FieldAccess { expr, .. } => {
             collect_types_from_expr(expr, type_table, reachable);
         }
-        TirExprKind::Index { expr, index } => {
+        NirExprKind::Index { expr, index } => {
             collect_types_from_expr(expr, type_table, reachable);
             collect_types_from_expr(index, type_table, reachable);
         }
-        TirExprKind::Block(block) => {
+        NirExprKind::Block(block) => {
             collect_types_from_block(block, type_table, reachable);
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -2201,7 +2088,7 @@ fn collect_types_from_expr(
                 collect_types_from_block(else_blk, type_table, reachable);
             }
         }
-        TirExprKind::Match { expr, arms } => {
+        NirExprKind::Match { expr, arms } => {
             collect_types_from_expr(expr, type_table, reachable);
             for arm in arms {
                 collect_types_from_pattern(&arm.pattern, type_table, reachable);
@@ -2211,7 +2098,7 @@ fn collect_types_from_expr(
                 collect_types_from_expr(&arm.body, type_table, reachable);
             }
         }
-        TirExprKind::StructLiteral {
+        NirExprKind::StructLiteral {
             struct_type,
             fields,
             ..
@@ -2221,34 +2108,18 @@ fn collect_types_from_expr(
                 collect_types_from_expr(&field.value, type_table, reachable);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 collect_types_from_expr(elem, type_table, reachable);
             }
         }
-        TirExprKind::Closure {
-            params,
-            body,
-            captures,
-            ..
-        } => {
-            // Collect parameter types
-            for (_name, type_id) in params {
-                collect_type_transitive(*type_id, type_table, reachable);
-            }
-            // Collect capture types
-            for capture in captures {
-                collect_type_transitive(capture.type_id, type_table, reachable);
-            }
-            collect_types_from_expr(body, type_table, reachable);
-        }
-        TirExprKind::IndirectCall { callee, args } => {
+        NirExprKind::IndirectCall { callee, args } => {
             collect_types_from_expr(callee, type_table, reachable);
             for arg in args {
                 collect_types_from_expr(arg, type_table, reachable);
             }
         }
-        TirExprKind::ClosureToCanonical {
+        NirExprKind::ClosureToCanonical {
             functor,
             target_fn_type,
             ..
@@ -2256,7 +2127,7 @@ fn collect_types_from_expr(
             collect_types_from_expr(functor, type_table, reachable);
             collect_type_transitive(*target_fn_type, type_table, reachable);
         }
-        TirExprKind::VariantConstruct {
+        NirExprKind::VariantConstruct {
             variant_type,
             payload,
             ..
@@ -2266,22 +2137,22 @@ fn collect_types_from_expr(
                 collect_types_from_expr(payload_expr, type_table, reachable);
             }
         }
-        TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::LabeledBlock { block, .. } => {
             collect_types_from_block(block, type_table, reachable);
         }
-        TirExprKind::GlobalVarSet { value, .. } => {
+        NirExprKind::GlobalVarSet { value, .. } => {
             collect_types_from_expr(value, type_table, reachable);
         }
-        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
+        NirExprKind::VariantTag { expr } | NirExprKind::VariantTest { expr, .. } => {
             collect_types_from_expr(expr, type_table, reachable);
         }
-        TirExprKind::VariantPayload {
+        NirExprKind::VariantPayload {
             expr, payload_type, ..
         } => {
             collect_types_from_expr(expr, type_table, reachable);
             collect_type_transitive(*payload_type, type_table, reachable);
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -2294,50 +2165,40 @@ fn collect_types_from_expr(
             collect_types_from_block(default, type_table, reachable);
         }
         // Leaf nodes
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. } => {}
-        TirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
+        NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::StringLiteral(_)
+        | NirExprKind::BytesLiteral(_)
+        | NirExprKind::Null
+        | NirExprKind::Unit
+        | NirExprKind::Local { .. }
+        | NirExprKind::GlobalVarGet { .. }
+        | NirExprKind::EnumConstruct { .. } => {}
     }
 }
 
 /// Collect types from a pattern
 fn collect_types_from_pattern(
-    pattern: &crate::tir::TirPattern,
+    pattern: &crate::nir::NirPattern,
     type_table: &TypeTable,
     reachable: &mut IndexSet<TypeId>,
 ) {
-    use crate::tir::TirPattern;
+    use crate::nir::NirPattern;
 
     match pattern {
-        TirPattern::Wildcard => {}
-        TirPattern::Binding { type_id, .. } => {
+        NirPattern::Wildcard => {}
+        NirPattern::Binding { type_id, .. } => {
             collect_type_transitive(*type_id, type_table, reachable);
         }
-        TirPattern::Literal(_) | TirPattern::Range { .. } => {}
-        TirPattern::Tuple(patterns, _) => {
+        NirPattern::Literal(_) | NirPattern::Range { .. } => {}
+        NirPattern::Tuple(patterns, _) => {
             for p in patterns {
                 collect_types_from_pattern(p, type_table, reachable);
             }
         }
-        TirPattern::Variant {
+        NirPattern::Variant {
             enum_type,
             bindings,
             payload_type,
@@ -2349,10 +2210,10 @@ fn collect_types_from_pattern(
                 collect_types_from_pattern(binding, type_table, reachable);
             }
         }
-        TirPattern::Enum { enum_type, .. } => {
+        NirPattern::Enum { enum_type, .. } => {
             collect_type_transitive(*enum_type, type_table, reachable);
         }
-        TirPattern::Struct {
+        NirPattern::Struct {
             struct_type,
             fields,
             ..
@@ -2362,12 +2223,12 @@ fn collect_types_from_pattern(
                 collect_types_from_pattern(&field.pattern, type_table, reachable);
             }
         }
-        TirPattern::Or(alternatives) => {
+        NirPattern::Or(alternatives) => {
             for p in alternatives {
                 collect_types_from_pattern(p, type_table, reachable);
             }
         }
-        TirPattern::ConstantValue { expr } => {
+        NirPattern::ConstantValue { expr } => {
             collect_type_transitive(expr.type_id, type_table, reachable);
         }
     }
@@ -2444,7 +2305,7 @@ fn collect_type_dependencies(
 
 /// Remove unreachable types from the project's `TypeTable` and module definitions.
 /// This should be called after function DCE.
-pub fn remove_unreachable_types(project: &mut FlatPackage) {
+pub fn remove_unreachable_types(project: &mut NirPackage) {
     let reachable_types = compute_reachable_types(project);
 
     // Collect names of structs to keep
@@ -2567,7 +2428,7 @@ pub fn remove_unreachable_types(project: &mut FlatPackage) {
 /// 1. Its declaration is removed from `module.globals`
 /// 2. Any `GlobalVarSet` statements for it are removed from function bodies
 ///    (this covers both the original `__initialize_module` and inlined copies)
-pub fn remove_unreachable_globals(project: &mut FlatPackage) {
+pub fn remove_unreachable_globals(project: &mut NirPackage) {
     // Phase 1: Collect all GlobalVarGet references from surviving functions.
     // Key: (module_source path as string, global name)
     let mut used_globals: IndexSet<(String, String)> = IndexSet::default();
@@ -2595,23 +2456,25 @@ pub fn remove_unreachable_globals(project: &mut FlatPackage) {
 }
 
 /// Collect all `GlobalVarGet` references from a block.
-fn collect_global_reads_block(block: &TirBlock, used: &mut IndexSet<(String, String)>) {
+fn collect_global_reads_block(block: &NirBlock, used: &mut IndexSet<(String, String)>) {
     for stmt in &block.stmts {
         collect_global_reads_stmt(stmt, used);
     }
 }
 
-fn collect_global_reads_stmt(stmt: &TirStmt, used: &mut IndexSet<(String, String)>) {
+fn collect_global_reads_stmt(stmt: &NirStmt, used: &mut IndexSet<(String, String)>) {
     match &stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+        NirStmtKind::Let { value, .. }
+        | NirStmtKind::LetDestructure { value, .. }
+        | NirStmtKind::Expr(value) => {
             collect_global_reads_expr(value, used);
         }
-        TirStmtKind::Return { value } => {
+        NirStmtKind::Return { value } => {
             if let Some(expr) = value {
                 collect_global_reads_expr(expr, used);
             }
         }
-        TirStmtKind::If {
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -2622,84 +2485,60 @@ fn collect_global_reads_stmt(stmt: &TirStmt, used: &mut IndexSet<(String, String
                 collect_global_reads_block(else_blk, used);
             }
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             collect_global_reads_block(body, used);
         }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_global_reads_expr(scrutinee, used);
-            collect_global_reads_block(then_block, used);
-            if let Some(else_blk) = else_block {
-                collect_global_reads_block(else_blk, used);
-            }
-        }
-        TirStmtKind::Break { value, .. } => {
+        NirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 collect_global_reads_expr(v, used);
             }
         }
-        TirStmtKind::Continue => {}
-        TirStmtKind::LetDestructure { value, .. } => {
-            collect_global_reads_expr(value, used);
-        }
-        TirStmtKind::TaskReturn { .. } => {}
-        TirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
+        NirStmtKind::Continue => {}
     }
 }
 
-fn collect_global_reads_expr(expr: &TirExpr, used: &mut IndexSet<(String, String)>) {
+fn collect_global_reads_expr(expr: &NirExpr, used: &mut IndexSet<(String, String)>) {
     match &expr.kind {
-        TirExprKind::GlobalVarGet {
+        NirExprKind::GlobalVarGet {
             module_source,
             name,
         } => {
             used.insert((module_source.to_path().join("::"), name.clone()));
         }
         // Recurse into sub-expressions — mirrors analyze_expr structure
-        TirExprKind::Call { args, .. } => {
+        NirExprKind::Call { args, .. } => {
             for arg in args {
                 collect_global_reads_expr(&arg.expr, used);
             }
         }
-        TirExprKind::CmRawCall { args, .. } => {
+        NirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_global_reads_expr(arg, used);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
+        NirExprKind::MethodCall { receiver, args, .. } => {
             collect_global_reads_expr(receiver, used);
             for arg in args {
                 collect_global_reads_expr(&arg.expr, used);
             }
         }
-        TirExprKind::Binary { left, right, .. } => {
+        NirExprKind::Binary { left, right, .. } => {
             collect_global_reads_expr(left, used);
             collect_global_reads_expr(right, used);
         }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. } => {
+        NirExprKind::Unary { expr: inner, .. }
+        | NirExprKind::Cast { expr: inner, .. }
+        | NirExprKind::FieldAccess { expr: inner, .. }
+        | NirExprKind::VariantTag { expr: inner }
+        | NirExprKind::VariantTest { expr: inner, .. }
+        | NirExprKind::VariantPayload { expr: inner, .. } => {
             collect_global_reads_expr(inner, used);
         }
-        TirExprKind::Assign { target, value } => {
+        NirExprKind::Assign { target, value } => {
             collect_global_reads_expr(target, used);
             collect_global_reads_expr(value, used);
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -2710,44 +2549,41 @@ fn collect_global_reads_expr(expr: &TirExpr, used: &mut IndexSet<(String, String
                 collect_global_reads_block(else_blk, used);
             }
         }
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             collect_global_reads_block(block, used);
         }
-        TirExprKind::Index { expr, index } => {
+        NirExprKind::Index { expr, index } => {
             collect_global_reads_expr(expr, used);
             collect_global_reads_expr(index, used);
         }
-        TirExprKind::StructLiteral { fields, .. } => {
+        NirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
                 collect_global_reads_expr(&field.value, used);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 collect_global_reads_expr(elem, used);
             }
         }
-        TirExprKind::Closure { body, .. } => {
-            collect_global_reads_expr(body, used);
-        }
-        TirExprKind::IndirectCall { callee, args } => {
+        NirExprKind::IndirectCall { callee, args } => {
             collect_global_reads_expr(callee, used);
             for arg in args {
                 collect_global_reads_expr(arg, used);
             }
         }
-        TirExprKind::ClosureToCanonical { functor, .. } => {
+        NirExprKind::ClosureToCanonical { functor, .. } => {
             collect_global_reads_expr(functor, used);
         }
-        TirExprKind::VariantConstruct { payload, .. } => {
+        NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 collect_global_reads_expr(payload_expr, used);
             }
         }
-        TirExprKind::GlobalVarSet { value, .. } => {
+        NirExprKind::GlobalVarSet { value, .. } => {
             collect_global_reads_expr(value, used);
         }
-        TirExprKind::Match { expr, arms } => {
+        NirExprKind::Match { expr, arms } => {
             collect_global_reads_expr(expr, used);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
@@ -2756,7 +2592,7 @@ fn collect_global_reads_expr(expr: &TirExpr, used: &mut IndexSet<(String, String
                 collect_global_reads_expr(&arm.body, used);
             }
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -2769,26 +2605,16 @@ fn collect_global_reads_expr(expr: &TirExpr, used: &mut IndexSet<(String, String
             collect_global_reads_block(default, used);
         }
         // Leaf nodes — no GlobalVarGet possible
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. } => {}
-        TirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
+        NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::StringLiteral(_)
+        | NirExprKind::BytesLiteral(_)
+        | NirExprKind::Null
+        | NirExprKind::Unit
+        | NirExprKind::Local { .. }
+        | NirExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -2798,17 +2624,17 @@ fn collect_global_reads_expr(expr: &TirExpr, used: &mut IndexSet<(String, String
 /// effects), the `GlobalVarSet` is replaced with the value expression to
 /// preserve the side effects. For pure initializers (constants, struct/array
 /// literals without calls), the entire statement is removed.
-fn remove_dead_global_sets_block(block: &mut TirBlock, used: &IndexSet<(String, String)>) {
+fn remove_dead_global_sets_block(block: &mut NirBlock, used: &IndexSet<(String, String)>) {
     // Recurse into sub-statements first
     for stmt in &mut block.stmts {
         remove_dead_global_sets_stmt(stmt, used);
     }
 
     // Process GlobalVarSet statements for dead globals
-    let mut new_stmts: Vec<TirStmt> = Vec::with_capacity(block.stmts.len());
+    let mut new_stmts: Vec<NirStmt> = Vec::with_capacity(block.stmts.len());
     for stmt in std::mem::take(&mut block.stmts) {
-        if let TirStmtKind::Expr(ref expr) = stmt.kind
-            && let TirExprKind::GlobalVarSet {
+        if let NirStmtKind::Expr(ref expr) = stmt.kind
+            && let NirExprKind::GlobalVarSet {
                 ref module_source,
                 ref name,
                 ref value,
@@ -2820,7 +2646,7 @@ fn remove_dead_global_sets_block(block: &mut TirBlock, used: &IndexSet<(String, 
                 // Dead global: keep the value expression only if it has side effects
                 // (e.g., panic() / unreachable — detected via never type)
                 if expr_has_side_effects(value) {
-                    new_stmts.push(TirStmt::new(TirStmtKind::Expr(*value.clone()), stmt.span));
+                    new_stmts.push(NirStmt::new(NirStmtKind::Expr(*value.clone()), stmt.span));
                 }
                 continue;
             }
@@ -2834,15 +2660,15 @@ fn remove_dead_global_sets_block(block: &mut TirBlock, used: &IndexSet<(String, 
 ///
 /// Only diverging expressions (type `never` — e.g. `panic()`, `unreachable()`) are
 /// considered side effects. Pure function calls like array construction are not.
-fn expr_has_side_effects(expr: &TirExpr) -> bool {
+fn expr_has_side_effects(expr: &NirExpr) -> bool {
     if expr.type_id == TypeTable::NEVER {
         return true;
     }
     match &expr.kind {
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             block_has_side_effects(block)
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -2851,14 +2677,14 @@ fn expr_has_side_effects(expr: &TirExpr) -> bool {
                 || block_has_side_effects(then_branch)
                 || else_branch.as_ref().is_some_and(block_has_side_effects)
         }
-        TirExprKind::Match { expr, arms } => {
+        NirExprKind::Match { expr, arms } => {
             expr_has_side_effects(expr)
                 || arms.iter().any(|a| {
                     a.guard.as_ref().is_some_and(expr_has_side_effects)
                         || expr_has_side_effects(&a.body)
                 })
         }
-        TirExprKind::Switch {
+        NirExprKind::Switch {
             scrutinee,
             arms,
             default,
@@ -2868,23 +2694,15 @@ fn expr_has_side_effects(expr: &TirExpr) -> bool {
                 || arms.iter().any(block_has_side_effects)
                 || block_has_side_effects(default)
         }
-        TirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
-        }
         _ => false,
     }
 }
 
-fn block_has_side_effects(block: &TirBlock) -> bool {
+fn block_has_side_effects(block: &NirBlock) -> bool {
     block.stmts.iter().any(|stmt| match &stmt.kind {
-        TirStmtKind::Expr(e) | TirStmtKind::Let { value: e, .. } => expr_has_side_effects(e),
-        TirStmtKind::Return { value } => value.as_ref().is_some_and(expr_has_side_effects),
-        TirStmtKind::If {
+        NirStmtKind::Expr(e) | NirStmtKind::Let { value: e, .. } => expr_has_side_effects(e),
+        NirStmtKind::Return { value } => value.as_ref().is_some_and(expr_has_side_effects),
+        NirStmtKind::If {
             condition,
             then_block,
             else_block,
@@ -2893,33 +2711,21 @@ fn block_has_side_effects(block: &TirBlock) -> bool {
                 || block_has_side_effects(then_block)
                 || else_block.as_ref().is_some_and(block_has_side_effects)
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             block_has_side_effects(body)
         }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            expr_has_side_effects(scrutinee)
-                || block_has_side_effects(then_block)
-                || else_block.as_ref().is_some_and(block_has_side_effects)
-        }
-        TirStmtKind::Break { value, .. } => value.as_ref().is_some_and(expr_has_side_effects),
-        TirStmtKind::Continue
-        | TirStmtKind::TaskReturn { .. }
-        | TirStmtKind::VariadicForOf { .. } => false,
-        TirStmtKind::LetDestructure { value, .. } => expr_has_side_effects(value),
+        NirStmtKind::Break { value, .. } => value.as_ref().is_some_and(expr_has_side_effects),
+        NirStmtKind::Continue => false,
+        NirStmtKind::LetDestructure { value, .. } => expr_has_side_effects(value),
     })
 }
 
-fn remove_dead_global_sets_stmt(stmt: &mut TirStmt, used: &IndexSet<(String, String)>) {
+fn remove_dead_global_sets_stmt(stmt: &mut NirStmt, used: &IndexSet<(String, String)>) {
     match &mut stmt.kind {
-        TirStmtKind::Expr(expr) | TirStmtKind::Let { value: expr, .. } => {
+        NirStmtKind::Expr(expr) | NirStmtKind::Let { value: expr, .. } => {
             remove_dead_global_sets_expr(expr, used);
         }
-        TirStmtKind::If {
+        NirStmtKind::If {
             then_block,
             else_block,
             ..
@@ -2929,43 +2735,30 @@ fn remove_dead_global_sets_stmt(stmt: &mut TirStmt, used: &IndexSet<(String, Str
                 remove_dead_global_sets_block(else_blk, used);
             }
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             remove_dead_global_sets_block(body, used);
         }
-        TirStmtKind::IfLet {
-            then_block,
-            else_block,
-            ..
-        } => {
-            remove_dead_global_sets_block(then_block, used);
-            if let Some(else_blk) = else_block {
-                remove_dead_global_sets_block(else_blk, used);
-            }
-        }
-        TirStmtKind::Return { value } => {
+        NirStmtKind::Return { value } => {
             if let Some(expr) = value {
                 remove_dead_global_sets_expr(expr, used);
             }
         }
-        TirStmtKind::Break { value, .. } => {
+        NirStmtKind::Break { value, .. } => {
             if let Some(expr) = value {
                 remove_dead_global_sets_expr(expr, used);
             }
         }
-        TirStmtKind::Continue
-        | TirStmtKind::TaskReturn { .. }
-        | TirStmtKind::VariadicForOf { .. }
-        | TirStmtKind::LetDestructure { .. } => {}
+        NirStmtKind::Continue | NirStmtKind::LetDestructure { .. } => {}
     }
 }
 
 /// Recursively remove dead `GlobalVarSet` from expressions that contain blocks.
-fn remove_dead_global_sets_expr(expr: &mut TirExpr, used: &IndexSet<(String, String)>) {
+fn remove_dead_global_sets_expr(expr: &mut NirExpr, used: &IndexSet<(String, String)>) {
     match &mut expr.kind {
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             remove_dead_global_sets_block(block, used);
         }
-        TirExprKind::If {
+        NirExprKind::If {
             condition,
             then_branch,
             else_branch,
@@ -2976,10 +2769,7 @@ fn remove_dead_global_sets_expr(expr: &mut TirExpr, used: &IndexSet<(String, Str
                 remove_dead_global_sets_block(else_blk, used);
             }
         }
-        TirExprKind::Closure { body, .. } => {
-            remove_dead_global_sets_expr(body, used);
-        }
-        TirExprKind::Match {
+        NirExprKind::Match {
             expr: scrutinee,
             arms,
         } => {
@@ -2988,19 +2778,11 @@ fn remove_dead_global_sets_expr(expr: &mut TirExpr, used: &IndexSet<(String, Str
                 remove_dead_global_sets_expr(&mut arm.body, used);
             }
         }
-        TirExprKind::Switch { arms, default, .. } => {
+        NirExprKind::Switch { arms, default, .. } => {
             for arm in arms {
                 remove_dead_global_sets_block(arm, used);
             }
             remove_dead_global_sets_block(default, used);
-        }
-        TirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
         }
         _ => {}
     }

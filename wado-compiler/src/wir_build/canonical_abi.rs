@@ -6,7 +6,8 @@
 //! the struct definition and the primary translation dispatch.
 
 use crate::module_source::ModuleSource;
-use crate::tir::{CallArg, FunctionRef, PrimitiveType, ResolvedType, TirExpr, TirExprKind, TypeId};
+use crate::nir::{CallArg, FunctionRef, NirExpr, NirExprKind};
+use crate::tir::{PrimitiveType, ResolvedType, TypeId};
 use crate::wir::{
     CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirFuncId, WirInstr,
     WirType,
@@ -173,7 +174,7 @@ impl FunctionTranslator<'_, '_> {
     /// require payload-parameterized canonical imports.
     pub(super) fn try_translate_canonical_method(
         &mut self,
-        receiver: &TirExpr,
+        receiver: &NirExpr,
         func: &FunctionRef,
         args: &[CallArg],
         result_type_id: TypeId,
@@ -1431,8 +1432,8 @@ impl FunctionTranslator<'_, '_> {
 /// Used to special-case future writes that deliver a single resource handle
 /// (e.g. trailers) via the `Result<Option<own<R>>, _>` shape, since general
 /// variant→CM-buffer lowering is not yet implemented.
-fn match_ok_some_resource(expr: &TirExpr) -> Option<&TirExpr> {
-    let TirExprKind::VariantConstruct {
+fn match_ok_some_resource(expr: &NirExpr) -> Option<&NirExpr> {
+    let NirExprKind::VariantConstruct {
         case_name: outer,
         payload: Some(outer_payload),
         ..
@@ -1443,7 +1444,7 @@ fn match_ok_some_resource(expr: &TirExpr) -> Option<&TirExpr> {
     if outer != "Ok" {
         return None;
     }
-    let TirExprKind::VariantConstruct {
+    let NirExprKind::VariantConstruct {
         case_name: inner,
         payload: Some(inner_payload),
         ..
@@ -1458,9 +1459,9 @@ fn match_ok_some_resource(expr: &TirExpr) -> Option<&TirExpr> {
 }
 
 /// Detect `Result::Ok(Option::None)` or `Result::Ok(null)` at TIR level.
-/// `null` stays as `TirExprKind::Null` in TIR (coerced to `Option::None` later).
-fn match_ok_none(expr: &TirExpr) -> bool {
-    let TirExprKind::VariantConstruct {
+/// `null` stays as `NirExprKind::Null` in TIR (coerced to `Option::None` later).
+fn match_ok_none(expr: &NirExpr) -> bool {
+    let NirExprKind::VariantConstruct {
         case_name: outer,
         payload: Some(outer_payload),
         ..
@@ -1472,8 +1473,8 @@ fn match_ok_none(expr: &TirExpr) -> bool {
         return false;
     }
     match &outer_payload.kind {
-        TirExprKind::Null => true,
-        TirExprKind::VariantConstruct {
+        NirExprKind::Null => true,
+        NirExprKind::VariantConstruct {
             case_name: inner,
             payload,
             ..

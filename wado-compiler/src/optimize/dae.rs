@@ -41,19 +41,19 @@
 //! `^InspectAlt` impls, where the matching wrapper adapts to the
 //! shrunken signature. Everything else flows through the general path.
 
-use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::{
-    FunctionKind, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind,
+use crate::nir::{
+    FunctionKind, NirExpr, NirExprKind, NirFunction, NirPattern, NirStmt, NirStmtKind,
 };
-use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::nir_package::NirPackage;
+use crate::nir_visitor::{NirMutVisitor, NirRefVisitor};
 
 use super::elide_local::is_pure_expr;
 
 pub(super) type FnKey = (ModuleSource, String);
 
-pub fn eliminate_dead_arguments(project: &mut FlatPackage) -> bool {
+pub fn eliminate_dead_arguments(project: &mut NirPackage) -> bool {
     let pinned = collect_pinned(project);
     let closure_call_keys = collect_closure_call_keys(project);
 
@@ -108,7 +108,7 @@ pub fn eliminate_dead_arguments(project: &mut FlatPackage) -> bool {
 ///   call wrapper does, so DAE can safely drop the `self` (env) param
 ///   from the inspect impl when its synthesised body
 ///   (`f.write_str("...")`) doesn't read it.
-fn collect_closure_call_keys(project: &FlatPackage) -> IndexSet<FnKey> {
+fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
     let mut keys: IndexSet<FnKey> = IndexSet::default();
     let functor_struct_names: IndexSet<(ModuleSource, String)> = project
         .closure_functors
@@ -143,7 +143,7 @@ fn collect_closure_call_keys(project: &FlatPackage) -> IndexSet<FnKey> {
     keys
 }
 
-fn is_eligible(func: &TirFunction, pinned: &IndexSet<FnKey>, is_closure_dae_relaxed: bool) -> bool {
+fn is_eligible(func: &NirFunction, pinned: &IndexSet<FnKey>, is_closure_dae_relaxed: bool) -> bool {
     if func.body.is_none() {
         return false;
     }
@@ -206,7 +206,7 @@ fn is_eligible(func: &TirFunction, pinned: &IndexSet<FnKey>, is_closure_dae_rela
 /// validator (`CallSiteValidator`) gates this on receiver purity so
 /// that dropping the receiver evaluation cannot strip an observable
 /// effect.
-fn find_dead_params(func: &TirFunction) -> Vec<bool> {
+fn find_dead_params(func: &NirFunction) -> Vec<bool> {
     if func.params.is_empty() {
         return Vec::new();
     }
@@ -228,59 +228,25 @@ fn find_dead_params(func: &TirFunction) -> Vec<bool> {
     dead
 }
 
-pub(super) fn collect_pinned(project: &FlatPackage) -> IndexSet<FnKey> {
-    let mut pinned: IndexSet<FnKey> = IndexSet::default();
-    let mut walker = FuncRefCollector { out: &mut pinned };
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        if let Some(body) = &func.body {
-            walker.visit_block(body);
-        }
-    }
-    for global in &project.globals {
-        walker.visit_expr(&global.initializer);
-    }
-    // Closure functor `__call` methods are NOT pinned wholesale.
-    //
-    // `wir_build::register_closure_wrappers` derives the function-table
-    // wrapper's external signature from `ClosureFunctor::canonical_user_params`
-    // / `canonical_return` — a snapshot taken at functor creation that DAE
-    // never mutates — and the wrapper body adapts to whichever
-    // `call_method.params` survive. So even when the closure is coerced to
-    // a typed `fn(...)` and dispatched through the table, DAE shrinking
-    // `__call.params` is safe: the table-level signature stays put, and
-    // the wrapper drops the corresponding wrapper-local from its inner
-    // call.
-    //
-    // Trait-shaped `__call`s (`^Inspect::inspect` /
-    // `^InspectAlt::inspect_alt`) are still skipped by `is_eligible`'s
-    // `trait_name` check, since their cross-impl signature contract is a
-    // separate concern from the closure-functor / wrapper boundary.
-    pinned
-}
-
-struct FuncRefCollector<'a> {
-    out: &'a mut IndexSet<FnKey>,
-}
-
-impl TirRefVisitor for FuncRefCollector<'_> {
-    fn visit_expr(&mut self, expr: &TirExpr) {
-        if let TirExprKind::FuncRef {
-            module_source,
-            name,
-        } = &expr.kind
-        {
-            self.out.insert((module_source.clone(), name.clone()));
-        }
-        self.walk_expr(expr);
-    }
+pub(super) fn collect_pinned(_project: &NirPackage) -> IndexSet<FnKey> {
+    // `FuncRef` is lowered into a `Closure` literal (functor struct) by
+    // `lower::closure` before NIR is constructed, so there is no bare
+    // function reference left to pin. Closure functor `__call` methods are
+    // NOT pinned wholesale either — `wir_build::register_closure_wrappers`
+    // derives the function-table wrapper's external signature from
+    // `ClosureFunctor::canonical_user_params` / `canonical_return`, a
+    // snapshot taken at functor creation that DAE never mutates, and the
+    // wrapper body adapts to whichever `call_method.params` survive.
+    // Trait-shaped `__call`s (`^Inspect::inspect` / `^InspectAlt`) are
+    // skipped separately by `is_eligible`'s `trait_name` check.
+    IndexSet::default()
 }
 
 /// Walk every call site once per validation. A single impure argument at a
 /// dead position drops the candidate completely so we never end up rewriting
 /// some sites and not others.
 fn validate_call_sites(
-    project: &FlatPackage,
+    project: &NirPackage,
     mut candidates: IndexMap<FnKey, Vec<bool>>,
 ) -> IndexMap<FnKey, Vec<bool>> {
     let mut validator = CallSiteValidator {
@@ -307,10 +273,10 @@ struct CallSiteValidator<'a> {
     rejected: IndexSet<FnKey>,
 }
 
-impl TirRefVisitor for CallSiteValidator<'_> {
-    fn visit_expr(&mut self, expr: &TirExpr) {
+impl NirRefVisitor for CallSiteValidator<'_> {
+    fn visit_expr(&mut self, expr: &NirExpr) {
         match &expr.kind {
-            TirExprKind::Call { func, args, .. } => {
+            NirExprKind::Call { func, args, .. } => {
                 let key = (func.module_source.clone(), func.name.clone());
                 if let Some(dead) = self.candidates.get(&key)
                     && !self.rejected.contains(&key)
@@ -333,7 +299,7 @@ impl TirRefVisitor for CallSiteValidator<'_> {
                     }
                 }
             }
-            TirExprKind::MethodCall {
+            NirExprKind::MethodCall {
                 func,
                 receiver,
                 args,
@@ -376,7 +342,7 @@ impl TirRefVisitor for CallSiteValidator<'_> {
     }
 }
 
-fn apply_dae(project: &mut FlatPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) {
+fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) {
     // Phase 3a: shrink the parameter list of every confirmed callee, then
     // renumber locals so `params[k].local_index == k` continues to hold.
     // `wir_build/translate.rs` declares `locals[i] for i >= params.len()`
@@ -409,14 +375,14 @@ struct CallRewriter<'a> {
     confirmed: &'a IndexMap<FnKey, Vec<bool>>,
 }
 
-impl TirMutVisitor for CallRewriter<'_> {
-    fn visit_expr(&mut self, expr: &mut TirExpr) {
+impl NirMutVisitor for CallRewriter<'_> {
+    fn visit_expr(&mut self, expr: &mut NirExpr) {
         // First descend so nested calls are rewritten with the same rules
         // before we mutate the current expression's shape.
         self.walk_expr(expr);
 
         match &mut expr.kind {
-            TirExprKind::Call { func, args, .. } => {
+            NirExprKind::Call { func, args, .. } => {
                 let key = (func.module_source.clone(), func.name.clone());
                 if let Some(dead) = self.confirmed.get(&key) {
                     let mut i = 0;
@@ -427,7 +393,7 @@ impl TirMutVisitor for CallRewriter<'_> {
                     });
                 }
             }
-            TirExprKind::MethodCall { func, args, .. } => {
+            NirExprKind::MethodCall { func, args, .. } => {
                 let key = (func.module_source.clone(), func.name.clone());
                 let Some(dead) = self.confirmed.get(&key).cloned() else {
                     return;
@@ -439,12 +405,12 @@ impl TirMutVisitor for CallRewriter<'_> {
                     // `Call(method_func, surviving_args)`. The receiver
                     // expression has already been verified pure by
                     // `CallSiteValidator`; dropping it is safe.
-                    let TirExprKind::MethodCall {
+                    let NirExprKind::MethodCall {
                         func,
                         type_args,
                         args,
                         ..
-                    } = std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+                    } = std::mem::replace(&mut expr.kind, NirExprKind::Unit)
                     else {
                         unreachable!();
                     };
@@ -456,7 +422,7 @@ impl TirMutVisitor for CallRewriter<'_> {
                         }
                         new_args.push(arg);
                     }
-                    expr.kind = TirExprKind::Call {
+                    expr.kind = NirExprKind::Call {
                         func,
                         type_args,
                         args: new_args,
@@ -479,7 +445,7 @@ impl TirMutVisitor for CallRewriter<'_> {
     }
 }
 
-fn shrink_params_and_renumber(func: &mut TirFunction, dead: &[bool]) {
+fn shrink_params_and_renumber(func: &mut NirFunction, dead: &[bool]) {
     // Compute the set of dead local_indices (one per dead param).
     let mut dead_local_indices: IndexSet<u32> = IndexSet::default();
     for (i, &d) in dead.iter().enumerate() {
@@ -539,7 +505,7 @@ fn shrink_params_and_renumber(func: &mut TirFunction, dead: &[bool]) {
         .collect();
 
     // Apply the remap to every Local / Capture reference in the body via a
-    // generic `TirMutVisitor` walk, overriding only the leaves that carry
+    // generic `NirMutVisitor` walk, overriding only the leaves that carry
     // local indices. The `Closure` arm explicitly stops the walk before
     // entering the closure body — closure-locals live in a separate index
     // namespace and the outer remap must not touch them.
@@ -558,37 +524,26 @@ impl LocalRemap<'_> {
     }
 }
 
-impl TirMutVisitor for LocalRemap<'_> {
-    fn visit_expr(&mut self, expr: &mut TirExpr) {
+impl NirMutVisitor for LocalRemap<'_> {
+    fn visit_expr(&mut self, expr: &mut NirExpr) {
         match &mut expr.kind {
-            TirExprKind::Local { index, .. } => *index = self.lookup(*index),
-            TirExprKind::Closure { captures, .. } => {
-                for cap in captures {
-                    cap.outer_index = self.lookup(cap.outer_index);
-                }
-                // Do NOT recurse into the closure body — its `Local` nodes
-                // index the closure's own locals, not the outer function's.
-            }
+            NirExprKind::Local { index, .. } => *index = self.lookup(*index),
             _ => self.walk_expr(expr),
         }
     }
 
-    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
+    fn visit_stmt(&mut self, stmt: &mut NirStmt) {
         match &mut stmt.kind {
-            TirStmtKind::Let { local_index, .. } => {
+            NirStmtKind::Let { local_index, .. } => {
                 *local_index = self.lookup(*local_index);
-                self.walk_stmt(stmt);
-            }
-            TirStmtKind::VariadicForOf { binding_local, .. } => {
-                *binding_local = self.lookup(*binding_local);
                 self.walk_stmt(stmt);
             }
             _ => self.walk_stmt(stmt),
         }
     }
 
-    fn visit_pattern(&mut self, pattern: &mut TirPattern) {
-        if let TirPattern::Binding { local_index, .. } = pattern {
+    fn visit_pattern(&mut self, pattern: &mut NirPattern) {
+        if let NirPattern::Binding { local_index, .. } = pattern {
             *local_index = self.lookup(*local_index);
         }
         self.walk_pattern(pattern);

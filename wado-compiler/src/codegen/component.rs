@@ -14,8 +14,8 @@ use super::component_context::ComponentModelContext;
 use super::postprocess;
 use crate::ast::Type;
 use crate::component_model::{CmInstanceTypeGen, CmVariantCase, WasiFunctionInfo};
-use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::nir_package::NirPackage;
 use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirPackage};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
@@ -24,7 +24,7 @@ use wasm_encoder::{
 
 /// Build a complete Wasm Component from a pre-built core module and project metadata.
 pub fn build_component(
-    project: &FlatPackage,
+    project: &NirPackage,
     core_module: &[u8],
     wir_package: &WirPackage,
 ) -> Vec<u8> {
@@ -433,7 +433,7 @@ fn emit_cm_val_type(
     enum_export_indices: &IndexMap<String, u32>,
     own_resource_type_indices: &IndexMap<String, u32>,
     mut shared_type_gen: Option<&mut CmInstanceTypeGen>,
-    project: Option<&FlatPackage>,
+    project: Option<&NirPackage>,
     ctx: &mut ComponentModelContext,
 ) -> ComponentValType {
     match ty {
@@ -686,7 +686,7 @@ fn build_cm_tuple_types(
     enum_export_indices: &IndexMap<String, u32>,
     own_resource_type_indices: &IndexMap<String, u32>,
     mut shared_type_gen: Option<&mut CmInstanceTypeGen>,
-    project: Option<&FlatPackage>,
+    project: Option<&NirPackage>,
     ctx: &mut ComponentModelContext,
 ) -> Vec<ComponentValType> {
     elems
@@ -747,7 +747,7 @@ fn collect_resources_in_type(
 }
 
 fn wado_type_to_cm_val_type(
-    _project: &FlatPackage,
+    _project: &NirPackage,
     ty: &Type,
     stream_type_idx: Option<u32>,
     _error_code_idx: Option<u32>,
@@ -1678,7 +1678,7 @@ fn emit_world_exports(
 fn generate_cm_imports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    project: &FlatPackage,
+    project: &NirPackage,
 ) {
     let cli_version = project
         .wasi_registry
@@ -2277,7 +2277,7 @@ fn generate_cm_imports(
 }
 
 fn import_http_types_for_service(
-    project: &FlatPackage,
+    project: &NirPackage,
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
 ) {
@@ -2603,7 +2603,7 @@ fn import_http_types_for_service(
 fn import_http_client(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    project: &FlatPackage,
+    project: &NirPackage,
 ) {
     // Build the instance type for wasi:http/client from registry metadata.
     // The client interface references types defined in wasi:http/types (request, handler-result),
@@ -2693,7 +2693,7 @@ fn import_interface_with_resource(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     interface_info: &crate::component_model::WasiInterfaceInfo,
-    project: &FlatPackage,
+    project: &NirPackage,
 ) {
     let Some((_resource_wado_name, resource_cm_name)) = &interface_info.resource_type else {
         return;
@@ -2786,7 +2786,7 @@ fn import_interface_with_resource(
 fn import_interfaces_with_resources(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    project: &FlatPackage,
+    project: &NirPackage,
 ) {
     let interfaces_with_resources: Vec<_> = project
         .wasi_registry
@@ -2966,7 +2966,7 @@ fn import_interfaces_with_resources(
 fn import_resource_using_interfaces(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    project: &FlatPackage,
+    project: &NirPackage,
 ) {
     for interface_info in project.wasi_registry.interfaces() {
         if interface_info.interface == "run" {
@@ -3279,7 +3279,7 @@ fn import_resource_using_interfaces(
 }
 
 fn lower_wasi_functions(
-    project: &FlatPackage,
+    project: &NirPackage,
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
 ) {
@@ -3320,7 +3320,7 @@ fn lower_wasi_functions(
 fn append_http_handler_export(
     component_bytes: &mut Vec<u8>,
     ctx: &ComponentModelContext,
-    project: &FlatPackage,
+    project: &NirPackage,
 ) {
     use wasm_encoder::{ComponentExportSection, ComponentInstanceSection, ComponentSection};
 

@@ -24,6 +24,11 @@ pub mod lower;
 pub mod module_source;
 pub mod monomorphize;
 pub mod name;
+pub mod nir;
+pub mod nir_convert;
+pub mod nir_package;
+pub mod nir_unparse;
+pub mod nir_visitor;
 pub mod optimize;
 pub mod package;
 pub mod parser;
@@ -139,9 +144,10 @@ pub struct DumpResult {
     /// Monomorphized TIR snapshot (unparsed text)
     pub monomorphized_tir_text: Option<String>,
     /// Lowered TIR snapshot (unparsed text)
-    pub lowered_tir_text: Option<String>,
-    /// Linked package after optimization (contains usage analysis results)
-    pub optimized_package: Option<FlatPackage>,
+    pub lowered_nir_text: Option<String>,
+    /// Optimized NIR package — the post-`optimize` body IR consumed by
+    /// `wir_build` and `codegen`. See WEP `wep-2026-05-11-nir.md`.
+    pub optimized_package: Option<nir_package::NirPackage>,
     /// WIR module (after `tir_to_wir` translation)
     pub wir_package: Option<wir::WirPackage>,
     /// AstId-keyed trivia for unparsing the dumped AST.
@@ -524,17 +530,17 @@ fn compile_after_load<H: CompilerHost>(
         flat.type_table.borrow_mut().erase_newtypes_and_flags();
     }
 
-    // === Phase 10: Lower (FlatPackage → FlatPackage) ===
-    {
+    // === Phase 10: Lower (FlatPackage → NirPackage) ===
+    let nir = {
         let _span = logger.span("lower");
-        lower(&mut flat);
-    }
+        lower(flat)
+    };
 
-    // === Phase 11: Optimize (FlatPackage → FlatPackage) ===
-    let flat = {
+    // === Phase 11: Optimize (NirPackage → NirPackage) ===
+    let nir = {
         let _span = logger.span("optimize");
         optimize(
-            flat,
+            nir,
             options.opt_level,
             options.inline_threshold,
             options.opt_iterations,
@@ -542,10 +548,10 @@ fn compile_after_load<H: CompilerHost>(
         )
     };
 
-    // === Phase 12: Build WIR (FlatPackage → WirPackage) ===
+    // === Phase 12: Build WIR (NirPackage → WirPackage) ===
     let mut wir_package = {
         let _span = logger.span("wir_build");
-        wir_build::build_wir_package(&flat)
+        wir_build::build_wir_package(&nir)
     };
 
     // === Phase 13: Optimize WIR ===
@@ -557,7 +563,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 14: Emit Wasm (WirPackage → Wasm component bytes) ===
     let wasm = {
         let _span = logger.span("codegen");
-        codegen::emit_wasm(&flat, &wir_package)
+        codegen::emit_wasm(&nir, &wir_package)
     };
 
     // Return the original (non-desugared) entry AST for tooling
@@ -730,7 +736,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
     // Create Package early so CM binding synthesis runs before monomorphize,
     // matching the compile_with_options pipeline.
-    let (monomorphized_tir_text, lowered_tir_text, optimized_package, wir_package) =
+    let (monomorphized_tir_text, lowered_nir_text, optimized_package, wir_package) =
         if let Some(resolved_modules) = tir_modules_by_source.clone() {
             let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
@@ -827,29 +833,28 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Snapshot monomorphized state (only unparse; Debug format is deferred)
             let mono_text = Some(unparse::unparse_flat_package(&flat));
 
-            // Lower
-            {
+            // Lower (FlatPackage → NirPackage)
+            let nir = {
                 let _span = logger.span("lower");
-                lower(&mut flat);
-            }
-            // Snapshot lowered state (only unparse; Debug format is deferred)
-            let lower_text = Some(unparse::unparse_flat_package(&flat));
+                lower(flat)
+            };
+            // Snapshot lowered state (NIR right after lower, before optimize)
+            let lower_text = Some(nir_unparse::unparse_nir_package(&nir));
 
             // Optimize
-            let flat = {
+            let nir = {
                 let _span = logger.span("optimize");
-                optimize(flat, opt_level, inline_threshold, opt_iterations, &logger)
+                optimize(nir, opt_level, inline_threshold, opt_iterations, &logger)
             };
 
-            // WIR: Translate optimized FlatPackage to WirPackage for inspection.
+            // WIR: Translate optimized NirPackage to WirPackage for inspection.
             let wir_package = Some({
-                let mut wir = wir_build::build_wir_package(&flat);
+                let mut wir = wir_build::build_wir_package(&nir);
                 wir_optimize::optimize_wir(&mut wir, opt_level, &logger);
                 wir
             });
-            let optimized = Some(flat);
 
-            (mono_text, lower_text, optimized, wir_package)
+            (mono_text, lower_text, Some(nir), wir_package)
         } else {
             (None, None, None, None)
         };
@@ -865,7 +870,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         entry_module_source: load_result.entry_module_source,
         tir_modules: tir_modules_by_source,
         monomorphized_tir_text,
-        lowered_tir_text,
+        lowered_nir_text,
         optimized_package,
         wir_package,
         trivia,

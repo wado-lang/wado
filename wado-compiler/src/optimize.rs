@@ -76,7 +76,7 @@ use tmpl_hoist::hoist_template_buffers;
 use value_copy_elide::elide_synthesized_value_copies;
 
 use crate::compiler_host::SpanEmitter;
-use crate::flat_package::FlatPackage;
+use crate::nir_package::NirPackage;
 
 /// Configuration for optimization passes
 struct OptConfig {
@@ -145,12 +145,12 @@ pub enum OptLevel {
 /// The `inline_threshold` and `opt_iterations` parameters override the
 /// defaults for the given `opt_level` when provided.
 pub fn optimize(
-    mut project: FlatPackage,
+    mut project: NirPackage,
     opt_level: OptLevel,
     inline_threshold: Option<usize>,
     opt_iterations: Option<u32>,
     profiler: &dyn SpanEmitter,
-) -> FlatPackage {
+) -> NirPackage {
     match opt_level {
         OptLevel::O0 => {
             // No optimizations, but still run DCE to reduce codegen work
@@ -228,7 +228,7 @@ pub fn optimize(
     project
 }
 
-fn run_dce(project: &mut FlatPackage, profiler: &dyn SpanEmitter) {
+fn run_dce(project: &mut NirPackage, profiler: &dyn SpanEmitter) {
     profiler.span_start("tir/dce");
     // Iterate to fixed point: `remove_unreachable_globals` rewrites
     // function bodies (drops `GlobalVarSet` for dead globals), which can
@@ -257,9 +257,9 @@ fn run_dce(project: &mut FlatPackage, profiler: &dyn SpanEmitter) {
 /// `WADO_DUMP_PASS_AFTER` developer-debug env vars (see `pass_dump`).
 fn run_pass(
     name: &str,
-    project: &mut FlatPackage,
+    project: &mut NirPackage,
     profiler: &dyn SpanEmitter,
-    f: impl FnOnce(&mut FlatPackage) -> bool,
+    f: impl FnOnce(&mut NirPackage) -> bool,
 ) -> bool {
     pass_dump::list_pass(name);
     pass_dump::dump_tir(name, project, pass_dump::Phase::Before);
@@ -273,7 +273,7 @@ fn run_pass(
 pub mod pass_dump {
     use std::sync::OnceLock;
 
-    use super::FlatPackage;
+    use super::NirPackage;
     use crate::wir::WirPackage;
 
     #[derive(Copy, Clone)]
@@ -331,11 +331,11 @@ pub mod pass_dump {
         }
     }
 
-    pub fn dump_tir(name: &str, project: &FlatPackage, phase: Phase) {
+    pub fn dump_tir(name: &str, project: &NirPackage, phase: Phase) {
         if matches(name, phase) {
             let label = phase.label();
             eprintln!("=== TIR {label} {name} ===");
-            eprintln!("{}", crate::unparse::unparse_flat_package(project));
+            eprintln!("{}", crate::nir_unparse::unparse_nir_package(project));
             eprintln!("=== end TIR {label} {name} ===");
         }
     }
@@ -386,7 +386,7 @@ pub mod pass_dump {
 /// Hot Field Scalarization (HFS) runs once after the loop converges; see
 /// `optimize` for the rationale.
 fn run_optimization_passes(
-    project: &mut FlatPackage,
+    project: &mut NirPackage,
     config: &OptConfig,
     profiler: &dyn SpanEmitter,
 ) {

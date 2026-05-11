@@ -1,16 +1,17 @@
-//! Function collection — gathers all reachable functions from the `FlatPackage`,
+//! Function collection — gathers all reachable functions from the `NirPackage`,
 //! registers their types and creates `WirFunction` stubs (bodies filled later).
 
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{TirFunction, TypeTable};
+use crate::nir::NirFunction;
+use crate::tir::TypeTable;
 use crate::wir::{
     CanonicalIntrinsic, WirFunction, WirGlobal, WirImport, WirImportDesc, WirMeta, WirName, WirType,
 };
 
 use super::context::{PendingFunctionBody, WirContext};
 
-/// Collect all functions from the `FlatPackage`, register imports, and create function stubs.
+/// Collect all functions from the `NirPackage`, register imports, and create function stubs.
 pub fn collect_functions(ctx: &mut WirContext<'_>) {
     // Step 1: Register builtin + bundled imports
     register_imports(ctx);
@@ -356,10 +357,10 @@ fn register_methods(ctx: &mut WirContext<'_>) {
 /// Register a single function with its type and create a `WirFunction` stub.
 fn register_single_function(
     ctx: &mut WirContext<'_>,
-    tir_func: &TirFunction,
+    tir_func: &NirFunction,
     type_table: &TypeTable,
     module_source: &ModuleSource,
-    tir_func_rc: std::rc::Rc<std::cell::RefCell<TirFunction>>,
+    tir_func_rc: std::rc::Rc<std::cell::RefCell<NirFunction>>,
     type_table_rc: std::rc::Rc<std::cell::RefCell<TypeTable>>,
 ) {
     let mangled_name = build_mangled_name(tir_func, module_source);
@@ -403,12 +404,12 @@ fn register_single_function(
     //   `optimize::multi_value_return` for aggregate-returning functions
     //   whose every call site destructures the result.
     let results: Vec<WirType> = match &tir_func.return_abi {
-        crate::tir::ReturnAbi::MultiValue { result_types, .. } => result_types
+        crate::nir::ReturnAbi::MultiValue { result_types, .. } => result_types
             .iter()
             .map(|&t| ctx.type_id_to_wir_type(type_table, t))
             .filter(|t| !matches!(t, WirType::Unit))
             .collect(),
-        crate::tir::ReturnAbi::Single => {
+        crate::nir::ReturnAbi::Single => {
             if tir_func.return_type == TypeTable::UNIT || tir_func.return_type == TypeTable::NEVER {
                 Vec::new()
             } else {
@@ -584,14 +585,15 @@ fn register_globals(ctx: &mut WirContext<'_>) {
 
 /// Convert a TIR global initializer to a WIR constant instruction.
 fn translate_global_init(
-    init: &crate::tir::TirExpr,
+    init: &crate::nir::NirExpr,
     type_table: &TypeTable,
 ) -> crate::wir::WirInstr {
-    use crate::tir::{PrimitiveType, ResolvedType, TirExprKind};
+    use crate::nir::NirExprKind;
+    use crate::tir::{PrimitiveType, ResolvedType};
     use crate::wir::WirInstr;
 
     match &init.kind {
-        TirExprKind::IntLiteral { value, .. } => match type_table.get(init.type_id) {
+        NirExprKind::IntLiteral { value, .. } => match type_table.get(init.type_id) {
             ResolvedType::Primitive(prim) => match prim {
                 PrimitiveType::I8
                 | PrimitiveType::I16
@@ -604,22 +606,22 @@ fn translate_global_init(
             },
             _ => WirInstr::I32Const(*value as i32),
         },
-        TirExprKind::FloatLiteral { value, .. } => match type_table.get(init.type_id) {
+        NirExprKind::FloatLiteral { value, .. } => match type_table.get(init.type_id) {
             ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(*value as f32),
             _ => WirInstr::F64Const(*value),
         },
-        TirExprKind::BoolLiteral(b) => WirInstr::I32Const(i32::from(*b)),
-        TirExprKind::CharLiteral(c) => WirInstr::I32Const(*c as i32),
-        TirExprKind::Null | TirExprKind::Unit => WirInstr::RefNull {
+        NirExprKind::BoolLiteral(b) => WirInstr::I32Const(i32::from(*b)),
+        NirExprKind::CharLiteral(c) => WirInstr::I32Const(*c as i32),
+        NirExprKind::Null | NirExprKind::Unit => WirInstr::RefNull {
             heap_type: crate::wir::WirAbstractHeapType::None,
         },
-        TirExprKind::Cast { expr: inner, .. } => {
+        NirExprKind::Cast { expr: inner, .. } => {
             // For casts, evaluate the inner expression with the cast's target type
-            let typed_inner = crate::tir::TirExpr::new(inner.kind.clone(), init.type_id, init.span);
+            let typed_inner = crate::nir::NirExpr::new(inner.kind.clone(), init.type_id, init.span);
             translate_global_init(&typed_inner, type_table)
         }
-        TirExprKind::Unary {
-            op: crate::tir::TirUnaryOp::Neg,
+        NirExprKind::Unary {
+            op: crate::nir::NirUnaryOp::Neg,
             expr: inner,
         } => {
             // Negation of constant (normally folded by resolver, but handle for robustness)
@@ -644,7 +646,7 @@ fn translate_global_init(
 }
 
 /// Build a mangled function name from TIR function and module source.
-fn build_mangled_name(tir_func: &TirFunction, _module_source: &ModuleSource) -> String {
+fn build_mangled_name(tir_func: &NirFunction, _module_source: &ModuleSource) -> String {
     // For monomorphized functions, prefer `tir_func.name` because the
     // monomorphizer set it to the canonical mangled name produced by
     // `function_instantiation_name` / `method_instantiation_name`. The
