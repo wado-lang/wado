@@ -5067,10 +5067,6 @@ pub fn parse(d: u64, p: i32) -> f64 {
     return "core::prelude/fpfmt.wado::pack64"("core::prelude/fpfmt.wado::unrounded_round"(u), -e);
 }
 
-pub fn parse_text(s: String) -> Option<f64> {
-    return "core::prelude/fpfmt.wado::parse_text_range"(s, 0, s.String::len());
-}
-
 pub fn parse_text_range(s: String, start: i32, end: i32) -> Option<f64> {
     let len: i32 = end;
     if (start >= end) {
@@ -5797,18 +5793,7 @@ pub fn u128::from_str_hex(s: String) -> Result<u128, ParseIntError> {
 }
 
 pub fn u128::from_str_radix(s: String, radix: u32) -> Result<u128, ParseIntError> {
-    "core::prelude/intparse.wado::assert_radix"(radix);
-    let prefix: Result<i32, IntErrorKind> = "core::prelude/intparse.wado::parse_unsigned_prefix"(s);
-    let __pattern_temp_0: Result<i32, IntErrorKind> = prefix;
-    if __variant_test(__pattern_temp_0, case=1, name=Err) {
-        let k: IntErrorKind = __variant_payload(__pattern_temp_0, case=1);
-        return Result<u128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
-    }
-    let start: i32 = Box<Result<i32,core:prelude/intparse.wado/IntErrorKind>> { value: prefix }."Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"();
-    return match "core::prelude/intparse.wado::parse_u128_digits"(s, start, s.String::len(), radix) {
-        Ok(v) => Result<u128, ParseIntError>::Ok(v),
-        Err(k) => Result<u128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k)),
-    };
+    return "core::prelude/int128.wado::u128::from_str_radix_range"(s, 0, s.String::len(), radix);
 }
 
 pub fn u128::from_str_radix_range(s: String, start: i32, end: i32, radix: u32) -> Result<u128, ParseIntError> {
@@ -7222,10 +7207,6 @@ pub fn parse_u128_digits(s: String, start: i32, end: i32, radix: u32) -> Result<
     return Result<u128, IntErrorKind>::Ok(acc);
 }
 
-pub fn parse_signed_prefix(s: String) -> Result<[bool, i32], IntErrorKind> {
-    return "core::prelude/intparse.wado::parse_signed_prefix_range"(s, 0, s.String::len());
-}
-
 pub fn parse_signed_prefix_range(s: String, start: i32, end: i32) -> Result<[bool, i32], IntErrorKind> {
     if (start >= end) {
         return Result<[bool, i32], IntErrorKind>::Err(IntErrorKind::Empty);
@@ -7242,10 +7223,6 @@ pub fn parse_signed_prefix_range(s: String, start: i32, end: i32) -> Result<[boo
         start;
     };
     return Result<[bool, i32], IntErrorKind>::Ok([is_negative, value_start]);
-}
-
-pub fn parse_unsigned_prefix(s: String) -> Result<i32, IntErrorKind> {
-    return "core::prelude/intparse.wado::parse_unsigned_prefix_range"(s, 0, s.String::len());
 }
 
 pub fn parse_unsigned_prefix_range(s: String, start: i32, end: i32) -> Result<i32, IntErrorKind> {
@@ -7266,10 +7243,6 @@ pub fn assert_radix(radix: u32) {
     if ((radix < 2) || (radix > 36)) {
         core::internal::panic("from_str_radix: radix must be in 2..=36");
     }
-}
-
-pub fn parse_i64_radix(s: String, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
-    return "core::prelude/intparse.wado::parse_i64_radix_range"(s, 0, s.String::len(), radix, max, min_abs);
 }
 
 pub fn parse_i64_radix_range(s: String, start: i32, end: i32, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
@@ -7307,10 +7280,6 @@ pub fn parse_i64_radix_range(s: String, start: i32, end: i32, radix: u32, max: i
     };
 }
 
-pub fn parse_u64_radix(s: String, radix: u32, max: u64) -> Result<u64, ParseIntError> {
-    return "core::prelude/intparse.wado::parse_u64_radix_range"(s, 0, s.String::len(), radix, max);
-}
-
 pub fn parse_u64_radix_range(s: String, start: i32, end: i32, radix: u32, max: u64) -> Result<u64, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
     let digit_start: i32 = match "core::prelude/intparse.wado::parse_unsigned_prefix_range"(s, start, end) {
@@ -7327,10 +7296,6 @@ pub fn parse_u64_radix_range(s: String, start: i32, end: i32, radix: u32, max: u
         },
         Err(k) => Result<u64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k)),
     };
-}
-
-pub fn parse_f64_from_str(s: String) -> Result<f64, ParseFloatError> {
-    return "core::prelude/intparse.wado::parse_f64_from_str_range"(s, 0, s.String::len());
 }
 
 pub fn parse_f64_from_str_range(s: String, start: i32, end: i32) -> Result<f64, ParseFloatError> {
@@ -8237,7 +8202,7 @@ pub fn i8::from_str_hex(s: String) -> Result<i8, ParseIntError> {
 }
 
 pub fn i8::from_str_radix(s: String, radix: u32) -> Result<i8, ParseIntError> {
-    return match "core::prelude/intparse.wado::parse_i64_radix"(s, radix, 127, 128) {
+    return match "core::prelude/intparse.wado::parse_i64_radix_range"(s, 0, s.String::len(), radix, 127, 128) {
         Ok(v) => Result<i8, ParseIntError>::Ok(v as i8),
         Err(e) => Result<i8, ParseIntError>::Err(e),
     };
@@ -8282,7 +8247,7 @@ pub fn u8::from_str_hex(s: String) -> Result<u8, ParseIntError> {
 }
 
 pub fn u8::from_str_radix(s: String, radix: u32) -> Result<u8, ParseIntError> {
-    return match "core::prelude/intparse.wado::parse_u64_radix"(s, radix, 255) {
+    return match "core::prelude/intparse.wado::parse_u64_radix_range"(s, 0, s.String::len(), radix, 255) {
         Ok(v) => Result<u8, ParseIntError>::Ok(v as u8),
         Err(e) => Result<u8, ParseIntError>::Err(e),
     };
@@ -8327,7 +8292,7 @@ pub fn i16::from_str_hex(s: String) -> Result<i16, ParseIntError> {
 }
 
 pub fn i16::from_str_radix(s: String, radix: u32) -> Result<i16, ParseIntError> {
-    return match "core::prelude/intparse.wado::parse_i64_radix"(s, radix, 32767, 32768) {
+    return match "core::prelude/intparse.wado::parse_i64_radix_range"(s, 0, s.String::len(), radix, 32767, 32768) {
         Ok(v) => Result<i16, ParseIntError>::Ok(v as i16),
         Err(e) => Result<i16, ParseIntError>::Err(e),
     };
@@ -8372,7 +8337,7 @@ pub fn u16::from_str_hex(s: String) -> Result<u16, ParseIntError> {
 }
 
 pub fn u16::from_str_radix(s: String, radix: u32) -> Result<u16, ParseIntError> {
-    return match "core::prelude/intparse.wado::parse_u64_radix"(s, radix, 65535) {
+    return match "core::prelude/intparse.wado::parse_u64_radix_range"(s, 0, s.String::len(), radix, 65535) {
         Ok(v) => Result<u16, ParseIntError>::Ok(v as u16),
         Err(e) => Result<u16, ParseIntError>::Err(e),
     };
@@ -8441,7 +8406,7 @@ pub fn i32::from_str_hex(s: String) -> Result<i32, ParseIntError> {
 }
 
 pub fn i32::from_str_radix(s: String, radix: u32) -> Result<i32, ParseIntError> {
-    return match "core::prelude/intparse.wado::parse_i64_radix"(s, radix, 2147483647, 2147483648) {
+    return match "core::prelude/intparse.wado::parse_i64_radix_range"(s, 0, s.String::len(), radix, 2147483647, 2147483648) {
         Ok(v) => Result<i32, ParseIntError>::Ok(v as i32),
         Err(e) => Result<i32, ParseIntError>::Err(e),
     };
@@ -8498,7 +8463,7 @@ pub fn u32::from_str_hex(s: String) -> Result<u32, ParseIntError> {
 }
 
 pub fn u32::from_str_radix(s: String, radix: u32) -> Result<u32, ParseIntError> {
-    return match "core::prelude/intparse.wado::parse_u64_radix"(s, radix, 4294967295) {
+    return match "core::prelude/intparse.wado::parse_u64_radix_range"(s, 0, s.String::len(), radix, 4294967295) {
         Ok(v) => Result<u32, ParseIntError>::Ok(v as u32),
         Err(e) => Result<u32, ParseIntError>::Err(e),
     };
@@ -8585,7 +8550,7 @@ pub fn i64::from_str_hex(s: String) -> Result<i64, ParseIntError> {
 }
 
 pub fn i64::from_str_radix(s: String, radix: u32) -> Result<i64, ParseIntError> {
-    return "core::prelude/intparse.wado::parse_i64_radix"(s, radix, 9223372036854775807, 9223372036854775808);
+    return "core::prelude/intparse.wado::parse_i64_radix_range"(s, 0, s.String::len(), radix, 9223372036854775807, 9223372036854775808);
 }
 
 fn "i64^FromStr::from_str_range"(s: String, start: i32, end: i32) -> Result<i64, ParseIntError> {
@@ -8701,7 +8666,7 @@ pub fn u64::from_str_hex(s: String) -> Result<u64, ParseIntError> {
 }
 
 pub fn u64::from_str_radix(s: String, radix: u32) -> Result<u64, ParseIntError> {
-    return "core::prelude/intparse.wado::parse_u64_radix"(s, radix, 18446744073709551615);
+    return "core::prelude/intparse.wado::parse_u64_radix_range"(s, 0, s.String::len(), radix, 18446744073709551615);
 }
 
 fn "u64^FromStr::from_str_range"(s: String, start: i32, end: i32) -> Result<u64, ParseIntError> {
@@ -8975,7 +8940,7 @@ pub fn f32::is_finite(self: Box<f32>) -> bool {
 }
 
 pub fn f32::from_str(s: String) -> Result<f32, ParseFloatError> {
-    return match "core::prelude/intparse.wado::parse_f64_from_str"(s) {
+    return match "core::prelude/intparse.wado::parse_f64_from_str_range"(s, 0, s.String::len()) {
         Ok(v) => Result<f32, ParseFloatError>::Ok(v as f32),
         Err(e) => Result<f32, ParseFloatError>::Err(e),
     };
@@ -9325,7 +9290,7 @@ pub fn f64::is_finite(self: Box<f64>) -> bool {
 }
 
 pub fn f64::from_str(s: String) -> Result<f64, ParseFloatError> {
-    return "core::prelude/intparse.wado::parse_f64_from_str"(s);
+    return "core::prelude/intparse.wado::parse_f64_from_str_range"(s, 0, s.String::len());
 }
 
 pub fn f64::to_bits(self: Box<f64>) -> i64 {

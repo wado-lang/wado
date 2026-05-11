@@ -1,0 +1,55 @@
+// BUG: `Type::trait_method(args)` fails to resolve a trait static method
+// whose body comes from the trait's *default* implementation. Required
+// methods resolve fine via `Type::method(args)`; only the defaulted-and-
+// not-overridden form is broken.
+//
+// Repro pattern:
+//   - Define a trait with two static methods: one required (`primary`)
+//     and one defaulted that calls `Self::primary()` (`secondary`).
+//   - Implement the trait for a concrete type, providing only `primary`.
+//   - Call `Type::secondary()` from any non-generic site.
+//
+// Discovered while removing the inherent `from_str` from primitive types
+// in favour of relying on `FromStr`'s defaulted `from_str`. After removal,
+// `i32::from_str("42")` failed to resolve, forcing us to keep the inherent
+// methods alongside the trait impls (duplicated logic).
+//
+// Expected after fix: compile and print "hi" — the resolver should look
+// through the trait's default implementations the same way it looks
+// through required methods.
+
+use { println, Stdout } from "core:cli";
+
+pub trait Greeter {
+    fn primary() -> String;
+
+    /// Defaulted method — implementors inherit this body unless they
+    /// override it.
+    fn secondary() -> String {
+        return Self::primary();
+    }
+}
+
+pub struct MyType {}
+
+impl Greeter for MyType {
+    fn primary() -> String {
+        return "hi";
+    }
+    // `secondary` is intentionally NOT overridden — we rely on the
+    // trait's default body.
+}
+
+export fn run() with Stdout {
+    // Sanity check: required trait method resolves via `Type::method()`.
+    let a = MyType::primary();
+    println(a);
+
+    // Bug surface: defaulted trait method fails to resolve.
+    // Currently: `error: unknown function 'MyType::secondary'`.
+    let b = MyType::secondary();
+    println(b);
+}
+
+__DATA__
+{"compile_error": "unknown function 'MyType::secondary'"}

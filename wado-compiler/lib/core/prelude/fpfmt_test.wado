@@ -27,8 +27,16 @@ use {
     check_special,
     SpecialKind,
     parse,
-    parse_text,
+    parse_text_range,
 } from "./fpfmt.wado";
+
+// Test-only convenience wrapper around `parse_text_range`. The stdlib
+// itself never needs the full-string variant — callers thread byte ranges
+// through directly — but keeping a parser-facing form here makes the
+// behavioural tests below read naturally.
+fn parse_text(s: String) -> Option<f64> {
+    return parse_text_range(s, 0, s.len());
+}
 
 test "log10_pow2 approximation" {
     assert log10_pow2(0) == 0;

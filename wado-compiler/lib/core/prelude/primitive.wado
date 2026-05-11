@@ -24,7 +24,6 @@ use {
     write_exp,
     write_decimal_prec,
     write_exp_prec,
-    parse_text,
 } from "core:prelude/fpfmt.wado";
 
 // Deterministic math functions imported directly from the bundled
@@ -60,15 +59,8 @@ use {
     IntErrorKind,
     ParseIntError,
     ParseFloatError,
-    parse_u64_digits,
-    parse_signed_prefix,
-    parse_unsigned_prefix,
-    assert_radix,
-    parse_i64_radix,
-    parse_u64_radix,
     parse_i64_radix_range,
     parse_u64_radix_range,
-    parse_f64_from_str,
     parse_f64_from_str_range,
 } from "core:prelude/intparse.wado";
 
@@ -441,7 +433,7 @@ impl i8 {
     }
 
     pub fn from_str_radix(s: String, radix: u32) -> Result<i8, ParseIntError> {
-        return match parse_i64_radix(s, radix, 127, 128) {
+        return match parse_i64_radix_range(s, 0, s.len(), radix, 127, 128) {
             Ok(v) => Result::Ok(v as i8),
             Err(e) => Result::Err(e),
         };
@@ -490,7 +482,7 @@ impl u8 {
     }
 
     pub fn from_str_radix(s: String, radix: u32) -> Result<u8, ParseIntError> {
-        return match parse_u64_radix(s, radix, 255) {
+        return match parse_u64_radix_range(s, 0, s.len(), radix, 255) {
             Ok(v) => Result::Ok(v as u8),
             Err(e) => Result::Err(e),
         };
@@ -539,7 +531,7 @@ impl i16 {
     }
 
     pub fn from_str_radix(s: String, radix: u32) -> Result<i16, ParseIntError> {
-        return match parse_i64_radix(s, radix, 32767, 32768) {
+        return match parse_i64_radix_range(s, 0, s.len(), radix, 32767, 32768) {
             Ok(v) => Result::Ok(v as i16),
             Err(e) => Result::Err(e),
         };
@@ -588,7 +580,7 @@ impl u16 {
     }
 
     pub fn from_str_radix(s: String, radix: u32) -> Result<u16, ParseIntError> {
-        return match parse_u64_radix(s, radix, 65535) {
+        return match parse_u64_radix_range(s, 0, s.len(), radix, 65535) {
             Ok(v) => Result::Ok(v as u16),
             Err(e) => Result::Err(e),
         };
@@ -660,7 +652,7 @@ impl i32 {
     }
 
     pub fn from_str_radix(s: String, radix: u32) -> Result<i32, ParseIntError> {
-        return match parse_i64_radix(s, radix, 2147483647, 2147483648) {
+        return match parse_i64_radix_range(s, 0, s.len(), radix, 2147483647, 2147483648) {
             Ok(v) => Result::Ok(v as i32),
             Err(e) => Result::Err(e),
         };
@@ -717,7 +709,7 @@ impl u32 {
     }
 
     pub fn from_str_radix(s: String, radix: u32) -> Result<u32, ParseIntError> {
-        return match parse_u64_radix(s, radix, 4294967295) {
+        return match parse_u64_radix_range(s, 0, s.len(), radix, 4294967295) {
             Ok(v) => Result::Ok(v as u32),
             Err(e) => Result::Err(e),
         };
@@ -809,7 +801,7 @@ impl i64 {
     }
 
     pub fn from_str_radix(s: String, radix: u32) -> Result<i64, ParseIntError> {
-        return parse_i64_radix(s, radix, 9223372036854775807, 9223372036854775808);
+        return parse_i64_radix_range(s, 0, s.len(), radix, 9223372036854775807, 9223372036854775808);
     }
 }
 
@@ -927,7 +919,7 @@ impl u64 {
     }
 
     pub fn from_str_radix(s: String, radix: u32) -> Result<u64, ParseIntError> {
-        return parse_u64_radix(s, radix, u64::MAX);
+        return parse_u64_radix_range(s, 0, s.len(), radix, u64::MAX);
     }
 }
 
@@ -1218,7 +1210,7 @@ impl f32 {
     }
 
     pub fn from_str(s: String) -> Result<f32, ParseFloatError> {
-        return match parse_f64_from_str(s) {
+        return match parse_f64_from_str_range(s, 0, s.len()) {
             Ok(v) => Result::Ok(v as f32),
             Err(e) => Result::Err(e),
         };
@@ -1571,7 +1563,7 @@ impl f64 {
     }
 
     pub fn from_str(s: String) -> Result<f64, ParseFloatError> {
-        return parse_f64_from_str(s);
+        return parse_f64_from_str_range(s, 0, s.len());
     }
 
     /// Reinterprets the bits of this f64 as an i64.

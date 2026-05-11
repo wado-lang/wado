@@ -7,9 +7,7 @@ use {
     IntErrorKind,
     ParseIntError,
     parse_u128_digits,
-    parse_signed_prefix,
     parse_signed_prefix_range,
-    parse_unsigned_prefix,
     parse_unsigned_prefix_range,
     assert_radix,
 } from "core:prelude/intparse.wado";
@@ -65,16 +63,7 @@ impl u128 {
 
     /// Parse a `u128` from a string in the given radix. `radix` must be in 2..=36.
     pub fn from_str_radix(s: String, radix: u32) -> Result<u128, ParseIntError> {
-        assert_radix(radix);
-        let prefix = parse_unsigned_prefix(s);
-        if let Err(k) = prefix {
-            return Result::Err(ParseIntError::new(k));
-        }
-        let start = prefix.unwrap();
-        return match parse_u128_digits(s, start, s.len(), radix) {
-            Ok(v) => Result::Ok(v),
-            Err(k) => Result::Err(ParseIntError::new(k)),
-        };
+        return u128::from_str_radix_range(s, 0, s.len(), radix);
     }
 
     /// Range variant of `from_str_radix`. Parses `s[start..end)` as a `u128`

@@ -858,17 +858,13 @@ pub fn parse(d: u64, p: i32) -> f64 {
     return pack64(unrounded_round(u), -e);
 }
 
-// parse_text parses a decimal string and returns the nearest f64.
+// parse_text_range parses a decimal string slice and returns the nearest
+// f64. Parses `s[start..end)` without allocating a substring.
 // Returns null if the input is malformed.
 // Accepts: optional sign, decimal digits, optional fractional part, optional exponent,
 //          "inf"/"infinity" (case-insensitive), "nan" (case-insensitive).
-// Rejects: leading dot (".5"), trailing dot ("5."), empty string.
+// Rejects: leading dot (".5"), trailing dot ("5."), empty input.
 // Examples: "3.14", "1e2", "0.5", "123", "+1.5e-3", "-42", "inf", "NaN"
-pub fn parse_text(s: String) -> Option<f64> {
-    return parse_text_range(s, 0, s.len());
-}
-
-// Range variant of parse_text. Parses `s[start..end)` without allocating a substring.
 pub fn parse_text_range(s: String, start: i32, end: i32) -> Option<f64> {
     let len = end;
     if start >= end {

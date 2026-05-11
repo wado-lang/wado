@@ -1,0 +1,50 @@
+#![TODO]
+// TODO: a generic helper whose return slot uses an associated type
+// (`Result<T, T::Err>`) compiles, but the value bound at the caller
+// retains the unsubstituted `T::Err` in its TIR type. Pattern matching
+// (`match`, `if let`, `matches`) silently fails because the runtime
+// variant tag does not unify with the concrete-typed `Result` produced
+// by the called impl.
+//
+// `wado dump --tir-monomorphized` of the caller shows:
+//   let r: Result<i32, T::Err> = "parse_range<i32>"(...);
+// — the associated type is not substituted at the binding site, even
+// though the called function is monomorphised correctly (returns
+// `Result<i32, ParseIntError>`).
+//
+// Symptom by optimisation level:
+//   - O0: WIR validation ICE
+//       "type mismatch: expected i32, found (ref struct)"
+//     (the binding's TIR type carries `T::Err`, the Wasm GC struct shape
+//     doesn't agree with the concrete `Result` returned by the impl).
+//   - O2: compiles silently. The `if let Ok(_)` arm never fires; the
+//     `else` branch runs instead, so stdout is "ERR\n" rather than the
+//     expected "OK: 123\n".
+//
+// Workaround in user code: write a non-generic wrapper for each
+// concrete `T`. This is why `core:router::PathParamsDeserializer` spells
+// out `deserialize_i32`, `deserialize_i64`, ... by hand instead of a
+// single generic `parse<T: FromStr>` helper.
+//
+// Expected after fix: every optimisation level should produce
+// "OK: 123\n" — flip the `__DATA__` below from `#![TODO]` + `stdout` to a
+// plain `{"stdout": "OK: 123\n"}` fixture once the resolver substitutes
+// the associated type at the binding site.
+
+use { println, Stdout } from "core:cli";
+
+fn parse_range<T: FromStr>(s: String, start: i32, end: i32) -> Result<T, T::Err> {
+    return T::from_str_range(s, start, end);
+}
+
+export fn run() with Stdout {
+    let r = parse_range::<i32>("xyz123abc", 3, 6);
+    if let Ok(v) = r {
+        println(`OK: {v}`);
+    } else {
+        println("ERR");
+    }
+}
+
+__DATA__
+{"stdout": "OK: 123\n"}
