@@ -73,13 +73,7 @@ use {
     rule_header,
     rule_alt_body,
 } from "./gir.wado";
-use {
-    is_left_recursive,
-    is_prefix_alt,
-    is_self_ref_element,
-    unwrap_label,
-    compute_prefix_self_ref_min_prec,
-} from "./lr_util.wado";
+use { is_left_recursive, is_prefix_alt, is_self_ref_element, unwrap_label, compute_prefix_self_ref_min_prec } from "./lr_util.wado";
 
 fn first_contains(first: &Array<String>, token: &String) -> bool {
     for let item of first {
@@ -2634,8 +2628,16 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
     let scan_fn_name = `scan_{rule.snake_name}`;
     match *lowered_rule {
         Simple(_) => gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, &fn_name, /*emit_visibility=*/ true),
-        MultiAlt(_) | LeftRecursive(_) => gen_parse_fn_named(w, rule, lowered_rule, ctx, &fn_name, &scan_fn_name, /*emit_visibility=*/ true),
-    };
+        MultiAlt(_) | LeftRecursive(_) => gen_parse_fn_named(
+            w,
+            rule,
+            lowered_rule,
+            ctx,
+            &fn_name,
+            &scan_fn_name,
+            true,
+        ),
+    }
 }
 
 /// Body emitter for a single-alt rule, parameterised by function
@@ -2924,11 +2926,7 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
         // sibling after it is deep-nullable). Otherwise the mask is
         // cleared so a non-tail `Repeat` here does not accidentally
         // suppress on the variant's caller-follow.
-        ctx.current_follow_mask = if ctx.tail_is_nullable_deep(&alt.elements, i + 1) {
-            saved_mask
-        } else {
-            []
-        };
+        ctx.current_follow_mask = if ctx.tail_is_nullable_deep(&alt.elements, i + 1) { saved_mask } else { [] };
         ctx.ruleref_call_follow = compute_ruleref_call_follow(&alt.elements, i, ctx);
         let elem = &alt.elements[i];
         let op = &body.ops[i - ops_offset];
@@ -3030,6 +3028,15 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
 }
 
 fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<Op>, ctx: &mut GenContext) {
+    // gen_alt_elements requires 1:1 correspondence between
+    // `elements` and `ops` — full-alt body bodies (Simple / MultiAlt
+    // / LR atom). LR-suffix bodies strip the leading self-ref op and
+    // flow through `gen_alt_body_skip`, which carries its own offset
+    // calculation; that path never reaches here. A length mismatch
+    // is a caller bug; the assert surfaces it with a targeted
+    // message instead of an out-of-bounds panic at an arbitrary
+    // index. `assert` survives release builds.
+    assert ops.len() == elements.len(), `gen_alt_elements: ops.len() ({ops.len()}) != elements.len() ({elements.len()}) — LR-suffix bodies must use gen_alt_body_skip`;
     let saved_mask = ctx.current_follow_mask;
     let saved_call_follow = ctx.ruleref_call_follow;
     let mut name_counts: Array<[String, i32]> = [];
@@ -3235,9 +3242,29 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
     if let Group(g_elem) = elem {
         return match &g_op.shape {
             TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, name_counts),
-            SingleAlt(sa) => gen_consume_single_alt_group_op(w, sa, &g_op.alts[0], &g_elem.alternatives[0], ctx, name_counts, &([] as Array<String>)),
-            SimpleCst(scst) => gen_consume_group_store_optional_op(w, Option::<&SimpleCstShape>::Some(scst), &g_elem.alternatives, ctx, name_counts),
-            General(gen_shape) => gen_general_group_store_optional_op(w, Option::<&GeneralShape>::Some(gen_shape), &g_elem.alternatives, ctx, name_counts),
+            SingleAlt(sa) => gen_consume_single_alt_group_op(
+                w,
+                sa,
+                &g_op.alts[0],
+                &g_elem.alternatives[0],
+                ctx,
+                name_counts,
+                &([] as Array<String>),
+            ),
+            SimpleCst(scst) => gen_consume_group_store_optional_op(
+                w,
+                Option::<&SimpleCstShape>::Some(scst),
+                &g_elem.alternatives,
+                ctx,
+                name_counts,
+            ),
+            General(gen_shape) => gen_general_group_store_optional_op(
+                w,
+                Option::<&GeneralShape>::Some(gen_shape),
+                &g_elem.alternatives,
+                ctx,
+                name_counts,
+            ),
             Transparent => {
                 // Transparent groups inline their inner alt; emit
                 // walks the alt's elements directly with no struct
@@ -5607,11 +5634,7 @@ fn gen_group_scan_dispatch(w: &mut CodeWriter, sorted: &Array<i32>, alts: &Array
             // suppress on the variant's caller-follow. See
             // `compute_ruleref_call_follow` for the variant-selection
             // policy on the call-follow side.
-            ctx.current_follow_mask = if ctx.tail_is_nullable_deep(&alt.elements, i + 1) {
-                saved_mask
-            } else {
-                []
-            };
+            ctx.current_follow_mask = if ctx.tail_is_nullable_deep(&alt.elements, i + 1) { saved_mask } else { [] };
             ctx.ruleref_call_follow = compute_ruleref_call_follow(&alt.elements, i, ctx);
             gen_element(w, &alt.elements[i], ctx, &mut nc);
             ctx.ruleref_call_follow = [];

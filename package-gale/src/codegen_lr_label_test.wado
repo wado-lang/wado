@@ -35,10 +35,8 @@ WS : (' '|'\\n') -> skip ;
     // After the fix the LR-aware codegen emits `scan_e_atom` and at
     // least one `scan_e_lr_<N>`. The non-LR path emits a unified
     // `scan_e` and never these helpers — its presence is a regression.
-    assert out.contains("fn scan_e_atom("),
-        "expected `scan_e_atom` in the generated parser; LR rule was misrouted to the non-LR scan generator";
-    assert out.contains("fn scan_e_lr_"),
-        "expected `scan_e_lr_<N>` suffix helper in the generated parser";
+    assert out.contains("fn scan_e_atom("), "expected `scan_e_atom` in the generated parser; LR rule was misrouted to the non-LR scan generator";
+    assert out.contains("fn scan_e_lr_"), "expected `scan_e_lr_<N>` suffix helper in the generated parser";
 
     // The infinite-recursion bug pattern: a top-level `scan_e` that
     // starts (after a few setup lines) with `pos = scan_e(tokens, pos);`.
@@ -50,12 +48,11 @@ WS : (' '|'\\n') -> skip ;
     if let Some(idx) = out.find("fn scan_e(") {
         let after = out.substr_bytes(idx, out.len());
         let body_end = if let Some(e) = after.find("\nfn ") {
-            idx + e
+            idx + e;
         } else {
-            out.len()
+            out.len();
         };
         let body = out.substr_bytes(idx, body_end);
-        assert !body.contains("pos = scan_e(tokens, pos);"),
-            `bare scan_e contains a self-call as its first step — infinite recursion: {body}`;
+        assert !body.contains("pos = scan_e(tokens, pos);"), `bare scan_e contains a self-call as its first step — infinite recursion: {body}`;
     }
 }

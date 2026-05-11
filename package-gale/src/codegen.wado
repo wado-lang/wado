@@ -1,9 +1,4 @@
-use {
-    Grammar,
-    OptionValue,
-    LexerRule,
-    normalize_caches,
-} from "./ir.wado";
+use { Grammar, OptionValue, LexerRule, normalize_caches } from "./ir.wado";
 use { rule_type_name } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use { gen_parser, gen_kind_set_helpers } from "./parser_gen.wado";
@@ -195,13 +190,7 @@ fn gen_rule_cst_type(w: &mut CodeWriter, rule: &Rule, emitted: &mut Array<String
     };
 }
 
-fn gen_multi_alt_cst(
-    w: &mut CodeWriter,
-    rule_name: &String,
-    type_name: &String,
-    alts: &Array<AltBody>,
-    emitted: &mut Array<String>,
-) {
+fn gen_multi_alt_cst(w: &mut CodeWriter, rule_name: &String, type_name: &String, alts: &Array<AltBody>, emitted: &mut Array<String>) {
     let mut v = VariantSpec::new(type_name);
     v.set_pub();
     for let alt of alts {
@@ -215,14 +204,7 @@ fn gen_multi_alt_cst(
     }
 }
 
-fn gen_lr_cst(
-    w: &mut CodeWriter,
-    rule_name: &String,
-    type_name: &String,
-    atom_alts: &Array<AltBody>,
-    lr_alts: &Array<LrAlt>,
-    emitted: &mut Array<String>,
-) {
+fn gen_lr_cst(w: &mut CodeWriter, rule_name: &String, type_name: &String, atom_alts: &Array<AltBody>, lr_alts: &Array<LrAlt>, emitted: &mut Array<String>) {
     // The variant cases follow original source order. Each
     // `AltBody.alt_index` / `LrAlt.alt_index` is the position of the
     // alt in the surface rule, so iterating `0..total` and looking
@@ -255,14 +237,7 @@ fn find_lr_alt_names(atom_alts: &Array<AltBody>, lr_alts: &Array<LrAlt>, idx: i3
     panic(`gen_lr_cst: no atom / lr alt has alt_index = {idx}`);
 }
 
-fn emit_lr_alt_struct(
-    w: &mut CodeWriter,
-    atom_alts: &Array<AltBody>,
-    lr_alts: &Array<LrAlt>,
-    idx: i32,
-    rule_name: &String,
-    emitted: &mut Array<String>,
-) {
+fn emit_lr_alt_struct(w: &mut CodeWriter, atom_alts: &Array<AltBody>, lr_alts: &Array<LrAlt>, idx: i32, rule_name: &String, emitted: &mut Array<String>) {
     for let a of atom_alts {
         if a.alt_index == idx {
             gen_ops_nested_types(w, &a.ops, rule_name, emitted);
@@ -316,7 +291,8 @@ fn gen_op_nested_types(w: &mut CodeWriter, op: &Op, rule_name: &String, emitted:
         Group(g) => gen_group_nested_types(w, g, rule_name, emitted),
         Repeat(r) => gen_op_nested_types(w, &r.body, rule_name, emitted),
         ListLabel(ll) => gen_op_nested_types(w, &ll.inner, rule_name, emitted),
-        Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => { },
+        Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => {
+        },
     };
 }
 
@@ -330,7 +306,8 @@ fn gen_group_nested_types(w: &mut CodeWriter, g: &GroupOp, rule_name: &String, e
                 gen_ops_nested_types(w, &g.alts[0].ops, rule_name, emitted);
             }
         },
-        TokenOnly(_) => { },
+        TokenOnly(_) => {
+        },
         SimpleCst(scst) => emit_simple_cst_enum_if_new(w, scst, &g.alts, emitted),
         SingleAlt(sa) => emit_single_alt_struct_if_new(w, sa, &g.alts, emitted),
         General(gen) => emit_general_group_types_if_new(w, gen, &g.alts, rule_name, emitted),
@@ -373,13 +350,7 @@ fn emit_single_alt_struct_if_new(w: &mut CodeWriter, sa: &SingleAltShape, alts: 
     emit_alt_struct(w, &sa.struct_name, &alts[0].fields);
 }
 
-fn emit_general_group_types_if_new(
-    w: &mut CodeWriter,
-    gen: &GeneralShape,
-    alts: &Array<AltBody>,
-    rule_name: &String,
-    emitted: &mut Array<String>,
-) {
+fn emit_general_group_types_if_new(w: &mut CodeWriter, gen: &GeneralShape, alts: &Array<AltBody>, rule_name: &String, emitted: &mut Array<String>) {
     if has_emitted(emitted, &gen.variant_type) {
         return;
     }

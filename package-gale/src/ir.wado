@@ -265,12 +265,7 @@ pub struct ParserRule {
 }
 
 impl ParserRule {
-    pub fn new(
-        name: String,
-        visibility: Visibility,
-        options: Array<GrammarOption>,
-        alternatives: Array<Alternative>,
-    ) -> ParserRule {
+    pub fn new(name: String, visibility: Visibility, options: Array<GrammarOption>, alternatives: Array<Alternative>) -> ParserRule {
         let snake_name = to_snake_case(&name);
         let field_name = escape_ident(&snake_name);
         return ParserRule { name, visibility, options, alternatives, snake_name, field_name };

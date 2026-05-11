@@ -36,14 +36,7 @@
 //! are pure markers or unmodified passthrough data; duplicating them
 //! would invite drift without semantic benefit.
 
-use {
-    Visibility,
-    OptionValue,
-    GrammarOption,
-    NamedAction,
-    LexerRule,
-    RepeatKind,
-} from "./ir.wado";
+use { Visibility, OptionValue, GrammarOption, NamedAction, LexerRule, RepeatKind } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 
 // ==========================================================================
@@ -798,11 +791,7 @@ pub fn rule_header(rule: &Rule) -> &RuleHeader with stores[rule] {
 /// `LrAlt.suffix` directly).
 pub fn rule_alt_body(rule: &Rule, alt_idx: i32) -> Option<&AltBody> with stores[rule] {
     return match rule {
-        Simple(s) => if alt_idx == 0 {
-            Option::<&AltBody>::Some(&s.body);
-        } else {
-            null;
-        },
+        Simple(s) => if alt_idx == 0 { Option::<&AltBody>::Some(&s.body) } else { null },
         MultiAlt(m) => find_alt_body_in_array(&m.alts, alt_idx),
         LeftRecursive(l) => {
             if let Some(b) = find_alt_body_in_array(&l.atom.alts, alt_idx) {
