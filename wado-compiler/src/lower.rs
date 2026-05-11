@@ -19,7 +19,6 @@ mod closure;
 mod globals;
 mod pattern;
 pub mod plan;
-mod string;
 pub mod translate;
 mod wide_int;
 
@@ -34,7 +33,6 @@ use boxing::BoxLowerer;
 use closure::ClosureLowerer;
 use globals::{generate_initialize_modules_flat, lower_global_initializers};
 use pattern::lower_patterns;
-use string::StringCollector;
 use wide_int::lower_wide_int_match_patterns;
 
 /// Run pre-boxing per-module lowering passes.
@@ -58,14 +56,8 @@ fn lower_post_boxing(module: &mut TirModule) {
     let mut closure_lowerer = ClosureLowerer::new(&module.module_source);
     closure_lowerer.lower_module(module);
 
-    // Phase 3b: Collect string literals (and bytes literals) and their function mappings
-    let mut collector = StringCollector::new();
-    collector.collect_module(module);
-    let (strings, bytes, function_strings, function_method_info) = collector.into_results();
-    module.string_literals = strings;
-    module.bytes_literals = bytes;
-    module.function_strings = function_strings;
-    module.function_method_info = function_method_info;
+    // String/bytes literals were previously collected here; they now live
+    // in `plan::string`, which runs after `lower_in_place`.
 }
 
 /// Lower a `FlatPackage` and return a `NirPackage`.
@@ -160,13 +152,6 @@ fn lower_in_place(flat: &mut FlatPackage) {
     flat.enums = temp_module.enums;
     flat.flags = temp_module.flags;
     flat.imports = temp_module.imports;
-
-    // String/bytes literals and function string maps from the string collector
-    // The StringCollector already uses (module_source, func_name) compound keys
-    flat.string_literals = temp_module.string_literals;
-    flat.bytes_literals = temp_module.bytes_literals;
-    flat.function_strings = temp_module.function_strings;
-    flat.function_method_info = temp_module.function_method_info;
 
     // Closure functors
     flat.closure_functors = temp_module.closure_functors;

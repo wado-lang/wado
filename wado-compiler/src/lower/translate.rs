@@ -16,7 +16,7 @@ use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
-use crate::lower::plan::LowerPlan;
+use crate::lower::plan::{LowerPlan, value_copy};
 use crate::nir;
 use crate::nir::{
     NirBlock, NirCapture, NirEnum, NirEnumCase, NirExpr, NirExprKind, NirField, NirFlags,
@@ -48,7 +48,13 @@ use crate::tir::{
 /// `func_map` so the optimizer's `Rc::ptr_eq`-based closure-type DCE
 /// pass keeps matching.
 pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
-    let translator = Translator { plan: &plan };
+    let LowerPlan {
+        value_copy,
+        strings,
+    } = plan;
+    let translator = Translator {
+        value_copy: &value_copy,
+    };
     let FlatPackage {
         entry_module_source,
         type_table,
@@ -61,11 +67,15 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         globals,
         imports,
         tests,
-        string_literals,
-        bytes_literals,
+        // `string_literals` / `bytes_literals` / `function_strings` /
+        // `function_method_info` are now collected by
+        // `lower::plan::string` and live on `strings` (above) instead
+        // of being threaded through `FlatPackage`.
+        string_literals: _,
+        bytes_literals: _,
         closure_functors,
-        function_strings,
-        function_method_info,
+        function_strings: _,
+        function_method_info: _,
         wasm_module_sources,
         module_name,
         wasi_registry,
@@ -106,14 +116,14 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         globals: globals.iter().map(|g| translator.convert_global(g)).collect(),
         imports: imports.iter().map(convert_import).collect(),
         tests: tests.iter().map(convert_test).collect(),
-        string_literals,
-        bytes_literals,
+        string_literals: strings.string_literals,
+        bytes_literals: strings.bytes_literals,
         closure_functors: closure_functors
             .iter()
             .map(|cf| translator.convert_closure_functor(cf, &func_map))
             .collect(),
-        function_strings,
-        function_method_info,
+        function_strings: strings.function_strings,
+        function_method_info: strings.function_method_info,
         wasm_module_sources,
         module_name,
         wasi_registry,
@@ -133,7 +143,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
 }
 
 struct Translator<'a> {
-    plan: &'a LowerPlan,
+    value_copy: &'a value_copy::ValueCopyPlan,
 }
 
 impl<'a> Translator<'a> {
@@ -555,7 +565,7 @@ impl<'a> Translator<'a> {
                 .as_ref()
                 .and_then(|mi| mi.impl_type_args.first().copied())
             && let Some((helper_module, helper_name)) =
-                self.plan.value_copy.name_for_type.get(&type_id)
+                self.value_copy.name_for_type.get(&type_id)
         {
             return NirExprKind::Call {
                 func: nir::FunctionRef {

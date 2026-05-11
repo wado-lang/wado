@@ -1,22 +1,46 @@
+//! Collect string and bytes literals referenced by function bodies.
+//!
+//! The translator copies these into the resulting [`crate::nir_package::NirPackage`]'s
+//! data-section fields and per-function DCE maps — codegen looks them up
+//! by `(module_source, function name)` to decide which literals to emit.
+
+use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
-use crate::tir::{TirBlock, TirExpr, TirExprKind, TirModule, TirStmt, TirStmtKind};
+use crate::tir::{TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind};
 
-pub(super) struct StringCollector {
+pub struct StringPlan {
+    pub string_literals: Vec<String>,
+    pub bytes_literals: Vec<Vec<u8>>,
+    /// Per-function literal usage; codegen DCE consults this to keep
+    /// only the literals each kept function needs.
+    pub function_strings: IndexMap<(ModuleSource, String), Vec<String>>,
+    /// Per-function method-info cache; lets codegen DCE skip re-parsing
+    /// `LocalMethodName` from the mangled function name.
+    pub function_method_info: IndexMap<(ModuleSource, String), Option<LocalMethodName>>,
+}
+
+pub fn plan(flat: &FlatPackage) -> StringPlan {
+    let mut collector = StringCollector::new();
+    for func_rc in &flat.functions {
+        let func = func_rc.borrow();
+        collector.collect_function(&func);
+    }
+    collector.into_plan()
+}
+
+struct StringCollector {
     strings: IndexSet<String>,
     bytes: IndexSet<Vec<u8>>,
-    /// Map of (`module_source`, function name) → strings in that function (for DCE filtering)
     function_strings: IndexMap<(ModuleSource, String), IndexSet<String>>,
-    /// Map of (`module_source`, function name) → method info (for DCE to avoid parsing)
     function_method_info: IndexMap<(ModuleSource, String), Option<LocalMethodName>>,
-    /// Current function being collected (for tracking)
     current_function: Option<(ModuleSource, String)>,
 }
 
 impl StringCollector {
-    pub(super) fn new() -> Self {
+    fn new() -> Self {
         Self {
             strings: IndexSet::default(),
             bytes: IndexSet::default(),
@@ -26,27 +50,22 @@ impl StringCollector {
         }
     }
 
-    pub(super) fn into_results(
-        self,
-    ) -> (
-        Vec<String>,
-        Vec<Vec<u8>>,
-        IndexMap<(ModuleSource, String), Vec<String>>,
-        IndexMap<(ModuleSource, String), Option<LocalMethodName>>,
-    ) {
-        let strings = self.strings.into_iter().collect();
-        let bytes = self.bytes.into_iter().collect();
+    fn into_plan(self) -> StringPlan {
         let function_strings = self
             .function_strings
             .into_iter()
             .map(|(k, v)| (k, v.into_iter().collect()))
             .collect();
-        (strings, bytes, function_strings, self.function_method_info)
+        StringPlan {
+            string_literals: self.strings.into_iter().collect(),
+            bytes_literals: self.bytes.into_iter().collect(),
+            function_strings,
+            function_method_info: self.function_method_info,
+        }
     }
 
     fn add_string(&mut self, s: String) {
         self.strings.insert(s.clone());
-        // Also track which function this string belongs to
         if let Some(key) = &self.current_function {
             self.function_strings
                 .entry(key.clone())
@@ -55,31 +74,16 @@ impl StringCollector {
         }
     }
 
-    pub(super) fn collect_module(&mut self, module: &TirModule) {
-        for func_rc in &module.functions {
-            let func = func_rc.borrow();
-            if let Some(body) = &func.body {
-                let key = (func.module_source.clone(), func.name.clone());
-                self.current_function = Some(key.clone());
-                self.function_method_info
-                    .insert(key, func.method_info.clone());
-                self.collect_block(body);
-                self.current_function = None;
-            }
-        }
-        // Also collect from trait impl methods
-        for impl_block in &module.impls {
-            for method in &impl_block.methods {
-                if let Some(body) = &method.body {
-                    let key = (method.module_source.clone(), method.name.clone());
-                    self.current_function = Some(key.clone());
-                    self.function_method_info
-                        .insert(key, method.method_info.clone());
-                    self.collect_block(body);
-                    self.current_function = None;
-                }
-            }
-        }
+    fn collect_function(&mut self, func: &TirFunction) {
+        let Some(body) = &func.body else {
+            return;
+        };
+        let key = (func.module_source.clone(), func.name.clone());
+        self.current_function = Some(key.clone());
+        self.function_method_info
+            .insert(key, func.method_info.clone());
+        self.collect_block(body);
+        self.current_function = None;
     }
 
     fn collect_block(&mut self, block: &TirBlock) {
@@ -252,7 +256,6 @@ impl StringCollector {
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.collect_expr(value);
             }
-            // Lowered pattern matching nodes
             TirExprKind::VariantTag { expr }
             | TirExprKind::VariantTest { expr, .. }
             | TirExprKind::VariantPayload { expr, .. } => {
@@ -270,7 +273,6 @@ impl StringCollector {
                 }
                 self.collect_block(default);
             }
-            // Literals and simple expressions don't contain strings
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
             | TirExprKind::BoolLiteral(_)

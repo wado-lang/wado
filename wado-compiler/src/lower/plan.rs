@@ -11,14 +11,22 @@
 
 use crate::flat_package::FlatPackage;
 
+pub mod string;
 pub mod value_copy;
 
 pub struct LowerPlan {
     pub value_copy: value_copy::ValueCopyPlan,
+    pub strings: string::StringPlan,
 }
 
 pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
+    let value_copy = value_copy::plan(flat);
+    // Strings are collected after `value_copy` planning so any literals
+    // that synthesized `$value_copy$T<id>` helpers introduce are
+    // included.
+    let strings = string::plan(flat);
     LowerPlan {
-        value_copy: value_copy::plan(flat),
+        value_copy,
+        strings,
     }
 }
