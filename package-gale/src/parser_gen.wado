@@ -47,7 +47,18 @@ use { GenContext, KindSetEntry, is_nullable, sets_overlap, is_simple_token_group
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
 use { log_stderr } from "core:cli";
 use { TreeSet } from "core:collections";
-use { LoweredGrammar, Rule, SimpleRule, MultiAltRule, LeftRecursiveRule, rule_header } from "./gir.wado";
+use {
+    LoweredGrammar,
+    Rule,
+    SimpleRule,
+    MultiAltRule,
+    LeftRecursiveRule,
+    AltBody,
+    FieldDecl,
+    FieldKind,
+    rule_header,
+    rule_alt_body,
+} from "./gir.wado";
 use {
     is_left_recursive,
     is_prefix_alt,
@@ -1149,7 +1160,7 @@ fn emit_follow_variant_from_gir(w: &mut CodeWriter, variant_rule: &Rule, ctx: &m
         gen_scan_function_named(w, rule, ctx, &scan_name, /*allow_lr_split=*/ true);
     }
     if entry.parse_used {
-        gen_parse_fn_named(w, rule, ctx, &parse_name, &scan_name, /*emit_visibility=*/ false);
+        gen_parse_fn_named(w, rule, variant_rule, ctx, &parse_name, &scan_name, /*emit_visibility=*/ false);
     }
 
     ctx.current_rule_name = saved_rule_name;
@@ -2608,28 +2619,23 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
     let fn_name = `parse_{rule.snake_name}`;
     let scan_fn_name = `scan_{rule.snake_name}`;
     match *lowered_rule {
-        Simple(s) => gen_parse_fn_simple(w, rule, s, ctx, &fn_name, &scan_fn_name),
-        MultiAlt(m) => gen_parse_fn_multi_alt(w, rule, m, ctx, &fn_name, &scan_fn_name),
-        LeftRecursive(l) => gen_parse_fn_left_recursive(w, rule, l, ctx, &fn_name, &scan_fn_name),
+        Simple(_) => gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, &fn_name, /*emit_visibility=*/ true),
+        MultiAlt(_) | LeftRecursive(_) => gen_parse_fn_named(w, rule, lowered_rule, ctx, &fn_name, &scan_fn_name, /*emit_visibility=*/ true),
     };
-}
-
-/// Emit a single-alternative rule. The body inlines the alt
-/// directly with no dispatch table — the simplest shape. The
-/// lowered `SimpleRule` carries the header / fields / alt body
-/// already classified; this wrapper installs the public function
-/// name and delegates to the shared emit core.
-fn gen_parse_fn_simple(w: &mut CodeWriter, rule: &ParserRule, lowered: &SimpleRule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String) {
-    let _ = scan_fn_name;
-    let _ = lowered;
-    gen_parse_fn_simple_named(w, rule, ctx, fn_name, /*emit_visibility=*/ true);
 }
 
 /// Body emitter for a single-alt rule, parameterised by function
 /// name so the follow-aware variant pass can reuse it with
 /// `parse_<rule>__follow_<id>`. No internal classification — the
 /// caller already committed to the Simple shape.
-fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext, fn_name: &String, emit_visibility: bool) {
+///
+/// `lowered_rule` is the corresponding `Rule::Simple` (or a
+/// `Rule::MultiAlt` / `Rule::LeftRecursive` in the variant-emission
+/// path where we still route through `gen_parse_fn_named` and the
+/// alt-len-1 shortcut lands here). `rule_alt_body` resolves the
+/// single AltBody whose `fields` drives the struct-literal field
+/// assignments emitted after the alt body.
+fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext, fn_name: &String, emit_visibility: bool) {
     ctx.current_rule_name = rule.name;
     ctx.group_counter = 0;
     let type_name = rule_type_name(&rule.name);
@@ -2647,27 +2653,10 @@ fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
     f.set_return_type(`Result<{type_name}, ParseError>`);
     f.emit_begin(w);
     w.line("let start = p.peek().span.start;");
-    gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], ctx);
+    let body = rule_alt_body(lowered_rule, 0).unwrap();
+    gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], body, ctx);
     w.end();
     w.blank();
-}
-
-/// Emit a multi-alternative rule with no LR alts. Dispatch comes
-/// from the lowered `MultiAltRule.dispatch` — `Direct` for
-/// disjoint first-sets, `Tournament` for overlapping
-/// fully-scannable alts.
-fn gen_parse_fn_multi_alt(w: &mut CodeWriter, rule: &ParserRule, lowered: &MultiAltRule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String) {
-    let _ = lowered;
-    gen_parse_fn_named(w, rule, ctx, fn_name, scan_fn_name, /*emit_visibility=*/ true);
-}
-
-/// Emit a directly-left-recursive rule (atom + lr_alts +
-/// precedence-climbing suffix loop). The lowered
-/// `LeftRecursiveRule` already split the alts into atom / LR
-/// groups and computed every precedence assignment.
-fn gen_parse_fn_left_recursive(w: &mut CodeWriter, rule: &ParserRule, lowered: &LeftRecursiveRule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String) {
-    let _ = lowered;
-    gen_parse_fn_named(w, rule, ctx, fn_name, scan_fn_name, /*emit_visibility=*/ true);
 }
 
 
@@ -2682,13 +2671,13 @@ fn gen_parse_fn_left_recursive(w: &mut CodeWriter, rule: &ParserRule, lowered: &
 /// `emit_visibility` is `false` for variant emission to suppress the
 /// `pub`/`export` doc comment on the variant function (variants are
 /// implementation details, not part of the rule's exposed surface).
-fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String, emit_visibility: bool) {
+fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String, emit_visibility: bool) {
     // Variant emission and the (legacy) single shared dispatch route
     // through here. Single-alt rules are handled by the dedicated
     // \`gen_parse_fn_simple_named\` so the heavy multi-alt + LR setup
     // below doesn't run for the trivial shape.
     if rule.alternatives.len() == 1 {
-        gen_parse_fn_simple_named(w, rule, ctx, fn_name, emit_visibility);
+        gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, fn_name, emit_visibility);
         return;
     }
 
@@ -2765,12 +2754,14 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContex
                     ctx.group_counter = ctx.alt_gc_starts[alt_idx];
                     let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
                     ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec(rule, alt_idx);
+                    let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
                     gen_alt_body(
                         w,
                         &type_name,
                         Option::<String>::Some(case_names[alt_idx]),
                         Option::<String>::Some(sname),
                         alt,
+                        body,
                         ctx,
                     );
                     ctx.prefix_self_ref_min_prec = saved_prefix_prec;
@@ -2802,9 +2793,9 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContex
         f.emit_begin(w);
         w.line("let start = p.peek().span.start;");
         if has_overlaps {
-            gen_multi_alt_body_bt(w, rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices);
+            gen_multi_alt_body_bt(w, rule, lowered_rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices);
         } else {
-            gen_multi_alt_body(w, rule, &type_name, ctx, &non_lr_indices);
+            gen_multi_alt_body(w, rule, lowered_rule, &type_name, ctx, &non_lr_indices);
         }
         w.end();
         w.blank();
@@ -2835,9 +2826,9 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContex
         f.emit_begin(w);
         w.line("let start = p.peek().span.start;");
         if has_overlaps {
-            gen_multi_alt_body_bt(w, rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices);
+            gen_multi_alt_body_bt(w, rule, lowered_rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices);
         } else {
-            gen_multi_alt_body(w, rule, &type_name, ctx, &non_lr_indices);
+            gen_multi_alt_body(w, rule, lowered_rule, &type_name, ctx, &non_lr_indices);
         }
         w.end();
         w.blank();
@@ -2853,7 +2844,7 @@ fn emit_clamped_span_field(w: &mut CodeWriter) {
     w.line("span: Span::new(start, i32::max(start, p.last_end())),");
 }
 
-fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<String>, struct_name: Option<String>, alt: &Alternative, ctx: &mut GenContext) {
+fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<String>, struct_name: Option<String>, alt: &Alternative, body: &AltBody, ctx: &mut GenContext) {
     let gc_start = ctx.group_counter;
     gen_alt_elements(w, &alt.elements, ctx);
 
@@ -2863,16 +2854,32 @@ fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<Str
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
         w.indent();
         emit_clamped_span_field(w);
-        gen_field_assignments(w, &alt.elements, ctx);
+        emit_field_assignments_from_fields(w, &body.fields);
         w.dedent();
         w.line("}));");
     } else {
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
         w.indent();
         emit_clamped_span_field(w);
-        gen_field_assignments(w, &alt.elements, ctx);
+        emit_field_assignments_from_fields(w, &body.fields);
         w.dedent();
         w.line("});");
+    }
+}
+
+/// Emit `{field.name},` for every entry in the alt body's
+/// `FieldDecl` list, skipping the leading `Span` entry that
+/// `emit_clamped_span_field` writes immediately before. `body.fields`
+/// is lower's canonical struct shape (matches what
+/// `codegen.wado::gen_cst_types` emits), so the struct literal stays
+/// in lockstep with the type definition. Replaces the legacy surface-
+/// IR walking `gen_field_assignments`.
+fn emit_field_assignments_from_fields(w: &mut CodeWriter, fields: &Array<FieldDecl>) {
+    for let mut i = 0; i < fields.len(); i += 1 {
+        if let Span = &fields[i].kind {
+            continue;
+        }
+        w.line(`{fields[i].name},`);
     }
 }
 
@@ -2944,7 +2951,7 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
     }
 }
 
-fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, ctx: &mut GenContext, non_lr_indices: &Array<i32>) {
+fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, non_lr_indices: &Array<i32>) {
     let case_names = case_names_for_rule(&rule.alternatives);
 
     let max_k = 5;
@@ -2974,12 +2981,14 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         ctx.group_counter = ctx.alt_gc_starts[alt_idx];
         let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
         ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec(rule, alt_idx);
+        let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
         gen_alt_body(
             w,
             type_name,
             Option::<String>::Some(case_names[alt_idx]),
             Option::<String>::Some(sname),
             alt,
+            body,
             ctx,
         );
         ctx.prefix_self_ref_min_prec = saved_prefix_prec;
@@ -6052,7 +6061,7 @@ fn elements_match(consumed: &Element, expected: &Element) -> bool {
 // `is_self_ref_element`, `compute_prefix_self_ref_min_prec`
 // have moved to `lr_util.wado`.
 
-fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, ctx: &mut GenContext, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>) {
+fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>) {
     let case_names = case_names_for_rule(&rule.alternatives);
     let fn_name = `parse_{rule.snake_name}`;
     w.line("let kind = p.peek_kind();");
@@ -6074,12 +6083,14 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
             ctx.group_counter = ctx.alt_gc_starts[alt_idx];
             let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
             ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec(rule, alt_idx);
+            let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
             gen_alt_body(
                 w,
                 type_name,
                 Option::<String>::Some(case_names[alt_idx]),
                 Option::<String>::Some(sname),
                 alt,
+                body,
                 ctx,
             );
             ctx.prefix_self_ref_min_prec = saved_prefix_prec;
