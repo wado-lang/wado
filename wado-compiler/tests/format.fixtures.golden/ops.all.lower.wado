@@ -4724,10 +4724,6 @@ pub fn u128::from_string(s: String) -> u128 {
     return result;
 }
 
-pub fn u128::from_str(s: String) -> Result<u128, ParseIntError> {
-    return "core::prelude/int128.wado::u128::from_str_radix"(s, 10);
-}
-
 pub fn u128::from_str_hex(s: String) -> Result<u128, ParseIntError> {
     return "core::prelude/int128.wado::u128::from_str_radix"(s, 16);
 }
@@ -5157,10 +5153,6 @@ pub fn i128::from_string(s: String) -> i128 {
         return result.i128::neg();
     }
     return result;
-}
-
-pub fn i128::from_str(s: String) -> Result<i128, ParseIntError> {
-    return "core::prelude/int128.wado::i128::from_str_radix"(s, 10);
 }
 
 pub fn i128::from_str_hex(s: String) -> Result<i128, ParseIntError> {
@@ -6993,10 +6985,6 @@ pub fn i8::to_string(self: Box<i8>) -> String {
     return buf;
 }
 
-pub fn i8::from_str(s: String) -> Result<i8, ParseIntError> {
-    return "core::prelude/primitive.wado::i8::from_str_radix"(s, 10);
-}
-
 pub fn i8::from_str_hex(s: String) -> Result<i8, ParseIntError> {
     return "core::prelude/primitive.wado::i8::from_str_radix"(s, 16);
 }
@@ -7036,10 +7024,6 @@ pub fn u8::to_string(self: Box<u8>) -> String {
     let mut f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut buf);
     self.u8::fmt_into(&mut f);
     return buf;
-}
-
-pub fn u8::from_str(s: String) -> Result<u8, ParseIntError> {
-    return "core::prelude/primitive.wado::u8::from_str_radix"(s, 10);
 }
 
 pub fn u8::from_str_hex(s: String) -> Result<u8, ParseIntError> {
@@ -7083,10 +7067,6 @@ pub fn i16::to_string(self: Box<i16>) -> String {
     return buf;
 }
 
-pub fn i16::from_str(s: String) -> Result<i16, ParseIntError> {
-    return "core::prelude/primitive.wado::i16::from_str_radix"(s, 10);
-}
-
 pub fn i16::from_str_hex(s: String) -> Result<i16, ParseIntError> {
     return "core::prelude/primitive.wado::i16::from_str_radix"(s, 16);
 }
@@ -7126,10 +7106,6 @@ pub fn u16::to_string(self: Box<u16>) -> String {
     let mut f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut buf);
     self.u16::fmt_into(&mut f);
     return buf;
-}
-
-pub fn u16::from_str(s: String) -> Result<u16, ParseIntError> {
-    return "core::prelude/primitive.wado::u16::from_str_radix"(s, 10);
 }
 
 pub fn u16::from_str_hex(s: String) -> Result<u16, ParseIntError> {
@@ -7197,10 +7173,6 @@ pub fn i32::to_string(self: Box<i32>) -> String {
     return buf;
 }
 
-pub fn i32::from_str(s: String) -> Result<i32, ParseIntError> {
-    return "core::prelude/primitive.wado::i32::from_str_radix"(s, 10);
-}
-
 pub fn i32::from_str_hex(s: String) -> Result<i32, ParseIntError> {
     return "core::prelude/primitive.wado::i32::from_str_radix"(s, 16);
 }
@@ -7252,10 +7224,6 @@ pub fn u32::to_string(self: Box<u32>) -> String {
     let mut f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut buf);
     self.u32::fmt_into(&mut f);
     return buf;
-}
-
-pub fn u32::from_str(s: String) -> Result<u32, ParseIntError> {
-    return "core::prelude/primitive.wado::u32::from_str_radix"(s, 10);
 }
 
 pub fn u32::from_str_hex(s: String) -> Result<u32, ParseIntError> {
@@ -7339,10 +7307,6 @@ pub fn i64::to_string(self: Box<i64>) -> String {
     let mut f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut buf);
     self.i64::fmt_into(&mut f);
     return buf;
-}
-
-pub fn i64::from_str(s: String) -> Result<i64, ParseIntError> {
-    return "core::prelude/primitive.wado::i64::from_str_radix"(s, 10);
 }
 
 pub fn i64::from_str_hex(s: String) -> Result<i64, ParseIntError> {
@@ -7455,10 +7419,6 @@ pub fn u64::to_string(self: Box<u64>) -> String {
     let mut f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut buf);
     self.u64::fmt_into(&mut f);
     return buf;
-}
-
-pub fn u64::from_str(s: String) -> Result<u64, ParseIntError> {
-    return "core::prelude/primitive.wado::u64::from_str_radix"(s, 10);
 }
 
 pub fn u64::from_str_hex(s: String) -> Result<u64, ParseIntError> {
@@ -7737,13 +7697,6 @@ pub fn f32::is_nan(self: Box<f32>) -> bool {
 
 pub fn f32::is_finite(self: Box<f32>) -> bool {
     return ((self.value - self.value) == 0.0);
-}
-
-pub fn f32::from_str(s: String) -> Result<f32, ParseFloatError> {
-    return match "core::prelude/intparse.wado::parse_f64_from_str_range"(s, 0, s.String::len()) {
-        Ok(v) => Result<f32, ParseFloatError>::Ok(v as f32),
-        Err(e) => Result<f32, ParseFloatError>::Err(e),
-    };
 }
 
 pub fn f32::to_bits(self: Box<f32>) -> i32 {
@@ -8087,10 +8040,6 @@ pub fn f64::is_nan(self: Box<f64>) -> bool {
 
 pub fn f64::is_finite(self: Box<f64>) -> bool {
     return ((self.value - self.value) == 0.0);
-}
-
-pub fn f64::from_str(s: String) -> Result<f64, ParseFloatError> {
-    return "core::prelude/intparse.wado::parse_f64_from_str_range"(s, 0, s.String::len());
 }
 
 pub fn f64::to_bits(self: Box<f64>) -> i64 {

@@ -1050,8 +1050,6 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str(s: String) -> Result<i8, ParseIntError>`
-
 #### `pub fn from_str_hex(s: String) -> Result<i8, ParseIntError>`
 
 #### `pub fn from_str_radix(s: String, radix: u32) -> Result<i8, ParseIntError>`
@@ -1144,8 +1142,6 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str(s: String) -> Result<u8, ParseIntError>`
-
 #### `pub fn from_str_hex(s: String) -> Result<u8, ParseIntError>`
 
 #### `pub fn from_str_radix(s: String, radix: u32) -> Result<u8, ParseIntError>`
@@ -1233,8 +1229,6 @@ Encodes this character as UTF-8, returning the bytes.
 #### `pub fn min(a: i16, b: i16) -> i16`
 
 #### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str(s: String) -> Result<i16, ParseIntError>`
 
 #### `pub fn from_str_hex(s: String) -> Result<i16, ParseIntError>`
 
@@ -1331,8 +1325,6 @@ Encodes this character as UTF-8, returning the bytes.
 #### `pub fn min(a: u16, b: u16) -> u16`
 
 #### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str(s: String) -> Result<u16, ParseIntError>`
 
 #### `pub fn from_str_hex(s: String) -> Result<u16, ParseIntError>`
 
@@ -1433,8 +1425,6 @@ Counts the trailing zeros in this integer.
 Counts the number of set bits (population count).
 
 #### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str(s: String) -> Result<i32, ParseIntError>`
 
 #### `pub fn from_str_hex(s: String) -> Result<i32, ParseIntError>`
 
@@ -1539,8 +1529,6 @@ Counts the number of set bits (population count).
 #### `pub fn min(a: u32, b: u32) -> u32`
 
 #### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str(s: String) -> Result<u32, ParseIntError>`
 
 #### `pub fn from_str_hex(s: String) -> Result<u32, ParseIntError>`
 
@@ -1654,8 +1642,6 @@ Counts the number of set bits (population count).
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str(s: String) -> Result<i64, ParseIntError>`
-
 #### `pub fn from_str_hex(s: String) -> Result<i64, ParseIntError>`
 
 #### `pub fn from_str_radix(s: String, radix: u32) -> Result<i64, ParseIntError>`
@@ -1767,8 +1753,6 @@ Counts the number of set bits (population count).
 #### `pub fn min(a: u64, b: u64) -> u64`
 
 #### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str(s: String) -> Result<u64, ParseIntError>`
 
 #### `pub fn from_str_hex(s: String) -> Result<u64, ParseIntError>`
 
@@ -2026,8 +2010,6 @@ Floating-point remainder of x/y
 
 #### `pub fn is_finite(&self) -> bool`
 
-#### `pub fn from_str(s: String) -> Result<f32, ParseFloatError>`
-
 #### `pub fn to_bits(&self) -> i32`
 
 Reinterprets the bits of this f32 as an i32.
@@ -2255,8 +2237,6 @@ Floating-point remainder of x/y
 #### `pub fn is_nan(&self) -> bool`
 
 #### `pub fn is_finite(&self) -> bool`
-
-#### `pub fn from_str(s: String) -> Result<f64, ParseFloatError>`
 
 #### `pub fn to_bits(&self) -> i64`
 
@@ -2568,11 +2548,6 @@ Used by the compiler for efficient large literal construction
 Create a u128 from a string (decimal representation)
 Used for literal coercion: `let x: u128 = "12345678901234567890"`
 
-#### `pub fn from_str(s: String) -> Result<u128, ParseIntError>`
-
-Parse a decimal `u128` from a string, returning an error on overflow,
-empty input, or invalid characters.
-
 #### `pub fn from_str_hex(s: String) -> Result<u128, ParseIntError>`
 
 Parse a hexadecimal `u128` from a string (equivalent to `from_str_radix(s, 16)`).
@@ -2772,11 +2747,6 @@ Used by the compiler for efficient large literal construction
 
 Create an i128 from a string (decimal representation, optionally prefixed with '-')
 Used for literal coercion: `let x: i128 = "-12345678901234567890"`
-
-#### `pub fn from_str(s: String) -> Result<i128, ParseIntError>`
-
-Parse a decimal `i128` from a string, returning an error on overflow,
-empty input, or invalid characters.
 
 #### `pub fn from_str_hex(s: String) -> Result<i128, ParseIntError>`
 

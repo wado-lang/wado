@@ -1727,16 +1727,26 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if has_self {
                     continue;
                 }
-                // Resolve `Self` (which may appear in the default body's
-                // return type) to the concrete struct at the call site.
-                let self_type_id = {
-                    let struct_src = self.find_struct_module_source(struct_name);
-                    self.type_table
-                        .borrow_mut()
-                        .make_struct(struct_name.to_string(), struct_src)
-                };
                 let mut scope = self.enter_inherited_type_param_scope();
                 scope.trait_ctx.type_params.clear();
+                scope.trait_ctx.assoc_type_bindings.clear();
+                // Bind `Self::AssocName` projections that may appear in the
+                // trait default body's return type (e.g. FromStr's
+                // `Result<Self, Self::Err>`). Pull the bindings from the
+                // impl block that connects this trait to this type.
+                let impl_assoc_types =
+                    scope.find_impl_assoc_types(struct_name, &trait_name);
+                for binding in &impl_assoc_types {
+                    let type_id = scope.resolve_type(&binding.ty);
+                    scope
+                        .trait_ctx
+                        .assoc_type_bindings
+                        .insert(binding.name.clone(), type_id);
+                }
+                // Resolve `Self` to the concrete type at the call site.
+                // `resolve_named_type` maps primitives to their canonical
+                // TypeTable id rather than a struct wrapper.
+                let self_type_id = scope.resolve_named_type(struct_name, Span::default());
                 let old_self = scope.trait_ctx.self_type;
                 scope.trait_ctx.self_type = Some(self_type_id);
                 let result = default_method
@@ -1751,6 +1761,43 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         TypeTable::UNKNOWN
+    }
+
+    /// Look up the associated-type bindings on the impl block that
+    /// connects `trait_name` to `struct_name`. Returns an empty vec when
+    /// the impl is auto-derived or otherwise has no bindings.
+    fn find_impl_assoc_types(
+        &self,
+        struct_name: &str,
+        trait_name: &str,
+    ) -> Vec<ast::AssociatedTypeBinding> {
+        let scan = |items: &[Item]| -> Option<Vec<ast::AssociatedTypeBinding>> {
+            for item in items {
+                if let Item::Impl(impl_block) = item
+                    && let Some(trait_type) = &impl_block.trait_type
+                    && Self::get_type_name_static(trait_type) == trait_name
+                    && Self::get_type_name_static(&impl_block.ty) == struct_name
+                {
+                    return Some(impl_block.associated_types.clone());
+                }
+            }
+            None
+        };
+        if let Some(found) = scan(self.current_module_items) {
+            return found;
+        }
+        if let Some(entries) = self.trait_env.impl_index.get(struct_name) {
+            for (module_source, item_idx) in entries {
+                if let Some(module) = self.loaded_modules.get(module_source)
+                    && let Item::Impl(impl_block) = &module.items[*item_idx]
+                    && let Some(trait_type) = &impl_block.trait_type
+                    && Self::get_type_name_static(trait_type) == trait_name
+                {
+                    return impl_block.associated_types.clone();
+                }
+            }
+        }
+        Vec::new()
     }
 
     /// Look up static method parameter types for coercion.

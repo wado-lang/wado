@@ -424,10 +424,6 @@ impl i8 {
         return buf;
     }
 
-    pub fn from_str(s: String) -> Result<i8, ParseIntError> {
-        return i8::from_str_radix(s, 10);
-    }
-
     pub fn from_str_hex(s: String) -> Result<i8, ParseIntError> {
         return i8::from_str_radix(s, 16);
     }
@@ -471,10 +467,6 @@ impl u8 {
         let mut f = Formatter::new(&mut buf);
         self.fmt_into(&mut f);
         return buf;
-    }
-
-    pub fn from_str(s: String) -> Result<u8, ParseIntError> {
-        return u8::from_str_radix(s, 10);
     }
 
     pub fn from_str_hex(s: String) -> Result<u8, ParseIntError> {
@@ -522,10 +514,6 @@ impl i16 {
         return buf;
     }
 
-    pub fn from_str(s: String) -> Result<i16, ParseIntError> {
-        return i16::from_str_radix(s, 10);
-    }
-
     pub fn from_str_hex(s: String) -> Result<i16, ParseIntError> {
         return i16::from_str_radix(s, 16);
     }
@@ -569,10 +557,6 @@ impl u16 {
         let mut f = Formatter::new(&mut buf);
         self.fmt_into(&mut f);
         return buf;
-    }
-
-    pub fn from_str(s: String) -> Result<u16, ParseIntError> {
-        return u16::from_str_radix(s, 10);
     }
 
     pub fn from_str_hex(s: String) -> Result<u16, ParseIntError> {
@@ -643,10 +627,6 @@ impl i32 {
         return buf;
     }
 
-    pub fn from_str(s: String) -> Result<i32, ParseIntError> {
-        return i32::from_str_radix(s, 10);
-    }
-
     pub fn from_str_hex(s: String) -> Result<i32, ParseIntError> {
         return i32::from_str_radix(s, 16);
     }
@@ -698,10 +678,6 @@ impl u32 {
         let mut f = Formatter::new(&mut buf);
         self.fmt_into(&mut f);
         return buf;
-    }
-
-    pub fn from_str(s: String) -> Result<u32, ParseIntError> {
-        return u32::from_str_radix(s, 10);
     }
 
     pub fn from_str_hex(s: String) -> Result<u32, ParseIntError> {
@@ -790,10 +766,6 @@ impl i64 {
         let mut f = Formatter::new(&mut buf);
         self.fmt_into(&mut f);
         return buf;
-    }
-
-    pub fn from_str(s: String) -> Result<i64, ParseIntError> {
-        return i64::from_str_radix(s, 10);
     }
 
     pub fn from_str_hex(s: String) -> Result<i64, ParseIntError> {
@@ -908,10 +880,6 @@ impl u64 {
         let mut f = Formatter::new(&mut buf);
         self.fmt_into(&mut f);
         return buf;
-    }
-
-    pub fn from_str(s: String) -> Result<u64, ParseIntError> {
-        return u64::from_str_radix(s, 10);
     }
 
     pub fn from_str_hex(s: String) -> Result<u64, ParseIntError> {
@@ -1207,13 +1175,6 @@ impl f32 {
 
     pub fn is_finite(&self) -> bool {
         return *self - *self == 0.0;
-    }
-
-    pub fn from_str(s: String) -> Result<f32, ParseFloatError> {
-        return match parse_f64_from_str_range(s, 0, s.len()) {
-            Ok(v) => Result::Ok(v as f32),
-            Err(e) => Result::Err(e),
-        };
     }
 
     /// Reinterprets the bits of this f32 as an i32.
@@ -1560,10 +1521,6 @@ impl f64 {
 
     pub fn is_finite(&self) -> bool {
         return *self - *self == 0.0;
-    }
-
-    pub fn from_str(s: String) -> Result<f64, ParseFloatError> {
-        return parse_f64_from_str_range(s, 0, s.len());
     }
 
     /// Reinterprets the bits of this f64 as an i64.
