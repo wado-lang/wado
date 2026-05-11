@@ -18,9 +18,11 @@ pub fn make_inactive() -> Status {
 pub fn status_value(s: Status) -> i32 {
     return match s {
         Active(n) => n,
-        // Distinctive sentinel: any same-name-variant collision that
-        // makes the `Active` arm silently always-match would leak a
-        // garbage `n` from the `Inactive` payload instead of 999.
+        // Distinctive sentinel: a same-name-variant collision that
+        // miscompiles the discriminant check would route an
+        // `Inactive` value into the `Active(n)` arm and either
+        // produce a wrong value or trap on the missing payload
+        // load. 999 is the only correct answer for `Inactive`.
         Inactive => 999,
     };
 }
