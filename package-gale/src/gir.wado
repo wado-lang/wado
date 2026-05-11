@@ -261,6 +261,12 @@ pub struct LrAlt {
     /// block, not source order). Affects how `own_prec` is reused
     /// for the trailing self-ref.
     pub right_associative: bool,
+    /// FieldDecl for the leading self-reference that the LR rewrite
+    /// stripped from `suffix.ops`. The CST struct for this alt still
+    /// surfaces the left operand as a field — `suffix.fields` carries
+    /// only the right-hand side, so emit prepends this decl when
+    /// laying out the struct.
+    pub prefix_self_ref: FieldDecl,
 }
 
 /// LR suffix dispatch metadata. The fields mirror
@@ -451,6 +457,14 @@ pub variant Op {
     /// a storable subtree, a token-only field, a single-alt struct,
     /// a general variant, or a transparent inlining.
     Group(GroupOp),
+    /// `name+=elem` list-label that is NOT wrapped in a Repeat. The
+    /// outer struct field surfaces as `Array<inner_type>` even
+    /// though a single `+=` only contributes once per execution;
+    /// emit's runtime construction (still surface-IR-driven in
+    /// parser_gen) pre-allocates the array and `push`es the matched
+    /// value. The scalar `=` label is folded into the inner op via
+    /// `rebind_op_field` and does NOT produce this variant.
+    ListLabel(ListLabelOp),
 }
 
 pub struct TokenOp {
@@ -497,6 +511,18 @@ pub struct ExcludedOp {
     /// Exclusion set. emit renders this as a literal token-array
     /// passed to `p.match_not([...])`.
     pub kinds: Array<String>,
+    pub field: String,
+}
+
+/// `name+=elem` outside of a Repeat. The outer CST struct lays out
+/// the field as `Array<inner_type>`; emit pushes the matched value
+/// into a list even though a single `+=` only contributes once.
+pub struct ListLabelOp {
+    /// Inner op the label wraps. Carries the runtime match shape
+    /// (Token / RuleCall / Group / …); the wrapper exists only to
+    /// surface the `Array<>` typing.
+    pub inner: Op,
+    /// Outer CST struct field name (the label's name, deduped).
     pub field: String,
 }
 

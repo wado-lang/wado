@@ -1,0 +1,18 @@
+// Sub-module exporting a struct type whose owning variant is also
+// exported here. Imported by the parent fixture WITHOUT pulling in
+// the inner struct name — exposing the missing-import diagnostic
+// gap in `wir_build/translate.rs::TirExprKind::StructLiteral`.
+
+pub variant Op {
+    Token(TokenOp),
+    Wrapped(WrappedOp),
+}
+
+pub struct TokenOp {
+    pub kind: String,
+}
+
+pub struct WrappedOp {
+    pub field: String,
+    pub inner: Op,
+}

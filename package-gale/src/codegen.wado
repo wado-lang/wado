@@ -1,40 +1,10 @@
 use {
     Grammar,
     OptionValue,
-    ParserRule,
-    Alternative,
-    Element,
-    RepeatElement,
-    LabelElement,
-    NotElement,
-    RepeatKind,
     LexerRule,
     normalize_caches,
 } from "./ir.wado";
-use {
-    to_pascal_case,
-    rule_type_name,
-    literal_field_name,
-    not_element_field_name,
-    strip_suffix,
-    case_names_for_rule,
-    is_simple_cst_group,
-    is_token_only_group,
-    is_single_alt_group,
-    is_storable_group,
-    is_general_group,
-    group_variant_type_name,
-    group_field_base_name,
-    group_case_name,
-    single_alt_group_type_name,
-    single_alt_group_field_name,
-    token_group_field_name,
-    general_group_type_name,
-    general_group_field_name,
-    general_group_alt_struct_name,
-    count_element_groups,
-    count_general_groups,
-} from "./gen_util.wado";
+use { rule_type_name } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use { gen_parser, gen_kind_set_helpers } from "./parser_gen.wado";
 use { gen_visitor } from "./visitor_gen.wado";
@@ -42,7 +12,22 @@ use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
 use { lower_with_ctx } from "./lower.wado";
-use { LoweredGrammar } from "./gir.wado";
+use {
+    LoweredGrammar,
+    Rule,
+    SimpleRule,
+    MultiAltRule,
+    LeftRecursiveRule,
+    LrAlt,
+    AltBody,
+    Op,
+    GroupOp,
+    GroupShape,
+    SimpleCstShape,
+    SingleAltShape,
+    GeneralShape,
+    FieldDecl,
+} from "./gir.wado";
 
 pub struct GenerateOptions {
     pub highlight: bool,
@@ -56,21 +41,18 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> String {
     // for IR constructed with struct-literal syntax (e.g. unit tests).
     normalize_caches(grammar);
     let mut w = CodeWriter::new();
+    // Lower up-front so CST emission can consume `AltBody.fields` /
+    // `GroupShape` directly. Sharing the GenContext primes the
+    // follow-variant / kind-set registries and the first / nullable
+    // / scannable caches for the subsequent parser emit.
+    let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
+    let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
+    let lowered = lower_with_ctx(grammar, &lit_tokens, &mut ctx);
     gen_header(&mut w, grammar);
     gen_grammar_metadata(&mut w, grammar);
     gen_runtime(&mut w);
     gen_token_kind(&mut w, &grammar.lexer_rules);
-    gen_cst_types(&mut w, &grammar.parser_rules);
-    let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
-    // Create the shared GenContext up front so lower's pre-pass
-    // (follow-variant registry, kind-set registry, first / nullable
-    // / scannable caches) primes the same instance emit later
-    // consumes. Sharing the registry means id assignments line up:
-    // lower picks the first id for the first set it sees; emit's
-    // subsequent intern_kind_set / intern_follow_variant calls hit
-    // the cache and return the same id lower already chose.
-    let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
-    let lowered = lower_with_ctx(grammar, &lit_tokens, &mut ctx);
+    gen_cst_types(&mut w, &lowered);
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
     gen_lexer(&mut w, grammar, &lit_tokens);
     gen_parser(&mut w, grammar, &lowered, &mut ctx);
@@ -182,138 +164,241 @@ fn gen_token_kind(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>) {
     w.blank();
 }
 
-fn gen_cst_types(w: &mut CodeWriter, parser_rules: &Array<ParserRule>) {
+
+/// Emit every CST type for the grammar, driven entirely by GIR.
+/// Each `Rule` lays out the struct / enum shapes via:
+///
+/// * `AltBody.fields` — `FieldDecl`s populated by lower's
+///   `enumerate_alt_field_decls` / `enumerate_op_field_decls`.
+/// * `Op::Group` + `GroupShape` — pre-classified nested types
+///   (`Transparent` / `TokenOnly` / `SimpleCst` / `SingleAlt` /
+///   `General`); each shape carries the struct / variant identifiers
+///   the legacy emit recomputed at every traversal.
+///
+/// emit reads these decisions verbatim — no surface-IR walk, no
+/// re-classification, no group-counter bookkeeping.
+fn gen_cst_types(w: &mut CodeWriter, lowered: &LoweredGrammar) {
     let mut emitted: Array<String> = [];
-    for let rule of parser_rules {
-        gen_parser_rule_type(w, rule, &mut emitted);
+    for let rule of &lowered.parser_rules {
+        gen_rule_cst_type(w, rule, &mut emitted);
     }
 }
 
-fn gen_parser_rule_type(w: &mut CodeWriter, rule: &ParserRule, emitted: &mut Array<String>) {
-    let type_name = rule_type_name(&rule.name);
-    let mut group_counter: i32 = 0;
-    if rule.alternatives.len() == 1 {
-        gen_struct_for_alt(w, &type_name, &rule.alternatives[0], emitted, &rule.name, &mut group_counter);
-    } else {
-        let case_names = case_names_for_rule(&rule.alternatives);
-        let base = strip_suffix(&type_name, "Node");
-        let mut v = VariantSpec::new(&type_name);
-        v.set_pub();
-        for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-            let struct_name = `{base}{case_names[i]}`;
-            v.add_case_with_payload(&case_names[i], &struct_name);
-        }
-        v.emit(w);
-        w.blank();
+fn gen_rule_cst_type(w: &mut CodeWriter, rule: &Rule, emitted: &mut Array<String>) {
+    return match *rule {
+        Simple(s) => {
+            gen_ops_nested_types(w, &s.body.ops, &s.header.name, emitted);
+            emit_alt_struct(w, &s.body.struct_name, &s.body.fields);
+        },
+        MultiAlt(m) => gen_multi_alt_cst(w, &m.header.name, &m.header.type_name, &m.alts, emitted),
+        LeftRecursive(l) => gen_lr_cst(w, &l.header.name, &l.header.type_name, &l.atom.alts, &l.lr_alts, emitted),
+    };
+}
 
-        for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-            let struct_name = `{base}{case_names[i]}`;
-            gen_struct_for_alt(w, &struct_name, &rule.alternatives[i], emitted, &rule.name, &mut group_counter);
-        }
+fn gen_multi_alt_cst(
+    w: &mut CodeWriter,
+    rule_name: &String,
+    type_name: &String,
+    alts: &Array<AltBody>,
+    emitted: &mut Array<String>,
+) {
+    let mut v = VariantSpec::new(type_name);
+    v.set_pub();
+    for let alt of alts {
+        v.add_case_with_payload(&alt.case_name, &alt.struct_name);
+    }
+    v.emit(w);
+    w.blank();
+    for let alt of alts {
+        gen_ops_nested_types(w, &alt.ops, rule_name, emitted);
+        emit_alt_struct(w, &alt.struct_name, &alt.fields);
     }
 }
 
-fn gen_struct_for_alt(w: &mut CodeWriter, type_name: &String, alt: &Alternative, emitted: &mut Array<String>, rule_name: &String, group_counter: &mut i32) {
-    let gc_start = *group_counter;
-    gen_group_variant_types(w, &alt.elements, emitted, rule_name, group_counter);
-    let mut gc = gc_start;
-    let fields = collect_fields(&alt.elements, rule_name, &mut gc);
+fn gen_lr_cst(
+    w: &mut CodeWriter,
+    rule_name: &String,
+    type_name: &String,
+    atom_alts: &Array<AltBody>,
+    lr_alts: &Array<LrAlt>,
+    emitted: &mut Array<String>,
+) {
+    // The variant cases follow original source order. Each
+    // `AltBody.alt_index` / `LrAlt.alt_index` is the position of the
+    // alt in the surface rule, so iterating `0..total` and looking
+    // each one up reconstructs that order without sorting.
+    let total: i32 = atom_alts.len() + lr_alts.len();
+    let mut v = VariantSpec::new(type_name);
+    v.set_pub();
+    for let mut idx = 0; idx < total; idx += 1 {
+        let pair = find_lr_alt_names(atom_alts, lr_alts, idx);
+        v.add_case_with_payload(&pair.0, &pair.1);
+    }
+    v.emit(w);
+    w.blank();
+    for let mut idx = 0; idx < total; idx += 1 {
+        emit_lr_alt_struct(w, atom_alts, lr_alts, idx, rule_name, emitted);
+    }
+}
+
+fn find_lr_alt_names(atom_alts: &Array<AltBody>, lr_alts: &Array<LrAlt>, idx: i32) -> [String, String] {
+    for let a of atom_alts {
+        if a.alt_index == idx {
+            return [a.case_name, a.struct_name];
+        }
+    }
+    for let l of lr_alts {
+        if l.alt_index == idx {
+            return [l.case_name, l.struct_name];
+        }
+    }
+    panic(`gen_lr_cst: no atom / lr alt has alt_index = {idx}`);
+}
+
+fn emit_lr_alt_struct(
+    w: &mut CodeWriter,
+    atom_alts: &Array<AltBody>,
+    lr_alts: &Array<LrAlt>,
+    idx: i32,
+    rule_name: &String,
+    emitted: &mut Array<String>,
+) {
+    for let a of atom_alts {
+        if a.alt_index == idx {
+            gen_ops_nested_types(w, &a.ops, rule_name, emitted);
+            emit_alt_struct(w, &a.struct_name, &a.fields);
+            return;
+        }
+    }
+    for let l of lr_alts {
+        if l.alt_index == idx {
+            gen_ops_nested_types(w, &l.suffix.ops, rule_name, emitted);
+            // LR alts surface the stripped leading self-ref as a CST
+            // field — `l.suffix.fields` only carries the right-hand
+            // side, so prepend the prefix decl (preserving the
+            // leading `span` entry).
+            let mut combined: Array<FieldDecl> = [];
+            for let mut i = 0; i < l.suffix.fields.len(); i += 1 {
+                combined.push(l.suffix.fields[i]);
+                if i == 0 {
+                    combined.push(l.prefix_self_ref);
+                }
+            }
+            emit_alt_struct(w, &l.struct_name, &combined);
+            return;
+        }
+    }
+    panic(`emit_lr_alt_struct: no atom / lr alt has alt_index = {idx}`);
+}
+
+/// Emit a `pub struct <name> { <fields> }` from a `FieldDecl` list.
+/// The leading `span: Span` field is part of the `FieldDecl` list
+/// (`FieldKind::Span`) when the struct is a rule-level alt body;
+/// nested SingleAlt / General-group alt structs omit it.
+fn emit_alt_struct(w: &mut CodeWriter, type_name: &String, fields: &Array<FieldDecl>) {
     let mut s = StructSpec::new(type_name);
     s.set_pub();
-    s.add_pub_field("span", "Span");
-    for let field of &fields {
-        s.add_pub_field(&field.name, &field.type_str);
+    for let f of fields {
+        s.add_pub_field(&f.name, &f.type_str);
     }
     s.emit(w);
     w.blank();
 }
 
-fn repeat_inner_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<Field> {
-    if let Group(g) = elem {
-        let alts = &g.alternatives;
-        if is_simple_cst_group(alts) {
-            return Option::<Field>::Some(Field {
-                name: group_field_base_name(alts),
-                type_str: group_variant_type_name(alts),
-            });
-        }
-        if is_token_only_group(alts) {
-            return Option::<Field>::Some(Field {
-                name: token_group_field_name(alts),
-                type_str: "Token",
-            });
-        }
-        if is_single_alt_group(alts) {
-            return Option::<Field>::Some(Field {
-                name: single_alt_group_field_name(&alts[0]),
-                type_str: single_alt_group_type_name(&alts[0]),
-            });
-        }
-        if is_general_group(alts) {
-            let idx = *group_counter;
-            *group_counter += 1;
-            return Option::<Field>::Some(Field {
-                name: general_group_field_name(idx),
-                type_str: general_group_type_name(rule_name, idx),
-            });
-        }
-        // Non-storable group: advance counter for nested general groups
-        *group_counter += count_element_groups(elem);
-        return null;
-    }
-    return element_to_field(elem, rule_name, group_counter);
-}
-
-fn gen_group_variant_types(w: &mut CodeWriter, elements: &Array<Element>, emitted: &mut Array<String>, rule_name: &String, group_counter: &mut i32) {
-    for let elem of elements {
-        gen_element_variant_types(w, elem, emitted, rule_name, group_counter);
+fn gen_ops_nested_types(w: &mut CodeWriter, ops: &Array<Op>, rule_name: &String, emitted: &mut Array<String>) {
+    for let op of ops {
+        gen_op_nested_types(w, op, rule_name, emitted);
     }
 }
 
-fn gen_element_variant_types(w: &mut CodeWriter, elem: &Element, emitted: &mut Array<String>, rule_name: &String, group_counter: &mut i32) {
-    let alts = extract_group_alts(elem);
-    if let Some(group_alts) = alts {
-        if is_simple_cst_group(group_alts) {
-            let type_name = group_variant_type_name(group_alts);
-            if !has_emitted(emitted, &type_name) {
-                emitted.push(type_name);
-                gen_group_variant_type(w, group_alts);
+fn gen_op_nested_types(w: &mut CodeWriter, op: &Op, rule_name: &String, emitted: &mut Array<String>) {
+    return match *op {
+        Group(g) => gen_group_nested_types(w, g, rule_name, emitted),
+        Repeat(r) => gen_op_nested_types(w, &r.body, rule_name, emitted),
+        ListLabel(ll) => gen_op_nested_types(w, &ll.inner, rule_name, emitted),
+        Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => { },
+    };
+}
+
+fn gen_group_nested_types(w: &mut CodeWriter, g: &GroupOp, rule_name: &String, emitted: &mut Array<String>) {
+    return match &g.shape {
+        Transparent => {
+            // Transparent groups have one alt with one inner op (the
+            // group is purely syntactic). Recurse into the inner op
+            // so nested storable groups land in the emit stream.
+            if g.alts.len() > 0 {
+                gen_ops_nested_types(w, &g.alts[0].ops, rule_name, emitted);
             }
-        } else if is_single_alt_group(group_alts) {
-            let type_name = single_alt_group_type_name(&group_alts[0]);
-            if !has_emitted(emitted, &type_name) {
-                emitted.push(type_name);
-                gen_single_alt_group_struct(w, &group_alts[0], emitted, rule_name, group_counter);
-            } else {
-                // Struct already emitted (shared across rules). Just advance counter
-                // for nested general groups. Don't emit types — they were already
-                // emitted under the first rule's name.
-                *group_counter += count_general_groups(&group_alts[0].elements);
-            }
-        } else if is_general_group(group_alts) {
-            let idx = *group_counter;
-            *group_counter += 1;
-            let type_name = general_group_type_name(rule_name, idx);
-            if !has_emitted(emitted, &type_name) {
-                emitted.push(type_name);
-                gen_general_group_types(w, group_alts, emitted, rule_name, idx, group_counter);
-            }
+        },
+        TokenOnly(_) => { },
+        SimpleCst(scst) => emit_simple_cst_enum_if_new(w, scst, &g.alts, emitted),
+        SingleAlt(sa) => emit_single_alt_struct_if_new(w, sa, &g.alts, emitted),
+        General(gen) => emit_general_group_types_if_new(w, gen, &g.alts, rule_name, emitted),
+    };
+}
+
+fn emit_simple_cst_enum_if_new(w: &mut CodeWriter, scst: &SimpleCstShape, alts: &Array<AltBody>, emitted: &mut Array<String>) {
+    if has_emitted(emitted, &scst.type_name) {
+        return;
+    }
+    emitted.push(scst.type_name);
+    let mut v = VariantSpec::new(&scst.type_name);
+    v.set_pub();
+    for let alt of alts {
+        // Each SimpleCst alt body has exactly one op: an `Op::RuleCall`
+        // resolved by `lower_simple_cst_alt_call`. The case name is the
+        // alt's PascalCase form; the payload is the target rule's CST
+        // type.
+        if let RuleCall(rc) = &alt.ops[0] {
+            v.add_case_with_payload(&alt.case_name, &rule_type_name(&rc.target_name));
         } else {
-            // Recurse into multi-alt groups to find nested storable groups
-            for let alt of group_alts {
-                gen_group_variant_types(w, &alt.elements, emitted, rule_name, group_counter);
-            }
+            panic(`gen_simple_cst: SimpleCst alt body must be a single RuleCall op`);
         }
+    }
+    v.emit(w);
+    w.blank();
+}
+
+fn emit_single_alt_struct_if_new(w: &mut CodeWriter, sa: &SingleAltShape, alts: &Array<AltBody>, emitted: &mut Array<String>) {
+    if has_emitted(emitted, &sa.struct_name) {
         return;
     }
-    // Recurse into repeat elements (non-group inner)
-    if let Repeat(rep) = elem {
-        gen_element_variant_types(w, &rep.element, emitted, rule_name, group_counter);
+    emitted.push(sa.struct_name);
+    // Recurse into the inner body's ops first so nested storable
+    // groups are declared before the SingleAlt struct that references
+    // them. SingleAlt struct names use the surrounding `owner_rule`'s
+    // monomorph table (per `single_alt_owner`) — nested groups inside
+    // it follow the same key.
+    gen_ops_nested_types(w, &alts[0].ops, &sa.owner_rule, emitted);
+    emit_alt_struct(w, &sa.struct_name, &alts[0].fields);
+}
+
+fn emit_general_group_types_if_new(
+    w: &mut CodeWriter,
+    gen: &GeneralShape,
+    alts: &Array<AltBody>,
+    rule_name: &String,
+    emitted: &mut Array<String>,
+) {
+    if has_emitted(emitted, &gen.variant_type) {
         return;
     }
-    // Recurse into label elements
-    if let Label(lab) = elem {
-        gen_element_variant_types(w, &lab.element, emitted, rule_name, group_counter);
+    emitted.push(gen.variant_type);
+    // Recurse into each alt's ops first so any nested storable groups
+    // (which by construction have group indices > this one) are
+    // declared before the enclosing variant.
+    for let alt of alts {
+        gen_ops_nested_types(w, &alt.ops, rule_name, emitted);
+    }
+    let mut v = VariantSpec::new(&gen.variant_type);
+    v.set_pub();
+    for let mut i = 0; i < alts.len(); i += 1 {
+        v.add_case_with_payload(&alts[i].case_name, &gen.alt_struct_names[i]);
+    }
+    v.emit(w);
+    w.blank();
+    for let mut i = 0; i < alts.len(); i += 1 {
+        emit_alt_struct(w, &gen.alt_struct_names[i], &alts[i].fields);
     }
 }
 
@@ -324,235 +409,4 @@ fn has_emitted(emitted: &Array<String>, name: &String) -> bool {
         }
     }
     return false;
-}
-
-fn extract_group_alts(elem: &Element) -> Option<&Array<Alternative>> {
-    if let Group(g) = elem {
-        return Option::Some(&g.alternatives);
-    }
-    if let Repeat(rep) = elem {
-        if let Group(g) = &rep.element {
-            return Option::Some(&g.alternatives);
-        }
-    }
-    return null;
-}
-
-fn gen_group_variant_type(w: &mut CodeWriter, alts: &Array<Alternative>) {
-    let type_name = group_variant_type_name(alts);
-    let mut v = VariantSpec::new(&type_name);
-    v.set_pub();
-    for let alt of alts {
-        if let RuleRef(r) = &alt.elements[0] {
-            let name = &r.name;
-            let case_name = to_pascal_case(name);
-            let payload = rule_type_name(name);
-            v.add_case_with_payload(&case_name, &payload);
-        }
-    }
-    v.emit(w);
-    w.blank();
-}
-
-fn gen_single_alt_group_struct(w: &mut CodeWriter, alt: &Alternative, emitted: &mut Array<String>, rule_name: &String, group_counter: &mut i32) {
-    let gc_start = *group_counter;
-    gen_group_variant_types(w, &alt.elements, emitted, rule_name, group_counter);
-    let mut gc = gc_start;
-    let type_name = single_alt_group_type_name(alt);
-    let fields = collect_fields(&alt.elements, rule_name, &mut gc);
-    let mut s = StructSpec::new(&type_name);
-    s.set_pub();
-    for let field of &fields {
-        s.add_pub_field(&field.name, &field.type_str);
-    }
-    s.emit(w);
-    w.blank();
-}
-
-fn gen_general_group_types(w: &mut CodeWriter, alts: &Array<Alternative>, emitted: &mut Array<String>, rule_name: &String, group_index: i32, group_counter: &mut i32) {
-    // Recurse into alts to generate nested storable group types first.
-    // Use the rule-level counter so nested group indices match the parser gen.
-    // Save counter before each alt's traversal, then process the alt,
-    // tracking the maximum counter reached across all alts.
-    let gc_before_alts = *group_counter;
-    let mut gc_max = gc_before_alts;
-    for let alt of alts {
-        *group_counter = gc_before_alts;
-        gen_group_variant_types(w, &alt.elements, emitted, rule_name, group_counter);
-        if *group_counter > gc_max {
-            gc_max = *group_counter;
-        }
-    }
-    *group_counter = gc_max;
-    // Generate variant type
-    let type_name = general_group_type_name(rule_name, group_index);
-    let mut v = VariantSpec::new(&type_name);
-    v.set_pub();
-    for let mut i = 0; i < alts.len(); i += 1 {
-        let struct_name = general_group_alt_struct_name(rule_name, group_index, i);
-        v.add_case_with_payload(&`Alt{i}`, &struct_name);
-    }
-    v.emit(w);
-    w.blank();
-    // Generate struct per alt
-    for let mut i = 0; i < alts.len(); i += 1 {
-        let struct_name = general_group_alt_struct_name(rule_name, group_index, i);
-        let mut gc = gc_before_alts;
-        let fields = collect_fields(&alts[i].elements, rule_name, &mut gc);
-        let mut s = StructSpec::new(&struct_name);
-        s.set_pub();
-        for let field of &fields {
-            s.add_pub_field(&field.name, &field.type_str);
-        }
-        s.emit(w);
-        w.blank();
-    }
-}
-
-struct Field {
-    name: String,
-    type_str: String,
-}
-
-fn collect_fields(elements: &Array<Element>, rule_name: &String, group_counter: &mut i32) -> Array<Field> {
-    let mut fields: Array<Field> = [];
-    let mut name_counts: Array<[String, i32]> = [];
-    for let mut i = 0; i < elements.len(); i += 1 {
-        if let Some(field) = element_to_field(&elements[i], rule_name, group_counter) {
-            let count = get_name_count(&name_counts, &field.name);
-            increment_name_count(&mut name_counts, &field.name);
-            let final_name = if count > 0 { `{field.name}_{count + 1}` } else { field.name };
-            fields.push(Field { name: final_name, type_str: field.type_str });
-        }
-    }
-    return fields;
-}
-
-fn get_name_count(counts: &Array<[String, i32]>, name: &String) -> i32 {
-    for let entry of counts {
-        if entry.0 == *name {
-            return entry.1;
-        }
-    }
-    return 0;
-}
-
-fn increment_name_count(counts: &mut Array<[String, i32]>, name: &String) {
-    for let mut i = 0; i < counts.len(); i += 1 {
-        if counts[i].0 == *name {
-            let prev = counts[i].1;
-            counts[i] = [*name, prev + 1];
-            return;
-        }
-    }
-    counts.push([*name, 1]);
-}
-
-fn element_to_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<Field> {
-    if let RuleRef(r) = elem {
-        return Option::<Field>::Some(Field {
-            name: r.field_name,
-            type_str: rule_type_name(&r.name),
-        });
-    }
-    if let TokenRef(t) = elem {
-        return Option::<Field>::Some(Field {
-            name: t.field_name,
-            type_str: "Token",
-        });
-    }
-    if let Literal(l) = elem {
-        let text = &l.text;
-        return Option::<Field>::Some(Field {
-            name: literal_field_name(text),
-            type_str: "Token",
-        });
-    }
-    if let Wildcard(_) = elem {
-        return Option::<Field>::Some(Field {
-            name: "wildcard",
-            type_str: "Token",
-        });
-    }
-    if let Not(ne) = elem {
-        return Option::<Field>::Some(Field {
-            name: not_element_field_name(&ne.element),
-            type_str: "Token",
-        });
-    }
-    if let Repeat(rep) = elem {
-        // List labels are already Array-typed — return them as-is without
-        // re-wrapping. `(items+=item)*` and `items+=item*` both produce a
-        // single `items: Array<ItemNode>` field.
-        if let Label(lab) = &rep.element {
-            if lab.list {
-                return element_to_field(&rep.element, rule_name, group_counter);
-            }
-        }
-        let inner_field = repeat_inner_field(&rep.element, rule_name, group_counter);
-        if let Some(inner) = inner_field {
-            let field = match rep.kind {
-                Star | Plus => Field {
-                    name: `{inner.name}_list`,
-                    type_str: `Array<{inner.type_str}>`,
-                },
-                Optional => Field {
-                    name: inner.name,
-                    type_str: `Option<{inner.type_str}>`,
-                },
-            };
-            return Option::<Field>::Some(field);
-        }
-        return null;
-    }
-    if let Label(lab) = elem {
-        if let Some(inner) = element_to_field(&lab.element, rule_name, group_counter) {
-            if lab.list {
-                // `items+=item` — the field is an Array<ItemNode>, regardless
-                // of whether this Label is wrapped in a Repeat.
-                return Option::<Field>::Some(Field {
-                    name: lab.field_name,
-                    type_str: `Array<{inner.type_str}>`,
-                });
-            }
-            return Option::<Field>::Some(Field {
-                name: lab.field_name,
-                type_str: inner.type_str,
-            });
-        }
-        return null;
-    }
-    if let Group(g) = elem {
-        let alts = &g.alternatives;
-        if is_simple_cst_group(alts) {
-            return Option::<Field>::Some(Field {
-                name: group_field_base_name(alts),
-                type_str: `Option<{group_variant_type_name(alts)}>`,
-            });
-        }
-        if is_token_only_group(alts) {
-            return Option::<Field>::Some(Field {
-                name: token_group_field_name(alts),
-                type_str: "Token",
-            });
-        }
-        if is_single_alt_group(alts) {
-            return Option::<Field>::Some(Field {
-                name: single_alt_group_field_name(&alts[0]),
-                type_str: single_alt_group_type_name(&alts[0]),
-            });
-        }
-        if is_general_group(alts) {
-            let idx = *group_counter;
-            *group_counter += 1;
-            return Option::<Field>::Some(Field {
-                name: general_group_field_name(idx),
-                type_str: `Option<{general_group_type_name(rule_name, idx)}>`,
-            });
-        }
-        // Non-storable group: advance counter for nested general groups
-        *group_counter += count_element_groups(elem);
-        return null;
-    }
-    return null;
 }

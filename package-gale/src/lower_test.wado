@@ -1585,6 +1585,182 @@ test "lower enumerates Repeat field decls with List/Optional kinds" {
     }
 }
 
+test "lower SingleAlt Group body enumerates list-label inner as Array field" {
+    // `r : ID (COMMA b+=ID)* ;` — the `(COMMA b+=ID)` SingleAlt
+    // group's inner `b+=ID` is a list label. The SingleAlt struct
+    // must carry `b: Array<Token>`.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "r",
+        Visibility::Default,
+        [],
+        [alt_of([
+            Element::TokenRef(TokenRefElement::new("ID")),
+            Element::Repeat(RepeatElement {
+                kind: RepeatKind::Star,
+                element: Element::Group(GroupElement::new([
+                    alt_of([
+                        Element::TokenRef(TokenRefElement::new("COMMA")),
+                        Element::Label(LabelElement::new(
+                            "b",
+                            true,
+                            Element::TokenRef(TokenRefElement::new("ID")),
+                        )),
+                    ]),
+                ])),
+                non_greedy: false,
+            }),
+        ])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        // Repeat is ops[1]; its body is the SingleAlt Group.
+        if let Repeat(rep) = &s.body.ops[1] {
+            if let Group(go) = &rep.body {
+                if let SingleAlt(_) = &go.shape {
+                    let inner_ops = &go.alts[0].ops;
+                    assert inner_ops.len() == 2, `expected 2 inner ops, got {inner_ops.len()}`;
+                    // ops[1] must be Op::ListLabel for `b+=ID`.
+                    if let ListLabel(ll) = &inner_ops[1] {
+                        assert ll.field == "b", ll.field;
+                    } else if let Token(t) = &inner_ops[1] {
+                        panic(`ops[1] is Token(field={t.field}); ListLabel expected`);
+                    } else if let RuleCall(r) = &inner_ops[1] {
+                        panic(`ops[1] is RuleCall(field={r.field}); ListLabel expected`);
+                    } else if let Literal(l) = &inner_ops[1] {
+                        panic(`ops[1] is Literal(field={l.field}); ListLabel expected`);
+                    } else {
+                        panic(`ops[1] is some other variant; ListLabel expected`);
+                    }
+                    let inner_fields = &go.alts[0].fields;
+                    assert inner_fields.len() == 2, `expected 2 inner fields, got {inner_fields.len()}`;
+                    assert inner_fields[0].type_str == "Token";
+                    assert inner_fields[1].name == "b", inner_fields[1].name;
+                    assert inner_fields[1].type_str == "Array<Token>", inner_fields[1].type_str;
+                } else {
+                    panic("expected GroupShape::SingleAlt");
+                }
+            } else {
+                panic("expected Op::Group inside Repeat body");
+            }
+        } else {
+            panic("expected Op::Repeat at ops[1]");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower SingleAlt Group body enumerates inner FieldDecls without span" {
+    // `assignment : (name=ID '=' INT) ;` — the SingleAlt inner body
+    // gets its own `IdEqIntItem` struct with `id`, `eq`, `int` —
+    // no leading `span` field (the outer rule struct owns the span).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [ParserRule::new(
+        "assignment",
+        Visibility::Default,
+        [],
+        [alt_of([Element::Group(GroupElement::new([
+            alt_of([
+                Element::TokenRef(TokenRefElement::new("ID")),
+                Element::Literal(LiteralElement::new("=")),
+                Element::TokenRef(TokenRefElement::new("INT")),
+            ]),
+        ]))])],
+    )];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Group(go) = &s.body.ops[0] {
+            if let SingleAlt(_) = &go.shape {
+                let inner_fields = &go.alts[0].fields;
+                assert inner_fields.len() == 3, `expected 3 inner fields, got {inner_fields.len()}`;
+                assert inner_fields[0].name == "id";
+                assert inner_fields[0].type_str == "Token";
+                assert inner_fields[1].name == "eq";
+                assert inner_fields[1].type_str == "Token";
+                assert inner_fields[2].name == "int";
+                assert inner_fields[2].type_str == "Token";
+                // None of them is the Span sentinel — the outer rule
+                // struct already carries the span.
+                for let f of inner_fields {
+                    if let Span = &f.kind {
+                        panic(`SingleAlt inner field '{f.name}' must not be Span`);
+                    }
+                }
+            } else {
+                panic("expected GroupShape::SingleAlt");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
+test "lower General Group inner alts enumerate per-alt FieldDecls without span" {
+    // `node : (stmt | 'go' expr) ;` — General group with two alts
+    // produces `NodeGroup0` enum + `NodeGroup0Alt0` / `NodeGroup0Alt1`
+    // structs. Each inner alt struct carries its own FieldDecls
+    // (no `span` — the outer `NodeNode` owns it).
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "node",
+            Visibility::Default,
+            [],
+            [alt_of([Element::Group(GroupElement::new([
+                alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                alt_of([
+                    Element::Literal(LiteralElement::new("go")),
+                    Element::RuleRef(RuleRefElement::new("expr")),
+                ]),
+            ]))])],
+        ),
+        ParserRule::new(
+            "stmt",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+        ),
+        ParserRule::new(
+            "expr",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Group(go) = &s.body.ops[0] {
+            if let General(_) = &go.shape {
+                assert go.alts.len() == 2;
+                // Alt 0: single RuleRef `stmt` → `stmt` field.
+                let alt0_fields = &go.alts[0].fields;
+                assert alt0_fields.len() == 1, `alt 0 expected 1 field, got {alt0_fields.len()}`;
+                assert alt0_fields[0].name == "stmt";
+                assert alt0_fields[0].type_str == "StmtNode", alt0_fields[0].type_str;
+                // Alt 1: literal `'go'` + `expr` → two fields.
+                let alt1_fields = &go.alts[1].fields;
+                assert alt1_fields.len() == 2, `alt 1 expected 2 fields, got {alt1_fields.len()}`;
+                assert alt1_fields[0].name == "lit_go";
+                assert alt1_fields[0].type_str == "Token";
+                assert alt1_fields[1].name == "expr";
+                assert alt1_fields[1].type_str == "ExprNode";
+            } else {
+                panic("expected GroupShape::General");
+            }
+        } else {
+            panic("expected Op::Group");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
 test "lower Repeat field name dedupes against outer scope" {
     // `r : int_list=ID INT* ;` — outer label takes `int_list`,
     // the unlabeled `INT*` dedups its outer struct field to
@@ -1669,12 +1845,14 @@ test "lower Group field decls match shape's outer field/type" {
 
     let lowered = lower(&g, &no_lit_tokens());
     if let Simple(s) = &lowered.parser_rules[0] {
-        // [span, k_a_or_k_b: Token, stmt_or_expr: StmtOrExprGroup, a_b: ABItem]
+        // [span, k_a_or_k_b: Token, stmt_or_expr: Option<StmtOrExprGroup>, a_b: ABItem]
+        // Standalone SimpleCst groups surface as `Option<>` to match
+        // parser_gen's `gen_consume_group_store_optional` storage pattern.
         assert s.body.fields.len() == 4, `expected 4 fields, got {s.body.fields.len()}`;
         assert s.body.fields[1].name == "k_a_or_k_b";
         assert s.body.fields[1].type_str == "Token";
         assert s.body.fields[2].name == "stmt_or_expr";
-        assert s.body.fields[2].type_str == "StmtOrExprGroup";
+        assert s.body.fields[2].type_str == "Option<StmtOrExprGroup>", s.body.fields[2].type_str;
         assert s.body.fields[3].name == "a_b";
         assert s.body.fields[3].type_str == "ABItem", s.body.fields[3].type_str;
     } else {
@@ -2416,9 +2594,13 @@ test "lower Repeat with list-label inner uses label name as outer field" {
     }
 }
 
-test "lower Transparent Group contributes inner op's field" {
-    // `r : (INT) ;` — Transparent group with single leaf inner.
-    // The struct field is the inner Token's, not a wrapper.
+test "lower Transparent Group does not contribute a CST field" {
+    // `r : (INT) ;` — Transparent group with a single leaf inner.
+    // The wrapper has no CST struct slot of its own; `parser_gen`'s
+    // `has_field(Group)` returns `is_storable_group(...)` which is
+    // false for this 1-alt-1-element shape. lower's enumeration must
+    // match that decision so the GIR-driven struct emit produces the
+    // same fields parser_gen's runtime construction assigns.
     let mut g = empty_grammar(&"T");
     g.parser_rules = [ParserRule::new(
         "r",
@@ -2431,10 +2613,13 @@ test "lower Transparent Group contributes inner op's field" {
 
     let lowered = lower(&g, &no_lit_tokens());
     if let Simple(s) = &lowered.parser_rules[0] {
-        // [span, int (from Transparent passthrough)]
-        assert s.body.fields.len() == 2, `expected 2 fields, got {s.body.fields.len()}`;
-        assert s.body.fields[1].name == "int";
-        assert s.body.fields[1].type_str == "Token";
+        // [span] — the Transparent group does not surface a field.
+        assert s.body.fields.len() == 1, `expected 1 field (span only), got {s.body.fields.len()}`;
+        if let Span = &s.body.fields[0].kind {
+            assert true;
+        } else {
+            panic("expected leading Span field");
+        }
     } else {
         panic("expected Rule::Simple");
     }

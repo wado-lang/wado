@@ -2251,9 +2251,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 crate::symbol::SymbolKind::Struct(_) => {
                     (symbol.name.clone(), symbol.module_source().clone())
                 }
-                _ => (name.clone(), self.current_module_source.clone()),
+                _ => {
+                    let _ = self.logger.error(TypeError::UnknownType {
+                        name: name.clone(),
+                        span: struct_lit.span,
+                    });
+                    (name.clone(), self.current_module_source.clone())
+                }
             }
         } else {
+            // The struct name is neither locally defined nor imported.
+            // Emit a clear diagnostic instead of silently falling back to
+            // `current_module_source` — that fallback creates a TypeId
+            // whose key does not match the registered struct in WIR build,
+            // which used to surface as a downstream
+            // `StructLiteral expected Ref WirType` panic. The fallback
+            // module_source is still returned so subsequent passes have a
+            // best-effort type; the error has already been logged.
+            let _ = self.logger.error(TypeError::UnknownType {
+                name: name.clone(),
+                span: struct_lit.span,
+            });
             (name.clone(), self.current_module_source.clone())
         };
 
