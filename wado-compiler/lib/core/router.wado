@@ -355,10 +355,6 @@ impl<H> Router<H> {
     fn match_static(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>>
         with stores[self]
     {
-        // self is &self, so we cannot mutate `static_sorted` here. The
-        // sort happens lazily on the first match call only — see the
-        // wrapping mutable-self path below.
-        let n = self.static_entries.len();
         let [lo, hi] = bsearch_pattern_range(&self.static_entries, path);
         if lo >= hi {
             return null;
@@ -794,56 +790,56 @@ impl Deserializer for PathParamsDeserializer {
         let [s, e] = self.current_range();
         return match i32::from_str_range(*self.src.path, s, e) {
             Ok(v) => Result::Ok(v),
-            Err(_) => Result::Err(DeserializeError::invalid_value("invalid i32 in path param", s as i64)),
+            Err(_) => Result::Err(DeserializeError::invalid_value(self.format_error("i32"), s as i64)),
         };
     }
     fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
         let [s, e] = self.current_range();
         return match i64::from_str_range(*self.src.path, s, e) {
             Ok(v) => Result::Ok(v),
-            Err(_) => Result::Err(DeserializeError::invalid_value("invalid i64 in path param", s as i64)),
+            Err(_) => Result::Err(DeserializeError::invalid_value(self.format_error("i64"), s as i64)),
         };
     }
     fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
         let [s, e] = self.current_range();
         return match u32::from_str_range(*self.src.path, s, e) {
             Ok(v) => Result::Ok(v),
-            Err(_) => Result::Err(DeserializeError::invalid_value("invalid u32 in path param", s as i64)),
+            Err(_) => Result::Err(DeserializeError::invalid_value(self.format_error("u32"), s as i64)),
         };
     }
     fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
         let [s, e] = self.current_range();
         return match u64::from_str_range(*self.src.path, s, e) {
             Ok(v) => Result::Ok(v),
-            Err(_) => Result::Err(DeserializeError::invalid_value("invalid u64 in path param", s as i64)),
+            Err(_) => Result::Err(DeserializeError::invalid_value(self.format_error("u64"), s as i64)),
         };
     }
     fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
         let [s, e] = self.current_range();
         return match i128::from_str_range(*self.src.path, s, e) {
             Ok(v) => Result::Ok(v),
-            Err(_) => Result::Err(DeserializeError::invalid_value("invalid i128 in path param", s as i64)),
+            Err(_) => Result::Err(DeserializeError::invalid_value(self.format_error("i128"), s as i64)),
         };
     }
     fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
         let [s, e] = self.current_range();
         return match u128::from_str_range(*self.src.path, s, e) {
             Ok(v) => Result::Ok(v),
-            Err(_) => Result::Err(DeserializeError::invalid_value("invalid u128 in path param", s as i64)),
+            Err(_) => Result::Err(DeserializeError::invalid_value(self.format_error("u128"), s as i64)),
         };
     }
     fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
         let [s, e] = self.current_range();
         return match f32::from_str_range(*self.src.path, s, e) {
             Ok(v) => Result::Ok(v),
-            Err(_) => Result::Err(DeserializeError::invalid_value("invalid f32 in path param", s as i64)),
+            Err(_) => Result::Err(DeserializeError::invalid_value(self.format_error("f32"), s as i64)),
         };
     }
     fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
         let [s, e] = self.current_range();
         return match f64::from_str_range(*self.src.path, s, e) {
             Ok(v) => Result::Ok(v),
-            Err(_) => Result::Err(DeserializeError::invalid_value("invalid f64 in path param", s as i64)),
+            Err(_) => Result::Err(DeserializeError::invalid_value(self.format_error("f64"), s as i64)),
         };
     }
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
@@ -851,14 +847,14 @@ impl Deserializer for PathParamsDeserializer {
         let slice = self.src.path.substr_bytes(s, e);
         if slice == "true" { return Result::Ok(true); }
         if slice == "false" { return Result::Ok(false); }
-        return Result::Err(DeserializeError::invalid_value("invalid bool in path param", s as i64));
+        return Result::Err(DeserializeError::invalid_value(self.format_error("bool"), s as i64));
     }
     fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
         let [s, e] = self.current_range();
         let slice = self.src.path.substr_bytes(s, e);
         let chars = slice.chars().collect();
         if chars.len() != 1 {
-            return Result::Err(DeserializeError::invalid_value("invalid char in path param", s as i64));
+            return Result::Err(DeserializeError::invalid_value(self.format_error("char"), s as i64));
         }
         return Result::Ok(chars[0]);
     }
@@ -894,9 +890,24 @@ impl Deserializer for PathParamsDeserializer {
 }
 
 impl PathParamsDeserializer {
+    /// Byte range of the path parameter currently being deserialized.
+    /// Contract: callers must arrive here through `begin_struct → next_field
+    /// → value`, which advances `cursor` past the active param. Calling
+    /// outside that flow yields a negative index and will trap.
     fn current_range(&self) -> [i32, i32] {
         let i = self.cursor - 1;
         return [self.src.ranges[i * 2], self.src.ranges[i * 2 + 1]];
+    }
+
+    /// Format an `invalid_value` error message including the param name and
+    /// the captured slice, e.g.
+    /// `path param 'id' is not a valid u64: 'abc'`.
+    fn format_error(&self, type_name: String) -> String {
+        let i = self.cursor - 1;
+        let name = &self.src.names[i];
+        let [s, e] = self.current_range();
+        let value = self.src.path.substr_bytes(s, e);
+        return `path param '{*name}' is not a valid {type_name}: '{value}'`;
     }
 }
 
@@ -927,9 +938,9 @@ impl DeserializeStruct for PathParamsStructAccess {
 // Unused sub-deserializers — required to satisfy the `Deserializer` trait's
 // associated-type bounds. Path params can only be deserialized into a struct
 // (or scalar at the field level), so seq/map/variant accesses are stubs that
-// trap if invoked.
+// fail if invoked.
 
-pub struct PathParamsSeqStub {}
+struct PathParamsSeqStub {}
 impl DeserializeSeq for PathParamsSeqStub {
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("path params: seq not supported", -1));
@@ -939,7 +950,7 @@ impl DeserializeSeq for PathParamsSeqStub {
     }
 }
 
-pub struct PathParamsMapStub {}
+struct PathParamsMapStub {}
 impl DeserializeMap for PathParamsMapStub {
     fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("path params: map not supported", -1));
@@ -952,7 +963,7 @@ impl DeserializeMap for PathParamsMapStub {
     }
 }
 
-pub struct PathParamsVariantStub {}
+struct PathParamsVariantStub {}
 impl DeserializeVariant for PathParamsVariantStub {
     fn variant_name(&mut self) -> Result<String, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("path params: variant not supported", -1));

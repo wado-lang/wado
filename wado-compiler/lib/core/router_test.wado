@@ -296,8 +296,10 @@ test "router: deserialize empty params on static route" {
     r.get("/health", 1);
 
     let m = r.match_path(Method::Get, &"/health").unwrap();
-    let p = m.params.deserialize::<StaticOnly>().unwrap();
     assert m.params.is_empty();
+    // Deserialize into an empty struct must succeed without scanning any
+    // ranges (cursor stays at 0).
+    assert m.params.deserialize::<StaticOnly>() matches { Ok(_) };
 }
 
 test "router: deserialize fails on invalid integer" {
