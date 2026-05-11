@@ -3292,23 +3292,31 @@ fn gen_consume_single_alt_group_op(w: &mut CodeWriter, sa: &SingleAltShape, body
 /// outer scope's dedup counters consistent with surface emitters that
 /// still inspect `name_counts`.
 fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    if let Label(lab) = elem {
-        sync_name_counts_for_list_label(lab, name_counts);
+    let lab = if let Label(l) = elem {
+        l;
     } else {
         panic("gen_op_list_label: ListLabel op mapped to non-Label element");
+    };
+    if !op_is_leaf(&ll.inner) {
+        // Non-leaf list-label inner (e.g. `items += (a b)` outside a
+        // Repeat, where `ll.inner` is `Op::Group` / `Op::Repeat`).
+        // Emit the surface walker's full `Label(lab.list=true)` path
+        // — it allocates the array, recurses into the inner element
+        // through `gen_element`, and pushes — so any inner shape
+        // that has a `gen_element` arm is covered. Surface
+        // `name_counts` already carries this scope's state, so the
+        // dedup'd field names match lower's. Migrates to a fully
+        // GIR-driven non-leaf emit when group / repeat helpers
+        // accept `GroupOp` / `RepeatOp` directly (Phase 2-B follow-
+        // ups).
+        gen_element(w, elem, ctx, name_counts);
+        return;
     }
+    sync_name_counts_for_list_label(lab, name_counts);
     let inner_type = op_field_type(&ll.inner);
     w.line(`let mut {ll.field}: Array<{inner_type}> = [];`);
     let inner_field = op_field(&ll.inner);
-    if op_is_leaf(&ll.inner) {
-        if let Label(lab) = elem {
-            gen_op_leaf(w, &ll.inner, &lab.element, ctx, name_counts);
-        } else {
-            panic("gen_op_list_label: surface element is not a Label");
-        }
-    } else {
-        panic("gen_op_list_label: non-leaf list-label inner is not yet migrated (Phase 2-B)");
-    }
+    gen_op_leaf(w, &ll.inner, &lab.element, ctx, name_counts);
     w.line(`{ll.field}.push({inner_field});`);
 }
 
