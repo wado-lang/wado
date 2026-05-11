@@ -156,18 +156,54 @@ fn count_block_exprs(block: &TirBlock) -> usize {
         .sum()
 }
 
-/// Compute the fully qualified name of a `TirFunction`, using the same format
-/// as `FuncRef::full_name()`.  This is the key used by `collect_callees_from_expr`
-/// so it must match exactly.
-fn tir_function_full_name(func: &TirFunction) -> String {
-    if let Some(info) = &func.method_info {
-        info.to_mangled_name()
-    } else if func.module_source.is_entry_point() {
-        func.name.clone()
+/// Build the canonical inliner key for a function identity.
+///
+/// We key the call graph on `(module_source, post-mono mangled name)` so that
+/// the function-definition side and the call-site side agree on a single
+/// identity. `FuncRef::full_name()` / `MethodInfo::to_mangled_name()` cannot
+/// be used here because they derive the struct portion from
+/// `MethodInfo.struct_name`, which is populated by different code paths with
+/// different mangling rules:
+///
+///  - The monomorphizer's `func_inst.rs` rebuilds `MethodInfo.struct_name`
+///    with qualified type args (`mangle_type_arg_for_generic`) on the
+///    function-definition side.
+///  - `synthesis/traits.rs::decompose_type_for_method_name` builds call-site
+///    `MethodInfo.struct_name` with unqualified `mangle_type_name`. The
+///    monomorphizer's `call_rewrite` later rewrites `FuncRef.name` to the
+///    post-mono canonical mangled name but **preserves** the original
+///    `method_info` unchanged.
+///
+/// So the call site has `name = "Array<{mod}/Node>^Eq::eq"` (qualified) but
+/// `method_info.to_mangled_name() = "Array<Node>^Eq::eq"` (unqualified). Two
+/// representations of the same logical call. The function-definition side
+/// after monomorphization has both fields qualified, so a key based on
+/// `to_mangled_name()` misses the recursive cycle. Keying on
+/// `(module_source, func.name)` sidesteps the divergence because both sides
+/// pull `func.name` from the same `Monomorphizer::functions.instantiated`
+/// map.
+///
+/// Mirrors the same fix `wir_build/functions.rs::build_mangled_name` adopted
+/// in commit 2b005695b for exactly this divergence.
+fn function_inline_key(module_source: &ModuleSource, name: &str) -> String {
+    if module_source.is_entry_point() {
+        name.to_string()
     } else {
-        let path = func.module_source.to_path();
-        format!("{}/{}", path.join("/"), &func.name)
+        let path = module_source.to_path();
+        format!("{}/{}", path.join("/"), name)
     }
+}
+
+/// Compute the call-graph key for a `TirFunction` definition.  Must agree
+/// with `func_ref_inline_key` so call sites resolve to the same node.
+fn tir_function_full_name(func: &TirFunction) -> String {
+    function_inline_key(&func.module_source, &func.name)
+}
+
+/// Compute the call-graph key for a `FunctionRef` call site.  Must agree
+/// with `tir_function_full_name`.
+fn func_ref_inline_key(func: &crate::tir::FunctionRef) -> String {
+    function_inline_key(&func.module_source, &func.name)
 }
 
 fn collect_inner_labels_from_block(block: &TirBlock, labels: &mut IndexSet<String>) {
@@ -405,12 +441,10 @@ fn is_inline_eligible(
 
 /// Detect recursive functions using call graph analysis
 fn find_recursive_functions(functions: &[Rc<RefCell<TirFunction>>]) -> IndexSet<String> {
-    // Phase 1: Build fully-qualified-name→index mapping.
-    // We use `tir_function_full_name` here so that the keys match the callee names
-    // produced by `collect_callees_from_expr` (which uses `FuncRef::full_name()`).
-    // Using only `func.name` caused cross-module recursive functions to go
-    // undetected, because the callee strings carried the module prefix while
-    // the node keys did not.
+    // Phase 1: Build fully-qualified-name→index mapping.  Keys come from
+    // `tir_function_full_name` / `func_ref_inline_key`, both of which hash
+    // `(module_source, func.name)`.  See `function_inline_key`'s docstring
+    // for why we deliberately ignore `MethodInfo::to_mangled_name()` here.
     let mut name_to_idx: IndexMap<String, usize> = IndexMap::default();
     let mut idx_to_name: Vec<String> = Vec::new();
 
@@ -542,7 +576,7 @@ fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut IndexSet<String>) {
 fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
     match &expr.kind {
         TirExprKind::Call { func, args, .. } => {
-            callees.insert(func.full_name());
+            callees.insert(func_ref_inline_key(func));
             for arg in args {
                 collect_callees_from_expr(&arg.expr, callees);
             }
@@ -553,7 +587,7 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
             args,
             ..
         } => {
-            callees.insert(func.full_name());
+            callees.insert(func_ref_inline_key(func));
             collect_callees_from_expr(receiver, callees);
             for arg in args {
                 collect_callees_from_expr(&arg.expr, callees);
