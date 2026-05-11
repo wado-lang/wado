@@ -32,7 +32,12 @@ static CORE_PRELUDE: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("pre
 static CORE_BUILTIN: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("builtin"));
 static CORE_INTERNAL: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("internal"));
 static CORE_ALLOCATOR: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("allocator"));
-static CORE_CLI: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("cli"));
+/// Shared between [`ModuleSource::cli`] (core:cli) and
+/// [`ModuleSource::wasi_cli`] (wasi:cli) — both literal contents are
+/// `"cli"`, and the interner deduplicates by content. Keeping a single
+/// canonical `Arc` ensures both constructors return values that are
+/// pointer-equal to `interner.intern("cli")`.
+static NAME_CLI: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("cli"));
 static CORE_PRELUDE_STRING: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/string.wado"));
 static CORE_PRELUDE_ARRAY: LazyLock<Arc<str>> =
@@ -51,7 +56,7 @@ static CORE_PRELUDE_RANGE: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::fro
 static CORE_SERDE: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("serde"));
 
 // Well-known WASI interface names embedded in the compiler.
-static WASI_CLI: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("cli"));
+// (`wasi_cli`'s arc is `NAME_CLI` above, shared with `core:cli`.)
 static WASI_CLOCKS: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("clocks"));
 static WASI_FILESYSTEM: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("filesystem"));
 static WASI_HTTP: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("http"));
@@ -69,7 +74,7 @@ fn well_known_arcs() -> Vec<Arc<str>> {
         CORE_BUILTIN.clone(),
         CORE_INTERNAL.clone(),
         CORE_ALLOCATOR.clone(),
-        CORE_CLI.clone(),
+        NAME_CLI.clone(),
         CORE_PRELUDE_STRING.clone(),
         CORE_PRELUDE_ARRAY.clone(),
         CORE_PRELUDE_FORMAT.clone(),
@@ -79,7 +84,6 @@ fn well_known_arcs() -> Vec<Arc<str>> {
         CORE_PRELUDE_TRAITS.clone(),
         CORE_PRELUDE_RANGE.clone(),
         CORE_SERDE.clone(),
-        WASI_CLI.clone(),
         WASI_CLOCKS.clone(),
         WASI_FILESYSTEM.clone(),
         WASI_HTTP.clone(),
@@ -388,12 +392,12 @@ impl ModuleSource {
         /// `core:builtin` — builtin wasm instruction mappings.
         pub fn builtin() = Core { name: CORE_BUILTIN },
         /// `core:cli` — CLI output functions.
-        pub fn cli() = Core { name: CORE_CLI },
+        pub fn cli() = Core { name: NAME_CLI },
         /// `core:serde` — serde framework.
         pub fn serde() = Core { name: CORE_SERDE },
 
         /// `wasi:cli` — CLI interface root.
-        pub fn wasi_cli() = Wasi { interface: WASI_CLI },
+        pub fn wasi_cli() = Wasi { interface: NAME_CLI },
         /// `wasi:clocks` — clocks interface root.
         pub fn wasi_clocks() = Wasi { interface: WASI_CLOCKS },
         /// `wasi:filesystem` — filesystem interface root.
@@ -539,7 +543,7 @@ impl ModuleSource {
     /// Examples:
     /// - `ModuleSource::prelude().qualify_name("Option")` → `"core:prelude//Option"`
     /// - `ModuleSource::local("./geometry.wado").qualify_name("Point")` → `"./geometry.wado//Point"`
-    /// - `ModuleSource::entry_point_with_filename("main.wado").qualify_name("Foo")` → `"main.wado//Foo"`
+    /// - `interner.entry_point("main.wado").qualify_name("Foo")` → `"main.wado//Foo"`
     #[must_use]
     pub fn qualify_name(&self, name: &str) -> String {
         format!("{self}//{name}")
@@ -713,6 +717,47 @@ mod tests {
         for path in paths {
             let source = interner.from_path(&path);
             assert_eq!(source.to_path(), path, "Roundtrip failed for {path:?}");
+        }
+    }
+
+    /// Every well-known zero-arg constructor must produce a value
+    /// that compares equal to the matching interner-built one. If a
+    /// `LazyLock<Arc<str>>` static contains content that duplicates
+    /// another well-known arc, only the first inserted is adopted by
+    /// the interner — and the duplicate's pointer drifts out of
+    /// canonical identity. This test guards against that regression
+    /// (see e.g. `NAME_CLI` shared between `cli()` and `wasi_cli()`).
+    #[test]
+    fn well_known_constructors_match_interner() {
+        let mut i = ModuleSourceInterner::new();
+        let cases: Vec<(ModuleSource, ModuleSource)> = vec![
+            (ModuleSource::prelude(), i.core("prelude")),
+            (ModuleSource::builtin(), i.core("builtin")),
+            (ModuleSource::internal(), i.core("internal")),
+            (ModuleSource::allocator(), i.core("allocator")),
+            (ModuleSource::cli(), i.core("cli")),
+            (ModuleSource::string(), i.core("prelude/string.wado")),
+            (ModuleSource::array(), i.core("prelude/array.wado")),
+            (ModuleSource::format(), i.core("prelude/format.wado")),
+            (ModuleSource::int128(), i.core("prelude/int128.wado")),
+            (ModuleSource::primitive(), i.core("prelude/primitive.wado")),
+            (ModuleSource::types(), i.core("prelude/types.wado")),
+            (ModuleSource::traits(), i.core("prelude/traits.wado")),
+            (ModuleSource::range(), i.core("prelude/range")),
+            (ModuleSource::serde(), i.core("serde")),
+            (ModuleSource::wasi_cli(), i.wasi("cli")),
+            (ModuleSource::wasi_clocks(), i.wasi("clocks")),
+            (ModuleSource::wasi_filesystem(), i.wasi("filesystem")),
+            (ModuleSource::wasi_http(), i.wasi("http")),
+            (ModuleSource::entry_point_synthetic(), i.entry_point("<entry>")),
+            (ModuleSource::entry_point_stdin(), i.entry_point("<stdin>")),
+            (
+                ModuleSource::entry_point_uninitialized(),
+                i.entry_point("<uninitialized>"),
+            ),
+        ];
+        for (lhs, rhs) in cases {
+            assert_eq!(lhs, rhs, "well-known {lhs} != interner-built {rhs}");
         }
     }
 }
