@@ -27,16 +27,8 @@ use {
     check_special,
     SpecialKind,
     parse,
-    parse_text_range,
+    parse_text,
 } from "./fpfmt.wado";
-
-// Test-only convenience wrapper around `parse_text_range`. The stdlib
-// itself never needs the full-string variant — callers thread byte ranges
-// through directly — but keeping a parser-facing form here makes the
-// behavioural tests below read naturally.
-fn parse_text(s: String) -> Option<f64> {
-    return parse_text_range(s, 0, s.len());
-}
 
 test "log10_pow2 approximation" {
     assert log10_pow2(0) == 0;
@@ -318,60 +310,60 @@ test "parse roundtrip basic" {
 }
 
 test "parse_text basic" {
-    assert parse_text("3.14") matches { Some(v) && v == 3.14 };
-    assert parse_text("1") matches { Some(v) && v == 1.0 };
-    assert parse_text("0.5") matches { Some(v) && v == 0.5 };
+    assert parse_text(&"3.14") matches { Some(v) && v == 3.14 };
+    assert parse_text(&"1") matches { Some(v) && v == 1.0 };
+    assert parse_text(&"0.5") matches { Some(v) && v == 0.5 };
 }
 
 test "parse_text with exponent" {
-    assert parse_text("1e2") matches { Some(v) && v == 100.0 };
-    assert parse_text("1.5e-3") matches { Some(v) && v == 0.0015 };
+    assert parse_text(&"1e2") matches { Some(v) && v == 100.0 };
+    assert parse_text(&"1.5e-3") matches { Some(v) && v == 0.0015 };
 }
 
 test "parse_text malformed input" {
-    assert parse_text("") matches { None };
-    assert parse_text("abc") matches { None };
-    assert parse_text("1.2.3") matches { None };
-    assert parse_text(".5") matches { None };
-    assert parse_text("5.") matches { None };
-    assert parse_text("+") matches { None };
-    assert parse_text("-") matches { None };
-    assert parse_text("e5") matches { None };
-    assert parse_text("1e") matches { None };
-    assert parse_text("infi") matches { None };
-    assert parse_text("nana") matches { None };
+    assert parse_text(&"") matches { None };
+    assert parse_text(&"abc") matches { None };
+    assert parse_text(&"1.2.3") matches { None };
+    assert parse_text(&".5") matches { None };
+    assert parse_text(&"5.") matches { None };
+    assert parse_text(&"+") matches { None };
+    assert parse_text(&"-") matches { None };
+    assert parse_text(&"e5") matches { None };
+    assert parse_text(&"1e") matches { None };
+    assert parse_text(&"infi") matches { None };
+    assert parse_text(&"nana") matches { None };
 }
 
 test "parse_text with sign" {
-    assert parse_text("-42") matches { Some(v) && v == -42.0 };
-    assert parse_text("+3.14") matches { Some(v) && v == 3.14 };
-    assert parse_text("-0.5e2") matches { Some(v) && v == -50.0 };
+    assert parse_text(&"-42") matches { Some(v) && v == -42.0 };
+    assert parse_text(&"+3.14") matches { Some(v) && v == 3.14 };
+    assert parse_text(&"-0.5e2") matches { Some(v) && v == -50.0 };
 }
 
 test "parse_text infinity" {
-    assert parse_text("inf") matches { Some(v) && v == f64::INFINITY };
-    assert parse_text("Inf") matches { Some(v) && v == f64::INFINITY };
-    assert parse_text("-inf") matches { Some(v) && v == f64::NEG_INFINITY };
-    assert parse_text("+infinity") matches { Some(v) && v == f64::INFINITY };
-    assert parse_text("-Infinity") matches { Some(v) && v == f64::NEG_INFINITY };
-    assert parse_text("INF") matches { Some(v) && v == f64::INFINITY };
-    assert parse_text("INFINITY") matches { Some(v) && v == f64::INFINITY };
+    assert parse_text(&"inf") matches { Some(v) && v == f64::INFINITY };
+    assert parse_text(&"Inf") matches { Some(v) && v == f64::INFINITY };
+    assert parse_text(&"-inf") matches { Some(v) && v == f64::NEG_INFINITY };
+    assert parse_text(&"+infinity") matches { Some(v) && v == f64::INFINITY };
+    assert parse_text(&"-Infinity") matches { Some(v) && v == f64::NEG_INFINITY };
+    assert parse_text(&"INF") matches { Some(v) && v == f64::INFINITY };
+    assert parse_text(&"INFINITY") matches { Some(v) && v == f64::INFINITY };
 }
 
 test "parse_text nan" {
-    assert parse_text("nan") matches { Some(_) };
-    assert parse_text("NaN") matches { Some(_) };
-    assert parse_text("NAN") matches { Some(_) };
+    assert parse_text(&"nan") matches { Some(_) };
+    assert parse_text(&"NaN") matches { Some(_) };
+    assert parse_text(&"NAN") matches { Some(_) };
 }
 
 test "parse_text negative zero" {
-    assert parse_text("-0") matches { Some(v) && v == 0.0 };
+    assert parse_text(&"-0") matches { Some(v) && v == 0.0 };
 }
 
 test "parse_text overflow underflow" {
-    assert parse_text("1e999") matches { Some(v) && v == f64::INFINITY };
-    assert parse_text("-1e999") matches { Some(v) && v == f64::NEG_INFINITY };
-    assert parse_text("1e-999") matches { Some(v) && v == 0.0 };
+    assert parse_text(&"1e999") matches { Some(v) && v == f64::INFINITY };
+    assert parse_text(&"-1e999") matches { Some(v) && v == f64::NEG_INFINITY };
+    assert parse_text(&"1e-999") matches { Some(v) && v == 0.0 };
 }
 
 test "parse roundtrip via short" {

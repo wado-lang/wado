@@ -856,6 +856,13 @@ impl Deserializer for PathParamsDeserializer {
         -> Result<PathParamsStructAccess, DeserializeError>
         with stores[self]
     {
+        // Nested structs are unsupported: `PathParams` is a flat key/value
+        // surface, so a nested `begin_struct` (cursor != 0) means a field
+        // typed as another struct asked us to descend into it. Refuse loudly
+        // rather than silently re-running the field loop for the inner type.
+        if self.cursor != 0 {
+            return Result::Err(DeserializeError::unexpected_type("path params cannot deserialize a nested struct field", -1));
+        }
         return Result::Ok(PathParamsStructAccess { de: *self, lookup });
     }
     fn begin_variant(&mut self, _type_name: &String, _num_cases: i32)

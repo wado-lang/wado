@@ -16,12 +16,12 @@
 
 use { println, Stdout } from "core:cli";
 
-fn parse_range<T: FromStr>(s: String, start: i32, end: i32) -> Result<T, T::Err> {
+fn parse_range<T: FromStr>(s: &String, start: i32, end: i32) -> Result<T, T::Err> {
     return T::from_str_range(s, start, end);
 }
 
 export fn run() with Stdout {
-    let r = parse_range::<i32>("xyz123abc", 3, 6);
+    let r = parse_range::<i32>(&"xyz123abc", 3, 6);
     if let Ok(v) = r {
         println(`OK: {v}`);
     } else {

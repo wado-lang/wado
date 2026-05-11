@@ -862,7 +862,7 @@ pub trait DisplayAlt { fn fmt_alt(&self, f: &mut Formatter); }  // for # (alt) f
 pub trait FromStr {
     type Err;
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<Self, Self::Err>;
-    fn from_str(s: String) -> Result<Self, Self::Err> { /* default */ }
+    fn from_str(s: &String) -> Result<Self, Self::Err> { /* default */ }
 }
 ```
 
@@ -928,11 +928,11 @@ f64::pow(x, y) f64::ln(x)     f64::exp(x)
 
 x.is_nan()     x.is_finite()    // where x is f64 or f32
 
-f64::from_str("3.14")                  // Result<f64, ParseFloatError>
-i32::from_str("42")                    // Result<i32, ParseIntError>
-i32::from_str_hex("ff")                // Result<i32, ParseIntError> (radix 16)
-i32::from_str_radix("1010", 2)         // Result<i32, ParseIntError> (radix 2..=36)
-i32::from_str_range("xyz42abc", 3, 5)  // parse a byte range without substring alloc
+f64::from_str(&"3.14")                  // Result<f64, ParseFloatError>
+i32::from_str(&"42")                    // Result<i32, ParseIntError>
+i32::from_str_hex(&"ff")                // Result<i32, ParseIntError> (radix 16)
+i32::from_str_radix(&"1010", 2)         // Result<i32, ParseIntError> (radix 2..=36)
+i32::from_str_range(&"xyz42abc", 3, 5)  // parse a byte range without substring alloc
 
 i32::min(a, b)  i32::max(a, b)
 

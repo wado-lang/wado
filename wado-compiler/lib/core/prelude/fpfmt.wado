@@ -1009,3 +1009,8 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     let val = parse(d, eff_p);
     return Option::Some(builtin::f64_copysign(val, sign));
 }
+
+/// Non-range variant of `parse_text_range`.
+pub fn parse_text(s: &String) -> Option<f64> {
+    return parse_text_range(s, 0, s.len());
+}

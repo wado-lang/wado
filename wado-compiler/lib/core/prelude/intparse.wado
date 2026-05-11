@@ -188,6 +188,19 @@ pub fn assert_radix(radix: u32) {
     }
 }
 
+/// Non-range variant of `parse_signed_prefix_range`. Use this when
+/// parsing a full string (no extracted slice). Both forms take
+/// `&String`, so this is a naming distinction — picking the non-range
+/// entry communicates "no range" at the call site.
+pub fn parse_signed_prefix(s: &String) -> Result<[bool, i32], IntErrorKind> {
+    return parse_signed_prefix_range(s, 0, s.len());
+}
+
+/// Non-range variant of `parse_unsigned_prefix_range`.
+pub fn parse_unsigned_prefix(s: &String) -> Result<i32, IntErrorKind> {
+    return parse_unsigned_prefix_range(s, 0, s.len());
+}
+
 /// Parse a signed integer in the given radix from `s[start..end)`,
 /// clamped to `[-min_abs, max]`. `max` is the largest positive value;
 /// `min_abs` is the absolute value of the most negative representable value
@@ -237,6 +250,16 @@ pub fn parse_u64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: 
     };
 }
 
+/// Non-range variant of `parse_i64_radix_range`.
+pub fn parse_i64_radix(s: &String, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
+    return parse_i64_radix_range(s, 0, s.len(), radix, max, min_abs);
+}
+
+/// Non-range variant of `parse_u64_radix_range`.
+pub fn parse_u64_radix(s: &String, radix: u32, max: u64) -> Result<u64, ParseIntError> {
+    return parse_u64_radix_range(s, 0, s.len(), radix, max);
+}
+
 /// Parse a `f64` from the byte range `s[start..end)` without allocating
 /// a substring. Out-of-bounds or empty ranges return `Err(Empty)` so the
 /// public surface stays total (no trap on a bad index).
@@ -248,4 +271,9 @@ pub fn parse_f64_from_str_range(s: &String, start: i32, end: i32) -> Result<f64,
         Some(v) => Result::Ok(v),
         None => Result::Err(ParseFloatError::new(FloatErrorKind::Invalid)),
     };
+}
+
+/// Non-range variant of `parse_f64_from_str_range`.
+pub fn parse_f64_from_str(s: &String) -> Result<f64, ParseFloatError> {
+    return parse_f64_from_str_range(s, 0, s.len());
 }

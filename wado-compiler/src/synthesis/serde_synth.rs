@@ -500,9 +500,6 @@ fn generate_struct_serialize(
     let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
     let ref_string_type = tt.make_ref(string_type);
     let ser_error_type = tt.make_struct("SerializeError".to_string(), serde_module.clone());
-    let ser_error_kind_type = tt
-        .find_enum_type("SerializeErrorKind", &serde_module)
-        .unwrap_or(TypeTable::I32);
     let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
     let struct_ser_type = tt.make_assoc_type_projection(
         s_type_param,
@@ -618,18 +615,14 @@ fn generate_struct_serialize(
     );
     then_stmts.push(return_stmt(Some(end_call)));
 
-    let err_val = serialize_error_literal(
+    let else_block = propagate_err_block(
+        result_tmp,
+        "__result",
+        result_ss_err,
         ser_error_type,
-        ser_error_kind_type,
-        "begin_struct failed",
-        string_type,
-        span,
-    );
-    let else_stmts = vec![return_stmt(Some(variant_err(
-        err_val,
         result_unit_err,
         span,
-    )))];
+    );
 
     stmts.push(if_let_ok(
         local_ref(result_tmp, "__result", result_ss_err),
@@ -638,7 +631,7 @@ fn generate_struct_serialize(
         st_local,
         "st",
         block(then_stmts),
-        block(else_stmts),
+        else_block,
         span,
     ));
 
@@ -1169,21 +1162,14 @@ fn generate_struct_deserialize(
         span,
     ))));
 
-    // else block
-    let begin_err = deserialize_error_literal(
+    let else_block = propagate_err_block(
+        result_tmp,
+        "__result",
+        result_sa_err,
         deser_error_type,
-        deser_error_kind_type,
-        "Custom",
-        9,
-        "begin_struct failed",
-        string_type,
-        span,
-    );
-    let else_block = block(vec![return_stmt(Some(variant_err(
-        begin_err,
         result_struct_err,
         span,
-    )))]);
+    );
 
     stmts.push(if_let_ok(
         local_ref(result_tmp, "__result", result_sa_err),

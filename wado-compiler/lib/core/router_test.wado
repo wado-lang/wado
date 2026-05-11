@@ -263,6 +263,12 @@ impl Deserialize for StaticOnly;
 struct StringParam { slug: String }
 impl Deserialize for StringParam;
 
+struct InnerParam { id: u64 }
+impl Deserialize for InnerParam;
+
+struct NestedParam { inner: InnerParam }
+impl Deserialize for NestedParam;
+
 test "router: deserialize params into struct" {
     let mut r = Router::<i32>::new();
     r.get("/users/:id", 1);
@@ -318,6 +324,15 @@ test "router: params.get returns Option" {
     let m = r.match_path(Method::Get, &"/users/abc").unwrap();
     assert m.params.get("id") matches { Some(v) && v == "abc" };
     assert m.params.get("missing") matches { None };
+}
+
+test "router: deserialize rejects nested struct field" {
+    let mut r = Router::<i32>::new();
+    r.get("/items/:inner", 1);
+
+    let m = r.match_path(Method::Get, &"/items/42").unwrap();
+    let result: Result<NestedParam, DeserializeError> = m.params.deserialize();
+    assert result matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
 }
 
 test "router: params index by name (IndexValue)" {
