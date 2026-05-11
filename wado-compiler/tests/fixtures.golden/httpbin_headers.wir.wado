@@ -1955,6 +1955,7 @@ fn "./sub/httpbin_handler.wado/read_body_from_request"(request) {
 fn "./sub/httpbin_handler.wado/parse_status_code"(s) {
     let f: f64;
     let code: i32;
+    let s_5: ref "core:prelude/string.wado//String";
     let end: i32;
     if s.used == 0 {
         return 1, 0;
@@ -1962,8 +1963,9 @@ fn "./sub/httpbin_handler.wado/parse_status_code"(s) {
     let __sroa___pattern_temp_0_discriminant: i32;
     let __sroa___pattern_temp_0_case0_payload_0: f64;
     let __sroa___pattern_temp_0_case1_payload_0: ref null "core:prelude/intparse.wado//ParseFloatError";
-    end = s.used;
-    multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_case0_payload_0, __sroa___pattern_temp_0_case1_payload_0] = "core:prelude/intparse.wado/parse_f64_from_str_range"(s, 0, end);
+    s_5 = s;
+    end = s_5.used;
+    multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_case0_payload_0, __sroa___pattern_temp_0_case1_payload_0] = "core:prelude/intparse.wado/parse_f64_from_str_range"(s_5, 0, end);
     if __sroa___pattern_temp_0_discriminant == 0 {
         f = __sroa___pattern_temp_0_case0_payload_0;
         code = builtin::i32_trunc_f64_s(f);
