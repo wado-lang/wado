@@ -2810,12 +2810,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         method_name: &str,
         assoc_type_name: &str,
         expected_index_type: Option<TypeId>,
-    ) -> Option<(
-        TypeId,
-        ast::SelfKind,
-        String,
-        ModuleSource,
-    )> {
+    ) -> Option<(TypeId, ast::SelfKind, String, ModuleSource)> {
         // Check cache first (include expected_index_type in key)
         let cache_key = (
             struct_name.to_string(),

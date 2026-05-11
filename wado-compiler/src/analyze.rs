@@ -240,19 +240,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             implicit_modules: crate::hashmap::IndexSet::default(),
             entry_module_source: ModuleSource::entry_point_uninitialized(),
             invocations: crate::kiln::InvocationIndex::new(),
-            interner: Rc::new(RefCell::new(
-                ModuleSourceInterner::new(),
-            )),
+            interner: Rc::new(RefCell::new(ModuleSourceInterner::new())),
         }
     }
 
     /// Seed the analyzer with the loader's interner so import-site
     /// resolution canonicalizes module identities consistently.
     #[must_use]
-    pub fn with_interner(
-        mut self,
-        interner: Rc<RefCell<ModuleSourceInterner>>,
-    ) -> Self {
+    pub fn with_interner(mut self, interner: Rc<RefCell<ModuleSourceInterner>>) -> Self {
         self.interner = interner;
         self
     }

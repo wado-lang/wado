@@ -5,8 +5,8 @@
 //!
 //! Pipeline: `WirPackage` → `emit` (core bytes) → `component` (wrapped) → `Vec<u8>`
 
-use crate::module_source::ModuleSource;
 use crate::flat_package::FlatPackage;
+use crate::module_source::ModuleSource;
 use crate::wir::WirPackage;
 
 mod component;

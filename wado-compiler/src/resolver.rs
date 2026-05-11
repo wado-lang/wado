@@ -262,9 +262,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             local_symbols: Rc::new(RefCell::new(IndexMap::default())),
             default_scope_module: None,
             invocations: Rc::new(crate::kiln::InvocationIndex::new()),
-            interner: Rc::new(RefCell::new(
-                ModuleSourceInterner::new(),
-            )),
+            interner: Rc::new(RefCell::new(ModuleSourceInterner::new())),
         }
     }
 

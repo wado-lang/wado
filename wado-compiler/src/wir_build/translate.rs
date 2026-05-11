@@ -3,8 +3,8 @@
 //! This is the core of the `tir_to_wir` phase, translating each TIR function body
 //! into a sequence of WIR instructions.
 
-use crate::module_source::ModuleSource;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::module_source::ModuleSource;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
     TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
@@ -1057,11 +1057,7 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Build the qualified global name.
-    fn make_global_name(
-        &self,
-        module_source: &ModuleSource,
-        name: &str,
-    ) -> String {
+    fn make_global_name(&self, module_source: &ModuleSource, name: &str) -> String {
         if module_source.is_entry_point() {
             format!("global:{name}")
         } else {

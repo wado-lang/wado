@@ -3011,10 +3011,7 @@ mod tests {
     use super::*;
     use crate::module_source::ModuleSourceInterner;
 
-    fn free_fn(
-        interner: &mut ModuleSourceInterner,
-        name: &str,
-    ) -> FunctionId {
+    fn free_fn(interner: &mut ModuleSourceInterner, name: &str) -> FunctionId {
         FunctionId::Free(FreeFunctionName::from_strs(interner, &["test"], name))
     }
 

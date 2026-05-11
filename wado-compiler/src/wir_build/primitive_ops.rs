@@ -87,10 +87,8 @@ impl FunctionTranslator<'_, '_> {
         let u8_array_type = self.ctx.array_type_by_name.get("u8").cloned();
 
         // Look up String struct type
-        let string_struct_name = crate::name::StructName::new(
-            ModuleSource::string(),
-            "String".to_string(),
-        );
+        let string_struct_name =
+            crate::name::StructName::new(ModuleSource::string(), "String".to_string());
         let string_type = self.ctx.struct_type_map.get(&string_struct_name).cloned();
 
         let (Some(array_type_id), Some(string_type_id)) = (u8_array_type, string_type) else {
@@ -143,8 +141,7 @@ impl FunctionTranslator<'_, '_> {
         // Look up Array<u8> wrapper struct type
         let mangled =
             crate::name::mangle_generic_name("Array", std::slice::from_ref(&"u8".to_string()));
-        let array_struct_name =
-            crate::name::StructName::new(ModuleSource::prelude(), mangled);
+        let array_struct_name = crate::name::StructName::new(ModuleSource::prelude(), mangled);
         let array_struct_type = self.ctx.struct_type_map.get(&array_struct_name).cloned();
 
         let (Some(gc_array_type_id), Some(struct_type_id)) = (u8_array_type, array_struct_type)
