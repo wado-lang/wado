@@ -255,6 +255,28 @@ test "MultiAltDispatch flat variants round-trip" {
     if let Tournament(t) = &tournament { assert t.alts.len() == 2; } else { panic("Tournament"); }
 }
 
+test "MultiAltDispatch variant set is exactly { Direct, Tournament }" {
+    // Exhaustive match — if a new variant is added (e.g. re-introducing
+    // PredictDispatch / PartialScanDispatch / SaveRewindDispatch),
+    // this `match` becomes non-exhaustive and the compiler will reject
+    // the test until both the variant's MultiAltDispatch doc-block and
+    // the matching emit translator are updated. See the doc-comment in
+    // gir.wado for the rationale.
+    let direct = direct_single_alt(0);
+    let tournament = MultiAltDispatch::Tournament(TournamentDispatch { alts: [0] });
+
+    let label_direct: String = match direct {
+        Direct(_) => "Direct",
+        Tournament(_) => "Tournament",
+    };
+    let label_tournament: String = match tournament {
+        Direct(_) => "Direct",
+        Tournament(_) => "Tournament",
+    };
+    assert label_direct == "Direct";
+    assert label_tournament == "Tournament";
+}
+
 test "ScanElement variants round-trip" {
     let token = ScanElement::Token(ScanTokenElem { kind: "TK_X" });
     let call = ScanElement::RuleCall(ScanRuleCallElem {

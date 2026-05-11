@@ -311,8 +311,30 @@ pub struct FollowVariant {
 /// How a multi-alternative rule (or rule atom) dispatches between its
 /// alts at parse time. Lowering picks exactly one variant per multi-
 /// alt body; emit pattern-matches the variant and translates each
-/// shape into the corresponding `if` chain / scan tournament / save-
-/// rewind cascade.
+/// shape into the corresponding `if` chain / scan tournament.
+///
+/// Only the two shapes below are emitted today. The variant set has
+/// been narrowed deliberately:
+///
+/// * `PredictDispatch` (a full SLL prediction-tree dispatch akin to
+///   ANTLR4's `ParserATNSimulator`) — never required by any
+///   committed grammar; emit's prediction tree
+///   (`parser_gen::PredictionNode`) is an emit-private SLL
+///   intermediary that does not surface in GIR.
+/// * `PartialScanDispatch` (some-alts-scannable + others-fall-through)
+///   — would let mixed scannable / unscannable alt sets coexist;
+///   currently `Tournament` requires every alt to be scannable, and
+///   unscannable alt sets are rejected at codegen time as a hard
+///   `panic!`.
+/// * `SaveRewindDispatch` (per-alt save-and-rewind) — last-ditch
+///   backtracking fallback; removed when the bt → scan-dispatch
+///   migration completed (see `package-gale/CLAUDE.md`
+///   "Migration status (2026-04)").
+///
+/// Re-introducing any of the three is a deliberate act: extend this
+/// variant, extend lower's classifier, and add the emit translator
+/// at the same time. Until then, every overlap case must fit into
+/// `Tournament`.
 pub variant MultiAltDispatch {
     /// Alts have disjoint first-sets — straight token-led `if/else if`
     /// chain followed by an error fallback. Used by the bulk of
