@@ -41,14 +41,27 @@ WS : (' '|'\\n') -> skip ;
     loop {
         let rest = out.substr_bytes(pos, out.len());
         let opt_i = rest.find(parse_e_decl);
-        if opt_i matches { None } { break; }
-        let i = if let Some(j) = opt_i { j } else { 0 };
+        if opt_i matches { None } {
+            break;
+        }
+        let i = if let Some(j) = opt_i {
+            j;
+        } else {
+            0;
+        };
         let abs = pos + i;
         let after = out.substr_bytes(abs + parse_e_decl.len(), out.len());
-        let next_fn = if let Some(j) = after.find("\nfn ") { j } else { after.len() };
-        let next_decl = if let Some(j) = after.find(parse_e_decl) { j } else { after.len() };
-        assert next_decl >= next_fn,
-            `two 'let e = parse_e(p)?;' in same function body — bug repro at offset {abs}`;
+        let next_fn = if let Some(j) = after.find("\nfn ") {
+            j;
+        } else {
+            after.len();
+        };
+        let next_decl = if let Some(j) = after.find(parse_e_decl) {
+            j;
+        } else {
+            after.len();
+        };
+        assert next_decl >= next_fn, `two 'let e = parse_e(p)?;' in same function body — bug repro at offset {abs}`;
         pos = abs + parse_e_decl.len();
     }
 }

@@ -1746,9 +1746,10 @@ impl FunctionTranslator<'_, '_> {
             NirExprKind::StructLiteral { fields, .. } => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, expr.type_id);
                 let WirType::Ref { type_id, .. } = wir_type else {
+                    let resolved = self.type_table.get(expr.type_id);
                     panic!(
-                        "[WIR] StructLiteral expected Ref WirType, got {wir_type:?} (type_id={:?})",
-                        expr.type_id
+                        "[WIR] StructLiteral expected Ref WirType, got {wir_type:?} (type_id={:?}, resolved={:?})",
+                        expr.type_id, resolved
                     );
                 };
                 // Unit-typed fields have no Wasm representation; skip them.

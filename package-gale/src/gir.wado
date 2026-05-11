@@ -36,14 +36,7 @@
 //! are pure markers or unmodified passthrough data; duplicating them
 //! would invite drift without semantic benefit.
 
-use {
-    Visibility,
-    OptionValue,
-    GrammarOption,
-    NamedAction,
-    LexerRule,
-    RepeatKind,
-} from "./ir.wado";
+use { Visibility, OptionValue, GrammarOption, NamedAction, LexerRule, RepeatKind } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 
 // ==========================================================================
@@ -261,6 +254,12 @@ pub struct LrAlt {
     /// block, not source order). Affects how `own_prec` is reused
     /// for the trailing self-ref.
     pub right_associative: bool,
+    /// FieldDecl for the leading self-reference that the LR rewrite
+    /// stripped from `suffix.ops`. The CST struct for this alt still
+    /// surfaces the left operand as a field — `suffix.fields` carries
+    /// only the right-hand side, so emit prepends this decl when
+    /// laying out the struct.
+    pub prefix_self_ref: FieldDecl,
 }
 
 /// LR suffix dispatch metadata. The fields mirror
@@ -311,8 +310,30 @@ pub struct FollowVariant {
 /// How a multi-alternative rule (or rule atom) dispatches between its
 /// alts at parse time. Lowering picks exactly one variant per multi-
 /// alt body; emit pattern-matches the variant and translates each
-/// shape into the corresponding `if` chain / scan tournament / save-
-/// rewind cascade.
+/// shape into the corresponding `if` chain / scan tournament.
+///
+/// Only the two shapes below are emitted today. The variant set has
+/// been narrowed deliberately:
+///
+/// * `PredictDispatch` (a full SLL prediction-tree dispatch akin to
+///   ANTLR4's `ParserATNSimulator`) — never required by any
+///   committed grammar; emit's prediction tree
+///   (`parser_gen::PredictionNode`) is an emit-private SLL
+///   intermediary that does not surface in GIR.
+/// * `PartialScanDispatch` (some-alts-scannable + others-fall-through)
+///   — would let mixed scannable / unscannable alt sets coexist;
+///   currently `Tournament` requires every alt to be scannable, and
+///   unscannable alt sets are rejected at codegen time as a hard
+///   `panic!`.
+/// * `SaveRewindDispatch` (per-alt save-and-rewind) — last-ditch
+///   backtracking fallback; removed when the bt → scan-dispatch
+///   migration completed (see `package-gale/CLAUDE.md`
+///   "Migration status (2026-04)").
+///
+/// Re-introducing any of the three is a deliberate act: extend this
+/// variant, extend lower's classifier, and add the emit translator
+/// at the same time. Until then, every overlap case must fit into
+/// `Tournament`.
 pub variant MultiAltDispatch {
     /// Alts have disjoint first-sets — straight token-led `if/else if`
     /// chain followed by an error fallback. Used by the bulk of
@@ -429,6 +450,14 @@ pub variant Op {
     /// a storable subtree, a token-only field, a single-alt struct,
     /// a general variant, or a transparent inlining.
     Group(GroupOp),
+    /// `name+=elem` list-label that is NOT wrapped in a Repeat. The
+    /// outer struct field surfaces as `Array<inner_type>` even
+    /// though a single `+=` only contributes once per execution;
+    /// emit's runtime construction (still surface-IR-driven in
+    /// parser_gen) pre-allocates the array and `push`es the matched
+    /// value. The scalar `=` label is folded into the inner op via
+    /// `rebind_op_field` and does NOT produce this variant.
+    ListLabel(ListLabelOp),
 }
 
 pub struct TokenOp {
@@ -475,6 +504,18 @@ pub struct ExcludedOp {
     /// Exclusion set. emit renders this as a literal token-array
     /// passed to `p.match_not([...])`.
     pub kinds: Array<String>,
+    pub field: String,
+}
+
+/// `name+=elem` outside of a Repeat. The outer CST struct lays out
+/// the field as `Array<inner_type>`; emit pushes the matched value
+/// into a list even though a single `+=` only contributes once.
+pub struct ListLabelOp {
+    /// Inner op the label wraps. Carries the runtime match shape
+    /// (Token / RuleCall / Group / …); the wrapper exists only to
+    /// surface the `Array<>` typing.
+    pub inner: Op,
+    /// Outer CST struct field name (the label's name, deduped).
     pub field: String,
 }
 
@@ -738,4 +779,42 @@ pub fn rule_header(rule: &Rule) -> &RuleHeader with stores[rule] {
         MultiAlt(m) => &m.header,
         LeftRecursive(l) => &l.header,
     };
+}
+
+/// Look up the `AltBody` for a given surface-IR alt index inside the
+/// lowered rule. For `Simple` rules `alt_idx` is always `0`; for
+/// `MultiAlt` the lookup scans `alts` for the entry whose
+/// `alt_index == alt_idx`; for `LeftRecursive` it searches the atom's
+/// alts first and falls back to the LR-alt suffixes. Returns `null`
+/// when the index is not present (e.g. looking for an LR alt's body
+/// via this helper, where the caller should reach for
+/// `LrAlt.suffix` directly).
+pub fn rule_alt_body(rule: &Rule, alt_idx: i32) -> Option<&AltBody> with stores[rule] {
+    return match rule {
+        Simple(s) => if alt_idx == 0 { Option::<&AltBody>::Some(&s.body) } else { null },
+        MultiAlt(m) => find_alt_body_in_array(&m.alts, alt_idx),
+        LeftRecursive(l) => {
+            if let Some(b) = find_alt_body_in_array(&l.atom.alts, alt_idx) {
+                Option::<&AltBody>::Some(b);
+            } else {
+                let mut found: Option<&AltBody> = null;
+                for let lr of &l.lr_alts {
+                    if lr.alt_index == alt_idx {
+                        found = Option::<&AltBody>::Some(&lr.suffix);
+                        break;
+                    }
+                }
+                found;
+            }
+        },
+    };
+}
+
+fn find_alt_body_in_array(alts: &Array<AltBody>, alt_idx: i32) -> Option<&AltBody> with stores[alts] {
+    for let a of alts {
+        if a.alt_index == alt_idx {
+            return Option::<&AltBody>::Some(a);
+        }
+    }
+    return null;
 }

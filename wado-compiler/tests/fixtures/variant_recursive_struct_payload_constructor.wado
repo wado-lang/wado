@@ -1,0 +1,51 @@
+// Regression test for: a struct literal whose type name is NOT
+// imported now produces a clean "unknown type 'X'" diagnostic
+// instead of panicking deep in WIR build at:
+//
+//   wado-compiler/src/wir_build/translate.rs::TirExprKind::StructLiteral
+//   "[WIR] StructLiteral expected Ref WirType, got AbstractRef ..."
+//
+// Trigger (before the fix):
+//
+// 1. A `pub variant` (`Op`) and one of its `pub struct` payloads
+//    (`WrappedOp`) live in a sub-module.
+// 2. The parent module imports the variant (`Op`) but NOT the payload
+//    struct (`WrappedOp`).
+// 3. The parent constructs a struct literal of that payload
+//    (`Op::Wrapped(WrappedOp { … })`).
+//
+// Before the fix, the resolver silently used
+// `self.current_module_source` for the missing import, creating a
+// `ResolvedType::Struct` whose `module_source` did not match the
+// registered key in WIR build's `struct_type_map`. WIR build then
+// fell back to `WirType::AbstractRef`, and `TirExprKind::StructLiteral`
+// translation panicked at the `let WirType::Ref { type_id, .. }`
+// guard.
+//
+// After the fix, `resolve_struct_literal` emits a
+// `TypeError::UnknownType` diagnostic and compilation fails cleanly
+// — this fixture pins that diagnostic so the regression never
+// surfaces as the WIR-build panic again. Originally surfaced while
+// implementing issue #1043 (3) in the gale package.
+
+use { Op, TokenOp } from "./sub/variant_recursive_struct_payload_ir.wado";
+
+fn wrap(inner: Op, field: &String) -> Op {
+    return Op::Wrapped(WrappedOp { field: *field, inner: inner });
+}
+
+test "construct cross-module variant payload via struct literal" {
+    let leaf = Op::Token(TokenOp { kind: "TK_X" });
+    let w = wrap(leaf, &"name");
+    if let Wrapped(p) = &w {
+        assert p.field == "name";
+    } else {
+        panic("expected Wrapped");
+    }
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "unknown type 'WrappedOp'"
+}

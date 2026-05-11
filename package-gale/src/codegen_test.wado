@@ -752,10 +752,8 @@ letterA : 'a' ;
     let scan_body = extract_fn_body(&output, &"fn scan_statement(");
     // The LR loop must save `pos` before the suffix call and restore it on
     // failure. Look for the save+restore pair around `scan_statement_lr_1(`.
-    assert str_contains(&scan_body, "let lr_saved_pos = pos;"),
-        `scan_statement must save pos before the LR suffix call:\n{scan_body}`;
-    assert str_contains(&scan_body, "pos = lr_saved_pos; break;"),
-        `scan_statement must restore pos and break on LR suffix failure:\n{scan_body}`;
+    assert str_contains(&scan_body, "let lr_saved_pos = pos;"), `scan_statement must save pos before the LR suffix call:\n{scan_body}`;
+    assert str_contains(&scan_body, "pos = lr_saved_pos; break;"), `scan_statement must restore pos and break on LR suffix failure:\n{scan_body}`;
 }
 
 test "LR helper wraps left into an array when the recursive-position label uses +=" {
@@ -774,8 +772,7 @@ WS : [ \\t\\n]+ -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     let helper = extract_fn_body(&output, &"fn parse_expr_lr_");
-    assert str_contains(&helper, "b: [left] as Array<ExprNode>,"),
-        `LR helper must wrap a list-label \`left\` in an Array<T>-typed array literal:\n{helper}`;
+    assert str_contains(&helper, "b: [left] as Array<ExprNode>,"), `LR helper must wrap a list-label \`left\` in an Array<T>-typed array literal:\n{helper}`;
 }
 
 test "LR parse loop predicts via scan when suffix's first token is shared with the atom" {
@@ -792,13 +789,14 @@ letterA : 'a' ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     let parse_body = extract_fn_body(&output, &"fn parse_statement(");
-    assert str_contains(&parse_body, "scan_statement_lr_1(") || str_contains(&parse_body, "scan_statement_lr_1 ("),
-        `parse_statement must consult scan_statement_lr_1 before parsing the LR suffix:\n{parse_body}`;
+    assert str_contains(&parse_body, "scan_statement_lr_1(") || str_contains(&parse_body, "scan_statement_lr_1 ("), `parse_statement must consult scan_statement_lr_1 before parsing the LR suffix:\n{parse_body}`;
 }
 
 fn extract_fn_body(output: &String, header: &String) -> String {
     let start = find_substr(output, header);
-    if start < 0 { return ""; }
+    if start < 0 {
+        return "";
+    }
     // Find the next "\nfn " (start of the next top-level fn) or end of file.
     let after = start + header.len();
     let next = find_substr_from(output, &"\nfn ", after);
@@ -825,7 +823,9 @@ fn find_substr_from(haystack: &String, needle: &String, from: i32) -> i32 {
                 break;
             }
         }
-        if ok { return i; }
+        if ok {
+            return i;
+        }
     }
     return -1;
 }

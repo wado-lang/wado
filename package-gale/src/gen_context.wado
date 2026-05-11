@@ -470,6 +470,41 @@ impl GenContext {
         return true;
     }
 
+    /// Per-call-site caller-FOLLOW for the element at index `i` in
+    /// `elements`. Single source of truth for both the `lower` pre-pass
+    /// (variant interning at `lower_scan_element` / `lower_op` RuleRef
+    /// sites) and `parser_gen` emit (variant interning at
+    /// `gen_scan_element` / `gen_element` RuleRef sites).
+    ///
+    /// Three cases:
+    ///
+    /// - Suffix is non-nullable: the immediate suffix's `first` set is
+    ///   the only thing that can follow. Drop the outer follow.
+    /// - Suffix is deep-nullable AND first-exact (every walked element's
+    ///   first uniquely predicts that element matching, see
+    ///   `element_is_first_exact`): the outer follow propagates through.
+    ///   Union the suffix's first with `current_outer_follow`. This
+    ///   closes `ll_nullable_suffix`'s gap.
+    /// - Suffix is deep-nullable but NOT first-exact: drop the suffix's
+    ///   first and propagate only `current_outer_follow`. This is the
+    ///   "first-exact deep-nullable suffix" soundness invariant — see
+    ///   `compute_ruleref_call_follow`'s historical doc in
+    ///   `parser_gen.wado` and `CLAUDE.md` "Failed Approaches" #3 for
+    ///   the rationale.
+    ///
+    /// Callers must have already installed `current_outer_follow` to
+    /// the surrounding variant's mask (or `[]` for regular bodies).
+    pub fn compute_call_site_follow(&mut self, elements: &Array<Element>, i: i32) -> Array<String> {
+        let first = self.first_of_elements_from(elements, i + 1);
+        if !self.tail_is_nullable_deep(elements, i + 1) {
+            return first;
+        }
+        if self.deep_suffix_is_first_exact(elements, i + 1) {
+            return union_kind_arrays(&first, &self.current_outer_follow);
+        }
+        return self.current_outer_follow;
+    }
+
     pub fn rule_is_single_token(&mut self, name: &String, visiting: &mut Array<String>) -> bool {
         let cached = self.single_token_cache.get(*name);
         if let Some(val) = cached {
@@ -1015,6 +1050,24 @@ fn extend_dedup(target: &mut Array<String>, source: &Array<String>) {
             target.push(*item);
         }
     }
+}
+
+/// Append-and-dedup union of two token-kind arrays, preserving the
+/// order of `a` then appending new entries from `b`. Shared helper
+/// for `compute_call_site_follow`; `union_sets` / `union_arrays` in
+/// parser_gen and lower compute the same thing — keep this as the
+/// canonical implementation.
+pub fn union_kind_arrays(a: &Array<String>, b: &Array<String>) -> Array<String> {
+    let mut result: Array<String> = [];
+    for let tk of a {
+        result.push(*tk);
+    }
+    for let tk of b {
+        if !arr_contains(&result, tk) {
+            result.push(*tk);
+        }
+    }
+    return result;
 }
 
 fn arr_contains(arr: &Array<String>, value: &String) -> bool {
