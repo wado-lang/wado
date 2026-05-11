@@ -790,6 +790,7 @@ fn get_type_name_static(ty: &ast::Type) -> String {
 mod tests {
     use super::*;
     use crate::ast::{GenericParam, GenericType, ImplBlock, NamedType};
+    use crate::module_source::ModuleSourceInterner;
     use crate::token::Span;
 
     fn dummy_span() -> Span {
@@ -844,7 +845,7 @@ mod tests {
 
     fn make_type_decl_index(local_names: &[&str]) -> IndexMap<String, ModuleSource> {
         let mut m = IndexMap::default();
-        let mut interner = crate::module_source::ModuleSourceInterner::new();
+        let mut interner = ModuleSourceInterner::new();
         let entry = interner.entry_point("test.wado");
         for &name in local_names {
             m.insert(name.to_string(), entry.clone());
@@ -871,13 +872,13 @@ mod tests {
 
     #[test]
     fn test_is_user_local_entry_point() {
-        let mut interner = crate::module_source::ModuleSourceInterner::new();
+        let mut interner = ModuleSourceInterner::new();
         assert!(is_user_local(&interner.entry_point("main.wado")));
     }
 
     #[test]
     fn test_is_user_local_local_path() {
-        let mut interner = crate::module_source::ModuleSourceInterner::new();
+        let mut interner = ModuleSourceInterner::new();
         assert!(is_user_local(&interner.local("./lib.wado")));
     }
 
@@ -893,7 +894,7 @@ mod tests {
 
     #[test]
     fn test_is_user_local_remote_is_foreign() {
-        let mut interner = crate::module_source::ModuleSourceInterner::new();
+        let mut interner = ModuleSourceInterner::new();
         assert!(!is_user_local(
             &interner.remote("https://example.com/lib.wado")
         ));

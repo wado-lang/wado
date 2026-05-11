@@ -24,7 +24,7 @@ use crate::ast::Type;
 use crate::cm_abi;
 use crate::component_model::WasiRegistry;
 use crate::hashmap::IndexMap;
-use crate::module_source::ModuleSource;
+use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::LocalMethodName;
 use crate::tir::{
     CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind,
@@ -844,7 +844,7 @@ pub(super) fn synthesize_result_export_binding(
     world_params: &[(String, Type)],
     wasi_registry: &WasiRegistry,
     cm_package: &str,
-    interner: &RefCell<crate::module_source::ModuleSourceInterner>,
+    interner: &RefCell<ModuleSourceInterner>,
 ) -> Rc<RefCell<TirFunction>> {
     let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
@@ -1394,7 +1394,7 @@ pub(super) fn synthesize_general_export_binding(
     world_params: &[(String, Type)],
     wasi_registry: &WasiRegistry,
     cm_package: &str,
-    interner: &RefCell<crate::module_source::ModuleSourceInterner>,
+    interner: &RefCell<ModuleSourceInterner>,
 ) -> Rc<RefCell<TirFunction>> {
     let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
@@ -1625,7 +1625,7 @@ pub(super) fn synthesize_async_export_binding(
     world_params: &[(String, Type)],
     wasi_registry: &WasiRegistry,
     cm_package: &str,
-    interner: &RefCell<crate::module_source::ModuleSourceInterner>,
+    interner: &RefCell<ModuleSourceInterner>,
 ) -> Rc<RefCell<TirFunction>> {
     let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();

@@ -13,7 +13,7 @@ use std::rc::Rc;
 use crate::cm_abi;
 use crate::component_model::WasiRegistry;
 use crate::hashmap::IndexMap;
-use crate::module_source::ModuleSource;
+use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirFunction, TirLocal, TirModule, TirStmt, TirStmtKind,
     TypeTable,
@@ -42,7 +42,7 @@ pub(super) fn expand_task_returns_in_func(
     type_table: &Rc<RefCell<TypeTable>>,
     wasi_registry: &WasiRegistry,
     cm_package: &str,
-    interner: &RefCell<crate::module_source::ModuleSourceInterner>,
+    interner: &RefCell<ModuleSourceInterner>,
 ) {
     let mut func = user_func.borrow_mut();
     let mut next_local = func.local_count;
@@ -123,7 +123,7 @@ fn expand_task_return_in_block(
     type_table: &Rc<RefCell<TypeTable>>,
     wasi_registry: &WasiRegistry,
     cm_package: &str,
-    interner: &RefCell<crate::module_source::ModuleSourceInterner>,
+    interner: &RefCell<ModuleSourceInterner>,
 ) {
     let stmts = std::mem::take(&mut blk.stmts);
     let mut new_stmts: Vec<TirStmt> = Vec::with_capacity(stmts.len());
@@ -172,7 +172,7 @@ fn expand_task_return_in_stmt(
     type_table: &Rc<RefCell<TypeTable>>,
     wasi_registry: &WasiRegistry,
     cm_package: &str,
-    interner: &RefCell<crate::module_source::ModuleSourceInterner>,
+    interner: &RefCell<ModuleSourceInterner>,
 ) {
     match &mut stmt.kind {
         TirStmtKind::If {
@@ -245,7 +245,7 @@ fn generate_inline_task_return(
     type_table: &Rc<RefCell<TypeTable>>,
     wasi_registry: &WasiRegistry,
     cm_package: &str,
-    interner: &RefCell<crate::module_source::ModuleSourceInterner>,
+    interner: &RefCell<ModuleSourceInterner>,
 ) -> Vec<TirStmt> {
     let lift_ctx = LiftContext {
         wasi_registry,

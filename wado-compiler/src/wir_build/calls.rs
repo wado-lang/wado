@@ -93,7 +93,7 @@ impl FunctionTranslator<'_, '_> {
     /// Follows the newtype chain for chained newtypes (C → B → A → Point).
     fn resolve_newtype_method(
         &self,
-        module_source: &crate::module_source::ModuleSource,
+        module_source: &ModuleSource,
         method_info: &crate::name::LocalMethodName,
     ) -> Option<crate::wir::WirFuncId> {
         let struct_name = &method_info.base_struct_name;

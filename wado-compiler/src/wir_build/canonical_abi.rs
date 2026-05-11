@@ -5,6 +5,7 @@
 //! These methods are part of `FunctionTranslator`; see `translate.rs` for
 //! the struct definition and the primary translation dispatch.
 
+use crate::module_source::ModuleSource;
 use crate::tir::{CallArg, FunctionRef, PrimitiveType, ResolvedType, TirExpr, TirExprKind, TypeId};
 use crate::wir::{
     CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirFuncId, WirInstr,
@@ -156,7 +157,7 @@ impl FunctionTranslator<'_, '_> {
             | ResolvedType::Variant { module_source, .. } => module_source,
             _ => return "cli".to_string(),
         };
-        if let crate::module_source::ModuleSource::Wasi { interface } = module_source {
+        if let ModuleSource::Wasi { interface } = module_source {
             // interface format is "{package}/..." (e.g., "http/types.wado")
             interface.split('/').next().unwrap_or("cli").to_string()
         } else {

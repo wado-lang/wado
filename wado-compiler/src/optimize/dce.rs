@@ -3009,9 +3009,10 @@ fn remove_dead_global_sets_expr(expr: &mut TirExpr, used: &IndexSet<(String, Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::module_source::ModuleSourceInterner;
 
     fn free_fn(
-        interner: &mut crate::module_source::ModuleSourceInterner,
+        interner: &mut ModuleSourceInterner,
         name: &str,
     ) -> FunctionId {
         FunctionId::Free(FreeFunctionName::from_strs(interner, &["test"], name))
@@ -3019,7 +3020,7 @@ mod tests {
 
     #[test]
     fn test_empty_reachable_set() {
-        let mut interner = crate::module_source::ModuleSourceInterner::new();
+        let mut interner = ModuleSourceInterner::new();
         let call_graph = IndexMap::default();
         let entry = free_fn(&mut interner, "run");
         let reachable = compute_reachable(&call_graph, &entry);
@@ -3029,7 +3030,7 @@ mod tests {
 
     #[test]
     fn test_transitive_reachability() {
-        let mut interner = crate::module_source::ModuleSourceInterner::new();
+        let mut interner = ModuleSourceInterner::new();
         let mut call_graph = IndexMap::default();
         call_graph.insert(
             free_fn(&mut interner, "run"),

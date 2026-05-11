@@ -41,7 +41,7 @@ use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::CompilerHost;
 use crate::component_model::WasiRegistry;
 use crate::logger::{Bail, Logger};
-use crate::module_source::ModuleSource;
+use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, MethodName};
 use crate::symbol::{Symbol, SymbolKey, SymbolTable};
 use crate::tir::{
@@ -194,7 +194,7 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// phases. Wrapped in `Rc<RefCell<>>` so per-module resolver
     /// instances can `borrow_mut()` it from `&self` contexts (e.g.
     /// `record_use_specifier_references`).
-    pub(super) interner: Rc<RefCell<crate::module_source::ModuleSourceInterner>>,
+    pub(super) interner: Rc<RefCell<ModuleSourceInterner>>,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -263,7 +263,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             default_scope_module: None,
             invocations: Rc::new(crate::kiln::InvocationIndex::new()),
             interner: Rc::new(RefCell::new(
-                crate::module_source::ModuleSourceInterner::new(),
+                ModuleSourceInterner::new(),
             )),
         }
     }
@@ -592,7 +592,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// For `use { Stdout } from "core:cli"`, maps "Stdout" → resolved("core:cli").
     /// For local effect declarations, maps name → current module source.
     fn build_effect_sources(
-        interner: &mut crate::module_source::ModuleSourceInterner,
+        interner: &mut ModuleSourceInterner,
         module: &Module,
         module_source: &ModuleSource,
         invocations: &crate::kiln::InvocationIndex,

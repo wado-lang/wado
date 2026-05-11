@@ -344,7 +344,7 @@ pub fn param_local(name: &str, type_id: TypeId, is_mut: bool) -> TirLocal {
 pub fn generic_static_call(
     struct_name: &str,
     method_name: &str,
-    module_source: crate::module_source::ModuleSource,
+    module_source: ModuleSource,
     type_args: Vec<TypeId>,
     args: Vec<TirExpr>,
     return_type: TypeId,
@@ -387,7 +387,7 @@ pub fn generic_method_call(
     receiver: TirExpr,
     struct_name: &str,
     method_name: &str,
-    method_module_source: crate::module_source::ModuleSource,
+    method_module_source: ModuleSource,
     args: Vec<TirExpr>,
     return_type: TypeId,
 ) -> TirExpr {

@@ -4,6 +4,7 @@
 //! These methods are part of `FunctionTranslator`; see `translate.rs` for
 //! the struct definition and the primary translation dispatch.
 
+use crate::module_source::ModuleSource;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
 };
@@ -87,7 +88,7 @@ impl FunctionTranslator<'_, '_> {
 
         // Look up String struct type
         let string_struct_name = crate::name::StructName::new(
-            crate::module_source::ModuleSource::string(),
+            ModuleSource::string(),
             "String".to_string(),
         );
         let string_type = self.ctx.struct_type_map.get(&string_struct_name).cloned();
@@ -143,7 +144,7 @@ impl FunctionTranslator<'_, '_> {
         let mangled =
             crate::name::mangle_generic_name("Array", std::slice::from_ref(&"u8".to_string()));
         let array_struct_name =
-            crate::name::StructName::new(crate::module_source::ModuleSource::prelude(), mangled);
+            crate::name::StructName::new(ModuleSource::prelude(), mangled);
         let array_struct_type = self.ctx.struct_type_map.get(&array_struct_name).cloned();
 
         let (Some(gc_array_type_id), Some(struct_type_id)) = (u8_array_type, array_struct_type)

@@ -42,7 +42,7 @@
 //! always fully populated.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
+use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::LocalMethodName;
 use crate::package::Package;
 use crate::synthesis::common::{alloc_local, option_some, ref_expr, synth_span};
@@ -488,7 +488,7 @@ fn build_dispatch_wrapper_function(
     plan: &DispatchPlan,
     is_resource: bool,
     type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
-    interner: &std::cell::RefCell<crate::module_source::ModuleSourceInterner>,
+    interner: &std::cell::RefCell<ModuleSourceInterner>,
 ) -> TirFunction {
     let span = synth_span();
     let op_name = &op.name;

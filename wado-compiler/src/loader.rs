@@ -16,7 +16,7 @@ use crate::compiler_host::{CompilerHost, SourceError};
 use crate::desugar::desugar_module;
 use crate::lexer::Lexer;
 use crate::logger::Logger;
-use crate::module_source::{ModuleSource, WasmAssetKind};
+use crate::module_source::{ModuleSource, ModuleSourceInterner, WasmAssetKind};
 use crate::name::{normalize_module_path, resolve_module_path};
 use crate::parser::Parser;
 use crate::stdlib;
@@ -276,7 +276,7 @@ pub struct LoadResult {
     /// (analyze / resolver / synthesis / monomorphize) borrow this to
     /// canonicalize any `ModuleSource` they construct so that ptr-eq
     /// remains a valid identity check across phases.
-    pub interner: crate::module_source::ModuleSourceInterner,
+    pub interner: ModuleSourceInterner,
 }
 
 use crate::compiler_host::LogLevel;
@@ -773,7 +773,7 @@ fn parse_bind_desugar_stdlib(label: &str, source: &str) -> Module {
 /// silently degrading to `EntryPoint`, since the LSP would then see the
 /// duplicate-definition cascade we introduced this attribute to suppress.
 fn parse_stdlib_identity_attribute(
-    interner: &mut crate::module_source::ModuleSourceInterner,
+    interner: &mut ModuleSourceInterner,
     module: &Module,
 ) -> Option<ModuleSource> {
     let path = module.stdlib_identity()?;
@@ -812,7 +812,7 @@ mod tests {
     #[test]
     fn stdlib_identity_attribute_resolves_to_core_module_source() {
         let module = parse_test_module("#![no_prelude]\n#![stdlib(\"core:prelude/types.wado\")]\n");
-        let mut interner = crate::module_source::ModuleSourceInterner::new();
+        let mut interner = ModuleSourceInterner::new();
         let want = interner.core("prelude/types.wado");
         assert_eq!(
             parse_stdlib_identity_attribute(&mut interner, &module),
@@ -905,7 +905,7 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     /// Interner for `ModuleSource` payloads. Owned by the loader so that
     /// every loader-produced module identity goes through the same pool.
     /// Re-exported from [`LoadResult`] for downstream phases.
-    interner: crate::module_source::ModuleSourceInterner,
+    interner: ModuleSourceInterner,
     /// Cache of already parsed modules
     loaded: IndexMap<ModuleSource, Module>,
     /// Set of modules currently being loaded (for cycle detection during collection)
@@ -939,7 +939,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             host,
             log_level,
             logger: Logger::new(host, log_level),
-            interner: crate::module_source::ModuleSourceInterner::new(),
+            interner: ModuleSourceInterner::new(),
             loaded: IndexMap::default(),
             loading: IndexSet::default(),
             implicit_modules: IndexSet::default(),
@@ -955,7 +955,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// Borrow the loader's interner mutably. Used by downstream phases
     /// (analyze / resolve / synthesis) when they need to construct
     /// fresh `ModuleSource` values during loader-driven processing.
-    pub fn interner_mut(&mut self) -> &mut crate::module_source::ModuleSourceInterner {
+    pub fn interner_mut(&mut self) -> &mut ModuleSourceInterner {
         &mut self.interner
     }
 

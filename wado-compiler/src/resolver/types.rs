@@ -1395,7 +1395,7 @@ pub(super) struct IndexTraitInfo {
     /// The trait name (e.g., "Index<i32>")
     pub(super) trait_name: String,
     /// Module where the impl block is defined
-    pub(super) impl_module_source: crate::module_source::ModuleSource,
+    pub(super) impl_module_source: ModuleSource,
 }
 
 /// Info about an `IndexAssign` trait implementation
@@ -1407,7 +1407,7 @@ pub(super) struct IndexAssignTraitInfo {
     /// The trait name (e.g., "`IndexAssign`<i32>")
     pub(super) trait_name: String,
     /// Module where the impl block is defined
-    pub(super) impl_module_source: crate::module_source::ModuleSource,
+    pub(super) impl_module_source: ModuleSource,
 }
 
 /// Info about an `IndexMut` trait implementation
@@ -1419,7 +1419,7 @@ pub(super) struct IndexMutTraitInfo {
     /// The trait name (e.g., "`IndexMut`")
     pub(super) trait_name: String,
     /// Module where the impl block is defined
-    pub(super) impl_module_source: crate::module_source::ModuleSource,
+    pub(super) impl_module_source: ModuleSource,
 }
 
 /// Info about an `IndexValue` trait implementation
@@ -1431,7 +1431,7 @@ pub(super) struct IndexValueTraitInfo {
     /// The trait name (e.g., "`IndexValue`<i32>")
     pub(super) trait_name: String,
     /// Module where the impl block is defined
-    pub(super) impl_module_source: crate::module_source::ModuleSource,
+    pub(super) impl_module_source: ModuleSource,
 }
 
 /// Info about a comparison trait implementation (`Eq` or `Ord`)

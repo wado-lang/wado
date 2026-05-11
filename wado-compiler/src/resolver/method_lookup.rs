@@ -2814,7 +2814,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         TypeId,
         ast::SelfKind,
         String,
-        crate::module_source::ModuleSource,
+        ModuleSource,
     )> {
         // Check cache first (include expected_index_type in key)
         let cache_key = (
