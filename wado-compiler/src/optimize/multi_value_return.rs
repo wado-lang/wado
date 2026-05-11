@@ -373,7 +373,9 @@ fn stmt_returns_match(stmt: &NirStmt, expected: &ExpectedShape) -> bool {
         }
         // Let / Expr / Break / Continue — no explicit Return; recurse into
         // nested blocks via expression walks.
-        NirStmtKind::Let { value, .. } => nested_returns_in_expr_match(value, expected),
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+            nested_returns_in_expr_match(value, expected)
+        }
         NirStmtKind::Expr(e) => nested_returns_in_expr_match(e, expected),
         NirStmtKind::Break { value, .. } => value
             .as_ref()
@@ -521,7 +523,9 @@ fn stmt_break_values_match(stmt: &NirStmt, expected: &ExpectedShape) -> bool {
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
             all_break_values_match_shape(body, expected)
         }
-        NirStmtKind::Let { value, .. } => expr_break_values_match(value, expected),
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+            expr_break_values_match(value, expected)
+        }
         NirStmtKind::Expr(e) | NirStmtKind::Return { value: Some(e) } => {
             expr_break_values_match(e, expected)
         }
@@ -651,6 +655,9 @@ fn validate_stmt(
             for stmt in &body.stmts {
                 validate_stmt(stmt, candidate_names, candidates, invalid, &mut inner);
             }
+        }
+        NirStmtKind::LetDestructure { value, .. } => {
+            walk_expr_for_uses(value, candidate_names, candidates, invalid, tracked);
         }
     }
 }

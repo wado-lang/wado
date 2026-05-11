@@ -1600,6 +1600,9 @@ fn rewrite_stmt_recurse(stmt: &mut NirStmt, ctx: &RewriteCtx) {
         NirStmtKind::LabeledBlock { block, .. } => {
             rewrite_block(block, ctx);
         }
+        NirStmtKind::LetDestructure { value, .. } => {
+            rewrite_expr_inplace(value, ctx);
+        }
     }
 }
 

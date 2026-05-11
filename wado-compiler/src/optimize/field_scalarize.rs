@@ -301,6 +301,15 @@ fn collect_param_field_usage_in_stmt(
             }
         }
         NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => {
+            collect_param_field_usage_in_expr(
+                value,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
     }
 }
 
@@ -1122,7 +1131,7 @@ fn visit_block_for_alias(block: &NirBlock, type_table: &TypeTable, out: &mut Ind
 
 fn visit_stmt_for_alias(stmt: &NirStmt, type_table: &TypeTable, out: &mut IndexSet<u32>) {
     match &stmt.kind {
-        NirStmtKind::Let { value, .. } => {
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             visit_expr_for_alias(value, false, type_table, out);
         }
         NirStmtKind::Expr(expr) => {
@@ -1426,6 +1435,9 @@ fn count_field_accesses_in_stmt(
             }
         }
         NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => {
+            count_field_accesses_in_expr(value, counts, false, false, type_table);
+        }
     }
 }
 
@@ -2105,6 +2117,10 @@ fn walk_stmt(
             out.push(stmt);
         }
         NirStmtKind::Let { value, .. } => {
+            walk_expr(value, states, true, out, ctx);
+            out.push(stmt);
+        }
+        NirStmtKind::LetDestructure { value, .. } => {
             walk_expr(value, states, true, out, ctx);
             out.push(stmt);
         }

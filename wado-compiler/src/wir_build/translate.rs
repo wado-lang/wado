@@ -1488,6 +1488,9 @@ impl FunctionTranslator<'_, '_> {
                     body: body_instrs,
                 })
             }
+            NirStmtKind::LetDestructure { pattern, value, .. } => {
+                self.translate_let_pattern(pattern, value)
+            }
         }
     }
 

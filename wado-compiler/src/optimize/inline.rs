@@ -107,6 +107,7 @@ fn count_block_exprs(block: &NirBlock) -> usize {
         .map(|s| match &s.kind {
             NirStmtKind::Expr(expr) => count_expr(expr),
             NirStmtKind::Let { value, .. } => count_expr(value),
+            NirStmtKind::LetDestructure { value, .. } => count_expr(value),
             NirStmtKind::Return { value } => value.as_ref().map_or(0, count_expr),
             NirStmtKind::If {
                 condition,
@@ -195,7 +196,9 @@ fn collect_inner_labels_from_block(block: &NirBlock, labels: &mut IndexSet<Strin
                 }
             }
             NirStmtKind::Loop { body } => collect_inner_labels_from_block(body, labels),
-            NirStmtKind::Expr(expr) | NirStmtKind::Let { value: expr, .. } => {
+            NirStmtKind::Expr(expr)
+            | NirStmtKind::Let { value: expr, .. }
+            | NirStmtKind::LetDestructure { value: expr, .. } => {
                 collect_inner_labels_from_expr(expr, labels);
             }
             NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
@@ -457,7 +460,9 @@ fn collect_callees_from_block(block: &NirBlock, callees: &mut IndexSet<String>) 
 
 fn collect_callees_from_stmt(stmt: &NirStmt, callees: &mut IndexSet<String>) {
     match &stmt.kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::Expr(value) => {
+        NirStmtKind::Let { value, .. }
+        | NirStmtKind::LetDestructure { value, .. }
+        | NirStmtKind::Expr(value) => {
             collect_callees_from_expr(value, callees);
         }
         NirStmtKind::Return { value } => {
@@ -1068,6 +1073,32 @@ fn inline_calls_in_block(
             }
             NirStmtKind::Continue => {
                 new_stmts.push(NirStmt::new(NirStmtKind::Continue, stmt.span));
+            }
+            NirStmtKind::LetDestructure {
+                pattern,
+                is_mut,
+                value,
+            } => {
+                let mut new_value = value;
+                inline_calls_in_expr(
+                    &mut new_value,
+                    candidates,
+                    current_module,
+                    local_count,
+                    locals,
+                    type_table,
+                    &mut new_stmts,
+                    inlined_funcs,
+                    inline_counter,
+                );
+                new_stmts.push(NirStmt::new(
+                    NirStmtKind::LetDestructure {
+                        pattern,
+                        is_mut,
+                        value: new_value,
+                    },
+                    stmt.span,
+                ));
             }
         }
     }
@@ -1951,6 +1982,15 @@ fn remap_stmt_inner(
             value: value.as_ref().map(&re),
         },
         NirStmtKind::Continue => NirStmtKind::Continue,
+        NirStmtKind::LetDestructure {
+            pattern,
+            is_mut,
+            value,
+        } => NirStmtKind::LetDestructure {
+            pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
+            is_mut: *is_mut,
+            value: re(value),
+        },
     };
 
     NirStmt::new(kind, stmt.span)

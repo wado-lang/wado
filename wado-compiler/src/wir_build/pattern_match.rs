@@ -173,6 +173,87 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Translate a `LetDestructure` statement.
+    ///
+    /// By the time WIR build runs, `lower::pattern::lower_let_pattern` has
+    /// rewritten every `LetDestructure` form *except* the multivalue-builtin
+    /// tuple shape (see `lower::pattern::is_multivalue_builtin_pattern`)
+    /// into plain `Let` / `Expr` statements. So the only variant that
+    /// reaches this translator is:
+    ///
+    /// * `Tuple` — multivalue-builtin call returning a tuple; destructure
+    ///   each element into its `Binding` slot or skip `Wildcard` slots.
+    ///
+    /// Other variants are unreachable; we still match the obvious
+    /// `Binding` case (single multivalue result) defensively and leave a
+    /// catch-all `None` arm rather than `unreachable!` so a future
+    /// lower-pass change cannot turn into a hard ICE.
+    pub(super) fn translate_let_pattern(
+        &mut self,
+        pattern: &NirPattern,
+        value: &NirExpr,
+    ) -> Option<WirInstr> {
+        let value_instr = self.translate_expr(value);
+
+        match pattern {
+            NirPattern::Tuple(patterns, _) => {
+                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, value.type_id);
+                if let WirType::Ref { ref type_id, .. } = wir_type {
+                    let mut instrs = Vec::new();
+
+                    // Declare and assign a temp local for the tuple
+                    let temp_name = format!("__let_pattern_{}", self.match_counter);
+                    self.match_counter += 1;
+                    instrs.push(WirInstr::DeclareLocal {
+                        name: temp_name.clone(),
+                        ty: wir_type.clone(),
+                    });
+                    instrs.push(WirInstr::LocalSet {
+                        name: temp_name.clone(),
+                        value: Box::new(value_instr),
+                    });
+
+                    // Bind each element
+                    for (i, sub_pattern) in patterns.iter().enumerate() {
+                        if let NirPattern::Binding { local_index, .. } = sub_pattern {
+                            let local_name = self.local_name(*local_index);
+                            let field_name_str = format!("{i}");
+                            let field_result_ty =
+                                self.struct_field_wir_type(type_id, &field_name_str);
+                            instrs.push(WirInstr::LocalSet {
+                                name: local_name,
+                                value: Box::new(WirInstr::StructGet {
+                                    type_id: type_id.clone(),
+                                    field_name: field_name_str,
+                                    expr: Box::new(WirInstr::LocalGet {
+                                        name: temp_name.clone(),
+                                        result_ty: wir_type.clone(),
+                                    }),
+                                    result_ty: field_result_ty,
+                                }),
+                            });
+                        }
+                        // Wildcard patterns: skip (no binding)
+                    }
+
+                    Some(WirInstr::Seq(instrs))
+                } else {
+                    // Non-ref tuple type — shouldn't happen for real tuples
+                    None
+                }
+            }
+            NirPattern::Binding { local_index, .. } => {
+                // Simple binding (not a tuple destructure)
+                let local_name = self.local_name(*local_index);
+                Some(WirInstr::LocalSet {
+                    name: local_name,
+                    value: Box::new(value_instr),
+                })
+            }
+            _ => None,
+        }
+    }
+
     /// Translate match expression as nested if-else chain.
     pub(super) fn translate_match(
         &mut self,

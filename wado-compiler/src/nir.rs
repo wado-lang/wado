@@ -607,6 +607,20 @@ pub enum NirStmtKind {
         label: String,
         block: NirBlock,
     },
+    /// Tuple destructuring let statement: `let [a, b] = tuple_expr;`
+    ///
+    /// Preserved post-lower only when `lower::pattern` detects a tuple-shaped
+    /// pattern whose value is a core-builtin Call (multi-value return).
+    /// Codegen has a special optimization for that case; all other shapes are
+    /// rewritten by `lower::pattern` before reaching NIR.
+    LetDestructure {
+        /// The pattern to bind (e.g., [a, b, c] or [x, [y, z]])
+        pattern: NirPattern,
+        /// Whether bindings are mutable
+        is_mut: bool,
+        /// The value expression (must be a tuple)
+        value: NirExpr,
+    },
 }
 
 /// Generic type parameter in TIR (from AST `GenericParam`)

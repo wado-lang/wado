@@ -413,7 +413,9 @@ fn collect_bytes_literals_block(block: &NirBlock, used: &mut IndexSet<Vec<u8>>) 
 
 fn collect_bytes_literals_stmt(stmt: &NirStmt, used: &mut IndexSet<Vec<u8>>) {
     match &stmt.kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::Expr(value) => {
+        NirStmtKind::Let { value, .. }
+        | NirStmtKind::LetDestructure { value, .. }
+        | NirStmtKind::Expr(value) => {
             collect_bytes_literals_expr(value, used);
         }
         NirStmtKind::Return { value } => {
@@ -850,6 +852,15 @@ fn analyze_block(
                 }
             }
             NirStmtKind::Continue => {}
+            NirStmtKind::LetDestructure { value, .. } => {
+                analyze_expr(
+                    value,
+                    current_module,
+                    type_table,
+                    inspectable_signatures,
+                    analysis,
+                );
+            }
         }
     }
 }
@@ -2007,6 +2018,10 @@ fn collect_types_from_block(
                 }
             }
             NirStmtKind::Continue => {}
+            NirStmtKind::LetDestructure { pattern, value, .. } => {
+                collect_types_from_pattern(pattern, type_table, reachable);
+                collect_types_from_expr(value, type_table, reachable);
+            }
         }
     }
 }
@@ -2449,7 +2464,9 @@ fn collect_global_reads_block(block: &NirBlock, used: &mut IndexSet<(String, Str
 
 fn collect_global_reads_stmt(stmt: &NirStmt, used: &mut IndexSet<(String, String)>) {
     match &stmt.kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::Expr(value) => {
+        NirStmtKind::Let { value, .. }
+        | NirStmtKind::LetDestructure { value, .. }
+        | NirStmtKind::Expr(value) => {
             collect_global_reads_expr(value, used);
         }
         NirStmtKind::Return { value } => {
@@ -2699,6 +2716,7 @@ fn block_has_side_effects(block: &NirBlock) -> bool {
         }
         NirStmtKind::Break { value, .. } => value.as_ref().is_some_and(expr_has_side_effects),
         NirStmtKind::Continue => false,
+        NirStmtKind::LetDestructure { value, .. } => expr_has_side_effects(value),
     })
 }
 
@@ -2730,7 +2748,7 @@ fn remove_dead_global_sets_stmt(stmt: &mut NirStmt, used: &IndexSet<(String, Str
                 remove_dead_global_sets_expr(expr, used);
             }
         }
-        NirStmtKind::Continue => {}
+        NirStmtKind::Continue | NirStmtKind::LetDestructure { .. } => {}
     }
 }
 

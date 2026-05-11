@@ -834,7 +834,9 @@ impl<'a> Interpreter<'a> {
     fn reduce_in_place_stmt(&mut self, stmt: &mut NirStmt) -> bool {
         match &mut stmt.kind {
             NirStmtKind::Expr(e) => self.reduce_in_place(e),
-            NirStmtKind::Let { value, .. } => self.reduce_in_place(value),
+            NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+                self.reduce_in_place(value)
+            }
             NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
                 value.as_mut().is_some_and(|v| self.reduce_in_place(v))
             }

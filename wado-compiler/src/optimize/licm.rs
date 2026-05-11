@@ -425,6 +425,12 @@ fn collect_modified_vars_in_stmt(
             }
         }
         NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { pattern, value, .. } => {
+            // Collect pattern bindings as they are assigned
+            collect_pattern_bindings(pattern, modified);
+            // Also check the value expression for mutable references
+            collect_modified_vars_in_expr(value, modified, type_table);
+        }
     }
 }
 
@@ -707,6 +713,9 @@ fn collect_licm_ref_bindings_in_stmt(
             }
         }
         NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => {
+            collect_licm_ref_bindings_in_expr(value, type_table, bindings);
+        }
     }
 }
 
@@ -984,6 +993,16 @@ fn find_hoist_candidates_in_stmt(
             }
         }
         NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => {
+            find_hoist_candidates_in_expr(
+                value,
+                modified_vars,
+                ref_bindings,
+                candidates,
+                seen,
+                next_local,
+            );
+        }
     }
 }
 
@@ -1448,6 +1467,9 @@ fn replace_hoisted_in_stmt(
             }
         }
         NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => {
+            replace_hoisted_in_expr(value, candidates, ref_bindings);
+        }
     }
 }
 

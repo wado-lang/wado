@@ -99,7 +99,9 @@ fn fuse_in_stmt(
     locals: &mut Vec<NirLocal>,
 ) -> bool {
     match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } => fuse_in_expr(value, local_count, locals),
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+            fuse_in_expr(value, local_count, locals)
+        }
         NirStmtKind::Expr(expr) => fuse_in_expr(expr, local_count, locals),
         NirStmtKind::If {
             condition,
@@ -632,7 +634,9 @@ fn count_local_uses_in_block(block: &NirBlock, local_idx: u32) -> usize {
 
 fn count_local_uses_in_stmt(stmt: &NirStmt, local_idx: u32) -> usize {
     match &stmt.kind {
-        NirStmtKind::Let { value, .. } => count_local_uses_in_expr(value, local_idx),
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+            count_local_uses_in_expr(value, local_idx)
+        }
         NirStmtKind::Expr(expr) => count_local_uses_in_expr(expr, local_idx),
         NirStmtKind::Return { value } => value
             .as_ref()
@@ -778,7 +782,7 @@ fn count_variant_payload_uses_in_block(block: &NirBlock, local_idx: u32, case_in
 
 fn count_variant_payload_uses_in_stmt(stmt: &NirStmt, local_idx: u32, case_index: u32) -> usize {
     match &stmt.kind {
-        NirStmtKind::Let { value, .. } => {
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             count_variant_payload_uses_in_expr(value, local_idx, case_index)
         }
         NirStmtKind::Expr(expr) => count_variant_payload_uses_in_expr(expr, local_idx, case_index),
@@ -1250,7 +1254,9 @@ fn transform_lb_in_stmt_kind(
     span: crate::token::Span,
 ) {
     match kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::Expr(value) => {
+        NirStmtKind::Let { value, .. }
+        | NirStmtKind::LetDestructure { value, .. }
+        | NirStmtKind::Expr(value) => {
             transform_lb_in_expr(
                 value,
                 orig_label,
@@ -1554,7 +1560,7 @@ fn subst_variant_payload_in_stmt(
     payload_local: u32,
 ) {
     match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } => {
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             subst_variant_payload_in_expr(value, temp_local, case_index, payload_local);
         }
         NirStmtKind::Expr(expr) => {
@@ -1746,6 +1752,7 @@ fn stmt_contains_loop(stmt: &NirStmt) -> bool {
                     .is_some_and(|b| b.stmts.iter().any(stmt_contains_loop))
         }
         NirStmtKind::Let { value, .. }
+        | NirStmtKind::LetDestructure { value, .. }
         | NirStmtKind::Expr(value)
         | NirStmtKind::Return { value: Some(value) } => expr_contains_loop(value),
         _ => false,
@@ -1802,6 +1809,7 @@ fn stmt_has_free_unlabeled_loop_exit(stmt: &NirStmt, loop_depth: u32) -> bool {
                     .is_some_and(|b| stmts_have_free_unlabeled_loop_exit(&b.stmts, loop_depth))
         }
         NirStmtKind::Let { value, .. }
+        | NirStmtKind::LetDestructure { value, .. }
         | NirStmtKind::Expr(value)
         | NirStmtKind::Return { value: Some(value) }
         | NirStmtKind::Break {

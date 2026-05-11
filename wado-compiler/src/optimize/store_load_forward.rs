@@ -87,6 +87,9 @@ fn precompute_modified_stmt(
             }
         }
         NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => {
+            precompute_modified_expr(value, modified, cache);
+        }
     }
 }
 
@@ -328,6 +331,7 @@ fn collect_modified_in_stmt(stmt: &NirStmt, modified: &mut IndexSet<u32>) {
             }
         }
         NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => collect_modified_in_expr(value, modified),
     }
 }
 
@@ -493,6 +497,7 @@ fn collect_unsafe_in_stmt(stmt: &NirStmt, unsafe_locals: &mut IndexSet<u32>) {
             }
         }
         NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => collect_unsafe_in_expr(value, unsafe_locals),
     }
 }
 
@@ -771,6 +776,9 @@ fn forward_in_stmt(
             }
         }
         NirStmtKind::Continue => false,
+        NirStmtKind::LetDestructure { value, .. } => {
+            forward_in_expr(value, known, unsafe_locals, type_table, cache)
+        }
     }
 }
 

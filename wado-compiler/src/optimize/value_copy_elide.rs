@@ -81,7 +81,7 @@ fn analyze_block(block: &NirBlock, usage: &mut IndexMap<u32, LocalUsage>, type_t
 
 fn analyze_stmt(stmt: &NirStmt, usage: &mut IndexMap<u32, LocalUsage>, type_table: &TypeTable) {
     match &stmt.kind {
-        NirStmtKind::Let { value, .. } => {
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             analyze_expr(value, usage, type_table);
         }
         NirStmtKind::Expr(expr) => analyze_expr(expr, usage, type_table),

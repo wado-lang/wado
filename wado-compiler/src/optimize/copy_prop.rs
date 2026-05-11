@@ -243,6 +243,9 @@ fn analyze_stmt(
             }
         }
         NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => {
+            analyze_expr(value, result, type_table, first_param_types);
+        }
     }
 }
 
@@ -607,7 +610,7 @@ fn apply_in_stmt(
     dead_locals: &IndexSet<u32>,
 ) {
     match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } => {
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             apply_in_expr(value, substitutions, dead_locals);
         }
         NirStmtKind::Expr(expr) => {

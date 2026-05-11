@@ -297,6 +297,7 @@ fn stmt_modifies_any(stmt: &NirStmt, locals: &IndexSet<u32>) -> bool {
         NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
             value.as_ref().is_some_and(|v| expr_modifies_any(v, locals))
         }
+        NirStmtKind::LetDestructure { value, .. } => expr_modifies_any(value, locals),
         NirStmtKind::Continue => false,
     }
 }
@@ -351,7 +352,9 @@ fn expr_modifies_any(expr: &NirExpr, locals: &IndexSet<u32>) -> bool {
 fn stmt_contains_expr(stmt: &NirStmt, key: &CseKey) -> bool {
     match &stmt.kind {
         NirStmtKind::Expr(e) => expr_contains(e, key),
-        NirStmtKind::Let { value, .. } => expr_contains(value, key),
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+            expr_contains(value, key)
+        }
         NirStmtKind::If {
             condition,
             then_block,
@@ -439,7 +442,7 @@ fn replace_matching_expr(
 ) {
     match &mut stmt.kind {
         NirStmtKind::Expr(e) => replace_in_expr(e, key, replacement, type_id),
-        NirStmtKind::Let { value, .. } => {
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             replace_in_expr(value, key, replacement, type_id);
         }
         NirStmtKind::If {

@@ -71,6 +71,10 @@ pub trait NirMutVisitor {
             NirStmtKind::LabeledBlock { block, .. } => {
                 self.visit_block(block);
             }
+            NirStmtKind::LetDestructure { pattern, value, .. } => {
+                self.visit_pattern(pattern);
+                self.visit_expr(value);
+            }
         }
     }
 
@@ -310,6 +314,10 @@ pub trait NirRefVisitor {
             NirStmtKind::LabeledBlock { block, .. } => {
                 self.visit_block(block);
             }
+            NirStmtKind::LetDestructure { pattern, value, .. } => {
+                self.visit_pattern(pattern);
+                self.visit_expr(value);
+            }
         }
     }
 
@@ -520,6 +528,11 @@ pub fn opt_walk_block(visitor: &mut impl NirOptVisitor, block: &mut NirBlock) ->
 pub fn opt_walk_stmt(visitor: &mut impl NirOptVisitor, stmt: &mut NirStmt) -> bool {
     match &mut stmt.kind {
         NirStmtKind::Let { value, .. } => visitor.visit_expr(value),
+        NirStmtKind::LetDestructure { pattern, value, .. } => {
+            let mut changed = visitor.visit_pattern(pattern);
+            changed |= visitor.visit_expr(value);
+            changed
+        }
         NirStmtKind::Expr(expr) => visitor.visit_expr(expr),
         NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
             value.as_mut().is_some_and(|v| visitor.visit_expr(v))
@@ -678,7 +691,9 @@ pub fn stmt_has_break_to(label: &str, stmt: &NirStmt) -> bool {
         NirStmtKind::Break { value, .. } => {
             value.as_ref().is_some_and(|v| expr_has_break_to(label, v))
         }
-        NirStmtKind::Let { value, .. } => expr_has_break_to(label, value),
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+            expr_has_break_to(label, value)
+        }
         NirStmtKind::Expr(expr) => expr_has_break_to(label, expr),
         NirStmtKind::Return { value } => {
             value.as_ref().is_some_and(|v| expr_has_break_to(label, v))

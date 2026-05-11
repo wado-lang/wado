@@ -129,6 +129,7 @@ fn analyze_uses_in_stmt(stmt: &NirStmt, refs: &mut IndexMap<u32, RefInfo>) {
             }
         }
         NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => analyze_uses_in_expr(value, refs),
     }
 }
 
@@ -310,6 +311,7 @@ fn transform_stmt(stmt: &mut NirStmt, eliminable: &IndexMap<u32, RefInfo>) {
             }
         }
         NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => transform_expr(value, eliminable),
     }
 }
 
@@ -508,6 +510,7 @@ fn check_deref_only_uses_in_stmt(stmt: &NirStmt, refs: &mut IndexMap<u32, DerefO
             }
         }
         NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => check_deref_only_uses_in_expr(value, refs),
     }
 }
 
@@ -704,6 +707,9 @@ fn rewrite_deref_only_refs_in_stmt(
             }
         }
         NirStmtKind::Continue => false,
+        NirStmtKind::LetDestructure { value, .. } => {
+            rewrite_deref_only_refs_in_expr(value, eliminable)
+        }
     }
 }
 

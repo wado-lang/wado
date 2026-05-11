@@ -380,6 +380,9 @@ fn record_defs_from_nested(stmt: &NirStmt, defs: &mut DefMap) {
         } => {
             record_defs_from_expr(expr, defs);
         }
+        NirStmtKind::LetDestructure { value, .. } => {
+            record_defs_from_expr(value, defs);
+        }
         // Loop bodies have their own scope handled via process_loop.
         // Remaining kinds (Return/Break with None, Continue) carry no
         // expressions with nested definitions.

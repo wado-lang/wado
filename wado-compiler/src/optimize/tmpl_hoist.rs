@@ -221,6 +221,9 @@ fn collect_escaping_in_stmt(stmt: &NirStmt, escaping: &mut IndexSet<u32>) {
                 collect_escaping_in_expr(v, escaping);
             }
         }
+        NirStmtKind::LetDestructure { value, .. } => {
+            collect_escaping_in_expr(value, escaping);
+        }
     }
 }
 

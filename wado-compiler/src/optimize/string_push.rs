@@ -164,7 +164,7 @@ fn is_duplicable_receiver(e: &NirExpr) -> bool {
 
 fn rewrite_stmt(stmt: &mut NirStmt, ctx: &Ctx, changed: &mut bool) {
     match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } => {
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             *changed |= rewrite_expr(value, ctx);
         }
         NirStmtKind::Expr(expr) => {

@@ -445,6 +445,21 @@ impl<'a> NirUnparser<'a> {
                 self.write_indent();
                 self.output.push_str("}\n");
             }
+            NirStmtKind::LetDestructure {
+                pattern,
+                is_mut,
+                value,
+            } => {
+                self.write_indent();
+                self.output.push_str("let ");
+                if *is_mut {
+                    self.output.push_str("mut ");
+                }
+                self.unparse_nir_pattern(pattern);
+                self.output.push_str(" = ");
+                self.unparse_expr(value);
+                self.output.push_str(";\n");
+            }
         }
     }
 

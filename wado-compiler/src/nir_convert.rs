@@ -303,9 +303,15 @@ fn convert_stmt_kind(kind: &TirStmtKind) -> NirStmtKind {
         TirStmtKind::IfLet { .. } => unreachable!(
             "TirStmtKind::IfLet should be lowered by lower::pattern before nir_convert::flat_to_nir runs"
         ),
-        TirStmtKind::LetDestructure { .. } => unreachable!(
-            "TirStmtKind::LetDestructure should be lowered by lower::pattern before nir_convert::flat_to_nir runs"
-        ),
+        TirStmtKind::LetDestructure {
+            pattern,
+            is_mut,
+            value,
+        } => NirStmtKind::LetDestructure {
+            pattern: convert_pattern(pattern),
+            is_mut: *is_mut,
+            value: convert_expr(value),
+        },
         TirStmtKind::VariadicForOf { .. } => unreachable!(
             "TirStmtKind::VariadicForOf should be expanded by monomorphize before nir_convert::flat_to_nir runs"
         ),

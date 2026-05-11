@@ -267,6 +267,9 @@ fn mark_ref_fields_in_stmt(
             }
         }
         NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => {
+            mark_ref_fields_in_expr(value, decomposed, stores_aliased);
+        }
     }
 }
 
@@ -521,6 +524,9 @@ fn collect_candidates_in_stmt(
             }
         }
         NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => {
+            collect_candidates_in_expr(value, type_table, candidates);
+        }
     }
 }
 
@@ -1133,6 +1139,16 @@ fn rewrite_stmt(
             }
         }
         NirStmtKind::Continue => {}
+        NirStmtKind::LetDestructure { value, .. } => {
+            rewrite_expr(
+                value,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
+        }
     }
 }
 
