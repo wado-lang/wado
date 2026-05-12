@@ -3284,6 +3284,7 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
             SimpleCst(scst) => gen_consume_group_store_optional_op(
                 w,
                 Option::<&SimpleCstShape>::Some(scst),
+                Option::<&Array<AltBody>>::Some(&g_op.alts),
                 &g_elem.alternatives,
                 ctx,
                 name_counts,
@@ -5072,7 +5073,7 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32
 }
 
 fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    gen_consume_group_store_optional_op(w, null, alts, ctx, name_counts);
+    gen_consume_group_store_optional_op(w, null, null, alts, ctx, name_counts);
 }
 
 /// GIR-aware twin of `gen_consume_group_store_optional`. When the
@@ -5080,9 +5081,10 @@ fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
 /// reaches the group through `Op::Group(g_op)`), pass it as `Some` so
 /// emit reads the outer field name and variant type from lower
 /// directly. The internal dispatch (overlap groups, scan helpers,
-/// per-alt RuleRef calls) still walks surface IR until
-/// `gen_elements_with_non_greedy` consumes `body.ops`.
-fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: Option<&SimpleCstShape>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+/// per-alt RuleRef calls) walks `g_op.alts` when available, falling
+/// back to surface IR for the legacy `gen_consume_group_store_optional`
+/// path.
+fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: Option<&SimpleCstShape>, g_op_alts: Option<&Array<AltBody>>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let var_name = if let Some(s) = scst {
         let _ = dedup_name(&group_field_base_name(alts), name_counts);
         s.field;
@@ -5102,7 +5104,6 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: Option<&SimpleC
     }
 
     let groups = compute_overlap_groups(&first_sets);
-    let has_overlaps = has_multi_alt_groups(&groups);
 
     // Use Option wrapper — None when no branch matches (standalone Group).
     let inner_var = dedup_name(&`{var_name}_inner`, name_counts);
@@ -5128,7 +5129,22 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: Option<&SimpleC
 
         if group.len() == 1 {
             let alt_idx = group[0];
-            if let RuleRef(r) = &alts[alt_idx].elements[0] {
+            // Prefer lowered `Op::RuleCall` (carries dedupped field,
+            // resolved variant id, etc.) when `g_op_alts` is `Some`.
+            // Fallback path reads the surface RuleRef directly.
+            if let Some(bodies) = g_op_alts {
+                let body = &bodies[alt_idx];
+                if let RuleCall(rc) = &body.ops[0] {
+                    let fn_name = if let Some(id) = rc.variant_id {
+                        `parse_{rc.target_snake}__follow_{id}`;
+                    } else {
+                        `parse_{rc.target_snake}`;
+                    };
+                    let local_var = rc.target_snake;
+                    w.line(`let {local_var} = {fn_name}(p)?;`);
+                    w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
+                }
+            } else if let RuleRef(r) = &alts[alt_idx].elements[0] {
                 let fn_name = `parse_{r.snake_name}`;
                 let local_var = r.snake_name;
                 let case_name = group_case_name(&alts[alt_idx]);
