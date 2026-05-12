@@ -304,12 +304,18 @@ fn intern_kind_sets(parser_rules: &Array<Rule>, ctx: &mut GenContext) -> Array<K
 
 fn walk_rule_for_kind_sets(rule: &Rule, ctx: &mut GenContext) {
     match *rule {
-        Simple(s) => walk_alt_body_for_kind_sets(&s.body, ctx),
+        Simple(s) => {
+            walk_alt_body_for_kind_sets(&s.body, ctx);
+            walk_scan_body_for_kind_sets(&s.scan_body, ctx);
+        },
         MultiAlt(m) => {
             walk_dispatch_for_kind_sets(&m.dispatch, ctx);
             walk_dispatch_for_kind_sets(&m.scan_dispatch, ctx);
             for let alt of &m.alts {
                 walk_alt_body_for_kind_sets(alt, ctx);
+            }
+            for let sb of &m.scan_alts {
+                walk_scan_body_for_kind_sets(sb, ctx);
             }
         },
         LeftRecursive(l) => {
@@ -318,8 +324,96 @@ fn walk_rule_for_kind_sets(rule: &Rule, ctx: &mut GenContext) {
             for let alt of &l.atom.alts {
                 walk_alt_body_for_kind_sets(alt, ctx);
             }
+            for let sb of &l.atom.scan_alts {
+                walk_scan_body_for_kind_sets(sb, ctx);
+            }
             for let lr of &l.lr_alts {
                 walk_alt_body_for_kind_sets(&lr.suffix, ctx);
+            }
+        },
+    }
+}
+
+/// Walk a `ScanBody` and pre-register every kind set the op-driven
+/// scan emit will consult at `kind_check_str` time. Keeps the
+/// registry in lock-step with the IR so `_gale_kind_set_<id>` names
+/// don't shift when emit-time intern call orders change between
+/// refactors.
+fn walk_scan_body_for_kind_sets(body: &ScanBody, ctx: &mut GenContext) {
+    for let elem of &body.elements {
+        walk_scan_element_for_kind_sets(elem, ctx);
+    }
+}
+
+fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
+    match *elem {
+        Token(_) => {},
+        RuleCall(_) => {},
+        Wildcard => {},
+        Excluded(e) => {
+            if e.kinds.len() >= 2 {
+                ctx.intern_kind_set(&e.kinds);
+            }
+        },
+        Repeat(r) => {
+            // `gen_scan_op_repeat_body` reads `inner_first` for the
+            // while-loop guard.  `WithFollowSubtraction` overrides it
+            // with `effective_first`.
+            if r.inner_first.len() >= 2 {
+                ctx.intern_kind_set(&r.inner_first);
+            }
+            if let WithFollowSubtraction(s) = &r.strategy {
+                if s.effective_first.len() >= 2 {
+                    ctx.intern_kind_set(&s.effective_first);
+                }
+            }
+            walk_scan_element_for_kind_sets(&r.body, ctx);
+        },
+        Group(g) => {
+            walk_dispatch_for_kind_sets(&g.dispatch, ctx);
+            // Per-alt first sets feed the ambiguity check inside
+            // `gen_scan_op_group` (which calls `kind_check_str` on
+            // each `alt_first_sets[i]` indirectly via the lenient gate).
+            for let fs of &g.alt_first_sets {
+                if fs.len() >= 2 {
+                    ctx.intern_kind_set(fs);
+                }
+            }
+            // Lenient gate union: when emit takes the top-level call
+            // path with `lenient = true`, it builds the union of every
+            // alt's first set and emits a single kind-set check before
+            // entering the dispatch. Compute the same union here so the
+            // intern lands at lower time.
+            if g.lenient {
+                let mut union_first: Array<String> = [];
+                for let fs of &g.alt_first_sets {
+                    for let tk of fs {
+                        if !first_set_contains(&union_first, tk) {
+                            union_first.push(*tk);
+                        }
+                    }
+                }
+                if union_first.len() >= 2 {
+                    ctx.intern_kind_set(&union_first);
+                }
+            }
+            for let b of &g.alts {
+                walk_scan_body_for_kind_sets(b, ctx);
+            }
+        },
+        OptionalLookahead(ole) => {
+            // Per-shape per-position kind sets feed
+            // `gen_scan_lookahead_condition`. Walk every signature so
+            // emit hits existing entries.
+            for let sig of &ole.sigs {
+                for let pos_set of sig {
+                    if pos_set.len() >= 2 {
+                        ctx.intern_kind_set(pos_set);
+                    }
+                }
+            }
+            for let b of &ole.bodies {
+                walk_scan_body_for_kind_sets(b, ctx);
             }
         },
     }

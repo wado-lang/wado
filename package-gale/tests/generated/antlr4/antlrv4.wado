@@ -3826,7 +3826,7 @@ fn scan_grammar_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     let mut pos = pos;
     pos = scan_grammar_decl(tokens, pos, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_7(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
         pos = scan_prequel_construct(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
@@ -3952,7 +3952,7 @@ fn scan_options_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_OPTIONS { return -1; }
     pos += 1;
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         let sp = pos;
         sg_0_done: {
             sg_0: {
@@ -3988,7 +3988,7 @@ fn scan_option_value(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_0(alt_kind) {
+        if _gale_kind_set_1(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_identifier(tokens, pos, 0);
@@ -4073,7 +4073,7 @@ fn scan_delegate_grammar(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_0(alt_kind) {
+        if _gale_kind_set_1(alt_kind) {
             pos = start;
             try_1: {
                 pos = scan_identifier(tokens, pos, 0);
@@ -4102,7 +4102,7 @@ fn scan_tokens_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_TOKENS { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         let sp = pos;
         pos = scan_id_list(tokens, pos, 0);
         if pos < 0 { pos = sp; }
@@ -4116,7 +4116,7 @@ fn scan_channels_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_CHANNELS { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         let sp = pos;
         pos = scan_id_list(tokens, pos, 0);
         if pos < 0 { pos = sp; }
@@ -4157,7 +4157,7 @@ fn scan_action_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_AT { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_2(tokens[pos].kind) {
         let sp = pos;
         sg_4_done: {
             sg_4: {
@@ -4183,7 +4183,7 @@ fn scan_action_scope_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_0(alt_kind) {
+        if _gale_kind_set_1(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_identifier(tokens, pos, 0);
@@ -4244,7 +4244,7 @@ fn scan_mode_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { return -1; }
     pos += 1;
-    while pos < tokens.len() && _gale_kind_set_9(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_3(tokens[pos].kind) {
         let sp = pos;
         pos = scan_lexer_rule_spec(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
@@ -4255,7 +4255,7 @@ fn scan_mode_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn scan_rules(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_10(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_4(tokens[pos].kind) {
         let sp = pos;
         pos = scan_rule_spec(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
@@ -4269,7 +4269,7 @@ fn scan_rule_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_11(alt_kind) {
+        if _gale_kind_set_17(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_parser_rule_spec(tokens, pos, 0);
@@ -4308,7 +4308,7 @@ fn scan_rule_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn scan_parser_rule_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && _gale_kind_set_12(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_5(tokens[pos].kind) {
         let sp = pos;
         pos = scan_rule_modifiers__follow_0(tokens, pos, 0);
         if pos < 0 { pos = sp; }
@@ -4335,7 +4335,7 @@ fn scan_parser_rule_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
         pos = scan_locals_spec(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && _gale_kind_set_13(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_6(tokens[pos].kind) {
         let sp = pos;
         pos = scan_rule_prequel(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
@@ -4473,7 +4473,7 @@ fn scan_rule_modifiers(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     let mut pos = pos;
     pos = scan_rule_modifier(tokens, pos, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_12(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_5(tokens[pos].kind) {
         let sp = pos;
         pos = scan_rule_modifier(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
@@ -4483,7 +4483,7 @@ fn scan_rule_modifiers(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
 }
 
 fn scan_rule_modifier(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_12(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_5(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
@@ -4621,12 +4621,12 @@ fn scan_lexer_elements(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_1(alt_kind) {
+        if _gale_kind_set_7(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_lexer_element(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
+                while pos < tokens.len() && _gale_kind_set_7(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_lexer_element(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
@@ -4655,12 +4655,12 @@ fn scan_lexer_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_2(alt_kind) {
+        if _gale_kind_set_8(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_lexer_atom(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                if pos < tokens.len() && _gale_kind_set_4(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_9(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_ebnf_suffix(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
@@ -4673,7 +4673,7 @@ fn scan_lexer_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
             try_1: {
                 pos = scan_lexer_block(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                if pos < tokens.len() && _gale_kind_set_4(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_9(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_ebnf_suffix(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
@@ -4741,7 +4741,7 @@ fn scan_lexer_command(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_14(alt_kind) {
+        if _gale_kind_set_18(alt_kind) {
             pos = start;
             try_1: {
                 pos = scan_lexer_command_name(tokens, pos, 0);
@@ -4773,7 +4773,7 @@ fn scan_lexer_command_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_0(alt_kind) {
+        if _gale_kind_set_1(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_identifier(tokens, pos, 0);
@@ -4801,7 +4801,7 @@ fn scan_lexer_command_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_0(alt_kind) {
+        if _gale_kind_set_1(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_identifier(tokens, pos, 0);
@@ -4851,7 +4851,7 @@ fn scan_alternative(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_3(alt_kind) {
+        if _gale_kind_set_10(alt_kind) {
             pos = start;
             try_0: {
                 if pos < tokens.len() && tokens[pos].kind == TK_LT {
@@ -4861,7 +4861,7 @@ fn scan_alternative(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 }
                 pos = scan_element(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                while pos < tokens.len() && _gale_kind_set_15(tokens[pos].kind) {
+                while pos < tokens.len() && _gale_kind_set_11(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_element(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
@@ -4890,14 +4890,14 @@ fn scan_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_0(alt_kind) {
+        if _gale_kind_set_1(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_labeled_element(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 let gp_11 = pos;
                 let sgk_11 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-                if _gale_kind_set_4(sgk_11) {
+                if _gale_kind_set_9(sgk_11) {
                     sg_11: {
                         pos = gp_11;
                         sg_11_0: {
@@ -4920,7 +4920,7 @@ fn scan_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 if pos < 0 { break try_1; }
                 let gp_12 = pos;
                 let sgk_12 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-                if _gale_kind_set_4(sgk_12) {
+                if _gale_kind_set_9(sgk_12) {
                     sg_12: {
                         pos = gp_12;
                         sg_12_0: {
@@ -4938,14 +4938,14 @@ fn scan_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_16(alt_kind) {
+        } else if _gale_kind_set_19(alt_kind) {
             pos = start;
             try_1: {
                 pos = scan_atom(tokens, pos, 0);
                 if pos < 0 { break try_1; }
                 let gp_13 = pos;
                 let sgk_13 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-                if _gale_kind_set_4(sgk_13) {
+                if _gale_kind_set_9(sgk_13) {
                     sg_13: {
                         pos = gp_13;
                         sg_13_0: {
@@ -5027,7 +5027,7 @@ fn scan_predicate_option(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_0(alt_kind) {
+        if _gale_kind_set_1(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_element_option(tokens, pos, 0);
@@ -5042,7 +5042,7 @@ fn scan_predicate_option(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
                 pos += 1;
                 let gp_15 = pos;
                 let sgk_15 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-                if _gale_kind_set_17(sgk_15) {
+                if _gale_kind_set_12(sgk_15) {
                     sg_15: {
                         pos = gp_15;
                         sg_15_0: {
@@ -5097,7 +5097,7 @@ fn scan_labeled_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i
     }
     let gp_17 = pos;
     let sgk_17 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    if _gale_kind_set_18(sgk_17) {
+    if _gale_kind_set_14(sgk_17) {
         sg_17: {
             pos = gp_17;
             sg_17_0: {
@@ -5121,7 +5121,7 @@ fn scan_ebnf(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_block(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && _gale_kind_set_4(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_9(tokens[pos].kind) {
         let sp = pos;
         pos = scan_block_suffix__follow_2(tokens, pos, 0);
         if pos < 0 { pos = sp; }
@@ -5250,7 +5250,7 @@ fn scan_atom(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_6(alt_kind) {
+        if _gale_kind_set_15(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_terminal_def(tokens, pos, 0);
@@ -5554,7 +5554,7 @@ fn scan_element_option(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_0(alt_kind) {
+        if _gale_kind_set_1(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_qualified_identifier(tokens, pos, 0);
@@ -5569,7 +5569,7 @@ fn scan_element_option(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
                 pos += 1;
                 let gp_24 = pos;
                 let sgk_24 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-                if _gale_kind_set_19(sgk_24) {
+                if _gale_kind_set_16(sgk_24) {
                     sg_24: {
                         pos = gp_24;
                         sg_24_0: {
@@ -5603,7 +5603,7 @@ fn scan_element_option(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
 }
 
 fn scan_identifier(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
@@ -5819,7 +5819,7 @@ fn parse_option(p: &mut Parser) -> Result<OptionNode, ParseError> {
 fn parse_option_value(p: &mut Parser) -> Result<OptionValueNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_0(kind) {
+    if _gale_kind_set_1(kind) {
         let identifier = parse_identifier(p)?;
         let mut dot_identifier_list: Array<DotIdentifierItem> = [];
         loop {
@@ -5956,8 +5956,8 @@ fn parse_delegate_grammar_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_delegate_grammar(p: &mut Parser) -> Result<DelegateGrammarNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_0(kind) {
-        if _gale_kind_set_0(p.peek_kind()) {
+    if _gale_kind_set_1(kind) {
+        if _gale_kind_set_1(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_1 = parse_delegate_grammar_scan_1(_sd_tokens, _sd_pos);
@@ -5991,7 +5991,7 @@ fn parse_delegate_grammar(p: &mut Parser) -> Result<DelegateGrammarNode, ParseEr
 fn parse_tokens_spec(p: &mut Parser) -> Result<TokensSpecNode, ParseError> {
     let start = p.peek().span.start;
     let tokens = p.expect(TK_TOKENS)?;
-    let id_list: Option<IdListNode> = if _gale_kind_set_0(p.peek_kind()) {
+    let id_list: Option<IdListNode> = if _gale_kind_set_1(p.peek_kind()) {
         let id_list = parse_id_list(p)?;
         Option::<IdListNode>::Some(id_list)
     } else {
@@ -6009,7 +6009,7 @@ fn parse_tokens_spec(p: &mut Parser) -> Result<TokensSpecNode, ParseError> {
 fn parse_channels_spec(p: &mut Parser) -> Result<ChannelsSpecNode, ParseError> {
     let start = p.peek().span.start;
     let channels = p.expect(TK_CHANNELS)?;
-    let id_list: Option<IdListNode> = if _gale_kind_set_0(p.peek_kind()) {
+    let id_list: Option<IdListNode> = if _gale_kind_set_1(p.peek_kind()) {
         let id_list = parse_id_list(p)?;
         Option::<IdListNode>::Some(id_list)
     } else {
@@ -6101,7 +6101,7 @@ fn parse_action_(p: &mut Parser) -> Result<ActionNode, ParseError> {
 fn parse_action_scope_name(p: &mut Parser) -> Result<ActionScopeNameNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_0(kind) {
+    if _gale_kind_set_1(kind) {
         let identifier = parse_identifier(p)?;
         return Result::<ActionScopeNameNode, ParseError>::Ok(ActionScopeNameNode::Alt0(ActionScopeNameAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -6242,7 +6242,7 @@ fn parse_rule_spec_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_rule_spec(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_10(kind) {
+    if _gale_kind_set_4(kind) {
         if p.peek_kind() == TK_FRAGMENT {
             if p.peek_at(1) == TK_TOKEN_REF {
                 return parse_rule_spec_bt_1(p);
@@ -6251,7 +6251,7 @@ fn parse_rule_spec(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
             }
         } else if p.peek_kind() == TK_TOKEN_REF {
             return parse_rule_spec_bt_1(p);
-        } else if _gale_kind_set_11(p.peek_kind()) {
+        } else if _gale_kind_set_17(p.peek_kind()) {
             return parse_rule_spec_bt_0(p);
         }
     }
@@ -6264,7 +6264,7 @@ fn parse_rule_spec(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
 
 fn parse_parser_rule_spec(p: &mut Parser) -> Result<ParserRuleSpecNode, ParseError> {
     let start = p.peek().span.start;
-    let rule_modifiers: Option<RuleModifiersNode> = if _gale_kind_set_12(p.peek_kind()) {
+    let rule_modifiers: Option<RuleModifiersNode> = if _gale_kind_set_5(p.peek_kind()) {
         let rule_modifiers = parse_rule_modifiers__follow_0(p)?;
         Option::<RuleModifiersNode>::Some(rule_modifiers)
     } else {
@@ -6706,7 +6706,7 @@ fn parse_lexer_alt(p: &mut Parser) -> Result<LexerAltNode, ParseError> {
 fn parse_lexer_elements(p: &mut Parser) -> Result<LexerElementsNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_1(kind) {
+    if _gale_kind_set_7(kind) {
         let mut lexer_element_list: Array<LexerElementNode> = [];
         let mut _plus_first = true;
         loop {
@@ -6746,9 +6746,9 @@ fn parse_lexer_elements(p: &mut Parser) -> Result<LexerElementsNode, ParseError>
 fn parse_lexer_element(p: &mut Parser) -> Result<LexerElementNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_2(kind) {
+    if _gale_kind_set_8(kind) {
         let lexer_atom = parse_lexer_atom(p)?;
-        let ebnf_suffix: Option<EbnfSuffixNode> = if _gale_kind_set_4(p.peek_kind()) {
+        let ebnf_suffix: Option<EbnfSuffixNode> = if _gale_kind_set_9(p.peek_kind()) {
             let ebnf_suffix = parse_ebnf_suffix__follow_1(p)?;
             Option::<EbnfSuffixNode>::Some(ebnf_suffix)
         } else {
@@ -6762,7 +6762,7 @@ fn parse_lexer_element(p: &mut Parser) -> Result<LexerElementNode, ParseError> {
     }
     if kind == TK_LPAREN {
         let lexer_block = parse_lexer_block(p)?;
-        let ebnf_suffix: Option<EbnfSuffixNode> = if _gale_kind_set_4(p.peek_kind()) {
+        let ebnf_suffix: Option<EbnfSuffixNode> = if _gale_kind_set_9(p.peek_kind()) {
             let ebnf_suffix = parse_ebnf_suffix__follow_1(p)?;
             Option::<EbnfSuffixNode>::Some(ebnf_suffix)
         } else {
@@ -6889,8 +6889,8 @@ fn parse_lexer_command_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_lexer_command(p: &mut Parser) -> Result<LexerCommandNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_14(kind) {
-        if _gale_kind_set_14(p.peek_kind()) {
+    if _gale_kind_set_18(kind) {
+        if _gale_kind_set_18(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_1 = parse_lexer_command_scan_1(_sd_tokens, _sd_pos);
@@ -6924,7 +6924,7 @@ fn parse_lexer_command(p: &mut Parser) -> Result<LexerCommandNode, ParseError> {
 fn parse_lexer_command_name(p: &mut Parser) -> Result<LexerCommandNameNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_0(kind) {
+    if _gale_kind_set_1(kind) {
         let identifier = parse_identifier(p)?;
         return Result::<LexerCommandNameNode, ParseError>::Ok(LexerCommandNameNode::Alt0(LexerCommandNameAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -6948,7 +6948,7 @@ fn parse_lexer_command_name(p: &mut Parser) -> Result<LexerCommandNameNode, Pars
 fn parse_lexer_command_expr(p: &mut Parser) -> Result<LexerCommandExprNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_0(kind) {
+    if _gale_kind_set_1(kind) {
         let identifier = parse_identifier(p)?;
         return Result::<LexerCommandExprNode, ParseError>::Ok(LexerCommandExprNode::Alt0(LexerCommandExprAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -7004,7 +7004,7 @@ fn parse_alt_list(p: &mut Parser) -> Result<AltListNode, ParseError> {
 fn parse_alternative(p: &mut Parser) -> Result<AlternativeNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_3(kind) {
+    if _gale_kind_set_10(kind) {
         let element_options: Option<ElementOptionsNode> = if p.peek_kind() == TK_LT {
             let element_options = parse_element_options(p)?;
             Option::<ElementOptionsNode>::Some(element_options)
@@ -7053,7 +7053,7 @@ fn parse_element_bt_0(p: &mut Parser) -> Result<ElementNode, ParseError> {
     let labeled_element = parse_labeled_element(p)?;
     let mut group_0_inner: Option<ElementGroup0> = null;
     let grp_kind = p.peek_kind();
-    if _gale_kind_set_4(grp_kind) {
+    if _gale_kind_set_9(grp_kind) {
         let ebnf_suffix = parse_ebnf_suffix(p)?;
         group_0_inner = Option::<ElementGroup0>::Some(ElementGroup0::Alt0(ElementGroup0Alt0 {
             ebnf_suffix,
@@ -7076,7 +7076,7 @@ fn parse_element_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     let gp_26 = pos;
     let sgk_26 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    if _gale_kind_set_4(sgk_26) {
+    if _gale_kind_set_9(sgk_26) {
         sg_26: {
             pos = gp_26;
             sg_26_0: {
@@ -7099,7 +7099,7 @@ fn parse_element_bt_1(p: &mut Parser) -> Result<ElementNode, ParseError> {
     let atom = parse_atom(p)?;
     let mut group_1_inner: Option<ElementGroup1> = null;
     let grp_kind = p.peek_kind();
-    if _gale_kind_set_4(grp_kind) {
+    if _gale_kind_set_9(grp_kind) {
         let ebnf_suffix = parse_ebnf_suffix(p)?;
         group_1_inner = Option::<ElementGroup1>::Some(ElementGroup1::Alt0(ElementGroup1Alt0 {
             ebnf_suffix,
@@ -7122,7 +7122,7 @@ fn parse_element_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     let gp_27 = pos;
     let sgk_27 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    if _gale_kind_set_4(sgk_27) {
+    if _gale_kind_set_9(sgk_27) {
         sg_27: {
             pos = gp_27;
             sg_27_0: {
@@ -7143,8 +7143,8 @@ fn parse_element_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_element(p: &mut Parser) -> Result<ElementNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_5(kind) {
-        if _gale_kind_set_0(p.peek_kind()) {
+    if _gale_kind_set_13(kind) {
+        if _gale_kind_set_1(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_0 = parse_element_scan_0(_sd_tokens, _sd_pos);
@@ -7166,7 +7166,7 @@ fn parse_element(p: &mut Parser) -> Result<ElementNode, ParseError> {
                 return parse_element_bt_1(p);
             }
             return parse_element_bt_1(p);
-        } else if _gale_kind_set_16(p.peek_kind()) {
+        } else if _gale_kind_set_19(p.peek_kind()) {
             return parse_element_bt_1(p);
         }
     }
@@ -7296,7 +7296,7 @@ fn parse_predicate_option_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     let gp_28 = pos;
     let sgk_28 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    if _gale_kind_set_17(sgk_28) {
+    if _gale_kind_set_12(sgk_28) {
         sg_28: {
             pos = gp_28;
             sg_28_0: {
@@ -7325,8 +7325,8 @@ fn parse_predicate_option_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_predicate_option(p: &mut Parser) -> Result<PredicateOptionNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_0(kind) {
-        if _gale_kind_set_0(p.peek_kind()) {
+    if _gale_kind_set_1(kind) {
+        if _gale_kind_set_1(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_0 = parse_predicate_option_scan_0(_sd_tokens, _sd_pos);
@@ -7363,7 +7363,7 @@ fn parse_labeled_element(p: &mut Parser) -> Result<LabeledElementNode, ParseErro
     let assign_or_plus_assign = p.advance();
     let mut atom_or_block_inner: Option<AtomOrBlockGroup> = null;
     let grp_kind = p.peek_kind();
-    if _gale_kind_set_5(grp_kind) {
+    if _gale_kind_set_13(grp_kind) {
         let atom = parse_atom(p)?;
         atom_or_block_inner = Option::<AtomOrBlockGroup>::Some(AtomOrBlockGroup::Atom(atom));
     } else if grp_kind == TK_LPAREN {
@@ -7382,7 +7382,7 @@ fn parse_labeled_element(p: &mut Parser) -> Result<LabeledElementNode, ParseErro
 fn parse_ebnf(p: &mut Parser) -> Result<EbnfNode, ParseError> {
     let start = p.peek().span.start;
     let block = parse_block(p)?;
-    let block_suffix: Option<BlockSuffixNode> = if _gale_kind_set_4(p.peek_kind()) {
+    let block_suffix: Option<BlockSuffixNode> = if _gale_kind_set_9(p.peek_kind()) {
         let block_suffix = parse_block_suffix__follow_2(p)?;
         Option::<BlockSuffixNode>::Some(block_suffix)
     } else {
@@ -7491,7 +7491,7 @@ fn parse_lexer_atom_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_lexer_atom(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_6(kind) {
+    if _gale_kind_set_15(kind) {
         if p.peek_kind() == TK_STRING_LITERAL {
             if p.peek_at(1) == TK_RANGE {
                 return parse_lexer_atom_bt_0(p);
@@ -7533,7 +7533,7 @@ fn parse_lexer_atom(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
 fn parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_6(kind) {
+    if _gale_kind_set_15(kind) {
         let terminal_def = parse_terminal_def(p)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt0(AtomAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -8015,7 +8015,7 @@ fn parse_element_option_bt_1(p: &mut Parser) -> Result<ElementOptionNode, ParseE
     let assign = p.expect(TK_ASSIGN)?;
     let mut group_0_inner: Option<ElementOptionGroup0> = null;
     let grp_kind = p.peek_kind();
-    if _gale_kind_set_0(grp_kind) {
+    if _gale_kind_set_1(grp_kind) {
         let qualified_identifier = parse_qualified_identifier(p)?;
         group_0_inner = Option::<ElementOptionGroup0>::Some(ElementOptionGroup0::Alt0(ElementOptionGroup0Alt0 {
             qualified_identifier,
@@ -8048,7 +8048,7 @@ fn parse_element_option_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     let gp_29 = pos;
     let sgk_29 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    if _gale_kind_set_19(sgk_29) {
+    if _gale_kind_set_16(sgk_29) {
         sg_29: {
             pos = gp_29;
             sg_29_0: {
@@ -8077,8 +8077,8 @@ fn parse_element_option_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_element_option(p: &mut Parser) -> Result<ElementOptionNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_0(kind) {
-        if _gale_kind_set_0(p.peek_kind()) {
+    if _gale_kind_set_1(kind) {
+        if _gale_kind_set_1(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_0 = parse_element_option_scan_0(_sd_tokens, _sd_pos);
@@ -9316,83 +9316,83 @@ pub fn to_tree(node: &GrammarSpecNode) -> CstNode {
 }
 
 fn _gale_kind_set_0(k: i32) -> bool {
-    return k matches { TK_RULE_REF | TK_TOKEN_REF };
-}
-
-fn _gale_kind_set_1(k: i32) -> bool {
-    return k matches { TK_ACTION | TK_DOT | TK_LEXER_CHAR_SET | TK_LPAREN | TK_NOT | TK_STRING_LITERAL | TK_TOKEN_REF };
-}
-
-fn _gale_kind_set_2(k: i32) -> bool {
-    return k matches { TK_DOT | TK_LEXER_CHAR_SET | TK_NOT | TK_STRING_LITERAL | TK_TOKEN_REF };
-}
-
-fn _gale_kind_set_3(k: i32) -> bool {
-    return k matches { TK_ACTION | TK_DOT | TK_LPAREN | TK_LT | TK_NOT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
-}
-
-fn _gale_kind_set_4(k: i32) -> bool {
-    return k matches { TK_PLUS | TK_QUESTION | TK_STAR };
-}
-
-fn _gale_kind_set_5(k: i32) -> bool {
-    return k matches { TK_DOT | TK_NOT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
-}
-
-fn _gale_kind_set_6(k: i32) -> bool {
-    return k matches { TK_STRING_LITERAL | TK_TOKEN_REF };
-}
-
-fn _gale_kind_set_7(k: i32) -> bool {
     return k matches { TK_AT | TK_CHANNELS | TK_IMPORT | TK_OPTIONS | TK_TOKENS };
 }
 
-fn _gale_kind_set_8(k: i32) -> bool {
+fn _gale_kind_set_1(k: i32) -> bool {
+    return k matches { TK_RULE_REF | TK_TOKEN_REF };
+}
+
+fn _gale_kind_set_2(k: i32) -> bool {
     return k matches { TK_LEXER | TK_PARSER | TK_RULE_REF | TK_TOKEN_REF };
 }
 
-fn _gale_kind_set_9(k: i32) -> bool {
+fn _gale_kind_set_3(k: i32) -> bool {
     return k matches { TK_FRAGMENT | TK_TOKEN_REF };
 }
 
-fn _gale_kind_set_10(k: i32) -> bool {
+fn _gale_kind_set_4(k: i32) -> bool {
     return k matches { TK_FRAGMENT | TK_PRIVATE | TK_PROTECTED | TK_PUBLIC | TK_RULE_REF | TK_TOKEN_REF };
 }
 
-fn _gale_kind_set_11(k: i32) -> bool {
-    return k matches { TK_PRIVATE | TK_PROTECTED | TK_PUBLIC | TK_RULE_REF };
-}
-
-fn _gale_kind_set_12(k: i32) -> bool {
+fn _gale_kind_set_5(k: i32) -> bool {
     return k matches { TK_FRAGMENT | TK_PRIVATE | TK_PROTECTED | TK_PUBLIC };
 }
 
-fn _gale_kind_set_13(k: i32) -> bool {
+fn _gale_kind_set_6(k: i32) -> bool {
     return k matches { TK_AT | TK_OPTIONS };
 }
 
-fn _gale_kind_set_14(k: i32) -> bool {
-    return k matches { TK_MODE | TK_RULE_REF | TK_TOKEN_REF };
+fn _gale_kind_set_7(k: i32) -> bool {
+    return k matches { TK_ACTION | TK_DOT | TK_LEXER_CHAR_SET | TK_LPAREN | TK_NOT | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
-fn _gale_kind_set_15(k: i32) -> bool {
+fn _gale_kind_set_8(k: i32) -> bool {
+    return k matches { TK_DOT | TK_LEXER_CHAR_SET | TK_NOT | TK_STRING_LITERAL | TK_TOKEN_REF };
+}
+
+fn _gale_kind_set_9(k: i32) -> bool {
+    return k matches { TK_PLUS | TK_QUESTION | TK_STAR };
+}
+
+fn _gale_kind_set_10(k: i32) -> bool {
+    return k matches { TK_ACTION | TK_DOT | TK_LPAREN | TK_LT | TK_NOT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
+}
+
+fn _gale_kind_set_11(k: i32) -> bool {
     return k matches { TK_ACTION | TK_DOT | TK_LPAREN | TK_NOT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
-fn _gale_kind_set_16(k: i32) -> bool {
-    return k matches { TK_DOT | TK_NOT | TK_STRING_LITERAL };
-}
-
-fn _gale_kind_set_17(k: i32) -> bool {
+fn _gale_kind_set_12(k: i32) -> bool {
     return k matches { TK_ACTION | TK_INT | TK_STRING_LITERAL };
 }
 
-fn _gale_kind_set_18(k: i32) -> bool {
+fn _gale_kind_set_13(k: i32) -> bool {
+    return k matches { TK_DOT | TK_NOT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
+}
+
+fn _gale_kind_set_14(k: i32) -> bool {
     return k matches { TK_DOT | TK_LPAREN | TK_NOT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
-fn _gale_kind_set_19(k: i32) -> bool {
+fn _gale_kind_set_15(k: i32) -> bool {
+    return k matches { TK_STRING_LITERAL | TK_TOKEN_REF };
+}
+
+fn _gale_kind_set_16(k: i32) -> bool {
     return k matches { TK_INT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
+}
+
+fn _gale_kind_set_17(k: i32) -> bool {
+    return k matches { TK_PRIVATE | TK_PROTECTED | TK_PUBLIC | TK_RULE_REF };
+}
+
+fn _gale_kind_set_18(k: i32) -> bool {
+    return k matches { TK_MODE | TK_RULE_REF | TK_TOKEN_REF };
+}
+
+fn _gale_kind_set_19(k: i32) -> bool {
+    return k matches { TK_DOT | TK_NOT | TK_STRING_LITERAL };
 }
 
 fn _gale_kind_set_20(k: i32) -> bool {
