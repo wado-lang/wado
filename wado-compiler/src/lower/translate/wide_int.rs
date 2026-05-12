@@ -82,12 +82,7 @@ pub(super) fn build_if_chain(
                     span,
                 ));
             }
-            TirPattern::Wildcard | TirPattern::Binding { .. } => {
-                // Bindings on wide-int scrutinees act as catch-alls in
-                // this rewrite: the binding name (if any) is lowered to
-                // a `Local` reference to the scrutinee local via the
-                // outer pattern pipeline, so the body already refers to
-                // the right value here.
+            TirPattern::Wildcard => {
                 if let Some(guard) = &arm.guard {
                     else_expr = Some(build_if(
                         guard.clone(),
@@ -99,6 +94,44 @@ pub(super) fn build_if_chain(
                 } else {
                     else_expr = Some(arm.body.clone());
                 }
+            }
+            TirPattern::Binding {
+                name,
+                local_index,
+                type_id,
+            } => {
+                // The bound local must hold the scrutinee value before
+                // the guard / body run. Emit `{ let <name> = <scrut>;
+                // <guarded_or_body> }` as a Block expression — same
+                // shape `lower::plan::pattern` synthesizes for normal
+                // `Binding` lowering.
+                let payload = if let Some(guard) = &arm.guard {
+                    build_if(guard.clone(), &arm.body, else_expr, result_type_id, span)
+                } else {
+                    arm.body.clone()
+                };
+                let let_stmt = TirStmt::new(
+                    TirStmtKind::Let {
+                        name: name.clone(),
+                        local_index: *local_index,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: *type_id,
+                        value: scrutinee.clone(),
+                        skip_value_copy: false,
+                    },
+                    span,
+                );
+                let payload_stmt = TirStmt::new(TirStmtKind::Expr(payload), span);
+                let block = TirBlock {
+                    stmts: vec![let_stmt, payload_stmt],
+                    span,
+                };
+                else_expr = Some(TirExpr::new(
+                    TirExprKind::Block(block),
+                    result_type_id,
+                    span,
+                ));
             }
             _ => {
                 // Other patterns (tuple, variant) shouldn't appear for i128/u128

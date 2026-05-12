@@ -671,10 +671,18 @@ impl FunctionTranslator<'_, '_> {
                 "TirExprKind::TypePackExpansion should be expanded by monomorphize before lower::translate runs"
             ),
             TirExprKind::Capture { .. } => unreachable!(
-                "TirExprKind::Capture should be lowered to FieldAccess by lower::closure before lower::translate runs"
+                "TirExprKind::Capture should be lowered to FieldAccess by lower::plan::closure before lower::translate runs"
             ),
+            // The translator handles closures intentionally just above
+            // this `match` (see the `TirExprKind::Closure` arm at the
+            // top of `convert_expr` that emits
+            // `NirExprKind::ClosureToCanonical`). Falling through to
+            // this arm means we hit a `Closure` node without a
+            // `functor_id` assigned by `lower::plan::closure`, or with
+            // a `functor_id` not present in `ClosurePlan::functor_infos`
+            // — both indicate the closure planner missed this node.
             TirExprKind::Closure { .. } => unreachable!(
-                "TirExprKind::Closure should be lowered to StructLiteral/ClosureToCanonical by lower::closure before lower::translate runs"
+                "TirExprKind::Closure reached lower::translate without a functor_id assigned by lower::plan::closure"
             ),
             TirExprKind::IndirectCall { callee, args } => NirExprKind::IndirectCall {
                 callee: Box::new(self.convert_expr(callee)),

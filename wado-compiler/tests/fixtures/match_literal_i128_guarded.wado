@@ -38,7 +38,19 @@ export fn run() with Stdout {
         _ => "other",
     };
     println(r4);
+
+    // Binding catch-all must assign the scrutinee to the bound local
+    // before the guard / body run. The if-else rewrite previously
+    // treated `Binding` as a value-less catch-all, so `y` referenced
+    // an uninitialized slot.
+    let bind: i128 = 99 as i128;
+    let r5 = match bind {
+        42 => "answer",
+        y && y > 10 as i128 => "big",
+        _ => "other",
+    };
+    println(r5);
 }
 
 __DATA__
-{"stdout": "answer_positive\nanswer\nseven_small\nother\n"}
+{"stdout": "answer_positive\nanswer\nseven_small\nother\nbig\n"}
