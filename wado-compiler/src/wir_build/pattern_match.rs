@@ -175,9 +175,9 @@ impl FunctionTranslator<'_, '_> {
 
     /// Translate a `LetDestructure` statement.
     ///
-    /// By the time WIR build runs, `lower::pattern::lower_let_pattern` has
+    /// By the time WIR build runs, `lower::plan::pattern::lower_let_pattern` has
     /// rewritten every `LetDestructure` form *except* the multivalue-builtin
-    /// tuple shape (see `lower::pattern::is_multivalue_builtin_pattern`)
+    /// tuple shape (see `lower::plan::pattern::is_multivalue_builtin_pattern`)
     /// into plain `Let` / `Expr` statements. So the only variant that
     /// reaches this translator is:
     ///

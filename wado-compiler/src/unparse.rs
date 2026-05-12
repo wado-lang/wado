@@ -4422,7 +4422,7 @@ fn tir_unary_op_str(op: TirUnaryOp) -> &'static str {
 /// Unparse a TIR closure as `|name: Type, ...| body` (or `|name: Type, ...|
 /// captures[...] body` when the closure captures locals) source text.
 ///
-/// Used by `lower::closure` to bake the per-literal source string into
+/// Used by `lower::plan::closure` to bake the per-literal source string into
 /// `__Closure_N^InspectAlt::inspect_alt` without requiring every TIR
 /// `Closure` node to carry an unparsed-AST string.
 ///

@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
@@ -12,27 +13,80 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-pub(super) struct BoxLowerer {
+/// Run the boxing planner: a TIR-mutating pass that rewrites
+/// `&primitive` / `&mut primitive` into `Box<T>` struct operations.
+/// Wrapped to consume `&mut FlatPackage` so it slots into
+/// [`super::plan`].
+pub fn plan(flat: &mut FlatPackage) {
+    let entry_module_source = flat.entry_module_source.clone();
+    let mut temp_module = TirModule::new(entry_module_source);
+    temp_module.type_table = flat.type_table.clone();
+    temp_module.functions = std::mem::take(&mut flat.functions);
+    temp_module.structs = std::mem::take(&mut flat.structs);
+    temp_module.globals = std::mem::take(&mut flat.globals);
+    temp_module.variants = std::mem::take(&mut flat.variants);
+    temp_module.enums = std::mem::take(&mut flat.enums);
+    temp_module.flags = std::mem::take(&mut flat.flags);
+    temp_module.imports = std::mem::take(&mut flat.imports);
+
+    let box_module_source = temp_module
+        .type_table
+        .borrow()
+        .box_module_source
+        .clone()
+        .unwrap_or_else(ModuleSource::prelude);
+    let mut box_lowerer = BoxLowerer::new(box_module_source);
+
+    for s in &temp_module.structs {
+        box_lowerer
+            .struct_fields_map
+            .insert((s.name.clone(), s.module_source.clone()), s.fields.clone());
+    }
+    for v in &temp_module.variants {
+        box_lowerer.variant_names.insert(v.name.clone());
+    }
+
+    {
+        let mut type_table = temp_module.type_table.borrow_mut();
+        box_lowerer.create_needed_box_types(&mut type_table);
+        box_lowerer.rewrite_types(&mut type_table);
+    }
+
+    box_lowerer.lower_module_exprs(&mut temp_module);
+    temp_module
+        .structs
+        .append(&mut box_lowerer.generated_structs);
+
+    flat.functions = temp_module.functions;
+    flat.structs = temp_module.structs;
+    flat.globals = temp_module.globals;
+    flat.variants = temp_module.variants;
+    flat.enums = temp_module.enums;
+    flat.flags = temp_module.flags;
+    flat.imports = temp_module.imports;
+}
+
+struct BoxLowerer {
     /// Mapping from inner `TypeId` to Box<T> struct type ID.
     /// e.g., `TypeTable::I32` → `TypeId` for Struct("Box<i32>")
     box_struct_types: IndexMap<TypeId, TypeId>,
     /// Set of all Box<T> struct type IDs (for fast lookup).
     box_type_ids: IndexSet<TypeId>,
     /// Generated Box<T> struct definitions to add to the module.
-    pub(super) generated_structs: Vec<TirStruct>,
+generated_structs: Vec<TirStruct>,
     /// Module source for registering Box types in the type table.
     /// Set from `TypeTable::box_module_source` (registered via `#[comp_feature("box")]`
     /// on `struct Box<T>` in the prelude).
     box_module_source: ModuleSource,
     /// Struct fields indexed by (name, `module_source`) for deref assign expansion.
-    pub(super) struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>>,
+struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>>,
     /// Variant names from all modules, used to identify `GenericInstance` types
     /// that are variants and need boxing.
-    pub(super) variant_names: IndexSet<String>,
+variant_names: IndexSet<String>,
 }
 
 impl BoxLowerer {
-    pub(super) fn new(box_module_source: ModuleSource) -> Self {
+fn new(box_module_source: ModuleSource) -> Self {
         Self {
             box_struct_types: IndexMap::default(),
             box_type_ids: IndexSet::default(),
@@ -352,7 +406,7 @@ impl BoxLowerer {
     ///
     /// This is the per-module phase: transforms function bodies, impl methods,
     /// and global initializers. Also injects generated Box structs into the module.
-    pub(super) fn lower_module_exprs(&mut self, module: &mut TirModule) {
+fn lower_module_exprs(&mut self, module: &mut TirModule) {
         // Transform expressions in all functions.
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
@@ -379,7 +433,7 @@ impl BoxLowerer {
     }
 
     /// Scan the type table to find which primitives need Box types.
-    pub(super) fn create_needed_box_types(&mut self, type_table: &mut TypeTable) {
+fn create_needed_box_types(&mut self, type_table: &mut TypeTable) {
         // Collect base TypeIds that need boxing, plus newtypes.
         // Boxing is required for:
         // - Primitives (except i128/u128 which are already GC types)
@@ -413,7 +467,7 @@ impl BoxLowerer {
     /// so that codegen and pattern matching can still see the original inner type. The lower
     /// pass transforms variant expressions (`VariantConstruct`) to wrap/unwrap Box structs,
     /// while codegen handles the type mapping from `Option(primitive)` to a nullable Box reference.
-    pub(super) fn rewrite_types(&mut self, type_table: &mut TypeTable) {
+fn rewrite_types(&mut self, type_table: &mut TypeTable) {
         // Collect entries to rewrite (can't mutate while iterating)
         let mut replacements: Vec<(TypeId, ResolvedType)> = Vec::new();
 

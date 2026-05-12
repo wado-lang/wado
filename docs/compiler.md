@@ -106,18 +106,18 @@ Synthesized impls are recorded back into the shared `TraitEnv` so subsequent pha
 
 ## Lower
 
-`lower.rs` runs `FlatPackage` (TIR-shaped) → `NirPackage` in three stages: in-place TIR-mutating sub-passes, the planner, and the TIR → NIR translator. See `docs/wep-2026-05-11-nir.md`.
+`lower.rs` runs `FlatPackage` (TIR-shaped) → `NirPackage` as planner + translator: the planner ([`lower::plan::plan`]) runs the TIR-mutating sub-passes and produces a `LowerPlan` of facts; the translator ([`lower::translate::translate`]) is a single fold from TIR to NIR. See `docs/wep-2026-05-11-nir.md`.
 
-| Sub-pass            | Stage      | File                     | What it does                                                                                                                           |
-| ------------------- | ---------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Wide-int match      | in-place   | `lower/wide_int.rs`      | i128/u128 match patterns → if-else chains                                                                                              |
-| Pattern lowering    | in-place   | `lower/pattern.rs`       | `LetDestructure` / `IfLet` → explicit Let + switch                                                                                     |
-| Global initializers | in-place   | `lower/globals.rs`       | Extracts non-const initializers into `__initialize_module`                                                                             |
-| Boxing              | in-place   | `lower/boxing.rs`        | `&primitive` / `&mut primitive` → `Box<T>` struct                                                                                      |
-| Closure             | planner    | `lower/plan/closure.rs`  | Closures → functor structs with `__call`; emits `ClosurePlan`                                                                          |
-| Value copy          | planner    | `lower/plan/value_copy/` | Inserts `copy_value::<T>(x)` markers and synthesizes `$value_copy$T` helpers; emits `ValueCopyPlan`                                    |
-| String collection   | planner    | `lower/plan/string.rs`   | Collects literals and per-function maps for the data section; emits `StringPlan`                                                       |
-| TIR → NIR           | translator | `lower/translate.rs`     | Single fold over TIR producing `NirPackage`; consumes `LowerPlan` to rewrite `copy_value` markers and assemble closure/string metadata |
+| Sub-pass            | Stage      | File                            | What it does                                                                                                                                                                       |
+| ------------------- | ---------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pattern lowering    | planner    | `lower/plan/pattern.rs`         | `LetDestructure` / `IfLet` → explicit `Let` + `If`; dense integer `Match` → `Switch`                                                                                               |
+| Global extract      | planner    | `lower/plan/globals.rs`         | Extracts non-constant global initializers into per-module `__initialize_<modname>` functions                                                                                       |
+| Boxing              | planner    | `lower/plan/boxing.rs`          | `&primitive` / `&mut primitive` → `Box<T>` struct operations                                                                                                                       |
+| Closure             | planner    | `lower/plan/closure.rs`         | Closures → `__Closure_N` functor structs with `__call` methods; produces fn-param specialized callees; emits `ClosurePlan { functor_infos }`                                       |
+| Initialize modules  | planner    | `lower/plan/globals.rs`         | Combines per-module init functions into the top-level `__initialize_modules`                                                                                                       |
+| Value copy          | planner    | `lower/plan/value_copy/`        | Inserts `copy_value::<T>(x)` markers and synthesizes `$value_copy$T` helpers; emits `ValueCopyPlan { name_for_type }`                                                              |
+| String collection   | planner    | `lower/plan/string.rs`          | Collects literals and per-function DCE maps for the data section; emits `StringPlan`                                                                                               |
+| TIR → NIR           | translator | `lower/translate.rs`            | Single fold over TIR producing `NirPackage`. Special-cases that consume `LowerPlan`: wide-int `Match` → if-else chain, `Closure` → `ClosureToCanonical`, `copy_value::<T>` → helper |
 
 ## Optimize
 

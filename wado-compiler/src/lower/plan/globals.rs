@@ -13,7 +13,41 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-use super::wide_int::{create_i128_literal, create_u128_literal};
+use crate::lower::wide_int_literal::{create_i128_literal, create_u128_literal};
+
+/// Extract non-constant global initializers into per-module
+/// `__initialize_<modname>` functions. Wrapped to consume
+/// `&mut FlatPackage` so it slots into [`super::plan`]. Must run
+/// before `boxing` because the extracted initializer code may contain
+/// `&primitive` / closure expressions that boxing / closure rewrite.
+pub fn extract(flat: &mut FlatPackage) {
+    let entry_module_source = flat.entry_module_source.clone();
+    let mut temp_module = TirModule::new(entry_module_source);
+    temp_module.type_table = flat.type_table.clone();
+    temp_module.functions = std::mem::take(&mut flat.functions);
+    temp_module.structs = std::mem::take(&mut flat.structs);
+    temp_module.globals = std::mem::take(&mut flat.globals);
+    temp_module.variants = std::mem::take(&mut flat.variants);
+    temp_module.enums = std::mem::take(&mut flat.enums);
+    temp_module.flags = std::mem::take(&mut flat.flags);
+    temp_module.imports = std::mem::take(&mut flat.imports);
+
+    lower_global_initializers(&mut temp_module);
+
+    flat.functions = temp_module.functions;
+    flat.structs = temp_module.structs;
+    flat.globals = temp_module.globals;
+    flat.variants = temp_module.variants;
+    flat.enums = temp_module.enums;
+    flat.flags = temp_module.flags;
+    flat.imports = temp_module.imports;
+}
+
+/// Generate the top-level `__initialize_modules` aggregator. Must run
+/// after all per-module init functions exist (i.e. after [`extract`]).
+pub fn build_initialize_modules(flat: &mut FlatPackage) {
+    generate_initialize_modules_flat(flat);
+}
 
 /// Check if an expression is a constant initializer (can be evaluated at Wasm instantiation time)
 fn is_constant_initializer(expr: &TirExpr) -> bool {
@@ -132,7 +166,7 @@ fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
 ///
 /// Note: The `__initialize_modules` function that calls all modules' `__initialize_module`
 /// is generated in the post-processing step (see `generate_initialize_modules_flat`).
-pub(super) fn lower_global_initializers(module: &mut TirModule) {
+fn lower_global_initializers(module: &mut TirModule) {
     let type_table = module.type_table.borrow();
 
     // Collect non-constant initializers with their indices for topological sorting
@@ -639,7 +673,7 @@ fn renumber_locals_in_pattern(pattern: &mut TirPattern, offset: u32) {
 }
 
 /// Generate `__initialize_modules` for a `FlatPackage`.
-pub(super) fn generate_initialize_modules_flat(flat: &mut FlatPackage) {
+fn generate_initialize_modules_flat(flat: &mut FlatPackage) {
     let entry_source = flat.entry_module_source.clone();
 
     // Collect distinct module sources that have __initialize_module function

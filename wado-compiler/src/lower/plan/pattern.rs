@@ -1,3 +1,4 @@
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 
 use crate::module_source::ModuleSource;
@@ -9,6 +10,44 @@ use crate::tir::{
     TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
+
+/// Run the pattern planner: a TIR-mutating pass that rewrites
+/// `LetDestructure` / `IfLet` into explicit `Let` + `If` chains and
+/// converts dense integer `Match` expressions into `Switch`. Wrapped
+/// to consume `&mut FlatPackage` so it slots into [`super::plan`].
+pub fn plan(flat: &mut FlatPackage) {
+    let entry_module_source = flat.entry_module_source.clone();
+    let mut temp_module = TirModule::new(entry_module_source);
+    temp_module.type_table = flat.type_table.clone();
+    temp_module.functions = std::mem::take(&mut flat.functions);
+    temp_module.structs = std::mem::take(&mut flat.structs);
+    temp_module.globals = std::mem::take(&mut flat.globals);
+    temp_module.variants = std::mem::take(&mut flat.variants);
+    temp_module.enums = std::mem::take(&mut flat.enums);
+    temp_module.flags = std::mem::take(&mut flat.flags);
+    temp_module.imports = std::mem::take(&mut flat.imports);
+
+    let mut global_variant_map: IndexMap<(String, ModuleSource), Vec<(String, u32)>> =
+        IndexMap::default();
+    for variant in &temp_module.variants {
+        let cases: Vec<(String, u32)> = variant
+            .cases
+            .iter()
+            .map(|c| (c.name.clone(), c.index))
+            .collect();
+        global_variant_map.insert((variant.name.clone(), variant.module_source.clone()), cases);
+    }
+
+    lower_patterns(&mut temp_module, &global_variant_map);
+
+    flat.functions = temp_module.functions;
+    flat.structs = temp_module.structs;
+    flat.globals = temp_module.globals;
+    flat.variants = temp_module.variants;
+    flat.enums = temp_module.enums;
+    flat.flags = temp_module.flags;
+    flat.imports = temp_module.imports;
+}
 
 const SWITCH_MIN_CASES: usize = 8;
 
@@ -197,7 +236,7 @@ fn match_to_switch(
     )
 }
 
-pub(super) fn lower_patterns(
+fn lower_patterns(
     module: &mut TirModule,
     global_variant_map: &IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
 ) {

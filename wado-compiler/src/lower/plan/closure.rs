@@ -391,27 +391,11 @@ impl ClosureLowerer {
             }
         }
 
-        // Phase 4: transform any remaining Closure nodes to ClosureToCanonical.
-        // These are closures that weren't specialised (fn-param stored in
-        // struct field). Walks the same set as phase 3 so cloned bodies in
-        // `__call` methods are also covered.
-        let mut remaining = RemainingClosuresRewriter {
-            functor_infos: &self.functor_infos,
-            module_source: &self.module_source,
-        };
-        for func_rc in &lowered_funcs {
-            let mut func = func_rc.borrow_mut();
-            if let Some(body) = &mut func.body {
-                remaining.visit_block(body);
-            }
-        }
-        for impl_block in &mut module.impls {
-            for method in &mut impl_block.methods {
-                if let Some(body) = &mut method.body {
-                    remaining.visit_block(body);
-                }
-            }
-        }
+        // Remaining `Closure` nodes (those not turned into
+        // `StructLiteral` at a specialized `Let` site) are now
+        // rewritten by the TIR → NIR translator's `Closure` arm using
+        // `ClosurePlan::functor_infos`, which produces
+        // `NirExprKind::ClosureToCanonical` directly.
 
         // Store functor metadata in module for the optimizer to use.
         // This enables closure inlining by providing the __call method body.
@@ -1100,63 +1084,6 @@ impl ClosureLowerer {
     }
 }
 
-/// Phase 4 rewriter: transform remaining `Closure` nodes (those not
-/// specialised) into `ClosureToCanonical`.
-struct RemainingClosuresRewriter<'a> {
-    functor_infos: &'a [ClosureFunctor],
-    module_source: &'a ModuleSource,
-}
-
-impl TirMutVisitor for RemainingClosuresRewriter<'_> {
-    fn visit_expr(&mut self, expr: &mut TirExpr) {
-        // Pull captures out of the borrow before we mutate `expr.kind`.
-        let closure_data = if let TirExprKind::Closure {
-            captures,
-            functor_id: Some(closure_id),
-            ..
-        } = &expr.kind
-        {
-            Some((*closure_id, captures.clone()))
-        } else {
-            None
-        };
-
-        let Some((closure_id, captures)) = closure_data else {
-            // For non-closure nodes (and `Closure { functor_id: None, .. }`,
-            // which the original code recursed into), use the default walk.
-            self.walk_expr(expr);
-            return;
-        };
-
-        // Closure with functor_id but no functor info: leave untouched and
-        // do NOT recurse into the body — the original logic also stopped
-        // here (the body lives in the generated `__call` method).
-        let Some(functor) = self.functor_infos.get(closure_id as usize) else {
-            return;
-        };
-
-        let target_fn_type = expr.type_id;
-        let span = expr.span;
-        let struct_literal = TirExpr::new(
-            TirExprKind::StructLiteral {
-                struct_type: functor.struct_type_id,
-                struct_name: functor.struct_name.clone(),
-                fields: build_capture_fields(&captures, span),
-            },
-            functor.ref_type_id,
-            span,
-        );
-
-        expr.kind = TirExprKind::ClosureToCanonical {
-            functor: Box::new(struct_literal),
-            functor_id: closure_id,
-            target_fn_type,
-            closure_module: self.module_source.clone(),
-        };
-        // Keep expr.type_id as the original function type for type compatibility.
-    }
-}
-
 /// Phase 1 visitor: assign a stable `functor_id` to every `Closure` node and
 /// record a `CollectedClosure` snapshot for the functor-generation pass.
 ///
@@ -1638,7 +1565,7 @@ impl ClosureCallSiteLowerer<'_> {
             // Use the functor's *defining* module, not the surrounding
             // body's module: the per-functor `__Closure_N^Inspect[Alt]`
             // impl was synthesised alongside the closure literal in
-            // `lower::closure::ClosureLowerer::lower_module`, so it
+            // `lower::plan::closure::ClosureLowerer::lower_module`, so it
             // lives in `functor.module_source`. After cross-module
             // inlining (`generate_fn_param_specializations` clones a
             // helper into another module) the body may be visited from

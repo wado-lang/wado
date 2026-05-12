@@ -6,17 +6,20 @@
 //! sub-passes before the translator runs — they `unreachable!()` here.
 //!
 //! Some translator arms consume facts from `plan` to rewrite TIR
-//! markers into resolved NIR forms (currently: the value-copy marker
-//! rewrite in the `Call` arm).
+//! markers into resolved NIR forms (the value-copy marker rewrite in
+//! the `Call` arm; the `i128` / `u128` match → if-else chain in the
+//! `Match` arm).
 //!
 //! See `docs/wep-2026-05-11-nir.md`.
+
+mod wide_int;
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
-use crate::lower::plan::{LowerPlan, value_copy};
+use crate::lower::plan::{LowerPlan, closure, value_copy};
 use crate::nir;
 use crate::nir::{
     NirBlock, NirCapture, NirEnum, NirEnumCase, NirExpr, NirExprKind, NirField, NirFlags,
@@ -31,7 +34,7 @@ use crate::tir::{
     TirEnumCase, TirExpr, TirExprKind, TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
     TirImport, TirLiteralPattern, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt,
     TirStmtKind, TirStruct, TirStructField, TirStructPatternField, TirTest, TirTypeParam,
-    TirVariantCase, TirVariantDecl,
+    TirVariantCase, TirVariantDecl, TypeTable,
 };
 
 /// Translate a [`FlatPackage`] (TIR-shaped) into a [`NirPackage`] (NIR-shaped).
@@ -53,9 +56,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         value_copy,
         strings,
     } = plan;
-    let translator = Translator {
-        value_copy: &value_copy,
-    };
     let FlatPackage {
         entry_module_source,
         type_table,
@@ -97,6 +97,12 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         wasm_assets,
         trait_env,
     } = flat;
+
+    let translator = Translator {
+        value_copy: &value_copy,
+        closure: &closure,
+        type_table: Rc::clone(&type_table),
+    };
 
     let mut func_map: IndexMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>> =
         IndexMap::with_capacity_and_hasher(functions.len(), rustc_hash::FxBuildHasher);
@@ -156,6 +162,11 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
 
 struct Translator<'a> {
     value_copy: &'a value_copy::ValueCopyPlan,
+    closure: &'a closure::ClosurePlan,
+    /// Shared with the consumed `FlatPackage`; used by translator arms
+    /// that need to inspect resolved types during the walk (e.g.
+    /// detecting wide-int `Match` scrutinees for the if-else rewrite).
+    type_table: Rc<RefCell<TypeTable>>,
 }
 
 impl<'a> Translator<'a> {
@@ -337,6 +348,57 @@ impl<'a> Translator<'a> {
     }
 
     fn convert_expr(&self, expr: &TirExpr) -> NirExpr {
+        // Wide-int (`i128` / `u128`) match → if-else chain. Done before
+        // dispatching `convert_expr_kind` so the rewrite can use the
+        // outer expression's `type_id` / `span` for the synthesized
+        // `If` nodes; arm bodies and nested wide-int matches are then
+        // processed by the recursive `convert_expr` call.
+        if let TirExprKind::Match { expr: scrutinee, arms } = &expr.kind
+            && wide_int::should_rewrite(scrutinee.type_id, arms, &self.type_table.borrow())
+        {
+            let if_chain = wide_int::build_if_chain(
+                scrutinee,
+                arms,
+                expr.type_id,
+                expr.span,
+                &self.type_table,
+            );
+            return self.convert_expr(&if_chain);
+        }
+        // Remaining `Closure` nodes (those the closure planner's
+        // specialized call-site rewriter did not turn into a
+        // `StructLiteral` at a `Let` binding) become
+        // `NirExprKind::ClosureToCanonical` wrapping a `StructLiteral`
+        // of the functor's captures. Do not recurse into the closure
+        // body — the body lives in the generated `__call` method,
+        // which `convert_function` walks separately.
+        if let TirExprKind::Closure {
+            functor_id: Some(closure_id),
+            captures,
+            ..
+        } = &expr.kind
+            && let Some(functor) = self.closure.functor_infos.get(*closure_id as usize)
+        {
+            let nir_struct = NirExpr {
+                kind: NirExprKind::StructLiteral {
+                    struct_type: functor.struct_type_id,
+                    struct_name: functor.struct_name.clone(),
+                    fields: build_nir_capture_fields(captures, expr.span),
+                },
+                type_id: functor.ref_type_id,
+                span: expr.span,
+            };
+            return NirExpr {
+                kind: NirExprKind::ClosureToCanonical {
+                    functor: Box::new(nir_struct),
+                    functor_id: *closure_id,
+                    target_fn_type: expr.type_id,
+                    closure_module: functor.module_source.clone(),
+                },
+                type_id: expr.type_id,
+                span: expr.span,
+            };
+        }
         NirExpr {
             kind: self.convert_expr_kind(&expr.kind),
             type_id: expr.type_id,
@@ -734,6 +796,30 @@ impl<'a> Translator<'a> {
             span: param.span,
         }
     }
+}
+
+/// Build NIR struct-field values for a closure's captures. Each field
+/// is a `Local` reading the captured value from the outer scope at
+/// `cap.outer_index`. Mirrors the TIR-side `build_capture_fields` that
+/// the closure planner uses for specialized closures at `Let`
+/// bindings.
+fn build_nir_capture_fields(captures: &[TirCapture], span: crate::token::Span) -> Vec<NirStructField> {
+    captures
+        .iter()
+        .enumerate()
+        .map(|(i, cap)| NirStructField {
+            name: format!("__capture_{i}"),
+            value: NirExpr {
+                kind: NirExprKind::Local {
+                    index: cap.outer_index,
+                    name: cap.name.clone(),
+                },
+                type_id: cap.type_id,
+                span,
+            },
+            field_index: i as u32,
+        })
+        .collect()
 }
 
 fn convert_test(test: &TirTest) -> NirTest {
