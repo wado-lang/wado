@@ -132,18 +132,18 @@ fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     }
 }
 
-/// Lower global variable initializers
+/// Extract non-constant global initializers into a per-module
+/// `__initialize_module` function (one per source module; the
+/// functions share a name and are disambiguated by their
+/// `module_source` field). For each lazy-init global the original
+/// initializer is replaced with a default value, and the original
+/// expression is moved into the module's `__initialize_module` body.
 ///
-/// For non-constant initializers, this:
-/// 1. Replaces the initializer with a default value
-/// 2. Generates a `__initialize_module` function containing the actual initialization
-///
-/// Note: The `__initialize_modules` function that calls all modules' `__initialize_module`
-/// is generated in the post-processing step (see `generate_initialize_modules_flat`).
-/// Extract non-constant global initializers into per-module
-/// `__initialize_<modname>` functions. Must run before `boxing`
-/// because the extracted initializer code may contain `&primitive` /
-/// closure expressions that boxing / closure rewrite.
+/// Must run before `boxing` because the extracted initializer code
+/// may contain `&primitive` / closure expressions that boxing /
+/// closure rewrite. The top-level `__initialize_modules` aggregator
+/// that calls each module's `__initialize_module` is built later by
+/// [`build_initialize_modules`].
 pub fn extract(flat: &mut FlatPackage) {
     let type_table = flat.type_table.borrow();
 
