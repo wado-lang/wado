@@ -7,6 +7,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
+use crate::tir;
 use crate::tir::{
     CallArg, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType, TirBlock,
     TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirImpl, TirLocal, TirModule,
@@ -16,14 +17,38 @@ use crate::tir::{
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
 
+/// Per-local entry recording that a function parameter has been
+/// specialized to a functor type. Populated for synthesized
+/// fn-param-specialized callees. The translator uses these entries to:
+///
+/// - Retag `Local` reads of the param to the functor `&__Closure_N`
+///   type instead of the original `fn(...)` declared type.
+/// - Rewrite `IndirectCall { callee: Local(param), .. }` into
+///   `MethodCall` on the functor's `__call` method.
+/// - Wrap `Local(param)` args to `Call` / `MethodCall` slots that
+///   still expect `fn(...)` in `NirExprKind::ClosureToCanonical`,
+///   converting the specialized value back to its canonical
+///   function-shaped view.
+pub struct SpecializedLocal {
+    pub local_index: u32,
+    pub functor_id: u32,
+    pub functor_ref_type: tir::TypeId,
+    pub original_fn_type: tir::TypeId,
+}
+
 /// Result of closure planning.
 ///
 /// `functor_infos` is consumed by the TIR → NIR translator to populate
 /// `NirPackage::closure_functors`. It carries per-functor metadata
 /// (struct name, `__call` method body, captures, canonical signature)
 /// that the optimizer uses for closure inlining.
+///
+/// `specialized_locals` lists, for each synthesized specialized
+/// callee, the params that were re-bound to functor types. See
+/// [`SpecializedLocal`].
 pub struct ClosurePlan {
     pub functor_infos: Vec<ClosureFunctor>,
+    pub specialized_locals: IndexMap<(ModuleSource, String), Vec<SpecializedLocal>>,
 }
 
 /// Run the closure planner.
@@ -63,6 +88,7 @@ pub fn plan(flat: &mut FlatPackage) -> ClosurePlan {
 
     ClosurePlan {
         functor_infos: std::mem::take(&mut temp_module.closure_functors),
+        specialized_locals: std::mem::take(&mut closure_lowerer.specialized_locals),
     }
 }
 
@@ -230,6 +256,12 @@ struct ClosureLowerer {
     generated_structs: Vec<TirStruct>,
     generated_functions: Vec<Rc<RefCell<TirFunction>>>,
     fn_param_specializations: IndexMap<FnParamSpecKey, String>,
+    /// For each synthesized fn-param-specialized callee, the locals
+    /// that were re-bound from `fn(...)` to functor types. The
+    /// translator consumes this map via `ClosurePlan::specialized_locals`
+    /// to rewrite call sites and `Local` reads inside the specialized
+    /// callee body.
+    specialized_locals: IndexMap<(ModuleSource, String), Vec<SpecializedLocal>>,
 }
 
 impl ClosureLowerer {
@@ -244,6 +276,7 @@ impl ClosureLowerer {
             generated_structs: Vec::new(),
             generated_functions: Vec::new(),
             fn_param_specializations: IndexMap::default(),
+            specialized_locals: IndexMap::default(),
         }
     }
 
@@ -1012,32 +1045,49 @@ impl ClosureLowerer {
 
         let mut new_params = callee.params.clone();
         let mut new_locals = callee.locals.clone();
+        // Record per-local metadata for the translator and apply the
+        // type rewrite to the param / local decls.
+        let mut spec_locals: Vec<SpecializedLocal> = Vec::new();
         for (arg_idx, &functor_type) in &arg_to_functor {
             let slot = (*arg_idx + param_offset) as usize;
+            let functor_ref_type = type_table.make_ref(functor_type);
+            // Capture the original `fn(...)` type before we overwrite
+            // the local's declared type — the translator needs it as
+            // `target_fn_type` when re-wrapping a fn-param `Local`
+            // into `NirExprKind::ClosureToCanonical` at a Call/MethodCall
+            // arg slot that still expects `fn(...)`.
+            let original_fn_type = new_locals
+                .get(slot)
+                .map(|l| l.type_id)
+                .or_else(|| new_params.get(slot).map(|p| p.type_id))
+                .unwrap_or(functor_ref_type);
             if slot < new_params.len() {
-                new_params[slot].type_id = type_table.make_ref(functor_type);
+                new_params[slot].type_id = functor_ref_type;
             }
             if slot < new_locals.len() {
-                new_locals[slot].type_id = type_table.make_ref(functor_type);
+                new_locals[slot].type_id = functor_ref_type;
+            }
+            if let Some(functor) = self
+                .functor_infos
+                .iter()
+                .find(|f| f.struct_type_id == functor_type)
+            {
+                spec_locals.push(SpecializedLocal {
+                    local_index: slot as u32,
+                    functor_id: functor.id,
+                    functor_ref_type,
+                    original_fn_type,
+                });
             }
         }
 
-        let local_to_functor: IndexMap<u32, TypeId> = arg_to_functor
-            .iter()
-            .map(|(arg_idx, functor_type)| (arg_idx + param_offset, *functor_type))
-            .collect();
-
-        let new_body = callee.body.as_ref().map(|body| {
-            let mut cloned = body.clone();
-            SpecializerTransformer {
-                param_to_functor: &local_to_functor,
-                functor_infos: &self.functor_infos,
-                module_source: &self.module_source,
-                type_table,
-            }
-            .visit_block(&mut cloned);
-            cloned
-        });
+        // The body is cloned as-is. The TIR → NIR translator handles
+        // the per-function rewrites (`Local` retag, `IndirectCall` →
+        // `MethodCall` on `__call`, fn-param-`Local` arg-slot wrap in
+        // `NirExprKind::ClosureToCanonical`) by consulting
+        // `ClosurePlan::specialized_locals` keyed on
+        // `(self.module_source, specialized_name)`.
+        let new_body = callee.body.clone();
 
         let specialized_method_info = callee
             .method_info
@@ -1080,6 +1130,12 @@ impl ClosureLowerer {
 
         self.generated_functions
             .push(Rc::new(RefCell::new(specialized_func)));
+        if !spec_locals.is_empty() {
+            self.specialized_locals.insert(
+                (self.module_source.clone(), specialized_name.clone()),
+                spec_locals,
+            );
+        }
         specialized_name
     }
 }
@@ -1896,117 +1952,8 @@ impl TirRefVisitor for StructFieldFnParamCheck<'_> {
     }
 }
 
-/// Phase 2.5 in-place transformer for the cloned body of a specialised
-/// callee. Rewrites:
-/// - `IndirectCall { callee: Local(fn-param), args }` → `MethodCall` on
-///   the corresponding `__call`.
-/// - `Local { fn-param }` → keep the Local but retag its `type_id` to the
-///   functor `&__Closure_N` so downstream code sees the new type.
-/// - `Call` / `MethodCall` arg slots: when a fn-param Local is forwarded
-///   into a callee that still expects `fn(...)`, wrap it in
-///   `ClosureToCanonical` so the callee sees the original function type.
-struct SpecializerTransformer<'a> {
-    param_to_functor: &'a IndexMap<u32, TypeId>,
-    functor_infos: &'a [ClosureFunctor],
-    module_source: &'a ModuleSource,
-    type_table: &'a mut TypeTable,
-}
-
-impl SpecializerTransformer<'_> {
-    fn wrap_arg_if_needed(&self, arg: &mut TirExpr, original_type_id: TypeId) {
-        if let TirExprKind::Local { index, .. } = &arg.kind
-            && let Some(&functor_type) = self.param_to_functor.get(index)
-            && matches!(
-                self.type_table.get(original_type_id),
-                ResolvedType::Function { .. }
-            )
-            && let Some(functor) = self
-                .functor_infos
-                .iter()
-                .find(|f| f.struct_type_id == functor_type)
-        {
-            let span = arg.span;
-            let inner =
-                std::mem::replace(arg, TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span));
-            *arg = TirExpr::new(
-                TirExprKind::ClosureToCanonical {
-                    functor: Box::new(inner),
-                    functor_id: functor.id,
-                    target_fn_type: original_type_id,
-                    closure_module: self.module_source.clone(),
-                },
-                original_type_id,
-                span,
-            );
-        }
-    }
-}
-
-impl TirMutVisitor for SpecializerTransformer<'_> {
-    fn visit_expr(&mut self, expr: &mut TirExpr) {
-        match &mut expr.kind {
-            TirExprKind::IndirectCall { callee, args } => {
-                self.visit_expr(callee);
-                for arg in &mut *args {
-                    self.visit_expr(arg);
-                }
-                if let TirExprKind::Local { index, .. } = &callee.kind
-                    && let Some(&functor_type) = self.param_to_functor.get(index)
-                    && let Some(functor) = self
-                        .functor_infos
-                        .iter()
-                        .find(|f| f.struct_type_id == functor_type)
-                {
-                    let call_method_name =
-                        MethodName::format_local(&functor.struct_name, None, "__call");
-                    let callee_owned = std::mem::replace(
-                        callee.as_mut(),
-                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
-                    );
-                    let args_owned: Vec<TirExpr> = std::mem::take(args);
-
-                    let call_method_info = LocalMethodName::new(
-                        functor.struct_name.clone(),
-                        None,
-                        "__call".to_string(),
-                    );
-
-                    let call_args =
-                        make_call_method_args(args_owned, &functor.call_method.borrow());
-                    expr.kind = TirExprKind::method_call(
-                        Box::new(callee_owned),
-                        FunctionRef {
-                            module_source: self.module_source.clone(),
-                            name: call_method_name,
-                            monomorph_info: None,
-                            method_info: Some(call_method_info),
-                        },
-                        Vec::new(),
-                        call_args,
-                    );
-                }
-            }
-            TirExprKind::Call { args, .. } => {
-                for arg in &mut *args {
-                    let original_type_id = arg.expr.type_id;
-                    self.visit_expr(&mut arg.expr);
-                    self.wrap_arg_if_needed(&mut arg.expr, original_type_id);
-                }
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                self.visit_expr(receiver);
-                for arg in &mut *args {
-                    let original_type_id = arg.expr.type_id;
-                    self.visit_expr(&mut arg.expr);
-                    self.wrap_arg_if_needed(&mut arg.expr, original_type_id);
-                }
-            }
-            TirExprKind::Local { index, .. } => {
-                if let Some(&functor_type) = self.param_to_functor.get(index) {
-                    expr.type_id = self.type_table.make_ref(functor_type);
-                }
-            }
-            _ => self.walk_expr(expr),
-        }
-    }
-}
+// `SpecializerTransformer` removed: the per-function rewrites it used
+// to apply (`Local` retag, `IndirectCall` → `MethodCall`, fn-param
+// `Local` arg-slot wrap in `ClosureToCanonical`) are now performed by
+// the TIR → NIR translator, which reads
+// `ClosurePlan::specialized_locals` per converted function.

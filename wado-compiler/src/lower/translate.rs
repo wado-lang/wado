@@ -14,12 +14,13 @@
 
 mod wide_int;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::lower::plan::{LowerPlan, closure, value_copy};
+use crate::name::{LocalMethodName, MethodName};
 use crate::nir;
 use crate::nir::{
     NirBlock, NirCapture, NirEnum, NirEnumCase, NirExpr, NirExprKind, NirField, NirFlags,
@@ -102,6 +103,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         value_copy: &value_copy,
         closure: &closure,
         type_table: Rc::clone(&type_table),
+        current_specialized: Cell::new(None),
     };
 
     let mut func_map: IndexMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>> =
@@ -167,11 +169,31 @@ struct Translator<'a> {
     /// that need to inspect resolved types during the walk (e.g.
     /// detecting wide-int `Match` scrutinees for the if-else rewrite).
     type_table: Rc<RefCell<TypeTable>>,
+    /// Specialized-locals for the function currently being walked, or
+    /// `None` if the current function is not a specialized callee.
+    /// Set / restored around each [`convert_function`] call. Read by
+    /// the per-arm rewrites (`Local` retag, `IndirectCall` →
+    /// `MethodCall`, fn-param-`Local` arg wrap).
+    current_specialized: Cell<Option<&'a [closure::SpecializedLocal]>>,
 }
 
 impl<'a> Translator<'a> {
     fn convert_function(&self, func: &TirFunction) -> NirFunction {
-        NirFunction {
+        // If this function is a synthesized fn-param-specialized
+        // callee, route per-arm rewrites through the recorded
+        // `SpecializedLocal` list. The previous mapping (which may
+        // belong to a recursing caller — e.g. via
+        // `convert_closure_functor`'s fallback `convert_function`) is
+        // restored on the way out.
+        let prev = self.current_specialized.get();
+        let key = (func.module_source.clone(), func.name.clone());
+        self.current_specialized.set(
+            self.closure
+                .specialized_locals
+                .get(&key)
+                .map(|v| v.as_slice()),
+        );
+        let result = NirFunction {
             name: func.name.clone(),
             module_source: func.module_source.clone(),
             is_pub: func.is_pub,
@@ -206,7 +228,9 @@ impl<'a> Translator<'a> {
             allocator_tag: func.allocator_tag.clone(),
             kind: convert_function_kind(&func.kind),
             return_abi: convert_return_abi(&func.return_abi),
-        }
+        };
+        self.current_specialized.set(prev);
+        result
     }
 
     fn convert_global(&self, global: &TirGlobal) -> NirGlobal {
@@ -399,11 +423,113 @@ impl<'a> Translator<'a> {
                 span: expr.span,
             };
         }
+        // Inside a synthesized fn-param-specialized callee body, a
+        // `Local` read of one of the specialized params surfaces in
+        // NIR as a `Local` retagged to the functor `&__Closure_N`
+        // type (mirrors the in-place rewrite the old
+        // `SpecializerTransformer` applied).
+        if let TirExprKind::Local { index, name } = &expr.kind
+            && let Some(spec) = self.specialized_for_local(*index)
+        {
+            return NirExpr {
+                kind: NirExprKind::Local {
+                    index: *index,
+                    name: name.clone(),
+                },
+                type_id: spec.functor_ref_type,
+                span: expr.span,
+            };
+        }
+        // `IndirectCall` whose callee resolves to a specialized
+        // fn-param `Local` is dispatched directly to the functor's
+        // `__call` method.
+        if let TirExprKind::IndirectCall { callee, args } = &expr.kind
+            && let TirExprKind::Local { index, .. } = &callee.kind
+            && let Some(spec) = self.specialized_for_local(*index)
+            && let Some(functor) = self.closure.functor_infos.get(spec.functor_id as usize)
+        {
+            let nir_receiver = self.convert_expr(callee);
+            let call_method_name =
+                MethodName::format_local(&functor.struct_name, None, "__call");
+            let call_method_info = LocalMethodName::new(
+                functor.struct_name.clone(),
+                None,
+                "__call".to_string(),
+            );
+            let call_method_borrow = functor.call_method.borrow();
+            let params_is_mut: Vec<bool> = call_method_borrow
+                .params
+                .iter()
+                .skip(1)
+                .map(|p| p.is_mut)
+                .collect();
+            let nir_args: Vec<nir::CallArg> = args
+                .iter()
+                .zip(params_is_mut.into_iter().chain(std::iter::repeat(false)))
+                .map(|(arg, is_mut)| nir::CallArg {
+                    expr: self.convert_expr(arg),
+                    is_mut,
+                })
+                .collect();
+            return NirExpr {
+                kind: NirExprKind::method_call(
+                    Box::new(nir_receiver),
+                    nir::FunctionRef {
+                        module_source: functor.module_source.clone(),
+                        name: call_method_name,
+                        monomorph_info: None,
+                        method_info: Some(call_method_info),
+                    },
+                    Vec::new(),
+                    nir_args,
+                ),
+                type_id: expr.type_id,
+                span: expr.span,
+            };
+        }
         NirExpr {
             kind: self.convert_expr_kind(&expr.kind),
             type_id: expr.type_id,
             span: expr.span,
         }
+    }
+
+    /// Look up a specialized-local entry for the given local index in
+    /// the function currently being walked.
+    fn specialized_for_local(&self, local_index: u32) -> Option<&'a closure::SpecializedLocal> {
+        self.current_specialized
+            .get()?
+            .iter()
+            .find(|s| s.local_index == local_index)
+    }
+
+    /// Convert a `Call` / `MethodCall` argument. When the argument is
+    /// a specialized fn-param `Local` and the slot still expects
+    /// `fn(...)`, wrap the converted `Local` in
+    /// `NirExprKind::ClosureToCanonical` so the callee sees the
+    /// original function-shaped view.
+    fn convert_specialized_arg_expr(&self, arg: &TirExpr) -> NirExpr {
+        if let TirExprKind::Local { index, .. } = &arg.kind
+            && let Some(spec) = self.specialized_for_local(*index)
+            && matches!(
+                self.type_table.borrow().get(spec.original_fn_type),
+                tir::ResolvedType::Function { .. }
+            )
+            && let Some(functor) = self.closure.functor_infos.get(spec.functor_id as usize)
+        {
+            let inner = self.convert_expr(arg);
+            return NirExpr {
+                kind: NirExprKind::ClosureToCanonical {
+                    functor: Box::new(inner),
+                    functor_id: spec.functor_id,
+                    target_fn_type: spec.original_fn_type,
+                    closure_module: functor.module_source.clone(),
+                },
+                type_id: spec.original_fn_type,
+                span: arg.span,
+            };
+        }
+        self.convert_expr(arg)
     }
 
     fn convert_expr_kind(&self, kind: &TirExprKind) -> NirExprKind {
@@ -760,8 +886,11 @@ impl<'a> Translator<'a> {
     }
 
     fn convert_call_arg(&self, arg: &CallArg) -> nir::CallArg {
+        // Specialized callee bodies need fn-param `Local` arg slots
+        // (expected to be `fn(...)` at the callee) to be wrapped in
+        // `ClosureToCanonical`.
         nir::CallArg {
-            expr: self.convert_expr(&arg.expr),
+            expr: self.convert_specialized_arg_expr(&arg.expr),
             is_mut: arg.is_mut,
         }
     }
