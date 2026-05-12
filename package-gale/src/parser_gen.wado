@@ -3166,6 +3166,7 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
             General(gen_shape) => gen_general_group_store_optional_op(
                 w,
                 Option::<&GeneralShape>::Some(gen_shape),
+                Option::<&Array<AltBody>>::Some(&g_op.alts),
                 &g_elem.alternatives,
                 ctx,
                 name_counts,
@@ -4569,13 +4570,6 @@ fn element_field_info(elem: &Element, ctx: &mut GenContext) -> [String, String] 
     return ["_", "Token"];
 }
 
-fn gen_field_assignments(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut GenContext) {
-    let mut name_counts: Array<[String, i32]> = [];
-    for let elem of elements {
-        gen_field_assignment(w, elem, &mut name_counts, ctx);
-    }
-}
-
 fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Array<[String, i32]>, ctx: &mut GenContext) {
     if let TokenRef(t) = elem {
         let field_name = dedup_name(&t.field_name, name_counts);
@@ -5069,7 +5063,7 @@ fn gen_consume_single_alt_group(w: &mut CodeWriter, alt: &Alternative, ctx: &mut
 
 /// Generate a general group store with Option wrapper (standalone Group in an alternative).
 fn gen_general_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    gen_general_group_store_optional_op(w, null, alts, ctx, name_counts);
+    gen_general_group_store_optional_op(w, null, null, alts, ctx, name_counts);
 }
 
 /// GIR-aware twin of `gen_general_group_store_optional`. When the
@@ -5078,7 +5072,7 @@ fn gen_general_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
 /// so emit reads the outer field name, variant type, and group
 /// index from lower's pre-baked shape — matching the values
 /// `gen_cst_types` already emitted for the corresponding enum.
-fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: Option<&GeneralShape>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: Option<&GeneralShape>, g_op_alts: Option<&Array<AltBody>>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let group_index = if let Some(g) = gs {
         // Lower already assigned a stable index in the shape; keep
         // emit's running counter aligned for the surface-IR helpers
@@ -5136,11 +5130,15 @@ fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: Option<&GeneralSh
         ctx.group_counter = gc_after_self;
         if group.len() == 1 {
             let alt_idx = group[0];
-            gen_general_alt_parse_and_store(w, alts, alt_idx, &type_name, &inner_var, ctx, name_counts, group_index);
+            if let Some(bs) = g_op_alts {
+                gen_general_alt_parse_and_store(w, alts, Option::<&AltBody>::Some(&bs[alt_idx]), alt_idx, &type_name, &inner_var, ctx, name_counts, group_index);
+            } else {
+                gen_general_alt_parse_and_store(w, alts, null, alt_idx, &type_name, &inner_var, ctx, name_counts, group_index);
+            }
         } else {
             let mut sorted_group = group.sorted();
             sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
-            gen_general_group_dispatch(w, alts, &sorted_group, &type_name, &inner_var, ctx, name_counts, group_index);
+            gen_general_group_dispatch(w, alts, g_op_alts, &sorted_group, &type_name, &inner_var, ctx, name_counts, group_index);
         }
         if ctx.group_counter > gc_max {
             gc_max = ctx.group_counter;
@@ -5182,7 +5180,7 @@ fn gen_general_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
                 w.else_begin("else");
             }
             ctx.group_counter = gc_after_self;
-            gen_general_alt_construct(w, alts, alt_idx, &type_name, ctx, name_counts, group_index);
+            gen_general_alt_construct(w, alts, null, alt_idx, &type_name, ctx, name_counts, group_index);
             if ctx.group_counter > gc_max {
                 gc_max = ctx.group_counter;
             }
@@ -5216,11 +5214,11 @@ fn gen_general_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
             ctx.group_counter = gc_after_self;
             if group.len() == 1 {
                 let alt_idx = group[0];
-                gen_general_alt_parse_and_store(w, alts, alt_idx, &type_name, &opt_var, ctx, name_counts, group_index);
+                gen_general_alt_parse_and_store(w, alts, null, alt_idx, &type_name, &opt_var, ctx, name_counts, group_index);
             } else {
                 let mut sorted_group = group.sorted();
                 sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
-                gen_general_group_dispatch(w, alts, &sorted_group, &type_name, &opt_var, ctx, name_counts, group_index);
+                gen_general_group_dispatch(w, alts, null, &sorted_group, &type_name, &opt_var, ctx, name_counts, group_index);
             }
             if ctx.group_counter > gc_max {
                 gc_max = ctx.group_counter;
@@ -5237,40 +5235,59 @@ fn gen_general_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
 }
 
 /// Parse one alt's elements and store into the variant Option variable.
-fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &Array<Alternative>, alt_idx: i32, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
+/// When `body` is `Some`, the walker uses `body.ops` (GIR-driven inner
+/// emit + struct construction). The `None` path remains for surface-IR
+/// callers reachable through `gen_element`'s Group arm.
+fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &Array<Alternative>, body: Option<&AltBody>, alt_idx: i32, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
     let alt = &alts[alt_idx];
     let struct_name = general_group_alt_struct_name(&ctx.current_rule_name, group_index, alt_idx);
 
     let mut nc: Array<[String, i32]> = [];
     let gc_start = ctx.group_counter;
-    gen_elements_with_non_greedy_legacy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
+    if let Some(b) = body {
+        gen_elements_with_non_greedy(w, &alt.elements, &b.ops, ctx, &mut nc, &([] as Array<String>));
+    } else {
+        gen_elements_with_non_greedy_legacy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
+    }
 
     w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
     w.indent();
     ctx.group_counter = gc_start;
-    let mut assign_nc: Array<[String, i32]> = [];
-    for let elem of &alt.elements {
-        gen_field_assignment(w, elem, &mut assign_nc, ctx);
+    if let Some(b) = body {
+        emit_field_assignments_from_fields(w, &b.fields);
+    } else {
+        let mut assign_nc: Array<[String, i32]> = [];
+        for let elem of &alt.elements {
+            gen_field_assignment(w, elem, &mut assign_nc, ctx);
+        }
     }
     w.dedent();
     w.line("}));");
 }
 
 /// Parse one alt's elements and return as variant value (for if/else expression).
-fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, alt_idx: i32, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
+fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, body: Option<&AltBody>, alt_idx: i32, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
     let alt = &alts[alt_idx];
     let struct_name = general_group_alt_struct_name(&ctx.current_rule_name, group_index, alt_idx);
 
     let mut nc: Array<[String, i32]> = [];
     let gc_start = ctx.group_counter;
-    gen_elements_with_non_greedy_legacy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
+    if let Some(b) = body {
+        gen_elements_with_non_greedy(w, &alt.elements, &b.ops, ctx, &mut nc, &([] as Array<String>));
+    } else {
+        gen_elements_with_non_greedy_legacy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
+    }
 
     w.line(`{type_name}::Alt{alt_idx}({struct_name} \{`);
     w.indent();
     ctx.group_counter = gc_start;
-    let mut assign_nc: Array<[String, i32]> = [];
-    for let elem of &alt.elements {
-        gen_field_assignment(w, elem, &mut assign_nc, ctx);
+    if let Some(b) = body {
+        emit_field_assignments_from_fields(w, &b.fields);
+    } else {
+        let mut assign_nc: Array<[String, i32]> = [];
+        for let elem of &alt.elements {
+            gen_field_assignment(w, elem, &mut assign_nc, ctx);
+        }
     }
     w.dedent();
     w.line("})");
@@ -5280,10 +5297,10 @@ fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, alt_
 /// alts. Asserts that every alt is fully scannable, then delegates to
 /// `gen_general_group_scan_dispatch`. Backtracking has been removed; an
 /// unscannable alt is a codegen-time error.
-fn gen_general_group_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
+fn gen_general_group_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, g_op_alts: Option<&Array<AltBody>>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
     assert general_group_all_scannable(sorted_group, alts, ctx),
         "general group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
-    gen_general_group_scan_dispatch(w, alts, sorted_group, type_name, inner_var, ctx, name_counts, group_index);
+    gen_general_group_scan_dispatch(w, alts, g_op_alts, sorted_group, type_name, inner_var, ctx, name_counts, group_index);
 }
 
 /// Returns true iff every alt in `sorted_group` has at least one element
@@ -5342,7 +5359,7 @@ fn ambiguous_node_all_scannable(sorted: &Array<i32>, alts: &Array<Alternative>, 
 /// rationale as `gen_group_scan_dispatch`: matches the longest-match
 /// tournament's pick on the longest-first sort while skipping the remaining
 /// scans, which matters when an alt's scan recurses through an LR rule.
-fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
+fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, g_op_alts: Option<&Array<AltBody>>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
     let winner_var = dedup_name(&"gd_winner", name_counts);
     let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
     w.line(`let mut {winner_var}: i32 = -1;`);
@@ -5382,13 +5399,22 @@ fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>
         ctx.group_counter = gc_entry;
         let mut nc: Array<[String, i32]> = [];
         let gc_alt = ctx.group_counter;
-        gen_elements_with_non_greedy_legacy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
-        w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
-        w.indent();
-        ctx.group_counter = gc_alt;
-        let mut assign_nc: Array<[String, i32]> = [];
-        for let elem of &alt.elements {
-            gen_field_assignment(w, elem, &mut assign_nc, ctx);
+        if let Some(bs) = g_op_alts {
+            let b = &bs[alt_idx];
+            gen_elements_with_non_greedy(w, &alt.elements, &b.ops, ctx, &mut nc, &([] as Array<String>));
+            w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
+            w.indent();
+            ctx.group_counter = gc_alt;
+            emit_field_assignments_from_fields(w, &b.fields);
+        } else {
+            gen_elements_with_non_greedy_legacy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
+            w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
+            w.indent();
+            ctx.group_counter = gc_alt;
+            let mut assign_nc: Array<[String, i32]> = [];
+            for let elem of &alt.elements {
+                gen_field_assignment(w, elem, &mut assign_nc, ctx);
+            }
         }
         w.dedent();
         w.line("}));");
