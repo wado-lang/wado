@@ -10510,6 +10510,11 @@ fn scan_import_from_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
         if _gale_kind_set_22(alt_kind) {
             pos = start;
             try_0: {
+                if pos < tokens.len() && _gale_kind_set_9(tokens[pos].kind) {
+                    let sp = pos;
+                    pos = scan_import_default(tokens, pos, 0);
+                    if pos < 0 { pos = sp; }
+                }
                 let gp_30 = pos;
                 let sgk_30 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
                 if _gale_kind_set_22(sgk_30) {

@@ -1316,7 +1316,7 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
             for let alt of &l.atom.alts {
                 non_lr_indices.push(alt.alt_index);
             }
-            gen_scan_lr_functions(w, rule, &l.lr_alts, &l.lr_dispatch, &non_lr_indices, ctx, fn_name);
+            gen_scan_lr_functions(w, rule, &l.lr_alts, &l.lr_dispatch, &non_lr_indices, &l.atom.scan_alts, ctx, fn_name);
             return;
         }
     }
@@ -1373,7 +1373,17 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
         w.end();
         w.line("return -1;");
     } else {
-        gen_scan_multi_alt(w, &rule.alternatives, ctx);
+        // `gen_scan_multi_alt` walks every alt body via the op-driven
+        // `gen_scan_op_elements_in_block`. Fetch the `scan_alts` from
+        // the matching `Rule` variant — multi-alt non-LR rules go
+        // through `MultiAlt`; LR rules dispatch earlier via the
+        // `allow_lr_split` branch.
+        let scan_alts = if let MultiAlt(m) = lowered_rule {
+            &m.scan_alts;
+        } else {
+            panic("gen_scan_function_named: multi-alt rule but lowered_rule is not MultiAlt — lower_rule invariant violated");
+        };
+        gen_scan_multi_alt(w, &rule.alternatives, scan_alts, ctx);
     }
 
     w.end();
@@ -1421,7 +1431,7 @@ fn single_token_first(elem: &Element) -> String {
 ///   - scan_X(tokens, pos, min_prec = 0): atom + precedence-aware LR-suffix
 ///     loop with token-kind dispatch and second-token overlap resolution.
 ///     Callers without a precedence context omit min_prec and get 0.
-fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<LrAlt>, lr_dispatch: &LrDispatchData, non_lr_indices: &Array<i32>, ctx: &mut GenContext, fn_name: &String) {
+fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<LrAlt>, lr_dispatch: &LrDispatchData, non_lr_indices: &Array<i32>, atom_scan_alts: &Array<ScanBody>, ctx: &mut GenContext, fn_name: &String) {
     let atom_name = `{*fn_name}_atom`;
 
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
@@ -1438,11 +1448,11 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<
         w.line("return -1;");
     } else if non_lr_alts.len() == 1 {
         w.line("let mut pos = pos;");
-        let elems = &non_lr_alts[0].elements;
-        gen_scan_elements(w, elems, 0, elems.len(), ctx);
+        let body = &atom_scan_alts[0];
+        gen_scan_op_elements(w, &body.elements, 0, body.elements.len(), ctx, &"return -1;");
         w.line("return pos;");
     } else {
-        gen_scan_multi_alt(w, &non_lr_alts, ctx);
+        gen_scan_multi_alt(w, &non_lr_alts, atom_scan_alts, ctx);
     }
     w.end();
     w.blank();
@@ -1723,7 +1733,7 @@ fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &Par
 /// try block fails, return -1. Alts with empty FIRST (e.g. starting with
 /// Wildcard or a rule whose FIRST is unenumerable) are attempted
 /// unconditionally as fallbacks.
-fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext) {
+fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, scan_alts: &Array<ScanBody>, ctx: &mut GenContext) {
     let n = alts.len();
     let max_k = 5;
     let mut all_pos_sets: Array<Array<Array<String>>> = [];
@@ -1831,16 +1841,16 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut G
         } else {
             w.else_begin(`else if {cond}`);
         }
-        emit_scan_partition_body(w, &groups_alts[g], &unguarded_idx, alts, ctx);
+        emit_scan_partition_body(w, &groups_alts[g], &unguarded_idx, scan_alts, ctx);
     }
 
     if unguarded_idx.len() > 0 {
         let empty_alts: Array<i32> = [];
         if first_branch {
-            emit_scan_partition_body(w, &empty_alts, &unguarded_idx, alts, ctx);
+            emit_scan_partition_body(w, &empty_alts, &unguarded_idx, scan_alts, ctx);
         } else {
             w.else_begin("else");
-            emit_scan_partition_body(w, &empty_alts, &unguarded_idx, alts, ctx);
+            emit_scan_partition_body(w, &empty_alts, &unguarded_idx, scan_alts, ctx);
             w.end();
         }
     } else if !first_branch {
@@ -1871,14 +1881,15 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut G
 /// Compared to the previous tournament, committing on first success skips
 /// running the remaining candidates' full scans — a meaningful saving when
 /// any alt's scan recurses through an LR rule.
-fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &Array<i32>, unguarded_alts: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext) {
+fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &Array<i32>, unguarded_alts: &Array<i32>, scan_alts: &Array<ScanBody>, ctx: &mut GenContext) {
     let total = guarded_alts.len() + unguarded_alts.len();
     if total == 1 {
         let i = if guarded_alts.len() == 1 { guarded_alts[0] } else { unguarded_alts[0] };
         let label = `try_{i}`;
         w.line("pos = start;");
         w.begin(`{label}:`);
-        gen_scan_elements_in_block(w, &alts[i].elements, 0, alts[i].elements.len(), ctx, &label);
+        let body = &scan_alts[i];
+        gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &label);
         w.line("break scan_alts;");
         w.end();
         w.line("return -1;");
@@ -1888,7 +1899,8 @@ fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &Array<i32>, ungua
         let label = `try_{*i}`;
         w.line("pos = start;");
         w.begin(`{label}:`);
-        gen_scan_elements_in_block(w, &alts[*i].elements, 0, alts[*i].elements.len(), ctx, &label);
+        let body = &scan_alts[*i];
+        gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &label);
         w.line("break scan_alts;");
         w.end();
     }
@@ -1896,7 +1908,8 @@ fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &Array<i32>, ungua
         let label = `try_{*i}`;
         w.line("pos = start;");
         w.begin(`{label}:`);
-        gen_scan_elements_in_block(w, &alts[*i].elements, 0, alts[*i].elements.len(), ctx, &label);
+        let body = &scan_alts[*i];
+        gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &label);
         w.line("break scan_alts;");
         w.end();
     }

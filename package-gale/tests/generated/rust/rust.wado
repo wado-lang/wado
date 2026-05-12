@@ -9034,7 +9034,7 @@ fn scan_delim_token_tree(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
                 pos += 1;
                 while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_token_tree(tokens, pos, 0);
+                    pos = scan_token_tree__follow_0(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
@@ -9050,7 +9050,7 @@ fn scan_delim_token_tree(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
                 pos += 1;
                 while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_token_tree(tokens, pos, 0);
+                    pos = scan_token_tree__follow_0(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
@@ -9066,7 +9066,7 @@ fn scan_delim_token_tree(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
                 pos += 1;
                 while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_token_tree(tokens, pos, 0);
+                    pos = scan_token_tree__follow_0(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
@@ -9198,7 +9198,7 @@ fn scan_macro_invocation_semi(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
                 pos += 1;
                 while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_token_tree(tokens, pos, 0);
+                    pos = scan_token_tree__follow_0(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
@@ -9218,7 +9218,7 @@ fn scan_macro_invocation_semi(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
                 pos += 1;
                 while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_token_tree(tokens, pos, 0);
+                    pos = scan_token_tree__follow_0(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
@@ -9238,7 +9238,7 @@ fn scan_macro_invocation_semi(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
                 pos += 1;
                 while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_token_tree(tokens, pos, 0);
+                    pos = scan_token_tree__follow_0(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
@@ -9369,7 +9369,7 @@ fn scan_macro_matcher(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
                 pos += 1;
                 while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_macro_match(tokens, pos, 0);
+                    pos = scan_macro_match__follow_1(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
@@ -9385,7 +9385,7 @@ fn scan_macro_matcher(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
                 pos += 1;
                 while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_macro_match(tokens, pos, 0);
+                    pos = scan_macro_match__follow_1(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
@@ -9401,7 +9401,7 @@ fn scan_macro_matcher(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
                 pos += 1;
                 while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_macro_match(tokens, pos, 0);
+                    pos = scan_macro_match__follow_1(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
@@ -9451,11 +9451,11 @@ fn scan_macro_match(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { break try_3; }
                 pos += 1;
-                pos = scan_macro_match(tokens, pos, 0);
+                pos = scan_macro_match__follow_1(tokens, pos, 0);
                 if pos < 0 { break try_3; }
                 while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_macro_match(tokens, pos, 0);
+                    pos = scan_macro_match__follow_1(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
@@ -12005,7 +12005,7 @@ fn scan_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 if pos < tokens.len() && _gale_kind_set_47(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_expression(tokens, pos, 0);
+                    pos = scan_expression__follow_6(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -12033,7 +12033,7 @@ fn scan_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 }
                 if pos < tokens.len() && _gale_kind_set_47(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_expression(tokens, pos, 0);
+                    pos = scan_expression__follow_6(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -12051,7 +12051,7 @@ fn scan_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 }
                 if pos < tokens.len() && _gale_kind_set_47(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_expression(tokens, pos, 0);
+                    pos = scan_expression__follow_6(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -12064,7 +12064,7 @@ fn scan_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 if pos < tokens.len() && _gale_kind_set_47(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_expression(tokens, pos, 0);
+                    pos = scan_expression__follow_6(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -12120,7 +12120,7 @@ fn scan_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 }
                 if pos < tokens.len() && _gale_kind_set_47(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_array_elements(tokens, pos, 0);
+                    pos = scan_array_elements__follow_7(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 if pos >= tokens.len() || tokens[pos].kind != TK_RSQUAREBRACKET { break try_12; }
@@ -12808,17 +12808,17 @@ fn scan_statements(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         if _gale_kind_set_95(alt_kind) {
             pos = start;
             try_0: {
-                pos = scan_statement(tokens, pos, 0);
+                pos = scan_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 while pos < tokens.len() && _gale_kind_set_49(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_statement(tokens, pos, 0);
+                    pos = scan_statement__follow_10(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
                 if pos < tokens.len() && _gale_kind_set_47(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_expression(tokens, pos, 0);
+                    pos = scan_expression__follow_6(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -12833,17 +12833,17 @@ fn scan_statements(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             }
             pos = start;
             try_0: {
-                pos = scan_statement(tokens, pos, 0);
+                pos = scan_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 while pos < tokens.len() && _gale_kind_set_49(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_statement(tokens, pos, 0);
+                    pos = scan_statement__follow_10(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
                 if pos < tokens.len() && _gale_kind_set_47(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_expression(tokens, pos, 0);
+                    pos = scan_expression__follow_6(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -28460,17 +28460,17 @@ fn scan_macro_match__follow_1(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { break try_3; }
                 pos += 1;
-                pos = scan_macro_match(tokens, pos, 0);
+                pos = scan_macro_match__follow_1(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
+                while pos < tokens.len() && _gale_kind_set_119(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_macro_match(tokens, pos, 0);
+                    pos = scan_macro_match__follow_1(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
                 if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { break try_3; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_7(tokens[pos].kind) {
+                if pos < tokens.len() && tokens[pos].kind == TK_DOLLAR {
                     let sp = pos;
                     pos = scan_macro_rep_sep(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
@@ -29359,7 +29359,7 @@ fn scan_expression__follow_6_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 if pos < tokens.len() && _gale_kind_set_120(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_expression(tokens, pos, 0);
+                    pos = scan_expression__follow_6(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -29382,7 +29382,7 @@ fn scan_expression__follow_6_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 if pos < tokens.len() && _gale_kind_set_120(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_expression(tokens, pos, 0);
+                    pos = scan_expression__follow_6(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -29395,7 +29395,7 @@ fn scan_expression__follow_6_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 if pos < tokens.len() && _gale_kind_set_120(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_expression(tokens, pos, 0);
+                    pos = scan_expression__follow_6(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -29408,7 +29408,7 @@ fn scan_expression__follow_6_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 if pos < tokens.len() && _gale_kind_set_120(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_expression(tokens, pos, 0);
+                    pos = scan_expression__follow_6(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -29441,7 +29441,7 @@ fn scan_expression__follow_6_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos < tokens.len() && _gale_kind_set_47(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_120(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_tuple_elements(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
@@ -29462,9 +29462,9 @@ fn scan_expression__follow_6_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos < tokens.len() && _gale_kind_set_47(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_120(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_array_elements(tokens, pos, 0);
+                    pos = scan_array_elements__follow_7(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 if pos >= tokens.len() || tokens[pos].kind != TK_RSQUAREBRACKET { break try_12; }
@@ -31276,17 +31276,17 @@ fn scan_statements__follow_9(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
         if _gale_kind_set_95(alt_kind) {
             pos = start;
             try_0: {
-                pos = scan_statement(tokens, pos, 0);
+                pos = scan_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 while pos < tokens.len() && _gale_kind_set_121(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_statement(tokens, pos, 0);
+                    pos = scan_statement__follow_10(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
                 if pos < tokens.len() && _gale_kind_set_120(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_expression(tokens, pos, 0);
+                    pos = scan_expression__follow_6(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -31301,17 +31301,17 @@ fn scan_statements__follow_9(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
             }
             pos = start;
             try_0: {
-                pos = scan_statement(tokens, pos, 0);
+                pos = scan_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 while pos < tokens.len() && _gale_kind_set_121(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_statement(tokens, pos, 0);
+                    pos = scan_statement__follow_10(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
                 if pos < tokens.len() && _gale_kind_set_120(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_expression(tokens, pos, 0);
+                    pos = scan_expression__follow_6(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -33264,7 +33264,7 @@ fn scan_expression__follow_23_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 if pos < tokens.len() && _gale_kind_set_123(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_expression(tokens, pos, 0);
+                    pos = scan_expression__follow_6(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -33292,7 +33292,7 @@ fn scan_expression__follow_23_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 }
                 if pos < tokens.len() && _gale_kind_set_123(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_expression(tokens, pos, 0);
+                    pos = scan_expression__follow_6(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -33310,7 +33310,7 @@ fn scan_expression__follow_23_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 }
                 if pos < tokens.len() && _gale_kind_set_123(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_expression(tokens, pos, 0);
+                    pos = scan_expression__follow_6(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -33323,7 +33323,7 @@ fn scan_expression__follow_23_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 if pos < tokens.len() && _gale_kind_set_123(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_expression(tokens, pos, 0);
+                    pos = scan_expression__follow_6(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -33356,7 +33356,7 @@ fn scan_expression__follow_23_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos < tokens.len() && _gale_kind_set_47(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_123(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_tuple_elements(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
@@ -33377,9 +33377,9 @@ fn scan_expression__follow_23_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos < tokens.len() && _gale_kind_set_47(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_123(tokens[pos].kind) {
                     let sp = pos;
-                    pos = scan_array_elements(tokens, pos, 0);
+                    pos = scan_array_elements__follow_7(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
                 if pos >= tokens.len() || tokens[pos].kind != TK_RSQUAREBRACKET { break try_12; }
