@@ -216,8 +216,10 @@ struct ClosureLowerer {
     next_closure_id: u32,
     module_source: ModuleSource,
     collected_closures: Vec<CollectedClosure>,
-    /// Indexed by `functor_id`. Moved into `module.closure_functors` at the
-    /// end of `lower_module` so the optimizer can inline `__call` bodies.
+    /// Indexed by `functor_id`. Taken out of `ClosureLowerer` by
+    /// [`plan`] and handed to [`ClosurePlan::functor_infos`], where the
+    /// translator reads it to populate `NirPackage::closure_functors`
+    /// (the optimizer uses that for `__call`-body inlining).
     functor_infos: Vec<ClosureFunctor>,
     /// Per-function map (cleared between functions) recording which locals
     /// hold which closure. Read by Phase 2 (safety analysis) and Phase 3

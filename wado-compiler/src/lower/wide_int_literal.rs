@@ -1,10 +1,16 @@
-//! Shared TIR helpers for building `i128` / `u128` literal expressions.
+//! Shared TIR builders for `i128` / `u128` literal expressions.
 //!
-//! Used by both the global-initializer lowering (`lower/globals.rs`)
-//! and the wide-int match → if-else translator
-//! (`lower/translate/wide_int.rs`). The two callers must agree on how
-//! the literal is represented because the optimizer / `wir_build`
-//! pattern-match on the resulting `Call` shape.
+//! Lives at the `lower::` top level because it has two callers across
+//! the planner / translator boundary:
+//!
+//! - `lower::plan::globals` — synthesizes default values for lazy-
+//!   initialized i128 / u128 globals.
+//! - `lower::translate::wide_int` — synthesizes the literal side of
+//!   `i128^Eq::eq` / `u128^Eq::eq` calls when rewriting wide-int
+//!   `Match` arms into an if-else chain.
+//!
+//! Both callers must produce identical `Call` shapes because the
+//! optimizer and `wir_build` pattern-match on them.
 
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;

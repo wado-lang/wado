@@ -15,19 +15,13 @@ use crate::token::Span;
 
 use crate::lower::wide_int_literal::{create_i128_literal, create_u128_literal};
 
-/// Extract non-constant global initializers into per-module
-/// `__initialize_<modname>` functions. Must run before `boxing`
-/// because the extracted initializer code may contain `&primitive` /
-/// closure expressions that boxing / closure rewrite.
-pub fn extract(flat: &mut FlatPackage) {
-    lower_global_initializers(flat);
-}
-
-/// Generate the top-level `__initialize_modules` aggregator. Must run
-/// after all per-module init functions exist (i.e. after [`extract`]).
-pub fn build_initialize_modules(flat: &mut FlatPackage) {
-    generate_initialize_modules_flat(flat);
-}
+// `extract` and `build_initialize_modules` are the two halves of
+// the global-initializer planner. They run at different points in
+// `super::plan` (extract before boxing, build_initialize_modules
+// after closure), so they cannot share a single entry point. The
+// `extract` half emits per-module init functions; the
+// `build_initialize_modules` half combines them into the top-level
+// `__initialize_modules` aggregator.
 
 /// Check if an expression is a constant initializer (can be evaluated at Wasm instantiation time)
 fn is_constant_initializer(expr: &TirExpr) -> bool {
@@ -146,7 +140,11 @@ fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
 ///
 /// Note: The `__initialize_modules` function that calls all modules' `__initialize_module`
 /// is generated in the post-processing step (see `generate_initialize_modules_flat`).
-fn lower_global_initializers(flat: &mut FlatPackage) {
+/// Extract non-constant global initializers into per-module
+/// `__initialize_<modname>` functions. Must run before `boxing`
+/// because the extracted initializer code may contain `&primitive` /
+/// closure expressions that boxing / closure rewrite.
+pub fn extract(flat: &mut FlatPackage) {
     let type_table = flat.type_table.borrow();
 
     // Collect non-constant initializers with their indices for topological sorting
@@ -652,7 +650,9 @@ fn renumber_locals_in_pattern(pattern: &mut TirPattern, offset: u32) {
 }
 
 /// Generate `__initialize_modules` for a `FlatPackage`.
-fn generate_initialize_modules_flat(flat: &mut FlatPackage) {
+/// Generate the top-level `__initialize_modules` aggregator. Must run
+/// after all per-module init functions exist (i.e. after [`extract`]).
+pub fn build_initialize_modules(flat: &mut FlatPackage) {
     let entry_source = flat.entry_module_source.clone();
 
     // Collect distinct module sources that have __initialize_module function
