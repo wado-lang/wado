@@ -10,9 +10,8 @@ use crate::name::{LocalMethodName, MethodName};
 use crate::tir;
 use crate::tir::{
     CallArg, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType, TirBlock,
-    TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirLocal,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
-    TypeTable,
+    TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirLocal, TirParam, TirPattern,
+    TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;

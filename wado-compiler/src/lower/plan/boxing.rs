@@ -8,8 +8,8 @@ use crate::module_source::ModuleSource;
 use crate::name::mangle_generic_name;
 use crate::tir::{
     MonomorphInfo, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField,
-    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
-    TirUnaryOp, TypeId, TypeTable,
+    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::token::Span;
 

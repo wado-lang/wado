@@ -461,7 +461,11 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         if let TirExprKind::IndirectCall { callee, args } = &expr.kind
             && let TirExprKind::Local { index, .. } = &callee.kind
             && let Some(spec) = self.specialized_for_local(*index)
-            && let Some(functor) = self.base.closure.functor_infos.get(spec.functor_id as usize)
+            && let Some(functor) = self
+                .base
+                .closure
+                .functor_infos
+                .get(spec.functor_id as usize)
         {
             let nir_receiver = self.convert_expr(callee);
             let call_method_name = MethodName::format_local(&functor.struct_name, None, "__call");
@@ -517,7 +521,11 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 self.base.type_table.borrow().get(spec.original_fn_type),
                 tir::ResolvedType::Function { .. }
             )
-            && let Some(functor) = self.base.closure.functor_infos.get(spec.functor_id as usize)
+            && let Some(functor) = self
+                .base
+                .closure
+                .functor_infos
+                .get(spec.functor_id as usize)
         {
             let inner = self.convert_expr(arg);
             return NirExpr {
@@ -762,7 +770,8 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 .monomorph_info
                 .as_ref()
                 .and_then(|mi| mi.impl_type_args.first().copied())
-            && let Some((helper_module, helper_name)) = self.base.value_copy.name_for_type.get(&type_id)
+            && let Some((helper_module, helper_name)) =
+                self.base.value_copy.name_for_type.get(&type_id)
         {
             return NirExprKind::Call {
                 func: nir::FunctionRef {

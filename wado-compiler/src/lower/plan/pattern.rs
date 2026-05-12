@@ -6,8 +6,8 @@ use crate::name::LocalMethodName;
 use crate::tir::FunctionRef;
 use crate::tir::{
     CallArg, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirField,
-    TirLiteralPattern, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    TirLiteralPattern, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
