@@ -2568,10 +2568,11 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
 }
 
 /// Op-driven scan emitter for `ScanElement::OptionalLookahead` —
-/// emits per-shape if/elseif chain using baked `sigs`.
+/// emits per-shape if/elseif chain using baked `sigs` + `bodies`.
 fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookaheadElem, ctx: &mut GenContext) {
     let mut is_first = true;
-    for let sig of &ole.sigs {
+    for let mut si = 0; si < ole.sigs.len(); si += 1 {
+        let sig = &ole.sigs[si];
         if sig.is_empty() {
             continue;
         }
@@ -2587,7 +2588,7 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
         let shape_label = `sol_{gc}`;
         let fail = `break {shape_label};`;
         w.begin(`{shape_label}:`);
-        for let elem_se of &ole.body.elements {
+        for let elem_se of &ole.bodies[si].elements {
             gen_scan_op_element(w, elem_se, ctx, &fail);
         }
         w.end();

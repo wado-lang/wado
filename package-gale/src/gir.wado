@@ -764,8 +764,15 @@ pub struct ScanGroupElem {
 }
 
 pub struct ScanOptionalLookaheadElem {
+    /// Per-shape lookahead signature: `sigs[s][position]` is the
+    /// kind set for position `position` of shape `s`. emit emits
+    /// `if peek_match(sigs[0]) { /* shape 0 body */ } else if ...`.
     pub sigs: Array<Array<Array<String>>>,
-    pub body: ScanBody,
+    /// Per-shape scan body: `bodies[s]` is the sequence of
+    /// `ScanElement`s emit scans when shape `s`'s sig matches. Each
+    /// shape selects a subset of the surface alt's elements (the
+    /// optional sub-elements that are "on" in this shape).
+    pub bodies: Array<ScanBody>,
 }
 
 // ==========================================================================

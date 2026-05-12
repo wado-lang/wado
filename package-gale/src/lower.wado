@@ -66,7 +66,7 @@ use {
     is_storable_group,
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
-use { GenContext } from "./gen_context.wado";
+use { GenContext, is_nullable } from "./gen_context.wado";
 use { strip_suffix } from "./gen_util.wado";
 use { compute_prefix_self_ref_min_prec } from "./lr_util.wado";
 use { TreeMap } from "core:collections";
@@ -92,6 +92,7 @@ use {
     ScanRepeatElem,
     ScanRepeatStrategy,
     ScanGroupElem,
+    ScanOptionalLookaheadElem,
     Op,
     TokenOp,
     LiteralOp,
@@ -1244,6 +1245,22 @@ fn lower_general_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, out
 /// Scan-side twin of `lower_repeat_op`. Same restrictions: greedy
 /// `Star` / `Plus` with a leaf inner only.
 fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &Array<String>) -> ScanElement {
+    // Greedy Optional + Group inner with nested optional sub-elements
+    // is the shape-based-lookahead case: lower produces
+    // `ScanElement::OptionalLookahead` so emit reads per-shape sigs
+    // instead of running a regular scan-repeat (which would fire on
+    // the first leading token without disambiguating the inner
+    // optional shape, breaking `( (a)? b )?`-style cases).
+    if !rep.non_greedy {
+        if let Optional = rep.kind {
+            if let Group(g) = &rep.element {
+                if g.alternatives.len() == 1 && has_nested_optional_in_alt(&g.alternatives[0]) {
+                    return lower_scan_optional_lookahead_group(&g.alternatives[0], ctx, outer_follow);
+                }
+            }
+        }
+    }
+
     let mut inner_visiting: Array<String> = [];
     let inner_first = ctx.first_of_element(&rep.element, &mut inner_visiting);
 
@@ -1262,6 +1279,152 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &A
         strategy: strategy,
         inner_first: inner_first,
     });
+}
+
+/// True iff any element in the alt is an Optional Repeat (possibly
+/// wrapped in a `Label`). Mirrors surface `has_nested_optionals` /
+/// `is_optional_repeat` for the scan-side OptionalLookahead trigger.
+fn has_nested_optional_in_alt(alt: &Alternative) -> bool {
+    for let elem of &alt.elements {
+        if surface_is_optional_repeat(elem) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn surface_is_optional_repeat(elem: &Element) -> bool {
+    if let Repeat(rep) = elem {
+        if let Optional = rep.kind {
+            return true;
+        }
+    }
+    if let Label(lab) = elem {
+        return surface_is_optional_repeat(&lab.element);
+    }
+    return false;
+}
+
+/// Lower an Optional Group with nested optionals to
+/// `ScanElement::OptionalLookahead`. Enumerates 2^n shape
+/// combinations (where n is the number of optional sub-elements),
+/// computes per-shape lookahead signatures, and lowers each shape's
+/// scan body separately (the optional sub-elements that are "on"
+/// in this shape, unwrapped from their Optional Repeat wrappers,
+/// plus the corresponding inner Group flattening when applicable).
+fn lower_scan_optional_lookahead_group(alt: &Alternative, ctx: &mut GenContext, outer_follow: &Array<String>) -> ScanElement {
+    let shapes = compute_shapes_for_alt(&alt.elements);
+    let mut sigs: Array<Array<Array<String>>> = [];
+    let mut bodies: Array<ScanBody> = [];
+    for let shape of &shapes {
+        sigs.push(shape_lookahead_signature_for_alt(shape, &alt.elements, ctx));
+        bodies.push(lower_scan_shape_body(shape, &alt.elements, ctx));
+    }
+    return ScanElement::OptionalLookahead(ScanOptionalLookaheadElem {
+        sigs: sigs,
+        bodies: bodies,
+    });
+}
+
+/// Lower a single shape's scan body. Mirrors surface
+/// `gen_scan_optional_with_lookahead`'s per-shape inner loop: for
+/// each selected position, unwrap the optional, and if the unwrapped
+/// is a single-alt Group, flatten its inner elements into the scan
+/// body directly. Otherwise lower the unwrapped element.
+fn lower_scan_shape_body(shape: &Array<i32>, elements: &Array<Element>, ctx: &mut GenContext) -> ScanBody {
+    let mut body_elems: Array<ScanElement> = [];
+    for let mut k = 0; k < shape.len(); k += 1 {
+        let idx = shape[k];
+        let actual = surface_unwrap_optional(&elements[idx]);
+        // Empty follow at lower time — the shape body is consumed
+        // as a labeled block, and emit handles per-position fail via
+        // `break <shape_label>;`. Per-element follow within the
+        // shape doesn't affect the scan emit.
+        let empty_follow: Array<String> = [];
+        if let Group(g) = actual {
+            if g.alternatives.len() == 1 {
+                for let mut j = 0; j < g.alternatives[0].elements.len(); j += 1 {
+                    body_elems.push(lower_scan_element(&g.alternatives[0].elements[j], ctx, &empty_follow));
+                }
+                continue;
+            }
+        }
+        body_elems.push(lower_scan_element(actual, ctx, &empty_follow));
+    }
+    return ScanBody { elements: body_elems };
+}
+
+fn surface_unwrap_optional(elem: &Element) -> &Element with stores[elem] {
+    if let Repeat(rep) = elem {
+        if let Optional = rep.kind {
+            return &rep.element;
+        }
+    }
+    if let Label(lab) = elem {
+        return surface_unwrap_optional(&lab.element);
+    }
+    return elem;
+}
+
+/// Enumerate 2^n shape combinations of optional sub-elements in an
+/// alt. Mirrors `parser_gen::compute_shapes`: bit-mask from
+/// `(2^n - 1)` down to 0; higher bits = more optionals included =
+/// longer shape = tried first.
+fn compute_shapes_for_alt(elements: &Array<Element>) -> Array<Array<i32>> {
+    let mut opt_indices: Array<i32> = [];
+    for let mut i = 0; i < elements.len(); i += 1 {
+        if is_nullable(&elements[i]) {
+            opt_indices.push(i);
+        }
+    }
+    let n = opt_indices.len();
+    let mut shapes: Array<Array<i32>> = [];
+    let total = 1 << n;
+    for let mut mask = total - 1; mask >= 0; mask -= 1 {
+        let mut shape: Array<i32> = [];
+        for let mut i = 0; i < elements.len(); i += 1 {
+            let mut is_opt = false;
+            let mut opt_bit = -1;
+            for let mut j = 0; j < opt_indices.len(); j += 1 {
+                if opt_indices[j] == i {
+                    is_opt = true;
+                    opt_bit = j;
+                }
+            }
+            if is_opt {
+                if mask >> opt_bit & 1 == 1 {
+                    shape.push(i);
+                }
+            } else {
+                shape.push(i);
+            }
+        }
+        shapes.push(shape);
+    }
+    return shapes;
+}
+
+/// Per-shape lookahead signature: for each element in the shape (in
+/// the shape's selection order), compute the per-position first set.
+/// Mirrors `parser_gen::shape_lookahead_signature`.
+fn shape_lookahead_signature_for_alt(shape: &Array<i32>, elements: &Array<Element>, ctx: &mut GenContext) -> Array<Array<String>> {
+    let mut sig: Array<Array<String>> = [];
+    for let mut si = 0; si < shape.len(); si += 1 {
+        let idx = shape[si];
+        let actual = surface_unwrap_optional(&elements[idx]);
+        if let Group(g) = actual {
+            if g.alternatives.len() == 1 {
+                for let mut j = 0; j < g.alternatives[0].elements.len(); j += 1 {
+                    let mut visiting: Array<String> = [];
+                    sig.push(ctx.first_of_element(&g.alternatives[0].elements[j], &mut visiting));
+                }
+                continue;
+            }
+        }
+        let mut visiting: Array<String> = [];
+        sig.push(ctx.first_of_element(actual, &mut visiting));
+    }
+    return sig;
 }
 
 /// Scan-side twin of `compute_non_greedy_strategy`. Same payload
