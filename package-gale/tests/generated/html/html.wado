@@ -2055,7 +2055,7 @@ fn scan_html_document(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     }
     while pos < tokens.len() && _gale_kind_set_3(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_html_elements(tokens, pos, 0);
+        pos = scan_html_elements__follow_0(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -2797,12 +2797,6 @@ fn parse_style(p: &mut Parser) -> Result<StyleNode, ParseError> {
 
 fn scan_html_elements__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_4(tokens[pos].kind) {
-        let sp = pos;
-        pos = scan_html_misc(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
     pos = scan_html_element(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;

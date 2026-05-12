@@ -10191,7 +10191,7 @@ fn scan_function_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && _gale_kind_set_34(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_function_parameters(tokens, pos, 0);
+        pos = scan_function_parameters__follow_2(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
@@ -10644,7 +10644,7 @@ fn scan_tuple_struct(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     pos += 1;
     if pos < tokens.len() && _gale_kind_set_42(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_tuple_fields(tokens, pos, 0);
+        pos = scan_tuple_fields__follow_3(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
@@ -10858,7 +10858,7 @@ fn scan_enum_item_tuple(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i
     pos += 1;
     if pos < tokens.len() && _gale_kind_set_42(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_tuple_fields(tokens, pos, 0);
+        pos = scan_tuple_fields__follow_3(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
@@ -11085,6 +11085,11 @@ fn scan_inherent_impl(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_KW_IMPL { return -1; }
     pos += 1;
+    if pos < tokens.len() && tokens[pos].kind == TK_LT {
+        let sp = pos;
+        pos = scan_generic_params(tokens, pos, 0);
+        if pos < 0 { pos = sp; }
+    }
     pos = scan_type_(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos].kind == TK_KW_WHERE {
@@ -11446,7 +11451,7 @@ fn scan_where_clause(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     }
     if pos < tokens.len() && _gale_kind_set_5(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_where_clause_item(tokens, pos, 0);
+        pos = scan_where_clause_item__follow_5(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     return pos;
@@ -11499,13 +11504,18 @@ fn scan_lifetime_where_clause_item(tokens: &Array<Token>, pos: i32, min_prec: i3
 
 fn scan_type_bound_where_clause_item(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind == TK_KW_FOR {
+        let sp = pos;
+        pos = scan_for_lifetimes(tokens, pos, 0);
+        if pos < 0 { pos = sp; }
+    }
     pos = scan_type_(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_COLON { return -1; }
     pos += 1;
     if pos < tokens.len() && _gale_kind_set_44(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_type_param_bounds(tokens, pos, 0);
+        pos = scan_type_param_bounds__follow_4(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     return pos;
@@ -12782,7 +12792,7 @@ fn scan_block_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     }
     if pos < tokens.len() && _gale_kind_set_71(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_statements(tokens, pos, 0);
+        pos = scan_statements__follow_9(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_RCURLYBRACE { return -1; }
@@ -12948,7 +12958,7 @@ fn scan_tuple_elements(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     }
     if pos < tokens.len() && _gale_kind_set_11(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_expression(tokens, pos, 0);
+        pos = scan_expression__follow_6(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     return pos;
@@ -13807,9 +13817,9 @@ fn scan_match_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos < tokens.len() && _gale_kind_set_80(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_76(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_match_arms(tokens, pos, 0);
+        pos = scan_match_arms__follow_11(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_RCURLYBRACE { return -1; }
@@ -13819,7 +13829,7 @@ fn scan_match_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
 
 fn scan_match_arms(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_80(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_76(tokens[pos].kind) {
         let sp = pos;
         sg_105_done: {
             sg_105: {
@@ -13952,7 +13962,7 @@ fn scan_pattern_no_top_alt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_81(alt_kind) {
+        if _gale_kind_set_80(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_pattern_without_range(tokens, pos, 0);
@@ -13960,7 +13970,7 @@ fn scan_pattern_no_top_alt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_82(alt_kind) {
+        } else if _gale_kind_set_81(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_pattern_without_range(tokens, pos, 0);
@@ -13994,7 +14004,7 @@ fn scan_pattern_without_range(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_83(alt_kind) {
+        } else if _gale_kind_set_82(alt_kind) {
             pos = start;
             try_1: {
                 pos = scan_identifier_pattern(tokens, pos, 0);
@@ -14058,7 +14068,7 @@ fn scan_pattern_without_range(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_84(alt_kind) {
+        } else if _gale_kind_set_83(alt_kind) {
             pos = start;
             try_5: {
                 pos = scan_struct_pattern(tokens, pos, 0);
@@ -14317,7 +14327,7 @@ fn scan_range_pattern(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_82(alt_kind) {
+        if _gale_kind_set_81(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_range_pattern_bound(tokens, pos, 0);
@@ -14425,7 +14435,7 @@ fn scan_range_pattern_bound(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_85(alt_kind) {
+        } else if _gale_kind_set_84(alt_kind) {
             pos = start;
             try_4: {
                 pos = scan_path_pattern(tokens, pos, 0);
@@ -14474,7 +14484,7 @@ fn scan_struct_pattern(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LCURLYBRACE { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_86(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_85(tokens[pos].kind) {
         let sp = pos;
         pos = scan_struct_pattern_elements(tokens, pos, 0);
         if pos < 0 { pos = sp; }
@@ -14500,7 +14510,7 @@ fn scan_struct_pattern_elements(tokens: &Array<Token>, pos: i32, min_prec: i32 =
             try_0: {
                 pos = scan_struct_pattern_fields(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                if pos < tokens.len() && tokens[pos].kind == TK_COMMA && pos + 1 < tokens.len() && _gale_kind_set_87(tokens[pos + 1].kind) {
+                if pos < tokens.len() && tokens[pos].kind == TK_COMMA && pos + 1 < tokens.len() && _gale_kind_set_86(tokens[pos + 1].kind) {
                     sol_109: {
                         if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sol_109; }
                         pos += 1;
@@ -14516,12 +14526,12 @@ fn scan_struct_pattern_elements(tokens: &Array<Token>, pos: i32, min_prec: i32 =
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_88(alt_kind) {
+        } else if _gale_kind_set_87(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_struct_pattern_fields(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                if pos < tokens.len() && tokens[pos].kind == TK_COMMA && pos + 1 < tokens.len() && _gale_kind_set_87(tokens[pos + 1].kind) {
+                if pos < tokens.len() && tokens[pos].kind == TK_COMMA && pos + 1 < tokens.len() && _gale_kind_set_86(tokens[pos + 1].kind) {
                     sol_111: {
                         if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sol_111; }
                         pos += 1;
@@ -14584,7 +14594,7 @@ fn scan_struct_pattern_field(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
     }
     let gp_114 = pos;
     let sgk_114 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    if _gale_kind_set_88(sgk_114) {
+    if _gale_kind_set_87(sgk_114) {
         let mut sg_114_best = -1;
         sg_114: {
             pos = gp_114;
@@ -14649,7 +14659,7 @@ fn scan_tuple_struct_pattern(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_89(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_88(tokens[pos].kind) {
         let sp = pos;
         pos = scan_tuple_struct_items(tokens, pos, 0);
         if pos < 0 { pos = sp; }
@@ -14690,7 +14700,7 @@ fn scan_tuple_pattern(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_89(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_88(tokens[pos].kind) {
         let sp = pos;
         pos = scan_tuple_pattern_items(tokens, pos, 0);
         if pos < 0 { pos = sp; }
@@ -14705,7 +14715,7 @@ fn scan_tuple_pattern_items(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_90(alt_kind) {
+        if _gale_kind_set_89(alt_kind) {
             pos = start;
             try_2: {
                 pos = scan_pattern(tokens, pos, 0);
@@ -14825,7 +14835,7 @@ fn scan_slice_pattern(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LSQUAREBRACKET { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_89(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_88(tokens[pos].kind) {
         let sp = pos;
         pos = scan_slice_pattern_items(tokens, pos, 0);
         if pos < 0 { pos = sp; }
@@ -14895,7 +14905,7 @@ fn scan_type_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_91(alt_kind) {
+        if _gale_kind_set_90(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_type_no_bounds(tokens, pos, 0);
@@ -14923,7 +14933,7 @@ fn scan_type_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_92(alt_kind) {
+        } else if _gale_kind_set_91(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_type_no_bounds(tokens, pos, 0);
@@ -14979,7 +14989,7 @@ fn scan_type_no_bounds(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_93(alt_kind) {
+        } else if _gale_kind_set_92(alt_kind) {
             pos = start;
             try_2: {
                 pos = scan_trait_object_type_one_bound(tokens, pos, 0);
@@ -15089,7 +15099,7 @@ fn scan_type_no_bounds(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_94(alt_kind) {
+        } else if _gale_kind_set_93(alt_kind) {
             pos = start;
             try_12: {
                 pos = scan_bare_function_type(tokens, pos, 0);
@@ -15273,9 +15283,9 @@ fn scan_bare_function_type(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
     pos += 1;
     if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_95(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_94(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_function_parameters_maybe_named_variadic(tokens, pos, 0);
+        pos = scan_function_parameters_maybe_named_variadic__follow_13(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
@@ -15325,7 +15335,7 @@ fn scan_function_parameters_maybe_named_variadic(tokens: &Array<Token>, pos: i32
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_95(alt_kind) {
+        if _gale_kind_set_94(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_maybe_named_function_parameters(tokens, pos, 0);
@@ -15419,7 +15429,7 @@ fn scan_maybe_named_param(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
 
 fn scan_maybe_named_function_parameters_variadic(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_95(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_94(tokens[pos].kind) {
         let sp = pos;
         sg_133_done: {
             sg_133: {
@@ -15906,7 +15916,7 @@ fn scan_generic_args(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
             try_3: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LT { break try_3; }
                 pos += 1;
-                while pos < tokens.len() && _gale_kind_set_96(tokens[pos].kind) {
+                while pos < tokens.len() && _gale_kind_set_95(tokens[pos].kind) {
                     let sp = pos;
                     sg_142_done: {
                         sg_142: {
@@ -15967,7 +15977,7 @@ fn scan_generic_arg(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_97(alt_kind) {
+        } else if _gale_kind_set_96(alt_kind) {
             pos = start;
             try_1: {
                 pos = scan_type_(tokens, pos, 0);
@@ -15995,7 +16005,7 @@ fn scan_generic_arg(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_98(alt_kind) {
+        } else if _gale_kind_set_97(alt_kind) {
             pos = start;
             try_1: {
                 pos = scan_type_(tokens, pos, 0);
@@ -16009,7 +16019,7 @@ fn scan_generic_arg(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_99(alt_kind) {
+        } else if _gale_kind_set_98(alt_kind) {
             pos = start;
             try_2: {
                 pos = scan_generic_args_const(tokens, pos, 0);
@@ -16267,7 +16277,7 @@ fn scan_type_path_segment(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
         if pos >= tokens.len() || tokens[pos].kind != TK_PATHSEP { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
-    if pos < tokens.len() && _gale_kind_set_100(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_99(tokens[pos].kind) {
         let sp = pos;
         let gp_152 = pos;
         sg_152: {
@@ -16296,7 +16306,7 @@ fn scan_type_path_fn(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     pos += 1;
     if pos < tokens.len() && _gale_kind_set_5(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_type_path_inputs(tokens, pos, 0);
+        pos = scan_type_path_inputs__follow_14(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
@@ -16357,7 +16367,7 @@ fn scan_visibility(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 pos += 1;
                 let gp_156 = pos;
                 let sgk_156 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-                if _gale_kind_set_101(sgk_156) {
+                if _gale_kind_set_100(sgk_156) {
                     sg_156: {
                         pos = gp_156;
                         sg_156_0: {
@@ -16407,7 +16417,7 @@ fn scan_identifier(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 }
 
 fn scan_keyword(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_102(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_101(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
@@ -16418,7 +16428,7 @@ fn scan_macro_identifier_like_token(tokens: &Array<Token>, pos: i32, min_prec: i
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_102(alt_kind) {
+        if _gale_kind_set_101(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_keyword(tokens, pos, 0);
@@ -16426,7 +16436,7 @@ fn scan_macro_identifier_like_token(tokens: &Array<Token>, pos: i32, min_prec: i
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_103(alt_kind) {
+        } else if _gale_kind_set_102(alt_kind) {
             pos = start;
             try_1: {
                 pos = scan_identifier(tokens, pos, 0);
@@ -16727,7 +16737,7 @@ fn parse_token_tree_token_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_token_tree_token(p: &mut Parser) -> Result<TokenTreeTokenNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_104(kind) {
+    if _gale_kind_set_103(kind) {
         if _gale_kind_set_21(p.peek_kind()) {
             return parse_token_tree_token_bt_1(p);
         } else if _gale_kind_set_20(p.peek_kind()) {
@@ -17394,7 +17404,7 @@ fn parse_macro_match_token_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_macro_match_token(p: &mut Parser) -> Result<MacroMatchTokenNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_104(kind) {
+    if _gale_kind_set_103(kind) {
         if _gale_kind_set_21(p.peek_kind()) {
             return parse_macro_match_token_bt_1(p);
         } else if _gale_kind_set_20(p.peek_kind()) {
@@ -17488,7 +17498,7 @@ fn parse_macro_rep_sep_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_macro_rep_sep(p: &mut Parser) -> Result<MacroRepSepNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_104(kind) {
+    if _gale_kind_set_103(kind) {
         if _gale_kind_set_21(p.peek_kind()) {
             return parse_macro_rep_sep_bt_1(p);
         } else if _gale_kind_set_20(p.peek_kind()) {
@@ -17622,7 +17632,7 @@ fn parse_vis_item(p: &mut Parser) -> Result<VisItemNode, ParseError> {
     };
     let mut module_or_extern_crate_or_use_declaration_or_function__or_type_alias_or_struct__or_enumeration_or_union__or_constant_item_or_static_item_or_trait__or_implementation_or_extern_block_inner: Option<ModuleOrExternCrateOrUseDeclarationOrFunctionOrTypeAliasOrStructOrEnumerationOrUnionOrConstantItemOrStaticItemOrTraitOrImplementationOrExternBlockGroup> = null;
     let grp_kind = p.peek_kind();
-    if _gale_kind_set_105(grp_kind) {
+    if _gale_kind_set_104(grp_kind) {
         let mut gd_winner: i32 = -1;
         gd_dispatch: {
             gd_scan: {
@@ -18705,7 +18715,7 @@ fn parse_function_param(p: &mut Parser) -> Result<FunctionParamNode, ParseError>
     }
     let mut group_0_inner: Option<FunctionParamGroup0> = null;
     let grp_kind = p.peek_kind();
-    if _gale_kind_set_106(grp_kind) {
+    if _gale_kind_set_105(grp_kind) {
         let mut gd_winner: i32 = -1;
         gd_dispatch: {
             gd_scan: {
@@ -19545,7 +19555,7 @@ fn parse_implementation_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_implementation(p: &mut Parser) -> Result<ImplementationNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_107(kind) {
+    if _gale_kind_set_106(kind) {
         if p.peek_kind() == TK_KW_IMPL {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -19953,7 +19963,7 @@ fn parse_generic_param(p: &mut Parser) -> Result<GenericParamNode, ParseError> {
     }
     let mut lifetime_param_or_type_param_or_const_param_inner: Option<LifetimeParamOrTypeParamOrConstParamGroup> = null;
     let grp_kind = p.peek_kind();
-    if _gale_kind_set_108(grp_kind) {
+    if _gale_kind_set_107(grp_kind) {
         let mut gd_winner: i32 = -1;
         gd_dispatch: {
             gd_scan: {
@@ -20442,7 +20452,7 @@ fn parse_statement(p: &mut Parser) -> Result<StatementNode, ParseError> {
             semi,
         }));
     }
-    if _gale_kind_set_109(kind) {
+    if _gale_kind_set_108(kind) {
         if p.peek_kind() == TK_POUND {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -20939,7 +20949,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
             literal_expression,
         }));
     }
-    if _gale_kind_set_85(kind) {
+    if _gale_kind_set_84(kind) {
         if _gale_kind_set_4(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -23285,7 +23295,7 @@ fn parse_closure_expression(p: &mut Parser) -> Result<ClosureExpressionNode, Par
         }));
     } else if grp_kind == TK_OR {
         let or = p.expect(TK_OR)?;
-        let closure_parameters: Option<ClosureParametersNode> = if _gale_kind_set_80(p.peek_kind()) {
+        let closure_parameters: Option<ClosureParametersNode> = if _gale_kind_set_76(p.peek_kind()) {
             let closure_parameters = parse_closure_parameters(p)?;
             Option::<ClosureParametersNode>::Some(closure_parameters)
         } else {
@@ -23642,7 +23652,7 @@ fn parse_match_expression(p: &mut Parser) -> Result<MatchExpressionNode, ParseEr
         let inner_attribute = parse_inner_attribute(p)?;
         inner_attribute_list.push(inner_attribute);
     }
-    let match_arms: Option<MatchArmsNode> = if _gale_kind_set_80(p.peek_kind()) {
+    let match_arms: Option<MatchArmsNode> = if _gale_kind_set_76(p.peek_kind()) {
         let match_arms = parse_match_arms__follow_11(p)?;
         Option::<MatchArmsNode>::Some(match_arms)
     } else {
@@ -23909,8 +23919,8 @@ fn parse_pattern_no_top_alt_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_pattern_no_top_alt(p: &mut Parser) -> Result<PatternNoTopAltNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_110(kind) {
-        if _gale_kind_set_82(p.peek_kind()) {
+    if _gale_kind_set_109(kind) {
+        if _gale_kind_set_81(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_0 = parse_pattern_no_top_alt_scan_0(_sd_tokens, _sd_pos);
@@ -23932,7 +23942,7 @@ fn parse_pattern_no_top_alt(p: &mut Parser) -> Result<PatternNoTopAltNode, Parse
                 return parse_pattern_no_top_alt_bt_1(p);
             }
             return parse_pattern_no_top_alt_bt_1(p);
-        } else if _gale_kind_set_81(p.peek_kind()) {
+        } else if _gale_kind_set_80(p.peek_kind()) {
             return parse_pattern_no_top_alt_bt_0(p);
         }
     }
@@ -24065,8 +24075,8 @@ fn parse_pattern_without_range(p: &mut Parser) -> Result<PatternWithoutRangeNode
             literal_pattern,
         }));
     }
-    if _gale_kind_set_111(kind) {
-        if _gale_kind_set_83(p.peek_kind()) {
+    if _gale_kind_set_110(kind) {
+        if _gale_kind_set_82(p.peek_kind()) {
             return parse_pattern_without_range_bt_1(p);
         } else if _gale_kind_set_2(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
@@ -24114,7 +24124,7 @@ fn parse_pattern_without_range(p: &mut Parser) -> Result<PatternWithoutRangeNode
                 return parse_pattern_without_range_bt_11(p);
             }
             return parse_pattern_without_range_bt_11(p);
-        } else if _gale_kind_set_84(p.peek_kind()) {
+        } else if _gale_kind_set_83(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_5 = parse_pattern_without_range_scan_5(_sd_tokens, _sd_pos);
@@ -24361,7 +24371,7 @@ fn parse_literal_pattern(p: &mut Parser) -> Result<LiteralPatternNode, ParseErro
             raw_byte_string_literal,
         }));
     }
-    if _gale_kind_set_112(kind) {
+    if _gale_kind_set_111(kind) {
         if p.peek_kind() == TK_MINUS {
             if p.peek_at(1) == TK_INTEGER_LITERAL {
                 return parse_literal_pattern_bt_8(p);
@@ -24505,8 +24515,8 @@ fn parse_range_pattern_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_range_pattern(p: &mut Parser) -> Result<RangePatternNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_82(kind) {
-        if _gale_kind_set_82(p.peek_kind()) {
+    if _gale_kind_set_81(kind) {
+        if _gale_kind_set_81(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_0 = parse_range_pattern_scan_0(_sd_tokens, _sd_pos);
@@ -24618,7 +24628,7 @@ fn parse_range_pattern_bound(p: &mut Parser) -> Result<RangePatternBoundNode, Pa
             byte_literal,
         }));
     }
-    if _gale_kind_set_112(kind) {
+    if _gale_kind_set_111(kind) {
         if p.peek_kind() == TK_MINUS {
             if p.peek_at(1) == TK_INTEGER_LITERAL {
                 return parse_range_pattern_bound_bt_2(p);
@@ -24631,7 +24641,7 @@ fn parse_range_pattern_bound(p: &mut Parser) -> Result<RangePatternBoundNode, Pa
             return parse_range_pattern_bound_bt_3(p);
         }
     }
-    if _gale_kind_set_85(kind) {
+    if _gale_kind_set_84(kind) {
         let path_pattern = parse_path_pattern(p)?;
         return Result::<RangePatternBoundNode, ParseError>::Ok(RangePatternBoundNode::Alt4(RangePatternBoundAlt4 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -24662,7 +24672,7 @@ fn parse_struct_pattern(p: &mut Parser) -> Result<StructPatternNode, ParseError>
     let start = p.peek().span.start;
     let path_in_expression = parse_path_in_expression(p)?;
     let lcurlybrace = p.expect(TK_LCURLYBRACE)?;
-    let struct_pattern_elements: Option<StructPatternElementsNode> = if _gale_kind_set_86(p.peek_kind()) {
+    let struct_pattern_elements: Option<StructPatternElementsNode> = if _gale_kind_set_85(p.peek_kind()) {
         let struct_pattern_elements = parse_struct_pattern_elements(p)?;
         Option::<StructPatternElementsNode>::Some(struct_pattern_elements)
     } else {
@@ -24699,7 +24709,7 @@ fn parse_struct_pattern_elements_bt_0(p: &mut Parser) -> Result<StructPatternEle
     let struct_pattern_fields = parse_struct_pattern_fields(p)?;
     let comma_struct_pattern_et_cetera: Option<CommaStructPatternEtCeteraOptItem> = if p.peek_kind() == TK_COMMA {
         let comma = p.expect(TK_COMMA)?;
-        let struct_pattern_et_cetera: Option<StructPatternEtCeteraNode> = if _gale_kind_set_87(p.peek_kind()) {
+        let struct_pattern_et_cetera: Option<StructPatternEtCeteraNode> = if _gale_kind_set_86(p.peek_kind()) {
             let struct_pattern_et_cetera = parse_struct_pattern_et_cetera(p)?;
             Option::<StructPatternEtCeteraNode>::Some(struct_pattern_et_cetera)
         } else {
@@ -24724,7 +24734,7 @@ fn parse_struct_pattern_elements_scan_0(tokens: &Array<Token>, pos: i32) -> i32 
     let mut pos = pos;
     pos = scan_struct_pattern_fields(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos].kind == TK_COMMA && pos + 1 < tokens.len() && _gale_kind_set_87(tokens[pos + 1].kind) {
+    if pos < tokens.len() && tokens[pos].kind == TK_COMMA && pos + 1 < tokens.len() && _gale_kind_set_86(tokens[pos + 1].kind) {
         sol_176: {
             if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sol_176; }
             pos += 1;
@@ -24743,7 +24753,7 @@ fn parse_struct_pattern_elements_scan_0(tokens: &Array<Token>, pos: i32) -> i32 
 fn parse_struct_pattern_elements(p: &mut Parser) -> Result<StructPatternElementsNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_86(kind) {
+    if _gale_kind_set_85(kind) {
         if p.peek_kind() == TK_POUND {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -24768,7 +24778,7 @@ fn parse_struct_pattern_elements(p: &mut Parser) -> Result<StructPatternElements
             return parse_struct_pattern_elements_bt_0(p);
         } else if p.peek_kind() == TK_DOTDOT {
             return parse_struct_pattern_elements_bt_1(p);
-        } else if _gale_kind_set_88(p.peek_kind()) {
+        } else if _gale_kind_set_87(p.peek_kind()) {
             return parse_struct_pattern_elements_bt_0(p);
         }
     }
@@ -24839,7 +24849,7 @@ fn parse_struct_pattern_field(p: &mut Parser) -> Result<StructPatternFieldNode, 
             colon,
             pattern,
         }));
-    } else if _gale_kind_set_113(grp_kind) {
+    } else if _gale_kind_set_112(grp_kind) {
         let mut gd_winner: i32 = -1;
         gd_dispatch: {
             gd_scan: {
@@ -24922,7 +24932,7 @@ fn parse_tuple_struct_pattern(p: &mut Parser) -> Result<TupleStructPatternNode, 
     let start = p.peek().span.start;
     let path_in_expression = parse_path_in_expression(p)?;
     let lparen = p.expect(TK_LPAREN)?;
-    let tuple_struct_items: Option<TupleStructItemsNode> = if _gale_kind_set_89(p.peek_kind()) {
+    let tuple_struct_items: Option<TupleStructItemsNode> = if _gale_kind_set_88(p.peek_kind()) {
         let tuple_struct_items = parse_tuple_struct_items(p)?;
         Option::<TupleStructItemsNode>::Some(tuple_struct_items)
     } else {
@@ -24980,7 +24990,7 @@ fn parse_tuple_struct_items(p: &mut Parser) -> Result<TupleStructItemsNode, Pars
 fn parse_tuple_pattern(p: &mut Parser) -> Result<TuplePatternNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN)?;
-    let tuple_pattern_items: Option<TuplePatternItemsNode> = if _gale_kind_set_89(p.peek_kind()) {
+    let tuple_pattern_items: Option<TuplePatternItemsNode> = if _gale_kind_set_88(p.peek_kind()) {
         let tuple_pattern_items = parse_tuple_pattern_items(p)?;
         Option::<TuplePatternItemsNode>::Some(tuple_pattern_items)
     } else {
@@ -25114,7 +25124,7 @@ fn parse_tuple_pattern_items_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_tuple_pattern_items(p: &mut Parser) -> Result<TuplePatternItemsNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_89(kind) {
+    if _gale_kind_set_88(kind) {
         if p.peek_kind() == TK_DOTDOT {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -25145,7 +25155,7 @@ fn parse_tuple_pattern_items(p: &mut Parser) -> Result<TuplePatternItemsNode, Pa
                 return parse_tuple_pattern_items_bt_0(p);
             }
             return parse_tuple_pattern_items_bt_0(p);
-        } else if _gale_kind_set_90(p.peek_kind()) {
+        } else if _gale_kind_set_89(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_2 = parse_tuple_pattern_items_scan_2(_sd_tokens, _sd_pos);
@@ -25192,7 +25202,7 @@ fn parse_grouped_pattern(p: &mut Parser) -> Result<GroupedPatternNode, ParseErro
 fn parse_slice_pattern(p: &mut Parser) -> Result<SlicePatternNode, ParseError> {
     let start = p.peek().span.start;
     let lsquarebracket = p.expect(TK_LSQUAREBRACKET)?;
-    let slice_pattern_items: Option<SlicePatternItemsNode> = if _gale_kind_set_89(p.peek_kind()) {
+    let slice_pattern_items: Option<SlicePatternItemsNode> = if _gale_kind_set_88(p.peek_kind()) {
         let slice_pattern_items = parse_slice_pattern_items(p)?;
         Option::<SlicePatternItemsNode>::Some(slice_pattern_items)
     } else {
@@ -25344,7 +25354,7 @@ fn parse_type_(p: &mut Parser) -> Result<TypeNode, ParseError> {
                 return parse_type__bt_1(p);
             }
             return parse_type__bt_1(p);
-        } else if _gale_kind_set_91(p.peek_kind()) {
+        } else if _gale_kind_set_90(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_0 = parse_type__scan_0(_sd_tokens, _sd_pos);
@@ -25368,7 +25378,7 @@ fn parse_type_(p: &mut Parser) -> Result<TypeNode, ParseError> {
             return parse_type__bt_2(p);
         } else if _gale_kind_set_12(p.peek_kind()) {
             return parse_type__bt_2(p);
-        } else if _gale_kind_set_92(p.peek_kind()) {
+        } else if _gale_kind_set_91(p.peek_kind()) {
             return parse_type__bt_0(p);
         }
     }
@@ -25510,7 +25520,7 @@ fn parse_type_no_bounds_scan_9(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_type_no_bounds(p: &mut Parser) -> Result<TypeNoBoundsNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_114(kind) {
+    if _gale_kind_set_113(kind) {
         if p.peek_kind() == TK_LPAREN {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -25563,7 +25573,7 @@ fn parse_type_no_bounds(p: &mut Parser) -> Result<TypeNoBoundsNode, ParseError> 
                 return parse_type_no_bounds_bt_12(p);
             }
             return parse_type_no_bounds_bt_12(p);
-        } else if _gale_kind_set_94(p.peek_kind()) {
+        } else if _gale_kind_set_93(p.peek_kind()) {
             return parse_type_no_bounds_bt_12(p);
         } else if _gale_kind_set_4(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
@@ -25617,7 +25627,7 @@ fn parse_type_no_bounds(p: &mut Parser) -> Result<TypeNoBoundsNode, ParseError> 
                 return parse_type_no_bounds_bt_3(p);
             }
             return parse_type_no_bounds_bt_3(p);
-        } else if _gale_kind_set_93(p.peek_kind()) {
+        } else if _gale_kind_set_92(p.peek_kind()) {
             return parse_type_no_bounds_bt_2(p);
         }
     }
@@ -25882,7 +25892,7 @@ fn parse_bare_function_type(p: &mut Parser) -> Result<BareFunctionTypeNode, Pars
     let function_type_qualifiers = parse_function_type_qualifiers(p)?;
     let kw_fn = p.expect(TK_KW_FN)?;
     let lparen = p.expect(TK_LPAREN)?;
-    let function_parameters_maybe_named_variadic: Option<FunctionParametersMaybeNamedVariadicNode> = if _gale_kind_set_95(p.peek_kind()) {
+    let function_parameters_maybe_named_variadic: Option<FunctionParametersMaybeNamedVariadicNode> = if _gale_kind_set_94(p.peek_kind()) {
         let function_parameters_maybe_named_variadic = parse_function_parameters_maybe_named_variadic__follow_13(p)?;
         Option::<FunctionParametersMaybeNamedVariadicNode>::Some(function_parameters_maybe_named_variadic)
     } else {
@@ -25984,8 +25994,8 @@ fn parse_function_parameters_maybe_named_variadic_scan_1(tokens: &Array<Token>, 
 fn parse_function_parameters_maybe_named_variadic(p: &mut Parser) -> Result<FunctionParametersMaybeNamedVariadicNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_95(kind) {
-        if _gale_kind_set_95(p.peek_kind()) {
+    if _gale_kind_set_94(kind) {
+        if _gale_kind_set_94(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_0 = parse_function_parameters_maybe_named_variadic_scan_0(_sd_tokens, _sd_pos);
@@ -26827,7 +26837,7 @@ fn parse_generic_args_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LT { return -1; }
     pos += 1;
-    while pos < tokens.len() && _gale_kind_set_96(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_95(tokens[pos].kind) {
         let sp = pos;
         sg_184_done: {
             sg_184: {
@@ -26990,7 +27000,7 @@ fn parse_generic_arg_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_generic_arg(p: &mut Parser) -> Result<GenericArgNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_96(kind) {
+    if _gale_kind_set_95(kind) {
         if _gale_kind_set_12(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -27043,9 +27053,9 @@ fn parse_generic_arg(p: &mut Parser) -> Result<GenericArgNode, ParseError> {
                 return parse_generic_arg_bt_3(p);
             }
             return parse_generic_arg_bt_3(p);
-        } else if _gale_kind_set_99(p.peek_kind()) {
-            return parse_generic_arg_bt_2(p);
         } else if _gale_kind_set_98(p.peek_kind()) {
+            return parse_generic_arg_bt_2(p);
+        } else if _gale_kind_set_97(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_1 = parse_generic_arg_scan_1(_sd_tokens, _sd_pos);
@@ -27067,7 +27077,7 @@ fn parse_generic_arg(p: &mut Parser) -> Result<GenericArgNode, ParseError> {
                 return parse_generic_arg_bt_2(p);
             }
             return parse_generic_arg_bt_2(p);
-        } else if _gale_kind_set_97(p.peek_kind()) {
+        } else if _gale_kind_set_96(p.peek_kind()) {
             return parse_generic_arg_bt_1(p);
         }
     }
@@ -27976,7 +27986,7 @@ fn parse_macro_identifier_like_token_scan_2(tokens: &Array<Token>, pos: i32) -> 
 fn parse_macro_identifier_like_token(p: &mut Parser) -> Result<MacroIdentifierLikeTokenNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_102(kind) {
+    if _gale_kind_set_101(kind) {
         let keyword = parse_keyword(p)?;
         return Result::<MacroIdentifierLikeTokenNode, ParseError>::Ok(MacroIdentifierLikeTokenNode::Alt0(MacroIdentifierLikeTokenAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -28006,7 +28016,7 @@ fn parse_macro_identifier_like_token(p: &mut Parser) -> Result<MacroIdentifierLi
                 return parse_macro_identifier_like_token_bt_2(p);
             }
             return parse_macro_identifier_like_token_bt_2(p);
-        } else if _gale_kind_set_103(p.peek_kind()) {
+        } else if _gale_kind_set_102(p.peek_kind()) {
             return parse_macro_identifier_like_token_bt_1(p);
         }
     }
@@ -28556,7 +28566,7 @@ fn parse_macro_match__follow_1_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     pos = scan_macro_match(tokens, pos, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_115(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_114(tokens[pos].kind) {
         let sp = pos;
         pos = scan_macro_match(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
@@ -29347,7 +29357,7 @@ fn scan_expression__follow_6_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             try_6: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_DOTDOT { break try_6; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_116(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_115(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
@@ -29370,7 +29380,7 @@ fn scan_expression__follow_6_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             try_8: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_KW_CONTINUE { break try_8; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_116(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_115(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
@@ -29383,7 +29393,7 @@ fn scan_expression__follow_6_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             try_9: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_KW_BREAK { break try_9; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_116(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_115(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
@@ -29396,7 +29406,7 @@ fn scan_expression__follow_6_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             try_10: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_KW_RETURN { break try_10; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_116(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_115(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
@@ -29493,7 +29503,7 @@ fn scan_expression__follow_6_lr_3(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_116(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_115(tokens[pos].kind) {
         let sp = pos;
         pos = scan_call_params(tokens, pos, 0);
         if pos < 0 { pos = sp; }
@@ -29534,7 +29544,7 @@ fn scan_expression__follow_6_lr_7(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_116(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_115(tokens[pos].kind) {
         let sp = pos;
         pos = scan_call_params(tokens, pos, 0);
         if pos < 0 { pos = sp; }
@@ -29707,7 +29717,7 @@ fn scan_expression__follow_6_lr_23(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_DOTDOT { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_116(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_115(tokens[pos].kind) {
         let sp = pos;
         pos = scan_expression(tokens, pos, 0);
         if pos < 0 { pos = sp; }
@@ -30197,7 +30207,7 @@ fn parse_expression__follow_6_scan_34(tokens: &Array<Token>, pos: i32) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos < tokens.len() && _gale_kind_set_116(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_115(tokens[pos].kind) {
         let sp = pos;
         pos = scan_tuple_elements(tokens, pos, 0);
         if pos < 0 { pos = sp; }
@@ -30244,7 +30254,7 @@ fn parse_expression__follow_6_atom(p: &mut Parser) -> Result<ExpressionNode, Par
             literal_expression,
         }));
     }
-    if _gale_kind_set_85(kind) {
+    if _gale_kind_set_84(kind) {
         if _gale_kind_set_4(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -30353,7 +30363,7 @@ fn parse_expression__follow_6_atom(p: &mut Parser) -> Result<ExpressionNode, Par
     }
     if kind == TK_DOTDOT {
         let dotdot = p.expect(TK_DOTDOT)?;
-        let expression: Option<ExpressionNode> = if _gale_kind_set_116(p.peek_kind()) {
+        let expression: Option<ExpressionNode> = if _gale_kind_set_115(p.peek_kind()) {
             let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
         } else {
@@ -30377,7 +30387,7 @@ fn parse_expression__follow_6_atom(p: &mut Parser) -> Result<ExpressionNode, Par
     if kind == TK_KW_CONTINUE {
         let kw_continue = p.expect(TK_KW_CONTINUE)?;
         let lifetime_or_label: Option<Token> = null;
-        let expression: Option<ExpressionNode> = if _gale_kind_set_116(p.peek_kind()) {
+        let expression: Option<ExpressionNode> = if _gale_kind_set_115(p.peek_kind()) {
             let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
         } else {
@@ -30393,7 +30403,7 @@ fn parse_expression__follow_6_atom(p: &mut Parser) -> Result<ExpressionNode, Par
     if kind == TK_KW_BREAK {
         let kw_break = p.expect(TK_KW_BREAK)?;
         let lifetime_or_label: Option<Token> = null;
-        let expression: Option<ExpressionNode> = if _gale_kind_set_116(p.peek_kind()) {
+        let expression: Option<ExpressionNode> = if _gale_kind_set_115(p.peek_kind()) {
             let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
         } else {
@@ -30408,7 +30418,7 @@ fn parse_expression__follow_6_atom(p: &mut Parser) -> Result<ExpressionNode, Par
     }
     if kind == TK_KW_RETURN {
         let kw_return = p.expect(TK_KW_RETURN)?;
-        let expression: Option<ExpressionNode> = if _gale_kind_set_116(p.peek_kind()) {
+        let expression: Option<ExpressionNode> = if _gale_kind_set_115(p.peek_kind()) {
             let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
         } else {
@@ -30493,7 +30503,7 @@ fn parse_expression__follow_6_lr_3(p: &mut Parser, left: ExpressionNode, start: 
     let dot = p.expect(TK_DOT)?;
     let path_expr_segment = parse_path_expr_segment(p)?;
     let lparen = p.expect(TK_LPAREN)?;
-    let call_params: Option<CallParamsNode> = if _gale_kind_set_116(p.peek_kind()) {
+    let call_params: Option<CallParamsNode> = if _gale_kind_set_115(p.peek_kind()) {
         let call_params = parse_call_params(p)?;
         Option::<CallParamsNode>::Some(call_params)
     } else {
@@ -30546,7 +30556,7 @@ fn parse_expression__follow_6_lr_6(p: &mut Parser, left: ExpressionNode, start: 
 
 fn parse_expression__follow_6_lr_7(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let lparen = p.expect(TK_LPAREN)?;
-    let call_params: Option<CallParamsNode> = if _gale_kind_set_116(p.peek_kind()) {
+    let call_params: Option<CallParamsNode> = if _gale_kind_set_115(p.peek_kind()) {
         let call_params = parse_call_params(p)?;
         Option::<CallParamsNode>::Some(call_params)
     } else {
@@ -30705,7 +30715,7 @@ fn parse_expression__follow_6_lr_22(p: &mut Parser, left: ExpressionNode, start:
 
 fn parse_expression__follow_6_lr_23(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let dotdot = p.expect(TK_DOTDOT)?;
-    let expression_2: Option<ExpressionNode> = if _gale_kind_set_116(p.peek_kind()) {
+    let expression_2: Option<ExpressionNode> = if _gale_kind_set_115(p.peek_kind()) {
         let expression = parse_expression(p)?;
         Option::<ExpressionNode>::Some(expression)
     } else {
@@ -31268,13 +31278,13 @@ fn scan_statements__follow_9(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
             try_0: {
                 pos = scan_statement(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                while pos < tokens.len() && _gale_kind_set_117(tokens[pos].kind) {
+                while pos < tokens.len() && _gale_kind_set_116(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_statement(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos < tokens.len() && _gale_kind_set_116(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_115(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
@@ -31293,13 +31303,13 @@ fn scan_statements__follow_9(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
             try_0: {
                 pos = scan_statement(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                while pos < tokens.len() && _gale_kind_set_117(tokens[pos].kind) {
+                while pos < tokens.len() && _gale_kind_set_116(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_statement(tokens, pos, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos < tokens.len() && _gale_kind_set_116(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_115(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
@@ -31351,7 +31361,7 @@ fn parse_statements__follow_9_bt_0(p: &mut Parser) -> Result<StatementsNode, Par
         let statement = parse_statement__follow_10(p)?;
         statement_list.push(statement);
     }
-    let expression: Option<ExpressionNode> = if _gale_kind_set_116(p.peek_kind()) {
+    let expression: Option<ExpressionNode> = if _gale_kind_set_115(p.peek_kind()) {
         let expression = parse_expression__follow_6(p)?;
         Option::<ExpressionNode>::Some(expression)
     } else {
@@ -31368,13 +31378,13 @@ fn parse_statements__follow_9_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_statement(tokens, pos, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_117(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_116(tokens[pos].kind) {
         let sp = pos;
         pos = scan_statement(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos < tokens.len() && _gale_kind_set_116(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_115(tokens[pos].kind) {
         let sp = pos;
         pos = scan_expression(tokens, pos, 0);
         if pos < 0 { pos = sp; }
@@ -31591,7 +31601,7 @@ fn parse_statement__follow_10(p: &mut Parser) -> Result<StatementNode, ParseErro
             semi,
         }));
     }
-    if _gale_kind_set_109(kind) {
+    if _gale_kind_set_108(kind) {
         if p.peek_kind() == TK_POUND {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -31691,7 +31701,7 @@ fn parse_statement__follow_10(p: &mut Parser) -> Result<StatementNode, ParseErro
 
 fn scan_match_arms__follow_11(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_80(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_117(tokens[pos].kind) {
         let sp = pos;
         sg_204_done: {
             sg_204: {
@@ -31774,7 +31784,7 @@ fn scan_type___follow_12(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_91(alt_kind) {
+        if _gale_kind_set_90(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_type_no_bounds__follow_21(tokens, pos, 0);
@@ -31802,7 +31812,7 @@ fn scan_type___follow_12(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_92(alt_kind) {
+        } else if _gale_kind_set_91(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_type_no_bounds__follow_21(tokens, pos, 0);
@@ -31899,7 +31909,7 @@ fn parse_type___follow_12(p: &mut Parser) -> Result<TypeNode, ParseError> {
                 return parse_type__bt_1(p);
             }
             return parse_type__bt_1(p);
-        } else if _gale_kind_set_91(p.peek_kind()) {
+        } else if _gale_kind_set_90(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_0 = parse_type__scan_0(_sd_tokens, _sd_pos);
@@ -31923,7 +31933,7 @@ fn parse_type___follow_12(p: &mut Parser) -> Result<TypeNode, ParseError> {
             return parse_type__bt_2(p);
         } else if _gale_kind_set_12(p.peek_kind()) {
             return parse_type__bt_2(p);
-        } else if _gale_kind_set_92(p.peek_kind()) {
+        } else if _gale_kind_set_91(p.peek_kind()) {
             return parse_type__bt_0(p);
         }
     }
@@ -31939,7 +31949,7 @@ fn scan_function_parameters_maybe_named_variadic__follow_13(tokens: &Array<Token
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_95(alt_kind) {
+        if _gale_kind_set_94(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_maybe_named_function_parameters__follow_26(tokens, pos, 0);
@@ -31995,8 +32005,8 @@ fn parse_function_parameters_maybe_named_variadic__follow_13_scan_1(tokens: &Arr
 fn parse_function_parameters_maybe_named_variadic__follow_13(p: &mut Parser) -> Result<FunctionParametersMaybeNamedVariadicNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_95(kind) {
-        if _gale_kind_set_95(p.peek_kind()) {
+    if _gale_kind_set_94(kind) {
+        if _gale_kind_set_94(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_0 = parse_function_parameters_maybe_named_variadic_scan_0(_sd_tokens, _sd_pos);
@@ -32114,7 +32124,7 @@ fn scan_self_param__follow_15(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
             }
             pos = gp_206;
             sg_206_1: {
-                pos = scan_typed_self__follow_27(tokens, pos, 0);
+                pos = scan_typed_self(tokens, pos, 0);
                 if pos < 0 { break sg_206_1; }
                 if pos > sg_206_best { sg_206_best = pos; }
             }
@@ -32187,7 +32197,7 @@ fn scan_function_param__follow_16(tokens: &Array<Token>, pos: i32, min_prec: i32
         sg_207: {
             pos = gp_207;
             sg_207_0: {
-                pos = scan_function_param_pattern__follow_28(tokens, pos, 0);
+                pos = scan_function_param_pattern__follow_27(tokens, pos, 0);
                 if pos < 0 { break sg_207_0; }
                 if pos > sg_207_best { sg_207_best = pos; }
             }
@@ -32229,20 +32239,20 @@ fn parse_function_param__follow_16(p: &mut Parser) -> Result<FunctionParamNode, 
     }
     let mut group_0_inner: Option<FunctionParamGroup0> = null;
     let grp_kind = p.peek_kind();
-    if _gale_kind_set_106(grp_kind) {
+    if _gale_kind_set_105(grp_kind) {
         let mut gd_winner: i32 = -1;
         gd_dispatch: {
             gd_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                pos = scan_function_param_pattern__follow_28(tokens, pos, 0);
+                pos = scan_function_param_pattern__follow_27(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
                 gd_winner = 0;
                 break gd_dispatch;
             }
         }
         if gd_winner == 0 {
-            let function_param_pattern = parse_function_param_pattern__follow_28(p)?;
+            let function_param_pattern = parse_function_param_pattern__follow_27(p)?;
             group_0_inner = Option::<FunctionParamGroup0>::Some(FunctionParamGroup0::Alt0(FunctionParamGroup0Alt0 {
                 function_param_pattern,
             }));
@@ -32332,7 +32342,7 @@ fn scan_type_param_bound__follow_18(tokens: &Array<Token>, pos: i32, min_prec: i
         } else if _gale_kind_set_13(alt_kind) {
             pos = start;
             try_1: {
-                pos = scan_trait_bound__follow_29(tokens, pos, 0);
+                pos = scan_trait_bound__follow_28(tokens, pos, 0);
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
@@ -32355,7 +32365,7 @@ fn parse_type_param_bound__follow_18(p: &mut Parser) -> Result<TypeParamBoundNod
         }));
     }
     if _gale_kind_set_13(kind) {
-        let trait_bound = parse_trait_bound__follow_29(p)?;
+        let trait_bound = parse_trait_bound__follow_28(p)?;
         return Result::<TypeParamBoundNode, ParseError>::Ok(TypeParamBoundNode::Alt1(TypeParamBoundAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             trait_bound,
@@ -32374,7 +32384,7 @@ fn scan_lifetime_where_clause_item__follow_19(tokens: &Array<Token>, pos: i32, m
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_COLON { return -1; }
     pos += 1;
-    pos = scan_lifetime_bounds__follow_30(tokens, pos, 0);
+    pos = scan_lifetime_bounds__follow_29(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -32383,7 +32393,7 @@ fn parse_lifetime_where_clause_item__follow_19(p: &mut Parser) -> Result<Lifetim
     let start = p.peek().span.start;
     let lifetime = parse_lifetime(p)?;
     let colon = p.expect(TK_COLON)?;
-    let lifetime_bounds = parse_lifetime_bounds__follow_30(p)?;
+    let lifetime_bounds = parse_lifetime_bounds__follow_29(p)?;
     return Result::<LifetimeWhereClauseItemNode, ParseError>::Ok(LifetimeWhereClauseItemNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         lifetime,
@@ -32413,7 +32423,7 @@ fn scan_closure_expression__follow_20(tokens: &Array<Token>, pos: i32, min_prec:
             sg_208_1: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_OR { break sg_208_1; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_76(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_117(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_closure_parameters(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
@@ -32468,7 +32478,7 @@ fn parse_closure_expression__follow_20(p: &mut Parser) -> Result<ClosureExpressi
         }));
     } else if grp_kind == TK_OR {
         let or = p.expect(TK_OR)?;
-        let closure_parameters: Option<ClosureParametersNode> = if _gale_kind_set_80(p.peek_kind()) {
+        let closure_parameters: Option<ClosureParametersNode> = if _gale_kind_set_76(p.peek_kind()) {
             let closure_parameters = parse_closure_parameters(p)?;
             Option::<ClosureParametersNode>::Some(closure_parameters)
         } else {
@@ -32522,7 +32532,7 @@ fn scan_type_no_bounds__follow_21(tokens: &Array<Token>, pos: i32, min_prec: i32
             }
             pos = start;
             try_2: {
-                pos = scan_trait_object_type_one_bound__follow_32(tokens, pos, 0);
+                pos = scan_trait_object_type_one_bound__follow_31(tokens, pos, 0);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
@@ -32536,15 +32546,15 @@ fn scan_type_no_bounds__follow_21(tokens: &Array<Token>, pos: i32, min_prec: i32
         } else if alt_kind == TK_KW_IMPL {
             pos = start;
             try_1: {
-                pos = scan_impl_trait_type_one_bound__follow_31(tokens, pos, 0);
+                pos = scan_impl_trait_type_one_bound__follow_30(tokens, pos, 0);
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_93(alt_kind) {
+        } else if _gale_kind_set_92(alt_kind) {
             pos = start;
             try_2: {
-                pos = scan_trait_object_type_one_bound__follow_32(tokens, pos, 0);
+                pos = scan_trait_object_type_one_bound__follow_31(tokens, pos, 0);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
@@ -32552,7 +32562,7 @@ fn scan_type_no_bounds__follow_21(tokens: &Array<Token>, pos: i32, min_prec: i32
         } else if alt_kind == TK_KW_FOR {
             pos = start;
             try_2: {
-                pos = scan_trait_object_type_one_bound__follow_32(tokens, pos, 0);
+                pos = scan_trait_object_type_one_bound__follow_31(tokens, pos, 0);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
@@ -32566,13 +32576,13 @@ fn scan_type_no_bounds__follow_21(tokens: &Array<Token>, pos: i32, min_prec: i32
         } else if _gale_kind_set_4(alt_kind) {
             pos = start;
             try_2: {
-                pos = scan_trait_object_type_one_bound__follow_32(tokens, pos, 0);
+                pos = scan_trait_object_type_one_bound__follow_31(tokens, pos, 0);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
             pos = start;
             try_3: {
-                pos = scan_type_path__follow_33(tokens, pos, 0);
+                pos = scan_type_path__follow_32(tokens, pos, 0);
                 if pos < 0 { break try_3; }
                 break scan_alts;
             }
@@ -32586,13 +32596,13 @@ fn scan_type_no_bounds__follow_21(tokens: &Array<Token>, pos: i32, min_prec: i32
         } else if alt_kind == TK_KW_SELFTYPE {
             pos = start;
             try_2: {
-                pos = scan_trait_object_type_one_bound__follow_32(tokens, pos, 0);
+                pos = scan_trait_object_type_one_bound__follow_31(tokens, pos, 0);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
             pos = start;
             try_3: {
-                pos = scan_type_path__follow_33(tokens, pos, 0);
+                pos = scan_type_path__follow_32(tokens, pos, 0);
                 if pos < 0 { break try_3; }
                 break scan_alts;
             }
@@ -32608,7 +32618,7 @@ fn scan_type_no_bounds__follow_21(tokens: &Array<Token>, pos: i32, min_prec: i32
         } else if alt_kind == TK_STAR {
             pos = start;
             try_6: {
-                pos = scan_raw_pointer_type__follow_34(tokens, pos, 0);
+                pos = scan_raw_pointer_type__follow_33(tokens, pos, 0);
                 if pos < 0 { break try_6; }
                 break scan_alts;
             }
@@ -32616,7 +32626,7 @@ fn scan_type_no_bounds__follow_21(tokens: &Array<Token>, pos: i32, min_prec: i32
         } else if alt_kind == TK_AND {
             pos = start;
             try_7: {
-                pos = scan_reference_type__follow_35(tokens, pos, 0);
+                pos = scan_reference_type__follow_34(tokens, pos, 0);
                 if pos < 0 { break try_7; }
                 break scan_alts;
             }
@@ -32651,7 +32661,7 @@ fn scan_type_no_bounds__follow_21(tokens: &Array<Token>, pos: i32, min_prec: i32
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_94(alt_kind) {
+        } else if _gale_kind_set_93(alt_kind) {
             pos = start;
             try_12: {
                 pos = scan_bare_function_type(tokens, pos, 0);
@@ -32732,7 +32742,7 @@ fn parse_type_no_bounds__follow_21_scan_13(tokens: &Array<Token>, pos: i32) -> i
 
 fn parse_type_no_bounds__follow_21_bt_3(p: &mut Parser) -> Result<TypeNoBoundsNode, ParseError> {
     let start = p.peek().span.start;
-    let type_path = parse_type_path__follow_33(p)?;
+    let type_path = parse_type_path__follow_32(p)?;
     return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt3(TypeNoBoundsAlt3 {
         span: Span::new(start, i32::max(start, p.last_end())),
         type_path,
@@ -32748,7 +32758,7 @@ fn parse_type_no_bounds__follow_21_scan_3(tokens: &Array<Token>, pos: i32) -> i3
 
 fn parse_type_no_bounds__follow_21_bt_2(p: &mut Parser) -> Result<TypeNoBoundsNode, ParseError> {
     let start = p.peek().span.start;
-    let trait_object_type_one_bound = parse_trait_object_type_one_bound__follow_32(p)?;
+    let trait_object_type_one_bound = parse_trait_object_type_one_bound__follow_31(p)?;
     return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt2(TypeNoBoundsAlt2 {
         span: Span::new(start, i32::max(start, p.last_end())),
         trait_object_type_one_bound,
@@ -32797,7 +32807,7 @@ fn parse_type_no_bounds__follow_21_scan_9(tokens: &Array<Token>, pos: i32) -> i3
 fn parse_type_no_bounds__follow_21(p: &mut Parser) -> Result<TypeNoBoundsNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_114(kind) {
+    if _gale_kind_set_113(kind) {
         if p.peek_kind() == TK_LPAREN {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -32850,7 +32860,7 @@ fn parse_type_no_bounds__follow_21(p: &mut Parser) -> Result<TypeNoBoundsNode, P
                 return parse_type_no_bounds_bt_12(p);
             }
             return parse_type_no_bounds_bt_12(p);
-        } else if _gale_kind_set_94(p.peek_kind()) {
+        } else if _gale_kind_set_93(p.peek_kind()) {
             return parse_type_no_bounds_bt_12(p);
         } else if _gale_kind_set_4(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
@@ -32904,12 +32914,12 @@ fn parse_type_no_bounds__follow_21(p: &mut Parser) -> Result<TypeNoBoundsNode, P
                 return parse_type_no_bounds_bt_3(p);
             }
             return parse_type_no_bounds_bt_3(p);
-        } else if _gale_kind_set_93(p.peek_kind()) {
+        } else if _gale_kind_set_92(p.peek_kind()) {
             return parse_type_no_bounds_bt_2(p);
         }
     }
     if kind == TK_KW_IMPL {
-        let impl_trait_type_one_bound = parse_impl_trait_type_one_bound__follow_31(p)?;
+        let impl_trait_type_one_bound = parse_impl_trait_type_one_bound__follow_30(p)?;
         return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt1(TypeNoBoundsAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             impl_trait_type_one_bound,
@@ -32923,14 +32933,14 @@ fn parse_type_no_bounds__follow_21(p: &mut Parser) -> Result<TypeNoBoundsNode, P
         }));
     }
     if kind == TK_STAR {
-        let raw_pointer_type = parse_raw_pointer_type__follow_34(p)?;
+        let raw_pointer_type = parse_raw_pointer_type__follow_33(p)?;
         return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt6(TypeNoBoundsAlt6 {
             span: Span::new(start, i32::max(start, p.last_end())),
             raw_pointer_type,
         }));
     }
     if kind == TK_AND {
-        let reference_type = parse_reference_type__follow_35(p)?;
+        let reference_type = parse_reference_type__follow_34(p)?;
         return Result::<TypeNoBoundsNode, ParseError>::Ok(TypeNoBoundsNode::Alt7(TypeNoBoundsAlt7 {
             span: Span::new(start, i32::max(start, p.last_end())),
             reference_type,
@@ -33380,7 +33390,7 @@ fn scan_expression__follow_23_atom(tokens: &Array<Token>, pos: i32) -> i32 {
         } else if _gale_kind_set_62(alt_kind) {
             pos = start;
             try_16: {
-                pos = scan_closure_expression__follow_36(tokens, pos, 0);
+                pos = scan_closure_expression__follow_35(tokens, pos, 0);
                 if pos < 0 { break try_16; }
                 break scan_alts;
             }
@@ -34159,7 +34169,7 @@ fn parse_expression__follow_23_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
             literal_expression,
         }));
     }
-    if _gale_kind_set_85(kind) {
+    if _gale_kind_set_84(kind) {
         if _gale_kind_set_4(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -34391,7 +34401,7 @@ fn parse_expression__follow_23_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
         }));
     }
     if _gale_kind_set_62(kind) {
-        let closure_expression = parse_closure_expression__follow_36(p)?;
+        let closure_expression = parse_closure_expression__follow_35(p)?;
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::ClosureExpression_(ExpressionClosureExpression_ {
             span: Span::new(start, i32::max(start, p.last_end())),
             closure_expression,
@@ -34982,7 +34992,7 @@ fn parse_trait_object_type__follow_25(p: &mut Parser) -> Result<TraitObjectTypeN
 
 fn scan_maybe_named_function_parameters__follow_26(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_maybe_named_param__follow_37(tokens, pos, 0);
+    pos = scan_maybe_named_param__follow_36(tokens, pos, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_COMMA {
         let sp = pos;
@@ -34990,7 +35000,7 @@ fn scan_maybe_named_function_parameters__follow_26(tokens: &Array<Token>, pos: i
             sg_215: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_215; }
                 pos += 1;
-                pos = scan_maybe_named_param__follow_37(tokens, pos, 0);
+                pos = scan_maybe_named_param__follow_36(tokens, pos, 0);
                 if pos < 0 { break sg_215; }
                 break sg_215_done;
             }
@@ -35009,7 +35019,7 @@ fn scan_maybe_named_function_parameters__follow_26(tokens: &Array<Token>, pos: i
 
 fn parse_maybe_named_function_parameters__follow_26(p: &mut Parser) -> Result<MaybeNamedFunctionParametersNode, ParseError> {
     let start = p.peek().span.start;
-    let maybe_named_param = parse_maybe_named_param__follow_37(p)?;
+    let maybe_named_param = parse_maybe_named_param__follow_36(p)?;
     let mut comma_maybe_named_param_list: Array<CommaMaybeNamedParamItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -35018,14 +35028,14 @@ fn parse_maybe_named_function_parameters__follow_26(p: &mut Parser) -> Result<Ma
             let mut pos: i32 = p.pos;
             if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break rep_scan; }
             pos += 1;
-            pos = scan_maybe_named_param__follow_37(tokens, pos, 0);
+            pos = scan_maybe_named_param__follow_36(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
-        let maybe_named_param = parse_maybe_named_param__follow_37(p)?;
+        let maybe_named_param = parse_maybe_named_param__follow_36(p)?;
         let comma_maybe_named_param = CommaMaybeNamedParamItem {
             comma,
             maybe_named_param,
@@ -35046,23 +35056,7 @@ fn parse_maybe_named_function_parameters__follow_26(p: &mut Parser) -> Result<Ma
     });
 }
 
-fn scan_typed_self__follow_27(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let mut pos = pos;
-    if pos < tokens.len() && tokens[pos].kind == TK_KW_MUT {
-        let sp = pos;
-        if pos >= tokens.len() || tokens[pos].kind != TK_KW_MUT { pos = -1; } else { pos += 1; }
-        if pos < 0 { pos = sp; }
-    }
-    if pos >= tokens.len() || tokens[pos].kind != TK_KW_SELFVALUE { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_COLON { return -1; }
-    pos += 1;
-    pos = scan_type___follow_12(tokens, pos, 0);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_function_param_pattern__follow_28(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_function_param_pattern__follow_27(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_pattern(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -35090,7 +35084,7 @@ fn scan_function_param_pattern__follow_28(tokens: &Array<Token>, pos: i32, min_p
     return pos;
 }
 
-fn parse_function_param_pattern__follow_28(p: &mut Parser) -> Result<FunctionParamPatternNode, ParseError> {
+fn parse_function_param_pattern__follow_27(p: &mut Parser) -> Result<FunctionParamPatternNode, ParseError> {
     let start = p.peek().span.start;
     let pattern = parse_pattern(p)?;
     let colon = p.expect(TK_COLON)?;
@@ -35116,7 +35110,7 @@ fn parse_function_param_pattern__follow_28(p: &mut Parser) -> Result<FunctionPar
     });
 }
 
-fn scan_trait_bound__follow_29(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_trait_bound__follow_28(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -35134,7 +35128,7 @@ fn scan_trait_bound__follow_29(tokens: &Array<Token>, pos: i32, min_prec: i32 = 
                     pos = scan_for_lifetimes(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                pos = scan_type_path__follow_33(tokens, pos, 0);
+                pos = scan_type_path__follow_32(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
@@ -35168,7 +35162,7 @@ fn scan_trait_bound__follow_29(tokens: &Array<Token>, pos: i32, min_prec: i32 = 
     return pos;
 }
 
-fn parse_trait_bound__follow_29(p: &mut Parser) -> Result<TraitBoundNode, ParseError> {
+fn parse_trait_bound__follow_28(p: &mut Parser) -> Result<TraitBoundNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_14(kind) {
@@ -35184,7 +35178,7 @@ fn parse_trait_bound__follow_29(p: &mut Parser) -> Result<TraitBoundNode, ParseE
         } else {
             null
         };
-        let type_path = parse_type_path__follow_33(p)?;
+        let type_path = parse_type_path__follow_32(p)?;
         return Result::<TraitBoundNode, ParseError>::Ok(TraitBoundNode::Alt0(TraitBoundAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             question,
@@ -35224,12 +35218,12 @@ fn parse_trait_bound__follow_29(p: &mut Parser) -> Result<TraitBoundNode, ParseE
     ));
 }
 
-fn scan_lifetime_bounds__follow_30(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_lifetime_bounds__follow_29(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     return pos;
 }
 
-fn parse_lifetime_bounds__follow_30(p: &mut Parser) -> Result<LifetimeBoundsNode, ParseError> {
+fn parse_lifetime_bounds__follow_29(p: &mut Parser) -> Result<LifetimeBoundsNode, ParseError> {
     let start = p.peek().span.start;
     let mut lifetime_plus_list: Array<LifetimePlusItem> = [];
     let lifetime: Option<LifetimeNode> = null;
@@ -35240,19 +35234,19 @@ fn parse_lifetime_bounds__follow_30(p: &mut Parser) -> Result<LifetimeBoundsNode
     });
 }
 
-fn scan_impl_trait_type_one_bound__follow_31(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_impl_trait_type_one_bound__follow_30(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_KW_IMPL { return -1; }
     pos += 1;
-    pos = scan_trait_bound__follow_29(tokens, pos, 0);
+    pos = scan_trait_bound__follow_28(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_impl_trait_type_one_bound__follow_31(p: &mut Parser) -> Result<ImplTraitTypeOneBoundNode, ParseError> {
+fn parse_impl_trait_type_one_bound__follow_30(p: &mut Parser) -> Result<ImplTraitTypeOneBoundNode, ParseError> {
     let start = p.peek().span.start;
     let kw_impl = p.expect(TK_KW_IMPL)?;
-    let trait_bound = parse_trait_bound__follow_29(p)?;
+    let trait_bound = parse_trait_bound__follow_28(p)?;
     return Result::<ImplTraitTypeOneBoundNode, ParseError>::Ok(ImplTraitTypeOneBoundNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         kw_impl,
@@ -35260,19 +35254,19 @@ fn parse_impl_trait_type_one_bound__follow_31(p: &mut Parser) -> Result<ImplTrai
     });
 }
 
-fn scan_trait_object_type_one_bound__follow_32(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_trait_object_type_one_bound__follow_31(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_KW_DYN {
         let sp = pos;
         if pos >= tokens.len() || tokens[pos].kind != TK_KW_DYN { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_trait_bound__follow_29(tokens, pos, 0);
+    pos = scan_trait_bound__follow_28(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_trait_object_type_one_bound__follow_32(p: &mut Parser) -> Result<TraitObjectTypeOneBoundNode, ParseError> {
+fn parse_trait_object_type_one_bound__follow_31(p: &mut Parser) -> Result<TraitObjectTypeOneBoundNode, ParseError> {
     let start = p.peek().span.start;
     let kw_dyn: Option<Token> = if p.peek_kind() == TK_KW_DYN {
         let kw_dyn = p.expect(TK_KW_DYN)?;
@@ -35280,7 +35274,7 @@ fn parse_trait_object_type_one_bound__follow_32(p: &mut Parser) -> Result<TraitO
     } else {
         null
     };
-    let trait_bound = parse_trait_bound__follow_29(p)?;
+    let trait_bound = parse_trait_bound__follow_28(p)?;
     return Result::<TraitObjectTypeOneBoundNode, ParseError>::Ok(TraitObjectTypeOneBoundNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         kw_dyn,
@@ -35288,22 +35282,17 @@ fn parse_trait_object_type_one_bound__follow_32(p: &mut Parser) -> Result<TraitO
     });
 }
 
-fn scan_type_path__follow_33(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_type_path__follow_32(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && tokens[pos].kind == TK_PATHSEP {
-        let sp = pos;
-        if pos >= tokens.len() || tokens[pos].kind != TK_PATHSEP { pos = -1; } else { pos += 1; }
-        if pos < 0 { pos = sp; }
-    }
-    pos = scan_type_path_segment__follow_38(tokens, pos, 0);
+    pos = scan_type_path_segment__follow_37(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_type_path__follow_33(p: &mut Parser) -> Result<TypePathNode, ParseError> {
+fn parse_type_path__follow_32(p: &mut Parser) -> Result<TypePathNode, ParseError> {
     let start = p.peek().span.start;
     let pathsep: Option<Token> = null;
-    let type_path_segment = parse_type_path_segment__follow_38(p)?;
+    let type_path_segment = parse_type_path_segment__follow_37(p)?;
     let mut pathsep_type_path_segment_list: Array<PathsepTypePathSegmentItem> = [];
     return Result::<TypePathNode, ParseError>::Ok(TypePathNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -35313,7 +35302,7 @@ fn parse_type_path__follow_33(p: &mut Parser) -> Result<TypePathNode, ParseError
     });
 }
 
-fn scan_raw_pointer_type__follow_34(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_raw_pointer_type__follow_33(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_STAR { return -1; }
     pos += 1;
@@ -35338,7 +35327,7 @@ fn scan_raw_pointer_type__follow_34(tokens: &Array<Token>, pos: i32, min_prec: i
     return pos;
 }
 
-fn parse_raw_pointer_type__follow_34(p: &mut Parser) -> Result<RawPointerTypeNode, ParseError> {
+fn parse_raw_pointer_type__follow_33(p: &mut Parser) -> Result<RawPointerTypeNode, ParseError> {
     let start = p.peek().span.start;
     let star = p.expect(TK_STAR)?;
     let kw_mut_or_kw_const = p.advance();
@@ -35351,7 +35340,7 @@ fn parse_raw_pointer_type__follow_34(p: &mut Parser) -> Result<RawPointerTypeNod
     });
 }
 
-fn scan_reference_type__follow_35(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_reference_type__follow_34(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_AND { return -1; }
     pos += 1;
@@ -35370,7 +35359,7 @@ fn scan_reference_type__follow_35(tokens: &Array<Token>, pos: i32, min_prec: i32
     return pos;
 }
 
-fn parse_reference_type__follow_35(p: &mut Parser) -> Result<ReferenceTypeNode, ParseError> {
+fn parse_reference_type__follow_34(p: &mut Parser) -> Result<ReferenceTypeNode, ParseError> {
     let start = p.peek().span.start;
     let and = p.expect(TK_AND)?;
     let lifetime: Option<LifetimeNode> = if _gale_kind_set_12(p.peek_kind()) {
@@ -35395,7 +35384,7 @@ fn parse_reference_type__follow_35(p: &mut Parser) -> Result<ReferenceTypeNode, 
     });
 }
 
-fn scan_closure_expression__follow_36(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_closure_expression__follow_35(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_KW_MOVE {
         let sp = pos;
@@ -35416,7 +35405,7 @@ fn scan_closure_expression__follow_36(tokens: &Array<Token>, pos: i32, min_prec:
             sg_218_1: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_OR { break sg_218_1; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_76(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_117(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_closure_parameters(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
@@ -35454,7 +35443,7 @@ fn scan_closure_expression__follow_36(tokens: &Array<Token>, pos: i32, min_prec:
     return pos;
 }
 
-fn parse_closure_expression__follow_36(p: &mut Parser) -> Result<ClosureExpressionNode, ParseError> {
+fn parse_closure_expression__follow_35(p: &mut Parser) -> Result<ClosureExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let kw_move: Option<Token> = if p.peek_kind() == TK_KW_MOVE {
         let kw_move = p.expect(TK_KW_MOVE)?;
@@ -35471,7 +35460,7 @@ fn parse_closure_expression__follow_36(p: &mut Parser) -> Result<ClosureExpressi
         }));
     } else if grp_kind == TK_OR {
         let or = p.expect(TK_OR)?;
-        let closure_parameters: Option<ClosureParametersNode> = if _gale_kind_set_80(p.peek_kind()) {
+        let closure_parameters: Option<ClosureParametersNode> = if _gale_kind_set_76(p.peek_kind()) {
             let closure_parameters = parse_closure_parameters(p)?;
             Option::<ClosureParametersNode>::Some(closure_parameters)
         } else {
@@ -35511,7 +35500,7 @@ fn parse_closure_expression__follow_36(p: &mut Parser) -> Result<ClosureExpressi
     });
 }
 
-fn scan_maybe_named_param__follow_37(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_maybe_named_param__follow_36(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos].kind == TK_POUND {
         let sp = pos;
@@ -35555,7 +35544,7 @@ fn scan_maybe_named_param__follow_37(tokens: &Array<Token>, pos: i32, min_prec: 
     return pos;
 }
 
-fn parse_maybe_named_param__follow_37(p: &mut Parser) -> Result<MaybeNamedParamNode, ParseError> {
+fn parse_maybe_named_param__follow_36(p: &mut Parser) -> Result<MaybeNamedParamNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
     loop {
@@ -35632,11 +35621,11 @@ fn parse_maybe_named_param__follow_37(p: &mut Parser) -> Result<MaybeNamedParamN
     });
 }
 
-fn scan_type_path_segment__follow_38(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_type_path_segment__follow_37(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_path_ident_segment(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && _gale_kind_set_100(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_99(tokens[pos].kind) {
         let sp = pos;
         let gp_223 = pos;
         sg_223: {
@@ -35659,7 +35648,7 @@ fn scan_type_path_segment__follow_38(tokens: &Array<Token>, pos: i32, min_prec: 
     return pos;
 }
 
-fn parse_type_path_segment__follow_38(p: &mut Parser) -> Result<TypePathSegmentNode, ParseError> {
+fn parse_type_path_segment__follow_37(p: &mut Parser) -> Result<TypePathSegmentNode, ParseError> {
     let start = p.peek().span.start;
     let path_ident_segment = parse_path_ident_segment(p)?;
     let pathsep: Option<Token> = null;
@@ -40316,7 +40305,7 @@ fn _gale_kind_set_75(k: i32) -> bool {
 }
 
 fn _gale_kind_set_76(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_POUND | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
+    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_OR | TK_PATHSEP | TK_POUND | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
 fn _gale_kind_set_77(k: i32) -> bool {
@@ -40332,155 +40321,155 @@ fn _gale_kind_set_79(k: i32) -> bool {
 }
 
 fn _gale_kind_set_80(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_OR | TK_PATHSEP | TK_POUND | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
-}
-
-fn _gale_kind_set_81(k: i32) -> bool {
     return k matches { TK_AND | TK_ANDAND | TK_BYTE_STRING_LITERAL | TK_DOTDOT | TK_KW_FALSE | TK_KW_MUT | TK_KW_REF | TK_KW_TRUE | TK_LPAREN | TK_LSQUAREBRACKET | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
-fn _gale_kind_set_82(k: i32) -> bool {
+fn _gale_kind_set_81(k: i32) -> bool {
     return k matches { TK_BYTE_LITERAL | TK_CHAR_LITERAL | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
 }
 
-fn _gale_kind_set_83(k: i32) -> bool {
+fn _gale_kind_set_82(k: i32) -> bool {
     return k matches { TK_KW_MUT | TK_KW_REF };
 }
 
-fn _gale_kind_set_84(k: i32) -> bool {
+fn _gale_kind_set_83(k: i32) -> bool {
     return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_PATHSEP };
 }
 
-fn _gale_kind_set_85(k: i32) -> bool {
+fn _gale_kind_set_84(k: i32) -> bool {
     return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
 }
 
-fn _gale_kind_set_86(k: i32) -> bool {
+fn _gale_kind_set_85(k: i32) -> bool {
     return k matches { TK_DOTDOT | TK_INTEGER_LITERAL | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_NON_KEYWORD_IDENTIFIER | TK_POUND | TK_RAW_IDENTIFIER };
 }
 
-fn _gale_kind_set_87(k: i32) -> bool {
+fn _gale_kind_set_86(k: i32) -> bool {
     return k matches { TK_DOTDOT | TK_POUND };
 }
 
-fn _gale_kind_set_88(k: i32) -> bool {
+fn _gale_kind_set_87(k: i32) -> bool {
     return k matches { TK_INTEGER_LITERAL | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
 }
 
-fn _gale_kind_set_89(k: i32) -> bool {
+fn _gale_kind_set_88(k: i32) -> bool {
     return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_OR | TK_PATHSEP | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
-fn _gale_kind_set_90(k: i32) -> bool {
+fn _gale_kind_set_89(k: i32) -> bool {
     return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_OR | TK_PATHSEP | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
-fn _gale_kind_set_91(k: i32) -> bool {
+fn _gale_kind_set_90(k: i32) -> bool {
     return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_FOR | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_LPAREN | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER };
 }
 
-fn _gale_kind_set_92(k: i32) -> bool {
+fn _gale_kind_set_91(k: i32) -> bool {
     return k matches { TK_AND | TK_KW_EXTERN | TK_KW_UNSAFE | TK_LSQUAREBRACKET | TK_LT | TK_NOT | TK_STAR | TK_UNDERSCORE };
 }
 
-fn _gale_kind_set_93(k: i32) -> bool {
+fn _gale_kind_set_92(k: i32) -> bool {
     return k matches { TK_KW_DYN | TK_QUESTION };
 }
 
-fn _gale_kind_set_94(k: i32) -> bool {
+fn _gale_kind_set_93(k: i32) -> bool {
     return k matches { TK_KW_EXTERN | TK_KW_UNSAFE };
 }
 
-fn _gale_kind_set_95(k: i32) -> bool {
+fn _gale_kind_set_94(k: i32) -> bool {
     return k matches { TK_AND | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_UNDERLINELIFETIME | TK_KW_UNSAFE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_PATHSEP | TK_POUND | TK_QUESTION | TK_RAW_IDENTIFIER | TK_STAR | TK_UNDERSCORE };
 }
 
-fn _gale_kind_set_96(k: i32) -> bool {
+fn _gale_kind_set_95(k: i32) -> bool {
     return k matches { TK_AND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNDERLINELIFETIME | TK_KW_UNSAFE | TK_LCURLYBRACE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_PATHSEP | TK_QUESTION | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
-fn _gale_kind_set_97(k: i32) -> bool {
+fn _gale_kind_set_96(k: i32) -> bool {
     return k matches { TK_AND | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FOR | TK_KW_IMPL | TK_KW_SELFTYPE | TK_KW_UNSAFE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_NOT | TK_PATHSEP | TK_QUESTION | TK_STAR | TK_UNDERSCORE };
 }
 
-fn _gale_kind_set_98(k: i32) -> bool {
+fn _gale_kind_set_97(k: i32) -> bool {
     return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_SELFVALUE | TK_KW_SUPER };
 }
 
-fn _gale_kind_set_99(k: i32) -> bool {
+fn _gale_kind_set_98(k: i32) -> bool {
     return k matches { TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_FALSE | TK_KW_TRUE | TK_LCURLYBRACE | TK_MINUS | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL };
 }
 
-fn _gale_kind_set_100(k: i32) -> bool {
+fn _gale_kind_set_99(k: i32) -> bool {
     return k matches { TK_LPAREN | TK_LT };
 }
 
-fn _gale_kind_set_101(k: i32) -> bool {
+fn _gale_kind_set_100(k: i32) -> bool {
     return k matches { TK_KW_CRATE | TK_KW_IN | TK_KW_SELFVALUE | TK_KW_SUPER };
 }
 
-fn _gale_kind_set_102(k: i32) -> bool {
+fn _gale_kind_set_101(k: i32) -> bool {
     return k matches { TK_KW_ABSTRACT | TK_KW_AS | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_BECOME | TK_KW_BOX | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_DO | TK_KW_DYN | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FINAL | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MACRO | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATIC | TK_KW_STATICLIFETIME | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TRY | TK_KW_TYPE | TK_KW_TYPEOF | TK_KW_UNION | TK_KW_UNSAFE | TK_KW_UNSIZED | TK_KW_USE | TK_KW_VIRTUAL | TK_KW_WHERE | TK_KW_WHILE | TK_KW_YIELD };
 }
 
-fn _gale_kind_set_103(k: i32) -> bool {
+fn _gale_kind_set_102(k: i32) -> bool {
     return k matches { TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
 }
 
-fn _gale_kind_set_104(k: i32) -> bool {
+fn _gale_kind_set_103(k: i32) -> bool {
     return k matches { TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_ABSTRACT | TK_KW_AS | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_BECOME | TK_KW_BOX | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_DO | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FINAL | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MACRO | TK_KW_MACRORULES | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATIC | TK_KW_STATICLIFETIME | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TRY | TK_KW_TYPE | TK_KW_TYPEOF | TK_KW_UNDERLINELIFETIME | TK_KW_UNION | TK_KW_UNSAFE | TK_KW_UNSIZED | TK_KW_USE | TK_KW_VIRTUAL | TK_KW_WHERE | TK_KW_WHILE | TK_KW_YIELD | TK_LIFETIME_OR_LABEL | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL };
 }
 
-fn _gale_kind_set_105(k: i32) -> bool {
+fn _gale_kind_set_104(k: i32) -> bool {
     return k matches { TK_KW_ASYNC | TK_KW_CONST | TK_KW_EXTERN | TK_KW_IMPL | TK_KW_MOD | TK_KW_TRAIT | TK_KW_UNSAFE };
 }
 
-fn _gale_kind_set_106(k: i32) -> bool {
+fn _gale_kind_set_105(k: i32) -> bool {
     return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNDERLINELIFETIME | TK_KW_UNSAFE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_PATHSEP | TK_QUESTION | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
-fn _gale_kind_set_107(k: i32) -> bool {
+fn _gale_kind_set_106(k: i32) -> bool {
     return k matches { TK_KW_IMPL | TK_KW_UNSAFE };
 }
 
-fn _gale_kind_set_108(k: i32) -> bool {
+fn _gale_kind_set_107(k: i32) -> bool {
     return k matches { TK_KW_MACRORULES | TK_LIFETIME_OR_LABEL | TK_NON_KEYWORD_IDENTIFIER | TK_POUND | TK_RAW_IDENTIFIER };
 }
 
-fn _gale_kind_set_109(k: i32) -> bool {
+fn _gale_kind_set_108(k: i32) -> bool {
     return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_DOTDOTEQ | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_ASYNC | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_LET | TK_KW_LOOP | TK_KW_MACRORULES | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_PUB | TK_KW_RETURN | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNION | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHILE | TK_LCURLYBRACE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_OROR | TK_PATHSEP | TK_POUND | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL };
 }
 
-fn _gale_kind_set_110(k: i32) -> bool {
+fn _gale_kind_set_109(k: i32) -> bool {
     return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
-fn _gale_kind_set_111(k: i32) -> bool {
+fn _gale_kind_set_110(k: i32) -> bool {
     return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
 }
 
-fn _gale_kind_set_112(k: i32) -> bool {
+fn _gale_kind_set_111(k: i32) -> bool {
     return k matches { TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_MINUS };
 }
 
-fn _gale_kind_set_113(k: i32) -> bool {
+fn _gale_kind_set_112(k: i32) -> bool {
     return k matches { TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
 }
 
-fn _gale_kind_set_114(k: i32) -> bool {
+fn _gale_kind_set_113(k: i32) -> bool {
     return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FOR | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNSAFE | TK_LPAREN | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER };
 }
 
-fn _gale_kind_set_115(k: i32) -> bool {
+fn _gale_kind_set_114(k: i32) -> bool {
     return k matches { TK_DOLLAR | TK_LCURLYBRACE | TK_LPAREN | TK_LSQUAREBRACKET };
 }
 
-fn _gale_kind_set_116(k: i32) -> bool {
+fn _gale_kind_set_115(k: i32) -> bool {
     return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_DOTDOTEQ | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_ASYNC | TK_KW_BREAK | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_FOR | TK_KW_IF | TK_KW_LOOP | TK_KW_MACRORULES | TK_KW_MATCH | TK_KW_MOVE | TK_KW_RETURN | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNSAFE | TK_KW_WHILE | TK_LCURLYBRACE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_OROR | TK_POUND | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL };
 }
 
-fn _gale_kind_set_117(k: i32) -> bool {
+fn _gale_kind_set_116(k: i32) -> bool {
     return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_DOTDOTEQ | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_ASYNC | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_LET | TK_KW_LOOP | TK_KW_MACRORULES | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_PUB | TK_KW_RETURN | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNION | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHILE | TK_LCURLYBRACE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_OROR | TK_POUND | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_SEMI | TK_STAR | TK_STRING_LITERAL };
+}
+
+fn _gale_kind_set_117(k: i32) -> bool {
+    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_OR | TK_POUND | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
 fn _gale_kind_set_118(k: i32) -> bool {

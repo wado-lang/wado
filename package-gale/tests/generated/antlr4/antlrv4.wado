@@ -4310,7 +4310,7 @@ fn scan_parser_rule_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_12(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_rule_modifiers(tokens, pos, 0);
+        pos = scan_rule_modifiers__follow_0(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_RULE_REF { return -1; }
@@ -5123,7 +5123,7 @@ fn scan_ebnf(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && _gale_kind_set_4(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_block_suffix(tokens, pos, 0);
+        pos = scan_block_suffix__follow_2(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     return pos;
