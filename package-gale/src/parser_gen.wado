@@ -75,7 +75,7 @@ use {
     rule_header,
     rule_alt_body,
 } from "./gir.wado";
-use { is_left_recursive, is_prefix_alt, is_self_ref_element, unwrap_label } from "./lr_util.wado";
+use { is_self_ref_element, unwrap_label } from "./lr_util.wado";
 
 fn first_contains(first: &Array<String>, token: &String) -> bool {
     for let item of first {
@@ -1416,24 +1416,18 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule,
 /// `false` for variants — variants are only emitted for non-LR rules
 /// today, so callers ensure the rule is non-LR before dispatching.
 fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext, fn_name: &String, allow_lr_split: bool) {
-    let mut lr_indices: Array<i32> = [];
-    let mut non_lr_indices: Array<i32> = [];
-    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-        if is_left_recursive(&rule.alternatives[i], &rule.name) {
-            lr_indices.push(i);
-        } else {
-            non_lr_indices.push(i);
+    if let LeftRecursive(l) = lowered_rule {
+        if allow_lr_split {
+            // LR rule: project the atom's alt indices into the
+            // surface-rule numbering so `gen_scan_lr_functions` can
+            // walk surface alts for the atom-side scan body.
+            let mut non_lr_indices: Array<i32> = [];
+            for let alt of &l.atom.alts {
+                non_lr_indices.push(alt.alt_index);
+            }
+            gen_scan_lr_functions(w, rule, &l.lr_alts, &l.lr_dispatch, &non_lr_indices, ctx, fn_name);
+            return;
         }
-    }
-
-    if lr_indices.len() > 0 && allow_lr_split {
-        let lr_data = if let LeftRecursive(l) = lowered_rule {
-            [&l.lr_alts, &l.lr_dispatch];
-        } else {
-            panic("gen_scan_function_named: lr_indices non-empty but lowered_rule is not LeftRecursive");
-        };
-        gen_scan_lr_functions(w, rule, lr_data.0, lr_data.1, &non_lr_indices, ctx, fn_name);
-        return;
     }
 
     let mut f = FnSpec::new(fn_name);
@@ -2705,11 +2699,24 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
 
     let case_names = case_names_for_rule(&rule.alternatives);
 
+    // Project the lowered rule's alt partition into surface alt
+    // indices. For LR rules, atom alts are non-LR; for `Simple` /
+    // `MultiAlt` rules every alt is non-LR.
     let mut non_lr_indices: Array<i32> = [];
-    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-        if !is_left_recursive(&rule.alternatives[i], &rule.name) {
-            non_lr_indices.push(i);
-        }
+    match lowered_rule {
+        Simple(_) => {
+            non_lr_indices.push(0);
+        },
+        MultiAlt(m) => {
+            for let alt of &m.alts {
+                non_lr_indices.push(alt.alt_index);
+            }
+        },
+        LeftRecursive(l) => {
+            for let alt of &l.atom.alts {
+                non_lr_indices.push(alt.alt_index);
+            }
+        },
     }
 
     let mut first_sets: Array<Array<String>> = [];
@@ -2782,13 +2789,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         }
     }
 
-    let mut lr_indices: Array<i32> = [];
-    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-        if is_left_recursive(&rule.alternatives[i], &rule.name) {
-            lr_indices.push(i);
-        }
-    }
-    let has_lr = lr_indices.len() > 0;
+    let has_lr = match lowered_rule { LeftRecursive(_) => true, _ => false };
 
     if has_lr {
         let atom_name = `{*fn_name}_atom`;
