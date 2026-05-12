@@ -923,85 +923,6 @@ fn sll_find_common_terminal(configs: &Array<SllConfig>) -> Option<Element> {
     return null;
 }
 
-/// Check if all alternatives start with the same element (TokenRef, Literal, or RuleRef).
-fn find_common_prefix_element(alt_elements: &Array<Array<Element>>) -> Option<Element> {
-    if alt_elements.len() < 2 {
-        return null;
-    }
-    // All alternatives must be non-empty.
-    for let elems of alt_elements {
-        if elems.len() == 0 {
-            return null;
-        }
-    }
-    let first_elem = &alt_elements[0][0];
-    if let TokenRef(t) = first_elem {
-        for let mut i = 1; i < alt_elements.len(); i += 1 {
-            if let TokenRef(other) = alt_elements[i][0] {
-                if other.name != t.name {
-                    return null;
-                }
-            } else {
-                return null;
-            }
-        }
-        return Option::<Element>::Some(*first_elem);
-    }
-    if let Literal(l) = first_elem {
-        for let mut i = 1; i < alt_elements.len(); i += 1 {
-            if let Literal(other) = alt_elements[i][0] {
-                if other.text != l.text {
-                    return null;
-                }
-            } else {
-                return null;
-            }
-        }
-        return Option::<Element>::Some(*first_elem);
-    }
-    if let RuleRef(r) = first_elem {
-        for let mut i = 1; i < alt_elements.len(); i += 1 {
-            if let RuleRef(other) = alt_elements[i][0] {
-                if other.name != r.name {
-                    return null;
-                }
-            } else {
-                return null;
-            }
-        }
-        return Option::<Element>::Some(*first_elem);
-    }
-    return null;
-}
-
-/// Return elements from index `start` onward.
-fn elements_suffix(elements: &Array<Element>, start: i32) -> Array<Element> {
-    let mut result: Array<Element> = [];
-    for let mut i = start; i < elements.len(); i += 1 {
-        result.push(elements[i]);
-    }
-    return result;
-}
-
-/// Compute first set of a sequence of elements.
-fn first_of_elements(elements: &Array<Element>, ctx: &mut GenContext, visiting: &mut Array<String>) -> Array<String> {
-    let mut result: Array<String> = [];
-    let mut seen = TreeSet::<String>::new();
-    for let elem of elements {
-        let ef = ctx.first_of_element(elem, visiting);
-        for let tk of ef {
-            if !seen.contains(tk) {
-                seen.insert(tk);
-                result.push(tk);
-            }
-        }
-        if !is_nullable(elem) {
-            break;
-        }
-    }
-    return result;
-}
-
 fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
     return match [*a, *b] {
         [Leaf(ai), Leaf(bi)] => ai == bi,
@@ -1028,35 +949,6 @@ fn element_eq(a: &Element, b: &Element) -> bool {
         [Literal(ta), Literal(tb)] => ta.text == tb.text,
         _ => false,
     };
-}
-
-fn compute_deeper_first(elements: &Array<Element>, depth: i32, ctx: &mut GenContext) -> Array<String> {
-    let mut pos = 0;
-    let mut remaining = depth;
-    while pos < elements.len() && remaining > 0 {
-        let elem = &elements[pos];
-        if let TokenRef(_) | Literal(_) = elem {
-            remaining -= 1;
-            pos += 1;
-            continue;
-        }
-        if is_nullable(elem) {
-            pos += 1;
-            continue;
-        }
-        // SLL advancement: single-token RuleRef consumes exactly 1 token,
-        // so we can safely advance past it and look at the next element.
-        if let RuleRef(r) = elem {
-            let mut visiting: Array<String> = [];
-            if ctx.rule_is_single_token(&r.name, &mut visiting) {
-                remaining -= 1;
-                pos += 1;
-                continue;
-            }
-        }
-        return [];
-    }
-    return ctx.first_of_elements_from(elements, pos);
 }
 
 fn array_contains_i32(arr: &Array<i32>, val: i32) -> bool {
@@ -2011,24 +1903,6 @@ fn i32_arrays_equal(a: &Array<i32>, b: &Array<i32>) -> bool {
         }
     }
     return true;
-}
-
-fn build_scan_lookahead_condition(ctx: &mut GenContext, pos_sets: &Array<Array<String>>, depth: i32) -> String {
-    let mut cond = String::with_capacity(128);
-    for let mut d = 0; d < depth; d += 1 {
-        if d > 0 {
-            cond.push_str(" && ");
-        }
-        let tokens = &pos_sets[d];
-        if d == 0 {
-            cond.push_str(ctx.kind_check_str(tokens, &"alt_kind"));
-        } else {
-            cond.push_str(`pos + {d} < tokens.len() && `);
-            let tok_expr = `tokens[pos + {d}].kind`;
-            cond.push_str(ctx.kind_check_str(tokens, &tok_expr));
-        }
-    }
-    return cond;
 }
 
 /// Scan-side twin of `gen_repeat_with_follow`. Subtracts `follow_first`
@@ -4649,19 +4523,6 @@ fn is_list_label(elem: &Element) -> bool {
         return lab.list;
     }
     return false;
-}
-
-/// For a list-label element, returns [label_field_name, array_type_str,
-/// inner_type_str, inner_field_name]. Returns null for non-list-labels.
-fn list_label_info(elem: &Element, ctx: &mut GenContext) -> Option<[String, String, String, String]> {
-    if let Label(lab) = elem {
-        if lab.list {
-            let inner = element_field_info(&lab.element, ctx);
-            return Option::<[String, String, String, String]>::Some([lab.field_name, `Array<{inner.1}>`, inner.1,
-                inner.0]);
-        }
-    }
-    return null;
 }
 
 fn element_field_info(elem: &Element, ctx: &mut GenContext) -> [String, String] {
