@@ -3696,13 +3696,6 @@ pub struct TirModule {
     pub data_section: Option<String>,
     /// `#![wasm_module("name")]` — items in this module compile to a separate Wasm core module.
     pub wasm_module: Option<String>,
-    pub string_literals: Vec<String>,
-    /// Byte array literals from `#include_bytes` (for data segments)
-    pub bytes_literals: Vec<Vec<u8>>,
-    /// Map of (`module_source`, function name) to string literals it contains (for DCE)
-    pub function_strings: IndexMap<(ModuleSource, String), Vec<String>>,
-    /// Map of (`module_source`, function name) to its method info (for DCE), populated alongside `function_strings`
-    pub function_method_info: IndexMap<(ModuleSource, String), Option<LocalMethodName>>,
     /// Generic struct definitions (before monomorphization)
     /// Key: (struct name, module source)
     pub generic_structs: IndexMap<(String, ModuleSource), TirStruct>,
@@ -3711,9 +3704,6 @@ pub struct TirModule {
     pub generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>>,
     /// Requested instantiations (populated during resolution, processed in lower)
     pub instantiation_requests: IndexSet<InstantiationKey>,
-    /// Closure metadata for optimization (populated by lower phase).
-    /// Maps closure ID to functor info including the `__call` method for inlining.
-    pub closure_functors: Vec<ClosureFunctor>,
 }
 
 impl TirModule {
@@ -3737,14 +3727,9 @@ impl TirModule {
             globals: Vec::new(),
             data_section: None,
             wasm_module: None,
-            string_literals: Vec::new(),
-            bytes_literals: Vec::new(),
-            function_strings: IndexMap::default(),
-            function_method_info: IndexMap::default(),
             generic_structs: IndexMap::default(),
             generic_functions: IndexMap::default(),
             instantiation_requests: IndexSet::default(),
-            closure_functors: Vec::new(),
         }
     }
 
@@ -3771,14 +3756,9 @@ impl TirModule {
             globals: Vec::new(),
             data_section: None,
             wasm_module: None,
-            string_literals: Vec::new(),
-            bytes_literals: Vec::new(),
-            function_strings: IndexMap::default(),
-            function_method_info: IndexMap::default(),
             generic_structs: IndexMap::default(),
             generic_functions: IndexMap::default(),
             instantiation_requests: IndexSet::default(),
-            closure_functors: Vec::new(),
         }
     }
 

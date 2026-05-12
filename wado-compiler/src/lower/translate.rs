@@ -69,19 +69,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         globals,
         imports,
         tests,
-        // `string_literals` / `bytes_literals` / `function_strings` /
-        // `function_method_info` are now collected by
-        // `lower::plan::string` and live on `strings` (above) instead
-        // of being threaded through `FlatPackage`.
-        string_literals: _,
-        bytes_literals: _,
-        // `closure_functors` are produced by `lower::plan::closure`
-        // and live on `closure.functor_infos` (above); the
-        // `FlatPackage` field is unused and will be removed in a
-        // subsequent cleanup pass.
-        closure_functors: _,
-        function_strings: _,
-        function_method_info: _,
         wasm_module_sources,
         module_name,
         wasi_registry,
