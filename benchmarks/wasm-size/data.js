@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778547404267,
+  "lastUpdate": 1778588959356,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21309,6 +21309,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fb9e67d7a9d9f05b5d76138f4255d0bb16335325"
         },
         "date": 1778547403883,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 512036,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1e6a5e661e9dd6e5b3399de88c7d1ba8cfddd89f",
+          "message": "Merge pull request #1051 from wado-lang/claude/evaluate-nir-lower-phase-Lu1Gv\n\nrefactor(compiler): split lower into planner + TIR→NIR translator",
+          "timestamp": "2026-05-12T21:22:24+09:00",
+          "tree_id": "0a349ffa1f88e199e6a92356111b22eedab31c77",
+          "url": "https://github.com/wado-lang/wado/commit/1e6a5e661e9dd6e5b3399de88c7d1ba8cfddd89f"
+        },
+        "date": 1778588959209,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
