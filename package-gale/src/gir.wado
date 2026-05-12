@@ -540,6 +540,17 @@ pub struct RepeatOp {
     /// non-greedy (continue/exit disambiguation). Empty when the
     /// Repeat is at the alt's tail.
     pub caller_follow_first: Array<String>,
+    /// True iff the inner element is fully scannable (has a complete
+    /// `scan_<rule>` / inline scan equivalent). Drives emit's choice
+    /// between `loop` + scan-guard and `while` + first-check loop
+    /// shapes. Precomputed so emit doesn't re-run
+    /// `ctx.is_element_scannable` at each Repeat dispatch.
+    pub body_scannable: bool,
+    /// True iff the inner element contributes a CST field — i.e.
+    /// emit's Repeat surfaces a storable `Option<T>` (`Optional`) or
+    /// `Array<T>` (`Star` / `Plus`) field. False for `Transparent`
+    /// groups and other non-storable shapes.
+    pub body_has_field: bool,
 }
 
 pub struct GroupOp {

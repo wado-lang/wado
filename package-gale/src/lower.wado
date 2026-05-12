@@ -63,6 +63,7 @@ use {
     general_group_type_name,
     general_group_field_name,
     general_group_alt_struct_name,
+    is_storable_group,
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { GenContext } from "./gen_context.wado";
@@ -722,7 +723,7 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
                 body: rep_op.body,
                 strategy: rep_op.strategy,
                 field: rep_op.field,
-                caller_follow_first: basic_follow,
+                caller_follow_first: basic_follow, body_scannable: rep_op.body_scannable, body_has_field: rep_op.body_has_field,
             });
         }
         ops.push(op);
@@ -1364,7 +1365,7 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
                 body: rep_op.body,
                 strategy: rep_op.strategy,
                 field: rep_op.field,
-                caller_follow_first: basic_follow,
+                caller_follow_first: basic_follow, body_scannable: rep_op.body_scannable, body_has_field: rep_op.body_has_field,
             });
         }
         ops.push(op);
@@ -1552,7 +1553,7 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
                 body: rep_op.body,
                 strategy: rep_op.strategy,
                 field: rep_op.field,
-                caller_follow_first: basic_follow,
+                caller_follow_first: basic_follow, body_scannable: rep_op.body_scannable, body_has_field: rep_op.body_has_field,
             });
         }
         ops.push(op);
@@ -1819,7 +1820,7 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
                     body: rep_op.body,
                     strategy: rep_op.strategy,
                     field: rep_op.field,
-                    caller_follow_first: basic_follow,
+                    caller_follow_first: basic_follow, body_scannable: rep_op.body_scannable, body_has_field: rep_op.body_has_field,
                 });
             }
             ops.push(op);
@@ -1970,13 +1971,35 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     } else {
         lower_op(&rep.element, &mut inner_counts, rule_name, ctx, group_counter, &iter_follow);
     };
+    let mut body_visiting: Array<String> = [];
+    let body_scannable = ctx.is_element_scannable(&rep.element, &mut body_visiting);
+    let body_has_field = element_has_field(&rep.element);
     return Op::Repeat(RepeatOp {
         kind: rep.kind,
         body,
         strategy: strategy,
         field: outer_field,
         caller_follow_first: *outer_follow,
+        body_scannable,
+        body_has_field,
     });
+}
+
+/// True iff the surface `Element` contributes a CST field. Mirror of
+/// `parser_gen::has_field`, kept in lower so the result can be baked
+/// into `RepeatOp.body_has_field` without forcing emit to keep the
+/// surface predicate alive.
+fn element_has_field(elem: &Element) -> bool {
+    if let TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) = elem {
+        return true;
+    }
+    if let Label(lab) = elem {
+        return element_has_field(&lab.element);
+    }
+    if let Group(g) = elem {
+        return is_storable_group(&g.alternatives);
+    }
+    return false;
 }
 
 /// Try to materialise an `OptionalLookahead` strategy for an
@@ -2541,6 +2564,8 @@ fn rebind_op_field(op: Op, new_field: &String) -> Op {
             strategy: rep.strategy,
             field: *new_field,
             caller_follow_first: rep.caller_follow_first,
+            body_scannable: rep.body_scannable,
+            body_has_field: rep.body_has_field,
         }),
         Group(g) => Op::Group(GroupOp {
             shape: rebind_group_shape(g.shape, new_field),
