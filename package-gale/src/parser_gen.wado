@@ -1499,9 +1499,18 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &A
         f.emit_begin(w);
         w.line("let mut pos = pos;");
 
-        // Walk alt.elements[1..] in lockstep with lr_alt.suffix.ops; the
-        // self-recursive call's `min_prec_arg` is baked in by lower's
-        // `stamp_lr_self_ref_min_prec`.
+        // Walk alt.elements[1..] in lockstep with lr_alt.suffix.ops and
+        // lr_alt.scan_suffix.elements (`scan_suffix.elements[k]`
+        // corresponds to `alt.elements[k+1]` and to
+        // `lr_alt.suffix.ops[k]`). Two cases need data only the parse-
+        // side suffix_op carries today:
+        //   * self-recursive RuleRef → emit with the precedence
+        //     `stamp_lr_self_ref_min_prec` baked onto the parse op.
+        //   * Optional+RuleRef-inner → emit with the
+        //     `caller_follow_first` baked onto the parse RepeatOp.
+        // The remaining element shapes go through the op-driven
+        // `gen_scan_op_element` against the lower-baked
+        // `ScanElement` directly.
         for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
             let elem = &alt.elements[ei];
             let suffix_op = &lr_alt.suffix.ops[ei - 1];
@@ -1523,7 +1532,8 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &A
                     }
                 }
             }
-            gen_scan_element(w, elem, ctx, &"return -1;");
+            let scan_elem = &lr_alt.scan_suffix.elements[ei - 1];
+            gen_scan_op_element(w, scan_elem, ctx, &"return -1;");
         }
         w.line("return pos;");
         w.end();
