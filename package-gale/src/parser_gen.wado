@@ -3809,7 +3809,18 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
     // scan-guarded or first-check loop based on `body_scannable`.
     // Inner emit goes through `gen_op_leaf` and consumes lower's
     // baked field / variant / kind values.
-    if op_is_leaf(&rep_op.body) {
+    //
+    // Optional + leaf falls through to the per-kind dispatch below so
+    // the dedup / emit decisions match `gen_repeat_body`'s Optional
+    // arm (the Optional flavour does not produce an `Array<…>` list).
+    let is_star_or_plus = if let Star = rep.kind {
+        true;
+    } else if let Plus = rep.kind {
+        true;
+    } else {
+        false;
+    };
+    if is_star_or_plus && op_is_leaf(&rep_op.body) {
         let inner = &rep.element;
         let mut visiting: Array<String> = [];
         let inner_first = ctx.first_of_element(inner, &mut visiting);
@@ -3876,15 +3887,21 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
             return;
         }
     }
-    // Greedy Optional + leaf-shaped inner: subtract the caller-side
+    // Greedy Optional + RuleCall-shaped inner: subtract the caller-side
     // follow from the inner's first set to gate the optional fire.
     // Op-driven inline of the former `gen_repeat_with_follow` — field
     // names / types come from `rep_op.field` / `op_field_type`, and
-    // inner emit goes through `gen_op_leaf`. Covers Token / Literal /
-    // RuleCall / Wildcard / Excluded — every leaf op shape lower
-    // recognises.
+    // inner emit goes through `gen_op_leaf`. Limited to RuleCall: for
+    // Token / Literal / Wildcard / Excluded inners the caller-side
+    // follow is part of the grammar's natural ambiguity (e.g.
+    // `attach_stmt : K_ATTACH (K_DATABASE)? expr ...` where
+    // `first(expr)` legitimately contains `K_DATABASE` via
+    // `name → keyword`). Subtracting it would suppress the optional
+    // even when the input actually begins with that token. Non-RuleCall
+    // leaves fall through to `gen_repeat` / `gen_repeat_body`, which
+    // gates on `first - current_follow_mask` only.
     if let Optional = rep.kind {
-        if op_is_leaf(&rep_op.body) {
+        if op_is_rulecall(&rep_op.body) {
             let inner = &rep.element;
             let mut visiting: Array<String> = [];
             let raw_first = ctx.first_of_element(inner, &mut visiting);
@@ -3915,8 +3932,8 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
                 w.line("null");
                 w.end_with(";");
             } else {
-                // Every leaf op carries a CST field; this branch is unreachable.
-                panic("gen_op_repeat_with_follow_override: leaf Optional with no field");
+                // RuleCall always has a field; this branch is unreachable.
+                panic("gen_op_repeat_with_follow_override: RuleCall Optional with no field");
             }
             return;
         }
