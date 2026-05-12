@@ -53,6 +53,8 @@ use {
     SimpleRule,
     MultiAltRule,
     LeftRecursiveRule,
+    LrAlt,
+    LrDispatchData,
     AltBody,
     Op,
     TokenOp,
@@ -1425,12 +1427,12 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
     }
 
     if lr_indices.len() > 0 && allow_lr_split {
-        let lr_alts = if let LeftRecursive(l) = lowered_rule {
-            &l.lr_alts;
+        let lr_data = if let LeftRecursive(l) = lowered_rule {
+            [&l.lr_alts, &l.lr_dispatch];
         } else {
             panic("gen_scan_function_named: lr_indices non-empty but lowered_rule is not LeftRecursive");
         };
-        gen_scan_lr_functions(w, rule, lr_alts, &non_lr_indices, ctx, fn_name);
+        gen_scan_lr_functions(w, rule, lr_data.0, lr_data.1, &non_lr_indices, ctx, fn_name);
         return;
     }
 
@@ -1526,7 +1528,7 @@ fn single_token_first(elem: &Element) -> String {
 ///   - scan_X(tokens, pos, min_prec = 0): atom + precedence-aware LR-suffix
 ///     loop with token-kind dispatch and second-token overlap resolution.
 ///     Callers without a precedence context omit min_prec and get 0.
-fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<LrAlt>, non_lr_indices: &Array<i32>, ctx: &mut GenContext, fn_name: &String) {
+fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<LrAlt>, lr_dispatch: &LrDispatchData, non_lr_indices: &Array<i32>, ctx: &mut GenContext, fn_name: &String) {
     let atom_name = `{*fn_name}_atom`;
 
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
@@ -1568,11 +1570,7 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<
     f2.emit_begin(w);
     w.line(`let mut pos = {atom_name}(tokens, pos);`);
     w.line("if pos < 0 { return -1; }");
-    let mut lr_indices: Array<i32> = [];
-    for let lr_alt of lr_alts {
-        lr_indices.push(lr_alt.alt_index);
-    }
-    gen_scan_lr_suffix_dispatch(w, rule, &lr_indices, ctx, fn_name);
+    gen_scan_lr_suffix_dispatch(w, rule, lr_alts, lr_dispatch, ctx, fn_name);
     w.line("return pos;");
     w.end();
     w.blank();
@@ -1634,19 +1632,22 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &A
 /// side, with p.peek_kind() replaced by an inline bounds-checked read into
 /// `suffix_kind` and `result = fn(p, ...)?` replaced by `pos = fn(tokens, pos);
 /// if pos < 0 { return -1; }`.
-fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, ctx: &mut GenContext, fn_name: &String) {
-    let d = compute_lr_dispatch_data(rule, lr_indices, ctx);
+fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<LrAlt>, lr_dispatch: &LrDispatchData, ctx: &mut GenContext, fn_name: &String) {
+    let projected = project_lr_dispatch(lr_alts, lr_dispatch);
+    let valid_lr_indices = projected.0;
+    let lr_precs = projected.1;
+    let suffix_first_sets = projected.2;
 
     w.begin("loop");
     w.line("let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };");
 
     let mut is_first = true;
-    for let mut g = 0; g < d.groups.len(); g += 1 {
-        let group = &d.groups[g];
+    for let mut g = 0; g < lr_dispatch.groups.len(); g += 1 {
+        let group = &lr_dispatch.groups[g];
 
         let mut union_first: Array<String> = [];
         for let idx of group {
-            dedup_append_arr(&mut union_first, &d.suffix_first_sets[*idx]);
+            dedup_append_arr(&mut union_first, &suffix_first_sets[*idx]);
         }
 
         let cond = ctx.kind_check_str(&union_first, "suffix_kind");
@@ -1658,8 +1659,8 @@ fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_indices
         }
 
         if group.len() == 1 {
-            let lr_idx = d.valid_lr_indices[group[0]];
-            let prec = d.lr_precs[group[0]];
+            let lr_idx = valid_lr_indices[group[0]];
+            let prec = lr_precs[group[0]];
             let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
             gen_scan_lr_call_with_prec(w, &suffix_fn, prec);
         } else {
@@ -1668,9 +1669,9 @@ fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_indices
                 fn_name,
                 rule,
                 group,
-                &d.valid_lr_indices,
-                &d.lr_precs,
-                &d.suffix_first_sets,
+                &valid_lr_indices,
+                &lr_precs,
+                &suffix_first_sets,
                 ctx,
             );
         }
@@ -2804,11 +2805,13 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         w.end();
         w.blank();
 
-        let lr_alts = if let LeftRecursive(l) = lowered_rule {
-            &l.lr_alts;
+        let lr_data = if let LeftRecursive(l) = lowered_rule {
+            [&l.lr_alts, &l.lr_dispatch];
         } else {
             panic("gen_parse_fn_named: has_lr but lowered_rule is not LeftRecursive");
         };
+        let lr_alts = lr_data.0;
+        let lr_dispatch = lr_data.1;
         gen_lr_suffix_helpers(w, rule, &type_name, lr_alts, ctx, fn_name);
 
         // Generate parse_rule(p, min_prec = 0) — precedence-aware parser.
@@ -2824,7 +2827,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         f2.emit_begin(w);
         w.line("let start = p.peek().span.start;");
         w.line(`let mut result = {*fn_name}_atom(p)?;`);
-        gen_lr_suffix_dispatch(w, rule, &type_name, &lr_indices, ctx, true, fn_name, scan_fn_name);
+        gen_lr_suffix_dispatch(w, rule, &type_name, lr_alts, lr_dispatch, ctx, true, fn_name, scan_fn_name);
         w.line(`return Result::<{type_name}, ParseError>::Ok(result);`);
         w.end();
         w.blank();
@@ -5999,70 +6002,40 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &
     }
 }
 
-/// Precomputed per-LR-rule dispatch data shared between the parse-side and
-/// scan-side suffix dispatchers. `valid_lr_indices` lists LR alternatives whose
-/// suffix has a non-empty FIRST set (eligible for token-kind dispatch).
-/// `suffix_first_sets[i]` is FIRST(elements[1..]) of the i-th valid alt.
-/// `lr_precs[i]` is its precedence (first alt = highest = N, last = 1).
-/// `groups` partitions the valid alts by FIRST-set overlap so that each group
-/// becomes a single `if suffix_kind matches { ... }` branch; groups of size > 1
-/// are resolved via a second-token (peek_at(1)) sub-dispatch.
-struct LrDispatchData {
-    valid_lr_indices: Array<i32>,
-    suffix_first_sets: Array<Array<String>>,
-    lr_precs: Array<i32>,
-    groups: Array<Array<i32>>,
-}
-
-fn compute_lr_dispatch_data(rule: &ParserRule, lr_indices: &Array<i32>, ctx: &mut GenContext) -> LrDispatchData {
-    let total_lr = lr_indices.len();
-
+/// Project lower's `LrDispatchData` (which indexes into `lr_alts`)
+/// into emit's per-alt arrays — alt indices in `rule.alternatives`,
+/// per-alt precedence, per-alt suffix first set. Used by the suffix-
+/// dispatch and overlap-dispatch helpers that still reference alt
+/// indices directly.
+fn project_lr_dispatch(lr_alts: &Array<LrAlt>, lr_dispatch: &LrDispatchData) -> [Array<i32>, Array<i32>, Array<Array<String>>] {
     let mut valid_lr_indices: Array<i32> = [];
-    let mut suffix_first_sets: Array<Array<String>> = [];
     let mut lr_precs: Array<i32> = [];
-    let mut lr_position = 0;
-    for let lr_idx_ref of lr_indices {
-        let lr_idx = *lr_idx_ref;
-        let alt = &rule.alternatives[lr_idx];
-        if alt.elements.len() <= 1 {
-            lr_position += 1;
-            continue;
-        }
-        let suffix_first = ctx.first_of_elements_from(&alt.elements, 1);
-        if suffix_first.len() == 0 {
-            lr_position += 1;
-            continue;
-        }
-        valid_lr_indices.push(lr_idx);
-        suffix_first_sets.push(suffix_first);
-        // Precedence: first LR alt = highest (N), last = 1
-        lr_precs.push(total_lr - lr_position);
-        lr_position += 1;
+    let mut suffix_first_sets: Array<Array<String>> = [];
+    for let v of &lr_dispatch.valid_lr_alts {
+        let lr = &lr_alts[*v];
+        valid_lr_indices.push(lr.alt_index);
+        lr_precs.push(lr.own_prec);
+        suffix_first_sets.push(lr.suffix_first);
     }
-
-    let groups = compute_overlap_groups(&suffix_first_sets);
-
-    return LrDispatchData {
-        valid_lr_indices,
-        suffix_first_sets,
-        lr_precs,
-        groups,
-    };
+    return [valid_lr_indices, lr_precs, suffix_first_sets];
 }
 
-fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, ctx: &mut GenContext, use_prec: bool, fn_name: &String, scan_fn_name: &String) {
-    let d = compute_lr_dispatch_data(rule, lr_indices, ctx);
+fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_alts: &Array<LrAlt>, lr_dispatch: &LrDispatchData, ctx: &mut GenContext, use_prec: bool, fn_name: &String, scan_fn_name: &String) {
+    let projected = project_lr_dispatch(lr_alts, lr_dispatch);
+    let valid_lr_indices = projected.0;
+    let lr_precs = projected.1;
+    let suffix_first_sets = projected.2;
 
     w.begin("loop");
     w.line("let suffix_kind = p.peek_kind();");
 
     let mut is_first = true;
-    for let mut g = 0; g < d.groups.len(); g += 1 {
-        let group = &d.groups[g];
+    for let mut g = 0; g < lr_dispatch.groups.len(); g += 1 {
+        let group = &lr_dispatch.groups[g];
 
         let mut union_first: Array<String> = [];
         for let idx of group {
-            dedup_append_arr(&mut union_first, &d.suffix_first_sets[*idx]);
+            dedup_append_arr(&mut union_first, &suffix_first_sets[*idx]);
         }
 
         let cond = ctx.kind_check_str(&union_first, "suffix_kind");
@@ -6074,8 +6047,8 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
         }
 
         if group.len() == 1 {
-            let lr_idx = d.valid_lr_indices[group[0]];
-            let prec = d.lr_precs[group[0]];
+            let lr_idx = valid_lr_indices[group[0]];
+            let prec = lr_precs[group[0]];
             let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
             let scan_suffix_fn = `{*scan_fn_name}_lr_{lr_idx}`;
             gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec);
@@ -6086,9 +6059,9 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
                 scan_fn_name,
                 rule,
                 group,
-                &d.valid_lr_indices,
-                &d.lr_precs,
-                &d.suffix_first_sets,
+                &valid_lr_indices,
+                &lr_precs,
+                &suffix_first_sets,
                 ctx,
                 use_prec,
             );
