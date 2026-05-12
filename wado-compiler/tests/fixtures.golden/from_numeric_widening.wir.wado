@@ -46,27 +46,27 @@ type "functype//wado-compiler/tests/fixtures/from_numeric_widening.wado/__cm_bin
 
 type "functype//wado-compiler/tests/fixtures/from_numeric_widening.wado/__cm_export__run" = fn();  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/from_numeric_widening.wado/__initialize_module" = fn();  // TypeId(16)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(16)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(17)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(17)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(18)
+type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(18)
 
-type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(19)
+type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(19)
 
-type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(20)
+type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(20)
 
-type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(21)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(21)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(22)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(22)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(23)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(23)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(24)
+type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(24)
 
-type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(25)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(25)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(26)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(26)
 
 type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(27)
 
@@ -117,7 +117,7 @@ fn "wado-compiler/tests/fixtures/from_numeric_widening.wado/run"() with Stdout {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        "wado-compiler/tests/fixtures/from_numeric_widening.wado/__initialize_module"();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
     __v0_48 = __inline_i32_From_bool___from_158: block -> i32 {
@@ -177,14 +177,11 @@ fn "wado-compiler/tests/fixtures/from_numeric_widening.wado/__cm_export__run"() 
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        "wado-compiler/tests/fixtures/from_numeric_widening.wado/__initialize_module"();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/from_numeric_widening.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/from_numeric_widening.wado/__initialize_module"() {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
@@ -342,6 +339,9 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
             };
         };
     }
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {

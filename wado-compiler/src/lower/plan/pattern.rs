@@ -39,10 +39,7 @@ pub fn plan(flat: &mut FlatPackage) {
     let mut struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>> =
         IndexMap::default();
     for s in &flat.structs {
-        struct_fields_map.insert(
-            (s.name.clone(), s.module_source.clone()),
-            s.fields.clone(),
-        );
+        struct_fields_map.insert((s.name.clone(), s.module_source.clone()), s.fields.clone());
     }
 
     let type_table = flat.type_table.borrow();

@@ -61,14 +61,26 @@ pub(super) fn build_if_chain(
                 let eq_call =
                     create_i128_eq_call(scrutinee.clone(), literal_expr, type_table, span);
                 let condition = with_guard(eq_call, arm.guard.as_ref(), span);
-                else_expr = Some(build_if(condition, &arm.body, else_expr, result_type_id, span));
+                else_expr = Some(build_if(
+                    condition,
+                    &arm.body,
+                    else_expr,
+                    result_type_id,
+                    span,
+                ));
             }
             TirPattern::Literal(TirLiteralPattern::U128(value)) => {
                 let literal_expr = create_u128_literal(*value, scrutinee.type_id, span);
                 let eq_call =
                     create_u128_eq_call(scrutinee.clone(), literal_expr, type_table, span);
                 let condition = with_guard(eq_call, arm.guard.as_ref(), span);
-                else_expr = Some(build_if(condition, &arm.body, else_expr, result_type_id, span));
+                else_expr = Some(build_if(
+                    condition,
+                    &arm.body,
+                    else_expr,
+                    result_type_id,
+                    span,
+                ));
             }
             TirPattern::Wildcard | TirPattern::Binding { .. } => {
                 // Bindings on wide-int scrutinees act as catch-alls in
