@@ -1957,49 +1957,7 @@ fn gen_scan_repeat_optional_with_follow(w: &mut CodeWriter, rep: &RepeatElement,
     w.end();
 }
 
-/// Iterate `elements[start..end]` in scan mode and emit each element's
-/// scan code. For Optional(RuleRef) elements we compute a local
-/// follow-set (first-set of elements after `i`) and apply follow-set
-/// pruning — the scan-side twin of the parse-side
-/// `gen_repeat_with_follow` branch in `gen_alt_elements`. All other
-/// elements go through `gen_scan_element` (fail ⇒ `return -1;`).
-fn gen_scan_elements(w: &mut CodeWriter, elements: &Array<Element>, start: i32, end: i32, ctx: &mut GenContext) {
-    let saved_mask = ctx.current_follow_mask;
-    let saved_call_follow = ctx.ruleref_call_follow;
-    for let mut i = start; i < end; i += 1 {
-        // Variant follow mask only propagates to tail-position elements
-        // (those whose right siblings are deep-nullable). Non-tail
-        // elements emit unchanged: e.g. `Y? Z` should not skip Y? when
-        // Z is required next, even if the caller's follow contains Y.
-        ctx.current_follow_mask = if ctx.tail_is_nullable_deep(elements, i + 1) { saved_mask } else { [] };
-        // Caller-side FOLLOW for variant selection: only register a
-        // follow-aware variant when the immediate next sibling is
-        // strictly required. When the suffix is deep-nullable, its
-        // first-set might or might not be claimed at runtime — applying
-        // a follow mask there would incorrectly suppress greedy
-        // consumption that the grammar relies on (CSS `ws (combinator
-        // ...)*` is the canonical hazard: Space is in both `ws`'s
-        // tail-greedy and combinator's first set, but `ws` should still
-        // consume Space when there is no combinator to follow).
-        ctx.ruleref_call_follow = compute_ruleref_call_follow(elements, i, ctx);
-        let elem = &elements[i];
-        if let Repeat(rep) = elem {
-            if let Optional = rep.kind {
-                if is_ruleref_optional(&rep.element) {
-                    let follow = ctx.first_of_elements_from(elements, i + 1);
-                    gen_scan_repeat_optional_with_follow(w, rep, ctx, &follow);
-                    continue;
-                }
-            }
-        }
-        gen_scan_element(w, elem, ctx, &"return -1;");
-        ctx.ruleref_call_follow = [];
-    }
-    ctx.current_follow_mask = saved_mask;
-    ctx.ruleref_call_follow = saved_call_follow;
-}
-
-/// Specialisation of `gen_scan_elements` for bt-scan helpers. Raises
+/// Specialisation of bt-scan helpers. Raises
 /// `ctx.scan_ruleref_min_prec` to `i32::MAX` for the LAST element only
 /// when it is a self-reference to the current rule, so that
 /// `gen_scan_element` emits `scan_<rule>(tokens, pos, i32::MAX)` for
