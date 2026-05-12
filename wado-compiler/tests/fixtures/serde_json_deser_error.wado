@@ -20,11 +20,11 @@ fn deser_msg(input: String) -> String {
 }
 
 test "invalid JSON - not an object" {
-    assert deser_msg("not json at all") == "begin_struct failed";
+    assert deser_msg("not json at all") == "expected '{', found 'n'";
 }
 
 test "invalid JSON - empty string" {
-    assert deser_msg("") == "begin_struct failed";
+    assert deser_msg("") == "unexpected end of input";
 }
 
 test "invalid JSON - truncated string" {

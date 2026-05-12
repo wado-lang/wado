@@ -1,0 +1,44 @@
+// Regression test for resolving a defaulted trait method via the concrete
+// `Type::method(args)` form. Previously the resolver only walked the impl
+// block's `methods`; default methods (whose body lives on the trait, not
+// the impl) were invisible to `Type::method` even though generic dispatch
+// `T::method()` already found them.
+//
+// The fix extends `locate_static_method_impl`, `is_static_method`, and
+// `lookup_static_method_return_type` to fall back to
+// `find_trait_decl_methods` when the impl block does not override the
+// method. This mirrors the path that generic dispatch already uses via
+// `find_method_type_param_names`.
+
+use { println, Stdout } from "core:cli";
+
+pub trait Greeter {
+    fn primary() -> String;
+
+    /// Defaulted method — implementors inherit this body unless they
+    /// override it.
+    fn secondary() -> String {
+        return Self::primary();
+    }
+}
+
+pub struct MyType {}
+
+impl Greeter for MyType {
+    fn primary() -> String {
+        return "hi";
+    }
+    // `secondary` is intentionally NOT overridden — we rely on the
+    // trait's default body.
+}
+
+export fn run() with Stdout {
+    // Sanity: required trait method resolves via `Type::method()`.
+    println(MyType::primary());
+
+    // Regression: defaulted trait method now resolves the same way.
+    println(MyType::secondary());
+}
+
+__DATA__
+{"stdout": "hi\nhi\n"}

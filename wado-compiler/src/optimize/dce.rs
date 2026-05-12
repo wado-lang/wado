@@ -113,7 +113,7 @@ fn extend_reachable_for_optimizer_passes(
         reachable.extend(compute_reachable(call_graph, &char_id));
     }
 
-    // `$value_copy$T<id>` helpers synthesized by `lower::value_copy` are
+    // `$value_copy$T<id>` helpers synthesized by `lower::plan::value_copy` are
     // reached through two paths: (a) direct TIR-level
     // `copy_value::<T>(...)` callers, which the regular call graph
     // already covers; and (b) the per-element clone hidden inside

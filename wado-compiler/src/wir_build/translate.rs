@@ -1339,7 +1339,7 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     let local_name = self.local_name(*local_index);
                     // Value-copy wrappers are materialized at the TIR level by
-                    // `lower::value_copy`; the translation here is a plain
+                    // `lower::plan::value_copy`; the translation here is a plain
                     // LocalSet. `skip_value_copy` is still respected upstream
                     // (the inserter leaves the value unwrapped).
                     Some(WirInstr::LocalSet {
@@ -1838,7 +1838,7 @@ impl FunctionTranslator<'_, '_> {
                             other => other,
                         };
                         // Value-copy wrappers for Assign targets are inserted by the
-                        // TIR `lower::value_copy` pass; no WIR-level wrapping here.
+                        // TIR `lower::plan::value_copy` pass; no WIR-level wrapping here.
                         WirInstr::LocalSet {
                             name: self.local_name(*index),
                             value: Box::new(val),

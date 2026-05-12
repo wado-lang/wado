@@ -1707,7 +1707,96 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return struct_type;
         }
 
+        // Fall back to a trait default method body. When
+        // `impl Trait for Type` does not override a static method that the
+        // trait provides a default for, concrete `Type::method()` calls
+        // must still resolve — this mirrors how generic dispatch
+        // (`T::method()`) already reaches the trait default via
+        // `find_method_type_param_names`.
+        if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name)
+            && let Some(trait_methods) = self.find_trait_decl_methods(&trait_name)
+        {
+            for default_method in &trait_methods {
+                if default_method.name != method_name || default_method.body.is_none() {
+                    continue;
+                }
+                let has_self = default_method
+                    .params
+                    .iter()
+                    .any(|p| p.self_kind != ast::SelfKind::None);
+                if has_self {
+                    continue;
+                }
+                let mut scope = self.enter_inherited_type_param_scope();
+                scope.trait_ctx.type_params.clear();
+                scope.trait_ctx.assoc_type_bindings.clear();
+                // Bind `Self::AssocName` projections that may appear in the
+                // trait default body's return type (e.g. FromStr's
+                // `Result<Self, Self::Err>`). Pull the bindings from the
+                // impl block that connects this trait to this type.
+                let impl_assoc_types = scope.find_impl_assoc_types(struct_name, &trait_name);
+                for binding in &impl_assoc_types {
+                    let type_id = scope.resolve_type(&binding.ty);
+                    scope
+                        .trait_ctx
+                        .assoc_type_bindings
+                        .insert(binding.name.clone(), type_id);
+                }
+                // Resolve `Self` to the concrete type at the call site.
+                // `resolve_named_type` maps primitives to their canonical
+                // TypeTable id rather than a struct wrapper.
+                let self_type_id = scope.resolve_named_type(struct_name, Span::default());
+                let old_self = scope.trait_ctx.self_type;
+                scope.trait_ctx.self_type = Some(self_type_id);
+                let result = default_method
+                    .return_type
+                    .as_ref()
+                    .map(|t| scope.resolve_type(t))
+                    .unwrap_or(TypeTable::UNIT);
+                scope.trait_ctx.self_type = old_self;
+                drop(scope);
+                return result;
+            }
+        }
+
         TypeTable::UNKNOWN
+    }
+
+    /// Look up the associated-type bindings on the impl block that
+    /// connects `trait_name` to `struct_name`. Returns an empty vec when
+    /// the impl is auto-derived or otherwise has no bindings.
+    fn find_impl_assoc_types(
+        &self,
+        struct_name: &str,
+        trait_name: &str,
+    ) -> Vec<ast::AssociatedTypeBinding> {
+        let scan = |items: &[Item]| -> Option<Vec<ast::AssociatedTypeBinding>> {
+            for item in items {
+                if let Item::Impl(impl_block) = item
+                    && let Some(trait_type) = &impl_block.trait_type
+                    && Self::get_type_name_static(trait_type) == trait_name
+                    && Self::get_type_name_static(&impl_block.ty) == struct_name
+                {
+                    return Some(impl_block.associated_types.clone());
+                }
+            }
+            None
+        };
+        if let Some(found) = scan(self.current_module_items) {
+            return found;
+        }
+        if let Some(entries) = self.trait_env.impl_index.get(struct_name) {
+            for (module_source, item_idx) in entries {
+                if let Some(module) = self.loaded_modules.get(module_source)
+                    && let Item::Impl(impl_block) = &module.items[*item_idx]
+                    && let Some(trait_type) = &impl_block.trait_type
+                    && Self::get_type_name_static(trait_type) == trait_name
+                {
+                    return impl_block.associated_types.clone();
+                }
+            }
+        }
+        Vec::new()
     }
 
     /// Look up static method parameter types for coercion.
@@ -2082,6 +2171,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return Some(resolve_trait_name(trait_type));
                 }
             }
+            // Fall back to the trait declaration's default methods: when
+            // `impl Trait for Type` does not override a defaulted static
+            // method, the trait still provides the body, so `Type::method`
+            // (called concretely, not via a generic bound) must resolve to
+            // the trait's default. This mirrors how generic dispatch
+            // (`T::method()`) already finds default methods in
+            // `find_method_type_param_names`.
+            let trait_name_base = Self::get_type_name_static(trait_type);
+            if let Some(trait_methods) = self.find_trait_decl_methods(&trait_name_base) {
+                for default_method in &trait_methods {
+                    if default_method.name != method_name || default_method.body.is_none() {
+                        continue;
+                    }
+                    let has_self = default_method
+                        .params
+                        .iter()
+                        .any(|p| p.self_kind != ast::SelfKind::None);
+                    if !has_self {
+                        return Some(resolve_trait_name(trait_type));
+                    }
+                }
+            }
             None
         };
 
@@ -2190,6 +2301,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // default expressions. No user impl exists (previous checks would have
         // caught it), but `synthesis::traits` will emit the body.
         if method_name == "default" && self.auto_derive_default_struct_type(struct_name).is_some() {
+            return true;
+        }
+
+        // Defaulted trait method: when `impl Trait for Type` does not
+        // override a static method that the trait provides a default for,
+        // `Type::method` must still resolve. `locate_static_method_impl`
+        // applies the same fallback to find the trait name and module.
+        if self
+            .locate_static_method_impl(struct_name, method_name, None)
+            .is_some()
+        {
             return true;
         }
 

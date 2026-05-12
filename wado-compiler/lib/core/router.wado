@@ -8,19 +8,95 @@
 //! is reached, method dispatch tries the specific-method list first, then
 //! falls back to the optional `any` slot.
 //!
+//! Static routes (no `:param`, no `*wildcard`) are routed through a sorted
+//! side-table with pre-built `RouteMatch` shells. Hits on a static route
+//! return a reference into the table, which (assuming `Option<&T>` niche
+//! optimization) costs zero heap allocations per match.
+//!
+//! Captured parameters are accessible either by name via `params["id"]`
+//! (`IndexValue<String>`) or as a typed struct via
+//! `params.deserialize::<T>()` (`T: Deserialize`). The latter parses
+//! directly from byte ranges of the path string without intermediate
+//! substring allocations for scalar fields.
+//!
 //! See `docs/wep-2026-05-06-core-router.md`.
 
 #![stdlib("core:router")]
 
-use { TreeMap } from "core:collections";
 use { Request } from "wasi:http";
+use {
+    Deserialize, DeserializeError,
+    Deserializer, DeserializeSeq, DeserializeMap, DeserializeStruct,
+    DeserializeVariant, Visitor,
+} from "core:serde";
 pub use { Method } from "wasi:http";
 
-/// Result of a successful match. `params` is keyed by parameter name; for
-/// a wildcard route the captured tail is stored under the wildcard name.
+/// Captured path parameters for a matched route.
+///
+/// `PathParams` is a thin handle of references into router-owned data:
+/// `path` is the request path that produced the match, `names` is the
+/// parameter-name list shared with the matched terminal state, and
+/// `ranges` is a flat `[start0, end0, start1, end1, ...]` of byte ranges
+/// into `path`. Empty for static-route matches; in that case all three
+/// fields point at shared empty singletons.
+pub struct PathParams {
+    path: &String,
+    names: &Array<String>,
+    ranges: &Array<i32>,
+}
+
+impl PathParams {
+    /// Number of captured parameters (0 for static routes).
+    pub fn len(&self) -> i32 {
+        return self.names.len();
+    }
+
+    /// True when no parameters were captured.
+    pub fn is_empty(&self) -> bool {
+        return self.names.is_empty();
+    }
+
+    /// Look up a captured parameter by name. Returns `None` if absent.
+    /// The returned `String` is freshly allocated from the matched
+    /// byte range of the path.
+    pub fn get(&self, name: String) -> Option<String> {
+        let n = self.names.len();
+        for let mut i = 0; i < n; i += 1 {
+            if self.names[i] == name {
+                let s = self.ranges[i * 2];
+                let e = self.ranges[i * 2 + 1];
+                return Option::Some(self.path.substr_bytes(s, e));
+            }
+        }
+        return null;
+    }
+
+    /// Deserialize captured parameters into a typed struct `T`. Scalar
+    /// fields parse directly from path bytes; only `String` fields incur
+    /// a substring allocation.
+    pub fn deserialize<T: Deserialize>(&self) -> Result<T, DeserializeError>
+        with stores[self]
+    {
+        let mut d = PathParamsDeserializer { src: self, cursor: 0 };
+        return T::deserialize(&mut d);
+    }
+}
+
+impl IndexValue<String> for PathParams {
+    type Output = String;
+
+    fn index_value(&self, name: String) -> String {
+        return match self.get(name) {
+            Some(v) => v,
+            None => panic("path param not found"),
+        };
+    }
+}
+
+/// Result of a successful route match.
 pub struct RouteMatch<H> {
     pub handler: H,
-    pub params: TreeMap<String, String>,
+    pub params: PathParams,
 }
 
 variant Segment {
@@ -48,6 +124,13 @@ struct DfaState {
     wildcard_name: String,
     terminal_methods: Array<MethodEntry>,
     terminal_any_idx: i32,
+    /// Captured param names from root to this state (in capture order).
+    /// Shared by all routes that end at this terminal.
+    terminal_names: Array<String>,
+    /// Captured param names for a wildcard match at this state — equal to
+    /// `terminal_names` extended with `wildcard_name`. Pre-built so a
+    /// wildcard match does not have to allocate a names array per call.
+    wildcard_names: Array<String>,
 }
 
 fn new_state() -> DfaState {
@@ -60,18 +143,45 @@ fn new_state() -> DfaState {
         wildcard_name: "",
         terminal_methods: [],
         terminal_any_idx: -1,
+        terminal_names: [],
+        wildcard_names: [],
+    };
+}
+
+/// Sorted entry for the static-route fast path.
+struct StaticEntry<H> {
+    method: Option<Method>,  // None means `any`
+    pattern: String,
+    rm: RouteMatch<H>,
+}
+
+/// Shared singletons for `PathParams` with no captures.
+global EMPTY_STR: String = "";
+global EMPTY_NAMES: Array<String> = [];
+global EMPTY_RANGES: Array<i32> = [];
+
+fn empty_path_params() -> PathParams {
+    return PathParams {
+        path: &EMPTY_STR,
+        names: &EMPTY_NAMES,
+        ranges: &EMPTY_RANGES,
     };
 }
 
 /// Generic HTTP path router.
 pub struct Router<H> {
+    static_entries: Array<StaticEntry<H>>,
     states: Array<DfaState>,
     handlers: Array<H>,
 }
 
 impl<H> Router<H> {
     pub fn new() -> Router<H> {
-        let mut r = Router { states: [], handlers: [] };
+        let mut r = Router {
+            static_entries: [],
+            states: [],
+            handlers: [],
+        };
         r.states.push(new_state());
         return r;
     }
@@ -114,7 +224,51 @@ impl<H> Router<H> {
         with stores[handler]
     {
         let segs = parse_pattern(&pattern);
+        if is_static_pattern(&segs) {
+            self.insert_static(method_opt, pattern, handler);
+            return;
+        }
+        self.insert_dynamic(&method_opt, &segs, handler);
+    }
+
+    fn insert_static(&mut self, method_opt: Option<Method>, pattern: String, handler: H)
+        with stores[handler]
+    {
+        // `static_entries` is kept sorted by `static_entry_cmp` so both
+        // `match_static` and this last-write-wins lookup can locate an
+        // existing entry in O(log n). The narrow `[lo, hi)` range covers
+        // the patterns equal to `pattern`; methods within it are still
+        // scanned linearly (one entry per HTTP method, so single digits).
+        let new_entry = StaticEntry {
+            method: method_opt,
+            pattern,
+            rm: RouteMatch {
+                handler,
+                params: empty_path_params(),
+            },
+        };
+        let [lo, hi] = bsearch_pattern_range(&self.static_entries, &new_entry.pattern);
+        for let mut i = lo; i < hi; i += 1 {
+            if method_opt_eq(&self.static_entries[i].method, &new_entry.method) {
+                self.static_entries[i].rm = new_entry.rm;
+                return;
+            }
+        }
+        // No existing (pattern, method) match: insert at the position that
+        // keeps the table sorted. Within the equal-pattern band that means
+        // the slot where the method-rank order places the new entry.
+        let mut pos = lo;
+        while pos < hi && static_entry_cmp(&self.static_entries[pos], &new_entry) matches { Less } {
+            pos += 1;
+        }
+        self.static_entries.insert(pos, new_entry);
+    }
+
+    fn insert_dynamic(&mut self, method_opt: &Option<Method>, segs: &Array<Segment>, handler: H)
+        with stores[handler]
+    {
         let mut cur: i32 = 0;
+        let mut names: Array<String> = [];
         let nseg = segs.len();
         for let mut i = 0; i < nseg; i += 1 {
             let seg = &segs[i];
@@ -123,6 +277,13 @@ impl<H> Router<H> {
                     let existing = self.states[cur].wildcard_name;
                     if existing.is_empty() {
                         self.states[cur].wildcard_name = *name;
+                        let mut wnames: Array<String> = [];
+                        let nn = names.len();
+                        for let mut k = 0; k < nn; k += 1 {
+                            wnames.push(names[k]);
+                        }
+                        wnames.push(*name);
+                        self.states[cur].wildcard_names = wnames;
                     } else if existing != *name {
                         panic(`wildcard name conflict: '*{existing}' vs '*{*name}' at the same node`);
                     }
@@ -130,7 +291,7 @@ impl<H> Router<H> {
                     self.handlers.push(handler);
                     if let Some(m) = method_opt {
                         set_method_specific(
-                            &mut self.states[cur].wildcard_methods, m, handler_idx);
+                            &mut self.states[cur].wildcard_methods, *m, handler_idx);
                     } else {
                         self.states[cur].wildcard_any_idx = handler_idx;
                     }
@@ -145,6 +306,7 @@ impl<H> Router<H> {
                     } else if self.states[cur].param_name != *name {
                         panic(`param name conflict: ':{self.states[cur].param_name}' vs ':{*name}' at the same node`);
                     }
+                    names.push(*name);
                     cur = self.states[cur].param_target;
                 },
                 Literal(lit) => {
@@ -164,11 +326,16 @@ impl<H> Router<H> {
                 },
             }
         }
+        // Cache the captured-name list at the terminal. Routes that share
+        // a terminal share the same param sequence by construction.
+        if self.states[cur].terminal_names.is_empty() && !names.is_empty() {
+            self.states[cur].terminal_names = names;
+        }
         let handler_idx = self.handlers.len();
         self.handlers.push(handler);
         if let Some(m) = method_opt {
             set_method_specific(
-                &mut self.states[cur].terminal_methods, m, handler_idx);
+                &mut self.states[cur].terminal_methods, *m, handler_idx);
         } else {
             self.states[cur].terminal_any_idx = handler_idx;
         }
@@ -176,11 +343,58 @@ impl<H> Router<H> {
 
     /// Matches `(method, path)`. The path argument must be a URL path
     /// (no query string, no fragment).
-    pub fn match_path(&self, method: Method, path: &String) -> Option<RouteMatch<H>> {
-        let mut params = TreeMap::<String, String>::new();
+    pub fn match_path(&self, method: Method, path: &String) -> Option<&RouteMatch<H>>
+        with stores[self, path]
+    {
+        if let Some(rm) = self.match_static(&method, path) {
+            return Option::Some(rm);
+        }
+        return self.match_dynamic(&method, path);
+    }
+
+    fn match_static(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>>
+        with stores[self]
+    {
+        let [lo, hi] = bsearch_pattern_range(&self.static_entries, path);
+        if lo >= hi {
+            return null;
+        }
+        // Within the equal-pattern range, prefer specific method, then `any`.
+        let mut any_idx: i32 = -1;
+        for let mut i = lo; i < hi; i += 1 {
+            match self.static_entries[i].method {
+                Some(m) => if m == *method {
+                    return Option::Some(&self.static_entries[i].rm);
+                },
+                None => {
+                    any_idx = i;
+                },
+            }
+        }
+        if any_idx >= 0 {
+            return Option::Some(&self.static_entries[any_idx].rm);
+        }
+        return null;
+    }
+
+    /// Dynamic DFA match.
+    ///
+    /// On a hit, builds a fresh `RouteMatch` plus its `PathParams` /
+    /// `ranges` storage in this function's locals and returns a reference
+    /// to that match. Wado's escape analysis automatically heap-promotes
+    /// any local whose address escapes the function (see
+    /// `docs/wep-2026-01-12-value-semantics-and-stores.md`), so the
+    /// returned `&RouteMatch<H>` is sound: `rm`, `pp`, and `ranges` all
+    /// migrate to GC-managed storage and live as long as the caller
+    /// retains the reference. The `stores[self, path]` annotation is what
+    /// makes returning a ref derived from `&self` and `path` legal here.
+    fn match_dynamic(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>>
+        with stores[self, path]
+    {
         let plen = path.len();
         let mut pos = if plen > 0 && path.get_byte(0) == '/' as u8 { 1 } else { 0 };
         let mut state: i32 = 0;
+        let mut ranges: Array<i32> = [];
         while pos < plen {
             let mut end = pos;
             while end < plen && path.get_byte(end) != '/' as u8 {
@@ -193,20 +407,27 @@ impl<H> Router<H> {
             if target >= 0 {
                 state = target;
             } else if self.states[state].param_target >= 0 {
-                let pname = self.states[state].param_name;
-                params[pname] = path.substr_bytes(pos, end);
+                ranges.push(pos);
+                ranges.push(end);
                 state = self.states[state].param_target;
             } else if has_wildcard(&self.states[state]) {
                 let h = pick_handler(
                     &self.states[state].wildcard_methods,
                     self.states[state].wildcard_any_idx,
-                    &method,
+                    method,
                 );
                 if h < 0 {
                     return null;
                 }
-                params[self.states[state].wildcard_name] = path.substr_bytes(pos, plen);
-                return Option::Some(RouteMatch { handler: self.handlers[h], params });
+                ranges.push(pos);
+                ranges.push(plen);
+                let pp = PathParams {
+                    path,
+                    names: &self.states[state].wildcard_names,
+                    ranges: &ranges,
+                };
+                let rm = RouteMatch { handler: self.handlers[h], params: pp };
+                return Option::Some(&rm);
             } else {
                 return null;
             }
@@ -216,10 +437,16 @@ impl<H> Router<H> {
             let h = pick_handler(
                 &self.states[state].terminal_methods,
                 self.states[state].terminal_any_idx,
-                &method,
+                method,
             );
             if h >= 0 {
-                return Option::Some(RouteMatch { handler: self.handlers[h], params });
+                let pp = PathParams {
+                    path,
+                    names: &self.states[state].terminal_names,
+                    ranges: &ranges,
+                };
+                let rm = RouteMatch { handler: self.handlers[h], params: pp };
+                return Option::Some(&rm);
             }
         } else if pos == plen {
             // Either path was "/" (root) or a trailing slash after a segment.
@@ -227,21 +454,34 @@ impl<H> Router<H> {
                 let h = pick_handler(
                     &self.states[0].terminal_methods,
                     self.states[0].terminal_any_idx,
-                    &method,
+                    method,
                 );
                 if h >= 0 {
-                    return Option::Some(RouteMatch { handler: self.handlers[h], params });
+                    let pp = PathParams {
+                        path,
+                        names: &self.states[0].terminal_names,
+                        ranges: &ranges,
+                    };
+                    let rm = RouteMatch { handler: self.handlers[h], params: pp };
+                    return Option::Some(&rm);
                 }
             }
             if has_wildcard(&self.states[state]) {
                 let h = pick_handler(
                     &self.states[state].wildcard_methods,
                     self.states[state].wildcard_any_idx,
-                    &method,
+                    method,
                 );
                 if h >= 0 {
-                    params[self.states[state].wildcard_name] = "";
-                    return Option::Some(RouteMatch { handler: self.handlers[h], params });
+                    ranges.push(plen);
+                    ranges.push(plen);
+                    let pp = PathParams {
+                        path,
+                        names: &self.states[state].wildcard_names,
+                        ranges: &ranges,
+                    };
+                    let rm = RouteMatch { handler: self.handlers[h], params: pp };
+                    return Option::Some(&rm);
                 }
             }
         }
@@ -251,6 +491,22 @@ impl<H> Router<H> {
     /// Returns the specific methods registered for `path`. `any` does not
     /// contribute. Empty array on a 404 or when only `any` is registered.
     pub fn allowed_methods(&self, path: &String) -> Array<Method> {
+        // Static side first.
+        let [lo, hi] = bsearch_pattern_range(&self.static_entries, path);
+        if lo < hi {
+            let mut out: Array<Method> = [];
+            for let mut i = lo; i < hi; i += 1 {
+                if let Some(m) = self.static_entries[i].method {
+                    out.push(m);
+                }
+            }
+            return out;
+        }
+        // Dynamic DFA fallback.
+        return self.allowed_methods_dynamic(path);
+    }
+
+    fn allowed_methods_dynamic(&self, path: &String) -> Array<Method> {
         let plen = path.len();
         let mut pos = if plen > 0 && path.get_byte(0) == '/' as u8 { 1 } else { 0 };
         let mut state: i32 = 0;
@@ -292,7 +548,9 @@ impl<H> Router<H> {
 
     /// Matches against a `wasi:http` `Request`. Strips `?query` / `#frag`
     /// from the path before matching.
-    pub fn match_request(&self, request: &Request) -> Option<RouteMatch<H>> {
+    pub fn match_request(&self, request: &Request) -> Option<&RouteMatch<H>>
+        with stores[self]
+    {
         let method = request.get_method();
         let pq = match request.get_path_with_query() {
             Some(s) => s,
@@ -301,6 +559,78 @@ impl<H> Router<H> {
         let path = strip_query(pq);
         return self.match_path(method, &path);
     }
+}
+
+fn is_static_pattern(segs: &Array<Segment>) -> bool {
+    let n = segs.len();
+    for let mut i = 0; i < n; i += 1 {
+        match &segs[i] {
+            Literal(_) => {},
+            _ => { return false; },
+        }
+    }
+    return true;
+}
+
+fn method_opt_eq(a: &Option<Method>, b: &Option<Method>) -> bool {
+    match a {
+        Some(am) => match b {
+            Some(bm) => return *am == *bm,
+            None => return false,
+        },
+        None => match b {
+            Some(_) => return false,
+            None => return true,
+        },
+    };
+}
+
+/// Compare two static entries by (pattern, method-rank). `any` (None) sorts
+/// after specific methods.
+fn static_entry_cmp<H>(a: &StaticEntry<H>, b: &StaticEntry<H>) -> Ordering {
+    let c = a.pattern.cmp(&b.pattern);
+    if c matches { Equal } {
+        let ar = method_rank(&a.method);
+        let br = method_rank(&b.method);
+        if ar < br { return Ordering::Less; }
+        if ar > br { return Ordering::Greater; }
+        return Ordering::Equal;
+    }
+    return c;
+}
+
+fn method_rank(m: &Option<Method>) -> i32 {
+    return match m {
+        Some(_) => 0,
+        None => 1,
+    };
+}
+
+/// Find the [lo, hi) range of entries whose `pattern` equals `path`.
+fn bsearch_pattern_range<H>(entries: &Array<StaticEntry<H>>, path: &String) -> [i32, i32] {
+    let n = entries.len();
+    // Lower bound
+    let mut lo = 0;
+    let mut hi = n;
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        match entries[mid].pattern.cmp(path) {
+            Less => { lo = mid + 1; },
+            _ => { hi = mid; },
+        }
+    }
+    let lower = lo;
+    // Upper bound
+    lo = lower;
+    hi = n;
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        match entries[mid].pattern.cmp(path) {
+            Greater => { hi = mid; },
+            _ => { lo = mid + 1; },
+        }
+    }
+    return [lower, lo];
 }
 
 fn has_wildcard(s: &DfaState) -> bool {
@@ -445,4 +775,237 @@ fn cmp_string_to_byte_range(label: &String, path: &String, start: i32, end: i32)
         return Ordering::Greater;
     }
     return Ordering::Equal;
+}
+
+/// `Deserializer` for `PathParams`. Iterates captured params in the order
+/// they appear in the pattern (= struct-field index after name lookup).
+/// Scalar atoms parse directly from path byte ranges; only `deserialize_string`
+/// allocates a substring.
+struct PathParamsDeserializer {
+    src: &PathParams,
+    cursor: i32,
+}
+
+struct PathParamsStructAccess {
+    de: PathParamsDeserializer,
+    lookup: fn(&String, i32, i32) -> Option<i32>,
+}
+
+impl Deserializer for PathParamsDeserializer {
+    type SeqAccess = PathParamsSeqStub;
+    type MapAccess = PathParamsMapStub;
+    type StructAccess = PathParamsStructAccess;
+    type VariantAccess = PathParamsVariantStub;
+
+    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> { return self.parse_scalar::<i32>("i32"); }
+    fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> { return self.parse_scalar::<i64>("i64"); }
+    fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> { return self.parse_scalar::<u32>("u32"); }
+    fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> { return self.parse_scalar::<u64>("u64"); }
+    fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> { return self.parse_scalar::<i128>("i128"); }
+    fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> { return self.parse_scalar::<u128>("u128"); }
+    fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> { return self.parse_scalar::<f32>("f32"); }
+    fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> { return self.parse_scalar::<f64>("f64"); }
+    fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
+        self.require_active_param()?;
+        let [s, e] = self.current_range();
+        let len = e - s;
+        if len == 4 && self.path_bytes_eq(s, "true") {
+            return Result::Ok(true);
+        }
+        if len == 5 && self.path_bytes_eq(s, "false") {
+            return Result::Ok(false);
+        }
+        return Result::Err(DeserializeError::invalid_value(self.format_error("bool"), s as i64));
+    }
+    fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
+        self.require_active_param()?;
+        let [s, e] = self.current_range();
+        let len = e - s;
+        if len == 0 {
+            return Result::Err(DeserializeError::invalid_value(self.format_error("char"), s as i64));
+        }
+        // Determine the UTF-8 sequence length from the leading byte and
+        // verify the captured slice encodes exactly one codepoint.
+        // `String::char_at_byte` decodes without substring allocation.
+        let b0 = self.src.path.get_byte(s);
+        let expected = if b0 < 0x80 { 1 } else if b0 < 0xC0 { 0 } else if b0 < 0xE0 { 2 } else if b0 < 0xF0 { 3 } else { 4 };
+        if expected == 0 || len != expected {
+            return Result::Err(DeserializeError::invalid_value(self.format_error("char"), s as i64));
+        }
+        return match self.src.path.char_at_byte(s) {
+            Some(c) => Result::Ok(c),
+            None => Result::Err(DeserializeError::invalid_value(self.format_error("char"), s as i64)),
+        };
+    }
+    fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
+        self.require_active_param()?;
+        let [s, e] = self.current_range();
+        return Result::Ok(self.src.path.substr_bytes(s, e));
+    }
+    fn is_null(&mut self) -> Result<bool, DeserializeError> {
+        return Result::Ok(false);
+    }
+    fn begin_seq(&mut self) -> Result<PathParamsSeqStub, DeserializeError> with stores[self] {
+        return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a seq", -1));
+    }
+    fn begin_map(&mut self) -> Result<PathParamsMapStub, DeserializeError> with stores[self] {
+        return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a map", -1));
+    }
+    fn begin_struct(&mut self, _name: &String, _num_fields: i32,
+                    lookup: fn(&String, i32, i32) -> Option<i32>)
+        -> Result<PathParamsStructAccess, DeserializeError>
+        with stores[self]
+    {
+        // Nested structs are unsupported: `PathParams` is a flat key/value
+        // surface, so a nested `begin_struct` (cursor != 0) means a field
+        // typed as another struct asked us to descend into it. Refuse loudly
+        // rather than silently re-running the field loop for the inner type.
+        if self.cursor != 0 {
+            return Result::Err(DeserializeError::unexpected_type("path params cannot deserialize a nested struct field", -1));
+        }
+        return Result::Ok(PathParamsStructAccess { de: *self, lookup });
+    }
+    fn begin_variant(&mut self, _type_name: &String, _num_cases: i32)
+        -> Result<PathParamsVariantStub, DeserializeError>
+        with stores[self]
+    {
+        return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a variant", -1));
+    }
+    fn deserialize_any<V: Visitor>(&mut self, _visitor: &mut V) -> Result<V::Value, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("path params do not support dynamic deserialize_any", -1));
+    }
+}
+
+impl PathParamsDeserializer {
+    /// Byte range of the path parameter currently being deserialized.
+    /// Contract: callers must arrive here through `begin_struct → next_field
+    /// → value`, which advances `cursor` past the active param. Use
+    /// `require_active_param` first to enforce this; raw access yields a
+    /// negative index for `cursor == 0` and would trap on the array read.
+    fn current_range(&self) -> [i32, i32] {
+        let i = self.cursor - 1;
+        return [self.src.ranges[i * 2], self.src.ranges[i * 2 + 1]];
+    }
+
+    /// Reject a scalar `deserialize_*` call that has not been preceded by
+    /// `begin_struct → next_field`. `PathParams::deserialize::<T>()` only
+    /// supports struct roots; a `u64`-rooted call would bypass `next_field`
+    /// and underflow `cursor` here. Returning `UnexpectedType` keeps the
+    /// API total instead of trapping on `ranges[-2]`.
+    fn require_active_param(&self) -> Result<(), DeserializeError> {
+        if self.cursor == 0 {
+            return Result::Err(DeserializeError::unexpected_type(
+                "path params can only be deserialized into a struct (non-struct root not supported)",
+                -1,
+            ));
+        }
+        return Result::Ok(());
+    }
+
+    /// Byte-by-byte comparison of `path[start..start+pat.len())` with
+    /// `pat`. Used by `deserialize_bool` to avoid a substring allocation
+    /// when checking against the constants `"true"` / `"false"`.
+    fn path_bytes_eq(&self, start: i32, pat: String) -> bool {
+        let plen = pat.len();
+        for let mut i = 0; i < plen; i += 1 {
+            if self.src.path.get_byte(start + i) != pat.get_byte(i) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// Format an `invalid_value` error message including the param name and
+    /// the captured slice, e.g.
+    /// `path param 'id' is not a valid u64: 'abc'`.
+    fn format_error(&self, type_name: String) -> String {
+        let i = self.cursor - 1;
+        let name = &self.src.names[i];
+        let [s, e] = self.current_range();
+        let value = self.src.path.substr_bytes(s, e);
+        return `path param '{*name}' is not a valid {type_name}: '{value}'`;
+    }
+
+    /// Parse the active param's byte range into `T` via `FromStr`.
+    /// Shared body of every scalar `deserialize_*` arm — keeps the per-type
+    /// methods to a single line each.
+    fn parse_scalar<T: FromStr>(&self, type_name: String) -> Result<T, DeserializeError> {
+        self.require_active_param()?;
+        let [s, e] = self.current_range();
+        return match T::from_str_range(self.src.path, s, e) {
+            Ok(v) => Result::Ok(v),
+            Err(_) => Result::Err(DeserializeError::invalid_value(self.format_error(type_name), s as i64)),
+        };
+    }
+}
+
+impl DeserializeStruct for PathParamsStructAccess {
+    fn next_field(&mut self) -> Result<Option<i32>, DeserializeError> {
+        if self.de.cursor >= self.de.src.names.len() {
+            return Result::Ok(null);
+        }
+        let name = &self.de.src.names[self.de.cursor];
+        self.de.cursor += 1;
+        let idx = match (self.lookup)(name, 0, name.len()) {
+            Some(v) => v,
+            None => -1,
+        };
+        return Result::Ok(Option::Some(idx));
+    }
+    fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        return T::deserialize(&mut self.de);
+    }
+    fn skip(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
+}
+
+// Unused sub-deserializers — required to satisfy the `Deserializer` trait's
+// associated-type bounds. Path params can only be deserialized into a struct
+// (or scalar at the field level), so seq/map/variant accesses are stubs that
+// fail if invoked.
+
+struct PathParamsSeqStub {}
+impl DeserializeSeq for PathParamsSeqStub {
+    fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("path params: seq not supported", -1));
+    }
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
+}
+
+struct PathParamsMapStub {}
+impl DeserializeMap for PathParamsMapStub {
+    fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("path params: map not supported", -1));
+    }
+    fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("path params: map not supported", -1));
+    }
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
+}
+
+struct PathParamsVariantStub {}
+impl DeserializeVariant for PathParamsVariantStub {
+    fn variant_name(&mut self) -> Result<String, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("path params: variant not supported", -1));
+    }
+    fn disc(&mut self) -> Result<i32, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("path params: variant not supported", -1));
+    }
+    fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("path params: variant not supported", -1));
+    }
+    fn is_unit(&mut self) -> Result<bool, DeserializeError> {
+        return Result::Ok(false);
+    }
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
 }

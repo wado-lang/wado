@@ -128,7 +128,6 @@ impl ValueCopyInserter {
             | TirExprKind::MethodCall { .. }
             | TirExprKind::CmRawCall { .. }
             | TirExprKind::IndirectCall { .. } => true,
-            TirExprKind::ClosureToCanonical { .. } => true,
             TirExprKind::VariantConstruct { .. } | TirExprKind::EnumConstruct { .. } => true,
             TirExprKind::Local { index, .. } => fresh_locals.contains(index),
             TirExprKind::Unary {

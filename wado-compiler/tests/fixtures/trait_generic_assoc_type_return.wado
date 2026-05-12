@@ -1,0 +1,33 @@
+// Regression test for substituting an associated type at the caller's
+// binding site of a generic function. Previously a call to
+// `fn h<T: Trait>(...) -> Result<T, T::Err>` had its return type
+// substituted only at the outer parameter (`T` → concrete) but the
+// nested `T::Err` was left dangling because
+// `register_assoc_types_for_concrete_type_and_trait` early-returned for
+// primitive `T`. The caller's `let r = h::<i32>(...)` then bound `r` to
+// `Result<i32, T::Err>` rather than `Result<i32, ParseIntError>`, and the
+// variant tag mismatch caused `match` / `if let` to silently miss
+// (at -O2) or trip WIR validation (at -O0).
+//
+// Fix: include `ResolvedType::Primitive` in
+// `register_assoc_types_for_concrete_type_and_trait` so that
+// `impl FromStr for i32 { type Err = ParseIntError; ... }` registers the
+// `(i32, "Err") → ParseIntError` mapping the substituter needs.
+
+use { println, Stdout } from "core:cli";
+
+fn parse_range<T: FromStr>(s: &String, start: i32, end: i32) -> Result<T, T::Err> {
+    return T::from_str_range(s, start, end);
+}
+
+export fn run() with Stdout {
+    let r = parse_range::<i32>(&"xyz123abc", 3, 6);
+    if let Ok(v) = r {
+        println(`OK: {v}`);
+    } else {
+        println("ERR");
+    }
+}
+
+__DATA__
+{"stdout": "OK: 123\n"}

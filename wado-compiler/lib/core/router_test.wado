@@ -1,5 +1,6 @@
 use { Router } from "core:router";
 use { Method } from "wasi:http";
+use { Deserialize, DeserializeError, DeserializeErrorKind } from "core:serde";
 
 test "router: static routes" {
     let mut r = Router::<i32>::new();
@@ -248,4 +249,98 @@ test "router: panic on conflicting wildcard names at same node" {
     let mut r = Router::<i32>::new();
     r.get("/static/*path", 1);
     r.post("/static/*tail", 2);
+}
+
+struct GetUserParams { id: u64 }
+impl Deserialize for GetUserParams;
+
+struct PostParams { user_id: i32, post_id: u32 }
+impl Deserialize for PostParams;
+
+struct StaticOnly {}
+impl Deserialize for StaticOnly;
+
+struct StringParam { slug: String }
+impl Deserialize for StringParam;
+
+struct InnerParam { id: u64 }
+impl Deserialize for InnerParam;
+
+struct NestedParam { inner: InnerParam }
+impl Deserialize for NestedParam;
+
+test "router: deserialize params into struct" {
+    let mut r = Router::<i32>::new();
+    r.get("/users/:id", 1);
+
+    let m = r.match_path(Method::Get, &"/users/42").unwrap();
+    let p = m.params.deserialize::<GetUserParams>().unwrap();
+    assert p.id == 42 as u64;
+}
+
+test "router: deserialize multiple params (camelCase rename)" {
+    let mut r = Router::<i32>::new();
+    r.get("/users/:userId/posts/:postId", 1);
+
+    let m = r.match_path(Method::Get, &"/users/7/posts/99").unwrap();
+    let p = m.params.deserialize::<PostParams>().unwrap();
+    assert p.user_id == 7;
+    assert p.post_id == 99 as u32;
+}
+
+test "router: deserialize string param" {
+    let mut r = Router::<i32>::new();
+    r.get("/articles/:slug", 1);
+
+    let m = r.match_path(Method::Get, &"/articles/hello-world").unwrap();
+    let p = m.params.deserialize::<StringParam>().unwrap();
+    assert p.slug == "hello-world";
+}
+
+test "router: deserialize empty params on static route" {
+    let mut r = Router::<i32>::new();
+    r.get("/health", 1);
+
+    let m = r.match_path(Method::Get, &"/health").unwrap();
+    assert m.params.is_empty();
+    // Deserialize into an empty struct must succeed without scanning any
+    // ranges (cursor stays at 0).
+    assert m.params.deserialize::<StaticOnly>() matches { Ok(_) };
+}
+
+test "router: deserialize fails on invalid integer" {
+    let mut r = Router::<i32>::new();
+    r.get("/users/:id", 1);
+
+    let m = r.match_path(Method::Get, &"/users/notanumber").unwrap();
+    let result: Result<GetUserParams, DeserializeError> = m.params.deserialize();
+    assert result matches { Err(e) && e.kind == DeserializeErrorKind::InvalidValue };
+}
+
+test "router: params.get returns Option" {
+    let mut r = Router::<i32>::new();
+    r.get("/users/:id", 1);
+
+    let m = r.match_path(Method::Get, &"/users/abc").unwrap();
+    assert m.params.get("id") matches { Some(v) && v == "abc" };
+    assert m.params.get("missing") matches { None };
+}
+
+test "router: deserialize rejects nested struct field" {
+    let mut r = Router::<i32>::new();
+    r.get("/items/:inner", 1);
+
+    let m = r.match_path(Method::Get, &"/items/42").unwrap();
+    let result: Result<NestedParam, DeserializeError> = m.params.deserialize();
+    assert result matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+}
+
+test "router: params index by name (IndexValue)" {
+    let mut r = Router::<i32>::new();
+    r.get("/users/:id/posts/:pid", 1);
+
+    let m = r.match_path(Method::Get, &"/users/42/posts/9").unwrap();
+    assert m.params["id"] == "42";
+    assert m.params["pid"] == "9";
+    assert m.params.len() == 2;
 }

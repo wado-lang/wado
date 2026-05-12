@@ -1,38 +1,69 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::name::mangle_generic_name;
 use crate::tir::{
     MonomorphInfo, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField,
-    TirFunction, TirLocal, TirModule, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
-    TirUnaryOp, TypeId, TypeTable,
+    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::token::Span;
 
-pub(super) struct BoxLowerer {
+/// Run the boxing planner: a TIR-mutating pass that rewrites
+/// `&primitive` / `&mut primitive` into `Box<T>` struct operations.
+pub fn plan(flat: &mut FlatPackage) {
+    let box_module_source = flat
+        .type_table
+        .borrow()
+        .box_module_source
+        .clone()
+        .unwrap_or_else(ModuleSource::prelude);
+    let mut box_lowerer = BoxLowerer::new(box_module_source);
+
+    for s in &flat.structs {
+        box_lowerer
+            .struct_fields_map
+            .insert((s.name.clone(), s.module_source.clone()), s.fields.clone());
+    }
+    for v in &flat.variants {
+        box_lowerer.variant_names.insert(v.name.clone());
+    }
+
+    {
+        let mut type_table = flat.type_table.borrow_mut();
+        box_lowerer.create_needed_box_types(&mut type_table);
+        box_lowerer.rewrite_types(&mut type_table);
+    }
+
+    box_lowerer.lower_module_exprs(flat);
+    flat.structs.append(&mut box_lowerer.generated_structs);
+}
+
+struct BoxLowerer {
     /// Mapping from inner `TypeId` to Box<T> struct type ID.
     /// e.g., `TypeTable::I32` → `TypeId` for Struct("Box<i32>")
     box_struct_types: IndexMap<TypeId, TypeId>,
     /// Set of all Box<T> struct type IDs (for fast lookup).
     box_type_ids: IndexSet<TypeId>,
     /// Generated Box<T> struct definitions to add to the module.
-    pub(super) generated_structs: Vec<TirStruct>,
+    generated_structs: Vec<TirStruct>,
     /// Module source for registering Box types in the type table.
     /// Set from `TypeTable::box_module_source` (registered via `#[comp_feature("box")]`
     /// on `struct Box<T>` in the prelude).
     box_module_source: ModuleSource,
     /// Struct fields indexed by (name, `module_source`) for deref assign expansion.
-    pub(super) struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>>,
+    struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>>,
     /// Variant names from all modules, used to identify `GenericInstance` types
     /// that are variants and need boxing.
-    pub(super) variant_names: IndexSet<String>,
+    variant_names: IndexSet<String>,
 }
 
 impl BoxLowerer {
-    pub(super) fn new(box_module_source: ModuleSource) -> Self {
+    fn new(box_module_source: ModuleSource) -> Self {
         Self {
             box_struct_types: IndexMap::default(),
             box_type_ids: IndexSet::default(),
@@ -350,36 +381,26 @@ impl BoxLowerer {
 
     /// Transform expressions in a module (called after type table setup).
     ///
-    /// This is the per-module phase: transforms function bodies, impl methods,
-    /// and global initializers. Also injects generated Box structs into the module.
-    pub(super) fn lower_module_exprs(&mut self, module: &mut TirModule) {
+    /// Transforms function bodies and global initializers. Generated
+    /// Box structs are appended by the caller.
+    fn lower_module_exprs(&mut self, flat: &mut FlatPackage) {
         // Transform expressions in all functions.
-        for func_rc in &module.functions {
+        for func_rc in &flat.functions {
             let mut func = func_rc.borrow_mut();
-            self.transform_function(&mut func, &module.type_table);
-        }
-
-        // Transform impl method bodies
-        for impl_block in &mut module.impls {
-            for method in &mut impl_block.methods {
-                self.transform_function(method, &module.type_table);
-            }
+            self.transform_function(&mut func, &flat.type_table);
         }
 
         // Transform global initializers
         {
-            let type_table = module.type_table.borrow();
-            for global in &mut module.globals {
+            let type_table = flat.type_table.borrow();
+            for global in &mut flat.globals {
                 self.transform_expr(&mut global.initializer, &IndexSet::default(), &type_table);
             }
         }
-
-        // Box structs are injected into the module separately
-        // (see lower::lower)
     }
 
     /// Scan the type table to find which primitives need Box types.
-    pub(super) fn create_needed_box_types(&mut self, type_table: &mut TypeTable) {
+    fn create_needed_box_types(&mut self, type_table: &mut TypeTable) {
         // Collect base TypeIds that need boxing, plus newtypes.
         // Boxing is required for:
         // - Primitives (except i128/u128 which are already GC types)
@@ -413,7 +434,7 @@ impl BoxLowerer {
     /// so that codegen and pattern matching can still see the original inner type. The lower
     /// pass transforms variant expressions (`VariantConstruct`) to wrap/unwrap Box structs,
     /// while codegen handles the type mapping from `Option(primitive)` to a nullable Box reference.
-    pub(super) fn rewrite_types(&mut self, type_table: &mut TypeTable) {
+    fn rewrite_types(&mut self, type_table: &mut TypeTable) {
         // Collect entries to rewrite (can't mutate while iterating)
         let mut replacements: Vec<(TypeId, ResolvedType)> = Vec::new();
 
@@ -655,8 +676,7 @@ impl BoxLowerer {
             }
             | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantPayload { expr: inner, .. }
-            | TirExprKind::VariantTest { expr: inner, .. }
-            | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+            | TirExprKind::VariantTest { expr: inner, .. } => {
                 Self::remap_locals_in_expr(inner, remap);
             }
             TirExprKind::Index { expr: e, index, .. } => {
@@ -1014,9 +1034,6 @@ impl BoxLowerer {
                 for arg in args {
                     self.transform_expr(arg, address_taken, type_table);
                 }
-            }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                self.transform_expr(functor, address_taken, type_table);
             }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload) = payload {

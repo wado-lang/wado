@@ -157,7 +157,7 @@ pub fn mark_unreachable_defined_functions(module: &mut WirPackage) {
 
     // `WirInstr::ArrayClone` references its per-element copy helper by
     // *name* (the `$value_copy$T<id>` synthesized by
-    // `lower::value_copy::synthesize`), not by `WirFuncId`, so the
+    // `lower::plan::value_copy::synthesize`), not by `WirFuncId`, so the
     // generic body walker that follows `WirInstr::Call` / `RefFunc`
     // can't see the edge. Pre-build a `name-suffix → array index` map
     // so the per-instruction collector below can resolve those edges

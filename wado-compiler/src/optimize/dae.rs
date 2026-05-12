@@ -93,7 +93,7 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage) -> bool {
 ///
 /// - `__Closure_N::__call` (the closure body). Reached via the
 ///   synthesised `__closure_wrapper_*` (function-table dispatch) and via
-///   `lower::closure`'s fn-param-specialisation `MethodCall(g, __call,
+///   `lower::plan::closure`'s fn-param-specialisation `MethodCall(g, __call,
 ///   args)`. `wir_build::register_closure_wrappers` adapts the wrapper
 ///   body to the surviving `call_method.params`.
 ///
@@ -230,7 +230,7 @@ fn find_dead_params(func: &NirFunction) -> Vec<bool> {
 
 pub(super) fn collect_pinned(_project: &NirPackage) -> IndexSet<FnKey> {
     // `FuncRef` is lowered into a `Closure` literal (functor struct) by
-    // `lower::closure` before NIR is constructed, so there is no bare
+    // `lower::plan::closure` before NIR is constructed, so there is no bare
     // function reference left to pin. Closure functor `__call` methods are
     // NOT pinned wholesale either — `wir_build::register_closure_wrappers`
     // derives the function-table wrapper's external signature from

@@ -4212,10 +4212,6 @@ impl<'a> TirUnparser<'a> {
                 self.unparse_expr(callee);
                 self.delimited("(", ")", args, TirUnparser::unparse_expr);
             }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                // Just unparse the functor - the canonical wrapper is invisible
-                self.unparse_expr(functor);
-            }
             TirExprKind::LabeledBlock { label, block, .. } => {
                 self.output.push_str(label);
                 self.output.push_str(": {\n");
@@ -4422,7 +4418,7 @@ fn tir_unary_op_str(op: TirUnaryOp) -> &'static str {
 /// Unparse a TIR closure as `|name: Type, ...| body` (or `|name: Type, ...|
 /// captures[...] body` when the closure captures locals) source text.
 ///
-/// Used by `lower::closure` to bake the per-literal source string into
+/// Used by `lower::plan::closure` to bake the per-literal source string into
 /// `__Closure_N^InspectAlt::inspect_alt` without requiring every TIR
 /// `Closure` node to carry an unparsed-AST string.
 ///

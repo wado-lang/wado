@@ -624,9 +624,6 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     }
                 }
             }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                self.check_expr(functor)?;
-            }
             TirExprKind::Binary { left, right, .. } => {
                 self.check_expr(left)?;
                 self.check_expr(right)?;
@@ -1143,9 +1140,6 @@ fn check_pure_expr<H: CompilerHost>(
             for arg in args {
                 check_pure_expr(checker, arg, logger);
             }
-        }
-        TirExprKind::ClosureToCanonical { functor, .. } => {
-            check_pure_expr(checker, functor, logger);
         }
         TirExprKind::Binary { left, right, .. } => {
             check_pure_expr(checker, left, logger);

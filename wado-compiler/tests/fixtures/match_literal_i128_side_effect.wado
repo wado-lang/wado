@@ -1,0 +1,59 @@
+// Regression: the wide-int `match` → if-else rewrite used to clone
+// the scrutinee `TirExpr` into every arm's `Eq::eq` condition. For
+// a side-effecting scrutinee the cloned expression re-executes once
+// per arm tested, breaking match's "evaluate scrutinee exactly
+// once" contract. `wir_build::pattern_match::translate_match`
+// already stores the scrutinee in a local for normal matches; the
+// wide-int rewrite must do the same. Fix: hoist the scrutinee into
+// a fresh function local and reference it via `Local(idx)` in every
+// generated `Eq::eq` / `Let` so the original expression runs once.
+use { println, Stdout } from "core:cli";
+
+global mut SIDE_EFFECT_COUNTER: i32 = 0;
+
+fn observe(value: i128) -> i128 {
+    SIDE_EFFECT_COUNTER = SIDE_EFFECT_COUNTER + 1;
+    return value;
+}
+
+export fn run() with Stdout {
+    SIDE_EFFECT_COUNTER = 0;
+    let r1 = match observe(30 as i128) {
+        10 => "ten",
+        20 => "twenty",
+        30 => "thirty",
+        _ => "other",
+    };
+    println(`{r1} after {SIDE_EFFECT_COUNTER}`);
+    assert SIDE_EFFECT_COUNTER == 1, `arm-match: counter must be 1 not {SIDE_EFFECT_COUNTER}`;
+    assert r1 == "thirty";
+
+    SIDE_EFFECT_COUNTER = 0;
+    let r2 = match observe(99 as i128) {
+        10 => "ten",
+        20 => "twenty",
+        30 => "thirty",
+        _ => "other",
+    };
+    println(`{r2} after {SIDE_EFFECT_COUNTER}`);
+    assert SIDE_EFFECT_COUNTER == 1, `wildcard: counter must be 1 not {SIDE_EFFECT_COUNTER}`;
+    assert r2 == "other";
+
+    SIDE_EFFECT_COUNTER = 0;
+    let r3 = match observe_u(7 as u128) {
+        1 => "one",
+        7 => "seven",
+        _ => "other",
+    };
+    println(`{r3} after {SIDE_EFFECT_COUNTER}`);
+    assert SIDE_EFFECT_COUNTER == 1, `u128: counter must be 1 not {SIDE_EFFECT_COUNTER}`;
+    assert r3 == "seven";
+}
+
+fn observe_u(value: u128) -> u128 {
+    SIDE_EFFECT_COUNTER = SIDE_EFFECT_COUNTER + 1;
+    return value;
+}
+
+__DATA__
+{"stdout": "thirty after 1\nother after 1\nseven after 1\n"}

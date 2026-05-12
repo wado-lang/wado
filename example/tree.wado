@@ -56,7 +56,7 @@ fn parse_args(arguments: Array<String>) -> Result<Options, String> {
             if i + 1 >= arguments.len() {
                 return Result::Err("tree: option -L requires a numeric argument");
             }
-            match i32::from_str(arguments[i + 1]) {
+            match i32::from_str(&arguments[i + 1]) {
                 Ok(n) && n >= 0 => {
                     opts.max_depth = n;
                 },

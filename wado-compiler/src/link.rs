@@ -64,7 +64,6 @@ pub fn link(package: Package) -> FlatPackage {
     let mut globals = Vec::new();
     let mut imports = Vec::new();
     let mut tests = Vec::new();
-    let mut closure_functors = Vec::new();
     let mut wasm_module_sources: IndexMap<ModuleSource, String> = IndexMap::default();
 
     for (_ms, tir_mod) in package.tir_modules {
@@ -82,7 +81,6 @@ pub fn link(package: Package) -> FlatPackage {
         variants.extend(tir_mod.variants);
         flags.extend(tir_mod.flags);
         globals.extend(tir_mod.globals);
-        closure_functors.extend(tir_mod.closure_functors);
 
         if is_entry {
             imports = tir_mod.imports;
@@ -114,11 +112,6 @@ pub fn link(package: Package) -> FlatPackage {
         globals,
         imports,
         tests,
-        string_literals: Vec::new(),
-        bytes_literals: Vec::new(),
-        closure_functors,
-        function_strings: IndexMap::default(),
-        function_method_info: IndexMap::default(),
         wasm_module_sources,
         module_name: package.module_name,
         wasi_registry: package.wasi_registry,

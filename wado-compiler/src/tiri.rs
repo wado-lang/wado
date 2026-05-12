@@ -693,7 +693,7 @@ impl<'a> Interpreter<'a> {
     /// src` (reference-typed Local→Local copy, where both names alias
     /// the same heap object) and `let dst = $value_copy$T(src)`
     /// (the synthesized one-level shallow value-copy helper from
-    /// `lower::value_copy::synthesize` — field-by-field projection
+    /// `lower::plan::value_copy::synthesize` — field-by-field projection
     /// plus `array_clone` for raw arrays). Only primitive-literal
     /// fields are recorded in `field_env`, so for the values we
     /// actually transfer, src and dst observe the same constants
