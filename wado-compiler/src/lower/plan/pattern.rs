@@ -6,30 +6,18 @@ use crate::name::LocalMethodName;
 use crate::tir::FunctionRef;
 use crate::tir::{
     CallArg, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirField,
-    TirLiteralPattern, TirLocal, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind,
+    TirLiteralPattern, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
 /// Run the pattern planner: a TIR-mutating pass that rewrites
 /// `LetDestructure` / `IfLet` into explicit `Let` + `If` chains and
-/// converts dense integer `Match` expressions into `Switch`. Wrapped
-/// to consume `&mut FlatPackage` so it slots into [`super::plan`].
+/// converts dense integer `Match` expressions into `Switch`.
 pub fn plan(flat: &mut FlatPackage) {
-    let entry_module_source = flat.entry_module_source.clone();
-    let mut temp_module = TirModule::new(entry_module_source);
-    temp_module.type_table = flat.type_table.clone();
-    temp_module.functions = std::mem::take(&mut flat.functions);
-    temp_module.structs = std::mem::take(&mut flat.structs);
-    temp_module.globals = std::mem::take(&mut flat.globals);
-    temp_module.variants = std::mem::take(&mut flat.variants);
-    temp_module.enums = std::mem::take(&mut flat.enums);
-    temp_module.flags = std::mem::take(&mut flat.flags);
-    temp_module.imports = std::mem::take(&mut flat.imports);
-
     let mut global_variant_map: IndexMap<(String, ModuleSource), Vec<(String, u32)>> =
         IndexMap::default();
-    for variant in &temp_module.variants {
+    for variant in &flat.variants {
         let cases: Vec<(String, u32)> = variant
             .cases
             .iter()
@@ -37,16 +25,7 @@ pub fn plan(flat: &mut FlatPackage) {
             .collect();
         global_variant_map.insert((variant.name.clone(), variant.module_source.clone()), cases);
     }
-
-    lower_patterns(&mut temp_module, &global_variant_map);
-
-    flat.functions = temp_module.functions;
-    flat.structs = temp_module.structs;
-    flat.globals = temp_module.globals;
-    flat.variants = temp_module.variants;
-    flat.enums = temp_module.enums;
-    flat.flags = temp_module.flags;
-    flat.imports = temp_module.imports;
+    lower_patterns(flat, &global_variant_map);
 }
 
 const SWITCH_MIN_CASES: usize = 8;
@@ -237,7 +216,7 @@ fn match_to_switch(
 }
 
 fn lower_patterns(
-    module: &mut TirModule,
+    flat: &mut FlatPackage,
     global_variant_map: &IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
 ) {
     // Build a map keyed by (variant_name, module_source). The
@@ -253,7 +232,7 @@ fn lower_patterns(
     // already produced, so the per-module entry is an idempotent
     // refresh rather than an override that would mask a sibling
     // module's variant of the same name.
-    for variant in &module.variants {
+    for variant in &flat.variants {
         let cases: Vec<(String, u32)> = variant
             .cases
             .iter()
@@ -265,15 +244,15 @@ fn lower_patterns(
     // Build struct fields map from module structs
     let mut struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>> =
         IndexMap::default();
-    for s in &module.structs {
+    for s in &flat.structs {
         struct_fields_map.insert(
-            (s.name.clone(), module.module_source.clone()),
+            (s.name.clone(), flat.entry_module_source.clone()),
             s.fields.clone(),
         );
     }
 
-    let type_table = module.type_table.borrow();
-    for func_rc in &module.functions {
+    let type_table = flat.type_table.borrow();
+    for func_rc in &flat.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(mut body) = func.body.take() {
             // Take ownership of the values to avoid borrow conflicts

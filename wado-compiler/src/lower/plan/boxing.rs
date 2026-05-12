@@ -8,28 +8,15 @@ use crate::module_source::ModuleSource;
 use crate::name::mangle_generic_name;
 use crate::tir::{
     MonomorphInfo, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField,
-    TirFunction, TirLocal, TirModule, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
     TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
 /// Run the boxing planner: a TIR-mutating pass that rewrites
 /// `&primitive` / `&mut primitive` into `Box<T>` struct operations.
-/// Wrapped to consume `&mut FlatPackage` so it slots into
-/// [`super::plan`].
 pub fn plan(flat: &mut FlatPackage) {
-    let entry_module_source = flat.entry_module_source.clone();
-    let mut temp_module = TirModule::new(entry_module_source);
-    temp_module.type_table = flat.type_table.clone();
-    temp_module.functions = std::mem::take(&mut flat.functions);
-    temp_module.structs = std::mem::take(&mut flat.structs);
-    temp_module.globals = std::mem::take(&mut flat.globals);
-    temp_module.variants = std::mem::take(&mut flat.variants);
-    temp_module.enums = std::mem::take(&mut flat.enums);
-    temp_module.flags = std::mem::take(&mut flat.flags);
-    temp_module.imports = std::mem::take(&mut flat.imports);
-
-    let box_module_source = temp_module
+    let box_module_source = flat
         .type_table
         .borrow()
         .box_module_source
@@ -37,33 +24,23 @@ pub fn plan(flat: &mut FlatPackage) {
         .unwrap_or_else(ModuleSource::prelude);
     let mut box_lowerer = BoxLowerer::new(box_module_source);
 
-    for s in &temp_module.structs {
+    for s in &flat.structs {
         box_lowerer
             .struct_fields_map
             .insert((s.name.clone(), s.module_source.clone()), s.fields.clone());
     }
-    for v in &temp_module.variants {
+    for v in &flat.variants {
         box_lowerer.variant_names.insert(v.name.clone());
     }
 
     {
-        let mut type_table = temp_module.type_table.borrow_mut();
+        let mut type_table = flat.type_table.borrow_mut();
         box_lowerer.create_needed_box_types(&mut type_table);
         box_lowerer.rewrite_types(&mut type_table);
     }
 
-    box_lowerer.lower_module_exprs(&mut temp_module);
-    temp_module
-        .structs
-        .append(&mut box_lowerer.generated_structs);
-
-    flat.functions = temp_module.functions;
-    flat.structs = temp_module.structs;
-    flat.globals = temp_module.globals;
-    flat.variants = temp_module.variants;
-    flat.enums = temp_module.enums;
-    flat.flags = temp_module.flags;
-    flat.imports = temp_module.imports;
+    box_lowerer.lower_module_exprs(flat);
+    flat.structs.append(&mut box_lowerer.generated_structs);
 }
 
 struct BoxLowerer {
@@ -404,32 +381,22 @@ impl BoxLowerer {
 
     /// Transform expressions in a module (called after type table setup).
     ///
-    /// This is the per-module phase: transforms function bodies, impl methods,
-    /// and global initializers. Also injects generated Box structs into the module.
-    fn lower_module_exprs(&mut self, module: &mut TirModule) {
+    /// Transforms function bodies and global initializers. Generated
+    /// Box structs are appended by the caller.
+    fn lower_module_exprs(&mut self, flat: &mut FlatPackage) {
         // Transform expressions in all functions.
-        for func_rc in &module.functions {
+        for func_rc in &flat.functions {
             let mut func = func_rc.borrow_mut();
-            self.transform_function(&mut func, &module.type_table);
-        }
-
-        // Transform impl method bodies
-        for impl_block in &mut module.impls {
-            for method in &mut impl_block.methods {
-                self.transform_function(method, &module.type_table);
-            }
+            self.transform_function(&mut func, &flat.type_table);
         }
 
         // Transform global initializers
         {
-            let type_table = module.type_table.borrow();
-            for global in &mut module.globals {
+            let type_table = flat.type_table.borrow();
+            for global in &mut flat.globals {
                 self.transform_expr(&mut global.initializer, &IndexSet::default(), &type_table);
             }
         }
-
-        // Box structs are injected into the module separately
-        // (see lower::lower)
     }
 
     /// Scan the type table to find which primitives need Box types.

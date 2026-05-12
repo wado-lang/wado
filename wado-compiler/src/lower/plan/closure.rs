@@ -10,7 +10,7 @@ use crate::name::{LocalMethodName, MethodName};
 use crate::tir;
 use crate::tir::{
     CallArg, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType, TirBlock,
-    TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirImpl, TirLocal, TirModule,
+    TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirLocal,
     TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
     TypeTable,
 };
@@ -53,41 +53,16 @@ pub struct ClosurePlan {
 
 /// Run the closure planner.
 ///
-/// Wraps `flat` in a transient `TirModule` so the existing
-/// [`ClosureLowerer`] can run unchanged: it expects `module.functions`,
-/// `module.structs`, `module.type_table`, and so on. The wrapper moves
-/// the data in and back out without copying.
-///
-/// The pass is TIR-mutating — it rewrites `Closure` / `FuncRef` /
-/// `Capture` / `IndirectCall` nodes in place, generates `__Closure_N`
-/// functor structs and `__call` methods, and produces specialized
-/// callees for fn-typed parameters. Splitting the call-site rewriting
-/// into the TIR → NIR translator is a deferred follow-up.
+/// TIR-mutating: rewrites `Closure` / `FuncRef` / `Capture` /
+/// `IndirectCall` nodes in place, generates `__Closure_N` functor
+/// structs and `__call` methods, and produces specialized callees for
+/// fn-typed parameters. Remaining `Closure` nodes survive in TIR until
+/// the translator emits `NirExprKind::ClosureToCanonical` from them.
 pub fn plan(flat: &mut FlatPackage) -> ClosurePlan {
-    let entry_module_source = flat.entry_module_source.clone();
-    let mut temp_module = TirModule::new(entry_module_source);
-    temp_module.type_table = flat.type_table.clone();
-    temp_module.functions = std::mem::take(&mut flat.functions);
-    temp_module.structs = std::mem::take(&mut flat.structs);
-    temp_module.globals = std::mem::take(&mut flat.globals);
-    temp_module.variants = std::mem::take(&mut flat.variants);
-    temp_module.enums = std::mem::take(&mut flat.enums);
-    temp_module.flags = std::mem::take(&mut flat.flags);
-    temp_module.imports = std::mem::take(&mut flat.imports);
-
-    let mut closure_lowerer = ClosureLowerer::new(&temp_module.module_source);
-    closure_lowerer.lower_module(&mut temp_module);
-
-    flat.functions = temp_module.functions;
-    flat.structs = temp_module.structs;
-    flat.globals = temp_module.globals;
-    flat.variants = temp_module.variants;
-    flat.enums = temp_module.enums;
-    flat.flags = temp_module.flags;
-    flat.imports = temp_module.imports;
-
+    let mut closure_lowerer = ClosureLowerer::new(&flat.entry_module_source);
+    closure_lowerer.lower_module(flat);
     ClosurePlan {
-        functor_infos: std::mem::take(&mut temp_module.closure_functors),
+        functor_infos: std::mem::take(&mut closure_lowerer.functor_infos),
         specialized_locals: std::mem::take(&mut closure_lowerer.specialized_locals),
     }
 }
@@ -281,11 +256,11 @@ impl ClosureLowerer {
     }
 
     /// Lower all closures in a module
-    fn lower_module(&mut self, module: &mut TirModule) {
+    fn lower_module(&mut self, flat: &mut FlatPackage) {
         // Phase 0: Convert FuncRef used as values to zero-capture Closures.
         // Named functions used as values (e.g., `&double` or `double` passed to fn-type params)
         // need to become Closure nodes so the existing closure pipeline handles them.
-        self.convert_func_refs_to_closures(module);
+        self.convert_func_refs_to_closures(flat);
 
         // Phase 1: collect all closures and assign each a stable `functor_id`.
         //
@@ -298,7 +273,7 @@ impl ClosureLowerer {
         self.next_closure_id = 0;
         self.collected_closures.clear();
 
-        let func_refs: Vec<_> = module.functions.clone();
+        let func_refs: Vec<_> = flat.functions.clone();
         let mut collector = CollectClosuresVisitor {
             next_closure_id: &mut self.next_closure_id,
             collected_closures: &mut self.collected_closures,
@@ -310,20 +285,11 @@ impl ClosureLowerer {
             }
         }
 
-        // Also collect from impl methods
-        for impl_block in &mut module.impls {
-            for method in &mut impl_block.methods {
-                if let Some(body) = &mut method.body {
-                    collector.visit_block(body);
-                }
-            }
-        }
-
         // Generate functor structs and __call methods. Each `__call` body is
         // a clone of the closure body taken AFTER `collect_closures_in_block`
         // assigned IDs to nested closures, so those clones carry the same
         // stable functor IDs as the originals.
-        self.generate_functor_items(&mut module.type_table.borrow_mut());
+        self.generate_functor_items(&mut flat.type_table.borrow_mut());
 
         // Phase 2: analyse which closures are safe to specialise. Reads
         // `functor_id` directly off the Closure node — no counter.
@@ -339,27 +305,10 @@ impl ClosureLowerer {
                 .visit_block(body);
             }
         }
-        for impl_block in &module.impls {
-            for method in &impl_block.methods {
-                if let Some(body) = &method.body {
-                    self.local_to_closure.clear();
-                    ClosureSafetyAnalyzer {
-                        local_to_closure: &mut self.local_to_closure,
-                        specializable: &mut self.specializable,
-                        in_callee_position: false,
-                    }
-                    .visit_block(body);
-                }
-            }
-        }
 
         // Phase 2.5: Generate specialized functions for fn-param monomorphization.
         // For closures passed as fn-type arguments, generate specialized callees.
-        self.generate_fn_param_specializations(
-            &func_refs,
-            &module.impls,
-            &mut module.type_table.borrow_mut(),
-        );
+        self.generate_fn_param_specializations(&func_refs, &mut flat.type_table.borrow_mut());
 
         // Phase 3: lower closure call sites. We walk the generated `__call`
         // methods alongside the original module functions because a nested
@@ -385,7 +334,7 @@ impl ClosureLowerer {
                 .collect();
             if let Some(body) = &mut func.body {
                 self.local_to_closure.clear();
-                let mut tt = module.type_table.borrow_mut();
+                let mut tt = flat.type_table.borrow_mut();
                 self.seed_local_to_closure_from_params(&param_locals, &tt);
                 ClosureCallSiteLowerer {
                     local_to_closure: &mut self.local_to_closure,
@@ -399,30 +348,6 @@ impl ClosureLowerer {
             }
             self.update_local_types(&mut func);
         }
-        for impl_block in &mut module.impls {
-            for method in &mut impl_block.methods {
-                let param_locals: Vec<(u32, TypeId)> = method
-                    .params
-                    .iter()
-                    .map(|p| (p.local_index, p.type_id))
-                    .collect();
-                if let Some(body) = &mut method.body {
-                    self.local_to_closure.clear();
-                    let mut tt = module.type_table.borrow_mut();
-                    self.seed_local_to_closure_from_params(&param_locals, &tt);
-                    ClosureCallSiteLowerer {
-                        local_to_closure: &mut self.local_to_closure,
-                        specializable: &self.specializable,
-                        functor_infos: &self.functor_infos,
-                        fn_param_specializations: &self.fn_param_specializations,
-                        module_source: &self.module_source,
-                        type_table: &mut tt,
-                    }
-                    .visit_block(body);
-                }
-                self.update_local_types(method);
-            }
-        }
 
         // Remaining `Closure` nodes (those not turned into
         // `StructLiteral` at a specialized `Let` site) are now
@@ -430,23 +355,21 @@ impl ClosureLowerer {
         // `ClosurePlan::functor_infos`, which produces
         // `NirExprKind::ClosureToCanonical` directly.
 
-        // Store functor metadata in module for the optimizer to use.
-        // This enables closure inlining by providing the __call method body.
-        module.closure_functors = std::mem::take(&mut self.functor_infos);
+        // Functor metadata stays on `self.functor_infos`; the planner
+        // moves it directly into `ClosurePlan` instead of staging it
+        // on `FlatPackage`.
 
         // Add ALL generated structs and functions to the module
-        module
-            .structs
+        flat.structs
             .extend(std::mem::take(&mut self.generated_structs));
-        module
-            .functions
+        flat.functions
             .extend(std::mem::take(&mut self.generated_functions));
     }
 
     /// Convert `FuncRef` nodes (used as values, not in Call/MethodCall func positions) to
     /// zero-capture `Closure` nodes. This enables named functions to be passed as function-type
     /// arguments (e.g., `apply(double, 21)` or `apply(&double, 21)`).
-    fn convert_func_refs_to_closures(&self, module: &mut TirModule) {
+    fn convert_func_refs_to_closures(&self, flat: &mut FlatPackage) {
         // Build a map from function name to (param_types, return_type).
         //
         // `lower::lower` operates on a flattened `FlatPackage` — all functions
@@ -455,7 +378,7 @@ impl ClosureLowerer {
         // runs, so a bare-name lookup here covers imported function refs like
         // `&println` from `core:cli` without an additional cross-module pass.
         let mut func_sigs: IndexMap<String, FuncSig> = IndexMap::default();
-        for func_rc in &module.functions {
+        for func_rc in &flat.functions {
             let func = func_rc.borrow();
             func_sigs.insert(
                 func.name.clone(),
@@ -469,45 +392,16 @@ impl ClosureLowerer {
                 },
             );
         }
-        for impl_block in &module.impls {
-            for method in &impl_block.methods {
-                func_sigs.insert(
-                    method.name.clone(),
-                    FuncSig {
-                        params: method
-                            .params
-                            .iter()
-                            .map(|p| (p.name.clone(), p.type_id))
-                            .collect(),
-                        return_type: method.return_type,
-                    },
-                );
-            }
-        }
 
-        {
-            let mut type_table = module.type_table.borrow_mut();
-            let mut rewriter = FuncRefToClosureRewriter {
-                func_sigs: &func_sigs,
-                type_table: &mut type_table,
-            };
-            for func_rc in &module.functions {
-                let mut func = func_rc.borrow_mut();
-                if let Some(body) = &mut func.body {
-                    rewriter.visit_block(body);
-                }
-            }
-        }
-        for impl_block in &mut module.impls {
-            let mut type_table = module.type_table.borrow_mut();
-            let mut rewriter = FuncRefToClosureRewriter {
-                func_sigs: &func_sigs,
-                type_table: &mut type_table,
-            };
-            for method in &mut impl_block.methods {
-                if let Some(body) = &mut method.body {
-                    rewriter.visit_block(body);
-                }
+        let mut type_table = flat.type_table.borrow_mut();
+        let mut rewriter = FuncRefToClosureRewriter {
+            func_sigs: &func_sigs,
+            type_table: &mut type_table,
+        };
+        for func_rc in &flat.functions {
+            let mut func = func_rc.borrow_mut();
+            if let Some(body) = &mut func.body {
+                rewriter.visit_block(body);
             }
         }
     }
@@ -960,7 +854,6 @@ impl ClosureLowerer {
     fn generate_fn_param_specializations(
         &mut self,
         func_refs: &[Rc<RefCell<TirFunction>>],
-        impls: &[TirImpl],
         type_table: &mut TypeTable,
     ) {
         let mut func_by_name: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
@@ -980,13 +873,6 @@ impl ClosureLowerer {
             let func = func_rc.borrow();
             if let Some(body) = &func.body {
                 collector.visit_block(body);
-            }
-        }
-        for impl_block in impls {
-            for method in &impl_block.methods {
-                if let Some(body) = &method.body {
-                    collector.visit_block(body);
-                }
             }
         }
 

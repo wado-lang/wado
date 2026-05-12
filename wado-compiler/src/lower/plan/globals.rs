@@ -9,38 +9,18 @@ use crate::module_source::ModuleSource;
 use crate::tir::FunctionRef;
 use crate::tir::{
     FunctionKind, InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
-    TirLocal, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirLocal, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
 use crate::lower::wide_int_literal::{create_i128_literal, create_u128_literal};
 
 /// Extract non-constant global initializers into per-module
-/// `__initialize_<modname>` functions. Wrapped to consume
-/// `&mut FlatPackage` so it slots into [`super::plan`]. Must run
-/// before `boxing` because the extracted initializer code may contain
-/// `&primitive` / closure expressions that boxing / closure rewrite.
+/// `__initialize_<modname>` functions. Must run before `boxing`
+/// because the extracted initializer code may contain `&primitive` /
+/// closure expressions that boxing / closure rewrite.
 pub fn extract(flat: &mut FlatPackage) {
-    let entry_module_source = flat.entry_module_source.clone();
-    let mut temp_module = TirModule::new(entry_module_source);
-    temp_module.type_table = flat.type_table.clone();
-    temp_module.functions = std::mem::take(&mut flat.functions);
-    temp_module.structs = std::mem::take(&mut flat.structs);
-    temp_module.globals = std::mem::take(&mut flat.globals);
-    temp_module.variants = std::mem::take(&mut flat.variants);
-    temp_module.enums = std::mem::take(&mut flat.enums);
-    temp_module.flags = std::mem::take(&mut flat.flags);
-    temp_module.imports = std::mem::take(&mut flat.imports);
-
-    lower_global_initializers(&mut temp_module);
-
-    flat.functions = temp_module.functions;
-    flat.structs = temp_module.structs;
-    flat.globals = temp_module.globals;
-    flat.variants = temp_module.variants;
-    flat.enums = temp_module.enums;
-    flat.flags = temp_module.flags;
-    flat.imports = temp_module.imports;
+    lower_global_initializers(flat);
 }
 
 /// Generate the top-level `__initialize_modules` aggregator. Must run
@@ -166,14 +146,14 @@ fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
 ///
 /// Note: The `__initialize_modules` function that calls all modules' `__initialize_module`
 /// is generated in the post-processing step (see `generate_initialize_modules_flat`).
-fn lower_global_initializers(module: &mut TirModule) {
-    let type_table = module.type_table.borrow();
+fn lower_global_initializers(flat: &mut FlatPackage) {
+    let type_table = flat.type_table.borrow();
 
     // Collect non-constant initializers with their indices for topological sorting
     let mut lazy_inits: Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)> =
         Vec::new();
 
-    for (idx, global) in module.globals.iter_mut().enumerate() {
+    for (idx, global) in flat.globals.iter_mut().enumerate() {
         if !is_constant_initializer(&global.initializer) {
             // Save the original initializer with index and local types
             lazy_inits.push((
@@ -222,7 +202,7 @@ fn lower_global_initializers(module: &mut TirModule) {
     }
 
     // Topologically sort the lazy initializers based on dependencies
-    let sorted_inits = topological_sort_global_inits(&lazy_inits, &module.globals);
+    let sorted_inits = topological_sort_global_inits(&lazy_inits, &flat.globals);
 
     // Generate __initialize_module function
     let span = Span::new(0, 0, 1, 1);
@@ -258,7 +238,7 @@ fn lower_global_initializers(module: &mut TirModule) {
     };
 
     let init_func = TirFunction {
-        module_source: module.module_source.clone(),
+        module_source: flat.entry_module_source.clone(),
         is_async: false,
         name: "__initialize_module".to_string(),
         is_pub: true, // pub so it can be called from entry module's __initialize_modules
@@ -291,7 +271,7 @@ fn lower_global_initializers(module: &mut TirModule) {
         return_abi: crate::tir::ReturnAbi::default(),
     };
 
-    module.functions.push(Rc::new(RefCell::new(init_func)));
+    flat.functions.push(Rc::new(RefCell::new(init_func)));
 }
 
 /// Collect global variable references from an expression
