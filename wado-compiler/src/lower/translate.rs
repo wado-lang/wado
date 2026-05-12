@@ -178,7 +178,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .closure
             .specialized_locals
             .get(&key)
-            .map(|v| v.as_slice());
+            .map(std::vec::Vec::as_slice);
         Self { base, specialized }
     }
 
@@ -200,7 +200,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
     }
 }
 
-impl<'a> Translator<'a> {
+impl Translator<'_> {
     fn convert_function(&self, func: &TirFunction) -> NirFunction {
         let fctx = FunctionTranslator::new(self, func);
         NirFunction {
@@ -303,7 +303,7 @@ impl<'a> Translator<'a> {
     }
 }
 
-impl<'a, 'p> FunctionTranslator<'a, 'p> {
+impl FunctionTranslator<'_, '_> {
     fn convert_block(&self, block: &TirBlock) -> NirBlock {
         NirBlock {
             stmts: block.stmts.iter().map(|s| self.convert_stmt(s)).collect(),
