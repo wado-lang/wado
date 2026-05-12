@@ -1253,7 +1253,7 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &A
     // optional shape, breaking `( (a)? b )?`-style cases).
     if !rep.non_greedy {
         if let Optional = rep.kind {
-            if let Group(g) = &rep.element {
+            if let Group(g) = rep.element {
                 if g.alternatives.len() == 1 && has_nested_optional_in_alt(&g.alternatives[0]) {
                     return lower_scan_optional_lookahead_group(&g.alternatives[0], ctx, outer_follow);
                 }
