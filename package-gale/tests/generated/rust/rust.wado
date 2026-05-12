@@ -18303,7 +18303,7 @@ fn parse_function_(p: &mut Parser) -> Result<FunctionNode, ParseError> {
     };
     let lparen = p.expect(TK_LPAREN)?;
     let function_parameters: Option<FunctionParametersNode> = if _gale_kind_set_34(p.peek_kind()) {
-        let function_parameters = parse_function_parameters(p)?;
+        let function_parameters = parse_function_parameters__follow_2(p)?;
         Option::<FunctionParametersNode>::Some(function_parameters)
     } else {
         null
@@ -18946,7 +18946,7 @@ fn parse_tuple_struct(p: &mut Parser) -> Result<TupleStructNode, ParseError> {
     };
     let lparen = p.expect(TK_LPAREN)?;
     let tuple_fields: Option<TupleFieldsNode> = if _gale_kind_set_42(p.peek_kind()) {
-        let tuple_fields = parse_tuple_fields(p)?;
+        let tuple_fields = parse_tuple_fields__follow_3(p)?;
         Option::<TupleFieldsNode>::Some(tuple_fields)
     } else {
         null
@@ -19273,7 +19273,7 @@ fn parse_enum_item_tuple(p: &mut Parser) -> Result<EnumItemTupleNode, ParseError
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN)?;
     let tuple_fields: Option<TupleFieldsNode> = if _gale_kind_set_42(p.peek_kind()) {
-        let tuple_fields = parse_tuple_fields(p)?;
+        let tuple_fields = parse_tuple_fields__follow_3(p)?;
         Option::<TupleFieldsNode>::Some(tuple_fields)
     } else {
         null
@@ -20098,7 +20098,7 @@ fn parse_where_clause(p: &mut Parser) -> Result<WhereClauseNode, ParseError> {
         where_clause_item_comma_list.push(where_clause_item_comma);
     }
     let where_clause_item: Option<WhereClauseItemNode> = if _gale_kind_set_5(p.peek_kind()) {
-        let where_clause_item = parse_where_clause_item(p)?;
+        let where_clause_item = parse_where_clause_item__follow_5(p)?;
         Option::<WhereClauseItemNode>::Some(where_clause_item)
     } else {
         null
@@ -20199,7 +20199,7 @@ fn parse_type_bound_where_clause_item(p: &mut Parser) -> Result<TypeBoundWhereCl
     let type_ = parse_type_(p)?;
     let colon = p.expect(TK_COLON)?;
     let type_param_bounds: Option<TypeParamBoundsNode> = if _gale_kind_set_44(p.peek_kind()) {
-        let type_param_bounds = parse_type_param_bounds(p)?;
+        let type_param_bounds = parse_type_param_bounds__follow_4(p)?;
         Option::<TypeParamBoundsNode>::Some(type_param_bounds)
     } else {
         null
@@ -21049,7 +21049,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     if kind == TK_DOTDOT {
         let dotdot = p.expect(TK_DOTDOT)?;
         let expression: Option<ExpressionNode> = if _gale_kind_set_11(p.peek_kind()) {
-            let expression = parse_expression(p)?;
+            let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
         } else {
             null
@@ -21078,7 +21078,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
             null
         };
         let expression: Option<ExpressionNode> = if _gale_kind_set_11(p.peek_kind()) {
-            let expression = parse_expression(p)?;
+            let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
         } else {
             null
@@ -21099,7 +21099,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
             null
         };
         let expression: Option<ExpressionNode> = if _gale_kind_set_11(p.peek_kind()) {
-            let expression = parse_expression(p)?;
+            let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
         } else {
             null
@@ -21114,7 +21114,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     if kind == TK_KW_RETURN {
         let kw_return = p.expect(TK_KW_RETURN)?;
         let expression: Option<ExpressionNode> = if _gale_kind_set_11(p.peek_kind()) {
-            let expression = parse_expression(p)?;
+            let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
         } else {
             null
@@ -21166,7 +21166,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
             inner_attribute_list.push(inner_attribute);
         }
         let array_elements: Option<ArrayElementsNode> = if _gale_kind_set_11(p.peek_kind()) {
-            let array_elements = parse_array_elements(p)?;
+            let array_elements = parse_array_elements__follow_7(p)?;
             Option::<ArrayElementsNode>::Some(array_elements)
         } else {
             null
@@ -22090,7 +22090,7 @@ fn parse_block_expression(p: &mut Parser) -> Result<BlockExpressionNode, ParseEr
         inner_attribute_list.push(inner_attribute);
     }
     let statements: Option<StatementsNode> = if _gale_kind_set_71(p.peek_kind()) {
-        let statements = parse_statements(p)?;
+        let statements = parse_statements__follow_9(p)?;
         Option::<StatementsNode>::Some(statements)
     } else {
         null
@@ -22143,7 +22143,7 @@ fn parse_statements_bt_0(p: &mut Parser) -> Result<StatementsNode, ParseError> {
         statement_list.push(statement);
     }
     let expression: Option<ExpressionNode> = if _gale_kind_set_11(p.peek_kind()) {
-        let expression = parse_expression(p)?;
+        let expression = parse_expression__follow_6(p)?;
         Option::<ExpressionNode>::Some(expression)
     } else {
         null
@@ -22393,7 +22393,7 @@ fn parse_tuple_elements(p: &mut Parser) -> Result<TupleElementsNode, ParseError>
         expression_comma_list.push(expression_comma);
     }
     let expression: Option<ExpressionNode> = if _gale_kind_set_11(p.peek_kind()) {
-        let expression = parse_expression(p)?;
+        let expression = parse_expression__follow_6(p)?;
         Option::<ExpressionNode>::Some(expression)
     } else {
         null
@@ -23653,7 +23653,7 @@ fn parse_match_expression(p: &mut Parser) -> Result<MatchExpressionNode, ParseEr
         inner_attribute_list.push(inner_attribute);
     }
     let match_arms: Option<MatchArmsNode> = if _gale_kind_set_80(p.peek_kind()) {
-        let match_arms = parse_match_arms(p)?;
+        let match_arms = parse_match_arms__follow_11(p)?;
         Option::<MatchArmsNode>::Some(match_arms)
     } else {
         null
@@ -25898,7 +25898,7 @@ fn parse_bare_function_type(p: &mut Parser) -> Result<BareFunctionTypeNode, Pars
     let kw_fn = p.expect(TK_KW_FN)?;
     let lparen = p.expect(TK_LPAREN)?;
     let function_parameters_maybe_named_variadic: Option<FunctionParametersMaybeNamedVariadicNode> = if _gale_kind_set_95(p.peek_kind()) {
-        let function_parameters_maybe_named_variadic = parse_function_parameters_maybe_named_variadic(p)?;
+        let function_parameters_maybe_named_variadic = parse_function_parameters_maybe_named_variadic__follow_13(p)?;
         Option::<FunctionParametersMaybeNamedVariadicNode>::Some(function_parameters_maybe_named_variadic)
     } else {
         null
@@ -27431,7 +27431,7 @@ fn parse_type_path_fn(p: &mut Parser) -> Result<TypePathFnNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN)?;
     let type_path_inputs: Option<TypePathInputsNode> = if _gale_kind_set_5(p.peek_kind()) {
-        let type_path_inputs = parse_type_path_inputs(p)?;
+        let type_path_inputs = parse_type_path_inputs__follow_14(p)?;
         Option::<TypePathInputsNode>::Some(type_path_inputs)
     } else {
         null
@@ -30476,7 +30476,7 @@ fn parse_expression__follow_6_atom(p: &mut Parser) -> Result<ExpressionNode, Par
             inner_attribute_list.push(inner_attribute);
         }
         let array_elements: Option<ArrayElementsNode> = if _gale_kind_set_11(p.peek_kind()) {
-            let array_elements = parse_array_elements(p)?;
+            let array_elements = parse_array_elements__follow_7(p)?;
             Option::<ArrayElementsNode>::Some(array_elements)
         } else {
             null
@@ -34284,7 +34284,7 @@ fn parse_expression__follow_23_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
     if kind == TK_DOTDOT {
         let dotdot = p.expect(TK_DOTDOT)?;
         let expression: Option<ExpressionNode> = if _gale_kind_set_118(p.peek_kind()) {
-            let expression = parse_expression__follow_23(p)?;
+            let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
         } else {
             null
@@ -34313,7 +34313,7 @@ fn parse_expression__follow_23_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
             null
         };
         let expression: Option<ExpressionNode> = if _gale_kind_set_118(p.peek_kind()) {
-            let expression = parse_expression__follow_23(p)?;
+            let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
         } else {
             null
@@ -34334,7 +34334,7 @@ fn parse_expression__follow_23_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
             null
         };
         let expression: Option<ExpressionNode> = if _gale_kind_set_118(p.peek_kind()) {
-            let expression = parse_expression__follow_23(p)?;
+            let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
         } else {
             null
@@ -34349,7 +34349,7 @@ fn parse_expression__follow_23_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
     if kind == TK_KW_RETURN {
         let kw_return = p.expect(TK_KW_RETURN)?;
         let expression: Option<ExpressionNode> = if _gale_kind_set_118(p.peek_kind()) {
-            let expression = parse_expression__follow_23(p)?;
+            let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
         } else {
             null
@@ -34401,7 +34401,7 @@ fn parse_expression__follow_23_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
             inner_attribute_list.push(inner_attribute);
         }
         let array_elements: Option<ArrayElementsNode> = if _gale_kind_set_11(p.peek_kind()) {
-            let array_elements = parse_array_elements(p)?;
+            let array_elements = parse_array_elements__follow_7(p)?;
             Option::<ArrayElementsNode>::Some(array_elements)
         } else {
             null

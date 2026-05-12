@@ -6265,7 +6265,7 @@ fn parse_rule_spec(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
 fn parse_parser_rule_spec(p: &mut Parser) -> Result<ParserRuleSpecNode, ParseError> {
     let start = p.peek().span.start;
     let rule_modifiers: Option<RuleModifiersNode> = if _gale_kind_set_12(p.peek_kind()) {
-        let rule_modifiers = parse_rule_modifiers(p)?;
+        let rule_modifiers = parse_rule_modifiers__follow_0(p)?;
         Option::<RuleModifiersNode>::Some(rule_modifiers)
     } else {
         null
@@ -6749,7 +6749,7 @@ fn parse_lexer_element(p: &mut Parser) -> Result<LexerElementNode, ParseError> {
     if _gale_kind_set_2(kind) {
         let lexer_atom = parse_lexer_atom(p)?;
         let ebnf_suffix: Option<EbnfSuffixNode> = if _gale_kind_set_4(p.peek_kind()) {
-            let ebnf_suffix = parse_ebnf_suffix(p)?;
+            let ebnf_suffix = parse_ebnf_suffix__follow_1(p)?;
             Option::<EbnfSuffixNode>::Some(ebnf_suffix)
         } else {
             null
@@ -6763,7 +6763,7 @@ fn parse_lexer_element(p: &mut Parser) -> Result<LexerElementNode, ParseError> {
     if kind == TK_LPAREN {
         let lexer_block = parse_lexer_block(p)?;
         let ebnf_suffix: Option<EbnfSuffixNode> = if _gale_kind_set_4(p.peek_kind()) {
-            let ebnf_suffix = parse_ebnf_suffix(p)?;
+            let ebnf_suffix = parse_ebnf_suffix__follow_1(p)?;
             Option::<EbnfSuffixNode>::Some(ebnf_suffix)
         } else {
             null
@@ -7383,7 +7383,7 @@ fn parse_ebnf(p: &mut Parser) -> Result<EbnfNode, ParseError> {
     let start = p.peek().span.start;
     let block = parse_block(p)?;
     let block_suffix: Option<BlockSuffixNode> = if _gale_kind_set_4(p.peek_kind()) {
-        let block_suffix = parse_block_suffix(p)?;
+        let block_suffix = parse_block_suffix__follow_2(p)?;
         Option::<BlockSuffixNode>::Some(block_suffix)
     } else {
         null
