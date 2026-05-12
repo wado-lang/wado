@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778541646856,
+  "lastUpdate": 1778547404267,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21265,6 +21265,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c796cc783fb20c41c109de31411b1e8dbe8fd1b0"
         },
         "date": 1778541646489,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 512036,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fb9e67d7a9d9f05b5d76138f4255d0bb16335325",
+          "message": "Merge pull request #1048 from wado-lang/claude/path-params-struct-deserialization-gDaKg\n\nfeat(router): deserialize path params into typed struct via core:serde",
+          "timestamp": "2026-05-12T09:50:01+09:00",
+          "tree_id": "422b4695d972253e5c6e132301f01805be78cef6",
+          "url": "https://github.com/wado-lang/wado/commit/fb9e67d7a9d9f05b5d76138f4255d0bb16335325"
+        },
+        "date": 1778547403883,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
