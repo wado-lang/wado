@@ -284,11 +284,14 @@ fn build_module_init_function(
     }
 }
 
-/// Collect global variable references from an expression
-fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<String>) {
+/// Collect global variable references from an expression as
+/// `(module_source, name)` pairs so two modules each declaring a
+/// global with the same name don't collide in the dependency graph
+/// when their initializers happen to share the topo-sort input.
+fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<(ModuleSource, String)>) {
     match &expr.kind {
-        TirExprKind::GlobalVarGet { name, .. } => {
-            refs.insert(name.clone());
+        TirExprKind::GlobalVarGet { name, module_source } => {
+            refs.insert((module_source.clone(), name.clone()));
         }
         // Recursively search in sub-expressions
         TirExprKind::Binary { left, right, .. } => {
@@ -394,11 +397,17 @@ fn topological_sort_global_inits(
         return lazy_inits.to_vec();
     }
 
-    // Build a map from global name to its index in lazy_inits
-    let name_to_idx: IndexMap<String, usize> = lazy_inits
+    // Build a map from `(module_source, name)` to its index in
+    // lazy_inits. The compound key keeps cross-module same-named
+    // globals separated when both happen to share a topo-sort input
+    // (today the planner partitions by module, but the keying is
+    // defensive against any future re-merge).
+    let key_to_idx: IndexMap<(ModuleSource, String), usize> = lazy_inits
         .iter()
         .enumerate()
-        .map(|(i, (_, name, ..))| (name.clone(), i))
+        .map(|(i, (_, name, module_source, ..))| {
+            ((module_source.clone(), name.clone()), i)
+        })
         .collect();
 
     // Build dependency graph: deps[i] = set of indices that i depends on
@@ -408,9 +417,8 @@ fn topological_sort_global_inits(
         let mut refs = IndexSet::default();
         collect_global_refs(initializer, &mut refs);
 
-        for ref_name in refs {
-            // Only consider dependencies on other lazy-init globals in this module
-            if let Some(&dep_idx) = name_to_idx.get(&ref_name)
+        for ref_key in refs {
+            if let Some(&dep_idx) = key_to_idx.get(&ref_key)
                 && dep_idx != i
             {
                 deps[i].insert(dep_idx);

@@ -175,11 +175,12 @@ impl FunctionTranslator<'_, '_> {
 
     /// Translate a `LetDestructure` statement.
     ///
-    /// By the time WIR build runs, `lower::plan::pattern::lower_let_pattern` has
-    /// rewritten every `LetDestructure` form *except* the multivalue-builtin
-    /// tuple shape (see `lower::plan::pattern::is_multivalue_builtin_pattern`)
-    /// into plain `Let` / `Expr` statements. So the only variant that
-    /// reaches this translator is:
+    /// By the time WIR build runs, the pattern planner
+    /// ([`lower::plan::pattern::plan`]) has rewritten every
+    /// `LetDestructure` form *except* the multivalue-builtin tuple
+    /// shape (a tuple whose RHS is a builtin call producing multiple
+    /// scalar return values) into plain `Let` / `Expr` statements.
+    /// So the only variant that reaches this translator is:
     ///
     /// * `Tuple` — multivalue-builtin call returning a tuple; destructure
     ///   each element into its `Binding` slot or skip `Wildcard` slots.

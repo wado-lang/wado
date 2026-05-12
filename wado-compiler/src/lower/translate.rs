@@ -169,6 +169,19 @@ struct FunctionTranslator<'a, 'p> {
     /// by `Local` retag, `IndirectCall` → `MethodCall`, and
     /// fn-param-`Local` arg-slot wrap.
     specialized: Option<&'p [closure::SpecializedLocal]>,
+    /// Locals to append onto the resulting `NirFunction`. The wide-int
+    /// `Match` rewrite uses this to hoist side-effecting scrutinees
+    /// into a fresh slot. `None` for `for_top_level` contexts that
+    /// don't own a function's local list.
+    extra: Option<ExtraLocals>,
+}
+
+/// Per-function local extension state. Indices issued by `alloc_local`
+/// are `base_count + extra.len()`, so they don't collide with the
+/// function's existing locals.
+struct ExtraLocals {
+    base_count: u32,
+    locals: RefCell<Vec<TirLocal>>,
 }
 
 impl<'a, 'p> FunctionTranslator<'a, 'p> {
@@ -179,17 +192,27 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .specialized_locals
             .get(&key)
             .map(std::vec::Vec::as_slice);
-        Self { base, specialized }
+        Self {
+            base,
+            specialized,
+            extra: Some(ExtraLocals {
+                base_count: func.local_count,
+                locals: RefCell::new(Vec::new()),
+            }),
+        }
     }
 
     /// A function context for places where no function is being
     /// translated (global initializers, struct field defaults).
     /// `specialized` is `None`; per-function arms degrade to their
-    /// non-specialized path.
+    /// non-specialized path. `alloc_local` panics here because the
+    /// only caller (wide-int `Match` rewrite) is only reachable
+    /// inside a function body.
     fn for_top_level(base: &'a Translator<'p>) -> Self {
         Self {
             base,
             specialized: None,
+            extra: None,
         }
     }
 
@@ -198,11 +221,48 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .iter()
             .find(|s| s.local_index == local_index)
     }
+
+    /// Allocate a fresh local slot, register a `TirLocal` for it, and
+    /// return the new index. Must be called from within a function
+    /// translation; panics for top-level contexts.
+    fn alloc_local(&self, type_id: tir::TypeId, name: String) -> u32 {
+        let extra = self
+            .extra
+            .as_ref()
+            .expect("alloc_local outside function translation");
+        let mut locals = extra.locals.borrow_mut();
+        let index = extra.base_count + u32::try_from(locals.len()).unwrap();
+        locals.push(TirLocal {
+            name,
+            type_id,
+            is_mut: false,
+        });
+        index
+    }
+
+    /// Drain any locals allocated during the walk so the caller can
+    /// append them to the output `NirFunction`'s local list.
+    fn take_extra_locals(&self) -> Vec<TirLocal> {
+        match &self.extra {
+            Some(extra) => std::mem::take(&mut *extra.locals.borrow_mut()),
+            None => Vec::new(),
+        }
+    }
 }
 
 impl Translator<'_> {
     fn convert_function(&self, func: &TirFunction) -> NirFunction {
         let fctx = FunctionTranslator::new(self, func);
+        // Walk the body first so any locals allocated by per-arm
+        // rewrites (currently only the wide-int `Match` scrutinee
+        // hoist) are visible when we materialize `locals` /
+        // `local_count` below.
+        let body = func.body.as_ref().map(|b| fctx.convert_block(b));
+        let params = func.params.iter().map(|p| fctx.convert_param(p)).collect();
+        let extra_locals = fctx.take_extra_locals();
+        let local_count = func.local_count + u32::try_from(extra_locals.len()).unwrap();
+        let mut locals: Vec<NirLocal> = func.locals.iter().map(convert_local).collect();
+        locals.extend(extra_locals.iter().map(convert_local));
         NirFunction {
             name: func.name.clone(),
             module_source: func.module_source.clone(),
@@ -217,15 +277,15 @@ impl Translator<'_> {
                 .collect(),
             monomorph_info: func.monomorph_info.as_ref().map(convert_monomorph_info),
             method_info: func.method_info.clone(),
-            params: func.params.iter().map(|p| fctx.convert_param(p)).collect(),
+            params,
             return_type: func.return_type,
             task_return_type: func.task_return_type,
             effects: func.effects.clone(),
             stores: func.stores.clone(),
-            body: func.body.as_ref().map(|b| fctx.convert_block(b)),
+            body,
             span: func.span,
-            local_count: func.local_count,
-            locals: func.locals.iter().map(convert_local).collect(),
+            local_count,
+            locals,
             address_taken_locals: func.address_taken_locals.clone(),
             stores_aliased_locals: func.stores_aliased_locals.clone(),
             is_cm_binding: func.is_cm_binding,
@@ -395,14 +455,51 @@ impl FunctionTranslator<'_, '_> {
         } = &expr.kind
             && wide_int::should_rewrite(scrutinee.type_id, arms, &self.base.type_table.borrow())
         {
+            // Hoist the scrutinee into a fresh local so it evaluates
+            // exactly once even though `build_if_chain` clones it into
+            // every arm's `Eq::eq` condition (and the `Binding` arm's
+            // `Let` value). Without this hoist a side-effecting
+            // scrutinee like `match observe() { 10 => ..., 20 => ... }`
+            // re-runs `observe()` per arm. `wir_build::pattern_match`
+            // does the same hoist for normal `Match` expressions.
+            let scrut_idx = self.alloc_local(scrutinee.type_id, "__wide_scrut".to_string());
+            let scrut_local = TirExpr::new(
+                TirExprKind::Local {
+                    index: scrut_idx,
+                    name: "__wide_scrut".to_string(),
+                },
+                scrutinee.type_id,
+                scrutinee.span,
+            );
             let if_chain = wide_int::build_if_chain(
-                scrutinee,
+                &scrut_local,
                 arms,
                 expr.type_id,
                 expr.span,
                 &self.base.type_table,
             );
-            return self.convert_expr(&if_chain);
+            let let_stmt = TirStmt::new(
+                TirStmtKind::Let {
+                    name: "__wide_scrut".to_string(),
+                    local_index: scrut_idx,
+                    is_mut: false,
+                    is_reactive: false,
+                    type_id: scrutinee.type_id,
+                    value: (**scrutinee).clone(),
+                    skip_value_copy: false,
+                },
+                scrutinee.span,
+            );
+            let payload_stmt = TirStmt::new(TirStmtKind::Expr(if_chain), expr.span);
+            let block_expr = TirExpr::new(
+                TirExprKind::Block(TirBlock {
+                    stmts: vec![let_stmt, payload_stmt],
+                    span: expr.span,
+                }),
+                expr.type_id,
+                expr.span,
+            );
+            return self.convert_expr(&block_expr);
         }
         // Remaining `Closure` nodes (those the closure planner's
         // specialized call-site rewriter did not turn into a
