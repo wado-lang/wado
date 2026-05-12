@@ -532,6 +532,14 @@ pub struct RepeatOp {
     /// lower time. Distinct from `body.field` (the per-iteration
     /// binding inside the loop, which lives in its own fresh scope).
     pub field: String,
+    /// Caller-side FOLLOW first set: tokens that can immediately
+    /// follow this Repeat in the surrounding alt body. Computed at
+    /// lower time from the position the Repeat occupies. Consumed
+    /// by emit's per-position decisions for `Optional + RuleRef`
+    /// (subtract from inner first to gate the optional fire) and
+    /// non-greedy (continue/exit disambiguation). Empty when the
+    /// Repeat is at the alt's tail.
+    pub caller_follow_first: Array<String>,
 }
 
 pub struct GroupOp {

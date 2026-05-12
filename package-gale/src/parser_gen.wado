@@ -2915,21 +2915,19 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
         let elem = &alt.elements[i];
         let op = &body.ops[i - ops_offset];
         if let Repeat(rep) = elem {
+            let rep_op = if let Repeat(r) = op { r } else { panic("gen_alt_body_skip: Repeat element / op mismatch") };
+            let follow = &rep_op.caller_follow_first;
             if let Optional = rep.kind {
                 if is_ruleref_optional(&rep.element) {
-                    let follow = ctx.first_of_elements_from(&alt.elements, i + 1);
-                    gen_repeat_with_follow(w, rep, ctx, &follow, &mut name_counts);
+                    gen_repeat_with_follow(w, rep, ctx, follow, &mut name_counts);
                 } else {
-                    let follow = ctx.first_of_elements_from(&alt.elements, i + 1);
-                    gen_repeat(w, rep, ctx, &mut name_counts, &follow);
+                    gen_repeat(w, rep, ctx, &mut name_counts, follow);
                 }
             } else if rep.non_greedy {
-                let follow = ctx.first_of_elements_from(&alt.elements, i + 1);
                 let follow_second = compute_follow_second(&alt.elements, i + 1, ctx);
-                gen_repeat_non_greedy(w, rep, ctx, &follow, &follow_second, &mut name_counts);
+                gen_repeat_non_greedy(w, rep, ctx, follow, &follow_second, &mut name_counts);
             } else {
-                let follow = ctx.first_of_elements_from(&alt.elements, i + 1);
-                gen_repeat(w, rep, ctx, &mut name_counts, &follow);
+                gen_repeat(w, rep, ctx, &mut name_counts, follow);
             }
         } else if op_is_leaf(op) {
             gen_op_leaf(w, op, elem, ctx, &mut name_counts);
@@ -3028,21 +3026,19 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<O
         let elem = &elements[i];
         let op = &ops[i];
         if let Repeat(rep) = elem {
+            let rep_op = if let Repeat(r) = op { r } else { panic("gen_alt_elements: Repeat element / op mismatch") };
+            let follow = &rep_op.caller_follow_first;
             if let Optional = rep.kind {
                 if is_ruleref_optional(&rep.element) {
-                    let follow = ctx.first_of_elements_from(elements, i + 1);
-                    gen_repeat_with_follow(w, rep, ctx, &follow, &mut name_counts);
+                    gen_repeat_with_follow(w, rep, ctx, follow, &mut name_counts);
                 } else {
-                    let follow = ctx.first_of_elements_from(elements, i + 1);
-                    gen_repeat(w, rep, ctx, &mut name_counts, &follow);
+                    gen_repeat(w, rep, ctx, &mut name_counts, follow);
                 }
             } else if rep.non_greedy {
-                let follow = ctx.first_of_elements_from(elements, i + 1);
                 let follow_second = compute_follow_second(elements, i + 1, ctx);
-                gen_repeat_non_greedy(w, rep, ctx, &follow, &follow_second, &mut name_counts);
+                gen_repeat_non_greedy(w, rep, ctx, follow, &follow_second, &mut name_counts);
             } else {
-                let follow = ctx.first_of_elements_from(elements, i + 1);
-                gen_repeat(w, rep, ctx, &mut name_counts, &follow);
+                gen_repeat(w, rep, ctx, &mut name_counts, follow);
             }
         } else if op_is_leaf(op) {
             // Lower has resolved every leaf op (field name, token kind,
@@ -3082,20 +3078,20 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, o
         let elem = &elements[i];
         let op = &ops[i];
         if let Repeat(rep) = elem {
+            let rep_op = if let Repeat(r) = op { r } else { panic("gen_elements_with_non_greedy: Repeat element / op mismatch") };
+            // Lower bakes the within-group follow into
+            // `rep_op.caller_follow_first`; emit unions the surrounding
+            // Repeat's iter_follow when the within-group tail is
+            // deep-nullable (lower doesn't see the outer iter_follow).
+            let mut follow = rep_op.caller_follow_first;
+            if ctx.tail_is_nullable_deep(elements, i + 1) {
+                follow = union_sets(&follow, outer_follow);
+            }
             if rep.non_greedy {
-                // follow(e_i) = first(e_{i+1..}) ∪ (outer_follow if suffix nullable)
-                let mut follow = ctx.first_of_elements_from(elements, i + 1);
-                if ctx.tail_is_nullable_deep(elements, i + 1) {
-                    follow = union_sets(&follow, outer_follow);
-                }
                 let follow_second = compute_follow_second(elements, i + 1, ctx);
                 gen_repeat_non_greedy(w, rep, ctx, &follow, &follow_second, name_counts);
             } else {
-                let mut rep_follow = ctx.first_of_elements_from(elements, i + 1);
-                if ctx.tail_is_nullable_deep(elements, i + 1) {
-                    rep_follow = union_sets(&rep_follow, outer_follow);
-                }
-                gen_repeat(w, rep, ctx, name_counts, &rep_follow);
+                gen_repeat(w, rep, ctx, name_counts, &follow);
             }
         } else if op_is_leaf(op) {
             gen_op_leaf(w, op, elem, ctx, name_counts);

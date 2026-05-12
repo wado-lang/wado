@@ -714,7 +714,18 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
     let outer_follow: Array<String> = [];
     for let mut i = 1; i < alt.elements.len(); i += 1 {
         let elem_follow = inner_follow_at(&alt.elements, i, ctx);
-        ops.push(lower_op(&alt.elements[i], &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow));
+        let mut op = lower_op(&alt.elements[i], &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow);
+        if let Repeat(rep_op) = &op {
+            let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
+            op = Op::Repeat(RepeatOp {
+                kind: rep_op.kind,
+                body: rep_op.body,
+                strategy: rep_op.strategy,
+                field: rep_op.field,
+                caller_follow_first: basic_follow,
+            });
+        }
+        ops.push(op);
     }
 
     let fields = enumerate_alt_field_decls(&ops);
@@ -1340,7 +1351,23 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
         let elem_follow = inner_follow_at(&alt.elements, i, ctx);
-        ops.push(lower_op(elem, &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow));
+        let mut op = lower_op(elem, &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow);
+        // For Repeat ops, replace `caller_follow_first` with the basic
+        // first set of the surrounding suffix. `inner_follow_at` returns
+        // the variant-interning follow (which considers deep-nullable
+        // suffixes via `current_outer_follow`); emit's per-position
+        // `gen_repeat*` decisions use the simpler `first_of_elements_from`.
+        if let Repeat(rep_op) = &op {
+            let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
+            op = Op::Repeat(RepeatOp {
+                kind: rep_op.kind,
+                body: rep_op.body,
+                strategy: rep_op.strategy,
+                field: rep_op.field,
+                caller_follow_first: basic_follow,
+            });
+        }
+        ops.push(op);
     }
 
     let fields = enumerate_alt_field_decls(&ops);
@@ -1517,7 +1544,18 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
         // group's alt. The last position inherits the surrounding
         // alt's `outer_follow`.
         let elem_follow = inner_follow_at(&alt.elements, i, ctx);
-        ops.push(lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow));
+        let mut op = lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow);
+        if let Repeat(rep_op) = &op {
+            let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
+            op = Op::Repeat(RepeatOp {
+                kind: rep_op.kind,
+                body: rep_op.body,
+                strategy: rep_op.strategy,
+                field: rep_op.field,
+                caller_follow_first: basic_follow,
+            });
+        }
+        ops.push(op);
         scan_elements.push(lower_scan_element(elem, ctx, &elem_follow));
     }
 
@@ -1773,7 +1811,18 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
         for let mut ei = 0; ei < alt.elements.len(); ei += 1 {
             let elem = &alt.elements[ei];
             let elem_follow = inner_follow_at(&alt.elements, ei, ctx);
-            ops.push(lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow));
+            let mut op = lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow);
+            if let Repeat(rep_op) = &op {
+                let basic_follow = ctx.first_of_elements_from(&alt.elements, ei + 1);
+                op = Op::Repeat(RepeatOp {
+                    kind: rep_op.kind,
+                    body: rep_op.body,
+                    strategy: rep_op.strategy,
+                    field: rep_op.field,
+                    caller_follow_first: basic_follow,
+                });
+            }
+            ops.push(op);
             scan_elements.push(lower_scan_element(elem, ctx, &elem_follow));
         }
 
@@ -1926,6 +1975,7 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
         body,
         strategy: strategy,
         field: outer_field,
+        caller_follow_first: *outer_follow,
     });
 }
 
@@ -2490,6 +2540,7 @@ fn rebind_op_field(op: Op, new_field: &String) -> Op {
             body: rep.body,
             strategy: rep.strategy,
             field: *new_field,
+            caller_follow_first: rep.caller_follow_first,
         }),
         Group(g) => Op::Group(GroupOp {
             shape: rebind_group_shape(g.shape, new_field),
