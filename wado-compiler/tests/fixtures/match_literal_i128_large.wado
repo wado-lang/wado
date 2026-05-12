@@ -1,0 +1,71 @@
+// Regression: wide-int `match` literals outside the i64 / u64 range
+// used to be silently truncated.
+//
+// `lower::wide_int_literal::create_i128_literal` originally built the
+// arm-side i128 by calling `i128::from_i64(value as i64)`, which
+// truncates everything above bit 63. So a pattern like `match x {
+// 9223372036854775808_i128 => "big" }` compared the scrutinee against
+// `i128::from_i64(i64::MIN)` (the bit-truncation of `i64::MAX + 1`)
+// and the arm never fired. Same defect for u128 and any literal
+// > u64::MAX. Fix: use `i128::from_pair(lo, hi)` / `u128::from_pair`
+// when the value doesn't fit i64 / u64; the wide-int `match` →
+// if-else translator emits the same `Eq::eq` call shape either way.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let x: i128 = 9223372036854775808;
+    let r1 = match x {
+        9223372036854775808 => "i64_max_plus_one",
+        _ => "other",
+    };
+    println(r1);
+
+    let y: i128 = -9223372036854775809;
+    let r2 = match y {
+        -9223372036854775809 => "i64_min_minus_one",
+        _ => "other",
+    };
+    println(r2);
+
+    let z: i128 = 170141183460469231731687303715884105727;
+    let r3 = match z {
+        170141183460469231731687303715884105727 => "i128_max",
+        _ => "other",
+    };
+    println(r3);
+
+    let small: i128 = 42 as i128;
+    let r4 = match small {
+        0 => "zero",
+        42 => "answer",
+        _ => "other",
+    };
+    println(r4);
+
+    let u: u128 = 18446744073709551616;
+    let r5 = match u {
+        18446744073709551616 => "u64_max_plus_one",
+        _ => "other",
+    };
+    println(r5);
+
+    let u2: u128 = 340282366920938463463374607431768211455;
+    let r6 = match u2 {
+        340282366920938463463374607431768211455 => "u128_max",
+        _ => "other",
+    };
+    println(r6);
+
+    // Make sure a large literal pattern doesn't spuriously match a
+    // small scrutinee (the previous truncation could cause aliasing).
+    let small_u: u128 = 1 as u128;
+    let r7 = match small_u {
+        18446744073709551616 => "u64_max_plus_one",
+        1 => "one",
+        _ => "other",
+    };
+    println(r7);
+}
+
+__DATA__
+{"stdout": "i64_max_plus_one\ni64_min_minus_one\ni128_max\nanswer\nu64_max_plus_one\nu128_max\none\n"}

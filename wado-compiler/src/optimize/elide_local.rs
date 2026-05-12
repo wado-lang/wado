@@ -45,7 +45,7 @@ fn elide_in_function(func: &mut NirFunction) -> bool {
     //    observable via the alias.
     //
     // `address_taken_locals` is *not* used as a kept-set source. That
-    // field is set during `lower::boxing` and reflects a static "address
+    // field is set during `lower::plan::boxing` and reflects a static "address
     // ever taken" property of the source TIR. After `inline` /
     // `ref_elim` strip away `&local` references, the field is stale —
     // including it would re-pin locals whose address-taking sites are

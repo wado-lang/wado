@@ -1,0 +1,25 @@
+// Regression: two modules each declaring a non-constant `global STATE`
+// with the entry module's `STATE` depending on the helper module's
+// `STATE`. The pre-fix flattened `lower::plan::globals::extract`
+// emitted a single merged `__initialize_module` with all modules'
+// lazy initializers, and its topological sort indexed dependencies
+// by global *name* only — so two `STATE` globals collided in
+// `name_to_idx`, the cross-module dependency edge was dropped, and
+// the result happened to come out right only because of insertion
+// order. Fix: emit one `__initialize_module` per source module
+// (disambiguated by `module_source`) and topo-sort within each
+// module; the aggregator then runs helper modules before the entry
+// module, so the cross-module dependency holds even when both
+// globals share a name.
+use { println, Stdout } from "core:cli";
+use { helper_state } from "./sub/global_multimod_same_name_helper.wado";
+
+global STATE: i32 = helper_state() + 100;
+
+export fn run() with Stdout {
+    println(`STATE={STATE}`);
+    println(`helper={helper_state()}`);
+}
+
+__DATA__
+{"stdout": "STATE=107\nhelper=7\n"}

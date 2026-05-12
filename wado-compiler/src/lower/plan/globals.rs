@@ -9,11 +9,19 @@ use crate::module_source::ModuleSource;
 use crate::tir::FunctionRef;
 use crate::tir::{
     FunctionKind, InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
-    TirLocal, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirLocal, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
-use super::wide_int::{create_i128_literal, create_u128_literal};
+use crate::lower::wide_int_literal::{create_i128_literal, create_u128_literal};
+
+// `extract` and `build_initialize_modules` are the two halves of
+// the global-initializer planner. They run at different points in
+// `super::plan` (extract before boxing, build_initialize_modules
+// after closure), so they cannot share a single entry point. The
+// `extract` half emits per-module init functions; the
+// `build_initialize_modules` half combines them into the top-level
+// `__initialize_modules` aggregator.
 
 /// Check if an expression is a constant initializer (can be evaluated at Wasm instantiation time)
 fn is_constant_initializer(expr: &TirExpr) -> bool {
@@ -124,22 +132,26 @@ fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     }
 }
 
-/// Lower global variable initializers
+/// Extract non-constant global initializers into a per-module
+/// `__initialize_module` function (one per source module; the
+/// functions share a name and are disambiguated by their
+/// `module_source` field). For each lazy-init global the original
+/// initializer is replaced with a default value, and the original
+/// expression is moved into the module's `__initialize_module` body.
 ///
-/// For non-constant initializers, this:
-/// 1. Replaces the initializer with a default value
-/// 2. Generates a `__initialize_module` function containing the actual initialization
-///
-/// Note: The `__initialize_modules` function that calls all modules' `__initialize_module`
-/// is generated in the post-processing step (see `generate_initialize_modules_flat`).
-pub(super) fn lower_global_initializers(module: &mut TirModule) {
-    let type_table = module.type_table.borrow();
+/// Must run before `boxing` because the extracted initializer code
+/// may contain `&primitive` / closure expressions that boxing /
+/// closure rewrite. The top-level `__initialize_modules` aggregator
+/// that calls each module's `__initialize_module` is built later by
+/// [`build_initialize_modules`].
+pub fn extract(flat: &mut FlatPackage) {
+    let type_table = flat.type_table.borrow();
 
     // Collect non-constant initializers with their indices for topological sorting
     let mut lazy_inits: Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)> =
         Vec::new();
 
-    for (idx, global) in module.globals.iter_mut().enumerate() {
+    for (idx, global) in flat.globals.iter_mut().enumerate() {
         if !is_constant_initializer(&global.initializer) {
             // Save the original initializer with index and local types
             lazy_inits.push((
@@ -187,26 +199,42 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
         return;
     }
 
-    // Topologically sort the lazy initializers based on dependencies
-    let sorted_inits = topological_sort_global_inits(&lazy_inits, &module.globals);
+    // Partition lazy inits by their owning module so each module gets
+    // its own `__initialize_module` function. Insertion order is
+    // preserved so cross-module sibling ordering matches the original
+    // global declaration order, which the aggregator then walks in
+    // entry-last order (see `build_initialize_modules`).
+    let mut by_module: IndexMap<ModuleSource, Vec<_>> = IndexMap::default();
+    for entry in lazy_inits {
+        by_module.entry(entry.2.clone()).or_default().push(entry);
+    }
 
-    // Generate __initialize_module function
     let span = Span::new(0, 0, 1, 1);
+    for (module_source, module_inits) in by_module {
+        let sorted_inits = topological_sort_global_inits(&module_inits, &flat.globals);
+        let init_func = build_module_init_function(module_source, sorted_inits, span);
+        flat.functions.push(Rc::new(RefCell::new(init_func)));
+    }
+}
+
+fn build_module_init_function(
+    module_source: ModuleSource,
+    sorted_inits: Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)>,
+    span: Span,
+) -> TirFunction {
     let mut init_stmts: Vec<TirStmt> = Vec::new();
     let mut merged_locals: Vec<TirLocal> = Vec::new();
 
-    for (_, name, module_source, _, mut initializer, locals) in sorted_inits {
-        // Renumber locals if this isn't the first global (to avoid index conflicts)
+    for (_, name, gvs_module_source, _, mut initializer, locals) in sorted_inits {
         let offset = u32::try_from(merged_locals.len()).unwrap();
         if offset > 0 && !locals.is_empty() {
             renumber_locals_in_expr(&mut initializer, offset);
         }
         merged_locals.extend(locals);
 
-        // Create: global_name = initializer;
         let global_set = TirExpr::new(
             TirExprKind::GlobalVarSet {
-                module_source,
+                module_source: gvs_module_source,
                 name,
                 value: Box::new(initializer),
             },
@@ -217,18 +245,17 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
     }
 
     let local_count = u32::try_from(merged_locals.len()).unwrap();
-
     let init_body = TirBlock {
         stmts: init_stmts,
         span,
     };
 
-    let init_func = TirFunction {
-        module_source: module.module_source.clone(),
+    TirFunction {
+        module_source,
         is_async: false,
         name: "__initialize_module".to_string(),
-        is_pub: true, // pub so it can be called from entry module's __initialize_modules
-        is_export: false, // Internal function, not a world export
+        is_pub: true,
+        is_export: false,
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
         monomorph_info: None,
@@ -253,18 +280,21 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
-
         return_abi: crate::tir::ReturnAbi::default(),
-    };
-
-    module.functions.push(Rc::new(RefCell::new(init_func)));
+    }
 }
 
-/// Collect global variable references from an expression
-fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<String>) {
+/// Collect global variable references from an expression as
+/// `(module_source, name)` pairs so two modules each declaring a
+/// global with the same name don't collide in the dependency graph
+/// when their initializers happen to share the topo-sort input.
+fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<(ModuleSource, String)>) {
     match &expr.kind {
-        TirExprKind::GlobalVarGet { name, .. } => {
-            refs.insert(name.clone());
+        TirExprKind::GlobalVarGet {
+            name,
+            module_source,
+        } => {
+            refs.insert((module_source.clone(), name.clone()));
         }
         // Recursively search in sub-expressions
         TirExprKind::Binary { left, right, .. } => {
@@ -370,11 +400,15 @@ fn topological_sort_global_inits(
         return lazy_inits.to_vec();
     }
 
-    // Build a map from global name to its index in lazy_inits
-    let name_to_idx: IndexMap<String, usize> = lazy_inits
+    // Build a map from `(module_source, name)` to its index in
+    // lazy_inits. The compound key keeps cross-module same-named
+    // globals separated when both happen to share a topo-sort input
+    // (today the planner partitions by module, but the keying is
+    // defensive against any future re-merge).
+    let key_to_idx: IndexMap<(ModuleSource, String), usize> = lazy_inits
         .iter()
         .enumerate()
-        .map(|(i, (_, name, ..))| (name.clone(), i))
+        .map(|(i, (_, name, module_source, ..))| ((module_source.clone(), name.clone()), i))
         .collect();
 
     // Build dependency graph: deps[i] = set of indices that i depends on
@@ -384,9 +418,8 @@ fn topological_sort_global_inits(
         let mut refs = IndexSet::default();
         collect_global_refs(initializer, &mut refs);
 
-        for ref_name in refs {
-            // Only consider dependencies on other lazy-init globals in this module
-            if let Some(&dep_idx) = name_to_idx.get(&ref_name)
+        for ref_key in refs {
+            if let Some(&dep_idx) = key_to_idx.get(&ref_key)
                 && dep_idx != i
             {
                 deps[i].insert(dep_idx);
@@ -451,8 +484,7 @@ fn renumber_locals_in_expr(expr: &mut TirExpr, offset: u32) {
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+        | TirExprKind::VariantPayload { expr: inner, .. } => {
             renumber_locals_in_expr(inner, offset);
         }
         TirExprKind::Index { expr: e, index: i } => {
@@ -639,7 +671,9 @@ fn renumber_locals_in_pattern(pattern: &mut TirPattern, offset: u32) {
 }
 
 /// Generate `__initialize_modules` for a `FlatPackage`.
-pub(super) fn generate_initialize_modules_flat(flat: &mut FlatPackage) {
+/// Generate the top-level `__initialize_modules` aggregator. Must run
+/// after all per-module init functions exist (i.e. after [`extract`]).
+pub fn build_initialize_modules(flat: &mut FlatPackage) {
     let entry_source = flat.entry_module_source.clone();
 
     // Collect distinct module sources that have __initialize_module function

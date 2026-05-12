@@ -1,3 +1,4 @@
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 
 use crate::module_source::ModuleSource;
@@ -5,10 +6,62 @@ use crate::name::LocalMethodName;
 use crate::tir::FunctionRef;
 use crate::tir::{
     CallArg, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirField,
-    TirLiteralPattern, TirLocal, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    TirLiteralPattern, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
+
+/// Run the pattern planner: a TIR-mutating pass that rewrites
+/// `LetDestructure` / `IfLet` into explicit `Let` + `If` chains and
+/// converts dense integer `Match` expressions into `Switch`.
+pub fn plan(flat: &mut FlatPackage) {
+    // Build a map keyed by (variant_name, module_source). The
+    // module_source axis is required so that two modules each
+    // declaring a variant with the same name keep their case
+    // tables distinct — pattern lookup resolves the
+    // module_source from the scrutinee's resolved type.
+    let mut variant_case_map: IndexMap<(String, ModuleSource), Vec<(String, u32)>> =
+        IndexMap::default();
+    for variant in &flat.variants {
+        let cases: Vec<(String, u32)> = variant
+            .cases
+            .iter()
+            .map(|c| (c.name.clone(), c.index))
+            .collect();
+        variant_case_map.insert((variant.name.clone(), variant.module_source.clone()), cases);
+    }
+
+    // Build struct fields map from module structs. The key uses the
+    // struct's own `module_source` so that two modules each declaring
+    // a struct with the same name keep their field tables distinct —
+    // pattern lookup resolves the `module_source` from the scrutinee's
+    // resolved type.
+    let mut struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>> =
+        IndexMap::default();
+    for s in &flat.structs {
+        struct_fields_map.insert((s.name.clone(), s.module_source.clone()), s.fields.clone());
+    }
+
+    let type_table = flat.type_table.borrow();
+    for func_rc in &flat.functions {
+        let mut func = func_rc.borrow_mut();
+        if let Some(mut body) = func.body.take() {
+            // Take ownership of the values to avoid borrow conflicts
+            let local_count = func.local_count;
+            let locals = std::mem::take(&mut func.locals);
+
+            let mut lowerer =
+                PatternLowerer::new(local_count, locals, &variant_case_map, &struct_fields_map);
+            lowerer.lower_block(&mut body, &type_table);
+
+            // Put the values back
+            let (new_count, new_locals) = lowerer.into_parts();
+            func.local_count = new_count;
+            func.locals = new_locals;
+            func.body = Some(body);
+        }
+    }
+}
 
 const SWITCH_MIN_CASES: usize = 8;
 
@@ -195,63 +248,6 @@ fn match_to_switch(
         result_type_id,
         span,
     )
-}
-
-pub(super) fn lower_patterns(
-    module: &mut TirModule,
-    global_variant_map: &IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
-) {
-    // Build a map keyed by (variant_name, module_source). The
-    // module_source axis is required so that two modules each
-    // declaring a variant with the same name keep their case
-    // tables distinct — pattern lookup resolves the
-    // module_source from the scrutinee's resolved type.
-    let mut variant_case_map: IndexMap<(String, ModuleSource), Vec<(String, u32)>> =
-        global_variant_map.clone();
-
-    // Add module-defined variants. Same-module variants share
-    // the (name, module_source) key with whatever the global map
-    // already produced, so the per-module entry is an idempotent
-    // refresh rather than an override that would mask a sibling
-    // module's variant of the same name.
-    for variant in &module.variants {
-        let cases: Vec<(String, u32)> = variant
-            .cases
-            .iter()
-            .map(|c| (c.name.clone(), c.index))
-            .collect();
-        variant_case_map.insert((variant.name.clone(), variant.module_source.clone()), cases);
-    }
-
-    // Build struct fields map from module structs
-    let mut struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>> =
-        IndexMap::default();
-    for s in &module.structs {
-        struct_fields_map.insert(
-            (s.name.clone(), module.module_source.clone()),
-            s.fields.clone(),
-        );
-    }
-
-    let type_table = module.type_table.borrow();
-    for func_rc in &module.functions {
-        let mut func = func_rc.borrow_mut();
-        if let Some(mut body) = func.body.take() {
-            // Take ownership of the values to avoid borrow conflicts
-            let local_count = func.local_count;
-            let locals = std::mem::take(&mut func.locals);
-
-            let mut lowerer =
-                PatternLowerer::new(local_count, locals, &variant_case_map, &struct_fields_map);
-            lowerer.lower_block(&mut body, &type_table);
-
-            // Put the values back
-            let (new_count, new_locals) = lowerer.into_parts();
-            func.local_count = new_count;
-            func.locals = new_locals;
-            func.body = Some(body);
-        }
-    }
 }
 
 /// Pattern lowering context - tracks local allocation for a function
@@ -3112,9 +3108,6 @@ impl<'a> PatternLowerer<'a> {
 
                 self.local_count = saved_count;
                 self.locals = saved_locals;
-            }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                self.lower_expr(functor, type_table);
             }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(p) = payload {

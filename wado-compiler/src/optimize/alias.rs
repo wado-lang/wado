@@ -17,7 +17,7 @@
 //! [`crate::nir::NirFunction::value_copy_type`] into the lookup the
 //! visitor uses to recognize `Call(helper, [arg])` shapes that
 //! transfer field knowledge across the one-level shallow value-copy
-//! helpers (see `lower::value_copy::synthesize`).
+//! helpers (see `lower::plan::value_copy::synthesize`).
 //!
 //! [`recognize_value_copy`] is the single-call recognizer.
 

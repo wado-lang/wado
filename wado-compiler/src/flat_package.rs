@@ -12,10 +12,9 @@ use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::LocalMethodName;
 use crate::tir::{
-    ClosureFunctor, TirEnum, TirFlags, TirFunction, TirGlobal, TirImport, TirStruct, TirTest,
-    TirVariantDecl, TypeId, TypeTable,
+    TirEnum, TirFlags, TirFunction, TirGlobal, TirImport, TirStruct, TirTest, TirVariantDecl,
+    TypeId, TypeTable,
 };
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldRegistry};
@@ -51,16 +50,6 @@ pub struct FlatPackage {
     pub imports: Vec<TirImport>,
     /// Test declarations (from entry module only)
     pub tests: Vec<TirTest>,
-    /// All string literals (merged from all modules)
-    pub string_literals: Vec<String>,
-    /// All byte array literals (merged from all modules)
-    pub bytes_literals: Vec<Vec<u8>>,
-    /// Closure functor metadata (each carries its own `module_source`)
-    pub closure_functors: Vec<ClosureFunctor>,
-    /// Map of (`ModuleSource`, function name) to string literals it contains (for DCE)
-    pub function_strings: IndexMap<(ModuleSource, String), Vec<String>>,
-    /// Map of (`ModuleSource`, function name) to method info (for DCE)
-    pub function_method_info: IndexMap<(ModuleSource, String), Option<LocalMethodName>>,
     /// Map of module source to wasm module name (from `#![wasm_module("name")]`)
     pub wasm_module_sources: IndexMap<ModuleSource, String>,
 

@@ -1,0 +1,56 @@
+// Regression: `match` arm guards on `i128` / `u128` scrutinees used
+// to be silently dropped. The wide-int `match` → if-else translator
+// only emitted `Eq::eq(x, literal)` as the if-condition, ignoring
+// `arm.guard`. Fix: when an arm has a guard, the synthesized
+// condition becomes `eq_call && guard` so the guard's semantics
+// (and arm ordering) are preserved.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let x: i128 = 42 as i128;
+    let positive = true;
+
+    let r1 = match x {
+        42 && positive => "answer_positive",
+        42 => "answer",
+        _ => "other",
+    };
+    println(r1);
+
+    let r2 = match x {
+        42 && false => "should_not_fire",
+        42 => "answer",
+        _ => "other",
+    };
+    println(r2);
+
+    let u: u128 = 7 as u128;
+    let small = true;
+    let r3 = match u {
+        7 && small => "seven_small",
+        7 => "seven",
+        _ => "other",
+    };
+    println(r3);
+
+    let r4 = match u {
+        7 && false => "should_not_fire",
+        _ => "other",
+    };
+    println(r4);
+
+    // Binding catch-all must assign the scrutinee to the bound local
+    // before the guard / body run. The if-else rewrite previously
+    // treated `Binding` as a value-less catch-all, so `y` referenced
+    // an uninitialized slot.
+    let bind: i128 = 99 as i128;
+    let r5 = match bind {
+        42 => "answer",
+        y && y > 10 as i128 => "big",
+        _ => "other",
+    };
+    println(r5);
+}
+
+__DATA__
+{"stdout": "answer_positive\nanswer\nseven_small\nother\nbig\n"}

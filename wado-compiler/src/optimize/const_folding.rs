@@ -53,7 +53,7 @@ pub fn fold_constants(project: &mut NirPackage) -> bool {
     // Build the `$value_copy$T<id>` helpers map once per pass; the
     // visitor uses it to recognize calls that transfer field
     // knowledge across the synthesized one-level shallow copies
-    // (see `lower::value_copy::synthesize`).
+    // (see `lower::plan::value_copy::synthesize`).
     let value_copy_helpers = build_value_copy_helpers(project);
     let mut visitor = ConstFoldVisitor {
         interpreter: Interpreter::new(&type_table),
@@ -510,7 +510,7 @@ impl ConstFoldVisitor<'_> {
     /// - `Call($value_copy$T(src))`: same as above; the helper is a
     ///   one-level shallow copy (field-by-field projection plus
     ///   `array_clone` for raw arrays — see
-    ///   `lower::value_copy::synthesize`), and the only fields we
+    ///   `lower::plan::value_copy::synthesize`), and the only fields we
     ///   actually forward are primitive literals (`Int` / `Float` /
     ///   `Bool` / `Char`) for which a shallow copy is observably
     ///   equivalent to a deep copy. Reference-typed fields stay
