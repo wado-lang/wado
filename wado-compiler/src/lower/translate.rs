@@ -14,7 +14,7 @@
 
 mod wide_int;
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
@@ -90,7 +90,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         value_copy: &value_copy,
         closure: &closure,
         type_table: Rc::clone(&type_table),
-        current_specialized: Cell::new(None),
     };
 
     let mut func_map: IndexMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>> =
@@ -156,31 +155,55 @@ struct Translator<'a> {
     /// that need to inspect resolved types during the walk (e.g.
     /// detecting wide-int `Match` scrutinees for the if-else rewrite).
     type_table: Rc<RefCell<TypeTable>>,
-    /// Specialized-locals for the function currently being walked, or
-    /// `None` if the current function is not a specialized callee.
-    /// Set / restored around each [`convert_function`] call. Read by
-    /// the per-arm rewrites (`Local` retag, `IndirectCall` →
-    /// `MethodCall`, fn-param-`Local` arg wrap).
-    current_specialized: Cell<Option<&'a [closure::SpecializedLocal]>>,
+}
+
+/// Per-function translation context. Created fresh for each function
+/// the translator walks (top-level functions, generated `__call`
+/// methods, fn-param specialized callees). Holds the per-function
+/// state that the per-arm rewrites need; the previous `Cell`-based
+/// shared slot on `Translator` is gone.
+struct FunctionTranslator<'a, 'p> {
+    base: &'a Translator<'p>,
+    /// Specialized-locals entries for this function if it is a
+    /// synthesized fn-param-specialized callee, otherwise `None`. Read
+    /// by `Local` retag, `IndirectCall` → `MethodCall`, and
+    /// fn-param-`Local` arg-slot wrap.
+    specialized: Option<&'p [closure::SpecializedLocal]>,
+}
+
+impl<'a, 'p> FunctionTranslator<'a, 'p> {
+    fn new(base: &'a Translator<'p>, func: &TirFunction) -> Self {
+        let key = (func.module_source.clone(), func.name.clone());
+        let specialized = base
+            .closure
+            .specialized_locals
+            .get(&key)
+            .map(|v| v.as_slice());
+        Self { base, specialized }
+    }
+
+    /// A function context for places where no function is being
+    /// translated (global initializers, struct field defaults).
+    /// `specialized` is `None`; per-function arms degrade to their
+    /// non-specialized path.
+    fn for_top_level(base: &'a Translator<'p>) -> Self {
+        Self {
+            base,
+            specialized: None,
+        }
+    }
+
+    fn specialized_for_local(&self, local_index: u32) -> Option<&'p closure::SpecializedLocal> {
+        self.specialized?
+            .iter()
+            .find(|s| s.local_index == local_index)
+    }
 }
 
 impl<'a> Translator<'a> {
     fn convert_function(&self, func: &TirFunction) -> NirFunction {
-        // If this function is a synthesized fn-param-specialized
-        // callee, route per-arm rewrites through the recorded
-        // `SpecializedLocal` list. The previous mapping (which may
-        // belong to a recursing caller — e.g. via
-        // `convert_closure_functor`'s fallback `convert_function`) is
-        // restored on the way out.
-        let prev = self.current_specialized.get();
-        let key = (func.module_source.clone(), func.name.clone());
-        self.current_specialized.set(
-            self.closure
-                .specialized_locals
-                .get(&key)
-                .map(|v| v.as_slice()),
-        );
-        let result = NirFunction {
+        let fctx = FunctionTranslator::new(self, func);
+        NirFunction {
             name: func.name.clone(),
             module_source: func.module_source.clone(),
             is_pub: func.is_pub,
@@ -194,12 +217,12 @@ impl<'a> Translator<'a> {
                 .collect(),
             monomorph_info: func.monomorph_info.as_ref().map(convert_monomorph_info),
             method_info: func.method_info.clone(),
-            params: func.params.iter().map(|p| self.convert_param(p)).collect(),
+            params: func.params.iter().map(|p| fctx.convert_param(p)).collect(),
             return_type: func.return_type,
             task_return_type: func.task_return_type,
             effects: func.effects.clone(),
             stores: func.stores.clone(),
-            body: func.body.as_ref().map(|b| self.convert_block(b)),
+            body: func.body.as_ref().map(|b| fctx.convert_block(b)),
             span: func.span,
             local_count: func.local_count,
             locals: func.locals.iter().map(convert_local).collect(),
@@ -215,16 +238,15 @@ impl<'a> Translator<'a> {
             allocator_tag: func.allocator_tag.clone(),
             kind: convert_function_kind(&func.kind),
             return_abi: convert_return_abi(&func.return_abi),
-        };
-        self.current_specialized.set(prev);
-        result
+        }
     }
 
     fn convert_global(&self, global: &TirGlobal) -> NirGlobal {
+        let fctx = FunctionTranslator::for_top_level(self);
         NirGlobal {
             name: global.name.clone(),
             ty: global.ty,
-            initializer: self.convert_expr(&global.initializer),
+            initializer: fctx.convert_expr(&global.initializer),
             mutable: global.mutable,
             wado_mutable: global.wado_mutable,
             is_pub: global.is_pub,
@@ -237,13 +259,14 @@ impl<'a> Translator<'a> {
     }
 
     fn convert_struct(&self, s: &TirStruct) -> NirStruct {
+        let fctx = FunctionTranslator::for_top_level(self);
         NirStruct {
             name: s.name.clone(),
             module_source: s.module_source.clone(),
             is_pub: s.is_pub,
             type_params: s.type_params.iter().map(convert_type_param).collect(),
             monomorph_info: s.monomorph_info.as_ref().map(convert_monomorph_info),
-            fields: s.fields.iter().map(|f| self.convert_field(f)).collect(),
+            fields: s.fields.iter().map(|f| fctx.convert_field(f)).collect(),
             span: s.span,
             serde_rename_all: s.serde_rename_all.clone(),
         }
@@ -278,7 +301,9 @@ impl<'a> Translator<'a> {
             canonical_return: cf.canonical_return,
         }
     }
+}
 
+impl<'a, 'p> FunctionTranslator<'a, 'p> {
     fn convert_block(&self, block: &TirBlock) -> NirBlock {
         NirBlock {
             stmts: block.stmts.iter().map(|s| self.convert_stmt(s)).collect(),
@@ -368,14 +393,14 @@ impl<'a> Translator<'a> {
             expr: scrutinee,
             arms,
         } = &expr.kind
-            && wide_int::should_rewrite(scrutinee.type_id, arms, &self.type_table.borrow())
+            && wide_int::should_rewrite(scrutinee.type_id, arms, &self.base.type_table.borrow())
         {
             let if_chain = wide_int::build_if_chain(
                 scrutinee,
                 arms,
                 expr.type_id,
                 expr.span,
-                &self.type_table,
+                &self.base.type_table,
             );
             return self.convert_expr(&if_chain);
         }
@@ -391,7 +416,7 @@ impl<'a> Translator<'a> {
             captures,
             ..
         } = &expr.kind
-            && let Some(functor) = self.closure.functor_infos.get(*closure_id as usize)
+            && let Some(functor) = self.base.closure.functor_infos.get(*closure_id as usize)
         {
             let nir_struct = NirExpr {
                 kind: NirExprKind::StructLiteral {
@@ -436,7 +461,7 @@ impl<'a> Translator<'a> {
         if let TirExprKind::IndirectCall { callee, args } = &expr.kind
             && let TirExprKind::Local { index, .. } = &callee.kind
             && let Some(spec) = self.specialized_for_local(*index)
-            && let Some(functor) = self.closure.functor_infos.get(spec.functor_id as usize)
+            && let Some(functor) = self.base.closure.functor_infos.get(spec.functor_id as usize)
         {
             let nir_receiver = self.convert_expr(callee);
             let call_method_name = MethodName::format_local(&functor.struct_name, None, "__call");
@@ -480,15 +505,6 @@ impl<'a> Translator<'a> {
         }
     }
 
-    /// Look up a specialized-local entry for the given local index in
-    /// the function currently being walked.
-    fn specialized_for_local(&self, local_index: u32) -> Option<&'a closure::SpecializedLocal> {
-        self.current_specialized
-            .get()?
-            .iter()
-            .find(|s| s.local_index == local_index)
-    }
-
     /// Convert a `Call` / `MethodCall` argument. When the argument is
     /// a specialized fn-param `Local` and the slot still expects
     /// `fn(...)`, wrap the converted `Local` in
@@ -498,10 +514,10 @@ impl<'a> Translator<'a> {
         if let TirExprKind::Local { index, .. } = &arg.kind
             && let Some(spec) = self.specialized_for_local(*index)
             && matches!(
-                self.type_table.borrow().get(spec.original_fn_type),
+                self.base.type_table.borrow().get(spec.original_fn_type),
                 tir::ResolvedType::Function { .. }
             )
-            && let Some(functor) = self.closure.functor_infos.get(spec.functor_id as usize)
+            && let Some(functor) = self.base.closure.functor_infos.get(spec.functor_id as usize)
         {
             let inner = self.convert_expr(arg);
             return NirExpr {
@@ -746,7 +762,7 @@ impl<'a> Translator<'a> {
                 .monomorph_info
                 .as_ref()
                 .and_then(|mi| mi.impl_type_args.first().copied())
-            && let Some((helper_module, helper_name)) = self.value_copy.name_for_type.get(&type_id)
+            && let Some((helper_module, helper_name)) = self.base.value_copy.name_for_type.get(&type_id)
         {
             return NirExprKind::Call {
                 func: nir::FunctionRef {
