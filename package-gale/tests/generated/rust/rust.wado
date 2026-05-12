@@ -21081,7 +21081,12 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     }
     if kind == TK_KW_CONTINUE {
         let kw_continue = p.expect(TK_KW_CONTINUE)?;
-        let lifetime_or_label: Option<Token> = null;
+        let lifetime_or_label: Option<Token> = if p.peek_kind() == TK_LIFETIME_OR_LABEL {
+            let lifetime_or_label = p.expect(TK_LIFETIME_OR_LABEL)?;
+            Option::<Token>::Some(lifetime_or_label)
+        } else {
+            null
+        };
         let expression: Option<ExpressionNode> = if _gale_kind_set_47(p.peek_kind()) {
             let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
@@ -21097,7 +21102,12 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     }
     if kind == TK_KW_BREAK {
         let kw_break = p.expect(TK_KW_BREAK)?;
-        let lifetime_or_label: Option<Token> = null;
+        let lifetime_or_label: Option<Token> = if p.peek_kind() == TK_LIFETIME_OR_LABEL {
+            let lifetime_or_label = p.expect(TK_LIFETIME_OR_LABEL)?;
+            Option::<Token>::Some(lifetime_or_label)
+        } else {
+            null
+        };
         let expression: Option<ExpressionNode> = if _gale_kind_set_47(p.peek_kind()) {
             let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
@@ -24658,7 +24668,12 @@ fn parse_range_pattern_bound(p: &mut Parser) -> Result<RangePatternBoundNode, Pa
 fn parse_reference_pattern(p: &mut Parser) -> Result<ReferencePatternNode, ParseError> {
     let start = p.peek().span.start;
     let and_or_andand = p.advance();
-    let kw_mut: Option<Token> = null;
+    let kw_mut: Option<Token> = if p.peek_kind() == TK_KW_MUT {
+        let kw_mut = p.expect(TK_KW_MUT)?;
+        Option::<Token>::Some(kw_mut)
+    } else {
+        null
+    };
     let pattern_without_range = parse_pattern_without_range(p)?;
     return Result::<ReferencePatternNode, ParseError>::Ok(ReferencePatternNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -34301,7 +34316,12 @@ fn parse_expression__follow_23_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
     }
     if kind == TK_KW_CONTINUE {
         let kw_continue = p.expect(TK_KW_CONTINUE)?;
-        let lifetime_or_label: Option<Token> = null;
+        let lifetime_or_label: Option<Token> = if p.peek_kind() == TK_LIFETIME_OR_LABEL {
+            let lifetime_or_label = p.expect(TK_LIFETIME_OR_LABEL)?;
+            Option::<Token>::Some(lifetime_or_label)
+        } else {
+            null
+        };
         let expression: Option<ExpressionNode> = if _gale_kind_set_123(p.peek_kind()) {
             let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
@@ -34317,7 +34337,12 @@ fn parse_expression__follow_23_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
     }
     if kind == TK_KW_BREAK {
         let kw_break = p.expect(TK_KW_BREAK)?;
-        let lifetime_or_label: Option<Token> = null;
+        let lifetime_or_label: Option<Token> = if p.peek_kind() == TK_LIFETIME_OR_LABEL {
+            let lifetime_or_label = p.expect(TK_LIFETIME_OR_LABEL)?;
+            Option::<Token>::Some(lifetime_or_label)
+        } else {
+            null
+        };
         let expression: Option<ExpressionNode> = if _gale_kind_set_123(p.peek_kind()) {
             let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
