@@ -1,0 +1,43 @@
+// Regression: synthesis bug in `synthesize_serde::generate_struct_deserialize`.
+// The auto-derived `Foo::deserialize` used to wrap the user-supplied
+// `Deserializer::begin_struct` failure in a generic
+// `DeserializeError::custom("begin_struct failed")`, discarding both the
+// real `kind` and `message`.
+//
+// Fix: the synthesized body now uses `propagate_err_block` to surface the
+// original `Err` payload unchanged. This fixture pins the contract by
+// driving `core:json`'s `Deserializer::begin_struct`, which returns
+// `MalformedInput { message: "expected '{', found 'n'" }` on non-object
+// input, and asserting that both the kind and message reach the caller.
+//
+// The parallel fix on the serialize side (`generate_struct_serialize`)
+// shares the same helper, so it is covered transitively by serializer
+// fixtures that exercise inner `begin_struct` failures.
+
+use {
+    Deserialize,
+    DeserializeError,
+    DeserializeErrorKind,
+} from "core:serde";
+
+use { from_string } from "core:json";
+
+struct Foo { bar: i32 }
+impl Deserialize for Foo;
+
+test "auto-derived deserialize propagates begin_struct kind" {
+    let r: Result<Foo, DeserializeError> = from_string::<Foo>("nope");
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+}
+
+test "auto-derived deserialize propagates begin_struct message" {
+    let r: Result<Foo, DeserializeError> = from_string::<Foo>("nope");
+    if let Err(e) = r {
+        assert e.message == "expected '{', found 'n'";
+    } else {
+        panic("expected Err");
+    }
+}
+
+__DATA__
+{"test": {}}

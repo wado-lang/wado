@@ -453,7 +453,7 @@ impl Parser {
             num_str.push(char::from_u32_unchecked(self.bytes[i] as u32));
         }
 
-        if let Ok(n) = f64::from_str(num_str) {
+        if let Ok(n) = f64::from_str(&num_str) {
             return Option::<JsonValue>::Some(JsonValue::Number(n));
         }
         self.pos = start;

@@ -766,6 +766,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 } => (name, type_args),
                 ResolvedType::Struct { name, .. } => (name, vec![]),
                 ResolvedType::BuiltinArray(elem) => ("Array".to_string(), vec![elem]),
+                // Primitives (`i32`, `f64`, `bool`, ...) can implement traits
+                // with associated types just like structs. Without this arm,
+                // a generic call like `parse_range::<i32>(...)` would skip
+                // the `i32::Err = ParseIntError` registration and leave
+                // `T::Err` unresolved at the caller's binding site.
+                ResolvedType::Primitive(p) => (p.as_str().to_string(), vec![]),
                 _ => return,
             }
         };
