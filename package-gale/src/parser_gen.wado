@@ -1337,8 +1337,14 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
 
     if rule.alternatives.len() == 1 {
         w.line("let mut pos = pos;");
-        let elems = &rule.alternatives[0].elements;
-        gen_scan_elements(w, elems, 0, elems.len(), ctx);
+        let scan_body = if let Simple(s) = lowered_rule {
+            &s.scan_body;
+        } else if let MultiAlt(m) = lowered_rule {
+            &m.scan_alts[0];
+        } else {
+            panic("gen_scan_function_named: single-alt rule but lowered_rule is not Simple/MultiAlt");
+        };
+        gen_scan_op_elements(w, &scan_body.elements, 0, scan_body.elements.len(), ctx, &"return -1;");
         w.line("return pos;");
     } else if all_alts_are_single_token(&rule.alternatives) {
         // Compact form: every alt matches exactly one fixed token, so the
@@ -2253,7 +2259,7 @@ fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContex
         return;
     }
     if let Group(ge) = se {
-        gen_scan_op_group(w, ge, ctx, fail_stmt);
+        gen_scan_op_group(w, ge, ctx, fail_stmt, ge.lenient);
         return;
     }
     if let OptionalLookahead(ole) = se {
@@ -2304,9 +2310,9 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         return;
     }
     if let Group(ge) = se {
-        // Group inside a repeat body — emit lenient scan since
-        // failure → skip, not abort.
-        gen_scan_op_group(w, ge, ctx, &"pos = -1;");
+        // Group inside a repeat body — emit strict scan so a
+        // 0-advance iteration cannot infinite-loop.
+        gen_scan_op_group(w, ge, ctx, &"pos = -1;", false);
         return;
     }
     if let Repeat(_) | OptionalLookahead(_) = se {
@@ -2335,23 +2341,6 @@ fn gen_scan_op_repeat_body(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut Ge
             // Plus mandatory — emit one mandatory iteration; the runtime
             // will fail with the parse error then.
             gen_scan_op_element(w, &re.body, ctx, fail_stmt);
-        }
-        return;
-    }
-    // Non-greedy: use the strategy's exit_first / exit_second.
-    if let NonGreedy(s) = &re.strategy {
-        let while_cond = scan_non_greedy_condition(&re.body, &s.exit_first, &s.exit_second, ctx, &re.inner_first);
-        let is_plus = if let Plus = re.kind { true } else { false };
-        if is_plus {
-            gen_scan_op_element(w, &re.body, ctx, fail_stmt);
-        }
-        if while_cond != "false" {
-            w.begin(`while {while_cond}`);
-            w.line("let sp = pos;");
-            gen_scan_op_element_assign(w, &re.body, ctx);
-            w.line("if pos < 0 { pos = sp; break; }");
-            w.line("if pos == sp { break; }");
-            w.end();
         }
         return;
     }
@@ -2406,62 +2395,11 @@ fn gen_scan_op_repeat_body(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut Ge
     }
 }
 
-/// Non-greedy continue-condition computed from ScanElement structure
-/// + exit_first / exit_second. Mirrors surface `compute_non_greedy_condition`.
-fn scan_non_greedy_condition(body: &ScanElement, exit_first: &Array<String>, exit_second: &Array<String>, ctx: &mut GenContext, inner_first: &Array<String>) -> String {
-    // Wildcard / Excluded inner: open-ended match. Continue while
-    // not EOF and not in follow.
-    if let Wildcard = body {
-        return scan_wildcard_non_greedy_condition(ctx, exit_first);
-    }
-    if let Excluded(_) = body {
-        return scan_wildcard_non_greedy_condition(ctx, exit_first);
-    }
-
-    let continue_first = subtract_sets(inner_first, exit_first);
-    if continue_first.len() > 0 {
-        if continue_first.len() > 20 && inner_first.len() > 20 {
-            return "false";
-        }
-        return ctx.kind_check_str(&continue_first, "tokens[pos].kind");
-    }
-    // First sets overlap fully — disambiguate via second-token.
-    if let Group(ge) = body {
-        if ge.alts.len() == 1 && ge.alts[0].elements.len() >= 2 && exit_second.len() > 0 {
-            // Use inner_second from the group's second element onwards.
-            // Lower could have baked this, but for now we approximate
-            // via the strategy's exit_second.
-            // ScanRepeatElem doesn't currently carry inner_second, so
-            // we use a conservative "false" fallback that matches
-            // emit's surface fallback.
-            return "false";
-        }
-    }
-    return "false";
-}
-
-fn scan_wildcard_non_greedy_condition(ctx: &mut GenContext, exit_first: &Array<String>) -> String {
-    let mut excluded: Array<String> = ["TK_EOF"];
-    for let tk of exit_first {
-        let mut seen = false;
-        for let e of &excluded {
-            if *e == *tk {
-                seen = true;
-                break;
-            }
-        }
-        if !seen {
-            excluded.push(*tk);
-        }
-    }
-    return ctx.kind_negate_check_str(&excluded, &"tokens[pos].kind");
-}
-
 /// Op-driven scan emitter for `ScanElement::Group`. Mirrors surface
 /// `gen_scan_group` semantics: ambiguity detection (alts sharing a
 /// first token enter longest-match commit), lenient gate, and the
 /// `sg_<gc>_done` / `sg_<gc>` block structure.
-fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContext, fail_stmt: &String) {
+fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContext, fail_stmt: &String, lenient: bool) {
     if ge.alts.len() == 1 {
         // Single alt: outer `done` wraps inner `body`.
         //   sg_N_done: { sg_N: { ...; break sg_N_done; } fail_stmt; }
@@ -2472,7 +2410,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
         let body = `sg_{gc}`;
         let done = `sg_{gc}_done`;
         let save_var = `sg_{gc}_save`;
-        if ge.lenient {
+        if lenient {
             w.line(`let {save_var} = pos;`);
         }
         w.begin(`{done}:`);
@@ -2480,7 +2418,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
         gen_scan_op_elements_in_block(w, &ge.alts[0].elements, 0, ge.alts[0].elements.len(), ctx, &body);
         w.line(`break {done};`);
         w.end();
-        if ge.lenient {
+        if lenient {
             w.line(`pos = {save_var};`);
         } else {
             w.line(*fail_stmt);
@@ -2522,12 +2460,12 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
     }
 
     let mut union_first: Array<String> = [];
-    if ge.lenient {
+    if lenient {
         for let fs of first_sets {
             dedup_append_arr(&mut union_first, fs);
         }
     }
-    let gate_emitted = ge.lenient && union_first.len() > 0;
+    let gate_emitted = lenient && union_first.len() > 0;
     if gate_emitted {
         let sgk_var = `sgk_{gc}`;
         w.line(`let {sgk_var} = if pos < tokens.len() \{ tokens[pos].kind \} else \{ TK_EOF \};`);
@@ -2555,7 +2493,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
     if any_ambiguous {
         w.line(`if {best_var} >= 0 \{ pos = {best_var}; break {outer}; \}`);
     }
-    if ge.lenient {
+    if lenient {
         w.line(`pos = {gp_var};`);
     } else {
         w.line(*fail_stmt);

@@ -1237,7 +1237,7 @@ fn lower_general_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, out
     return ScanElement::Group(ScanGroupElem {
         alts: bodies,
         dispatch: dispatch,
-        lenient: false,
+        lenient: true,
         alt_first_sets: first_sets,
     });
 }
@@ -1264,11 +1264,13 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &A
     let mut inner_visiting: Array<String> = [];
     let inner_first = ctx.first_of_element(&rep.element, &mut inner_visiting);
 
-    let strategy = if rep.non_greedy {
-        compute_non_greedy_scan_strategy(&rep.element, outer_follow, ctx);
-    } else {
-        choose_greedy_scan_repeat_strategy(&inner_first, &ctx.current_follow_mask);
-    };
+    // Scan-side intentionally ignores `rep.non_greedy`: the surface
+    // emit treats every Repeat as greedy on the scan side (loop while
+    // peek ∈ inner_first), letting the inner scan's pos = -1 / 0-
+    // advance restore semantics handle the boundary. Non-greedy vs
+    // greedy is a parse-side ordering concern; for scan we just want
+    // the maximal in-language prefix length.
+    let strategy = choose_greedy_scan_repeat_strategy(&inner_first, &ctx.current_follow_mask);
 
     let iter_follow = union_arrays(&inner_first, outer_follow);
 
@@ -1425,34 +1427,6 @@ fn shape_lookahead_signature_for_alt(shape: &Array<i32>, elements: &Array<Elemen
         sig.push(ctx.first_of_element(actual, &mut visiting));
     }
     return sig;
-}
-
-/// Scan-side twin of `compute_non_greedy_strategy`. Same payload
-/// computation; only the wrapping `ScanRepeatStrategy` variant
-/// differs.
-fn compute_non_greedy_scan_strategy(inner: &Element, outer_follow: &Array<String>, ctx: &mut GenContext) -> ScanRepeatStrategy {
-    if let Wildcard(_) = inner {
-        return ScanRepeatStrategy::NonGreedy(NonGreedyStrategy {
-            exit_first: *outer_follow,
-            exit_second: [],
-        });
-    }
-    if let Not(_) = inner {
-        return ScanRepeatStrategy::NonGreedy(NonGreedyStrategy {
-            exit_first: *outer_follow,
-            exit_second: [],
-        });
-    }
-    let mut exit_second: Array<String> = [];
-    if let Group(g) = inner {
-        if g.alternatives.len() == 1 && g.alternatives[0].elements.len() >= 2 {
-            exit_second = ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
-        }
-    }
-    return ScanRepeatStrategy::NonGreedy(NonGreedyStrategy {
-        exit_first: *outer_follow,
-        exit_second: exit_second,
-    });
 }
 
 /// Build the `RuleHeader` shared by every `Rule` variant. The cached
@@ -1901,10 +1875,17 @@ fn lower_simple_cst_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, 
     let mut bodies: Array<ScanBody> = [];
     let mut first_sets: Array<Array<String>> = [];
     let mut all_indices: Array<i32> = [];
+    let empty_follow: Array<String> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
         let alt = &alts[i];
         let elem = &alt.elements[0];
-        bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, outer_follow)] });
+        // Per-position follow within the alt: a single-element alt has
+        // no suffix, so the RuleRef's call-site follow is empty (mirrors
+        // surface `gen_scan_elements_in_block`'s
+        // `compute_ruleref_call_follow(alt.elements, 0, ctx)` for a
+        // one-element alt). The Group's `outer_follow` only flows back
+        // through the Repeat-iter side, not into each alt's element.
+        bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, &empty_follow)] });
         let mut visiting: Array<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
         all_indices.push(i);
@@ -1913,7 +1894,7 @@ fn lower_simple_cst_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, 
     return ScanElement::Group(ScanGroupElem {
         alts: bodies,
         dispatch: dispatch,
-        lenient: false,
+        lenient: true,
         alt_first_sets: first_sets,
     });
 }
