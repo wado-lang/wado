@@ -3075,7 +3075,17 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<O
     ctx.ruleref_call_follow = saved_call_follow;
 }
 
-fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
+/// Group / single-alt-body internal walker. Mirrors `gen_alt_elements`
+/// but accepts an `outer_follow` parameter so nested non-greedy /
+/// follow-aware Repeats can union the outer iter-follow into their
+/// effective continuation set. `ops` runs parallel to `elements` —
+/// callers obtain it from the surrounding `AltBody.ops`. Leaf / Group /
+/// ListLabel ops dispatch through `gen_op_leaf` / `gen_op_group` /
+/// `gen_op_list_label`; Repeat / Label / Not still flow through the
+/// surface `gen_repeat*` helpers (Phase 2-C migrates the Repeat arm).
+fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<Op>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
+    assert ops.len() == elements.len(),
+        "gen_elements_with_non_greedy: ops / elements length mismatch";
     let saved_call_follow = ctx.ruleref_call_follow;
     for let mut i = 0; i < elements.len(); i += 1 {
         // Per-position threading. The exact policy (immediate suffix's
@@ -3085,9 +3095,51 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, c
         // soundness argument.
         ctx.ruleref_call_follow = compute_ruleref_call_follow(elements, i, ctx);
         let elem = &elements[i];
+        let op = &ops[i];
         if let Repeat(rep) = elem {
             if rep.non_greedy {
                 // follow(e_i) = first(e_{i+1..}) ∪ (outer_follow if suffix nullable)
+                let mut follow = ctx.first_of_elements_from(elements, i + 1);
+                if ctx.tail_is_nullable_deep(elements, i + 1) {
+                    follow = union_sets(&follow, outer_follow);
+                }
+                let follow_second = compute_follow_second(elements, i + 1, ctx);
+                gen_repeat_non_greedy(w, rep, ctx, &follow, &follow_second, name_counts);
+            } else {
+                let mut rep_follow = ctx.first_of_elements_from(elements, i + 1);
+                if ctx.tail_is_nullable_deep(elements, i + 1) {
+                    rep_follow = union_sets(&rep_follow, outer_follow);
+                }
+                gen_repeat(w, rep, ctx, name_counts, &rep_follow);
+            }
+        } else if op_is_leaf(op) {
+            gen_op_leaf(w, op, elem, ctx, name_counts);
+        } else if let ListLabel(ll) = op {
+            gen_op_list_label(w, ll, elem, ctx, name_counts);
+        } else if let Group(g_op) = op {
+            gen_op_group(w, g_op, elem, ctx, name_counts);
+        } else {
+            gen_element(w, elem, ctx, name_counts);
+        }
+        ctx.ruleref_call_follow = [];
+    }
+    ctx.ruleref_call_follow = saved_call_follow;
+}
+
+/// Surface-IR variant of `gen_elements_with_non_greedy` for callers
+/// that don't have a corresponding `AltBody` handy (transitively
+/// reachable from `gen_element`'s Group / Repeat arms). Uses
+/// `gen_element` fallback for every non-Repeat element. This walker
+/// disappears once `gen_element` is retired (Phase 2-F); each remaining
+/// caller migrates as the surrounding `AltBody.ops` becomes
+/// thread-able.
+fn gen_elements_with_non_greedy_legacy(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
+    let saved_call_follow = ctx.ruleref_call_follow;
+    for let mut i = 0; i < elements.len(); i += 1 {
+        ctx.ruleref_call_follow = compute_ruleref_call_follow(elements, i, ctx);
+        let elem = &elements[i];
+        if let Repeat(rep) = elem {
+            if rep.non_greedy {
                 let mut follow = ctx.first_of_elements_from(elements, i + 1);
                 if ctx.tail_is_nullable_deep(elements, i + 1) {
                     follow = union_sets(&follow, outer_follow);
@@ -3297,7 +3349,7 @@ fn gen_consume_single_alt_group_op(w: &mut CodeWriter, sa: &SingleAltShape, body
     let saved_rule_name = ctx.current_rule_name;
     ctx.current_rule_name = ctx.general_group_rule_name(&sa.struct_name);
     let gc_start = ctx.group_counter;
-    gen_elements_with_non_greedy(w, &alt.elements, ctx, name_counts, outer_follow);
+    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, outer_follow);
     w.line(`let {sa.field} = {sa.struct_name} \{`);
     w.indent();
     ctx.group_counter = gc_start;
@@ -4827,7 +4879,7 @@ fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut Ge
         return;
     }
     if alts.len() == 1 {
-        gen_elements_with_non_greedy(w, &alts[0].elements, ctx, name_counts, &([] as Array<String>));
+        gen_elements_with_non_greedy_legacy(w, &alts[0].elements, ctx, name_counts, &([] as Array<String>));
         return;
     }
 
@@ -4859,7 +4911,7 @@ fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut Ge
         if group.len() == 1 {
             let alt_idx = group[0];
             let mut nc: Array<[String, i32]> = [];
-            gen_elements_with_non_greedy(w, &alts[alt_idx].elements, ctx, &mut nc, &([] as Array<String>));
+            gen_elements_with_non_greedy_legacy(w, &alts[alt_idx].elements, ctx, &mut nc, &([] as Array<String>));
         } else {
             let mut sorted_group = group.sorted();
             // LL-correct: longer alts first so first-success-wins picks
@@ -5137,7 +5189,7 @@ fn gen_consume_single_alt_group(w: &mut CodeWriter, alt: &Alternative, ctx: &mut
     ctx.current_rule_name = ctx.general_group_rule_name(&type_name);
     let nc_snapshot = *name_counts;
     let gc_start = ctx.group_counter;
-    gen_elements_with_non_greedy(w, &alt.elements, ctx, name_counts, outer_follow);
+    gen_elements_with_non_greedy_legacy(w, &alt.elements, ctx, name_counts, outer_follow);
     w.line(`let {field_name} = {type_name} \{`);
     w.indent();
     ctx.group_counter = gc_start;
@@ -5326,7 +5378,7 @@ fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &Array<Alternative>
 
     let mut nc: Array<[String, i32]> = [];
     let gc_start = ctx.group_counter;
-    gen_elements_with_non_greedy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
+    gen_elements_with_non_greedy_legacy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
 
     w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
     w.indent();
@@ -5346,7 +5398,7 @@ fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, alt_
 
     let mut nc: Array<[String, i32]> = [];
     let gc_start = ctx.group_counter;
-    gen_elements_with_non_greedy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
+    gen_elements_with_non_greedy_legacy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
 
     w.line(`{type_name}::Alt{alt_idx}({struct_name} \{`);
     w.indent();
@@ -5465,7 +5517,7 @@ fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>
         ctx.group_counter = gc_entry;
         let mut nc: Array<[String, i32]> = [];
         let gc_alt = ctx.group_counter;
-        gen_elements_with_non_greedy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
+        gen_elements_with_non_greedy_legacy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
         w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
         w.indent();
         ctx.group_counter = gc_alt;
