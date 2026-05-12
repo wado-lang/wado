@@ -1,21 +1,18 @@
-#![TODO]
-// P0 min repro of a WIR-pipeline validation error first encountered
-// while migrating `package-gale/src/parser_gen.wado`'s scan helpers
-// (see `gen_scan_op_group` in `claude/design-per-rule-emit-UbIS6`).
+// Regression: passing `&mut [] as Array<T>` (or any non-trivial
+// `&mut <tuple-literal> as Array<T>` form) as a function argument
+// where the parameter is `&mut Array<T>`.
 //
-// Trigger: passing `&mut [] as Array<[String, i32]>` (a temporary
-// mutable empty array of tuples) as a function argument whose
-// parameter is `&mut Array<[String, i32]>`. The Wado frontend
-// accepts the source; the WIR pipeline lowers it to a Wasm function
-// that fails validation with
+// Wado parses `&mut x as T` as `(&mut x) as T` — `&mut` binds tighter
+// than `as` — so without a special-case the cast applies to a borrow
+// of an unrelated `tuple<>` struct. The Wado frontend accepted it but
+// the WIR pipeline emitted `struct.new tuple//[]` for the empty array
+// literal, and Wasm validation failed with
 //   "type mismatch: expected (ref $type), found (ref (exact $type))"
-// at the call site.
+// when the call site expected `Array<T>`.
 //
-// Workaround: hoist the temporary into a `let mut counts = [];
-// helper(&mut counts);` binding. The fix likely belongs in WIR
-// lowering of `as` casts on mutable array literal expressions — the
-// cast appears to drop the exact-typing of the literal while the
-// callee still expects the exact ref form.
+// Fix: `try_coerce_tuple_to_sequence` looks through one `&` / `&mut`
+// wrapper, so the inner tuple is coerced via `SequenceLiteralBuilder`
+// and the call site auto-borrows the resulting `Array<T>`.
 
 use { println, Stdout } from "core:cli";
 
@@ -32,8 +29,6 @@ fn helper(name: &String, counts: &mut Array<[String, i32]>) -> String {
 }
 
 export fn run() with Stdout {
-    // The crash trigger: temporary `&mut [] as Array<[String, i32]>`
-    // passed to a helper that expects `&mut Array<[String, i32]>`.
     let result = helper(&"foo", &mut [] as Array<[String, i32]>);
     println(result);
 }
