@@ -51,13 +51,13 @@ impl u128 {
     }
 
     /// Parse a hexadecimal `u128` from a string (equivalent to `from_str_radix(s, 16)`).
-    pub fn from_str_hex(s: String) -> Result<u128, ParseIntError> {
+    pub fn from_str_hex(s: &String) -> Result<u128, ParseIntError> {
         return u128::from_str_radix(s, 16);
     }
 
     /// Parse a `u128` from a string in the given radix. `radix` must be in 2..=36.
-    pub fn from_str_radix(s: String, radix: u32) -> Result<u128, ParseIntError> {
-        return u128::from_str_radix_range(&s, 0, s.len(), radix);
+    pub fn from_str_radix(s: &String, radix: u32) -> Result<u128, ParseIntError> {
+        return u128::from_str_radix_range(s, 0, s.len(), radix);
     }
 
     /// Range variant of `from_str_radix`. Parses `s[start..end)` as a `u128`
@@ -663,13 +663,13 @@ impl i128 {
     }
 
     /// Parse a hexadecimal `i128` from a string (equivalent to `from_str_radix(s, 16)`).
-    pub fn from_str_hex(s: String) -> Result<i128, ParseIntError> {
+    pub fn from_str_hex(s: &String) -> Result<i128, ParseIntError> {
         return i128::from_str_radix(s, 16);
     }
 
     /// Parse an `i128` from a string in the given radix. `radix` must be in 2..=36.
-    pub fn from_str_radix(s: String, radix: u32) -> Result<i128, ParseIntError> {
-        return i128::from_str_radix_range(&s, 0, s.len(), radix);
+    pub fn from_str_radix(s: &String, radix: u32) -> Result<i128, ParseIntError> {
+        return i128::from_str_radix_range(s, 0, s.len(), radix);
     }
 
     /// Range variant of `from_str_radix`. Parses `s[start..end)` as an `i128`

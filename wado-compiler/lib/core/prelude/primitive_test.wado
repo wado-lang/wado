@@ -109,25 +109,25 @@ test "u32::from_str errors" {
 }
 
 test "i32::from_str_radix" {
-    assert i32::from_str_radix("1010", 2) matches { Ok(10) };
-    assert i32::from_str_radix("777", 8) matches { Ok(v) && v == 511 };
-    assert i32::from_str_radix("ff", 16) matches { Ok(255) };
-    assert i32::from_str_radix("FF", 16) matches { Ok(255) };
-    assert i32::from_str_radix("-ff", 16) matches { Ok(-255) };
-    assert i32::from_str_radix("z", 36) matches { Ok(35) };
-    assert i32::from_str_radix("2", 2) matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
-    assert i32::from_str_radix("g", 16) matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert i32::from_str_radix(&"1010", 2) matches { Ok(10) };
+    assert i32::from_str_radix(&"777", 8) matches { Ok(v) && v == 511 };
+    assert i32::from_str_radix(&"ff", 16) matches { Ok(255) };
+    assert i32::from_str_radix(&"FF", 16) matches { Ok(255) };
+    assert i32::from_str_radix(&"-ff", 16) matches { Ok(-255) };
+    assert i32::from_str_radix(&"z", 36) matches { Ok(35) };
+    assert i32::from_str_radix(&"2", 2) matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert i32::from_str_radix(&"g", 16) matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
 }
 
 test "u32::from_str_hex" {
-    assert u32::from_str_hex("0") matches { Ok(0) };
-    assert u32::from_str_hex("ff") matches { Ok(255) };
-    assert u32::from_str_hex("FF") matches { Ok(255) };
-    assert u32::from_str_hex("DeadBeef") matches { Ok(v) && v == 3735928559 };
-    assert u32::from_str_hex("ffffffff") matches { Ok(v) && v == u32::MAX };
-    assert u32::from_str_hex("") matches { Err(e) && e.kind() == IntErrorKind::Empty };
-    assert u32::from_str_hex("zz") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
-    assert u32::from_str_hex("100000000") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert u32::from_str_hex(&"0") matches { Ok(0) };
+    assert u32::from_str_hex(&"ff") matches { Ok(255) };
+    assert u32::from_str_hex(&"FF") matches { Ok(255) };
+    assert u32::from_str_hex(&"DeadBeef") matches { Ok(v) && v == 3735928559 };
+    assert u32::from_str_hex(&"ffffffff") matches { Ok(v) && v == u32::MAX };
+    assert u32::from_str_hex(&"") matches { Err(e) && e.kind() == IntErrorKind::Empty };
+    assert u32::from_str_hex(&"zz") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert u32::from_str_hex(&"100000000") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
 }
 
 test "i64::from_str bounds" {
@@ -143,8 +143,8 @@ test "u64::from_str bounds" {
 }
 
 test "u64::from_str_hex" {
-    assert u64::from_str_hex("ffffffffffffffff") matches { Ok(v) && v == u64::MAX };
-    assert u64::from_str_hex("10000000000000000") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert u64::from_str_hex(&"ffffffffffffffff") matches { Ok(v) && v == u64::MAX };
+    assert u64::from_str_hex(&"10000000000000000") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
 }
 
 test "i8 u8 i16 u16 from_str bounds" {
@@ -165,11 +165,11 @@ test "i8 u8 i16 u16 from_str bounds" {
 }
 
 test "i8 from_str_hex common cases" {
-    assert u8::from_str_hex("ff") matches { Ok(255) };
-    assert u8::from_str_hex("100") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
-    assert i16::from_str_hex("7fff") matches { Ok(32767) };
-    assert i16::from_str_hex("8000") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
-    assert i16::from_str_hex("-8000") matches { Ok(-32768) };
+    assert u8::from_str_hex(&"ff") matches { Ok(255) };
+    assert u8::from_str_hex(&"100") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert i16::from_str_hex(&"7fff") matches { Ok(32767) };
+    assert i16::from_str_hex(&"8000") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert i16::from_str_hex(&"-8000") matches { Ok(-32768) };
 }
 
 test "f64 wasm instruction math" {

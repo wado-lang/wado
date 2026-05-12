@@ -426,12 +426,12 @@ impl i8 {
         return buf;
     }
 
-    pub fn from_str_hex(s: String) -> Result<i8, ParseIntError> {
+    pub fn from_str_hex(s: &String) -> Result<i8, ParseIntError> {
         return i8::from_str_radix(s, 16);
     }
 
-    pub fn from_str_radix(s: String, radix: u32) -> Result<i8, ParseIntError> {
-        return match parse_i64_radix(&s, radix, 127, 128) {
+    pub fn from_str_radix(s: &String, radix: u32) -> Result<i8, ParseIntError> {
+        return match parse_i64_radix(s, radix, 127, 128) {
             Ok(v) => Result::Ok(v as i8),
             Err(e) => Result::Err(e),
         };
@@ -471,12 +471,12 @@ impl u8 {
         return buf;
     }
 
-    pub fn from_str_hex(s: String) -> Result<u8, ParseIntError> {
+    pub fn from_str_hex(s: &String) -> Result<u8, ParseIntError> {
         return u8::from_str_radix(s, 16);
     }
 
-    pub fn from_str_radix(s: String, radix: u32) -> Result<u8, ParseIntError> {
-        return match parse_u64_radix(&s, radix, 255) {
+    pub fn from_str_radix(s: &String, radix: u32) -> Result<u8, ParseIntError> {
+        return match parse_u64_radix(s, radix, 255) {
             Ok(v) => Result::Ok(v as u8),
             Err(e) => Result::Err(e),
         };
@@ -516,12 +516,12 @@ impl i16 {
         return buf;
     }
 
-    pub fn from_str_hex(s: String) -> Result<i16, ParseIntError> {
+    pub fn from_str_hex(s: &String) -> Result<i16, ParseIntError> {
         return i16::from_str_radix(s, 16);
     }
 
-    pub fn from_str_radix(s: String, radix: u32) -> Result<i16, ParseIntError> {
-        return match parse_i64_radix(&s, radix, 32767, 32768) {
+    pub fn from_str_radix(s: &String, radix: u32) -> Result<i16, ParseIntError> {
+        return match parse_i64_radix(s, radix, 32767, 32768) {
             Ok(v) => Result::Ok(v as i16),
             Err(e) => Result::Err(e),
         };
@@ -561,12 +561,12 @@ impl u16 {
         return buf;
     }
 
-    pub fn from_str_hex(s: String) -> Result<u16, ParseIntError> {
+    pub fn from_str_hex(s: &String) -> Result<u16, ParseIntError> {
         return u16::from_str_radix(s, 16);
     }
 
-    pub fn from_str_radix(s: String, radix: u32) -> Result<u16, ParseIntError> {
-        return match parse_u64_radix(&s, radix, 65535) {
+    pub fn from_str_radix(s: &String, radix: u32) -> Result<u16, ParseIntError> {
+        return match parse_u64_radix(s, radix, 65535) {
             Ok(v) => Result::Ok(v as u16),
             Err(e) => Result::Err(e),
         };
@@ -629,12 +629,12 @@ impl i32 {
         return buf;
     }
 
-    pub fn from_str_hex(s: String) -> Result<i32, ParseIntError> {
+    pub fn from_str_hex(s: &String) -> Result<i32, ParseIntError> {
         return i32::from_str_radix(s, 16);
     }
 
-    pub fn from_str_radix(s: String, radix: u32) -> Result<i32, ParseIntError> {
-        return match parse_i64_radix(&s, radix, 2147483647, 2147483648) {
+    pub fn from_str_radix(s: &String, radix: u32) -> Result<i32, ParseIntError> {
+        return match parse_i64_radix(s, radix, 2147483647, 2147483648) {
             Ok(v) => Result::Ok(v as i32),
             Err(e) => Result::Err(e),
         };
@@ -682,12 +682,12 @@ impl u32 {
         return buf;
     }
 
-    pub fn from_str_hex(s: String) -> Result<u32, ParseIntError> {
+    pub fn from_str_hex(s: &String) -> Result<u32, ParseIntError> {
         return u32::from_str_radix(s, 16);
     }
 
-    pub fn from_str_radix(s: String, radix: u32) -> Result<u32, ParseIntError> {
-        return match parse_u64_radix(&s, radix, 4294967295) {
+    pub fn from_str_radix(s: &String, radix: u32) -> Result<u32, ParseIntError> {
+        return match parse_u64_radix(s, radix, 4294967295) {
             Ok(v) => Result::Ok(v as u32),
             Err(e) => Result::Err(e),
         };
@@ -770,12 +770,12 @@ impl i64 {
         return buf;
     }
 
-    pub fn from_str_hex(s: String) -> Result<i64, ParseIntError> {
+    pub fn from_str_hex(s: &String) -> Result<i64, ParseIntError> {
         return i64::from_str_radix(s, 16);
     }
 
-    pub fn from_str_radix(s: String, radix: u32) -> Result<i64, ParseIntError> {
-        return parse_i64_radix(&s, radix, 9223372036854775807, 9223372036854775808);
+    pub fn from_str_radix(s: &String, radix: u32) -> Result<i64, ParseIntError> {
+        return parse_i64_radix(s, radix, 9223372036854775807, 9223372036854775808);
     }
 }
 
@@ -884,12 +884,12 @@ impl u64 {
         return buf;
     }
 
-    pub fn from_str_hex(s: String) -> Result<u64, ParseIntError> {
+    pub fn from_str_hex(s: &String) -> Result<u64, ParseIntError> {
         return u64::from_str_radix(s, 16);
     }
 
-    pub fn from_str_radix(s: String, radix: u32) -> Result<u64, ParseIntError> {
-        return parse_u64_radix(&s, radix, u64::MAX);
+    pub fn from_str_radix(s: &String, radix: u32) -> Result<u64, ParseIntError> {
+        return parse_u64_radix(s, radix, u64::MAX);
     }
 }
 
