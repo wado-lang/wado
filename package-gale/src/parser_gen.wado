@@ -1076,7 +1076,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
     // recomputing the classification at every emit site.
     gen_parser_struct(w);
-    gen_scan_functions(w, grammar, ctx);
+    gen_scan_functions(w, grammar, lowered, ctx);
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         let rule = &grammar.parser_rules[i];
         let lowered_rule = &lowered.parser_rules[i];
@@ -1162,7 +1162,7 @@ fn emit_follow_variant_from_gir(w: &mut CodeWriter, variant_rule: &Rule, ctx: &m
     let scan_name = `scan_{rule.snake_name}__follow_{entry.id}`;
     let parse_name = `parse_{rule.snake_name}__follow_{entry.id}`;
     if entry.scan_used {
-        gen_scan_function_named(w, rule, ctx, &scan_name, /*allow_lr_split=*/ true);
+        gen_scan_function_named(w, rule, variant_rule, ctx, &scan_name, /*allow_lr_split=*/ true);
     }
     if entry.parse_used {
         gen_parse_fn_named(w, rule, variant_rule, ctx, &parse_name, &scan_name, /*emit_visibility=*/ false);
@@ -1398,14 +1398,14 @@ fn alt_scan_is_full(elements: &Array<Element>, ctx: &mut GenContext) -> bool {
 // successful recognition, or -1 on failure. Used to disambiguate Ambiguous
 // alternatives without expensive speculative parsing.
 
-fn gen_scan_functions(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
-    for let rule of grammar.parser_rules {
-        gen_scan_function(w, &rule, ctx);
+fn gen_scan_functions(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
+    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+        gen_scan_function(w, &grammar.parser_rules[i], &lowered.parser_rules[i], ctx);
     }
 }
 
-fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
-    gen_scan_function_named(w, rule, ctx, &`scan_{rule.snake_name}`, true);
+fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
+    gen_scan_function_named(w, rule, lowered_rule, ctx, &`scan_{rule.snake_name}`, true);
 }
 
 /// Body emitter shared by `gen_scan_function` and the follow-aware
@@ -1413,7 +1413,7 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext
 /// dispatches to `gen_scan_lr_functions` for left-recursive rules) and
 /// `false` for variants — variants are only emitted for non-LR rules
 /// today, so callers ensure the rule is non-LR before dispatching.
-fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext, fn_name: &String, allow_lr_split: bool) {
+fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext, fn_name: &String, allow_lr_split: bool) {
     let mut lr_indices: Array<i32> = [];
     let mut non_lr_indices: Array<i32> = [];
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
@@ -1425,7 +1425,12 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenC
     }
 
     if lr_indices.len() > 0 && allow_lr_split {
-        gen_scan_lr_functions(w, rule, &lr_indices, &non_lr_indices, ctx, fn_name);
+        let lr_alts = if let LeftRecursive(l) = lowered_rule {
+            &l.lr_alts;
+        } else {
+            panic("gen_scan_function_named: lr_indices non-empty but lowered_rule is not LeftRecursive");
+        };
+        gen_scan_lr_functions(w, rule, lr_alts, &non_lr_indices, ctx, fn_name);
         return;
     }
 
@@ -1521,7 +1526,7 @@ fn single_token_first(elem: &Element) -> String {
 ///   - scan_X(tokens, pos, min_prec = 0): atom + precedence-aware LR-suffix
 ///     loop with token-kind dispatch and second-token overlap resolution.
 ///     Callers without a precedence context omit min_prec and get 0.
-fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, non_lr_indices: &Array<i32>, ctx: &mut GenContext, fn_name: &String) {
+fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<LrAlt>, non_lr_indices: &Array<i32>, ctx: &mut GenContext, fn_name: &String) {
     let atom_name = `{*fn_name}_atom`;
 
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
@@ -1548,7 +1553,7 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Arr
     w.blank();
 
     // scan_X_lr_N for each valid LR alt (suffix helper, mirrors parse_X_lr_N).
-    gen_scan_lr_suffix_helpers(w, rule, lr_indices, ctx, fn_name);
+    gen_scan_lr_suffix_helpers(w, rule, lr_alts, ctx, fn_name);
 
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
     let mut f2 = FnSpec::new(fn_name);
@@ -1563,7 +1568,11 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Arr
     f2.emit_begin(w);
     w.line(`let mut pos = {atom_name}(tokens, pos);`);
     w.line("if pos < 0 { return -1; }");
-    gen_scan_lr_suffix_dispatch(w, rule, lr_indices, ctx, fn_name);
+    let mut lr_indices: Array<i32> = [];
+    for let lr_alt of lr_alts {
+        lr_indices.push(lr_alt.alt_index);
+    }
+    gen_scan_lr_suffix_dispatch(w, rule, &lr_indices, ctx, fn_name);
     w.line("return pos;");
     w.end();
     w.blank();
@@ -1573,29 +1582,14 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Arr
 /// for each valid LR alternative, scanning its suffix (elements[1..]). Self-
 /// recursive calls compile to `scan_X(tokens, pos, prec)` with the same
 /// precedence value the parse side uses (via `compute_lr_self_ref_prec`).
-fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, ctx: &mut GenContext, fn_name: &String) {
-    let total_lr = lr_indices.len();
-    let lr_suffix_first_tokens = collect_lr_suffix_first_tokens(rule, lr_indices, ctx);
-
-    let mut lr_pos = 0;
-    for let lr_idx_ref of lr_indices {
-        let lr_idx = *lr_idx_ref;
+fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<LrAlt>, ctx: &mut GenContext, fn_name: &String) {
+    for let lr_alt of lr_alts {
+        let lr_idx = lr_alt.alt_index;
         let alt = &rule.alternatives[lr_idx];
         if alt.elements.len() <= 1 {
-            lr_pos += 1;
             continue;
         }
-        let own_prec = total_lr - lr_pos;
         let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
-        let inner_min_prec = compute_lr_conflict_min_prec(
-            alt,
-            own_prec,
-            lr_indices,
-            rule,
-            ctx,
-            total_lr,
-        );
-        let last_self_ref_idx = find_last_self_ref_idx(alt, &rule.name);
 
         let mut f = FnSpec::new(&suffix_fn);
         f.add_param("tokens", "&Array<Token>");
@@ -1604,17 +1598,15 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_indices:
         f.emit_begin(w);
         w.line("let mut pos = pos;");
 
+        // Walk alt.elements[1..] in lockstep with lr_alt.suffix.ops; the
+        // self-recursive call's `min_prec_arg` is baked in by lower's
+        // `stamp_lr_self_ref_min_prec`.
         for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
             let elem = &alt.elements[ei];
+            let suffix_op = &lr_alt.suffix.ops[ei - 1];
             if let RuleRef(r) = elem {
                 if r.name == rule.name {
-                    let prec = compute_lr_self_ref_prec(
-                        alt,
-                        ei,
-                        last_self_ref_idx,
-                        inner_min_prec,
-                        &lr_suffix_first_tokens,
-                    );
+                    let prec = lookup_baked_min_prec(suffix_op);
                     w.line(`pos = {*fn_name}(tokens, pos, {prec});`);
                     w.line("if pos < 0 { return -1; }");
                     continue;
@@ -1634,7 +1626,6 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_indices:
         w.line("return pos;");
         w.end();
         w.blank();
-        lr_pos += 1;
     }
 }
 
