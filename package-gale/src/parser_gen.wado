@@ -1488,10 +1488,11 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &A
             }
             if let Repeat(rep) = elem {
                 if let Optional = rep.kind {
-                    if is_ruleref_optional(&rep.element) {
-                        let follow = ctx.first_of_elements_from(&alt.elements, ei + 1);
-                        gen_scan_repeat_optional_with_follow(w, rep, ctx, &follow);
-                        continue;
+                    if let Repeat(rep_op) = suffix_op {
+                        if op_is_rulecall(&rep_op.body) {
+                            gen_scan_repeat_optional_with_follow(w, rep, ctx, &rep_op.caller_follow_first);
+                            continue;
+                        }
                     }
                 }
             }
