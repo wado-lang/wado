@@ -377,7 +377,10 @@ impl<'a> Translator<'a> {
         // outer expression's `type_id` / `span` for the synthesized
         // `If` nodes; arm bodies and nested wide-int matches are then
         // processed by the recursive `convert_expr` call.
-        if let TirExprKind::Match { expr: scrutinee, arms } = &expr.kind
+        if let TirExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } = &expr.kind
             && wide_int::should_rewrite(scrutinee.type_id, arms, &self.type_table.borrow())
         {
             let if_chain = wide_int::build_if_chain(
@@ -449,13 +452,9 @@ impl<'a> Translator<'a> {
             && let Some(functor) = self.closure.functor_infos.get(spec.functor_id as usize)
         {
             let nir_receiver = self.convert_expr(callee);
-            let call_method_name =
-                MethodName::format_local(&functor.struct_name, None, "__call");
-            let call_method_info = LocalMethodName::new(
-                functor.struct_name.clone(),
-                None,
-                "__call".to_string(),
-            );
+            let call_method_name = MethodName::format_local(&functor.struct_name, None, "__call");
+            let call_method_info =
+                LocalMethodName::new(functor.struct_name.clone(), None, "__call".to_string());
             let call_method_borrow = functor.call_method.borrow();
             let params_is_mut: Vec<bool> = call_method_borrow
                 .params
@@ -669,17 +668,6 @@ impl<'a> Translator<'a> {
             TirExprKind::IndirectCall { callee, args } => NirExprKind::IndirectCall {
                 callee: Box::new(self.convert_expr(callee)),
                 args: args.iter().map(|a| self.convert_expr(a)).collect(),
-            },
-            TirExprKind::ClosureToCanonical {
-                functor,
-                functor_id,
-                target_fn_type,
-                closure_module,
-            } => NirExprKind::ClosureToCanonical {
-                functor: Box::new(self.convert_expr(functor)),
-                functor_id: *functor_id,
-                target_fn_type: *target_fn_type,
-                closure_module: closure_module.clone(),
             },
             TirExprKind::VariantConstruct {
                 variant_type,
@@ -932,7 +920,10 @@ impl<'a> Translator<'a> {
 /// `cap.outer_index`. Mirrors the TIR-side `build_capture_fields` that
 /// the closure planner uses for specialized closures at `Let`
 /// bindings.
-fn build_nir_capture_fields(captures: &[TirCapture], span: crate::token::Span) -> Vec<NirStructField> {
+fn build_nir_capture_fields(
+    captures: &[TirCapture],
+    span: crate::token::Span,
+) -> Vec<NirStructField> {
     captures
         .iter()
         .enumerate()

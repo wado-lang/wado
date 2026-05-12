@@ -266,10 +266,6 @@ fn expand_expr(expr: &mut TirExpr, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx
             expand_expr(value, alloc, ctx);
             return;
         }
-        TirExprKind::ClosureToCanonical { functor, .. } => {
-            expand_expr(functor, alloc, ctx);
-            return;
-        }
         TirExprKind::Switch {
             scrutinee,
             arms,

@@ -4212,10 +4212,6 @@ impl<'a> TirUnparser<'a> {
                 self.unparse_expr(callee);
                 self.delimited("(", ")", args, TirUnparser::unparse_expr);
             }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                // Just unparse the functor - the canonical wrapper is invisible
-                self.unparse_expr(functor);
-            }
             TirExprKind::LabeledBlock { label, block, .. } => {
                 self.output.push_str(label);
                 self.output.push_str(": {\n");
