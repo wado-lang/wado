@@ -16582,7 +16582,7 @@ fn parse_delim_token_tree(p: &mut Parser) -> Result<DelimTokenTreeNode, ParseErr
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let token_tree = parse_token_tree(p)?;
+            let token_tree = parse_token_tree__follow_0(p)?;
             token_tree_list.push(token_tree);
         }
         let rparen = p.expect(TK_RPAREN)?;
@@ -16607,7 +16607,7 @@ fn parse_delim_token_tree(p: &mut Parser) -> Result<DelimTokenTreeNode, ParseErr
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let token_tree = parse_token_tree(p)?;
+            let token_tree = parse_token_tree__follow_0(p)?;
             token_tree_list.push(token_tree);
         }
         let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
@@ -16632,7 +16632,7 @@ fn parse_delim_token_tree(p: &mut Parser) -> Result<DelimTokenTreeNode, ParseErr
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let token_tree = parse_token_tree(p)?;
+            let token_tree = parse_token_tree__follow_0(p)?;
             token_tree_list.push(token_tree);
         }
         let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
@@ -16801,7 +16801,7 @@ fn parse_macro_invocation_semi_bt_0(p: &mut Parser) -> Result<MacroInvocationSem
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let token_tree = parse_token_tree(p)?;
+        let token_tree = parse_token_tree__follow_0(p)?;
         token_tree_list.push(token_tree);
     }
     let rparen = p.expect(TK_RPAREN)?;
@@ -16855,7 +16855,7 @@ fn parse_macro_invocation_semi_bt_1(p: &mut Parser) -> Result<MacroInvocationSem
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let token_tree = parse_token_tree(p)?;
+        let token_tree = parse_token_tree__follow_0(p)?;
         token_tree_list.push(token_tree);
     }
     let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
@@ -16909,7 +16909,7 @@ fn parse_macro_invocation_semi_bt_2(p: &mut Parser) -> Result<MacroInvocationSem
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let token_tree = parse_token_tree(p)?;
+        let token_tree = parse_token_tree__follow_0(p)?;
         token_tree_list.push(token_tree);
     }
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
@@ -17116,7 +17116,7 @@ fn parse_macro_matcher(p: &mut Parser) -> Result<MacroMatcherNode, ParseError> {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let macro_match = parse_macro_match(p)?;
+            let macro_match = parse_macro_match__follow_1(p)?;
             macro_match_list.push(macro_match);
         }
         let rparen = p.expect(TK_RPAREN)?;
@@ -17141,7 +17141,7 @@ fn parse_macro_matcher(p: &mut Parser) -> Result<MacroMatcherNode, ParseError> {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let macro_match = parse_macro_match(p)?;
+            let macro_match = parse_macro_match__follow_1(p)?;
             macro_match_list.push(macro_match);
         }
         let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
@@ -17166,7 +17166,7 @@ fn parse_macro_matcher(p: &mut Parser) -> Result<MacroMatcherNode, ParseError> {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let macro_match = parse_macro_match(p)?;
+            let macro_match = parse_macro_match__follow_1(p)?;
             macro_match_list.push(macro_match);
         }
         let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
@@ -17204,7 +17204,7 @@ fn parse_macro_match_bt_3(p: &mut Parser) -> Result<MacroMatchNode, ParseError> 
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let macro_match = parse_macro_match(p)?;
+        let macro_match = parse_macro_match__follow_1(p)?;
         macro_match_list.push(macro_match);
     }
     let rparen = p.expect(TK_RPAREN)?;
@@ -22129,7 +22129,7 @@ fn parse_statements_bt_0(p: &mut Parser) -> Result<StatementsNode, ParseError> {
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let statement = parse_statement(p)?;
+        let statement = parse_statement__follow_10(p)?;
         statement_list.push(statement);
     }
     let expression: Option<ExpressionNode> = if _gale_kind_set_11(p.peek_kind()) {
@@ -28526,7 +28526,7 @@ fn parse_macro_match__follow_1_bt_3(p: &mut Parser) -> Result<MacroMatchNode, Pa
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let macro_match = parse_macro_match(p)?;
+        let macro_match = parse_macro_match__follow_1(p)?;
         macro_match_list.push(macro_match);
     }
     let rparen = p.expect(TK_RPAREN)?;
@@ -31348,7 +31348,7 @@ fn parse_statements__follow_9_bt_0(p: &mut Parser) -> Result<StatementsNode, Par
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let statement = parse_statement(p)?;
+        let statement = parse_statement__follow_10(p)?;
         statement_list.push(statement);
     }
     let expression: Option<ExpressionNode> = if _gale_kind_set_116(p.peek_kind()) {

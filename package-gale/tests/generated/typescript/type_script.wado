@@ -19115,7 +19115,7 @@ fn parse_statement_list(p: &mut Parser) -> Result<StatementListNode, ParseError>
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let statement = parse_statement(p)?;
+        let statement = parse_statement__follow_0(p)?;
         statement_list.push(statement);
     }
     return Result::<StatementListNode, ParseError>::Ok(StatementListNode {
@@ -21095,7 +21095,7 @@ fn parse_class_tail(p: &mut Parser) -> Result<ClassTailNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let class_element = parse_class_element(p)?;
+        let class_element = parse_class_element__follow_1(p)?;
         class_element_list.push(class_element);
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
@@ -22158,7 +22158,7 @@ fn parse_source_elements(p: &mut Parser) -> Result<SourceElementsNode, ParseErro
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let source_element = parse_source_element(p)?;
+        let source_element = parse_source_element__follow_4(p)?;
         source_element_list.push(source_element);
     }
     return Result::<SourceElementsNode, ParseError>::Ok(SourceElementsNode {
