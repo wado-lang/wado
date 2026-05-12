@@ -36,11 +36,9 @@ use {
     general_group_type_name,
     general_group_field_name,
     general_group_alt_struct_name,
-    count_general_groups,
     count_element_groups,
     str_set_from,
     str_set_insert_all,
-    case_names_for_rule,
     gen_visibility_comment,
 } from "./gen_util.wado";
 use { GenContext, KindSetEntry, is_nullable, sets_overlap, is_simple_token_group } from "./gen_context.wado";
@@ -2687,17 +2685,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         gen_visibility_comment(w, &rule.visibility);
     }
 
-    // Precompute the starting group counter for each alternative.
-    // This matches the type gen which processes alts in index order.
-    let mut alt_gc_starts: Array<i32> = [];
-    let mut gc_running: i32 = 0;
-    for let alt of &rule.alternatives {
-        alt_gc_starts.push(gc_running);
-        gc_running += count_general_groups(&alt.elements);
-    }
-    ctx.alt_gc_starts = alt_gc_starts;
-
-    let case_names = case_names_for_rule(&rule.alternatives);
+    ctx.alt_gc_starts = rule_header(lowered_rule).alt_gc_starts;
 
     // Project the lowered rule's alt partition into surface alt
     // indices. For LR rules, atom alts are non-LR; for `Simple` /
@@ -2755,7 +2743,6 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
                 for let gi of group {
                     let alt_idx = non_lr_indices[gi];
                     let alt = &rule.alternatives[alt_idx];
-                    let sname = `{strip_suffix(&type_name, "Node")}{case_names[alt_idx]}`;
                     let helper_name = `{*fn_name}_bt_{alt_idx}`;
 
                     let mut f = FnSpec::new(&helper_name);
@@ -2770,8 +2757,8 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
                     gen_alt_body(
                         w,
                         &type_name,
-                        Option::<String>::Some(case_names[alt_idx]),
-                        Option::<String>::Some(sname),
+                        Option::<String>::Some(body.case_name),
+                        Option::<String>::Some(body.struct_name),
                         alt,
                         body,
                         ctx,
@@ -2978,7 +2965,6 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
 }
 
 fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, non_lr_indices: &Array<i32>) {
-    let case_names = case_names_for_rule(&rule.alternatives);
 
     let max_k = 5;
     let mut all_pos_sets: Array<Array<Array<String>>> = [];
@@ -2992,7 +2978,6 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
     for let mut i = 0; i < non_lr_indices.len(); i += 1 {
         let alt_idx = non_lr_indices[i];
         let alt = &rule.alternatives[alt_idx];
-        let sname = `{strip_suffix(type_name, "Node")}{case_names[alt_idx]}`;
 
         let pos_sets = &all_pos_sets[i];
         let cond_depth = if depth < pos_sets.len() { depth } else { pos_sets.len() };
@@ -3011,8 +2996,8 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         gen_alt_body(
             w,
             type_name,
-            Option::<String>::Some(case_names[alt_idx]),
-            Option::<String>::Some(sname),
+            Option::<String>::Some(body.case_name),
+            Option::<String>::Some(body.struct_name),
             alt,
             body,
             ctx,
@@ -5677,8 +5662,6 @@ fn gen_group_scan_dispatch(w: &mut CodeWriter, sorted: &Array<i32>, alts: &Array
 }
 
 fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_alts: &Array<LrAlt>, ctx: &mut GenContext, fn_name: &String) {
-    let case_names = case_names_for_rule(&rule.alternatives);
-
     for let lr_alt of lr_alts {
         let lr_idx = lr_alt.alt_index;
         let alt = &rule.alternatives[lr_idx];
@@ -5686,7 +5669,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
             continue;
         }
 
-        let sname = `{strip_suffix(type_name, "Node")}{case_names[lr_idx]}`;
+        let sname = lr_alt.struct_name;
         let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
 
         let mut f = FnSpec::new(&suffix_fn);
@@ -5775,7 +5758,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         }
 
         let first_field = first_binding;
-        w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case_names[lr_idx]}({sname} \{`);
+        w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{lr_alt.case_name}({sname} \{`);
         w.indent();
         emit_clamped_span_field(w);
         if first_is_list_label {
@@ -6090,9 +6073,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
             w.line(`return {*fn_name}_bt_{idx}(p);`);
         } else {
             // Consumed prefix tokens already — inline the remaining alt body.
-            let alt_case_names = case_names_for_rule(alts);
             let alt = &alts[*idx];
-            let sname = `{strip_suffix(type_name, "Node")}{alt_case_names[*idx]}`;
             ctx.group_counter = ctx.alt_gc_starts[*idx];
             let body = rule_alt_body(lowered_rule, *idx).unwrap();
             let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
@@ -6100,8 +6081,8 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
             gen_alt_body_skip(
                 w,
                 type_name,
-                Option::<String>::Some(alt_case_names[*idx]),
-                Option::<String>::Some(sname),
+                Option::<String>::Some(body.case_name),
+                Option::<String>::Some(body.struct_name),
                 alt,
                 body,
                 ctx,
@@ -6305,7 +6286,6 @@ fn elements_match(consumed: &Element, expected: &Element) -> bool {
 // have moved to `lr_util.wado`.
 
 fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>) {
-    let case_names = case_names_for_rule(&rule.alternatives);
     let fn_name = `parse_{rule.snake_name}`;
     w.line("let kind = p.peek_kind();");
 
@@ -6322,7 +6302,6 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
         if group.len() == 1 {
             let alt_idx = non_lr_indices[group[0]];
             let alt = &rule.alternatives[alt_idx];
-            let sname = `{strip_suffix(type_name, "Node")}{case_names[alt_idx]}`;
             ctx.group_counter = ctx.alt_gc_starts[alt_idx];
             let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
             let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
@@ -6330,8 +6309,8 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
             gen_alt_body(
                 w,
                 type_name,
-                Option::<String>::Some(case_names[alt_idx]),
-                Option::<String>::Some(sname),
+                Option::<String>::Some(body.case_name),
+                Option::<String>::Some(body.struct_name),
                 alt,
                 body,
                 ctx,
