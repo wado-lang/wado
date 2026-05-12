@@ -2457,38 +2457,114 @@ fn scan_wildcard_non_greedy_condition(ctx: &mut GenContext, exit_first: &Array<S
     return ctx.kind_negate_check_str(&excluded, &"tokens[pos].kind");
 }
 
-/// Op-driven scan emitter for `ScanElement::Group` — uses baked
-/// `dispatch` to pick scan-tournament or first-token-led dispatch.
+/// Op-driven scan emitter for `ScanElement::Group`. Mirrors surface
+/// `gen_scan_group` semantics: ambiguity detection (alts sharing a
+/// first token enter longest-match commit), lenient gate, and the
+/// `sg_<gc>_done` / `sg_<gc>` block structure.
 fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContext, fail_stmt: &String) {
-    // Single-alt group: walk its scan body directly.
     if ge.alts.len() == 1 {
-        gen_scan_op_elements(w, &ge.alts[0].elements, 0, ge.alts[0].elements.len(), ctx, fail_stmt);
+        // Single alt: outer `done` wraps inner `body`.
+        //   sg_N_done: { sg_N: { ...; break sg_N_done; } fail_stmt; }
+        // Element failure → break sg_N, falls to fail_stmt.
+        // Success → break sg_N_done, skips fail_stmt.
+        let gc = SCAN_GROUP_COUNTER;
+        SCAN_GROUP_COUNTER += 1;
+        let body = `sg_{gc}`;
+        let done = `sg_{gc}_done`;
+        let save_var = `sg_{gc}_save`;
+        if ge.lenient {
+            w.line(`let {save_var} = pos;`);
+        }
+        w.begin(`{done}:`);
+        w.begin(`{body}:`);
+        gen_scan_op_elements_in_block(w, &ge.alts[0].elements, 0, ge.alts[0].elements.len(), ctx, &body);
+        w.line(`break {done};`);
+        w.end();
+        if ge.lenient {
+            w.line(`pos = {save_var};`);
+        } else {
+            w.line(*fail_stmt);
+        }
+        w.end();
         return;
     }
-    // Multi-alt: emit first-success-wins scan via labeled blocks.
-    // The outer label provides a single scope for `group_start` and
-    // for each per-alt try_label; the gc counter dedupes nested
-    // groups inside the same function.
+    // Multi-alternative group: try each alternative, fall through to fail.
     let gc = SCAN_GROUP_COUNTER;
     SCAN_GROUP_COUNTER += 1;
-    let group_label = `scan_g_{gc}`;
-    w.begin(`{group_label}:`);
-    w.line("let group_start = pos;");
-    for let mut k = 0; k < ge.alts.len(); k += 1 {
-        let alt = &ge.alts[k];
-        let try_label = `g_try_{gc}_{k}`;
-        w.line("pos = group_start;");
-        w.begin(`{try_label}:`);
-        gen_scan_op_elements_in_block(w, &alt.elements, 0, alt.elements.len(), ctx, &try_label);
-        w.line(`break {group_label};`);
+    let outer = `sg_{gc}`;
+    let gp_var = `gp_{gc}`;
+    let best_var = `sg_{gc}_best`;
+    w.line(`let {gp_var} = pos;`);
+
+    let n = ge.alts.len();
+    let first_sets = &ge.alt_first_sets;
+
+    let mut is_ambiguous: Array<bool> = [];
+    for let mut i = 0; i < n; i += 1 {
+        is_ambiguous.push(false);
+    }
+    for let mut i = 0; i < n; i += 1 {
+        for let mut j = 0; j < n; j += 1 {
+            if i == j {
+                continue;
+            }
+            if sets_overlap(&first_sets[i], &first_sets[j]) {
+                is_ambiguous[i] = true;
+                is_ambiguous[j] = true;
+            }
+        }
+    }
+    let mut any_ambiguous = false;
+    for let mut i = 0; i < n; i += 1 {
+        if is_ambiguous[i] {
+            any_ambiguous = true;
+        }
+    }
+
+    let mut union_first: Array<String> = [];
+    if ge.lenient {
+        for let fs of first_sets {
+            dedup_append_arr(&mut union_first, fs);
+        }
+    }
+    let gate_emitted = ge.lenient && union_first.len() > 0;
+    if gate_emitted {
+        let sgk_var = `sgk_{gc}`;
+        w.line(`let {sgk_var} = if pos < tokens.len() \{ tokens[pos].kind \} else \{ TK_EOF \};`);
+        let gate = ctx.kind_check_str(&union_first, &sgk_var);
+        w.begin(`if {gate}`);
+    }
+
+    if any_ambiguous {
+        w.line(`let mut {best_var} = -1;`);
+    }
+
+    w.begin(`{outer}:`);
+    for let mut i = 0; i < n; i += 1 {
+        let inner = `sg_{gc}_{i}`;
+        w.line(`pos = {gp_var};`);
+        w.begin(`{inner}:`);
+        gen_scan_op_elements_in_block(w, &ge.alts[i].elements, 0, ge.alts[i].elements.len(), ctx, &inner);
+        if is_ambiguous[i] {
+            w.line(`if pos > {best_var} \{ {best_var} = pos; \}`);
+        } else {
+            w.line(`break {outer};`);
+        }
         w.end();
     }
-    if ge.lenient {
-        w.line("pos = group_start;");
-    } else {
-        w.line(`{*fail_stmt}`);
+    if any_ambiguous {
+        w.line(`if {best_var} >= 0 \{ pos = {best_var}; break {outer}; \}`);
     }
-    w.end();
+    if ge.lenient {
+        w.line(`pos = {gp_var};`);
+    } else {
+        w.line(*fail_stmt);
+    }
+    w.end();  // close outer labeled block
+
+    if gate_emitted {
+        w.end();  // close the first-set gate
+    }
 }
 
 /// Op-driven scan emitter for `ScanElement::OptionalLookahead` —

@@ -1183,10 +1183,13 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &Array
             let elem_follow = inner_follow_at(&alt.elements, i, ctx);
             elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
         }
+        let mut visiting: Array<String> = [];
+        let alt_first = ctx.first_of_alt(alt, &mut visiting);
         return ScanElement::Group(ScanGroupElem {
             alts: [ScanBody { elements }],
             dispatch: empty_direct_dispatch(),
             lenient: false,
+            alt_first_sets: [alt_first],
         });
     }
     if is_token_only_group(alts) {
@@ -1201,6 +1204,7 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &Array
             alts: bodies,
             dispatch: build_direct_dispatch(&first_sets),
             lenient: false,
+            alt_first_sets: first_sets,
         });
     }
     if is_simple_cst_group(alts) {
@@ -1233,6 +1237,7 @@ fn lower_general_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, out
         alts: bodies,
         dispatch: dispatch,
         lenient: false,
+        alt_first_sets: first_sets,
     });
 }
 
@@ -1746,6 +1751,7 @@ fn lower_simple_cst_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, 
         alts: bodies,
         dispatch: dispatch,
         lenient: false,
+        alt_first_sets: first_sets,
     });
 }
 

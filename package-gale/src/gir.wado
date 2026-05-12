@@ -756,6 +756,11 @@ pub struct ScanGroupElem {
     /// True for "lenient" groups whose dispatch may bail out
     /// without advancing on no match (used for `?`-over-group).
     pub lenient: bool,
+    /// Per-alt first set (parallel to `alts`). Drives emit's
+    /// ambiguity detection (`sets_overlap` between any two alts)
+    /// and the lenient gate. Cached at lower time so emit's
+    /// `gen_scan_op_group` doesn't re-call `ctx.first_of_alt`.
+    pub alt_first_sets: Array<Array<String>>,
 }
 
 pub struct ScanOptionalLookaheadElem {
