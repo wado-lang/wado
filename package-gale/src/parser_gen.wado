@@ -6281,10 +6281,6 @@ fn elements_match(consumed: &Element, expected: &Element) -> bool {
     return false;
 }
 
-// `unwrap_label`, `is_left_recursive`, `is_prefix_alt`,
-// `is_self_ref_element`, `compute_prefix_self_ref_min_prec`
-// have moved to `lr_util.wado`.
-
 fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>) {
     let fn_name = `parse_{rule.snake_name}`;
     w.line("let kind = p.peek_kind();");
@@ -6514,14 +6510,6 @@ fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
     }
     counts.push([*name, 1]);
 }
-
-/// True iff the alternative is left-recursive: its first element references
-/// the enclosing rule by name. ANTLR4 treats labeled self-references like
-/// `a=e` at the start of an alt as left-recursive too (per
-/// `vendor/antlr4/doc/left-recursion.md`), so `is_self_ref_element`
-/// unwraps one `Label`.
-// `is_left_recursive` / `is_prefix_alt` / `is_self_ref_element` /
-// `compute_prefix_self_ref_min_prec` have moved to `lr_util.wado`.
 
 fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<i32>> {
     let n = first_sets.len();
