@@ -67,6 +67,7 @@ use {
 use { LitToken } from "./lexer_gen.wado";
 use { GenContext } from "./gen_context.wado";
 use { strip_suffix } from "./gen_util.wado";
+use { compute_prefix_self_ref_min_prec } from "./lr_util.wado";
 use { TreeMap } from "core:collections";
 use {
     LoweredGrammar,
@@ -1241,7 +1242,7 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
         ops,
         fields,
         group_index_start: cumulative_group_index_start(rule, idx),
-        prefix_self_ref_min_prec: 0,
+        prefix_self_ref_min_prec: compute_prefix_self_ref_min_prec(rule, idx),
     };
 }
 

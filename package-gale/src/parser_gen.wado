@@ -73,7 +73,7 @@ use {
     rule_header,
     rule_alt_body,
 } from "./gir.wado";
-use { is_left_recursive, is_prefix_alt, is_self_ref_element, unwrap_label, compute_prefix_self_ref_min_prec } from "./lr_util.wado";
+use { is_left_recursive, is_prefix_alt, is_self_ref_element, unwrap_label } from "./lr_util.wado";
 
 fn first_contains(first: &Array<String>, token: &String) -> bool {
     for let item of first {
@@ -2765,9 +2765,9 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
                     f.emit_begin(w);
                     w.line("let start = p.peek().span.start;");
                     ctx.group_counter = ctx.alt_gc_starts[alt_idx];
-                    let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
-                    ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec(rule, alt_idx);
                     let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
+                    let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
+                    ctx.prefix_self_ref_min_prec = body.prefix_self_ref_min_prec;
                     gen_alt_body(
                         w,
                         &type_name,
@@ -3005,9 +3005,9 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         }
 
         ctx.group_counter = ctx.alt_gc_starts[alt_idx];
-        let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
-        ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec(rule, alt_idx);
         let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
+        let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
+        ctx.prefix_self_ref_min_prec = body.prefix_self_ref_min_prec;
         gen_alt_body(
             w,
             type_name,
@@ -6212,11 +6212,9 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
             let alt = &alts[*idx];
             let sname = `{strip_suffix(type_name, "Node")}{alt_case_names[*idx]}`;
             ctx.group_counter = ctx.alt_gc_starts[*idx];
-            let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
-            if let Some(rule) = ctx.find_rule(&ctx.current_rule_name) {
-                ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec(rule, *idx);
-            }
             let body = rule_alt_body(lowered_rule, *idx).unwrap();
+            let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
+            ctx.prefix_self_ref_min_prec = body.prefix_self_ref_min_prec;
             gen_alt_body_skip(
                 w,
                 type_name,
@@ -6444,9 +6442,9 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
             let alt = &rule.alternatives[alt_idx];
             let sname = `{strip_suffix(type_name, "Node")}{case_names[alt_idx]}`;
             ctx.group_counter = ctx.alt_gc_starts[alt_idx];
-            let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
-            ctx.prefix_self_ref_min_prec = compute_prefix_self_ref_min_prec(rule, alt_idx);
             let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
+            let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
+            ctx.prefix_self_ref_min_prec = body.prefix_self_ref_min_prec;
             gen_alt_body(
                 w,
                 type_name,
