@@ -718,12 +718,16 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
         let mut op = lower_op(&alt.elements[i], &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow);
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
+            let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
             op = Op::Repeat(RepeatOp {
                 kind: rep_op.kind,
                 body: rep_op.body,
                 strategy: rep_op.strategy,
                 field: rep_op.field,
-                caller_follow_first: basic_follow, body_scannable: rep_op.body_scannable, body_has_field: rep_op.body_has_field,
+                caller_follow_first: basic_follow,
+                caller_follow_second: basic_second,
+                body_scannable: rep_op.body_scannable,
+                body_has_field: rep_op.body_has_field,
             });
         }
         ops.push(op);
@@ -1360,12 +1364,16 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
         // `gen_repeat*` decisions use the simpler `first_of_elements_from`.
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
+            let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
             op = Op::Repeat(RepeatOp {
                 kind: rep_op.kind,
                 body: rep_op.body,
                 strategy: rep_op.strategy,
                 field: rep_op.field,
-                caller_follow_first: basic_follow, body_scannable: rep_op.body_scannable, body_has_field: rep_op.body_has_field,
+                caller_follow_first: basic_follow,
+                caller_follow_second: basic_second,
+                body_scannable: rep_op.body_scannable,
+                body_has_field: rep_op.body_has_field,
             });
         }
         ops.push(op);
@@ -1548,12 +1556,16 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
         let mut op = lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow);
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
+            let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
             op = Op::Repeat(RepeatOp {
                 kind: rep_op.kind,
                 body: rep_op.body,
                 strategy: rep_op.strategy,
                 field: rep_op.field,
-                caller_follow_first: basic_follow, body_scannable: rep_op.body_scannable, body_has_field: rep_op.body_has_field,
+                caller_follow_first: basic_follow,
+                caller_follow_second: basic_second,
+                body_scannable: rep_op.body_scannable,
+                body_has_field: rep_op.body_has_field,
             });
         }
         ops.push(op);
@@ -1815,12 +1827,16 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
             let mut op = lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow);
             if let Repeat(rep_op) = &op {
                 let basic_follow = ctx.first_of_elements_from(&alt.elements, ei + 1);
+                let basic_second = compute_caller_follow_second(&alt.elements, ei + 1, ctx);
                 op = Op::Repeat(RepeatOp {
                     kind: rep_op.kind,
                     body: rep_op.body,
                     strategy: rep_op.strategy,
                     field: rep_op.field,
-                    caller_follow_first: basic_follow, body_scannable: rep_op.body_scannable, body_has_field: rep_op.body_has_field,
+                    caller_follow_first: basic_follow,
+                    caller_follow_second: basic_second,
+                    body_scannable: rep_op.body_scannable,
+                    body_has_field: rep_op.body_has_field,
                 });
             }
             ops.push(op);
@@ -1980,9 +1996,32 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
         strategy: strategy,
         field: outer_field,
         caller_follow_first: *outer_follow,
+        caller_follow_second: [],
         body_scannable,
         body_has_field,
     });
+}
+
+/// Caller-side second-token set for a non-greedy Repeat at position
+/// `start - 1` in the surrounding alt. Returns the first set of the
+/// second sub-position when the next element (at `start`) is itself a
+/// Repeat over a single-alt Group of ≥ 2 elements (the common
+/// `(',' x)*?` followed by `(',' y)*` disambiguation pattern). Returns
+/// `[]` otherwise — emit's `compute_non_greedy_condition` mirror
+/// already handles the empty case.
+fn compute_caller_follow_second(elements: &Array<Element>, start: i32, ctx: &mut GenContext) -> Array<String> {
+    if start >= elements.len() {
+        return [];
+    }
+    let follow_elem = &elements[start];
+    if let Repeat(rep) = follow_elem {
+        if let Group(g) = rep.element {
+            if g.alternatives.len() == 1 && g.alternatives[0].elements.len() >= 2 {
+                return ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
+            }
+        }
+    }
+    return [];
 }
 
 /// True iff the surface `Element` contributes a CST field. Mirror of
@@ -2564,6 +2603,7 @@ fn rebind_op_field(op: Op, new_field: &String) -> Op {
             strategy: rep.strategy,
             field: *new_field,
             caller_follow_first: rep.caller_follow_first,
+            caller_follow_second: rep.caller_follow_second,
             body_scannable: rep.body_scannable,
             body_has_field: rep.body_has_field,
         }),

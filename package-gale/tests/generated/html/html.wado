@@ -2811,36 +2811,8 @@ fn scan_html_elements__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 =
 fn parse_html_elements__follow_0(p: &mut Parser) -> Result<HtmlElementsNode, ParseError> {
     let start = p.peek().span.start;
     let mut html_misc_list: Array<HtmlMiscNode> = [];
-    loop {
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.tokens;
-            let mut pos: i32 = p.pos;
-            pos = scan_html_misc(tokens, pos, 0);
-            if pos < 0 { break rep_scan; }
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
-        }
-        if rep_scan_pos < 0 { break; }
-        let html_misc = parse_html_misc(p)?;
-        html_misc_list.push(html_misc);
-    }
     let html_element = parse_html_element(p)?;
     let mut html_misc_list_2: Array<HtmlMiscNode> = [];
-    loop {
-        let mut rep_scan_pos_2: i32 = -1;
-        rep_scan_2: {
-            let tokens = &p.tokens;
-            let mut pos: i32 = p.pos;
-            pos = scan_html_misc(tokens, pos, 0);
-            if pos < 0 { break rep_scan_2; }
-            if pos <= p.pos { break rep_scan_2; }
-            rep_scan_pos_2 = pos;
-        }
-        if rep_scan_pos_2 < 0 { break; }
-        let html_misc = parse_html_misc(p)?;
-        html_misc_list_2.push(html_misc);
-    }
     return Result::<HtmlElementsNode, ParseError>::Ok(HtmlElementsNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         html_misc_list,

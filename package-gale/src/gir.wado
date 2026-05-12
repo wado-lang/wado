@@ -551,6 +551,13 @@ pub struct RepeatOp {
     /// `Array<T>` (`Star` / `Plus`) field. False for `Transparent`
     /// groups and other non-storable shapes.
     pub body_has_field: bool,
+    /// Caller-side second-token set for non-greedy 2-token
+    /// disambiguation. For a non-greedy Repeat at position `i` of a
+    /// surface alt, this is the first set of the next element's
+    /// second sub-position when the next element is itself a Repeat
+    /// over a single-alt Group of ≥ 2 elements. Empty when 1-token
+    /// follow suffices. Consumed by `gen_repeat_non_greedy`.
+    pub caller_follow_second: Array<String>,
 }
 
 pub struct GroupOp {

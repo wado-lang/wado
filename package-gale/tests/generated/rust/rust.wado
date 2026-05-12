@@ -35257,27 +35257,6 @@ fn scan_lifetime_bounds__follow_30(tokens: &Array<Token>, pos: i32, min_prec: i3
 fn parse_lifetime_bounds__follow_30(p: &mut Parser) -> Result<LifetimeBoundsNode, ParseError> {
     let start = p.peek().span.start;
     let mut lifetime_plus_list: Array<LifetimePlusItem> = [];
-    loop {
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.tokens;
-            let mut pos: i32 = p.pos;
-            pos = scan_lifetime(tokens, pos, 0);
-            if pos < 0 { break rep_scan; }
-            if pos >= tokens.len() || tokens[pos].kind != TK_PLUS { break rep_scan; }
-            pos += 1;
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
-        }
-        if rep_scan_pos < 0 { break; }
-        let lifetime = parse_lifetime(p)?;
-        let plus = p.expect(TK_PLUS)?;
-        let lifetime_plus = LifetimePlusItem {
-            lifetime,
-            plus,
-        };
-        lifetime_plus_list.push(lifetime_plus);
-    }
     let lifetime: Option<LifetimeNode> = null;
     return Result::<LifetimeBoundsNode, ParseError>::Ok(LifetimeBoundsNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -35348,35 +35327,9 @@ fn scan_type_path__follow_33(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
 
 fn parse_type_path__follow_33(p: &mut Parser) -> Result<TypePathNode, ParseError> {
     let start = p.peek().span.start;
-    let pathsep: Option<Token> = if p.peek_kind() == TK_PATHSEP {
-        let pathsep = p.expect(TK_PATHSEP)?;
-        Option::<Token>::Some(pathsep)
-    } else {
-        null
-    };
+    let pathsep: Option<Token> = null;
     let type_path_segment = parse_type_path_segment__follow_38(p)?;
     let mut pathsep_type_path_segment_list: Array<PathsepTypePathSegmentItem> = [];
-    loop {
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.tokens;
-            let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos].kind != TK_PATHSEP { break rep_scan; }
-            pos += 1;
-            pos = scan_type_path_segment__follow_38(tokens, pos, 0);
-            if pos < 0 { break rep_scan; }
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
-        }
-        if rep_scan_pos < 0 { break; }
-        let pathsep = p.expect(TK_PATHSEP)?;
-        let type_path_segment = parse_type_path_segment__follow_38(p)?;
-        let pathsep_type_path_segment = PathsepTypePathSegmentItem {
-            pathsep,
-            type_path_segment,
-        };
-        pathsep_type_path_segment_list.push(pathsep_type_path_segment);
-    }
     return Result::<TypePathNode, ParseError>::Ok(TypePathNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         pathsep,

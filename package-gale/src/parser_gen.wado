@@ -2782,19 +2782,7 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
         let op = &body.ops[i - ops_offset];
         if let Repeat(rep) = elem {
             let rep_op = if let Repeat(r) = op { r } else { panic("gen_alt_body_skip: Repeat element / op mismatch") };
-            let follow = &rep_op.caller_follow_first;
-            if let Optional = rep.kind {
-                if is_ruleref_optional(&rep.element) {
-                    gen_repeat_with_follow(w, rep, ctx, follow, &mut name_counts);
-                } else {
-                    gen_repeat(w, rep, ctx, &mut name_counts, follow);
-                }
-            } else if rep.non_greedy {
-                let follow_second = compute_follow_second(&alt.elements, i + 1, ctx);
-                gen_repeat_non_greedy(w, rep, ctx, follow, &follow_second, &mut name_counts);
-            } else {
-                gen_repeat(w, rep, ctx, &mut name_counts, follow);
-            }
+            gen_op_repeat(w, rep, rep_op, ctx, &mut name_counts);
         } else if op_is_leaf(op) {
             gen_op_leaf(w, op, elem, ctx, &mut name_counts);
         } else if let ListLabel(ll) = op {
@@ -2893,19 +2881,7 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<O
         let op = &ops[i];
         if let Repeat(rep) = elem {
             let rep_op = if let Repeat(r) = op { r } else { panic("gen_alt_elements: Repeat element / op mismatch") };
-            let follow = &rep_op.caller_follow_first;
-            if let Optional = rep.kind {
-                if is_ruleref_optional(&rep.element) {
-                    gen_repeat_with_follow(w, rep, ctx, follow, &mut name_counts);
-                } else {
-                    gen_repeat(w, rep, ctx, &mut name_counts, follow);
-                }
-            } else if rep.non_greedy {
-                let follow_second = compute_follow_second(elements, i + 1, ctx);
-                gen_repeat_non_greedy(w, rep, ctx, follow, &follow_second, &mut name_counts);
-            } else {
-                gen_repeat(w, rep, ctx, &mut name_counts, follow);
-            }
+            gen_op_repeat(w, rep, rep_op, ctx, &mut name_counts);
         } else if op_is_leaf(op) {
             // Lower has resolved every leaf op (field name, token kind,
             // variant id, min-prec) — emit reads them verbatim. The
@@ -2945,20 +2921,17 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, o
         let op = &ops[i];
         if let Repeat(rep) = elem {
             let rep_op = if let Repeat(r) = op { r } else { panic("gen_elements_with_non_greedy: Repeat element / op mismatch") };
-            // Lower bakes the within-group follow into
-            // `rep_op.caller_follow_first`; emit unions the surrounding
-            // Repeat's iter_follow when the within-group tail is
-            // deep-nullable (lower doesn't see the outer iter_follow).
+            // For nested constructs within a surrounding Repeat the
+            // iter_follow must be unioned on top of lower's per-
+            // position `caller_follow_first` when this position's
+            // within-group tail is deep-nullable. The override is
+            // computed here and applied via the `_with_outer_follow`
+            // entry point.
             let mut follow = rep_op.caller_follow_first;
             if ctx.tail_is_nullable_deep(elements, i + 1) {
                 follow = union_sets(&follow, outer_follow);
             }
-            if rep.non_greedy {
-                let follow_second = compute_follow_second(elements, i + 1, ctx);
-                gen_repeat_non_greedy(w, rep, ctx, &follow, &follow_second, name_counts);
-            } else {
-                gen_repeat(w, rep, ctx, name_counts, &follow);
-            }
+            gen_op_repeat_with_follow_override(w, rep, rep_op, ctx, name_counts, &follow);
         } else if op_is_leaf(op) {
             gen_op_leaf(w, op, elem, ctx, name_counts);
         } else if let ListLabel(ll) = op {
@@ -3029,6 +3002,19 @@ fn op_is_leaf(op: &Op) -> bool {
         Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => true,
         _ => false,
     };
+}
+
+/// True when the lowered op is a `RuleCall` (possibly wrapped in a
+/// single `Op::ListLabel`). Op-level analogue of surface
+/// `is_ruleref_optional`'s check on `Repeat.element`.
+fn op_is_rulecall(op: &Op) -> bool {
+    if let RuleCall(_) = op {
+        return true;
+    }
+    if let ListLabel(ll) = op {
+        return op_is_rulecall(&ll.inner);
+    }
+    return false;
 }
 
 /// Emit a single leaf-op parse line, reading the deduped field name
@@ -3428,6 +3414,67 @@ fn peek_dedup_name(base: &String, counts: &Array<[String, i32]>) -> String {
         return `{base}_{count + 1}`;
     }
     return *base;
+}
+
+/// Op-driven top-level Repeat dispatcher. Walkers reach this with
+/// `rep` (surface) and `rep_op` (lowered, carrying baked follow /
+/// strategy / scannable / has-field). Internally routes to the
+/// existing emit helpers using the baked data, with one specialised
+/// short-circuit for `RepeatStrategy::Suppressed` on `Optional` and
+/// `Star` (mask-suppressed loops emit just the storage decl).
+fn gen_op_repeat(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    gen_op_repeat_with_follow_override(w, rep, rep_op, ctx, name_counts, &rep_op.caller_follow_first);
+}
+
+/// Twin of `gen_op_repeat` with an explicit `follow` override. Used by
+/// `gen_elements_with_non_greedy` to union the surrounding Repeat's
+/// iter_follow on top of lower's per-position `caller_follow_first`
+/// — that propagation isn't expressible through lower's per-alt-body
+/// `caller_follow_first` computation alone (lower doesn't see the
+/// outer iter_follow at group-alt time).
+fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
+    // Suppressed short-circuit (Optional / Star — Plus is mandatory,
+    // so even with a covering mask the existing emit's mandatory-first
+    // path is left in place).
+    if let Suppressed = &rep_op.strategy {
+        if rep_op.body_has_field {
+            let inner_type = op_field_type(&rep_op.body);
+            if let Optional = rep.kind {
+                let _ = dedup_name(&rep_op.field, name_counts);
+                w.line(`let {rep_op.field}: Option<{inner_type}> = null;`);
+                return;
+            }
+            if let Star = rep.kind {
+                let _ = dedup_name(&rep_op.field, name_counts);
+                w.line(`let mut {rep_op.field}: Array<{inner_type}> = [];`);
+                return;
+            }
+        } else {
+            if let Optional = rep.kind {
+                return;
+            }
+            if let Star = rep.kind {
+                return;
+            }
+        }
+    }
+    // Non-greedy dispatch reads exit_first / exit_second from the
+    // baked strategy; the walker no longer recomputes
+    // `compute_follow_second` per position.
+    if rep.non_greedy {
+        gen_repeat_non_greedy(w, rep, ctx, follow, &rep_op.caller_follow_second, name_counts);
+        return;
+    }
+    // Greedy Optional + RuleRef-shaped inner takes the caller-follow
+    // subtraction path; everything else goes through the general
+    // greedy emitter.
+    if let Optional = rep.kind {
+        if op_is_rulecall(&rep_op.body) {
+            gen_repeat_with_follow(w, rep, ctx, follow, name_counts);
+            return;
+        }
+    }
+    gen_repeat(w, rep, ctx, name_counts, follow);
 }
 
 /// `ruleref_call_follow` is saved, cleared, and restored around the
