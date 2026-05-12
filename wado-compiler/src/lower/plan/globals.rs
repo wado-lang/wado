@@ -290,7 +290,10 @@ fn build_module_init_function(
 /// when their initializers happen to share the topo-sort input.
 fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<(ModuleSource, String)>) {
     match &expr.kind {
-        TirExprKind::GlobalVarGet { name, module_source } => {
+        TirExprKind::GlobalVarGet {
+            name,
+            module_source,
+        } => {
             refs.insert((module_source.clone(), name.clone()));
         }
         // Recursively search in sub-expressions
@@ -405,9 +408,7 @@ fn topological_sort_global_inits(
     let key_to_idx: IndexMap<(ModuleSource, String), usize> = lazy_inits
         .iter()
         .enumerate()
-        .map(|(i, (_, name, module_source, ..))| {
-            ((module_source.clone(), name.clone()), i)
-        })
+        .map(|(i, (_, name, module_source, ..))| ((module_source.clone(), name.clone()), i))
         .collect();
 
     // Build dependency graph: deps[i] = set of indices that i depends on
