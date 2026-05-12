@@ -1147,7 +1147,6 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &Array
         RuleRef(r) => ScanElement::RuleCall(ScanRuleCallElem {
             target_snake: r.snake_name,
             variant_id: ctx.intern_follow_variant(&r.name, outer_follow, true),
-            min_prec_arg: 0,
         }),
         Wildcard(_) => ScanElement::Wildcard,
         Not(ne) => ScanElement::Excluded(ScanExcludedElem {
@@ -1264,12 +1263,17 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &A
     let mut inner_visiting: Array<String> = [];
     let inner_first = ctx.first_of_element(&rep.element, &mut inner_visiting);
 
-    // Scan-side intentionally ignores `rep.non_greedy`: the surface
-    // emit treats every Repeat as greedy on the scan side (loop while
-    // peek ∈ inner_first), letting the inner scan's pos = -1 / 0-
-    // advance restore semantics handle the boundary. Non-greedy vs
-    // greedy is a parse-side ordering concern; for scan we just want
-    // the maximal in-language prefix length.
+    // Scan-side ignores `rep.non_greedy` because the existing surface
+    // emit (`gen_scan_repeat_body`) also ignores it — both greedy and
+    // non-greedy Repeats lower to the same `while peek ∈ inner_first`
+    // loop with `pos = sp; break` on 0-advance / failure. The scan
+    // result has been correct in practice on every committed grammar:
+    // when the loop overshoots, the parse side's longest-match scan
+    // tournament picks a shorter prefix instead. If we ever encounter
+    // a grammar where the scan-side fixed-point really needs 2-token
+    // disambiguation to distinguish `(',' a)*?` from `(',' b)*`, the
+    // `NonGreedyStrategy` infrastructure on the parse side (carrying
+    // `exit_second`) is the natural foundation to restore here.
     let strategy = choose_greedy_scan_repeat_strategy(&inner_first, &ctx.current_follow_mask);
 
     let iter_follow = union_arrays(&inner_first, outer_follow);
@@ -1878,6 +1882,19 @@ fn lower_simple_cst_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, 
     for let mut i = 0; i < alts.len(); i += 1 {
         let alt = &alts[i];
         let elem = &alt.elements[0];
+        // Pass `outer_follow` (not an empty per-position follow) here so
+        // lower's variant-registry stays in lock-step with surface emit's
+        // re-walk of the variant body — `lower_variant_rules` seeds
+        // `current_outer_follow` with the variant's mask, and any RuleRef
+        // call inside the variant re-lowers with that mask propagated
+        // through `compute_call_site_follow`. Cutting the follow to `[]`
+        // here makes lower under-register at this site while emit's
+        // surface walker (which still re-evaluates `ruleref_call_follow`)
+        // continues to register — and `gen_parser`'s post-lower assert
+        // catches the divergence. The spurious `scan_X__follow_N` cases
+        // this re-introduces (e.g. `scan_sql_stmt_list__follow_0`) are
+        // currently observable; see the matching commit message for the
+        // tradeoff.
         bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, outer_follow)] });
         let mut visiting: Array<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));

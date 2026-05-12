@@ -1336,14 +1336,16 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
     f.emit_begin(w);
 
     if rule.alternatives.len() == 1 {
-        w.line("let mut pos = pos;");
+        // `lower_rule` maps every single-alt surface rule (including its
+        // follow variants) to `Rule::Simple` — multi-alt and LR shapes
+        // require 2+ surface alts. The pattern is therefore total over
+        // the shape we observe here.
         let scan_body = if let Simple(s) = lowered_rule {
             &s.scan_body;
-        } else if let MultiAlt(m) = lowered_rule {
-            &m.scan_alts[0];
         } else {
-            panic("gen_scan_function_named: single-alt rule but lowered_rule is not Simple/MultiAlt");
+            panic("gen_scan_function_named: single-alt rule but lowered_rule is not Simple — lower_rule invariant violated");
         };
+        w.line("let mut pos = pos;");
         gen_scan_op_elements(w, &scan_body.elements, 0, scan_body.elements.len(), ctx, &"return -1;");
         w.line("return pos;");
     } else if all_alts_are_single_token(&rule.alternatives) {
@@ -2222,14 +2224,11 @@ fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContex
         } else {
             `scan_{rc.target_snake}`;
         };
-        // Scan-side `min_prec_arg` is always set (0 by default); the
-        // bt-scan path overrides via `ctx.scan_ruleref_min_prec`.
-        let min_prec = if ctx.scan_ruleref_min_prec != 0 {
-            `{ctx.scan_ruleref_min_prec}`;
-        } else {
-            `{rc.min_prec_arg}`;
-        };
-        w.line(`pos = {fn_name}(tokens, pos, {min_prec});`);
+        // Scan-side min_prec is purely a ctx concern: bt-scan paths
+        // set `scan_ruleref_min_prec` to `i32::MAX` to short-circuit
+        // any LR climb in the target rule; every other call site
+        // leaves it at the default `0`.
+        w.line(`pos = {fn_name}(tokens, pos, {ctx.scan_ruleref_min_prec});`);
         w.line(`if pos < 0 \{ {*fail_stmt} \}`);
         return;
     }
@@ -2282,12 +2281,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         } else {
             `scan_{rc.target_snake}`;
         };
-        let min_prec = if ctx.scan_ruleref_min_prec != 0 {
-            `{ctx.scan_ruleref_min_prec}`;
-        } else {
-            `{rc.min_prec_arg}`;
-        };
-        w.line(`pos = {fn_name}(tokens, pos, {min_prec});`);
+        w.line(`pos = {fn_name}(tokens, pos, {ctx.scan_ruleref_min_prec});`);
         return;
     }
     if let Wildcard = se {
@@ -2326,14 +2320,13 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
 
 /// Op-driven scan-side Repeat dispatcher. Reads `ScanRepeatStrategy`
 /// to pick the loop guard set and emit the appropriate loop shape.
+///
+/// Unlike its surface twin `gen_scan_repeat`, this does not need to
+/// save/clear `ctx.ruleref_call_follow` around the body: the op-
+/// driven path reads `variant_id` from the lower-baked
+/// `ScanRuleCallElem`, never from the ctx, so a stale outer call-
+/// follow can't leak into the inner RuleRefs.
 fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenContext, fail_stmt: &String) {
-    let saved_call_follow = ctx.ruleref_call_follow;
-    ctx.ruleref_call_follow = [];
-    gen_scan_op_repeat_body(w, re, ctx, fail_stmt);
-    ctx.ruleref_call_follow = saved_call_follow;
-}
-
-fn gen_scan_op_repeat_body(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenContext, fail_stmt: &String) {
     // Suppressed: mask covers all of the inner's first set — no
     // iterations possible.
     if let Suppressed = &re.strategy {
