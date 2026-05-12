@@ -53,31 +53,32 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         Ok(g) => grammars.push(g),
         Err(e) => {
             return Result::Err(Error::InvalidSchema(
-                `gale: failed to parse primary grammar '{req.primary.path}': {e.message}`
+                `gale: failed to parse primary grammar '{req.primary.path}': {e.message}`,
             ));
         },
-    };
+    }
     for let supp of &req.inputs {
         match parse(supp.content) {
             Ok(g) => grammars.push(g),
             Err(e) => {
                 return Result::Err(Error::InvalidSchema(
-                    `gale: failed to parse supplementary grammar '{supp.path}': {e.message}`
+                    `gale: failed to parse supplementary grammar '{supp.path}': {e.message}`,
                 ));
             },
-        };
+        }
     }
 
     let mut grammar = merge_grammars(grammars);
 
     match check_references(&grammar) {
-        Ok(_) => {},
+        Ok(_) => {
+        },
         Err(e) => {
             return Result::Err(Error::InvalidSchema(
-                `gale: unresolved rule references in '{req.primary.path}': {e.message}`
+                `gale: unresolved rule references in '{req.primary.path}': {e.message}`,
             ));
         },
-    };
+    }
 
     let gen_opts = GenerateOptions { highlight: req.options.highlight };
     let wado_source = codegen_generate(&mut grammar, &gen_opts);
@@ -89,12 +90,10 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     // `use { X } from "./path/to/grammar.g4"` redirect that the Kiln
     // pipeline installs.
     let entry_name = to_snake_case(&grammar.name);
-    let files: Array<OutputFile> = [
-        OutputFile {
+    let files: Array<OutputFile> = [OutputFile {
             path: `{entry_name}.wado`,
             content: wado_source,
             is_entry: true,
-        },
-    ];
+        }];
     return Result::Ok(Response { files });
 }

@@ -101,17 +101,94 @@ Rules:
 ### Types
 
 ```wado
-/// Result of a successful match. `params` is the captured parameter values
-/// keyed by parameter name; for a wildcard route the captured tail is
-/// stored under the wildcard name.
+/// Captured path parameters for a matched route. `PathParams` is a thin
+/// handle of three references: the request path, the parameter-name list
+/// shared with the matched terminal state, and a flat byte-range table
+/// (`[start0, end0, start1, end1, ...]`) into `path`. Empty for static
+/// routes; in that case all three fields point at shared empty singletons.
+pub struct PathParams {
+    path: &String,
+    names: &Array<String>,
+    ranges: &Array<i32>,
+}
+
+impl PathParams {
+    pub fn len(&self) -> i32;
+    pub fn is_empty(&self) -> bool;
+
+    /// Lookup by name (linear scan). The returned `String` is a freshly
+    /// allocated substring of the matched byte range. Returns `None` if
+    /// no parameter has the given name.
+    pub fn get(&self, name: String) -> Option<String>;
+
+    /// Deserialize into a typed struct via `core:serde`. Scalar fields
+    /// parse directly from path bytes; only `String` fields allocate a
+    /// substring.
+    pub fn deserialize<T: Deserialize>(&self) -> Result<T, DeserializeError>;
+}
+
+/// `params["id"]` panics if `id` isn't a captured parameter. Use
+/// `params.get("id")` for fallible access.
+impl IndexValue<String> for PathParams {
+    type Output = String;
+    fn index_value(&self, name: String) -> String;
+}
+
 pub struct RouteMatch<H> {
     pub handler: H,
-    pub params: TreeMap<String, String>,
+    pub params: PathParams,
 }
 
 /// Generic HTTP path router.
 pub struct Router<H> { /* private */ }
 ```
+
+### Captured Params: Data Layout
+
+`RouteMatch.params` is a `PathParams` value, but every contained field is a
+reference, so copying the struct copies three pointers — there is no deep
+copy of the path string, names array, or range table when the user passes
+`m.params` around.
+
+A typical match allocates:
+
+- For a static-route hit (no `:param`, no `*wildcard`): **0 allocations**.
+  `match_request` returns a reference into a pre-built `RouteMatch` shell
+  living in the router. `Option<&RouteMatch<H>>` is encoded as a nullable
+  reference (niche optimization), so the `Option` itself does not box.
+- For a dynamic-route hit with N captured params: **1 allocation** for the
+  flat `Array<i32>` of byte ranges (length `2N`). The `PathParams` and
+  `RouteMatch` are heap-promoted by the compiler.
+
+Compare to the previous `TreeMap<String, String>` design, which allocated
+one tree node, one key `String`, and one value `String` per parameter, plus
+the tree itself.
+
+### `core:serde` Integration
+
+A handler that wants typed parameters declares a struct and an
+`impl Deserialize for X;`. The compiler synthesizes the deserializer body
+per [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
+
+```wado
+struct GetUserParams { id: u64 }
+impl Deserialize for GetUserParams;
+
+if let Some(m) = ROUTER.match_request(&request) {
+    let p = m.params.deserialize::<GetUserParams>().unwrap();
+    // p.id is u64, parsed straight from path bytes (no substring alloc)
+}
+```
+
+The default camelCase wire-name convention applies here too. A pattern
+segment `:userId` matches a Wado-side field `user_id` because the
+synthesized lookup function maps `"userId"` → field index for `user_id`.
+Per-field `#[serde(rename = "...")]` overrides this.
+
+Unsupported shapes (sequences, maps, variants, nested structs) return
+`DeserializeError::UnexpectedType`. Invalid scalar values (e.g. `:id` =
+`"abc"` deserialized to `u64`) return `DeserializeError::InvalidValue`
+with the path byte offset in `error.offset`.
 
 ### `Router<H>` Methods
 
@@ -144,10 +221,14 @@ impl<H> Router<H> {
     /// Same panic rules as `route()`.
     pub fn any(&mut self, pattern: String, handler: H) with stores[handler]
 
-    /// Matches a method/path pair. Returns `Some(RouteMatch)` on a hit and
+    /// Matches a method/path pair. Returns `Some(&RouteMatch)` on a hit and
     /// `None` on a miss. The path argument must be the URL path only (no
-    /// query string, no fragment).
-    pub fn match_path(&self, method: Method, path: &String) -> Option<RouteMatch<H>>
+    /// query string, no fragment). Static-route hits return a reference
+    /// into a pre-built table; dynamic-route hits return a reference to a
+    /// heap-promoted local `RouteMatch`. Assumes `Option<&T>` niche
+    /// optimization at codegen, so the `Option` itself is not boxed.
+    pub fn match_path(&self, method: Method, path: &String) -> Option<&RouteMatch<H>>
+        with stores[self, path]
 
     /// If `path` matches a registered route under any specific method, returns
     /// the list of those methods. `any` handlers do not contribute (they are
@@ -158,7 +239,8 @@ impl<H> Router<H> {
 
     /// Matches against a `wasi:http` `Request`, splitting the path from the
     /// query string internally. Recommended entry point for HTTP services.
-    pub fn match_request(&self, request: &Request) -> Option<RouteMatch<H>>
+    pub fn match_request(&self, request: &Request) -> Option<&RouteMatch<H>>
+        with stores[self]
 }
 ```
 
@@ -249,6 +331,8 @@ The implementation lives in `wado-compiler/lib/core/router.wado` and is ported f
 - Method dispatch supports multiple methods per terminal via an `Array<MethodEntry>` per terminal, scanned linearly on lookup (per-terminal method count is in the single digits, so a sorted array + binary search is overkill). (The example assumes one method per terminal.)
 - Each terminal and wildcard node carries an extra `any_handler_idx: i32` (`-1` when absent) for `Router::any` dispatch.
 - A `match_request` adapter handles path/query split.
+- Patterns with no `:param`/`*wildcard` segments are routed through a sorted side-table (`static_entries: Array<StaticEntry<H>>`) with binary search and pre-built `RouteMatch` shells. The DFA only stores dynamic patterns. Static-route hits return a reference into the side-table — zero allocations per match.
+- Each DFA terminal caches the captured parameter-name list (`terminal_names: Array<String>`) so a match can construct `PathParams` without re-walking the path. Wildcard transitions similarly cache `wildcard_names = terminal_names + [wildcard_name]`.
 
 ```
 wado-compiler/lib/core/router.wado        Implementation (~250 lines)
@@ -275,6 +359,7 @@ example/router-*.wado                     Retained as a competing-algorithm benc
 - [ ] Build-time route compilation: `#![generated]` DFA tables produced from a TOML/Wado route manifest
 - [ ] `core:collections::PrefixTree<V>` for the byte-level radix algorithm, separated from HTTP routing
 - [ ] OpenAPI / Swagger introspection: dump the route table as JSON for documentation tooling
+- [ ] Static check that the typed parameter struct passed to `params.deserialize::<T>()` matches the captured names of the matched route. Requires either a route table that is fully visible at type-check time (a `#routes!` macro form) or a router-level type parameter for the typed-params schema.
 
 ## See Also
 

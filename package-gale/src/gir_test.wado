@@ -166,10 +166,14 @@ test "Op::Wildcard / Excluded round-trip" {
 
     if let Wildcard(w) = &any {
         assert w.field == "wildcard";
-    } else { panic("Wildcard"); }
+    } else {
+        panic("Wildcard");
+    }
     if let Excluded(e) = &excl {
         assert e.kinds.len() == 2;
-    } else { panic("Excluded"); }
+    } else {
+        panic("Excluded");
+    }
 }
 
 test "Op::Repeat carries inner element and strategy" {
@@ -193,9 +197,7 @@ test "Op::Repeat carries inner element and strategy" {
 
 test "RepeatStrategy variants round-trip" {
     let plain = RepeatStrategy::Plain;
-    let with_follow = RepeatStrategy::WithFollowSubtraction(
-        WithFollowSubtractionStrategy { effective_first: ["TK_A"] }
-    );
+    let with_follow = RepeatStrategy::WithFollowSubtraction(WithFollowSubtractionStrategy { effective_first: ["TK_A"] });
     let non_greedy = RepeatStrategy::NonGreedy(NonGreedyStrategy {
         exit_first: ["TK_END"],
         exit_second: [],
@@ -207,18 +209,36 @@ test "RepeatStrategy variants round-trip" {
     let scan_guard = RepeatStrategy::OptionalScanGuard;
     let suppressed = RepeatStrategy::Suppressed;
 
-    if let Plain = &plain { assert true; } else { panic("Plain"); }
+    if let Plain = &plain {
+        assert true;
+    } else {
+        panic("Plain");
+    }
     if let WithFollowSubtraction(s) = &with_follow {
         assert s.effective_first[0] == "TK_A";
-    } else { panic("WithFollowSubtraction"); }
+    } else {
+        panic("WithFollowSubtraction");
+    }
     if let NonGreedy(s) = &non_greedy {
         assert s.exit_first[0] == "TK_END";
-    } else { panic("NonGreedy"); }
+    } else {
+        panic("NonGreedy");
+    }
     if let OptionalLookahead(s) = &lookahead {
         assert s.sigs[0][0][0] == "TK_X";
-    } else { panic("OptionalLookahead"); }
-    if let OptionalScanGuard = &scan_guard { assert true; } else { panic("OptionalScanGuard"); }
-    if let Suppressed = &suppressed { assert true; } else { panic("Suppressed"); }
+    } else {
+        panic("OptionalLookahead");
+    }
+    if let OptionalScanGuard = &scan_guard {
+        assert true;
+    } else {
+        panic("OptionalScanGuard");
+    }
+    if let Suppressed = &suppressed {
+        assert true;
+    } else {
+        panic("Suppressed");
+    }
 }
 
 test "GroupShape variants round-trip" {
@@ -240,19 +260,69 @@ test "GroupShape variants round-trip" {
     });
     let tr = GroupShape::Transparent;
 
-    if let SimpleCst(x) = &s { assert x.type_name == "StmtOrExpr"; } else { panic("SimpleCst"); }
-    if let TokenOnly(x) = &t { assert x.field == "op"; } else { panic("TokenOnly"); }
-    if let SingleAlt(x) = &a { assert x.owner_rule == "obj"; } else { panic("SingleAlt"); }
-    if let General(x) = &g { assert x.group_index == 0; } else { panic("General"); }
-    if let Transparent = &tr { assert true; } else { panic("Transparent"); }
+    if let SimpleCst(x) = &s {
+        assert x.type_name == "StmtOrExpr";
+    } else {
+        panic("SimpleCst");
+    }
+    if let TokenOnly(x) = &t {
+        assert x.field == "op";
+    } else {
+        panic("TokenOnly");
+    }
+    if let SingleAlt(x) = &a {
+        assert x.owner_rule == "obj";
+    } else {
+        panic("SingleAlt");
+    }
+    if let General(x) = &g {
+        assert x.group_index == 0;
+    } else {
+        panic("General");
+    }
+    if let Transparent = &tr {
+        assert true;
+    } else {
+        panic("Transparent");
+    }
 }
 
 test "MultiAltDispatch flat variants round-trip" {
     let direct = direct_single_alt(0);
     let tournament = MultiAltDispatch::Tournament(TournamentDispatch { alts: [0, 1] });
 
-    if let Direct(d) = &direct { assert d.branches.len() == 1; } else { panic("Direct"); }
-    if let Tournament(t) = &tournament { assert t.alts.len() == 2; } else { panic("Tournament"); }
+    if let Direct(d) = &direct {
+        assert d.branches.len() == 1;
+    } else {
+        panic("Direct");
+    }
+    if let Tournament(t) = &tournament {
+        assert t.alts.len() == 2;
+    } else {
+        panic("Tournament");
+    }
+}
+
+test "MultiAltDispatch variant set is exactly { Direct, Tournament }" {
+    // Exhaustive match — if a new variant is added (e.g. re-introducing
+    // PredictDispatch / PartialScanDispatch / SaveRewindDispatch),
+    // this `match` becomes non-exhaustive and the compiler will reject
+    // the test until both the variant's MultiAltDispatch doc-block and
+    // the matching emit translator are updated. See the doc-comment in
+    // gir.wado for the rationale.
+    let direct = direct_single_alt(0);
+    let tournament = MultiAltDispatch::Tournament(TournamentDispatch { alts: [0] });
+
+    let label_direct: String = match direct {
+        Direct(_) => "Direct",
+        Tournament(_) => "Tournament",
+    };
+    let label_tournament: String = match tournament {
+        Direct(_) => "Direct",
+        Tournament(_) => "Tournament",
+    };
+    assert label_direct == "Direct";
+    assert label_tournament == "Tournament";
 }
 
 test "ScanElement variants round-trip" {
@@ -271,15 +341,39 @@ test "ScanElement variants round-trip" {
         strategy: ScanRepeatStrategy::Plain,
     });
 
-    if let Token(t) = &token { assert t.kind == "TK_X"; } else { panic("Token"); }
+    if let Token(t) = &token {
+        assert t.kind == "TK_X";
+    } else {
+        panic("Token");
+    }
     if let RuleCall(c) = &call {
-        if let Some(id) = c.variant_id { assert id == 2; } else { panic("variant_id"); }
-    } else { panic("RuleCall"); }
-    if let Wildcard = &any { assert true; } else { panic("Wildcard"); }
-    if let Excluded(e) = &excl { assert e.kinds[0] == "TK_A"; } else { panic("Excluded"); }
+        if let Some(id) = c.variant_id {
+            assert id == 2;
+        } else {
+            panic("variant_id");
+        }
+    } else {
+        panic("RuleCall");
+    }
+    if let Wildcard = &any {
+        assert true;
+    } else {
+        panic("Wildcard");
+    }
+    if let Excluded(e) = &excl {
+        assert e.kinds[0] == "TK_A";
+    } else {
+        panic("Excluded");
+    }
     if let Repeat(r) = &rep {
-        if let Plus = r.kind { assert true; } else { panic("Plus"); }
-    } else { panic("Repeat"); }
+        if let Plus = r.kind {
+            assert true;
+        } else {
+            panic("Plus");
+        }
+    } else {
+        panic("Repeat");
+    }
 }
 
 test "FollowVariant carries scan/parse usage" {
@@ -302,7 +396,11 @@ test "FieldDecl and KindSet" {
         type_str: "Option<ExprNode>",
         kind: FieldKind::Optional,
     };
-    if let Optional = &f.kind { assert true; } else { panic("Optional"); }
+    if let Optional = &f.kind {
+        assert true;
+    } else {
+        panic("Optional");
+    }
     assert f.name == "expr_2";
 
     let ks = KindSet { id: 0, tokens: ["TK_A", "TK_B"] };

@@ -856,8 +856,7 @@ fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
     }
     if kind == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
-        let e = parse_e(p)?;
-        let x = e;
+        let x = parse_e(p)?;
         let rparen = p.expect(TK_LIT_RPAREN)?;
         return Result::<ENode, ParseError>::Ok(ENode::Alt2(EAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),

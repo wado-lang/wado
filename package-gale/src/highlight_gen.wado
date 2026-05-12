@@ -80,7 +80,9 @@ fn gen_highlight_run(w: &mut CodeWriter) {
     w.line("let path = arguments[0];");
     w.line("let dirs = Preopens::get_directories();");
     w.line("let root = dirs[0].0;");
-    w.line("let file = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait().unwrap();");
+    w.line(
+        "let file = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait().unwrap();",
+    );
     w.line("let [read_stream, _done] = file.read_via_stream(0 as Filesize);");
     w.line("let mut bytes: Array<u8> = [];");
     w.begin("loop");

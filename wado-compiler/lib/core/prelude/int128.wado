@@ -7,8 +7,8 @@ use {
     IntErrorKind,
     ParseIntError,
     parse_u128_digits,
-    parse_signed_prefix,
-    parse_unsigned_prefix,
+    parse_signed_prefix_range,
+    parse_unsigned_prefix_range,
     assert_radix,
 } from "core:prelude/intparse.wado";
 
@@ -50,26 +50,26 @@ impl u128 {
         return result;
     }
 
-    /// Parse a decimal `u128` from a string, returning an error on overflow,
-    /// empty input, or invalid characters.
-    pub fn from_str(s: String) -> Result<u128, ParseIntError> {
-        return u128::from_str_radix(s, 10);
-    }
-
     /// Parse a hexadecimal `u128` from a string (equivalent to `from_str_radix(s, 16)`).
-    pub fn from_str_hex(s: String) -> Result<u128, ParseIntError> {
+    pub fn from_str_hex(s: &String) -> Result<u128, ParseIntError> {
         return u128::from_str_radix(s, 16);
     }
 
     /// Parse a `u128` from a string in the given radix. `radix` must be in 2..=36.
-    pub fn from_str_radix(s: String, radix: u32) -> Result<u128, ParseIntError> {
+    pub fn from_str_radix(s: &String, radix: u32) -> Result<u128, ParseIntError> {
+        return u128::from_str_radix_range(s, 0, s.len(), radix);
+    }
+
+    /// Range variant of `from_str_radix`. Parses `s[start..end)` as a `u128`
+    /// in the given radix without allocating a substring.
+    pub fn from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) -> Result<u128, ParseIntError> {
         assert_radix(radix);
-        let prefix = parse_unsigned_prefix(s);
+        let prefix = parse_unsigned_prefix_range(s, start, end);
         if let Err(k) = prefix {
             return Result::Err(ParseIntError::new(k));
         }
-        let start = prefix.unwrap();
-        return match parse_u128_digits(s, start, s.len(), radix) {
+        let digit_start = prefix.unwrap();
+        return match parse_u128_digits(s, digit_start, end, radix) {
             Ok(v) => Result::Ok(v),
             Err(k) => Result::Err(ParseIntError::new(k)),
         };
@@ -312,6 +312,13 @@ impl u128 {
                 hi = hi >> shift_u64;
             }
         }
+    }
+}
+
+impl FromStr for u128 {
+    type Err = ParseIntError;
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<u128, ParseIntError> {
+        return u128::from_str_radix_range(s, start, end, 10);
     }
 }
 
@@ -655,21 +662,21 @@ impl i128 {
         return result;
     }
 
-    /// Parse a decimal `i128` from a string, returning an error on overflow,
-    /// empty input, or invalid characters.
-    pub fn from_str(s: String) -> Result<i128, ParseIntError> {
-        return i128::from_str_radix(s, 10);
-    }
-
     /// Parse a hexadecimal `i128` from a string (equivalent to `from_str_radix(s, 16)`).
-    pub fn from_str_hex(s: String) -> Result<i128, ParseIntError> {
+    pub fn from_str_hex(s: &String) -> Result<i128, ParseIntError> {
         return i128::from_str_radix(s, 16);
     }
 
     /// Parse an `i128` from a string in the given radix. `radix` must be in 2..=36.
-    pub fn from_str_radix(s: String, radix: u32) -> Result<i128, ParseIntError> {
+    pub fn from_str_radix(s: &String, radix: u32) -> Result<i128, ParseIntError> {
+        return i128::from_str_radix_range(s, 0, s.len(), radix);
+    }
+
+    /// Range variant of `from_str_radix`. Parses `s[start..end)` as an `i128`
+    /// in the given radix without allocating a substring.
+    pub fn from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) -> Result<i128, ParseIntError> {
         assert_radix(radix);
-        let [is_negative, start] = match parse_signed_prefix(s) {
+        let [is_negative, digit_start] = match parse_signed_prefix_range(s, start, end) {
             Ok(p) => p,
             Err(k) => {
                 return Result::Err(ParseIntError::new(k));
@@ -679,7 +686,7 @@ impl i128 {
         // |i128::MIN| = 2^127 = (0, 1 << 63).
         let max_pos = u128::from_pair(u64::MAX, i64::MAX as u64);
         let max_neg_abs = u128::from_pair(0, 9223372036854775808);
-        return match parse_u128_digits(s, start, s.len(), radix) {
+        return match parse_u128_digits(s, digit_start, end, radix) {
             Ok(v) => if is_negative {
                 if v > max_neg_abs {
                     Result::Err(ParseIntError::new(IntErrorKind::NegOverflow));
@@ -921,6 +928,13 @@ impl i128 {
                 hi = hi >> shift_u64;
             }
         }
+    }
+}
+
+impl FromStr for i128 {
+    type Err = ParseIntError;
+    fn from_str_range(s: &String, start: i32, end: i32) -> Result<i128, ParseIntError> {
+        return i128::from_str_radix_range(s, start, end, 10);
     }
 }
 
