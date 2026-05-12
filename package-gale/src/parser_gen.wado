@@ -2813,7 +2813,12 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         w.end();
         w.blank();
 
-        gen_lr_suffix_helpers(w, rule, &type_name, &lr_indices, ctx, fn_name);
+        let lr_alts = if let LeftRecursive(l) = lowered_rule {
+            &l.lr_alts;
+        } else {
+            panic("gen_parse_fn_named: has_lr but lowered_rule is not LeftRecursive");
+        };
+        gen_lr_suffix_helpers(w, rule, &type_name, lr_alts, ctx, fn_name);
 
         // Generate parse_rule(p, min_prec = 0) — precedence-aware parser.
         // Callers without a precedence context omit min_prec and get 0.
@@ -5807,33 +5812,18 @@ fn compute_lr_self_ref_prec(alt: &Alternative, ei: i32, last_self_ref_idx: i32, 
     return prec;
 }
 
-fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, ctx: &mut GenContext, fn_name: &String) {
+fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_alts: &Array<LrAlt>, ctx: &mut GenContext, fn_name: &String) {
     let case_names = case_names_for_rule(&rule.alternatives);
-    let total_lr = lr_indices.len();
-    let lr_suffix_first_tokens = collect_lr_suffix_first_tokens(rule, lr_indices, ctx);
 
-    let mut lr_pos = 0;
-    for let lr_idx_ref of lr_indices {
-        let lr_idx = *lr_idx_ref;
+    for let lr_alt of lr_alts {
+        let lr_idx = lr_alt.alt_index;
         let alt = &rule.alternatives[lr_idx];
         if alt.elements.len() <= 1 {
-            lr_pos += 1;
             continue;
         }
-        let own_prec = total_lr - lr_pos;
 
         let sname = `{strip_suffix(type_name, "Node")}{case_names[lr_idx]}`;
         let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
-
-        // Compute min_prec for self-recursive calls in this helper
-        let inner_min_prec = compute_lr_conflict_min_prec(
-            alt,
-            own_prec,
-            lr_indices,
-            rule,
-            ctx,
-            total_lr,
-        );
 
         let mut f = FnSpec::new(&suffix_fn);
         f.add_param("p", "&mut Parser");
@@ -5864,20 +5854,17 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         ctx.group_counter = ctx.alt_gc_starts[lr_idx];
         let gc_lr = ctx.group_counter;
 
-        let last_self_ref_idx = find_last_self_ref_idx(alt, &rule.name);
-
+        // suffix.ops[k] runs parallel to alt.elements[k+1] — lower's
+        // `lower_lr_alt_suffix` produces exactly one Op per surface
+        // element. Self-recursive RuleCalls have `min_prec_arg` baked
+        // in by `stamp_lr_self_ref_min_prec`; emit reads it directly.
         for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
             let elem = &alt.elements[ei];
+            let suffix_op = &lr_alt.suffix.ops[ei - 1];
             if let RuleRef(rr) = elem {
                 if rr.name == rule.name {
                     let field_name = dedup_name(&rr.field_name, &mut name_counts);
-                    let prec = compute_lr_self_ref_prec(
-                        alt,
-                        ei,
-                        last_self_ref_idx,
-                        inner_min_prec,
-                        &lr_suffix_first_tokens,
-                    );
+                    let prec = lookup_baked_min_prec(suffix_op);
                     w.line(`let {field_name} = {*fn_name}(p, {prec})?;`);
                 } else {
                     let elem_fn = `parse_{rr.snake_name}`;
@@ -5893,13 +5880,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                     if rr.name == rule.name {
                         let lab_name = dedup_name(&lab.field_name, &mut name_counts);
                         let inner_name = dedup_name(&rr.field_name, &mut name_counts);
-                        let prec = compute_lr_self_ref_prec(
-                            alt,
-                            ei,
-                            last_self_ref_idx,
-                            inner_min_prec,
-                            &lr_suffix_first_tokens,
-                        );
+                        let prec = lookup_baked_min_prec(suffix_op);
                         w.line(`let {inner_name} = {*fn_name}(p, {prec})?;`);
                         if lab.list {
                             // Type-annotate the local so `[inner]` parses as
@@ -5953,8 +5934,23 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
 
         w.end();  // fn
         w.blank();
-        lr_pos += 1;
     }
+}
+
+/// Read `min_prec_arg` from a baked self-ref op. Peels a single
+/// `Op::ListLabel` wrapper (the only wrapping shape lower produces;
+/// scalar `Label` is collapsed by `lower_label_op`).
+fn lookup_baked_min_prec(op: &Op) -> i32 {
+    if let RuleCall(rc) = op {
+        if let Some(v) = rc.min_prec_arg {
+            return v;
+        }
+        return 0;
+    }
+    if let ListLabel(ll) = op {
+        return lookup_baked_min_prec(&ll.inner);
+    }
+    return 0;
 }
 
 fn compute_lr_second_token(shared_token: &String, elements: &Array<Element>, ctx: &mut GenContext) -> Array<String> {

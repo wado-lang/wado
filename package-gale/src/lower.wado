@@ -489,12 +489,122 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
 
     let lr_dispatch = compute_lr_dispatch_data(&lr_alts);
 
+    // Bake `min_prec_arg` into every self-recursive `RuleCall` op
+    // inside each LR suffix. Mirrors emit's
+    // `compute_lr_self_ref_prec` decision, but resolved once at
+    // lower time so emit consumes the suffix as a structural walk.
+    stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name);
+
     return LeftRecursiveRule {
         header,
         atom,
         lr_alts,
         lr_dispatch,
     };
+}
+
+/// Walk every LR suffix and stamp `RuleCallOp.min_prec_arg` on
+/// self-recursive calls. The trailing self-ref (at original alt
+/// position `last_self_ref_idx`) uses the alt's `conflict_min`;
+/// non-trailing self-refs use 0 unless the immediately following
+/// op is a fixed token that also appears in some LR alt's
+/// `suffix_first` set (the BETWEEN…AND-style case where a non-final
+/// self-ref must keep its precedence so the shared delimiter binds
+/// correctly). Mirrors `parser_gen::compute_lr_self_ref_prec`.
+fn stamp_lr_self_ref_min_prec(lr_alts: &mut Array<LrAlt>, rule_name: &String) {
+    let lr_suffix_first_tokens = collect_lr_suffix_first_tokens_from_lowered(lr_alts);
+    for let mut i = 0; i < lr_alts.len(); i += 1 {
+        let mut new_ops: Array<Op> = [];
+        let suffix_len = lr_alts[i].suffix.ops.len();
+        for let mut k = 0; k < suffix_len; k += 1 {
+            // suffix.ops[k] corresponds to alt.elements[k+1].
+            let elem_idx = k + 1;
+            let op_ref = &lr_alts[i].suffix.ops[k];
+            // Find the inner RuleCall, peeling a single `Op::ListLabel`
+            // wrapper (scalar `Label` is collapsed by `lower_label_op`).
+            let inner_rc_opt = find_self_ref_rule_call(op_ref, rule_name);
+            if let Some(_) = inner_rc_opt {
+                let prec = compute_self_ref_prec_from_ops(
+                    &lr_alts[i].suffix.ops,
+                    k,
+                    elem_idx,
+                    lr_alts[i].last_self_ref_idx,
+                    lr_alts[i].conflict_min,
+                    &lr_suffix_first_tokens,
+                );
+                new_ops.push(rebind_self_ref_min_prec(*op_ref, prec));
+            } else {
+                new_ops.push(*op_ref);
+            }
+        }
+        lr_alts[i].suffix.ops = new_ops;
+    }
+}
+
+fn find_self_ref_rule_call(op: &Op, rule_name: &String) -> Option<&RuleCallOp> with stores[op] {
+    if let RuleCall(rc) = op {
+        if rc.target_name == *rule_name {
+            return Option::<&RuleCallOp>::Some(rc);
+        }
+    }
+    if let ListLabel(ll) = op {
+        return find_self_ref_rule_call(&ll.inner, rule_name);
+    }
+    return null;
+}
+
+fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
+    return match op {
+        RuleCall(rc) => Op::RuleCall(RuleCallOp {
+            target_name: rc.target_name,
+            target_snake: rc.target_snake,
+            variant_id: rc.variant_id,
+            min_prec_arg: Option::<i32>::Some(prec),
+            field: rc.field,
+        }),
+        ListLabel(ll) => Op::ListLabel(ListLabelOp {
+            field: ll.field,
+            inner: rebind_self_ref_min_prec(ll.inner, prec),
+        }),
+        other => other,
+    };
+}
+
+/// Collect the union of every LR alt's `suffix_first` token set.
+/// Used to decide whether a non-trailing self-ref must keep its
+/// precedence so a shared delimiter binds at the right precedence.
+fn collect_lr_suffix_first_tokens_from_lowered(lr_alts: &Array<LrAlt>) -> Array<String> {
+    let mut result: Array<String> = [];
+    for let lr of lr_alts {
+        for let tk of &lr.suffix_first {
+            if !first_set_contains(&result, tk) {
+                result.push(*tk);
+            }
+        }
+    }
+    return result;
+}
+
+fn compute_self_ref_prec_from_ops(ops: &Array<Op>, k: i32, elem_idx: i32, last_self_ref_idx: i32, conflict_min: i32, lr_suffix_first_tokens: &Array<String>) -> i32 {
+    let mut prec = conflict_min;
+    if elem_idx != last_self_ref_idx && k + 1 < ops.len() {
+        let next_op = &ops[k + 1];
+        let mut next_is_lr_op = false;
+        if let Token(t) = next_op {
+            if first_set_contains(lr_suffix_first_tokens, &t.kind) {
+                next_is_lr_op = true;
+            }
+        }
+        if let Literal(l) = next_op {
+            if first_set_contains(lr_suffix_first_tokens, &l.kind) {
+                next_is_lr_op = true;
+            }
+        }
+        if !next_is_lr_op {
+            prec = 0;
+        }
+    }
+    return prec;
 }
 
 /// Lower the atom side of an LR rule — the non-LR alternatives only.
