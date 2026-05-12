@@ -31,12 +31,16 @@ pub fn plan(flat: &mut FlatPackage) {
         variant_case_map.insert((variant.name.clone(), variant.module_source.clone()), cases);
     }
 
-    // Build struct fields map from module structs.
+    // Build struct fields map from module structs. The key uses the
+    // struct's own `module_source` so that two modules each declaring
+    // a struct with the same name keep their field tables distinct —
+    // pattern lookup resolves the `module_source` from the scrutinee's
+    // resolved type.
     let mut struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>> =
         IndexMap::default();
     for s in &flat.structs {
         struct_fields_map.insert(
-            (s.name.clone(), flat.entry_module_source.clone()),
+            (s.name.clone(), s.module_source.clone()),
             s.fields.clone(),
         );
     }

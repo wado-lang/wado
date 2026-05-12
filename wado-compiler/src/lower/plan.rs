@@ -13,7 +13,7 @@
 //!    dense integer `Match` → `Switch`.
 //! 2. `globals::extract` — extract non-constant initializers into a
 //!    per-module `__initialize_module` function (one per source
-//!    module; disambiguated by `module_source`, not by name).
+//!    module; disambiguated by `module_source`).
 //! 3. `boxing` — `&primitive` / `&mut primitive` → `Box<T>` structs.
 //! 4. `closure` — closures → `__Closure_N` functor structs with
 //!    `__call` methods; returns `ClosurePlan`.

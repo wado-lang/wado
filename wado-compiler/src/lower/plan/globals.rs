@@ -199,26 +199,42 @@ pub fn extract(flat: &mut FlatPackage) {
         return;
     }
 
-    // Topologically sort the lazy initializers based on dependencies
-    let sorted_inits = topological_sort_global_inits(&lazy_inits, &flat.globals);
+    // Partition lazy inits by their owning module so each module gets
+    // its own `__initialize_module` function. Insertion order is
+    // preserved so cross-module sibling ordering matches the original
+    // global declaration order, which the aggregator then walks in
+    // entry-last order (see `build_initialize_modules`).
+    let mut by_module: IndexMap<ModuleSource, Vec<_>> = IndexMap::default();
+    for entry in lazy_inits {
+        by_module.entry(entry.2.clone()).or_default().push(entry);
+    }
 
-    // Generate __initialize_module function
     let span = Span::new(0, 0, 1, 1);
+    for (module_source, module_inits) in by_module {
+        let sorted_inits = topological_sort_global_inits(&module_inits, &flat.globals);
+        let init_func = build_module_init_function(module_source, sorted_inits, span);
+        flat.functions.push(Rc::new(RefCell::new(init_func)));
+    }
+}
+
+fn build_module_init_function(
+    module_source: ModuleSource,
+    sorted_inits: Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)>,
+    span: Span,
+) -> TirFunction {
     let mut init_stmts: Vec<TirStmt> = Vec::new();
     let mut merged_locals: Vec<TirLocal> = Vec::new();
 
-    for (_, name, module_source, _, mut initializer, locals) in sorted_inits {
-        // Renumber locals if this isn't the first global (to avoid index conflicts)
+    for (_, name, gvs_module_source, _, mut initializer, locals) in sorted_inits {
         let offset = u32::try_from(merged_locals.len()).unwrap();
         if offset > 0 && !locals.is_empty() {
             renumber_locals_in_expr(&mut initializer, offset);
         }
         merged_locals.extend(locals);
 
-        // Create: global_name = initializer;
         let global_set = TirExpr::new(
             TirExprKind::GlobalVarSet {
-                module_source,
+                module_source: gvs_module_source,
                 name,
                 value: Box::new(initializer),
             },
@@ -229,18 +245,17 @@ pub fn extract(flat: &mut FlatPackage) {
     }
 
     let local_count = u32::try_from(merged_locals.len()).unwrap();
-
     let init_body = TirBlock {
         stmts: init_stmts,
         span,
     };
 
-    let init_func = TirFunction {
-        module_source: flat.entry_module_source.clone(),
+    TirFunction {
+        module_source,
         is_async: false,
         name: "__initialize_module".to_string(),
-        is_pub: true, // pub so it can be called from entry module's __initialize_modules
-        is_export: false, // Internal function, not a world export
+        is_pub: true,
+        is_export: false,
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
         monomorph_info: None,
@@ -265,11 +280,8 @@ pub fn extract(flat: &mut FlatPackage) {
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
-
         return_abi: crate::tir::ReturnAbi::default(),
-    };
-
-    flat.functions.push(Rc::new(RefCell::new(init_func)));
+    }
 }
 
 /// Collect global variable references from an expression

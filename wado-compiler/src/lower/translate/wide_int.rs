@@ -13,8 +13,9 @@ use crate::lower::wide_int_literal::{create_i128_literal, create_u128_literal};
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::tir::{
-    CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirLiteralPattern,
-    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
+    TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -57,38 +58,35 @@ pub(super) fn build_if_chain(
         match &arm.pattern {
             TirPattern::Literal(TirLiteralPattern::I128(value)) => {
                 let literal_expr = create_i128_literal(*value, scrutinee.type_id, span);
-                let condition =
+                let eq_call =
                     create_i128_eq_call(scrutinee.clone(), literal_expr, type_table, span);
-                let then_block = expr_to_block(&arm.body, span);
-                let else_block = else_expr.as_ref().map(|e| expr_to_block(e, span));
-                else_expr = Some(TirExpr::new(
-                    TirExprKind::If {
-                        condition: Box::new(condition),
-                        then_branch: then_block,
-                        else_branch: else_block,
-                    },
-                    result_type_id,
-                    span,
-                ));
+                let condition = with_guard(eq_call, arm.guard.as_ref(), span);
+                else_expr = Some(build_if(condition, &arm.body, else_expr, result_type_id, span));
             }
             TirPattern::Literal(TirLiteralPattern::U128(value)) => {
                 let literal_expr = create_u128_literal(*value, scrutinee.type_id, span);
-                let condition =
+                let eq_call =
                     create_u128_eq_call(scrutinee.clone(), literal_expr, type_table, span);
-                let then_block = expr_to_block(&arm.body, span);
-                let else_block = else_expr.as_ref().map(|e| expr_to_block(e, span));
-                else_expr = Some(TirExpr::new(
-                    TirExprKind::If {
-                        condition: Box::new(condition),
-                        then_branch: then_block,
-                        else_branch: else_block,
-                    },
-                    result_type_id,
-                    span,
-                ));
+                let condition = with_guard(eq_call, arm.guard.as_ref(), span);
+                else_expr = Some(build_if(condition, &arm.body, else_expr, result_type_id, span));
             }
             TirPattern::Wildcard | TirPattern::Binding { .. } => {
-                else_expr = Some(arm.body.clone());
+                // Bindings on wide-int scrutinees act as catch-alls in
+                // this rewrite: the binding name (if any) is lowered to
+                // a `Local` reference to the scrutinee local via the
+                // outer pattern pipeline, so the body already refers to
+                // the right value here.
+                if let Some(guard) = &arm.guard {
+                    else_expr = Some(build_if(
+                        guard.clone(),
+                        &arm.body,
+                        else_expr,
+                        result_type_id,
+                        span,
+                    ));
+                } else {
+                    else_expr = Some(arm.body.clone());
+                }
             }
             _ => {
                 // Other patterns (tuple, variant) shouldn't appear for i128/u128
@@ -98,6 +96,41 @@ pub(super) fn build_if_chain(
         }
     }
     else_expr.expect("wide-int match has at least one arm")
+}
+
+fn with_guard(condition: TirExpr, guard: Option<&TirExpr>, span: Span) -> TirExpr {
+    match guard {
+        None => condition,
+        Some(guard) => TirExpr::new(
+            TirExprKind::Binary {
+                op: TirBinaryOp::And,
+                left: Box::new(condition),
+                right: Box::new(guard.clone()),
+            },
+            TypeTable::BOOL,
+            span,
+        ),
+    }
+}
+
+fn build_if(
+    condition: TirExpr,
+    body: &TirExpr,
+    else_expr: Option<TirExpr>,
+    result_type_id: TypeId,
+    span: Span,
+) -> TirExpr {
+    let then_block = expr_to_block(body, span);
+    let else_block = else_expr.as_ref().map(|e| expr_to_block(e, span));
+    TirExpr::new(
+        TirExprKind::If {
+            condition: Box::new(condition),
+            then_branch: then_block,
+            else_branch: else_block,
+        },
+        result_type_id,
+        span,
+    )
 }
 
 fn expr_to_block(expr: &TirExpr, span: Span) -> TirBlock {
