@@ -3358,18 +3358,25 @@ fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: 
     } else {
         panic("gen_op_list_label: ListLabel op mapped to non-Label element");
     };
+    if let Group(g_op) = &ll.inner {
+        // Non-leaf inner of shape `Op::Group` (e.g.
+        // `items += (a | b)` outside a Repeat). Allocate the array
+        // ourselves, dispatch the inner Group via `gen_op_group`
+        // (which emits `let <shape.field> = ...;`), then push.
+        // Mirrors the leaf path's structure but routes inner emit
+        // through GIR rather than surface `gen_element`.
+        sync_name_counts_for_list_label(lab, name_counts);
+        let inner_type = op_field_type(&ll.inner);
+        w.line(`let mut {ll.field}: Array<{inner_type}> = [];`);
+        let inner_field = op_field(&ll.inner);
+        gen_op_group(w, g_op, &lab.element, ctx, name_counts);
+        w.line(`{ll.field}.push({inner_field});`);
+        return;
+    }
     if !op_is_leaf(&ll.inner) {
-        // Non-leaf list-label inner (e.g. `items += (a b)` outside a
-        // Repeat, where `ll.inner` is `Op::Group` / `Op::Repeat`).
-        // Emit the surface walker's full `Label(lab.list=true)` path
-        // — it allocates the array, recurses into the inner element
-        // through `gen_element`, and pushes — so any inner shape
-        // that has a `gen_element` arm is covered. Surface
-        // `name_counts` already carries this scope's state, so the
-        // dedup'd field names match lower's. Migrates to a fully
-        // GIR-driven non-leaf emit when group / repeat helpers
-        // accept `GroupOp` / `RepeatOp` directly (Phase 2-B follow-
-        // ups).
+        // Inner of shape `Op::Repeat` / nested `Op::ListLabel` —
+        // rare; routes through the surface walker. Phase 2-C migrates
+        // the Op::Repeat arm.
         gen_element(w, elem, ctx, name_counts);
         return;
     }
