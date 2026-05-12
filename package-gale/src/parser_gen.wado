@@ -3951,47 +3951,6 @@ fn subtract_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
     return result;
 }
 
-fn gen_repeat_with_follow(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, follow_first: &Array<String>, name_counts: &mut Array<[String, i32]>) {
-    let inner = &rep.element;
-    let mut visiting: Array<String> = [];
-    let raw_first = ctx.first_of_element(inner, &mut visiting);
-    // Combine the caller-supplied local `follow_first` with the variant
-    // mask so the subtracted set reflects both same-alt siblings and
-    // outer-rule follow when emitting a follow-aware variant body.
-    let combined_follow = if ctx.current_follow_mask.is_empty() {
-        *follow_first;
-    } else {
-        union_sets(follow_first, &ctx.current_follow_mask);
-    };
-    let first = subtract_sets(&raw_first, &combined_follow);
-
-    if first.len() == 0 {
-        // All first tokens overlap with follow — always skip the optional.
-        if has_field(inner) {
-            let field_info = element_field_info(inner, ctx);
-            let type_str = field_info.1;
-            let opt_name = dedup_name(&field_info.0, name_counts);
-            w.line(`let {opt_name}: Option<{type_str}> = null;`);
-        }
-        return;
-    }
-
-    if has_field(inner) {
-        let field_info = element_field_info(inner, ctx);
-        let type_str = field_info.1;
-        let opt_name = dedup_name(&field_info.0, name_counts);
-        w.begin(`let {opt_name}: Option<{type_str}> = if {ctx.first_check_str(&first)}`);
-        let mut nc: Array<[String, i32]> = [];
-        gen_element(w, inner, ctx, &mut nc);
-        w.line(`Option::<{type_str}>::Some({field_info.0})`);
-        w.else_begin("else");
-        w.line("null");
-        w.end_with(";");
-    } else {
-        gen_optional_with_scan_guard(w, inner, ctx, name_counts);
-    }
-}
-
 fn is_optional_repeat(elem: &Element) -> bool {
     if let Repeat(rep) = elem {
         if let Optional = rep.kind {
