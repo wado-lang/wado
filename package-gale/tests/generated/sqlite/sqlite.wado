@@ -11704,12 +11704,7 @@ fn parse_analyze_stmt(p: &mut Parser) -> Result<AnalyzeStmtNode, ParseError> {
 fn parse_attach_stmt(p: &mut Parser) -> Result<AttachStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_attach = p.expect(TK_K_ATTACH)?;
-    let k_database: Option<Token> = if p.peek_kind() == TK_K_DATABASE {
-        let k_database = p.expect(TK_K_DATABASE)?;
-        Option::<Token>::Some(k_database)
-    } else {
-        null
-    };
+    let k_database: Option<Token> = null;
     let expr = parse_expr(p)?;
     let k_as = p.expect(TK_K_AS)?;
     let database_name = parse_database_name(p)?;
@@ -13013,12 +13008,7 @@ fn parse_delete_stmt_limited(p: &mut Parser) -> Result<DeleteStmtLimitedNode, Pa
 fn parse_detach_stmt(p: &mut Parser) -> Result<DetachStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_detach = p.expect(TK_K_DETACH)?;
-    let k_database: Option<Token> = if p.peek_kind() == TK_K_DATABASE {
-        let k_database = p.expect(TK_K_DATABASE)?;
-        Option::<Token>::Some(k_database)
-    } else {
-        null
-    };
+    let k_database: Option<Token> = null;
     let database_name = parse_database_name(p)?;
     return Result::<DetachStmtNode, ParseError>::Ok(DetachStmtNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -13963,12 +13953,7 @@ fn parse_reindex_stmt(p: &mut Parser) -> Result<ReindexStmtNode, ParseError> {
 fn parse_release_stmt(p: &mut Parser) -> Result<ReleaseStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_release = p.expect(TK_K_RELEASE)?;
-    let k_savepoint: Option<Token> = if p.peek_kind() == TK_K_SAVEPOINT {
-        let k_savepoint = p.expect(TK_K_SAVEPOINT)?;
-        Option::<Token>::Some(k_savepoint)
-    } else {
-        null
-    };
+    let k_savepoint: Option<Token> = null;
     let savepoint_name = parse_savepoint_name(p)?;
     return Result::<ReleaseStmtNode, ParseError>::Ok(ReleaseStmtNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -17517,12 +17502,7 @@ fn parse_table_constraint(p: &mut Parser) -> Result<TableConstraintNode, ParseEr
 fn parse_with_clause(p: &mut Parser) -> Result<WithClauseNode, ParseError> {
     let start = p.peek().span.start;
     let k_with = p.expect(TK_K_WITH)?;
-    let k_recursive: Option<Token> = if p.peek_kind() == TK_K_RECURSIVE {
-        let k_recursive = p.expect(TK_K_RECURSIVE)?;
-        Option::<Token>::Some(k_recursive)
-    } else {
-        null
-    };
+    let k_recursive: Option<Token> = null;
     let common_table_expression = parse_common_table_expression(p)?;
     let mut comma_common_table_expression_list: Array<CommaCommonTableExpressionItem> = [];
     loop {

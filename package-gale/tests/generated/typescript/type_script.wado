@@ -16659,12 +16659,7 @@ fn parse_type_query_expression(p: &mut Parser) -> Result<TypeQueryExpressionNode
 
 fn parse_property_signatur(p: &mut Parser) -> Result<PropertySignaturNode, ParseError> {
     let start = p.peek().span.start;
-    let readonly: Option<Token> = if p.peek_kind() == TK_ReadOnly {
-        let readonly = p.expect(TK_ReadOnly)?;
-        Option::<Token>::Some(readonly)
-    } else {
-        null
-    };
+    let readonly: Option<Token> = null;
     let property_name = parse_property_name(p)?;
     let question: Option<Token> = if p.peek_kind() == TK_LIT_QUESTION {
         let question = p.expect(TK_LIT_QUESTION)?;
@@ -17683,12 +17678,7 @@ fn parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
 
 fn parse_source_element(p: &mut Parser) -> Result<SourceElementNode, ParseError> {
     let start = p.peek().span.start;
-    let export_: Option<Token> = if p.peek_kind() == TK_Export {
-        let export_ = p.expect(TK_Export)?;
-        Option::<Token>::Some(export_)
-    } else {
-        null
-    };
+    let export_: Option<Token> = null;
     let statement = parse_statement(p)?;
     return Result::<SourceElementNode, ParseError>::Ok(SourceElementNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -19444,12 +19434,7 @@ fn parse_alias_name(p: &mut Parser) -> Result<AliasNameNode, ParseError> {
 fn parse_export_statement_bt_0(p: &mut Parser) -> Result<ExportStatementNode, ParseError> {
     let start = p.peek().span.start;
     let export_ = p.expect(TK_Export)?;
-    let default: Option<Token> = if p.peek_kind() == TK_Default {
-        let default = p.expect(TK_Default)?;
-        Option::<Token>::Some(default)
-    } else {
-        null
-    };
+    let default: Option<Token> = null;
     let mut export_from_block_or_declaration_inner: Option<ExportFromBlockOrDeclarationGroup> = null;
     let grp_kind = p.peek_kind();
     if _gale_kind_set_41(grp_kind) {
@@ -25033,12 +25018,7 @@ fn parse_anonymous_function(p: &mut Parser) -> Result<AnonymousFunctionNode, Par
 
 fn parse_arrow_function_declaration(p: &mut Parser) -> Result<ArrowFunctionDeclarationNode, ParseError> {
     let start = p.peek().span.start;
-    let async_: Option<Token> = if p.peek_kind() == TK_Async {
-        let async_ = p.expect(TK_Async)?;
-        Option::<Token>::Some(async_)
-    } else {
-        null
-    };
+    let async_: Option<Token> = null;
     let arrow_function_parameters = parse_arrow_function_parameters(p)?;
     let type_annotation: Option<TypeAnnotationNode> = if p.peek_kind() == TK_LIT_COLON {
         let type_annotation = parse_type_annotation(p)?;
@@ -28717,12 +28697,7 @@ fn scan_source_element__follow_4(tokens: &Array<Token>, pos: i32, min_prec: i32 
 
 fn parse_source_element__follow_4(p: &mut Parser) -> Result<SourceElementNode, ParseError> {
     let start = p.peek().span.start;
-    let export_: Option<Token> = if p.peek_kind() == TK_Export {
-        let export_ = p.expect(TK_Export)?;
-        Option::<Token>::Some(export_)
-    } else {
-        null
-    };
+    let export_: Option<Token> = null;
     let statement = parse_statement__follow_0(p)?;
     return Result::<SourceElementNode, ParseError>::Ok(SourceElementNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -29023,12 +28998,7 @@ fn scan_export_statement__follow_6(tokens: &Array<Token>, pos: i32, min_prec: i3
 fn parse_export_statement__follow_6_bt_0(p: &mut Parser) -> Result<ExportStatementNode, ParseError> {
     let start = p.peek().span.start;
     let export_ = p.expect(TK_Export)?;
-    let default: Option<Token> = if p.peek_kind() == TK_Default {
-        let default = p.expect(TK_Default)?;
-        Option::<Token>::Some(default)
-    } else {
-        null
-    };
+    let default: Option<Token> = null;
     let mut export_from_block_or_declaration_inner: Option<ExportFromBlockOrDeclarationGroup> = null;
     let grp_kind = p.peek_kind();
     if _gale_kind_set_41(grp_kind) {

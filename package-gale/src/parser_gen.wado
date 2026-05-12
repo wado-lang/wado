@@ -3466,14 +3466,15 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
         gen_repeat_non_greedy(w, rep, ctx, follow, &rep_op.caller_follow_second, name_counts);
         return;
     }
-    // Greedy Optional + RuleRef-shaped inner: subtract the caller-side
+    // Greedy Optional + leaf-shaped inner: subtract the caller-side
     // follow from the inner's first set to gate the optional fire.
     // Op-driven inline of the former `gen_repeat_with_follow` — field
     // names / types come from `rep_op.field` / `op_field_type`, and
-    // inner emit goes through `gen_op_leaf` since RuleRef is always
-    // a leaf op.
+    // inner emit goes through `gen_op_leaf`. Covers Token / Literal /
+    // RuleCall / Wildcard / Excluded — every leaf op shape lower
+    // recognises.
     if let Optional = rep.kind {
-        if op_is_rulecall(&rep_op.body) {
+        if op_is_leaf(&rep_op.body) {
             let inner = &rep.element;
             let mut visiting: Array<String> = [];
             let raw_first = ctx.first_of_element(inner, &mut visiting);
@@ -3498,17 +3499,14 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
                 let inner_field = op_field(&rep_op.body);
                 w.begin(`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&first)}`);
                 let mut nc: Array<[String, i32]> = [];
-                // `rep.element` is RuleRef (possibly Label-wrapped);
-                // gen_op_leaf emits `let <field> = parse_<rule>(p)?;`
-                // using the baked `RuleCallOp.field` / variant id.
                 gen_op_leaf(w, &rep_op.body, inner, ctx, &mut nc);
                 w.line(`Option::<{inner_type}>::Some({inner_field})`);
                 w.else_begin("else");
                 w.line("null");
                 w.end_with(";");
             } else {
-                // RuleRef always has a field; this branch is unreachable.
-                panic("gen_op_repeat_with_follow_override: RuleRef Optional with no field");
+                // Every leaf op carries a CST field; this branch is unreachable.
+                panic("gen_op_repeat_with_follow_override: leaf Optional with no field");
             }
             return;
         }
