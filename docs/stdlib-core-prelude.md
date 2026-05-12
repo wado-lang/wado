@@ -1050,9 +1050,9 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str_hex(s: String) -> Result<i8, ParseIntError>`
+#### `pub fn from_str_hex(s: &String) -> Result<i8, ParseIntError>`
 
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<i8, ParseIntError>`
+#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<i8, ParseIntError>`
 
 #### `impl FromStr for i8`
 
@@ -1142,9 +1142,9 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str_hex(s: String) -> Result<u8, ParseIntError>`
+#### `pub fn from_str_hex(s: &String) -> Result<u8, ParseIntError>`
 
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<u8, ParseIntError>`
+#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<u8, ParseIntError>`
 
 #### `impl FromStr for u8`
 
@@ -1230,9 +1230,9 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str_hex(s: String) -> Result<i16, ParseIntError>`
+#### `pub fn from_str_hex(s: &String) -> Result<i16, ParseIntError>`
 
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<i16, ParseIntError>`
+#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<i16, ParseIntError>`
 
 #### `impl FromStr for i16`
 
@@ -1326,9 +1326,9 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str_hex(s: String) -> Result<u16, ParseIntError>`
+#### `pub fn from_str_hex(s: &String) -> Result<u16, ParseIntError>`
 
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<u16, ParseIntError>`
+#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<u16, ParseIntError>`
 
 #### `impl FromStr for u16`
 
@@ -1426,9 +1426,9 @@ Counts the number of set bits (population count).
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str_hex(s: String) -> Result<i32, ParseIntError>`
+#### `pub fn from_str_hex(s: &String) -> Result<i32, ParseIntError>`
 
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<i32, ParseIntError>`
+#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<i32, ParseIntError>`
 
 #### `impl FromStr for i32`
 
@@ -1530,9 +1530,9 @@ Counts the number of set bits (population count).
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str_hex(s: String) -> Result<u32, ParseIntError>`
+#### `pub fn from_str_hex(s: &String) -> Result<u32, ParseIntError>`
 
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<u32, ParseIntError>`
+#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<u32, ParseIntError>`
 
 #### `impl FromStr for u32`
 
@@ -1642,9 +1642,9 @@ Counts the number of set bits (population count).
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str_hex(s: String) -> Result<i64, ParseIntError>`
+#### `pub fn from_str_hex(s: &String) -> Result<i64, ParseIntError>`
 
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<i64, ParseIntError>`
+#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<i64, ParseIntError>`
 
 #### `impl FromStr for i64`
 
@@ -1754,9 +1754,9 @@ Counts the number of set bits (population count).
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str_hex(s: String) -> Result<u64, ParseIntError>`
+#### `pub fn from_str_hex(s: &String) -> Result<u64, ParseIntError>`
 
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<u64, ParseIntError>`
+#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<u64, ParseIntError>`
 
 #### `impl FromStr for u64`
 
@@ -2548,11 +2548,11 @@ Used by the compiler for efficient large literal construction
 Create a u128 from a string (decimal representation)
 Used for literal coercion: `let x: u128 = "12345678901234567890"`
 
-#### `pub fn from_str_hex(s: String) -> Result<u128, ParseIntError>`
+#### `pub fn from_str_hex(s: &String) -> Result<u128, ParseIntError>`
 
 Parse a hexadecimal `u128` from a string (equivalent to `from_str_radix(s, 16)`).
 
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<u128, ParseIntError>`
+#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<u128, ParseIntError>`
 
 Parse a `u128` from a string in the given radix. `radix` must be in 2..=36.
 
@@ -2748,11 +2748,11 @@ Used by the compiler for efficient large literal construction
 Create an i128 from a string (decimal representation, optionally prefixed with '-')
 Used for literal coercion: `let x: i128 = "-12345678901234567890"`
 
-#### `pub fn from_str_hex(s: String) -> Result<i128, ParseIntError>`
+#### `pub fn from_str_hex(s: &String) -> Result<i128, ParseIntError>`
 
 Parse a hexadecimal `i128` from a string (equivalent to `from_str_radix(s, 16)`).
 
-#### `pub fn from_str_radix(s: String, radix: u32) -> Result<i128, ParseIntError>`
+#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<i128, ParseIntError>`
 
 Parse an `i128` from a string in the given radix. `radix` must be in 2..=36.
 
