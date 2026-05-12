@@ -62,6 +62,15 @@ use {
     ListLabelOp,
     FieldDecl,
     FieldKind,
+    ScanBody,
+    ScanElement,
+    ScanTokenElem,
+    ScanRuleCallElem,
+    ScanExcludedElem,
+    ScanRepeatElem,
+    ScanRepeatStrategy,
+    ScanGroupElem,
+    ScanOptionalLookaheadElem,
     rule_header,
     rule_alt_body,
 } from "./gir.wado";
@@ -2189,6 +2198,347 @@ fn gen_scan_lookahead_condition(ctx: &mut GenContext, sig: &Array<Array<String>>
         result.push_str(parts[i]);
     }
     return result;
+}
+
+/// Op-driven scan element emitter — dispatches on `ScanElement`
+/// variant. Lower has already resolved kind constants, variant ids,
+/// min-prec, repeat strategy / first sets, and group dispatch shape;
+/// emit reads them verbatim.
+fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContext, fail_stmt: &String) {
+    if let Token(t) = se {
+        w.line(`if pos >= tokens.len() || tokens[pos].kind != {t.kind} \{ {*fail_stmt} \}`);
+        w.line("pos += 1;");
+        return;
+    }
+    if let RuleCall(rc) = se {
+        let fn_name = if let Some(id) = rc.variant_id {
+            `scan_{rc.target_snake}__follow_{id}`;
+        } else {
+            `scan_{rc.target_snake}`;
+        };
+        // Scan-side `min_prec_arg` is always set (0 by default); the
+        // bt-scan path overrides via `ctx.scan_ruleref_min_prec`.
+        let min_prec = if ctx.scan_ruleref_min_prec != 0 {
+            `{ctx.scan_ruleref_min_prec}`;
+        } else {
+            `{rc.min_prec_arg}`;
+        };
+        w.line(`pos = {fn_name}(tokens, pos, {min_prec});`);
+        w.line(`if pos < 0 \{ {*fail_stmt} \}`);
+        return;
+    }
+    if let Wildcard = se {
+        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF \{ {*fail_stmt} \}`);
+        w.line("pos += 1;");
+        return;
+    }
+    if let Excluded(e) = se {
+        let mut check_parts: Array<String> = [];
+        for let k of &e.kinds {
+            check_parts.push(`tokens[pos].kind == {*k}`);
+        }
+        let mut check = String::with_capacity(64);
+        for let mut i = 0; i < check_parts.len(); i += 1 {
+            if i > 0 {
+                check.push_str(" || ");
+            }
+            check.push_str(check_parts[i]);
+        }
+        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ {*fail_stmt} \}`);
+        w.line("pos += 1;");
+        return;
+    }
+    if let Repeat(re) = se {
+        gen_scan_op_repeat(w, re, ctx, fail_stmt);
+        return;
+    }
+    if let Group(ge) = se {
+        gen_scan_op_group(w, ge, ctx, fail_stmt);
+        return;
+    }
+    if let OptionalLookahead(ole) = se {
+        gen_scan_op_optional_lookahead(w, ole, ctx);
+        return;
+    }
+}
+
+/// Op-driven scan emitter where failure sets `pos = -1` rather than
+/// running `fail_stmt`. Used inside Optional/Repeat loops where a
+/// failed iteration means "skip", not abort.
+fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContext) {
+    if let Token(t) = se {
+        w.line(`if pos >= tokens.len() || tokens[pos].kind != {t.kind} \{ pos = -1; \} else \{ pos += 1; \}`);
+        return;
+    }
+    if let RuleCall(rc) = se {
+        let fn_name = if let Some(id) = rc.variant_id {
+            `scan_{rc.target_snake}__follow_{id}`;
+        } else {
+            `scan_{rc.target_snake}`;
+        };
+        let min_prec = if ctx.scan_ruleref_min_prec != 0 {
+            `{ctx.scan_ruleref_min_prec}`;
+        } else {
+            `{rc.min_prec_arg}`;
+        };
+        w.line(`pos = {fn_name}(tokens, pos, {min_prec});`);
+        return;
+    }
+    if let Wildcard = se {
+        w.line("if pos >= tokens.len() || tokens[pos].kind == TK_EOF { pos = -1; } else { pos += 1; }");
+        return;
+    }
+    if let Excluded(e) = se {
+        let mut check_parts: Array<String> = [];
+        for let k of &e.kinds {
+            check_parts.push(`tokens[pos].kind == {*k}`);
+        }
+        let mut check = String::with_capacity(64);
+        for let mut i = 0; i < check_parts.len(); i += 1 {
+            if i > 0 {
+                check.push_str(" || ");
+            }
+            check.push_str(check_parts[i]);
+        }
+        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ pos = -1; \} else \{ pos += 1; \}`);
+        return;
+    }
+    if let Group(ge) = se {
+        // Group inside a repeat body — emit lenient scan since
+        // failure → skip, not abort.
+        gen_scan_op_group(w, ge, ctx, &"pos = -1;");
+        return;
+    }
+    if let Repeat(_) | OptionalLookahead(_) = se {
+        // Nested Repeat / OptionalLookahead within a Repeat's loop
+        // body: emit through fail_stmt = "pos = -1;" so the outer
+        // loop sees failure as "stop iterating".
+        gen_scan_op_element(w, se, ctx, &"pos = -1;");
+        return;
+    }
+}
+
+/// Op-driven scan-side Repeat dispatcher. Reads `ScanRepeatStrategy`
+/// to pick the loop guard set and emit the appropriate loop shape.
+fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenContext, fail_stmt: &String) {
+    let saved_call_follow = ctx.ruleref_call_follow;
+    ctx.ruleref_call_follow = [];
+    gen_scan_op_repeat_body(w, re, ctx, fail_stmt);
+    ctx.ruleref_call_follow = saved_call_follow;
+}
+
+fn gen_scan_op_repeat_body(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenContext, fail_stmt: &String) {
+    // Suppressed: mask covers all of the inner's first set — no
+    // iterations possible.
+    if let Suppressed = &re.strategy {
+        if let Plus = re.kind {
+            // Plus mandatory — emit one mandatory iteration; the runtime
+            // will fail with the parse error then.
+            gen_scan_op_element(w, &re.body, ctx, fail_stmt);
+        }
+        return;
+    }
+    // Non-greedy: use the strategy's exit_first / exit_second.
+    if let NonGreedy(s) = &re.strategy {
+        let while_cond = scan_non_greedy_condition(&re.body, &s.exit_first, &s.exit_second, ctx, &re.inner_first);
+        let is_plus = if let Plus = re.kind { true } else { false };
+        if is_plus {
+            gen_scan_op_element(w, &re.body, ctx, fail_stmt);
+        }
+        if while_cond != "false" {
+            w.begin(`while {while_cond}`);
+            w.line("let sp = pos;");
+            gen_scan_op_element_assign(w, &re.body, ctx);
+            w.line("if pos < 0 { pos = sp; break; }");
+            w.line("if pos == sp { break; }");
+            w.end();
+        }
+        return;
+    }
+    // Greedy: pick loop_first based on strategy.
+    let loop_first = if let WithFollowSubtraction(s) = &re.strategy {
+        s.effective_first;
+    } else {
+        re.inner_first;
+    };
+
+    if let Optional = re.kind {
+        // OptionalLookahead doesn't reach this path (it's a
+        // ScanElement::OptionalLookahead, not a ScanElement::Repeat).
+        if loop_first.is_empty() {
+            return;
+        }
+        let check = ctx.kind_check_str(&loop_first, "tokens[pos].kind");
+        w.begin(`if pos < tokens.len() && {check}`);
+        w.line("let sp = pos;");
+        gen_scan_op_element_assign(w, &re.body, ctx);
+        w.line("if pos < 0 { pos = sp; }");
+        w.end();
+        return;
+    }
+    if let Star = re.kind {
+        if loop_first.is_empty() {
+            return;
+        }
+        let check = ctx.kind_check_str(&loop_first, "tokens[pos].kind");
+        w.begin(`while pos < tokens.len() && {check}`);
+        w.line("let sp = pos;");
+        gen_scan_op_element_assign(w, &re.body, ctx);
+        w.line("if pos < 0 { pos = sp; break; }");
+        w.line("if pos == sp { break; }");
+        w.end();
+        return;
+    }
+    if let Plus = re.kind {
+        // First iteration is mandatory: failure goes through fail_stmt.
+        gen_scan_op_element(w, &re.body, ctx, fail_stmt);
+        if loop_first.is_empty() {
+            return;
+        }
+        let check = ctx.kind_check_str(&loop_first, "tokens[pos].kind");
+        w.begin(`while pos < tokens.len() && {check}`);
+        w.line("let sp = pos;");
+        gen_scan_op_element_assign(w, &re.body, ctx);
+        w.line("if pos < 0 { pos = sp; break; }");
+        w.line("if pos == sp { break; }");
+        w.end();
+        return;
+    }
+}
+
+/// Non-greedy continue-condition computed from ScanElement structure
+/// + exit_first / exit_second. Mirrors surface `compute_non_greedy_condition`.
+fn scan_non_greedy_condition(body: &ScanElement, exit_first: &Array<String>, exit_second: &Array<String>, ctx: &mut GenContext, inner_first: &Array<String>) -> String {
+    // Wildcard / Excluded inner: open-ended match. Continue while
+    // not EOF and not in follow.
+    if let Wildcard = body {
+        return scan_wildcard_non_greedy_condition(ctx, exit_first);
+    }
+    if let Excluded(_) = body {
+        return scan_wildcard_non_greedy_condition(ctx, exit_first);
+    }
+
+    let continue_first = subtract_sets(inner_first, exit_first);
+    if continue_first.len() > 0 {
+        if continue_first.len() > 20 && inner_first.len() > 20 {
+            return "false";
+        }
+        return ctx.kind_check_str(&continue_first, "tokens[pos].kind");
+    }
+    // First sets overlap fully — disambiguate via second-token.
+    if let Group(ge) = body {
+        if ge.alts.len() == 1 && ge.alts[0].elements.len() >= 2 && exit_second.len() > 0 {
+            // Use inner_second from the group's second element onwards.
+            // Lower could have baked this, but for now we approximate
+            // via the strategy's exit_second.
+            // ScanRepeatElem doesn't currently carry inner_second, so
+            // we use a conservative "false" fallback that matches
+            // emit's surface fallback.
+            return "false";
+        }
+    }
+    return "false";
+}
+
+fn scan_wildcard_non_greedy_condition(ctx: &mut GenContext, exit_first: &Array<String>) -> String {
+    let mut excluded: Array<String> = ["TK_EOF"];
+    for let tk of exit_first {
+        let mut seen = false;
+        for let e of &excluded {
+            if *e == *tk {
+                seen = true;
+                break;
+            }
+        }
+        if !seen {
+            excluded.push(*tk);
+        }
+    }
+    return ctx.kind_negate_check_str(&excluded, &"tokens[pos].kind");
+}
+
+/// Op-driven scan emitter for `ScanElement::Group` — uses baked
+/// `dispatch` to pick scan-tournament or first-token-led dispatch.
+fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContext, fail_stmt: &String) {
+    // Single-alt group: walk its scan body directly.
+    if ge.alts.len() == 1 {
+        gen_scan_op_elements(w, &ge.alts[0].elements, 0, ge.alts[0].elements.len(), ctx, fail_stmt);
+        return;
+    }
+    // Multi-alt: emit first-success-wins scan via labeled blocks.
+    // The outer label provides a single scope for `group_start` and
+    // for each per-alt try_label; the gc counter dedupes nested
+    // groups inside the same function.
+    let gc = SCAN_GROUP_COUNTER;
+    SCAN_GROUP_COUNTER += 1;
+    let group_label = `scan_g_{gc}`;
+    w.begin(`{group_label}:`);
+    w.line("let group_start = pos;");
+    for let mut k = 0; k < ge.alts.len(); k += 1 {
+        let alt = &ge.alts[k];
+        let try_label = `g_try_{gc}_{k}`;
+        w.line("pos = group_start;");
+        w.begin(`{try_label}:`);
+        gen_scan_op_elements_in_block(w, &alt.elements, 0, alt.elements.len(), ctx, &try_label);
+        w.line(`break {group_label};`);
+        w.end();
+    }
+    if ge.lenient {
+        w.line("pos = group_start;");
+    } else {
+        w.line(`{*fail_stmt}`);
+    }
+    w.end();
+}
+
+/// Op-driven scan emitter for `ScanElement::OptionalLookahead` —
+/// emits per-shape if/elseif chain using baked `sigs`.
+fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookaheadElem, ctx: &mut GenContext) {
+    let mut is_first = true;
+    for let sig of &ole.sigs {
+        if sig.is_empty() {
+            continue;
+        }
+        let cond = gen_scan_lookahead_condition(ctx, sig);
+        if is_first {
+            w.begin(`if {cond}`);
+            is_first = false;
+        } else {
+            w.else_begin(`else if {cond}`);
+        }
+        let gc = SCAN_GROUP_COUNTER;
+        SCAN_GROUP_COUNTER += 1;
+        let shape_label = `sol_{gc}`;
+        let fail = `break {shape_label};`;
+        w.begin(`{shape_label}:`);
+        for let elem_se of &ole.body.elements {
+            gen_scan_op_element(w, elem_se, ctx, &fail);
+        }
+        w.end();
+    }
+    if !is_first {
+        w.end();
+    }
+}
+
+/// Op-driven scan element walker — used by top-level scan entry
+/// points (Simple rule scan_body, LR atom scan_alts, LR suffix
+/// scan_suffix) once the corresponding `ScanBody` is in hand.
+/// Failures route through `fail_stmt`.
+fn gen_scan_op_elements(w: &mut CodeWriter, scan_elems: &Array<ScanElement>, start: i32, end: i32, ctx: &mut GenContext, fail_stmt: &String) {
+    for let mut i = start; i < end; i += 1 {
+        gen_scan_op_element(w, &scan_elems[i], ctx, fail_stmt);
+    }
+}
+
+/// `gen_scan_op_elements` variant that routes failures through a
+/// labeled `break {label};` so the sequence can be nested in a
+/// labeled block.
+fn gen_scan_op_elements_in_block(w: &mut CodeWriter, scan_elems: &Array<ScanElement>, start: i32, end: i32, ctx: &mut GenContext, label: &String) {
+    let fail = `break {*label};`;
+    for let mut i = start; i < end; i += 1 {
+        gen_scan_op_element(w, &scan_elems[i], ctx, &fail);
+    }
 }
 
 /// Generate scan code for a single element, emitting `fail_stmt` on failure.

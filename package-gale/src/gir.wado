@@ -734,6 +734,12 @@ pub struct ScanRepeatElem {
     pub kind: RepeatKind,
     pub body: ScanElement,
     pub strategy: ScanRepeatStrategy,
+    /// First set of `body` cached at lower time. emit's scan-side
+    /// repeat emitter uses this for `while peek_kind ∈ inner_first`
+    /// loop guards (Plain strategy) and for Plus's mandatory-first
+    /// iteration condition. WithFollowSubtraction carries the
+    /// effective (mask-subtracted) first separately in its payload.
+    pub inner_first: Array<String>,
 }
 
 pub variant ScanRepeatStrategy {

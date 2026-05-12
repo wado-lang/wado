@@ -1,0 +1,42 @@
+#![TODO]
+// P0 min repro of a WIR-pipeline validation error first encountered
+// while migrating `package-gale/src/parser_gen.wado`'s scan helpers
+// (see `gen_scan_op_group` in `claude/design-per-rule-emit-UbIS6`).
+//
+// Trigger: passing `&mut [] as Array<[String, i32]>` (a temporary
+// mutable empty array of tuples) as a function argument whose
+// parameter is `&mut Array<[String, i32]>`. The Wado frontend
+// accepts the source; the WIR pipeline lowers it to a Wasm function
+// that fails validation with
+//   "type mismatch: expected (ref $type), found (ref (exact $type))"
+// at the call site.
+//
+// Workaround: hoist the temporary into a `let mut counts = [];
+// helper(&mut counts);` binding. The fix likely belongs in WIR
+// lowering of `as` casts on mutable array literal expressions — the
+// cast appears to drop the exact-typing of the literal while the
+// callee still expects the exact ref form.
+
+use { println, Stdout } from "core:cli";
+
+fn helper(name: &String, counts: &mut Array<[String, i32]>) -> String {
+    for let mut i = 0; i < counts.len(); i += 1 {
+        if counts[i].0 == *name {
+            let prev = counts[i].1;
+            counts[i] = [*name, prev + 1];
+            return `{*name}_{prev + 1}`;
+        }
+    }
+    counts.push([*name, 1]);
+    return *name;
+}
+
+export fn run() with Stdout {
+    // The crash trigger: temporary `&mut [] as Array<[String, i32]>`
+    // passed to a helper that expects `&mut Array<[String, i32]>`.
+    let result = helper(&"foo", &mut [] as Array<[String, i32]>);
+    println(result);
+}
+
+__DATA__
+{"stdout": "foo\n"}
