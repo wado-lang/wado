@@ -3825,11 +3825,77 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
             }
         }
     }
-    // Non-greedy dispatch reads exit_first / exit_second from the
-    // baked strategy; the walker no longer recomputes
-    // `compute_follow_second` per position.
+    // Non-greedy `*?` / `+?`. The inner emit dispatches through
+    // op-driven helpers when the body is a leaf or a storable
+    // `Group(SingleAlt | TokenOnly)`; other shapes
+    // (SimpleCst / General / Transparent Group) still fall through
+    // to the surface `gen_repeat_non_greedy`. `compute_non_greedy_condition`
+    // continues to consume the surface inner — its analysis depends
+    // on the inner element shape (Wildcard / Not vs. Group sub-position
+    // second-token disambiguation) and that information is not yet
+    // surfaced on `RepeatStrategy::NonGreedy`.
     if rep.non_greedy {
-        gen_repeat_non_greedy(w, rep, ctx, follow, &rep_op.caller_follow_second, name_counts);
+        let inner = &rep.element;
+        let follow_first = follow;
+        let follow_second = &rep_op.caller_follow_second;
+        let body_op_storable = if op_is_leaf(&rep_op.body) {
+            true;
+        } else if let Group(g_op) = &rep_op.body {
+            if !rep_op.body_has_field {
+                false;
+            } else {
+                match &g_op.shape {
+                    SingleAlt(_) | TokenOnly(_) => true,
+                    _ => false,
+                };
+            }
+        } else {
+            false;
+        };
+        if !body_op_storable {
+            gen_repeat_non_greedy(w, rep, ctx, follow_first, follow_second, name_counts);
+            return;
+        }
+        let is_plus = if let Plus = rep.kind { true } else { false };
+        let while_cond = compute_non_greedy_condition(inner, follow_first, follow_second, ctx);
+        let iter_follow_unused = ([] as Array<String>);
+        if rep_op.body_has_field {
+            let inner_field = op_field(&rep_op.body);
+            let inner_type = op_field_type(&rep_op.body);
+            let list_field = rep_op.field;
+            let _ = dedup_name(&list_field, name_counts);
+            if is_plus {
+                let mut nc: Array<[String, i32]> = [];
+                gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow_unused);
+                w.line(`let mut {list_field}: Array<{inner_type}> = [{inner_field}];`);
+                if while_cond != "false" {
+                    w.begin(`while {while_cond}`);
+                    let mut nc2: Array<[String, i32]> = [];
+                    gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc2, &iter_follow_unused);
+                    w.line(`{list_field}.push({inner_field});`);
+                    w.end();
+                }
+            } else {
+                w.line(`let mut {list_field}: Array<{inner_type}> = [];`);
+                if while_cond != "false" {
+                    w.begin(`while {while_cond}`);
+                    let mut nc: Array<[String, i32]> = [];
+                    gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow_unused);
+                    w.line(`{list_field}.push({inner_field});`);
+                    w.end();
+                }
+            }
+        } else {
+            if is_plus {
+                gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, name_counts, &iter_follow_unused);
+            }
+            if while_cond != "false" {
+                w.begin(`while {while_cond}`);
+                let mut nc: Array<[String, i32]> = [];
+                gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow_unused);
+                w.end();
+            }
+        }
         return;
     }
     // Star / Plus + storable body: emit the list field and a
