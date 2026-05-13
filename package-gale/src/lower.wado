@@ -281,6 +281,28 @@ fn attach_variant_header(rule: &mut Rule, v: FollowVariant) {
 /// No-op for non-LR rules — they have no LR suffix to walk.
 fn attach_variant_id_to_lr_self_refs(rule: &mut Rule, rule_snake: &String, variant_id: i32) {
     if let LeftRecursive(l) = *rule {
+        // Walk every suffix once to count self-refs. If zero, the
+        // rebuild is a no-op — skip it so a variant rule with only
+        // non-self-ref-targeting LR alts (e.g. unary prefix alts
+        // whose suffix is just a token) doesn't pay the
+        // reconstruction cost.
+        let mut has_self_ref = false;
+        for let lr_alt of &l.lr_alts {
+            for let se of &lr_alt.scan_suffix.elements {
+                if let RuleCall(rc) = se {
+                    if rc.target_snake == *rule_snake {
+                        has_self_ref = true;
+                        break;
+                    }
+                }
+            }
+            if has_self_ref {
+                break;
+            }
+        }
+        if !has_self_ref {
+            return;
+        }
         let mut new_lr_alts: Array<LrAlt> = [];
         for let lr_alt of &l.lr_alts {
             let mut new_elements: Array<ScanElement> = [];

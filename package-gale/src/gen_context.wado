@@ -44,6 +44,22 @@ pub struct FollowVariantEntry {
     pub parse_used: bool,
 }
 
+/// Codegen-time context shared across emit walkers. Caches first /
+/// nullable / single-token / scannable analyses, the kind-set
+/// registry, and the variant-emit walker state.
+///
+/// Note on retired fields: `prefix_self_ref_min_prec` and
+/// `scan_ruleref_min_prec` used to live here as walker mutables;
+/// they were retired in Phase 2-F slice 5 once the corresponding
+/// values landed directly on the GIR (`RuleCallOp.min_prec_arg`,
+/// `ScanRuleCallElem.min_prec_arg`) or were threaded as explicit
+/// parameters (`gen_scan_op_element`'s `min_prec_override`). The
+/// remaining mutable walker fields (`group_counter` /
+/// `alt_gc_starts` / `current_follow_mask` / `ruleref_call_follow` /
+/// `current_outer_follow` / `current_rule_name`) are still
+/// consulted by the legacy `gen_element` / `gen_repeat` surface
+/// walker family; they retire once that family is migrated to GIR
+/// in Phase 2-G.
 pub struct GenContext {
     pub parser_rules: Array<ParserRule>,
     pub lit_tokens: Array<LitToken>,
