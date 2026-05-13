@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778632188918,
+  "lastUpdate": 1778641517295,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21397,6 +21397,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9342a9be3d8eef211de0896de7da691da89cd087"
         },
         "date": 1778632188578,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 511920,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b2c4b9b0d6867d9a5a877eb31d2a3e634b76f59a",
+          "message": "Merge pull request #1053 from wado-lang/gfx/clarify_agents_md\n\nclarify AGENTS.md",
+          "timestamp": "2026-05-13T11:58:50+09:00",
+          "tree_id": "51df5ab2f9f74630e1aa68e78419e50347c22fa1",
+          "url": "https://github.com/wado-lang/wado/commit/b2c4b9b0d6867d9a5a877eb31d2a3e634b76f59a"
+        },
+        "date": 1778641517164,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
