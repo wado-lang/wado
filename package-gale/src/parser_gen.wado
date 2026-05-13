@@ -3551,23 +3551,13 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
                 name_counts,
             ),
             Transparent => {
-                // Transparent groups inline their inner alt; emit
-                // walks the alt's elements directly with no struct
-                // construction. The surface fallback walks the alt
-                // body through `gen_consume_group(alts.len() == 1)` —
-                // which in turn flows through
-                // `gen_elements_with_non_greedy_legacy` → surface
-                // `gen_repeat` / `gen_element` for any nested Repeat /
-                // Group. Lifting this to `gen_elements_with_non_greedy`
-                // on `g_op.alts[0].ops` is gated on aligning lower's
-                // `group_counter` with emit's: lower does not bump
-                // `ctx.group_counter` for the Transparent wrapper
-                // itself, while legacy emit's `element_field_info`
-                // implicitly walks the outer Group and reaches the
-                // inner General-group's `group_<idx>` at a different
-                // index. Retire as a follow-up once that mismatch is
-                // closed (Phase 2-G+1 — surface helper graph deletion).
-                gen_consume_group(w, &g_elem.alternatives, ctx, name_counts);
+                // Transparent groups inline their inner alt; walk
+                // `g_op.alts[0].ops` directly so emit stops flowing
+                // through the surface `gen_consume_group` /
+                // `gen_elements_with_non_greedy_legacy` graph.
+                let body = &g_op.alts[0];
+                let alt = &g_elem.alternatives[0];
+                gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, &([] as Array<String>));
             },
         };
     } else {
@@ -4007,7 +3997,6 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
                     inner_first;
                 };
                 let _ = dedup_name(&rep_op.field, name_counts);
-
                 if let Star = rep.kind {
                     if rep_op.body_scannable {
                         w.begin("loop");
@@ -6245,7 +6234,17 @@ fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &Array<Alternative>
     } else {
         gen_elements_with_non_greedy_legacy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
     }
-
+    // The element walk above bumped `ctx.group_counter` for every
+    // nested General group encountered. Reset to `gc_start` so the
+    // second pass below (field assignments) starts from the same
+    // point and reproduces the same indices. The op-driven
+    // `emit_field_assignments_from_fields` doesn't walk elements at
+    // all — it just emits field names — so it leaves the counter
+    // un-bumped, which would drop the surrounding caller's `gc_max`
+    // tracking. Save the post-walk max and propagate it after the
+    // reset so both the legacy and op-driven flows leave the same
+    // post-call counter for the caller.
+    let gc_after_walk = ctx.group_counter;
     w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
     w.indent();
     ctx.group_counter = gc_start;
@@ -6259,6 +6258,9 @@ fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &Array<Alternative>
     }
     w.dedent();
     w.line("}));");
+    if ctx.group_counter < gc_after_walk {
+        ctx.group_counter = gc_after_walk;
+    }
 }
 
 /// Parse one alt's elements and return as variant value (for if/else expression).
@@ -6273,7 +6275,9 @@ fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, body
     } else {
         gen_elements_with_non_greedy_legacy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
     }
-
+    // See the docstring on `gen_general_alt_parse_and_store` — same
+    // two-pass dance, same propagation of the post-walk max.
+    let gc_after_walk = ctx.group_counter;
     w.line(`{type_name}::Alt{alt_idx}({struct_name} \{`);
     w.indent();
     ctx.group_counter = gc_start;
@@ -6287,6 +6291,9 @@ fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, body
     }
     w.dedent();
     w.line("})");
+    if ctx.group_counter < gc_after_walk {
+        ctx.group_counter = gc_after_walk;
+    }
 }
 
 /// First-success-wins scan dispatch wrapper for overlapping general-group
