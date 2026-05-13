@@ -3107,7 +3107,6 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
         replay_element_names(&alt.elements[i], &mut name_counts, ctx);
     }
     let saved_mask = ctx.current_follow_mask;
-    let saved_call_follow = ctx.ruleref_call_follow;
     // `body.ops` skips the LR-stripped prefix self-ref, so its
     // indexing is offset from `alt.elements` by `skip` for LR suffix
     // bodies. For the BT (multi-alt prediction) path `skip > 0` is a
@@ -3119,14 +3118,7 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
     // and `body.ops[k]` corresponds to `alt.elements[skip + k]`.
     let ops_offset = if body.ops.len() == alt.elements.len() { 0 } else { skip };
     for let mut i = skip; i < alt.elements.len(); i += 1 {
-        // Same per-position threading as `gen_alt_elements`: the
-        // variant mask flows down into a tail-position element only
-        // when this position itself is the alt's tail (i.e. every
-        // sibling after it is deep-nullable). Otherwise the mask is
-        // cleared so a non-tail `Repeat` here does not accidentally
-        // suppress on the variant's caller-follow.
         ctx.current_follow_mask = if ctx.tail_is_nullable_deep(&alt.elements, i + 1) { saved_mask } else { [] };
-        ctx.ruleref_call_follow = compute_ruleref_call_follow(&alt.elements, i, ctx);
         let elem = &alt.elements[i];
         let op = &body.ops[i - ops_offset];
         if let Repeat(rep) = elem {
@@ -3141,10 +3133,8 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
         } else {
             panic("gen_alt_body_skip: unreachable op shape — every Op variant is handled");
         }
-        ctx.ruleref_call_follow = [];
     }
     ctx.current_follow_mask = saved_mask;
-    ctx.ruleref_call_follow = saved_call_follow;
 
     ctx.group_counter = gc_start;
     if let Some(case) = variant_case {
@@ -3218,11 +3208,9 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<O
     assert ops.len() == elements.len(),
         "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies must use gen_alt_body_skip";
     let saved_mask = ctx.current_follow_mask;
-    let saved_call_follow = ctx.ruleref_call_follow;
     let mut name_counts: Array<[String, i32]> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
         ctx.current_follow_mask = if ctx.tail_is_nullable_deep(elements, i + 1) { saved_mask } else { [] };
-        ctx.ruleref_call_follow = compute_ruleref_call_follow(elements, i, ctx);
         let elem = &elements[i];
         let op = &ops[i];
         if let Repeat(rep) = elem {
@@ -3237,10 +3225,8 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<O
         } else {
             panic("gen_alt_elements: unreachable op shape — every Op variant is handled");
         }
-        ctx.ruleref_call_follow = [];
     }
     ctx.current_follow_mask = saved_mask;
-    ctx.ruleref_call_follow = saved_call_follow;
 }
 
 /// Group / single-alt-body internal walker. Mirrors `gen_alt_elements`
@@ -3254,14 +3240,7 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<O
 fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<Op>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
     assert ops.len() == elements.len(),
         "gen_elements_with_non_greedy: ops / elements length mismatch";
-    let saved_call_follow = ctx.ruleref_call_follow;
     for let mut i = 0; i < elements.len(); i += 1 {
-        // Per-position threading. The exact policy (immediate suffix's
-        // first set, or — for first-exact deep-nullable suffixes —
-        // unioned with `current_outer_follow`) lives in
-        // `compute_ruleref_call_follow`; see its doc-comment for the
-        // soundness argument.
-        ctx.ruleref_call_follow = compute_ruleref_call_follow(elements, i, ctx);
         let elem = &elements[i];
         let op = &ops[i];
         if let Repeat(rep) = elem {
@@ -3286,9 +3265,7 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, o
         } else {
             panic("gen_elements_with_non_greedy: unreachable op shape — every Op variant is handled");
         }
-        ctx.ruleref_call_follow = [];
     }
-    ctx.ruleref_call_follow = saved_call_follow;
 }
 
 /// Surface-IR variant of `gen_elements_with_non_greedy` for callers
