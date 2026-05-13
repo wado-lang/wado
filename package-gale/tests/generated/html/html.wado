@@ -2025,7 +2025,7 @@ impl Parser {
 
 fn scan_html_document(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_2(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
         pos = scan_scriptlet_or_sea_ws(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
@@ -2036,7 +2036,7 @@ fn scan_html_document(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
         if pos >= tokens.len() || tokens[pos].kind != TK_XML { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && _gale_kind_set_2(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
         pos = scan_scriptlet_or_sea_ws(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
@@ -2047,15 +2047,15 @@ fn scan_html_document(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
         if pos >= tokens.len() || tokens[pos].kind != TK_DTD { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && _gale_kind_set_2(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
         pos = scan_scriptlet_or_sea_ws(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    while pos < tokens.len() && _gale_kind_set_3(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_html_elements(tokens, pos, 0);
+        pos = scan_html_elements__follow_0(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -2063,7 +2063,7 @@ fn scan_html_document(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
 }
 
 fn scan_scriptlet_or_sea_ws(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_2(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
@@ -2071,7 +2071,7 @@ fn scan_scriptlet_or_sea_ws(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
 
 fn scan_html_elements(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_4(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_2(tokens[pos].kind) {
         let sp = pos;
         pos = scan_html_misc(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
@@ -2079,7 +2079,7 @@ fn scan_html_elements(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     }
     pos = scan_html_element(tokens, pos, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_4(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_2(tokens[pos].kind) {
         let sp = pos;
         pos = scan_html_misc(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
@@ -2108,13 +2108,13 @@ fn scan_html_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
                 }
                 let gp_0 = pos;
                 let sgk_0 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-                if _gale_kind_set_5(sgk_0) {
+                if _gale_kind_set_3(sgk_0) {
                     sg_0: {
                         pos = gp_0;
                         sg_0_0: {
                             if pos >= tokens.len() || tokens[pos].kind != TK_TAG_CLOSE { break sg_0_0; }
                             pos += 1;
-                            if pos < tokens.len() && _gale_kind_set_6(tokens[pos].kind) {
+                            if pos < tokens.len() && _gale_kind_set_4(tokens[pos].kind) {
                                 let sp = pos;
                                 sg_1_done: {
                                     sg_1: {
@@ -2263,7 +2263,7 @@ fn scan_html_misc(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_1(alt_kind) {
+        if _gale_kind_set_6(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_html_comment(tokens, pos, 0);
@@ -2287,7 +2287,7 @@ fn scan_html_misc(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 }
 
 fn scan_html_comment(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_6(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
@@ -2410,7 +2410,7 @@ fn parse_html_document(p: &mut Parser) -> Result<HtmlDocumentNode, ParseError> {
             rep_scan_pos_4 = pos;
         }
         if rep_scan_pos_4 < 0 { break; }
-        let html_elements = parse_html_elements(p)?;
+        let html_elements = parse_html_elements__follow_0(p)?;
         html_elements_list.push(html_elements);
     }
     return Result::<HtmlDocumentNode, ParseError>::Ok(HtmlDocumentNode {
@@ -2644,7 +2644,7 @@ fn parse_html_content(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
         if rep_scan_pos < 0 { break; }
         let mut group_0_inner: Option<HtmlContentGroup0> = null;
         let grp_kind = p.peek_kind();
-        if _gale_kind_set_0(grp_kind) {
+        if _gale_kind_set_5(grp_kind) {
             let html_element = parse_html_element(p)?;
             group_0_inner = Option::<HtmlContentGroup0>::Some(HtmlContentGroup0::Alt0(HtmlContentGroup0Alt0 {
                 html_element,
@@ -2654,7 +2654,7 @@ fn parse_html_content(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
             group_0_inner = Option::<HtmlContentGroup0>::Some(HtmlContentGroup0::Alt1(HtmlContentGroup0Alt1 {
                 cdata,
             }));
-        } else if _gale_kind_set_1(grp_kind) {
+        } else if _gale_kind_set_6(grp_kind) {
             let html_comment = parse_html_comment(p)?;
             group_0_inner = Option::<HtmlContentGroup0>::Some(HtmlContentGroup0::Alt2(HtmlContentGroup0Alt2 {
                 html_comment,
@@ -2728,7 +2728,7 @@ fn parse_html_chardata(p: &mut Parser) -> Result<HtmlChardataNode, ParseError> {
 fn parse_html_misc(p: &mut Parser) -> Result<HtmlMiscNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_1(kind) {
+    if _gale_kind_set_6(kind) {
         let html_comment = parse_html_comment(p)?;
         return Result::<HtmlMiscNode, ParseError>::Ok(HtmlMiscNode::Alt0(HtmlMiscAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -2797,12 +2797,6 @@ fn parse_style(p: &mut Parser) -> Result<StyleNode, ParseError> {
 
 fn scan_html_elements__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_4(tokens[pos].kind) {
-        let sp = pos;
-        pos = scan_html_misc(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
     pos = scan_html_element(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
@@ -2811,36 +2805,8 @@ fn scan_html_elements__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 =
 fn parse_html_elements__follow_0(p: &mut Parser) -> Result<HtmlElementsNode, ParseError> {
     let start = p.peek().span.start;
     let mut html_misc_list: Array<HtmlMiscNode> = [];
-    loop {
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.tokens;
-            let mut pos: i32 = p.pos;
-            pos = scan_html_misc(tokens, pos, 0);
-            if pos < 0 { break rep_scan; }
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
-        }
-        if rep_scan_pos < 0 { break; }
-        let html_misc = parse_html_misc(p)?;
-        html_misc_list.push(html_misc);
-    }
     let html_element = parse_html_element(p)?;
     let mut html_misc_list_2: Array<HtmlMiscNode> = [];
-    loop {
-        let mut rep_scan_pos_2: i32 = -1;
-        rep_scan_2: {
-            let tokens = &p.tokens;
-            let mut pos: i32 = p.pos;
-            pos = scan_html_misc(tokens, pos, 0);
-            if pos < 0 { break rep_scan_2; }
-            if pos <= p.pos { break rep_scan_2; }
-            rep_scan_pos_2 = pos;
-        }
-        if rep_scan_pos_2 < 0 { break; }
-        let html_misc = parse_html_misc(p)?;
-        html_misc_list_2.push(html_misc);
-    }
     return Result::<HtmlElementsNode, ParseError>::Ok(HtmlElementsNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         html_misc_list,
@@ -3053,31 +3019,31 @@ pub fn to_tree(node: &HtmlDocumentNode) -> CstNode {
 }
 
 fn _gale_kind_set_0(k: i32) -> bool {
-    return k matches { TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_STYLE_OPEN | TK_TAG_OPEN };
-}
-
-fn _gale_kind_set_1(k: i32) -> bool {
-    return k matches { TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT };
-}
-
-fn _gale_kind_set_2(k: i32) -> bool {
     return k matches { TK_SCRIPTLET | TK_SEA_WS };
 }
 
-fn _gale_kind_set_3(k: i32) -> bool {
+fn _gale_kind_set_1(k: i32) -> bool {
     return k matches { TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_SEA_WS | TK_STYLE_OPEN | TK_TAG_OPEN };
 }
 
-fn _gale_kind_set_4(k: i32) -> bool {
+fn _gale_kind_set_2(k: i32) -> bool {
     return k matches { TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT | TK_SEA_WS };
 }
 
-fn _gale_kind_set_5(k: i32) -> bool {
+fn _gale_kind_set_3(k: i32) -> bool {
     return k matches { TK_TAG_CLOSE | TK_TAG_SLASH_CLOSE };
 }
 
-fn _gale_kind_set_6(k: i32) -> bool {
+fn _gale_kind_set_4(k: i32) -> bool {
     return k matches { TK_CDATA | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT | TK_HTML_TEXT | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_SEA_WS | TK_STYLE_OPEN | TK_TAG_OPEN };
+}
+
+fn _gale_kind_set_5(k: i32) -> bool {
+    return k matches { TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_STYLE_OPEN | TK_TAG_OPEN };
+}
+
+fn _gale_kind_set_6(k: i32) -> bool {
+    return k matches { TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT };
 }
 
 fn _gale_kind_set_7(k: i32) -> bool {

@@ -183,6 +183,10 @@ test "Op::Repeat carries inner element and strategy" {
         body: inner,
         strategy: RepeatStrategy::Plain,
         field: "x_list",
+        caller_follow_first: [],
+        caller_follow_second: [],
+        body_scannable: true,
+        body_has_field: true,
     });
     if let Repeat(r) = &rep {
         if let Star = r.kind {
@@ -330,7 +334,6 @@ test "ScanElement variants round-trip" {
     let call = ScanElement::RuleCall(ScanRuleCallElem {
         target_snake: "expr",
         variant_id: Option::<i32>::Some(2),
-        min_prec_arg: 0,
     });
     let any = ScanElement::Wildcard;
     let excl = ScanElement::Excluded(ScanExcludedElem { kinds: ["TK_A"] });
@@ -339,6 +342,7 @@ test "ScanElement variants round-trip" {
         kind: RepeatKind::Plus,
         body: inner_scan,
         strategy: ScanRepeatStrategy::Plain,
+        inner_first: [],
     });
 
     if let Token(t) = &token {

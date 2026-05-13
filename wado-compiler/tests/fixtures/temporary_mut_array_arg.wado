@@ -1,0 +1,37 @@
+// Regression: passing `&mut [] as Array<T>` (or any non-trivial
+// `&mut <tuple-literal> as Array<T>` form) as a function argument
+// where the parameter is `&mut Array<T>`.
+//
+// Wado parses `&mut x as T` as `(&mut x) as T` — `&mut` binds tighter
+// than `as` — so without a special-case the cast applies to a borrow
+// of an unrelated `tuple<>` struct. The Wado frontend accepted it but
+// the WIR pipeline emitted `struct.new tuple//[]` for the empty array
+// literal, and Wasm validation failed with
+//   "type mismatch: expected (ref $type), found (ref (exact $type))"
+// when the call site expected `Array<T>`.
+//
+// Fix: `try_coerce_tuple_to_sequence` looks through one `&` / `&mut`
+// wrapper, so the inner tuple is coerced via `SequenceLiteralBuilder`
+// and the call site auto-borrows the resulting `Array<T>`.
+
+use { println, Stdout } from "core:cli";
+
+fn helper(name: &String, counts: &mut Array<[String, i32]>) -> String {
+    for let mut i = 0; i < counts.len(); i += 1 {
+        if counts[i].0 == *name {
+            let prev = counts[i].1;
+            counts[i] = [*name, prev + 1];
+            return `{*name}_{prev + 1}`;
+        }
+    }
+    counts.push([*name, 1]);
+    return *name;
+}
+
+export fn run() with Stdout {
+    let result = helper(&"foo", &mut [] as Array<[String, i32]>);
+    println(result);
+}
+
+__DATA__
+{"stdout": "foo\n"}

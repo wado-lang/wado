@@ -532,6 +532,32 @@ pub struct RepeatOp {
     /// lower time. Distinct from `body.field` (the per-iteration
     /// binding inside the loop, which lives in its own fresh scope).
     pub field: String,
+    /// Caller-side FOLLOW first set: tokens that can immediately
+    /// follow this Repeat in the surrounding alt body. Computed at
+    /// lower time from the position the Repeat occupies. Consumed
+    /// by emit's per-position decisions for `Optional + RuleRef`
+    /// (subtract from inner first to gate the optional fire) and
+    /// non-greedy (continue/exit disambiguation). Empty when the
+    /// Repeat is at the alt's tail.
+    pub caller_follow_first: Array<String>,
+    /// True iff the inner element is fully scannable (has a complete
+    /// `scan_<rule>` / inline scan equivalent). Drives emit's choice
+    /// between `loop` + scan-guard and `while` + first-check loop
+    /// shapes. Precomputed so emit doesn't re-run
+    /// `ctx.is_element_scannable` at each Repeat dispatch.
+    pub body_scannable: bool,
+    /// True iff the inner element contributes a CST field — i.e.
+    /// emit's Repeat surfaces a storable `Option<T>` (`Optional`) or
+    /// `Array<T>` (`Star` / `Plus`) field. False for `Transparent`
+    /// groups and other non-storable shapes.
+    pub body_has_field: bool,
+    /// Caller-side second-token set for non-greedy 2-token
+    /// disambiguation. For a non-greedy Repeat at position `i` of a
+    /// surface alt, this is the first set of the next element's
+    /// second sub-position when the next element is itself a Repeat
+    /// over a single-alt Group of ≥ 2 elements. Empty when 1-token
+    /// follow suffices. Consumed by `gen_repeat_non_greedy`.
+    pub caller_follow_second: Array<String>,
 }
 
 pub struct GroupOp {
@@ -694,10 +720,6 @@ pub struct ScanTokenElem {
 pub struct ScanRuleCallElem {
     pub target_snake: String,
     pub variant_id: Option<i32>,
-    /// Always emit a `min_prec` argument so the call site is
-    /// uniform regardless of LR. `0` when the parse side did not
-    /// override.
-    pub min_prec_arg: i32,
 }
 
 pub struct ScanExcludedElem {
@@ -708,12 +730,17 @@ pub struct ScanRepeatElem {
     pub kind: RepeatKind,
     pub body: ScanElement,
     pub strategy: ScanRepeatStrategy,
+    /// First set of `body` cached at lower time. emit's scan-side
+    /// repeat emitter uses this for `while peek_kind ∈ inner_first`
+    /// loop guards (Plain strategy) and for Plus's mandatory-first
+    /// iteration condition. WithFollowSubtraction carries the
+    /// effective (mask-subtracted) first separately in its payload.
+    pub inner_first: Array<String>,
 }
 
 pub variant ScanRepeatStrategy {
     Plain,
     WithFollowSubtraction(WithFollowSubtractionStrategy),
-    NonGreedy(NonGreedyStrategy),
     Suppressed,
 }
 
@@ -724,11 +751,23 @@ pub struct ScanGroupElem {
     /// True for "lenient" groups whose dispatch may bail out
     /// without advancing on no match (used for `?`-over-group).
     pub lenient: bool,
+    /// Per-alt first set (parallel to `alts`). Drives emit's
+    /// ambiguity detection (`sets_overlap` between any two alts)
+    /// and the lenient gate. Cached at lower time so emit's
+    /// `gen_scan_op_group` doesn't re-call `ctx.first_of_alt`.
+    pub alt_first_sets: Array<Array<String>>,
 }
 
 pub struct ScanOptionalLookaheadElem {
+    /// Per-shape lookahead signature: `sigs[s][position]` is the
+    /// kind set for position `position` of shape `s`. emit emits
+    /// `if peek_match(sigs[0]) { /* shape 0 body */ } else if ...`.
     pub sigs: Array<Array<Array<String>>>,
-    pub body: ScanBody,
+    /// Per-shape scan body: `bodies[s]` is the sequence of
+    /// `ScanElement`s emit scans when shape `s`'s sig matches. Each
+    /// shape selects a subset of the surface alt's elements (the
+    /// optional sub-elements that are "on" in this shape).
+    pub bodies: Array<ScanBody>,
 }
 
 // ==========================================================================

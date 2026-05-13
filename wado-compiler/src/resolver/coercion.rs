@@ -746,14 +746,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ///
     /// Coerce a tuple/sequence literal `[e0, e1, ...]` to a type implementing
     /// `SequenceLiteralBuilder` (including built-in `Array<T>` and user types).
+    ///
+    /// `&mut <tuple-literal>` / `&<tuple-literal>` are looked through: the cast
+    /// `&mut [...] as Array<T>` parses as `(&mut [...]) as Array<T>` (`&mut`
+    /// binds tighter than `as`), but the user-facing semantics is to construct
+    /// an `Array<T>` and let the call site auto-borrow it. Without this
+    /// passthrough the inner `[...]` would lower as a `tuple<>` `struct.new`
+    /// and the call site's Wasm validation would fail because the tuple
+    /// struct type is unrelated to the expected `Array` struct type.
     pub(super) fn try_coerce_tuple_to_sequence(
         &mut self,
         expr: &Expr,
         ctx: &mut FunctionContext,
         target_type: TypeId,
     ) -> Option<TirExpr> {
-        let Expr::TupleLiteral(tuple_lit) = expr else {
-            return None;
+        let tuple_lit = match expr {
+            Expr::TupleLiteral(tuple_lit) => tuple_lit,
+            Expr::Unary(unary) if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) => {
+                if let Expr::TupleLiteral(tuple_lit) = &unary.expr {
+                    tuple_lit
+                } else {
+                    return None;
+                }
+            }
+            _ => return None,
         };
 
         let base_name = self.struct_name_for_type(target_type)?;
