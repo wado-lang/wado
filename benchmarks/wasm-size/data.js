@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778676424279,
+  "lastUpdate": 1778705956117,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21485,6 +21485,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/225aeb49c99faf4b838b7506a383394748f196e2"
         },
         "date": 1778676423893,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 511920,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6af929aac4fb190b47ad4fbfd926c0fc0bb11308",
+          "message": "Merge pull request #1054 from wado-lang/claude/check-docs-consistency-r8dJV\n\ndocs: align value-semantics across spec, cheatsheet, and WEPs",
+          "timestamp": "2026-05-14T05:53:08+09:00",
+          "tree_id": "feacaa2e6f4b63915a3cd7fadb005e22670262c9",
+          "url": "https://github.com/wado-lang/wado/commit/6af929aac4fb190b47ad4fbfd926c0fc0bb11308"
+        },
+        "date": 1778705955809,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
