@@ -728,7 +728,7 @@ A pure function can be used where a capturing function is expected.
 
 #### Closure Type
 
-There is a single closure type. Captures are by value, so the closure body cannot write to outer bindings — there is no `Fn` / `FnMut` / `FnOnce` hierarchy and no `&mut ||` syntax.
+There is a single closure type. Captures are by value, so the closure body cannot write to outer bindings, and there is no `Fn` / `FnMut` / `FnOnce` hierarchy.
 
 | Type         | Description           |
 | ------------ | --------------------- |

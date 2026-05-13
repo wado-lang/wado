@@ -221,7 +221,7 @@ fn make_counter() -> Fn() -> i32 {
 }
 ```
 
-There is no special `&mut ||` syntax and no per-closure capture-mode keyword: a closure that needs to mutate or share state captures a reference, exactly like any other piece of code that wants to alias.
+A closure that needs to mutate or share state captures a reference, exactly like any other piece of code that wants to alias.
 
 **Rationale**:
 

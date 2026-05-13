@@ -500,15 +500,15 @@ Wado's closure design is simpler due to GC:
 
 ### Skip (Rust-specific, unnecessary with GC)
 
-| Feature                         | Reason                                                        |
-| ------------------------------- | ------------------------------------------------------------- |
-| Lifetime annotations (`'a`)     | GC manages memory; `stores[...]` handles escape analysis      |
-| Reborrowing                     | `&mut T` is Copy-like in Wado; no uniqueness invariant        |
-| `ref` / `ref mut` in patterns   | No move semantics; pattern matching always copies values      |
-| `Fn`/`FnMut`/`FnOnce` hierarchy | Wado uses `fn(...)` + `&mut \|\|`                             |
-| `into_iter()` (consuming)       | No ownership transfer; one iteration mode suffices            |
-| Temporary lifetime extension    | GC keeps values alive                                         |
-| `&mut T` is non-Copy            | No borrow checker; both `&T` and `&mut T` are freely copyable |
+| Feature                         | Reason                                                                  |
+| ------------------------------- | ----------------------------------------------------------------------- |
+| Lifetime annotations (`'a`)     | GC manages memory; `stores[...]` handles escape analysis                |
+| Reborrowing                     | `&mut T` is Copy-like in Wado; no uniqueness invariant                  |
+| `ref` / `ref mut` in patterns   | No move semantics; pattern matching always copies values                |
+| `Fn`/`FnMut`/`FnOnce` hierarchy | Wado has a single `fn(...)` closure type; share mutation via references |
+| `into_iter()` (consuming)       | No ownership transfer; one iteration mode suffices                      |
+| Temporary lifetime extension    | GC keeps values alive                                                   |
+| `&mut T` is non-Copy            | No borrow checker; both `&T` and `&mut T` are freely copyable           |
 
 ### Open Design Questions
 

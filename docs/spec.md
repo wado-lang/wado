@@ -1910,8 +1910,6 @@ inc();
 assert get() == 2;   // both closures observe mutation through the shared reference
 ```
 
-There is no special `&mut ||` syntax; closures use the same value semantics as the rest of the language and reach mutable state via references.
-
 Note: `stores[...]` is a separate concept for declaring that a _function_ stores reference _parameters_ beyond the call. It is not yet implemented. See [Reference Storage](#reference-storage-stores) and [`docs/wep-2026-01-12-value-semantics-and-stores.md`](./wep-2026-01-12-value-semantics-and-stores.md).
 
 ### Default Arguments
