@@ -4084,6 +4084,34 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
             }
             return;
         }
+        // Optional + Group body. Dispatches to the existing surface
+        // helpers (`gen_storable_optional` for storable shapes,
+        // `gen_optional_with_scan_guard` for Transparent / non-storable),
+        // bypassing the surface `gen_repeat_body` middle layer so emit
+        // reads the outer field name / type from the lowered `GroupOp`
+        // / `RepeatOp`. The helpers themselves remain surface-IR —
+        // their internal `gen_group_store_any` / shape-based lookahead
+        // analysis still consults the surface element directly — but
+        // every reach into `gen_repeat_body` from a Repeat element is
+        // already gone after this arm.
+        if let Group(g_op) = &rep_op.body {
+            let inner = &rep.element;
+            if rep_op.body_has_field {
+                let inner_type = op_field_type(&rep_op.body);
+                let inner_field = op_field(&rep_op.body);
+                let opt_field = rep_op.field;
+                let _ = dedup_name(&opt_field, name_counts);
+                gen_storable_optional(w, inner, ctx, name_counts, &inner_type, &opt_field, &inner_field);
+            } else {
+                // Transparent Group (no own field): conditional inline
+                // via scan-guard or k-token lookahead. The helper
+                // accepts the surface inner directly; no outer Option
+                // wrapping is emitted.
+                let _ = dedup_name(&rep_op.field, name_counts);
+                gen_optional_with_scan_guard(w, inner, ctx, name_counts);
+            }
+            return;
+        }
         // Optional + non-RuleCall leaf (Token / Literal / Wildcard /
         // Excluded). Mirror of the RuleCall arm above, but without
         // caller-side follow subtraction — for these leaves the caller
