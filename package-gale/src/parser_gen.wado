@@ -3911,6 +3911,41 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
             }
             return;
         }
+        // Optional + non-RuleCall leaf (Token / Literal / Wildcard /
+        // Excluded). Mirror of the RuleCall arm above, but without
+        // caller-side follow subtraction — for these leaves the caller
+        // follow legitimately overlaps with the inner's first set (e.g.
+        // `K_DATABASE` in `attach_stmt`'s optional appearing again at
+        // the start of `expr` via `name → keyword`), so we gate only
+        // on `inner_first - mask`. Lower's `RepeatStrategy` already
+        // bakes the mask subtraction: `Plain` keeps the raw inner
+        // first; `WithFollowSubtraction` carries the effective first;
+        // `Suppressed` is caught by the top short-circuit. The body
+        // always has a field for these leaves (`element_has_field` is
+        // true for TokenRef / Literal / Wildcard / Not).
+        if op_is_leaf(&rep_op.body) {
+            let inner = &rep.element;
+            let mut visiting: Array<String> = [];
+            let inner_first = ctx.first_of_element(inner, &mut visiting);
+            let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
+                s.effective_first;
+            } else {
+                inner_first;
+            };
+            let inner_type = op_field_type(&rep_op.body);
+            let opt_field = rep_op.field;
+            let _ = dedup_name(&opt_field, name_counts);
+
+            let inner_field = op_field(&rep_op.body);
+            w.begin(`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&loop_first)}`);
+            let mut nc: Array<[String, i32]> = [];
+            gen_op_leaf(w, &rep_op.body, inner, ctx, &mut nc);
+            w.line(`Option::<{inner_type}>::Some({inner_field})`);
+            w.else_begin("else");
+            w.line("null");
+            w.end_with(";");
+            return;
+        }
     }
     gen_repeat(w, rep, ctx, name_counts, follow);
 }
