@@ -829,7 +829,7 @@ fn scan_expr_lr_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { return -1; }
     pos += 1;
-    pos = scan_expr(tokens, pos, 0);
+    pos = scan_expr(tokens, pos, 3);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -853,7 +853,7 @@ fn scan_expr_lr_1(tokens: &Array<Token>, pos: i32) -> i32 {
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_GTGT { return -1; }
     pos += 1;
-    pos = scan_expr(tokens, pos, 0);
+    pos = scan_expr(tokens, pos, 2);
     if pos < 0 { return -1; }
     return pos;
 }
