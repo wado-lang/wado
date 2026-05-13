@@ -720,6 +720,13 @@ pub struct ScanTokenElem {
 pub struct ScanRuleCallElem {
     pub target_snake: String,
     pub variant_id: Option<i32>,
+    /// Scan-side mirror of `RuleCallOp.min_prec_arg`. `Some(p)` when
+    /// the call should pass `p` as the `min_prec` argument — set by
+    /// `stamp_lr_self_ref_min_prec` for self-recursive RuleCalls
+    /// inside an LR suffix. `None` means "use the surrounding
+    /// `ctx.scan_ruleref_min_prec`" (bt-scan paths set it to
+    /// `i32::MAX`; every other call site keeps the default `0`).
+    pub min_prec_arg: Option<i32>,
 }
 
 pub struct ScanExcludedElem {

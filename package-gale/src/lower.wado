@@ -226,6 +226,13 @@ fn lower_variant_rules(parser_rules: &Array<ParserRule>, ctx: &mut GenContext) -
                 scan_used: entry.scan_used,
                 parse_used: entry.parse_used,
             });
+            // Re-route self-recursive scan calls inside the variant's
+            // LR suffixes to the variant's own `__follow_<id>` function.
+            // Mirrors the pre-Phase-2-F emitter, which used the
+            // surrounding `fn_name` (`scan_X__follow_<id>` when called
+            // from `emit_follow_variant_from_gir`) for every self-ref
+            // regardless of the call-site's local follow.
+            attach_variant_id_to_lr_self_refs(&mut lowered, &rule.snake_name, entry.id);
             result.push(lowered);
         }
         lowered_count = entries.len();
@@ -263,6 +270,59 @@ fn attach_variant_header(rule: &mut Rule, v: FollowVariant) {
             });
         },
     }
+}
+
+/// Walk a freshly-lowered LR variant rule and re-stamp `variant_id`
+/// on every top-level self-recursive `ScanRuleCall` inside the LR
+/// suffixes. Used by `lower_variant_rules` after `attach_variant_header`
+/// to preserve the pre-Phase-2-F emitter contract: an LR variant's
+/// suffix recurses into the SAME variant function (not the base
+/// `scan_X`, and not whichever per-call-site variant
+/// `intern_follow_variant` happened to register for the local follow).
+///
+/// No-op for non-LR rules — they have no LR suffix to walk.
+fn attach_variant_id_to_lr_self_refs(rule: &mut Rule, rule_snake: &String, variant_id: i32) {
+    if let LeftRecursive(l) = *rule {
+        let mut new_lr_alts: Array<LrAlt> = [];
+        for let lr_alt of &l.lr_alts {
+            let mut new_elements: Array<ScanElement> = [];
+            for let se of &lr_alt.scan_suffix.elements {
+                new_elements.push(rebind_scan_self_ref_variant_id(*se, rule_snake, variant_id));
+            }
+            new_lr_alts.push(LrAlt {
+                alt_index: lr_alt.alt_index,
+                case_name: lr_alt.case_name,
+                struct_name: lr_alt.struct_name,
+                suffix: lr_alt.suffix,
+                scan_suffix: ScanBody { elements: new_elements },
+                own_prec: lr_alt.own_prec,
+                conflict_min: lr_alt.conflict_min,
+                last_self_ref_idx: lr_alt.last_self_ref_idx,
+                suffix_first: lr_alt.suffix_first,
+                right_associative: lr_alt.right_associative,
+                prefix_self_ref: lr_alt.prefix_self_ref,
+            });
+        }
+        *rule = Rule::LeftRecursive(LeftRecursiveRule {
+            header: l.header,
+            atom: l.atom,
+            lr_alts: new_lr_alts,
+            lr_dispatch: l.lr_dispatch,
+        });
+    }
+}
+
+fn rebind_scan_self_ref_variant_id(se: ScanElement, rule_snake: &String, variant_id: i32) -> ScanElement {
+    if let RuleCall(rc) = se {
+        if rc.target_snake == *rule_snake {
+            return ScanElement::RuleCall(ScanRuleCallElem {
+                target_snake: rc.target_snake,
+                variant_id: Option::<i32>::Some(variant_id),
+                min_prec_arg: rc.min_prec_arg,
+            });
+        }
+    }
+    return se;
 }
 
 /// Walk every lowered `Rule` and intern every multi-element
@@ -590,7 +650,9 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // inside each LR suffix. Mirrors emit's
     // `compute_lr_self_ref_prec` decision, but resolved once at
     // lower time so emit consumes the suffix as a structural walk.
-    stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name);
+    // Stamps both `suffix.ops` (parse-side `RuleCallOp.min_prec_arg`)
+    // and `scan_suffix.elements` (scan-side `ScanRuleCallElem.min_prec_arg`).
+    stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name);
 
     return LeftRecursiveRule {
         header,
@@ -600,42 +662,96 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     };
 }
 
-/// Walk every LR suffix and stamp `RuleCallOp.min_prec_arg` on
-/// self-recursive calls. The trailing self-ref (at original alt
-/// position `last_self_ref_idx`) uses the alt's `conflict_min`;
-/// non-trailing self-refs use 0 unless the immediately following
-/// op is a fixed token that also appears in some LR alt's
-/// `suffix_first` set (the BETWEEN…AND-style case where a non-final
-/// self-ref must keep its precedence so the shared delimiter binds
-/// correctly). Mirrors `parser_gen::compute_lr_self_ref_prec`.
-fn stamp_lr_self_ref_min_prec(lr_alts: &mut Array<LrAlt>, rule_name: &String) {
+/// Walk every LR suffix and stamp `min_prec_arg` on self-recursive
+/// calls — both on the parse-side ops (`RuleCallOp.min_prec_arg`)
+/// and on the scan-side elements (`ScanRuleCallElem.min_prec_arg`).
+/// The trailing self-ref (at original alt position
+/// `last_self_ref_idx`) uses the alt's `conflict_min`; non-trailing
+/// self-refs use 0 unless the immediately following op is a fixed
+/// token that also appears in some LR alt's `suffix_first` set (the
+/// BETWEEN…AND-style case where a non-final self-ref must keep its
+/// precedence so the shared delimiter binds correctly). Mirrors
+/// `parser_gen::compute_lr_self_ref_prec`.
+///
+/// Parse-side `suffix.ops` and scan-side `scan_suffix.elements`
+/// walk the same `alt.elements[1..]` in lockstep — index `k` on
+/// each side corresponds to `alt.elements[k+1]`. The per-position
+/// precedence is computed once from the parse-side ops (whose
+/// neighbour tokens drive the BETWEEN…AND decision) and then
+/// stamped onto whichever side carries a self-ref at that position.
+fn stamp_lr_self_ref_min_prec(lr_alts: &mut Array<LrAlt>, rule_name: &String, rule_snake: &String) {
     let lr_suffix_first_tokens = collect_lr_suffix_first_tokens_from_lowered(lr_alts);
     for let mut i = 0; i < lr_alts.len(); i += 1 {
-        let mut new_ops: Array<Op> = [];
         let suffix_len = lr_alts[i].suffix.ops.len();
+        let last_self_ref_idx = lr_alts[i].last_self_ref_idx;
+        let conflict_min = lr_alts[i].conflict_min;
+
+        let scan_len = lr_alts[i].scan_suffix.elements.len();
+        assert scan_len == suffix_len,
+            `LR suffix walk length mismatch: parse-side {suffix_len}, scan-side {scan_len}`;
+
+        let mut new_ops: Array<Op> = [];
+        let mut new_scan: Array<ScanElement> = [];
         for let mut k = 0; k < suffix_len; k += 1 {
-            // suffix.ops[k] corresponds to alt.elements[k+1].
+            // suffix.ops[k] / scan_suffix.elements[k] correspond to
+            // alt.elements[k+1].
             let elem_idx = k + 1;
             let op_ref = &lr_alts[i].suffix.ops[k];
-            // Find the inner RuleCall, peeling a single `Op::ListLabel`
-            // wrapper (scalar `Label` is collapsed by `lower_label_op`).
+            let se_ref = &lr_alts[i].scan_suffix.elements[k];
+
+            // Find the inner parse-side RuleCall, peeling a single
+            // `Op::ListLabel` wrapper (scalar `Label` is collapsed
+            // by `lower_label_op`).
             let inner_rc_opt = find_self_ref_rule_call(op_ref, rule_name);
             if let Some(_) = inner_rc_opt {
                 let prec = compute_self_ref_prec_from_ops(
                     &lr_alts[i].suffix.ops,
                     k,
                     elem_idx,
-                    lr_alts[i].last_self_ref_idx,
-                    lr_alts[i].conflict_min,
+                    last_self_ref_idx,
+                    conflict_min,
                     &lr_suffix_first_tokens,
                 );
                 new_ops.push(rebind_self_ref_min_prec(*op_ref, prec));
+                new_scan.push(rebind_scan_self_ref_min_prec(*se_ref, rule_snake, prec));
             } else {
                 new_ops.push(*op_ref);
+                new_scan.push(*se_ref);
             }
         }
         lr_alts[i].suffix.ops = new_ops;
+        lr_alts[i].scan_suffix = ScanBody { elements: new_scan };
     }
+}
+
+/// Scan-side counterpart to `rebind_self_ref_min_prec`. Stamps
+/// `min_prec_arg` on the top-level `ScanRuleCall` when it targets
+/// `rule_snake`. The scan IR has no `ListLabel` wrapper — labels
+/// are stripped by `lower_scan_element` — so a self-ref is always
+/// the outer element.
+///
+/// Also clears `variant_id` to `None`. The pre-Phase-2-F emitter
+/// (`gen_scan_lr_suffix_helpers`) used the surrounding scan
+/// function's name for every self-recursive LR suffix RuleRef,
+/// which is `scan_<snake>` when emitting the base rule. We mirror
+/// that by clearing here; `lower_variant_rules` re-stamps
+/// `variant_id` for variant bodies via
+/// `attach_variant_id_to_lr_self_refs` so a `__follow_<id>` variant
+/// recurses into the same variant. The per-call-site `variant_id`
+/// that `intern_follow_variant` originally returned (based on the
+/// position's local follow) is intentionally discarded — the LR
+/// loop's `min_prec` is what disambiguates the climb.
+fn rebind_scan_self_ref_min_prec(se: ScanElement, rule_snake: &String, prec: i32) -> ScanElement {
+    if let RuleCall(rc) = se {
+        if rc.target_snake == *rule_snake {
+            return ScanElement::RuleCall(ScanRuleCallElem {
+                target_snake: rc.target_snake,
+                variant_id: null,
+                min_prec_arg: Option::<i32>::Some(prec),
+            });
+        }
+    }
+    return se;
 }
 
 fn find_self_ref_rule_call(op: &Op, rule_name: &String) -> Option<&RuleCallOp> with stores[op] {
@@ -1242,6 +1358,9 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &Array
         RuleRef(r) => ScanElement::RuleCall(ScanRuleCallElem {
             target_snake: r.snake_name,
             variant_id: ctx.intern_follow_variant(&r.name, outer_follow, true),
+            // Default `None`; `stamp_lr_self_ref_min_prec` rewrites
+            // self-recursive scan calls inside LR suffixes.
+            min_prec_arg: null,
         }),
         Wildcard(_) => ScanElement::Wildcard,
         Not(ne) => ScanElement::Excluded(ScanExcludedElem {

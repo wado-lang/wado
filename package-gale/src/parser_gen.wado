@@ -1482,7 +1482,8 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<
 /// Scan-side twin of `gen_lr_suffix_helpers`. Emits `scan_X_lr_N(tokens, pos)`
 /// for each valid LR alternative, scanning its suffix (elements[1..]). Self-
 /// recursive calls compile to `scan_X(tokens, pos, prec)` with the same
-/// precedence value the parse side uses (via `compute_lr_self_ref_prec`).
+/// precedence value the parse side uses; the precedence is baked onto
+/// `ScanRuleCallElem.min_prec_arg` by `stamp_lr_self_ref_min_prec`.
 fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<LrAlt>, ctx: &mut GenContext, fn_name: &String) {
     for let lr_alt of lr_alts {
         let lr_idx = lr_alt.alt_index;
@@ -1499,29 +1500,17 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &A
         f.emit_begin(w);
         w.line("let mut pos = pos;");
 
-        // Walk alt.elements[1..] in lockstep with lr_alt.suffix.ops and
-        // lr_alt.scan_suffix.elements (`scan_suffix.elements[k]`
-        // corresponds to `alt.elements[k+1]` and to
-        // `lr_alt.suffix.ops[k]`). Two cases need data only the parse-
-        // side suffix_op carries today:
-        //   * self-recursive RuleRef → emit with the precedence
-        //     `stamp_lr_self_ref_min_prec` baked onto the parse op.
+        // Walk lr_alt.scan_suffix.elements (which runs in lockstep
+        // with alt.elements[1..] and lr_alt.suffix.ops). Self-
+        // recursive RuleCalls carry their `min_prec_arg` baked on
+        // the ScanRuleCallElem by `stamp_lr_self_ref_min_prec`, so
+        // the op-driven scan emit handles them uniformly. One case
+        // still needs data only the parse-side suffix_op carries:
         //   * Optional+RuleRef-inner → emit with the
         //     `caller_follow_first` baked onto the parse RepeatOp.
-        // The remaining element shapes go through the op-driven
-        // `gen_scan_op_element` against the lower-baked
-        // `ScanElement` directly.
         for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
             let elem = &alt.elements[ei];
             let suffix_op = &lr_alt.suffix.ops[ei - 1];
-            if let RuleRef(r) = elem {
-                if r.name == rule.name {
-                    let prec = lookup_baked_min_prec(suffix_op);
-                    w.line(`pos = {*fn_name}(tokens, pos, {prec});`);
-                    w.line("if pos < 0 { return -1; }");
-                    continue;
-                }
-            }
             if let Repeat(rep) = elem {
                 if let Optional = rep.kind {
                     if let Repeat(rep_op) = suffix_op {
@@ -2205,11 +2194,14 @@ fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContex
         } else {
             `scan_{rc.target_snake}`;
         };
-        // Scan-side min_prec is purely a ctx concern: bt-scan paths
-        // set `scan_ruleref_min_prec` to `i32::MAX` to short-circuit
-        // any LR climb in the target rule; every other call site
-        // leaves it at the default `0`.
-        w.line(`pos = {fn_name}(tokens, pos, {ctx.scan_ruleref_min_prec});`);
+        // `min_prec_arg`, when set, is the baked precedence for a
+        // self-recursive call inside an LR suffix (stamped by
+        // `stamp_lr_self_ref_min_prec`). Otherwise fall back to
+        // `ctx.scan_ruleref_min_prec`: bt-scan paths set it to
+        // `i32::MAX` to short-circuit any LR climb in the target
+        // rule; every other call site leaves it at the default `0`.
+        let min_prec = if let Some(p) = rc.min_prec_arg { p } else { ctx.scan_ruleref_min_prec };
+        w.line(`pos = {fn_name}(tokens, pos, {min_prec});`);
         w.line(`if pos < 0 \{ {*fail_stmt} \}`);
         return;
     }
@@ -2262,7 +2254,8 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         } else {
             `scan_{rc.target_snake}`;
         };
-        w.line(`pos = {fn_name}(tokens, pos, {ctx.scan_ruleref_min_prec});`);
+        let min_prec = if let Some(p) = rc.min_prec_arg { p } else { ctx.scan_ruleref_min_prec };
+        w.line(`pos = {fn_name}(tokens, pos, {min_prec});`);
         return;
     }
     if let Wildcard = se {
