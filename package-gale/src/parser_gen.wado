@@ -33,6 +33,7 @@ use {
     str_set_from,
     str_set_insert_all,
     gen_visibility_comment,
+    to_snake_case,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, is_simple_token_group } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
@@ -73,8 +74,9 @@ use {
     ScanOptionalLookaheadElem,
     rule_header,
     rule_alt_body,
+    rule_alt_scan_body,
 } from "./gir.wado";
-use { is_self_ref_element, unwrap_label } from "./lr_util.wado";
+use { unwrap_label } from "./lr_util.wado";
 
 fn first_contains(first: &Array<String>, token: &String) -> bool {
     for let item of first {
@@ -1246,11 +1248,17 @@ fn scannable_prefix_len(elements: &Array<Element>, ctx: &mut GenContext) -> i32 
 /// Generate a scan function for a tournament alternative (`parse_X_bt_N` —
 /// the `_bt_` infix is historical) if it has at least one scannable leading
 /// element. The scan covers the scannable prefix only.
-fn gen_bt_scan_if_possible(w: &mut CodeWriter, alt: &Alternative, fn_name: &String, alt_idx: i32, ctx: &mut GenContext) {
+fn gen_bt_scan_if_possible(w: &mut CodeWriter, alt: &Alternative, lowered_rule: &Rule, fn_name: &String, alt_idx: i32, ctx: &mut GenContext) {
     let prefix_len = scannable_prefix_len(&alt.elements, ctx);
     if prefix_len == 0 {
         return;
     }
+
+    let scan_body = if let Some(b) = rule_alt_scan_body(lowered_rule, alt_idx) {
+        b;
+    } else {
+        panic(`gen_bt_scan_if_possible: no scan body for alt {alt_idx}`);
+    };
 
     let scan_name = `{*fn_name}_scan_{alt_idx}`;
 
@@ -1267,7 +1275,7 @@ fn gen_bt_scan_if_possible(w: &mut CodeWriter, alt: &Alternative, fn_name: &Stri
     // and including it here would over-match. Inner self-refs, by
     // contrast, are bounded by surrounding tokens (e.g. `K_WHEN expr
     // K_THEN expr` inside `case_expr`) and need a full scan.
-    gen_bt_scan_elements(w, &alt.elements, 0, prefix_len, ctx);
+    gen_bt_scan_op_elements(w, &scan_body.elements, prefix_len, ctx);
 
     w.line("return pos;");
     w.end();
@@ -1943,34 +1951,39 @@ fn gen_scan_repeat_optional_with_follow(w: &mut CodeWriter, rep: &RepeatElement,
     w.end();
 }
 
-/// Specialisation of bt-scan helpers. Raises
-/// `ctx.scan_ruleref_min_prec` to `i32::MAX` for the LAST element only
-/// when it is a self-reference to the current rule, so that
-/// `gen_scan_element` emits `scan_<rule>(tokens, pos, i32::MAX)` for
-/// that one position. The MAX guards short-circuit the LR suffix loop
-/// inside the target rule's `scan_<rule>` — the prefix-alt scenario
-/// where the outer LR loop will consume the trailing tokens.
-fn gen_bt_scan_elements(w: &mut CodeWriter, elements: &Array<Element>, start: i32, end: i32, ctx: &mut GenContext) {
-    for let mut i = start; i < end; i += 1 {
-        let elem = &elements[i];
-        let is_last_self_ref = i == end - 1 && is_self_ref_element(elem, &ctx.current_rule_name);
+/// Op-driven bt-scan walker. Raises `ctx.scan_ruleref_min_prec` to
+/// `i32::MAX` for the LAST element only when it is a self-recursive
+/// `ScanRuleCall`, so that `gen_scan_op_element` emits
+/// `scan_<rule>(tokens, pos, i32::MAX)` for that one position. The
+/// MAX guards short-circuit the LR suffix loop inside the target
+/// rule's `scan_<rule>` — the prefix-alt scenario where the outer
+/// LR loop will consume the trailing tokens. Inner self-refs are
+/// bounded by surrounding tokens (e.g. `K_WHEN expr K_THEN expr`
+/// inside `case_expr`) and need a full scan.
+fn gen_bt_scan_op_elements(w: &mut CodeWriter, scan_elems: &Array<ScanElement>, end: i32, ctx: &mut GenContext) {
+    for let mut i = 0; i < end; i += 1 {
+        let se = &scan_elems[i];
+        let is_last_self_ref = i == end - 1 && is_self_ref_scan_call(se, &ctx.current_rule_name);
         let saved = ctx.scan_ruleref_min_prec;
         if is_last_self_ref {
             ctx.scan_ruleref_min_prec = i32::MAX;
         }
-        if let Repeat(rep) = elem {
-            if let Optional = rep.kind {
-                if is_ruleref_optional(&rep.element) {
-                    let follow = ctx.first_of_elements_from(elements, i + 1);
-                    gen_scan_repeat_optional_with_follow(w, rep, ctx, &follow);
-                    ctx.scan_ruleref_min_prec = saved;
-                    continue;
-                }
-            }
-        }
-        gen_scan_element(w, elem, ctx, &"return -1;");
+        gen_scan_op_element(w, se, ctx, &"return -1;");
         ctx.scan_ruleref_min_prec = saved;
     }
+}
+
+/// True iff `se` is a top-level `ScanRuleCall` targeting `rule_name`.
+/// Scan-side counterpart of `is_self_ref_element`. Used by the bt-scan
+/// walker to bump `ctx.scan_ruleref_min_prec` for the trailing
+/// self-ref. `target_snake` is the lowered call site's snake-cased
+/// rule name; `rule_name` is the surrounding rule's surface name
+/// (`ctx.current_rule_name`).
+fn is_self_ref_scan_call(se: &ScanElement, rule_name: &String) -> bool {
+    if let RuleCall(rc) = se {
+        return rc.target_snake == to_snake_case(rule_name);
+    }
+    return false;
 }
 
 /// `gen_scan_elements` variant that routes non-Optional failures through
@@ -2974,7 +2987,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
                     // Generate scan helper for this alternative if it has a
                     // scannable prefix (at least one scannable element before
                     // the first unscannable one).
-                    gen_bt_scan_if_possible(w, alt, fn_name, alt_idx, ctx);
+                    gen_bt_scan_if_possible(w, alt, lowered_rule, fn_name, alt_idx, ctx);
                 }
             }
         }
