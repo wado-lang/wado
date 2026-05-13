@@ -21332,7 +21332,7 @@ fn parse_property_member_declaration_bt_0(p: &mut Parser) -> Result<PropertyMemb
 
 fn parse_property_member_declaration_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_property_member_base(tokens, pos, 0);
+    pos = scan_property_member_base__follow_2(tokens, pos, 0);
     if pos < 0 { return -1; }
     pos = scan_property_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -21393,7 +21393,7 @@ fn parse_property_member_declaration_bt_1(p: &mut Parser) -> Result<PropertyMemb
 
 fn parse_property_member_declaration_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_property_member_base(tokens, pos, 0);
+    pos = scan_property_member_base__follow_2(tokens, pos, 0);
     if pos < 0 { return -1; }
     pos = scan_property_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -21466,7 +21466,7 @@ fn parse_property_member_declaration_bt_2(p: &mut Parser) -> Result<PropertyMemb
 
 fn parse_property_member_declaration_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_property_member_base(tokens, pos, 0);
+    pos = scan_property_member_base__follow_3(tokens, pos, 0);
     if pos < 0 { return -1; }
     let gp_116 = pos;
     let sgk_116 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -26942,7 +26942,7 @@ fn parse_statement__follow_0_scan_27(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Export { return -1; }
     pos += 1;
-    pos = scan_statement(tokens, pos, 2147483647);
+    pos = scan_statement__follow_0(tokens, pos, 2147483647);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -26974,7 +26974,7 @@ fn parse_statement__follow_0_bt_3(p: &mut Parser) -> Result<StatementNode, Parse
 
 fn parse_statement__follow_0_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_export_statement(tokens, pos, 0);
+    pos = scan_export_statement__follow_6(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -26990,7 +26990,7 @@ fn parse_statement__follow_0_bt_5(p: &mut Parser) -> Result<StatementNode, Parse
 
 fn parse_statement__follow_0_scan_5(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_abstract_declaration(tokens, pos, 0);
+    pos = scan_abstract_declaration__follow_7(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -27006,7 +27006,7 @@ fn parse_statement__follow_0_bt_11(p: &mut Parser) -> Result<StatementNode, Pars
 
 fn parse_statement__follow_0_scan_11(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_if_statement(tokens, pos, 0);
+    pos = scan_if_statement__follow_10(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -27070,7 +27070,7 @@ fn parse_statement__follow_0_bt_17(p: &mut Parser) -> Result<StatementNode, Pars
 
 fn parse_statement__follow_0_scan_17(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_with_statement(tokens, pos, 0);
+    pos = scan_with_statement__follow_12(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -27262,7 +27262,7 @@ fn parse_statement__follow_0_bt_12(p: &mut Parser) -> Result<StatementNode, Pars
 
 fn parse_statement__follow_0_scan_12(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_iteration_statement(tokens, pos, 0);
+    pos = scan_iteration_statement__follow_11(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -27278,7 +27278,7 @@ fn parse_statement__follow_0_bt_9(p: &mut Parser) -> Result<StatementNode, Parse
 
 fn parse_statement__follow_0_scan_9(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_interface_declaration(tokens, pos, 0);
+    pos = scan_interface_declaration__follow_9(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -27310,7 +27310,7 @@ fn parse_statement__follow_0_bt_18(p: &mut Parser) -> Result<StatementNode, Pars
 
 fn parse_statement__follow_0_scan_18(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_labelled_statement(tokens, pos, 0);
+    pos = scan_labelled_statement__follow_13(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -27326,7 +27326,7 @@ fn parse_statement__follow_0_bt_1(p: &mut Parser) -> Result<StatementNode, Parse
 
 fn parse_statement__follow_0_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_variable_statement(tokens, pos, 0);
+    pos = scan_variable_statement__follow_5(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -27358,7 +27358,7 @@ fn parse_statement__follow_0_bt_8(p: &mut Parser) -> Result<StatementNode, Parse
 
 fn parse_statement__follow_0_scan_8(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_expression_statement(tokens, pos, 0);
+    pos = scan_expression_statement__follow_8(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -28454,7 +28454,7 @@ fn parse_class_element__follow_1_bt_3(p: &mut Parser) -> Result<ClassElementNode
 
 fn parse_class_element__follow_1_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_statement(tokens, pos, 0);
+    pos = scan_statement__follow_0(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -28482,7 +28482,7 @@ fn parse_class_element__follow_1_scan_1(tokens: &Array<Token>, pos: i32) -> i32 
         pos = scan_decorator_list(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
-    pos = scan_property_member_declaration(tokens, pos, 0);
+    pos = scan_property_member_declaration__follow_14(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -29636,7 +29636,7 @@ fn parse_iteration_statement__follow_11_scan_3(tokens: &Array<Token>, pos: i32) 
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
     pos += 1;
-    pos = scan_statement(tokens, pos, 0);
+    pos = scan_statement__follow_0(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -29718,7 +29718,7 @@ fn parse_iteration_statement__follow_11_scan_7(tokens: &Array<Token>, pos: i32) 
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
     pos += 1;
-    pos = scan_statement(tokens, pos, 0);
+    pos = scan_statement__follow_0(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -29796,7 +29796,7 @@ fn parse_iteration_statement__follow_11_scan_6(tokens: &Array<Token>, pos: i32) 
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
     pos += 1;
-    pos = scan_statement(tokens, pos, 0);
+    pos = scan_statement__follow_0(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -29868,7 +29868,7 @@ fn parse_iteration_statement__follow_11_scan_2(tokens: &Array<Token>, pos: i32) 
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
     pos += 1;
-    pos = scan_statement(tokens, pos, 0);
+    pos = scan_statement__follow_0(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -29912,7 +29912,7 @@ fn parse_iteration_statement__follow_11_scan_5(tokens: &Array<Token>, pos: i32) 
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
     pos += 1;
-    pos = scan_statement(tokens, pos, 0);
+    pos = scan_statement__follow_0(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -29952,7 +29952,7 @@ fn parse_iteration_statement__follow_11_scan_4(tokens: &Array<Token>, pos: i32) 
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
     pos += 1;
-    pos = scan_statement(tokens, pos, 0);
+    pos = scan_statement__follow_0(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -30418,7 +30418,7 @@ fn parse_property_member_declaration__follow_14_bt_0(p: &mut Parser) -> Result<P
 
 fn parse_property_member_declaration__follow_14_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_property_member_base(tokens, pos, 0);
+    pos = scan_property_member_base__follow_2(tokens, pos, 0);
     if pos < 0 { return -1; }
     pos = scan_property_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -30479,7 +30479,7 @@ fn parse_property_member_declaration__follow_14_bt_1(p: &mut Parser) -> Result<P
 
 fn parse_property_member_declaration__follow_14_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_property_member_base(tokens, pos, 0);
+    pos = scan_property_member_base__follow_2(tokens, pos, 0);
     if pos < 0 { return -1; }
     pos = scan_property_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -30552,7 +30552,7 @@ fn parse_property_member_declaration__follow_14_bt_2(p: &mut Parser) -> Result<P
 
 fn parse_property_member_declaration__follow_14_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_property_member_base(tokens, pos, 0);
+    pos = scan_property_member_base__follow_3(tokens, pos, 0);
     if pos < 0 { return -1; }
     let gp_140 = pos;
     let sgk_140 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };

@@ -16827,7 +16827,7 @@ fn parse_macro_invocation_semi_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_token_tree(tokens, pos, 0);
+        pos = scan_token_tree__follow_0(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -16881,7 +16881,7 @@ fn parse_macro_invocation_semi_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_token_tree(tokens, pos, 0);
+        pos = scan_token_tree__follow_0(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -16933,7 +16933,7 @@ fn parse_macro_invocation_semi_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_token_tree(tokens, pos, 0);
+        pos = scan_token_tree__follow_0(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -17232,11 +17232,11 @@ fn parse_macro_match_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
     pos += 1;
-    pos = scan_macro_match(tokens, pos, 0);
+    pos = scan_macro_match__follow_1(tokens, pos, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_macro_match(tokens, pos, 0);
+        pos = scan_macro_match__follow_1(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -22157,17 +22157,17 @@ fn parse_statements_bt_0(p: &mut Parser) -> Result<StatementsNode, ParseError> {
 
 fn parse_statements_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_statement(tokens, pos, 0);
+    pos = scan_statement__follow_10(tokens, pos, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && _gale_kind_set_50(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_statement(tokens, pos, 0);
+        pos = scan_statement__follow_10(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
     if pos < tokens.len() && _gale_kind_set_47(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_expression(tokens, pos, 0);
+        pos = scan_expression__follow_6(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     return pos;
@@ -28569,11 +28569,11 @@ fn parse_macro_match__follow_1_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
     pos += 1;
-    pos = scan_macro_match(tokens, pos, 0);
+    pos = scan_macro_match__follow_1(tokens, pos, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && _gale_kind_set_120(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_macro_match(tokens, pos, 0);
+        pos = scan_macro_match__follow_1(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -28880,7 +28880,7 @@ fn parse_function_parameters__follow_2_scan_1(tokens: &Array<Token>, pos: i32) -
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_function_param(tokens, pos, 0);
+    pos = scan_function_param__follow_16(tokens, pos, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_COMMA {
         let sp = pos;
@@ -28923,7 +28923,7 @@ fn parse_function_parameters__follow_2_bt_0(p: &mut Parser) -> Result<FunctionPa
 
 fn parse_function_parameters__follow_2_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_self_param(tokens, pos, 0);
+    pos = scan_self_param__follow_15(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos].kind == TK_COMMA {
         let sp = pos;
@@ -29147,7 +29147,7 @@ fn parse_where_clause_item__follow_5_bt_0(p: &mut Parser) -> Result<WhereClauseI
 
 fn parse_where_clause_item__follow_5_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_lifetime_where_clause_item(tokens, pos, 0);
+    pos = scan_lifetime_where_clause_item__follow_19(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -30053,7 +30053,7 @@ fn parse_expression__follow_6_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    pos = scan_expression(tokens, pos, 2147483647);
+    pos = scan_expression__follow_6(tokens, pos, 2147483647);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -31123,7 +31123,7 @@ fn parse_array_elements__follow_7_bt_0(p: &mut Parser) -> Result<ArrayElementsNo
 
 fn parse_array_elements__follow_7_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_expression(tokens, pos, 0);
+    pos = scan_expression__follow_6(tokens, pos, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_COMMA {
         let sp = pos;
@@ -31167,7 +31167,7 @@ fn parse_array_elements__follow_7_scan_1(tokens: &Array<Token>, pos: i32) -> i32
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { return -1; }
     pos += 1;
-    pos = scan_expression(tokens, pos, 0);
+    pos = scan_expression__follow_6(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -31340,7 +31340,7 @@ fn parse_statements__follow_9_bt_1(p: &mut Parser) -> Result<StatementsNode, Par
 
 fn parse_statements__follow_9_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_expression(tokens, pos, 0);
+    pos = scan_expression__follow_6(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -31381,17 +31381,17 @@ fn parse_statements__follow_9_bt_0(p: &mut Parser) -> Result<StatementsNode, Par
 
 fn parse_statements__follow_9_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_statement(tokens, pos, 0);
+    pos = scan_statement__follow_10(tokens, pos, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && _gale_kind_set_122(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_statement(tokens, pos, 0);
+        pos = scan_statement__follow_10(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
     if pos < tokens.len() && _gale_kind_set_121(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_expression(tokens, pos, 0);
+        pos = scan_expression__follow_6(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     return pos;
@@ -31591,7 +31591,7 @@ fn parse_statement__follow_10_bt_3(p: &mut Parser) -> Result<StatementNode, Pars
 
 fn parse_statement__follow_10_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_expression_statement(tokens, pos, 0);
+    pos = scan_expression_statement__follow_22(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -31851,7 +31851,7 @@ fn parse_type___follow_12_bt_1(p: &mut Parser) -> Result<TypeNode, ParseError> {
 
 fn parse_type___follow_12_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_impl_trait_type(tokens, pos, 0);
+    pos = scan_impl_trait_type__follow_24(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -31867,7 +31867,7 @@ fn parse_type___follow_12_bt_2(p: &mut Parser) -> Result<TypeNode, ParseError> {
 
 fn parse_type___follow_12_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_trait_object_type(tokens, pos, 0);
+    pos = scan_trait_object_type__follow_25(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -31883,7 +31883,7 @@ fn parse_type___follow_12_bt_0(p: &mut Parser) -> Result<TypeNode, ParseError> {
 
 fn parse_type___follow_12_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_type_no_bounds(tokens, pos, 0);
+    pos = scan_type_no_bounds__follow_21(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -31986,7 +31986,7 @@ fn parse_function_parameters_maybe_named_variadic__follow_13_bt_0(p: &mut Parser
 
 fn parse_function_parameters_maybe_named_variadic__follow_13_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_maybe_named_function_parameters(tokens, pos, 0);
+    pos = scan_maybe_named_function_parameters__follow_26(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -32756,7 +32756,7 @@ fn parse_type_no_bounds__follow_21_bt_3(p: &mut Parser) -> Result<TypeNoBoundsNo
 
 fn parse_type_no_bounds__follow_21_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_type_path(tokens, pos, 0);
+    pos = scan_type_path__follow_33(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -32772,7 +32772,7 @@ fn parse_type_no_bounds__follow_21_bt_2(p: &mut Parser) -> Result<TypeNoBoundsNo
 
 fn parse_type_no_bounds__follow_21_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_trait_object_type_one_bound(tokens, pos, 0);
+    pos = scan_trait_object_type_one_bound__follow_32(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -33968,7 +33968,7 @@ fn parse_expression__follow_23_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    pos = scan_expression(tokens, pos, 2147483647);
+    pos = scan_expression__follow_23(tokens, pos, 2147483647);
     if pos < 0 { return -1; }
     return pos;
 }
