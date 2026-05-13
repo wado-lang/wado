@@ -334,6 +334,7 @@ test "ScanElement variants round-trip" {
     let call = ScanElement::RuleCall(ScanRuleCallElem {
         target_snake: "expr",
         variant_id: Option::<i32>::Some(2),
+        min_prec_arg: null,
     });
     let any = ScanElement::Wildcard;
     let excl = ScanElement::Excluded(ScanExcludedElem { kinds: ["TK_A"] });
@@ -343,6 +344,7 @@ test "ScanElement variants round-trip" {
         body: inner_scan,
         strategy: ScanRepeatStrategy::Plain,
         inner_first: [],
+        caller_follow_first: [],
     });
 
     if let Token(t) = &token {

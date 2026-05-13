@@ -720,6 +720,15 @@ pub struct ScanTokenElem {
 pub struct ScanRuleCallElem {
     pub target_snake: String,
     pub variant_id: Option<i32>,
+    /// Scan-side mirror of `RuleCallOp.min_prec_arg`. `Some(p)` when
+    /// the call should pass `p` as the `min_prec` argument — set by
+    /// `stamp_lr_self_ref_min_prec` for self-recursive RuleCalls
+    /// inside an LR suffix. `None` means "use the caller-supplied
+    /// override" — `gen_scan_op_element` reads its `min_prec_override`
+    /// parameter, which `gen_bt_scan_op_elements` raises to `i32::MAX`
+    /// for the trailing self-ref and every other call site leaves at
+    /// the default `0`.
+    pub min_prec_arg: Option<i32>,
 }
 
 pub struct ScanExcludedElem {
@@ -736,6 +745,15 @@ pub struct ScanRepeatElem {
     /// iteration condition. WithFollowSubtraction carries the
     /// effective (mask-subtracted) first separately in its payload.
     pub inner_first: Array<String>,
+    /// Scan-side mirror of `RepeatOp.caller_follow_first`. Default is
+    /// the variant-aware `outer_follow` at construction time; alt-level
+    /// scan walkers override it with `first_of_elements_from(elements,
+    /// i + 1)` to match the parse-side post-pass. Consumed by op-driven
+    /// emit's Optional+RuleRef-inner case to suppress the inner fire
+    /// when the outer next-token is a caller-side follow token (the
+    /// pre-Phase-2-F `gen_scan_repeat_optional_with_follow` contract).
+    /// Empty when the Repeat is at the alt's tail.
+    pub caller_follow_first: Array<String>,
 }
 
 pub variant ScanRepeatStrategy {
@@ -853,6 +871,40 @@ fn find_alt_body_in_array(alts: &Array<AltBody>, alt_idx: i32) -> Option<&AltBod
     for let a of alts {
         if a.alt_index == alt_idx {
             return Option::<&AltBody>::Some(a);
+        }
+    }
+    return null;
+}
+
+/// Scan-side counterpart of `rule_alt_body`. Returns the
+/// `ScanBody` for the alt at the given index — `s.scan_body` for
+/// `Simple` (alt_idx 0), or the parallel `scan_alts` entry for
+/// `MultiAlt` / LR atom shapes, or `lr.scan_suffix` for LR alts.
+pub fn rule_alt_scan_body(rule: &Rule, alt_idx: i32) -> Option<&ScanBody> with stores[rule] {
+    return match rule {
+        Simple(s) => if alt_idx == 0 { Option::<&ScanBody>::Some(&s.scan_body) } else { null },
+        MultiAlt(m) => find_scan_body_in_array(&m.alts, &m.scan_alts, alt_idx),
+        LeftRecursive(l) => {
+            if let Some(b) = find_scan_body_in_array(&l.atom.alts, &l.atom.scan_alts, alt_idx) {
+                Option::<&ScanBody>::Some(b);
+            } else {
+                let mut found: Option<&ScanBody> = null;
+                for let lr of &l.lr_alts {
+                    if lr.alt_index == alt_idx {
+                        found = Option::<&ScanBody>::Some(&lr.scan_suffix);
+                        break;
+                    }
+                }
+                found;
+            }
+        },
+    };
+}
+
+fn find_scan_body_in_array(alts: &Array<AltBody>, scan_alts: &Array<ScanBody>, alt_idx: i32) -> Option<&ScanBody> with stores[scan_alts] {
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if alts[i].alt_index == alt_idx {
+            return Option::<&ScanBody>::Some(&scan_alts[i]);
         }
     }
     return null;

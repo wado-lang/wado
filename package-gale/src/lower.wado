@@ -179,11 +179,9 @@ pub fn lower_with_ctx(grammar: &Grammar, lit_tokens: &Array<LitToken>, ctx: &mut
 /// Lower each registered follow-aware variant. Runs as a fixed-point
 /// loop because a variant body may itself register new variants. The
 /// per-variant lowering installs `ctx.current_follow_mask` (consumed
-/// by `lower_repeat_op` for `Suppressed` / `WithFollowSubtraction`
-/// strategies — those are stubs today; Phase 2.6 follow-up will fill
-/// them in once a committed grammar exercises them) before walking
-/// the rule, then restores the previous mask so subsequent variants
-/// see a clean slate.
+/// by `lower_repeat_op` to pick `Suppressed` / `WithFollowSubtraction`
+/// strategies) before walking the rule, then restores the previous
+/// mask so subsequent variants see a clean slate.
 fn lower_variant_rules(parser_rules: &Array<ParserRule>, ctx: &mut GenContext) -> Array<Rule> {
     let mut result: Array<Rule> = [];
     let mut lowered_count: i32 = 0;
@@ -226,6 +224,13 @@ fn lower_variant_rules(parser_rules: &Array<ParserRule>, ctx: &mut GenContext) -
                 scan_used: entry.scan_used,
                 parse_used: entry.parse_used,
             });
+            // Re-route self-recursive scan calls inside the variant's
+            // LR suffixes to the variant's own `__follow_<id>` function.
+            // Mirrors the pre-Phase-2-F emitter, which used the
+            // surrounding `fn_name` (`scan_X__follow_<id>` when called
+            // from `emit_follow_variant_from_gir`) for every self-ref
+            // regardless of the call-site's local follow.
+            attach_variant_id_to_lr_self_refs(&mut lowered, &rule.snake_name, entry.id);
             result.push(lowered);
         }
         lowered_count = entries.len();
@@ -263,6 +268,81 @@ fn attach_variant_header(rule: &mut Rule, v: FollowVariant) {
             });
         },
     }
+}
+
+/// Walk a freshly-lowered LR variant rule and re-stamp `variant_id`
+/// on every top-level self-recursive `ScanRuleCall` inside the LR
+/// suffixes. Used by `lower_variant_rules` after `attach_variant_header`
+/// to preserve the pre-Phase-2-F emitter contract: an LR variant's
+/// suffix recurses into the SAME variant function (not the base
+/// `scan_X`, and not whichever per-call-site variant
+/// `intern_follow_variant` happened to register for the local follow).
+///
+/// No-op for non-LR rules — they have no LR suffix to walk.
+fn attach_variant_id_to_lr_self_refs(rule: &mut Rule, rule_snake: &String, variant_id: i32) {
+    if let LeftRecursive(l) = *rule {
+        // Walk every suffix once to count self-refs. If zero, the
+        // rebuild is a no-op — skip it so a variant rule with only
+        // non-self-ref-targeting LR alts (e.g. unary prefix alts
+        // whose suffix is just a token) doesn't pay the
+        // reconstruction cost.
+        let mut has_self_ref = false;
+        for let lr_alt of &l.lr_alts {
+            for let se of &lr_alt.scan_suffix.elements {
+                if let RuleCall(rc) = se {
+                    if rc.target_snake == *rule_snake {
+                        has_self_ref = true;
+                        break;
+                    }
+                }
+            }
+            if has_self_ref {
+                break;
+            }
+        }
+        if !has_self_ref {
+            return;
+        }
+        let mut new_lr_alts: Array<LrAlt> = [];
+        for let lr_alt of &l.lr_alts {
+            let mut new_elements: Array<ScanElement> = [];
+            for let se of &lr_alt.scan_suffix.elements {
+                new_elements.push(rebind_scan_self_ref_variant_id(*se, rule_snake, variant_id));
+            }
+            new_lr_alts.push(LrAlt {
+                alt_index: lr_alt.alt_index,
+                case_name: lr_alt.case_name,
+                struct_name: lr_alt.struct_name,
+                suffix: lr_alt.suffix,
+                scan_suffix: ScanBody { elements: new_elements },
+                own_prec: lr_alt.own_prec,
+                conflict_min: lr_alt.conflict_min,
+                last_self_ref_idx: lr_alt.last_self_ref_idx,
+                suffix_first: lr_alt.suffix_first,
+                right_associative: lr_alt.right_associative,
+                prefix_self_ref: lr_alt.prefix_self_ref,
+            });
+        }
+        *rule = Rule::LeftRecursive(LeftRecursiveRule {
+            header: l.header,
+            atom: l.atom,
+            lr_alts: new_lr_alts,
+            lr_dispatch: l.lr_dispatch,
+        });
+    }
+}
+
+fn rebind_scan_self_ref_variant_id(se: ScanElement, rule_snake: &String, variant_id: i32) -> ScanElement {
+    if let RuleCall(rc) = se {
+        if rc.target_snake == *rule_snake {
+            return ScanElement::RuleCall(ScanRuleCallElem {
+                target_snake: rc.target_snake,
+                variant_id: Option::<i32>::Some(variant_id),
+                min_prec_arg: rc.min_prec_arg,
+            });
+        }
+    }
+    return se;
 }
 
 /// Walk every lowered `Rule` and intern every multi-element
@@ -357,15 +437,31 @@ fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
             }
         },
         Repeat(r) => {
-            // `gen_scan_op_repeat_body` reads `inner_first` for the
-            // while-loop guard.  `WithFollowSubtraction` overrides it
-            // with `effective_first`.
+            // `gen_scan_op_repeat` reads `inner_first` for the
+            // while-loop guard. `WithFollowSubtraction` overrides it
+            // with `effective_first`. For Optional + RuleRef bodies
+            // the emit additionally subtracts `caller_follow_first`
+            // from the loop's first set — pre-register that derived
+            // set too so the `_gale_kind_set_<id>` registry stays
+            // anchored to the lower walk order.
             if r.inner_first.len() >= 2 {
                 ctx.intern_kind_set(&r.inner_first);
             }
-            if let WithFollowSubtraction(s) = &r.strategy {
+            let loop_first = if let WithFollowSubtraction(s) = &r.strategy {
                 if s.effective_first.len() >= 2 {
                     ctx.intern_kind_set(&s.effective_first);
+                }
+                s.effective_first;
+            } else {
+                r.inner_first;
+            };
+            if let Optional = r.kind {
+                let body_is_rulecall = r.body matches { RuleCall(_) };
+                if body_is_rulecall && !r.caller_follow_first.is_empty() {
+                    let effective = subtract_first(&loop_first, &r.caller_follow_first);
+                    if effective.len() >= 2 {
+                        ctx.intern_kind_set(&effective);
+                    }
                 }
             }
             walk_scan_element_for_kind_sets(&r.body, ctx);
@@ -590,7 +686,9 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // inside each LR suffix. Mirrors emit's
     // `compute_lr_self_ref_prec` decision, but resolved once at
     // lower time so emit consumes the suffix as a structural walk.
-    stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name);
+    // Stamps both `suffix.ops` (parse-side `RuleCallOp.min_prec_arg`)
+    // and `scan_suffix.elements` (scan-side `ScanRuleCallElem.min_prec_arg`).
+    stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name);
 
     return LeftRecursiveRule {
         header,
@@ -600,42 +698,87 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     };
 }
 
-/// Walk every LR suffix and stamp `RuleCallOp.min_prec_arg` on
-/// self-recursive calls. The trailing self-ref (at original alt
-/// position `last_self_ref_idx`) uses the alt's `conflict_min`;
-/// non-trailing self-refs use 0 unless the immediately following
-/// op is a fixed token that also appears in some LR alt's
-/// `suffix_first` set (the BETWEEN…AND-style case where a non-final
-/// self-ref must keep its precedence so the shared delimiter binds
-/// correctly). Mirrors `parser_gen::compute_lr_self_ref_prec`.
-fn stamp_lr_self_ref_min_prec(lr_alts: &mut Array<LrAlt>, rule_name: &String) {
+/// Walk every LR suffix and stamp `min_prec_arg` on self-recursive
+/// calls — both on the parse-side ops (`RuleCallOp.min_prec_arg`)
+/// and on the scan-side elements (`ScanRuleCallElem.min_prec_arg`).
+/// The trailing self-ref (at original alt position
+/// `last_self_ref_idx`) uses the alt's `conflict_min`; non-trailing
+/// self-refs use 0 unless the immediately following op is a fixed
+/// token that also appears in some LR alt's `suffix_first` set (the
+/// BETWEEN…AND-style case where a non-final self-ref must keep its
+/// precedence so the shared delimiter binds correctly). Mirrors
+/// `parser_gen::compute_lr_self_ref_prec`.
+///
+/// Parse-side `suffix.ops` and scan-side `scan_suffix.elements`
+/// walk the same `alt.elements[1..]` in lockstep — index `k` on
+/// each side corresponds to `alt.elements[k+1]`. The per-position
+/// precedence is computed once from the parse-side ops (whose
+/// neighbour tokens drive the BETWEEN…AND decision) and then
+/// stamped onto whichever side carries a self-ref at that position.
+fn stamp_lr_self_ref_min_prec(lr_alts: &mut Array<LrAlt>, rule_name: &String, rule_snake: &String) {
     let lr_suffix_first_tokens = collect_lr_suffix_first_tokens_from_lowered(lr_alts);
     for let mut i = 0; i < lr_alts.len(); i += 1 {
-        let mut new_ops: Array<Op> = [];
         let suffix_len = lr_alts[i].suffix.ops.len();
+        let last_self_ref_idx = lr_alts[i].last_self_ref_idx;
+        let conflict_min = lr_alts[i].conflict_min;
+
+        let scan_len = lr_alts[i].scan_suffix.elements.len();
+        assert scan_len == suffix_len,
+            `LR suffix walk length mismatch: parse-side {suffix_len}, scan-side {scan_len}`;
+
+        let mut new_ops: Array<Op> = [];
+        let mut new_scan: Array<ScanElement> = [];
         for let mut k = 0; k < suffix_len; k += 1 {
-            // suffix.ops[k] corresponds to alt.elements[k+1].
+            // suffix.ops[k] / scan_suffix.elements[k] correspond to
+            // alt.elements[k+1].
             let elem_idx = k + 1;
             let op_ref = &lr_alts[i].suffix.ops[k];
-            // Find the inner RuleCall, peeling a single `Op::ListLabel`
-            // wrapper (scalar `Label` is collapsed by `lower_label_op`).
+            let se_ref = &lr_alts[i].scan_suffix.elements[k];
+
+            // Find the inner parse-side RuleCall, peeling a single
+            // `Op::ListLabel` wrapper (scalar `Label` is collapsed
+            // by `lower_label_op`).
             let inner_rc_opt = find_self_ref_rule_call(op_ref, rule_name);
             if let Some(_) = inner_rc_opt {
                 let prec = compute_self_ref_prec_from_ops(
                     &lr_alts[i].suffix.ops,
                     k,
                     elem_idx,
-                    lr_alts[i].last_self_ref_idx,
-                    lr_alts[i].conflict_min,
+                    last_self_ref_idx,
+                    conflict_min,
                     &lr_suffix_first_tokens,
                 );
                 new_ops.push(rebind_self_ref_min_prec(*op_ref, prec));
+                new_scan.push(rebind_scan_self_ref_min_prec(*se_ref, rule_snake, prec));
             } else {
                 new_ops.push(*op_ref);
+                new_scan.push(*se_ref);
             }
         }
         lr_alts[i].suffix.ops = new_ops;
+        lr_alts[i].scan_suffix = ScanBody { elements: new_scan };
     }
+}
+
+/// Scan-side counterpart to `rebind_self_ref_min_prec`. Stamps
+/// `min_prec_arg` on the top-level `ScanRuleCall` when it targets
+/// `rule_snake`, and clears `variant_id` — for an LR self-ref the
+/// LR loop's `min_prec` is what disambiguates the climb, so the
+/// per-call-site variant id `intern_follow_variant` returned is not
+/// what we want here. `lower_variant_rules` re-stamps `variant_id`
+/// for variant bodies via `attach_variant_id_to_lr_self_refs` so a
+/// `__follow_<id>` variant recurses into the same variant.
+fn rebind_scan_self_ref_min_prec(se: ScanElement, rule_snake: &String, prec: i32) -> ScanElement {
+    if let RuleCall(rc) = se {
+        if rc.target_snake == *rule_snake {
+            return ScanElement::RuleCall(ScanRuleCallElem {
+                target_snake: rc.target_snake,
+                variant_id: null,
+                min_prec_arg: Option::<i32>::Some(prec),
+            });
+        }
+    }
+    return se;
 }
 
 fn find_self_ref_rule_call(op: &Op, rule_name: &String) -> Option<&RuleCallOp> with stores[op] {
@@ -845,13 +988,13 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
 fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_idx: i32, ctx: &mut GenContext) -> ScanBody {
     let alt = &rule.alternatives[alt_idx];
     let mut elements: Array<ScanElement> = [];
-    // LR suffix: the scan body walks elements after the leading
-    // self-ref. The follow at the end of the suffix is the rule's
-    // outer follow — empty here; Phase 2.6 may refine.
-    let outer_follow: Array<String> = [];
+    // LR suffix walks `alt.elements[1..]` — the leading self-ref is
+    // stripped. The end-of-suffix outer follow is left empty; threading
+    // the LR rule's caller-side follow here would require an LR-variant
+    // mechanism analogous to the non-LR follow variants, which no
+    // committed grammar yet exercises.
     for let mut i = 1; i < alt.elements.len(); i += 1 {
-        let elem_follow = inner_follow_at(&alt.elements, i, ctx);
-        elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
+        elements.push(lower_alt_scan_element(&alt.elements, i, ctx));
     }
     return ScanBody { elements };
 }
@@ -1224,11 +1367,9 @@ fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
 /// no name dedup — it only produces a token-stream walk that
 /// returns the new `pos`.
 fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext) -> ScanBody {
-    let outer_follow: Array<String> = [];
     let mut elements: Array<ScanElement> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
-        let elem_follow = inner_follow_at(&alt.elements, i, ctx);
-        elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
+        elements.push(lower_alt_scan_element(&alt.elements, i, ctx));
     }
     return ScanBody { elements };
 }
@@ -1242,6 +1383,9 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &Array
         RuleRef(r) => ScanElement::RuleCall(ScanRuleCallElem {
             target_snake: r.snake_name,
             variant_id: ctx.intern_follow_variant(&r.name, outer_follow, true),
+            // Default `None`; `stamp_lr_self_ref_min_prec` rewrites
+            // self-recursive scan calls inside LR suffixes.
+            min_prec_arg: null,
         }),
         Wildcard(_) => ScanElement::Wildcard,
         Not(ne) => ScanElement::Excluded(ScanExcludedElem {
@@ -1275,8 +1419,7 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &Array
         // is lowered through the standard scan-element recursion.
         let mut elements: Array<ScanElement> = [];
         for let mut i = 0; i < alt.elements.len(); i += 1 {
-            let elem_follow = inner_follow_at(&alt.elements, i, ctx);
-            elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
+            elements.push(lower_alt_scan_element(&alt.elements, i, ctx));
         }
         let mut visiting: Array<String> = [];
         let alt_first = ctx.first_of_alt(alt, &mut visiting);
@@ -1319,8 +1462,7 @@ fn lower_general_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, out
         let alt = &alts[ai];
         let mut elements: Array<ScanElement> = [];
         for let mut i = 0; i < alt.elements.len(); i += 1 {
-            let elem_follow = inner_follow_at(&alt.elements, i, ctx);
-            elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
+            elements.push(lower_alt_scan_element(&alt.elements, i, ctx));
         }
         bodies.push(ScanBody { elements });
         let mut visiting: Array<String> = [];
@@ -1379,7 +1521,56 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &A
         body,
         strategy: strategy,
         inner_first: inner_first,
+        // Default seed mirrors parse-side `lower_repeat_op`: the
+        // variant-aware `outer_follow` so nested Repeats (not at
+        // alt-position) carry a sensible value. Alt-level scan
+        // walkers (`lower_scan_body`, `lower_lr_alt_scan_suffix`,
+        // and the per-shape walks inside `lower_scan_group`)
+        // overwrite this with `first_of_elements_from(alt_elements,
+        // i + 1)` so emit's op-driven Optional+RuleRef gate reads
+        // the same basic follow as the parse side's
+        // `RepeatOp.caller_follow_first`.
+        caller_follow_first: *outer_follow,
     });
+}
+
+/// Rebuild a top-level `ScanElement::Repeat` with a fresh
+/// `caller_follow_first`. No-op for non-Repeat elements. Used by
+/// alt-level scan walkers (`lower_scan_body`,
+/// `lower_lr_alt_scan_suffix`, per-shape walks inside groups) to
+/// override the default that `lower_scan_repeat` seeded with
+/// `outer_follow`, matching the parse-side `RepeatOp` post-pass.
+fn rebind_scan_repeat_caller_follow(se: ScanElement, caller_follow_first: Array<String>) -> ScanElement {
+    if let Repeat(re) = se {
+        return ScanElement::Repeat(ScanRepeatElem {
+            kind: re.kind,
+            body: re.body,
+            strategy: re.strategy,
+            inner_first: re.inner_first,
+            caller_follow_first: caller_follow_first,
+        });
+    }
+    return se;
+}
+
+/// Lower one element of `alt_elements` at index `i` to a `ScanElement`,
+/// then run the alt-level post-pass: if the result is a top-level
+/// Repeat, rebind its `caller_follow_first` to
+/// `first_of_elements_from(alt_elements, i + 1)`. Mirrors the parse-
+/// side `RepeatOp` post-pass; used by every scan-only alt walker
+/// (`lower_scan_body`, `lower_lr_alt_scan_suffix`, the single-alt
+/// branch of `lower_scan_group`, `lower_general_scan_group`). Walks
+/// that emit parse-side ops alongside scan elements (`lower_single_alt_group`,
+/// `lower_general_group`) inline the post-pass so they can share
+/// `basic_follow` with the parse-side rebind.
+fn lower_alt_scan_element(alt_elements: &Array<Element>, i: i32, ctx: &mut GenContext) -> ScanElement {
+    let elem_follow = inner_follow_at(alt_elements, i, ctx);
+    let mut se = lower_scan_element(&alt_elements[i], ctx, &elem_follow);
+    if let Repeat(_) = &se {
+        let basic_follow = ctx.first_of_elements_from(alt_elements, i + 1);
+        se = rebind_scan_repeat_caller_follow(se, basic_follow);
+    }
+    return se;
 }
 
 /// True iff any element in the alt is an Optional Repeat (possibly
@@ -1621,6 +1812,19 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
         ops.push(op);
     }
 
+    // For prefix LR alts (e.g. `'-' e` in `e : e '+' e | '-' e | …`),
+    // stamp the trailing self-ref RuleCall's `min_prec_arg` so emit
+    // doesn't need to thread the prec value through `ctx`. The
+    // surrounding alt walker (`gen_op_leaf`) reads
+    // `RuleCallOp.min_prec_arg` directly.
+    let prefix_prec = compute_prefix_self_ref_min_prec(rule, idx);
+    if prefix_prec > 0 && !ops.is_empty() {
+        let last_idx = ops.len() - 1;
+        if let Some(_) = find_self_ref_rule_call(&ops[last_idx], &rule.name) {
+            ops[last_idx] = rebind_self_ref_min_prec(ops[last_idx], prefix_prec);
+        }
+    }
+
     let fields = enumerate_alt_field_decls(&ops);
 
     return AltBody {
@@ -1630,7 +1834,7 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
         ops,
         fields,
         group_index_start: cumulative_group_index_start(rule, idx),
-        prefix_self_ref_min_prec: compute_prefix_self_ref_min_prec(rule, idx),
+        prefix_self_ref_min_prec: prefix_prec,
     };
 }
 
@@ -1796,22 +2000,37 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
         // alt's `outer_follow`.
         let elem_follow = inner_follow_at(&alt.elements, i, ctx);
         let mut op = lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow);
-        if let Repeat(rep_op) = &op {
+        let mut se = lower_scan_element(elem, ctx, &elem_follow);
+        // Gate `basic_follow` on either side actually being a Repeat —
+        // `first_of_elements_from` walks the suffix and isn't free.
+        // Scalar `Label(Repeat(_))` collapses to `Op::Repeat` on the
+        // parse side (so this fires); list `Label(Repeat(_))` lands as
+        // `Op::ListLabel(Repeat(_))` on parse, but the scan side still
+        // surfaces a top-level `ScanElement::Repeat` — so the scan
+        // rebind needs an independent check, not an `&&` of the two.
+        let op_is_repeat = op matches { Repeat(_) };
+        let se_is_repeat = se matches { Repeat(_) };
+        if op_is_repeat || se_is_repeat {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
-            let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(RepeatOp {
-                kind: rep_op.kind,
-                body: rep_op.body,
-                strategy: rep_op.strategy,
-                field: rep_op.field,
-                caller_follow_first: basic_follow,
-                caller_follow_second: basic_second,
-                body_scannable: rep_op.body_scannable,
-                body_has_field: rep_op.body_has_field,
-            });
+            if let Repeat(rep_op) = &op {
+                let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
+                op = Op::Repeat(RepeatOp {
+                    kind: rep_op.kind,
+                    body: rep_op.body,
+                    strategy: rep_op.strategy,
+                    field: rep_op.field,
+                    caller_follow_first: basic_follow,
+                    caller_follow_second: basic_second,
+                    body_scannable: rep_op.body_scannable,
+                    body_has_field: rep_op.body_has_field,
+                });
+            }
+            if se_is_repeat {
+                se = rebind_scan_repeat_caller_follow(se, basic_follow);
+            }
         }
         ops.push(op);
-        scan_elements.push(lower_scan_element(elem, ctx, &elem_follow));
+        scan_elements.push(se);
     }
 
     let body = AltBody {
@@ -1990,6 +2209,10 @@ fn lower_simple_cst_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, 
         // this re-introduces (e.g. `scan_sql_stmt_list__follow_0`) are
         // currently observable; see the matching commit message for the
         // tradeoff.
+        // SimpleCst alts are single RuleRefs by construction
+        // (`is_simple_cst_group`), so `lower_scan_element` produces a
+        // `ScanRuleCall` here, never a Repeat — no caller-follow
+        // rebind is needed.
         bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, outer_follow)] });
         let mut visiting: Array<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
@@ -2081,22 +2304,30 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
             let elem = &alt.elements[ei];
             let elem_follow = inner_follow_at(&alt.elements, ei, ctx);
             let mut op = lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow);
-            if let Repeat(rep_op) = &op {
+            let mut se = lower_scan_element(elem, ctx, &elem_follow);
+            let op_is_repeat = op matches { Repeat(_) };
+            let se_is_repeat = se matches { Repeat(_) };
+            if op_is_repeat || se_is_repeat {
                 let basic_follow = ctx.first_of_elements_from(&alt.elements, ei + 1);
-                let basic_second = compute_caller_follow_second(&alt.elements, ei + 1, ctx);
-                op = Op::Repeat(RepeatOp {
-                    kind: rep_op.kind,
-                    body: rep_op.body,
-                    strategy: rep_op.strategy,
-                    field: rep_op.field,
-                    caller_follow_first: basic_follow,
-                    caller_follow_second: basic_second,
-                    body_scannable: rep_op.body_scannable,
-                    body_has_field: rep_op.body_has_field,
-                });
+                if let Repeat(rep_op) = &op {
+                    let basic_second = compute_caller_follow_second(&alt.elements, ei + 1, ctx);
+                    op = Op::Repeat(RepeatOp {
+                        kind: rep_op.kind,
+                        body: rep_op.body,
+                        strategy: rep_op.strategy,
+                        field: rep_op.field,
+                        caller_follow_first: basic_follow,
+                        caller_follow_second: basic_second,
+                        body_scannable: rep_op.body_scannable,
+                        body_has_field: rep_op.body_has_field,
+                    });
+                }
+                if se_is_repeat {
+                    se = rebind_scan_repeat_caller_follow(se, basic_follow);
+                }
             }
             ops.push(op);
-            scan_elements.push(lower_scan_element(elem, ctx, &elem_follow));
+            scan_elements.push(se);
         }
 
         bodies.push(AltBody {
@@ -2132,12 +2363,13 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
 /// shapes panic with their own `TODO` markers so a half-lowered
 /// `Repeat` cannot quietly reach codegen.
 ///
-/// Strategy is `Plain`: emit produces `while peek_kind ∈ first_of_inner
-/// { … push body }` for `Star` and `Plus` (with `+`'s mandatory-first
-/// guard handled at emit time, not in the strategy enum). Phase
-/// 2.6 will introduce `WithFollowSubtraction` / `OptionalLookahead`
-/// / `OptionalScanGuard` once the per-call-site follow analysis
-/// runs as a pre-pass.
+/// Default strategy is `Plain`: emit produces `while peek_kind ∈
+/// first_of_inner { … push body }` for `Star` and `Plus` (with `+`'s
+/// mandatory-first guard handled at emit time, not in the strategy
+/// enum). When `ctx.current_follow_mask` is non-empty (variant
+/// bodies), `choose_greedy_repeat_strategy` picks
+/// `Suppressed` / `WithFollowSubtraction` / `OptionalLookahead` /
+/// `OptionalScanGuard` as appropriate.
 ///
 /// The inner Op uses a fresh `name_counts` because the binding name
 /// inside a loop body is a local to that iteration — it does not

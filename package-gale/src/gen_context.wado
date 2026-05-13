@@ -44,6 +44,22 @@ pub struct FollowVariantEntry {
     pub parse_used: bool,
 }
 
+/// Codegen-time context shared across emit walkers. Caches first /
+/// nullable / single-token / scannable analyses, the kind-set
+/// registry, and the variant-emit walker state.
+///
+/// Note on retired fields: `prefix_self_ref_min_prec` and
+/// `scan_ruleref_min_prec` used to live here as walker mutables;
+/// they were retired in Phase 2-F slice 5 once the corresponding
+/// values landed directly on the GIR (`RuleCallOp.min_prec_arg`,
+/// `ScanRuleCallElem.min_prec_arg`) or were threaded as explicit
+/// parameters (`gen_scan_op_element`'s `min_prec_override`). The
+/// remaining mutable walker fields (`group_counter` /
+/// `alt_gc_starts` / `current_follow_mask` / `ruleref_call_follow` /
+/// `current_outer_follow` / `current_rule_name`) are still
+/// consulted by the legacy `gen_element` / `gen_repeat` surface
+/// walker family; they retire once that family is migrated to GIR
+/// in Phase 2-G.
 pub struct GenContext {
     pub parser_rules: Array<ParserRule>,
     pub lit_tokens: Array<LitToken>,
@@ -55,25 +71,6 @@ pub struct GenContext {
     pub current_rule_name: String,
     pub group_counter: i32,
     pub alt_gc_starts: Array<i32>,
-    /// Override for self-recursive RuleRef calls inside a prefix alt body.
-    /// When non-zero, `gen_element`'s RuleRef branch emits
-    /// `parse_<rule>(p, prefix_self_ref_min_prec)` instead of the default
-    /// `parse_<rule>(p)`. Set by call sites that wrap `gen_alt_body` for
-    /// prefix alts (non-LR alts containing a self-ref) so the inner
-    /// self-ref runs with the precedence ANTLR4 assigns to that alt.
-    /// 0 means no override (the default emission applies).
-    pub prefix_self_ref_min_prec: i32,
-    /// `min_prec` argument that `gen_scan_element` passes when emitting a
-    /// `scan_<rule>(tokens, pos, …)` call for a `RuleRef`. Default is 0
-    /// (full LR scan, matching the parser side). `gen_bt_scan_elements`
-    /// raises this to `i32::MAX` for the LAST element when it is a
-    /// self-reference to the current rule, so that prefix-alt scans
-    /// (`op expr`, etc.) short-circuit the LR suffix loop the OUTER
-    /// LR loop is going to consume — mirroring ANTLR4's k-lookahead.
-    /// Non-LR `scan_<rule>` accept an unused `min_prec` parameter so the
-    /// emitted call site is uniform regardless of whether the target rule
-    /// is left-recursive.
-    pub scan_ruleref_min_prec: i32,
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: TreeMap<String, String>,
@@ -144,8 +141,6 @@ impl GenContext {
             current_rule_name: "",
             group_counter: 0,
             alt_gc_starts: [],
-            prefix_self_ref_min_prec: 0,
-            scan_ruleref_min_prec: 0,
             single_alt_owner,
             kind_set_registry: TreeMap::<String, KindSetEntry>::new(),
             tail_greedy_cache: TreeMap::<String, Array<String>>::new(),
