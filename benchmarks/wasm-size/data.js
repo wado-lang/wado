@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778641517295,
+  "lastUpdate": 1778676424279,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21441,6 +21441,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b2c4b9b0d6867d9a5a877eb31d2a3e634b76f59a"
         },
         "date": 1778641517164,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 511920,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "225aeb49c99faf4b838b7506a383394748f196e2",
+          "message": "Merge pull request #1055 from wado-lang/gfx/gale-phase2f-scan-min-prec\n\ngale Phase 2-F: bake LR self-ref min_prec & Optional caller-follow into GIR, retire two ctx walker fields",
+          "timestamp": "2026-05-13T21:40:12+09:00",
+          "tree_id": "e7d6be8d837ca37109757e5a8034238395e80a8a",
+          "url": "https://github.com/wado-lang/wado/commit/225aeb49c99faf4b838b7506a383394748f196e2"
+        },
+        "date": 1778676423893,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
