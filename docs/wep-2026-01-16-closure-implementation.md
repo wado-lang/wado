@@ -12,7 +12,7 @@ let g = || { return count; };  // Captures outer variable 'count'
 The language design requires:
 
 1. First-class functions (closures can be passed as values)
-2. Capture by reference (per [WEP: Value Semantics and Reference Captures](./wep-2026-01-12-value-semantics-and-captures.md))
+2. Capture by reference (per [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md))
 3. Multiple closures can capture the same variable
 4. Closures must work with effect system and `captures[...]` tracking
 5. Efficient representation targeting Wasm GC
@@ -431,7 +431,7 @@ Most languages with GC targeting Wasm use **Option 1** (struct + funcref) becaus
 
 ### Integration with `captures[...]` Tracking
 
-Per the [Value Semantics WEP](./wep-2026-01-12-value-semantics-and-captures.md), closures that capture variables require `captures[...]` annotation in function types:
+Per the [Value Semantics WEP](./wep-2026-01-12-value-semantics-and-stores.md), closures that capture variables require `captures[...]` annotation in function types:
 
 ```wado
 // Closure type with captures
@@ -914,7 +914,7 @@ The specialised path (closure local stays as `&__Closure_N`) does not use the vt
 
 ## References
 
-- [WEP: Value Semantics and Reference Captures](./wep-2026-01-12-value-semantics-and-captures.md)
+- [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)
 - [WebAssembly GC Proposal](https://github.com/WebAssembly/gc)
 - [Wasm Component Model](https://github.com/WebAssembly/component-model)
 - [Rust Closure Implementation](https://doc.rust-lang.org/book/ch13-01-closures.html)

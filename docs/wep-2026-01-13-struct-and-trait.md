@@ -2,7 +2,7 @@
 
 ## Context
 
-Wado needs a type system for defining custom data types and shared behavior. This WEP defines the syntax and semantics for structs (product types) and traits (behavior abstraction), building on the value semantics established in `wep-2026-01-12-value-semantics-and-captures.md`.
+Wado needs a type system for defining custom data types and shared behavior. This WEP defines the syntax and semantics for structs (product types) and traits (behavior abstraction), building on the value semantics established in `wep-2026-01-12-value-semantics-and-stores.md`.
 
 ### Design Goals
 
@@ -629,4 +629,4 @@ impl<T: Display> Display for Stack<T> {
 - [Rust Traits](https://doc.rust-lang.org/book/ch10-02-traits.html)
 - [Rust Clone vs Copy](https://doc.rust-lang.org/std/clone/trait.Clone.html)
 - [Rust Drop](https://doc.rust-lang.org/std/ops/trait.Drop.html)
-- [WEP: Value Semantics and Captures](./wep-2026-01-12-value-semantics-and-captures.md)
+- [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)

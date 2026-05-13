@@ -773,14 +773,39 @@ if opt matches { Some(x) && x > 0 } { }  // OK
 
 - **Wasm-GC based**: Garbage collection delegated to runtime
 - **Lifetime inference**: No explicit lifetime annotations required
+- **Value semantics**: Every value is deeply copied on assignment, parameter passing, and return — references (`&T`, `&mut T`) are the only types that share state
 - **Explicit move**: Ownership transfer only when explicitly stated
+
+### Value Semantics
+
+See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
+
+Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `Array<T>` all follow this rule uniformly. The only exceptions are reference types (`&T`, `&mut T`), which alias the underlying value.
+
+```wado
+struct Point { x: i32, y: i32 }
+
+let a = Point { x: 1, y: 2 };
+let b = a;       // b is a deep copy of a
+b.x = 10;        // does not affect a
+assert a.x == 1;
+```
+
+In-place mutation through a parameter binding (field writes, method calls, index writes) operates on the callee's local copy and is not visible to the caller. To allow callee-side mutation, pass a reference explicitly:
+
+```wado
+fn translate(p: &mut Point, dx: i32, dy: i32) {
+    p.x += dx;   // visible to caller (reference)
+    p.y += dy;
+}
+```
 
 ### Move Syntax (not yet implemented)
 
 ```wado
-// Default: copy or reference (depending on type)
+// Default: deep copy (references alias)
 let a = some_value;
-let b = a;          // a is still usable
+let b = a;          // a is still usable; b is a copy
 
 // Explicit move
 let b = move a;     // a is invalidated
@@ -1075,7 +1100,7 @@ fn normalize(mut s: String) -> String {
 }
 ```
 
-The `mut` keyword grants write access to the local parameter binding inside the function. Due to Wado's value semantics for primitives (i32, f64, bool, char, etc.), reassigning a `mut` primitive parameter never affects the caller's variable — primitives are passed as Wasm stack values. For GC-managed reference types (struct, String, Array), reassigning the parameter binding (`p = new_value`) does not affect the caller's variable, but in-place mutations via method calls or field writes (`p.x = ...`) operate on the shared GC object and are visible to the caller.
+The `mut` keyword grants write access to the local parameter binding inside the function. Wado uses value semantics for every parameter: every value is deeply copied when passed to a function, except references (`&T`, `&mut T`) which share state with the caller. This applies uniformly to primitives, structs, `String`, and `Array<T>`. Inside the callee, both reassignment (`p = new_value`) and in-place mutations — field writes (`p.x = ...`), method calls (`s.push_str("!")`, `arr.push(0)`), and index writes (`arr[0] = ...`) — operate on the callee's local copy and are not visible to the caller. To let the callee mutate the caller's value, pass an explicit reference (`&mut p`).
 
 ```wado
 fn countdown(mut n: i32) with Stdout {
