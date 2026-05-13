@@ -4173,7 +4173,11 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
         // their internal `gen_group_store_any` / shape-based lookahead
         // analysis still consults the surface element directly — but
         // every reach into `gen_repeat_body` from a Repeat element is
-        // already gone after this arm.
+        // already gone after this arm. Going fully op-driven here is
+        // gated on aligning the lower-time strategy with the legacy
+        // k-token / shape lookahead dispatch (lower's narrower
+        // OptionalLookahead can't replace legacy's la_depth-1 case),
+        // which is a separate slice.
         if let Group(g_op) = &rep_op.body {
             let inner = &rep.element;
             if rep_op.body_has_field {
