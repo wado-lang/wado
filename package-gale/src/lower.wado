@@ -179,11 +179,9 @@ pub fn lower_with_ctx(grammar: &Grammar, lit_tokens: &Array<LitToken>, ctx: &mut
 /// Lower each registered follow-aware variant. Runs as a fixed-point
 /// loop because a variant body may itself register new variants. The
 /// per-variant lowering installs `ctx.current_follow_mask` (consumed
-/// by `lower_repeat_op` for `Suppressed` / `WithFollowSubtraction`
-/// strategies — those are stubs today; Phase 2.6 follow-up will fill
-/// them in once a committed grammar exercises them) before walking
-/// the rule, then restores the previous mask so subsequent variants
-/// see a clean slate.
+/// by `lower_repeat_op` to pick `Suppressed` / `WithFollowSubtraction`
+/// strategies) before walking the rule, then restores the previous
+/// mask so subsequent variants see a clean slate.
 fn lower_variant_rules(parser_rules: &Array<ParserRule>, ctx: &mut GenContext) -> Array<Rule> {
     let mut result: Array<Rule> = [];
     let mut lowered_count: i32 = 0;
@@ -969,8 +967,10 @@ fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_idx: i32, ctx: &mut GenContex
     let alt = &rule.alternatives[alt_idx];
     let mut elements: Array<ScanElement> = [];
     // LR suffix walks `alt.elements[1..]` — the leading self-ref is
-    // stripped. The end-of-suffix follow is the rule's outer follow
-    // (empty here; Phase 2.6 may refine).
+    // stripped. The end-of-suffix outer follow is left empty; threading
+    // the LR rule's caller-side follow here would require an LR-variant
+    // mechanism analogous to the non-LR follow variants, which no
+    // committed grammar yet exercises.
     for let mut i = 1; i < alt.elements.len(); i += 1 {
         elements.push(lower_alt_scan_element(&alt.elements, i, ctx));
     }
@@ -2328,12 +2328,13 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
 /// shapes panic with their own `TODO` markers so a half-lowered
 /// `Repeat` cannot quietly reach codegen.
 ///
-/// Strategy is `Plain`: emit produces `while peek_kind ∈ first_of_inner
-/// { … push body }` for `Star` and `Plus` (with `+`'s mandatory-first
-/// guard handled at emit time, not in the strategy enum). Phase
-/// 2.6 will introduce `WithFollowSubtraction` / `OptionalLookahead`
-/// / `OptionalScanGuard` once the per-call-site follow analysis
-/// runs as a pre-pass.
+/// Default strategy is `Plain`: emit produces `while peek_kind ∈
+/// first_of_inner { … push body }` for `Star` and `Plus` (with `+`'s
+/// mandatory-first guard handled at emit time, not in the strategy
+/// enum). When `ctx.current_follow_mask` is non-empty (variant
+/// bodies), `choose_greedy_repeat_strategy` picks
+/// `Suppressed` / `WithFollowSubtraction` / `OptionalLookahead` /
+/// `OptionalScanGuard` as appropriate.
 ///
 /// The inner Op uses a fresh `name_counts` because the binding name
 /// inside a loop body is a local to that iteration — it does not
