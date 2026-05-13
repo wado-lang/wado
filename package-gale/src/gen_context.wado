@@ -55,17 +55,6 @@ pub struct GenContext {
     pub current_rule_name: String,
     pub group_counter: i32,
     pub alt_gc_starts: Array<i32>,
-    /// `min_prec` argument that `gen_scan_element` passes when emitting a
-    /// `scan_<rule>(tokens, pos, …)` call for a `RuleRef`. Default is 0
-    /// (full LR scan, matching the parser side). `gen_bt_scan_elements`
-    /// raises this to `i32::MAX` for the LAST element when it is a
-    /// self-reference to the current rule, so that prefix-alt scans
-    /// (`op expr`, etc.) short-circuit the LR suffix loop the OUTER
-    /// LR loop is going to consume — mirroring ANTLR4's k-lookahead.
-    /// Non-LR `scan_<rule>` accept an unused `min_prec` parameter so the
-    /// emitted call site is uniform regardless of whether the target rule
-    /// is left-recursive.
-    pub scan_ruleref_min_prec: i32,
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: TreeMap<String, String>,
@@ -136,7 +125,6 @@ impl GenContext {
             current_rule_name: "",
             group_counter: 0,
             alt_gc_starts: [],
-            scan_ruleref_min_prec: 0,
             single_alt_owner,
             kind_set_registry: TreeMap::<String, KindSetEntry>::new(),
             tail_greedy_cache: TreeMap::<String, Array<String>>::new(),

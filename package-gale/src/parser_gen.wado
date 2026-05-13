@@ -1951,25 +1951,20 @@ fn gen_scan_repeat_optional_with_follow(w: &mut CodeWriter, rep: &RepeatElement,
     w.end();
 }
 
-/// Op-driven bt-scan walker. Raises `ctx.scan_ruleref_min_prec` to
-/// `i32::MAX` for the LAST element only when it is a self-recursive
-/// `ScanRuleCall`, so that `gen_scan_op_element` emits
-/// `scan_<rule>(tokens, pos, i32::MAX)` for that one position. The
-/// MAX guards short-circuit the LR suffix loop inside the target
-/// rule's `scan_<rule>` — the prefix-alt scenario where the outer
-/// LR loop will consume the trailing tokens. Inner self-refs are
+/// Op-driven bt-scan walker. Passes `i32::MAX` as the
+/// `min_prec_override` for the LAST element when it is a self-
+/// recursive `ScanRuleCall`, so the trailing self-ref short-
+/// circuits the LR suffix loop inside the target rule's
+/// `scan_<rule>` — the prefix-alt scenario where the OUTER LR
+/// loop will consume the trailing tokens. Inner self-refs are
 /// bounded by surrounding tokens (e.g. `K_WHEN expr K_THEN expr`
 /// inside `case_expr`) and need a full scan.
 fn gen_bt_scan_op_elements(w: &mut CodeWriter, scan_elems: &Array<ScanElement>, end: i32, ctx: &mut GenContext) {
     for let mut i = 0; i < end; i += 1 {
         let se = &scan_elems[i];
         let is_last_self_ref = i == end - 1 && is_self_ref_scan_call(se, &ctx.current_rule_name);
-        let saved = ctx.scan_ruleref_min_prec;
-        if is_last_self_ref {
-            ctx.scan_ruleref_min_prec = i32::MAX;
-        }
-        gen_scan_op_element(w, se, ctx, &"return -1;");
-        ctx.scan_ruleref_min_prec = saved;
+        let min_prec_override = if is_last_self_ref { i32::MAX } else { 0 };
+        gen_scan_op_element(w, se, ctx, &"return -1;", min_prec_override);
     }
 }
 
@@ -2182,7 +2177,7 @@ fn gen_scan_lookahead_condition(ctx: &mut GenContext, sig: &Array<Array<String>>
 /// variant. Lower has already resolved kind constants, variant ids,
 /// min-prec, repeat strategy / first sets, and group dispatch shape;
 /// emit reads them verbatim.
-fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContext, fail_stmt: &String) {
+fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContext, fail_stmt: &String, min_prec_override: i32 = 0) {
     if let Token(t) = se {
         w.line(`if pos >= tokens.len() || tokens[pos].kind != {t.kind} \{ {*fail_stmt} \}`);
         w.line("pos += 1;");
@@ -2197,10 +2192,11 @@ fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContex
         // `min_prec_arg`, when set, is the baked precedence for a
         // self-recursive call inside an LR suffix (stamped by
         // `stamp_lr_self_ref_min_prec`). Otherwise fall back to
-        // `ctx.scan_ruleref_min_prec`: bt-scan paths set it to
-        // `i32::MAX` to short-circuit any LR climb in the target
-        // rule; every other call site leaves it at the default `0`.
-        let min_prec = if let Some(p) = rc.min_prec_arg { p } else { ctx.scan_ruleref_min_prec };
+        // `min_prec_override`: `gen_bt_scan_op_elements` passes
+        // `i32::MAX` for the trailing self-ref to short-circuit
+        // any LR climb in the target rule; every other call site
+        // leaves it at the default `0`.
+        let min_prec = if let Some(p) = rc.min_prec_arg { p } else { min_prec_override };
         w.line(`pos = {fn_name}(tokens, pos, {min_prec});`);
         w.line(`if pos < 0 \{ {*fail_stmt} \}`);
         return;
@@ -2254,7 +2250,11 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         } else {
             `scan_{rc.target_snake}`;
         };
-        let min_prec = if let Some(p) = rc.min_prec_arg { p } else { ctx.scan_ruleref_min_prec };
+        // `_assign` only fires inside Repeat bodies — never reachable
+        // from bt-scan's trailing-self-ref site, so `min_prec` here
+        // is always the rule's default `0` (or whatever
+        // `min_prec_arg` baked at lower time, e.g. LR self-refs).
+        let min_prec = if let Some(p) = rc.min_prec_arg { p } else { 0 };
         w.line(`pos = {fn_name}(tokens, pos, {min_prec});`);
         return;
     }
@@ -2562,15 +2562,16 @@ fn gen_scan_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, fa
         return;
     }
     if let RuleRef(r) = elem {
-        // Always pass min_prec — non-LR `scan_<rule>` accept and ignore it.
-        // bt-scan sets `ctx.scan_ruleref_min_prec` to `i32::MAX` so any LR
-        // suffix loop in the target rule short-circuits.
+        // Always pass min_prec — non-LR `scan_<rule>` accept and
+        // ignore it. The legacy surface walker is only reached from
+        // emit paths that aren't the bt-scan trailing-self-ref site,
+        // so the override is always the rule's default `0`.
         let follow = ctx.ruleref_call_follow;
         let variant_id = if follow.is_empty() { null } else { ctx.intern_follow_variant(&r.name, &follow, true) };
         let call = if let Some(id) = variant_id {
-            `scan_{r.snake_name}__follow_{id}(tokens, pos, {ctx.scan_ruleref_min_prec})`;
+            `scan_{r.snake_name}__follow_{id}(tokens, pos, 0)`;
         } else {
-            `scan_{r.snake_name}(tokens, pos, {ctx.scan_ruleref_min_prec})`;
+            `scan_{r.snake_name}(tokens, pos, 0)`;
         };
         w.line(`pos = {call};`);
         w.line(`if pos < 0 \{ {*fail_stmt} \}`);
@@ -2616,7 +2617,7 @@ fn gen_scan_element_assign(w: &mut CodeWriter, elem: &Element, ctx: &mut GenCont
         return;
     }
     if let RuleRef(r) = elem {
-        w.line(`pos = scan_{r.snake_name}(tokens, pos, {ctx.scan_ruleref_min_prec});`);
+        w.line(`pos = scan_{r.snake_name}(tokens, pos, 0);`);
         return;
     }
     if let Wildcard(_) = elem {
