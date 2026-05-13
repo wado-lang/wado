@@ -1501,27 +1501,14 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &A
         w.line("let mut pos = pos;");
 
         // Walk lr_alt.scan_suffix.elements (which runs in lockstep
-        // with alt.elements[1..] and lr_alt.suffix.ops). Self-
-        // recursive RuleCalls carry their `min_prec_arg` baked on
-        // the ScanRuleCallElem by `stamp_lr_self_ref_min_prec`, so
-        // the op-driven scan emit handles them uniformly. One case
-        // still needs data only the parse-side suffix_op carries:
-        //   * Optional+RuleRef-inner → emit with the
-        //     `caller_follow_first` baked onto the parse RepeatOp.
-        for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
-            let elem = &alt.elements[ei];
-            let suffix_op = &lr_alt.suffix.ops[ei - 1];
-            if let Repeat(rep) = elem {
-                if let Optional = rep.kind {
-                    if let Repeat(rep_op) = suffix_op {
-                        if op_is_rulecall(&rep_op.body) {
-                            gen_scan_repeat_optional_with_follow(w, rep, ctx, &rep_op.caller_follow_first);
-                            continue;
-                        }
-                    }
-                }
-            }
-            let scan_elem = &lr_alt.scan_suffix.elements[ei - 1];
+        // with alt.elements[1..] and lr_alt.suffix.ops). Every
+        // shape — including self-recursive RuleCalls and
+        // Optional+RuleRef — is now driven by lower-baked data on
+        // the `ScanElement`: `min_prec_arg` for self-refs (via
+        // `stamp_lr_self_ref_min_prec`) and `caller_follow_first`
+        // for Optionals (via the alt-walker's `lower_scan_*` post-
+        // pass + `gen_scan_op_repeat`'s subtraction).
+        for let scan_elem of &lr_alt.scan_suffix.elements {
             gen_scan_op_element(w, scan_elem, ctx, &"return -1;");
         }
         w.line("return pos;");
@@ -2324,7 +2311,25 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
         if loop_first.is_empty() {
             return;
         }
-        let check = ctx.kind_check_str(&loop_first, "tokens[pos].kind");
+        // Mirror the pre-Phase-2-F `gen_scan_repeat_optional_with_follow`
+        // contract: when the Optional's body is a RuleCall, subtract
+        // the caller-side follow first (the tokens that may appear
+        // right after this Optional in the surrounding alt) so we
+        // don't fire the Optional on a token that belongs to the
+        // caller's next position. Strategy-subtracted `loop_first`
+        // already accounts for the variant mask; the additional
+        // `caller_follow_first` subtraction matches the surface
+        // emitter's `combined_follow = follow_first ∪ mask`.
+        let body_is_rulecall = if let RuleCall(_) = &re.body { true } else { false };
+        let effective_first = if body_is_rulecall && !re.caller_follow_first.is_empty() {
+            subtract_sets(&loop_first, &re.caller_follow_first);
+        } else {
+            loop_first;
+        };
+        if effective_first.is_empty() {
+            return;
+        }
+        let check = ctx.kind_check_str(&effective_first, "tokens[pos].kind");
         w.begin(`if pos < tokens.len() && {check}`);
         w.line("let sp = pos;");
         gen_scan_op_element_assign(w, &re.body, ctx);

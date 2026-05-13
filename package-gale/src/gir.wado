@@ -743,6 +743,15 @@ pub struct ScanRepeatElem {
     /// iteration condition. WithFollowSubtraction carries the
     /// effective (mask-subtracted) first separately in its payload.
     pub inner_first: Array<String>,
+    /// Scan-side mirror of `RepeatOp.caller_follow_first`. Default is
+    /// the variant-aware `outer_follow` at construction time; alt-level
+    /// scan walkers override it with `first_of_elements_from(elements,
+    /// i + 1)` to match the parse-side post-pass. Consumed by op-driven
+    /// emit's Optional+RuleRef-inner case to suppress the inner fire
+    /// when the outer next-token is a caller-side follow token (the
+    /// pre-Phase-2-F `gen_scan_repeat_optional_with_follow` contract).
+    /// Empty when the Repeat is at the alt's tail.
+    pub caller_follow_first: Array<String>,
 }
 
 pub variant ScanRepeatStrategy {

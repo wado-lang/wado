@@ -417,15 +417,31 @@ fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
             }
         },
         Repeat(r) => {
-            // `gen_scan_op_repeat_body` reads `inner_first` for the
-            // while-loop guard.  `WithFollowSubtraction` overrides it
-            // with `effective_first`.
+            // `gen_scan_op_repeat` reads `inner_first` for the
+            // while-loop guard. `WithFollowSubtraction` overrides it
+            // with `effective_first`. For Optional + RuleRef bodies
+            // the emit additionally subtracts `caller_follow_first`
+            // from the loop's first set — pre-register that derived
+            // set too so the `_gale_kind_set_<id>` registry stays
+            // anchored to the lower walk order.
             if r.inner_first.len() >= 2 {
                 ctx.intern_kind_set(&r.inner_first);
             }
-            if let WithFollowSubtraction(s) = &r.strategy {
+            let loop_first = if let WithFollowSubtraction(s) = &r.strategy {
                 if s.effective_first.len() >= 2 {
                     ctx.intern_kind_set(&s.effective_first);
+                }
+                s.effective_first;
+            } else {
+                r.inner_first;
+            };
+            if let Optional = r.kind {
+                let body_is_rulecall = if let RuleCall(_) = &r.body { true } else { false };
+                if body_is_rulecall && !r.caller_follow_first.is_empty() {
+                    let effective = subtract_first(&loop_first, &r.caller_follow_first);
+                    if effective.len() >= 2 {
+                        ctx.intern_kind_set(&effective);
+                    }
                 }
             }
             walk_scan_element_for_kind_sets(&r.body, ctx);
@@ -967,7 +983,17 @@ fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_idx: i32, ctx: &mut GenContex
     let outer_follow: Array<String> = [];
     for let mut i = 1; i < alt.elements.len(); i += 1 {
         let elem_follow = inner_follow_at(&alt.elements, i, ctx);
-        elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
+        let mut se = lower_scan_element(&alt.elements[i], ctx, &elem_follow);
+        // Mirror parse-side `lower_lr_alt_suffix`'s Repeat post-pass:
+        // a top-level Repeat carries the basic `first_of_elements_from`
+        // for the surrounding suffix, so emit's op-driven
+        // Optional+RuleRef gate can suppress the inner fire against
+        // the alt's next-position first.
+        if let Repeat(_) = &se {
+            let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
+            se = rebind_scan_repeat_caller_follow(se, basic_follow);
+        }
+        elements.push(se);
     }
     return ScanBody { elements };
 }
@@ -1344,7 +1370,17 @@ fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext) -> ScanBody {
     let mut elements: Array<ScanElement> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let elem_follow = inner_follow_at(&alt.elements, i, ctx);
-        elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
+        let mut se = lower_scan_element(&alt.elements[i], ctx, &elem_follow);
+        // Mirror parse-side `lower_alt_body`'s post-pass: rebind a
+        // top-level Repeat's `caller_follow_first` to the basic first
+        // set of the surrounding suffix (variant-mask propagation
+        // already happened inside `inner_follow_at`; emit's
+        // op-driven Optional+RuleRef gate wants the basic set).
+        if let Repeat(_) = &se {
+            let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
+            se = rebind_scan_repeat_caller_follow(se, basic_follow);
+        }
+        elements.push(se);
     }
     return ScanBody { elements };
 }
@@ -1395,7 +1431,12 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &Array
         let mut elements: Array<ScanElement> = [];
         for let mut i = 0; i < alt.elements.len(); i += 1 {
             let elem_follow = inner_follow_at(&alt.elements, i, ctx);
-            elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
+            let mut se = lower_scan_element(&alt.elements[i], ctx, &elem_follow);
+            if let Repeat(_) = &se {
+                let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
+                se = rebind_scan_repeat_caller_follow(se, basic_follow);
+            }
+            elements.push(se);
         }
         let mut visiting: Array<String> = [];
         let alt_first = ctx.first_of_alt(alt, &mut visiting);
@@ -1439,7 +1480,12 @@ fn lower_general_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, out
         let mut elements: Array<ScanElement> = [];
         for let mut i = 0; i < alt.elements.len(); i += 1 {
             let elem_follow = inner_follow_at(&alt.elements, i, ctx);
-            elements.push(lower_scan_element(&alt.elements[i], ctx, &elem_follow));
+            let mut se = lower_scan_element(&alt.elements[i], ctx, &elem_follow);
+            if let Repeat(_) = &se {
+                let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
+                se = rebind_scan_repeat_caller_follow(se, basic_follow);
+            }
+            elements.push(se);
         }
         bodies.push(ScanBody { elements });
         let mut visiting: Array<String> = [];
@@ -1498,7 +1544,36 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &A
         body,
         strategy: strategy,
         inner_first: inner_first,
+        // Default seed mirrors parse-side `lower_repeat_op`: the
+        // variant-aware `outer_follow` so nested Repeats (not at
+        // alt-position) carry a sensible value. Alt-level scan
+        // walkers (`lower_scan_body`, `lower_lr_alt_scan_suffix`,
+        // and the per-shape walks inside `lower_scan_group`)
+        // overwrite this with `first_of_elements_from(alt_elements,
+        // i + 1)` so emit's op-driven Optional+RuleRef gate reads
+        // the same basic follow as the parse side's
+        // `RepeatOp.caller_follow_first`.
+        caller_follow_first: *outer_follow,
     });
+}
+
+/// Rebuild a top-level `ScanElement::Repeat` with a fresh
+/// `caller_follow_first`. No-op for non-Repeat elements. Used by
+/// alt-level scan walkers (`lower_scan_body`,
+/// `lower_lr_alt_scan_suffix`, per-shape walks inside groups) to
+/// override the default that `lower_scan_repeat` seeded with
+/// `outer_follow`, matching the parse-side `RepeatOp` post-pass.
+fn rebind_scan_repeat_caller_follow(se: ScanElement, caller_follow_first: Array<String>) -> ScanElement {
+    if let Repeat(re) = se {
+        return ScanElement::Repeat(ScanRepeatElem {
+            kind: re.kind,
+            body: re.body,
+            strategy: re.strategy,
+            inner_first: re.inner_first,
+            caller_follow_first: caller_follow_first,
+        });
+    }
+    return se;
 }
 
 /// True iff any element in the alt is an Optional Repeat (possibly
@@ -1915,8 +1990,8 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
         // alt's `outer_follow`.
         let elem_follow = inner_follow_at(&alt.elements, i, ctx);
         let mut op = lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow);
+        let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
         if let Repeat(rep_op) = &op {
-            let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
             op = Op::Repeat(RepeatOp {
                 kind: rep_op.kind,
@@ -1930,7 +2005,11 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
             });
         }
         ops.push(op);
-        scan_elements.push(lower_scan_element(elem, ctx, &elem_follow));
+        let mut se = lower_scan_element(elem, ctx, &elem_follow);
+        if let Repeat(_) = &se {
+            se = rebind_scan_repeat_caller_follow(se, basic_follow);
+        }
+        scan_elements.push(se);
     }
 
     let body = AltBody {
@@ -2109,7 +2188,15 @@ fn lower_simple_cst_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, 
         // this re-introduces (e.g. `scan_sql_stmt_list__follow_0`) are
         // currently observable; see the matching commit message for the
         // tradeoff.
-        bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, outer_follow)] });
+        let mut se = lower_scan_element(elem, ctx, outer_follow);
+        if let Repeat(_) = &se {
+            // Single-element alt: nothing after position 0, so the
+            // basic follow is empty. Matches parse-side
+            // `lower_simple_cst_alt_call`'s `first_of_elements_from(..., 1)`.
+            let basic_follow: Array<String> = [];
+            se = rebind_scan_repeat_caller_follow(se, basic_follow);
+        }
+        bodies.push(ScanBody { elements: [se] });
         let mut visiting: Array<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
         all_indices.push(i);
@@ -2200,8 +2287,8 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
             let elem = &alt.elements[ei];
             let elem_follow = inner_follow_at(&alt.elements, ei, ctx);
             let mut op = lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow);
+            let basic_follow = ctx.first_of_elements_from(&alt.elements, ei + 1);
             if let Repeat(rep_op) = &op {
-                let basic_follow = ctx.first_of_elements_from(&alt.elements, ei + 1);
                 let basic_second = compute_caller_follow_second(&alt.elements, ei + 1, ctx);
                 op = Op::Repeat(RepeatOp {
                     kind: rep_op.kind,
@@ -2215,7 +2302,11 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
                 });
             }
             ops.push(op);
-            scan_elements.push(lower_scan_element(elem, ctx, &elem_follow));
+            let mut se = lower_scan_element(elem, ctx, &elem_follow);
+            if let Repeat(_) = &se {
+                se = rebind_scan_repeat_caller_follow(se, basic_follow);
+            }
+            scan_elements.push(se);
         }
 
         bodies.push(AltBody {
