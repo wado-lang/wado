@@ -4,13 +4,13 @@ Wado is a programming language targeting Wasm/WASI -- Wasm in plain sight.
 
 ## Overview
 
-| Item      | Description                         |
-| --------- | ----------------------------------- |
-| Name      | Wado                                |
-| Extension | `.wado`                             |
-| Paradigm  | Imperative, Reactive, Effect System |
-| Typing    | Static, Strong, Inferred            |
-| Target    | Wasm/WASI                           |
+| Item      | Description               |
+| --------- | ------------------------- |
+| Name      | Wado                      |
+| Extension | `.wado`                   |
+| Paradigm  | Imperative, Effect System |
+| Typing    | Static, Strong, Inferred  |
+| Target    | Wasm/WASI                 |
 
 See also: [Cheatsheet](docs/cheatsheet.md) for quick syntax reference.
 
@@ -774,7 +774,6 @@ if opt matches { Some(x) && x > 0 } { }  // OK
 - **Wasm-GC based**: Garbage collection delegated to runtime
 - **Lifetime inference**: No explicit lifetime annotations required
 - **Value semantics**: Every value is deeply copied on assignment, parameter passing, and return — references (`&T`, `&mut T`) are the only types that share state
-- **Explicit move**: Ownership transfer only when explicitly stated
 
 ### Value Semantics
 
@@ -786,7 +785,7 @@ Assignment, parameter passing, and return all perform a deep copy of the value. 
 struct Point { x: i32, y: i32 }
 
 let a = Point { x: 1, y: 2 };
-let b = a;       // b is a deep copy of a
+let mut b = a;   // b is a deep copy of a
 b.x = 10;        // does not affect a
 assert a.x == 1;
 ```
@@ -798,30 +797,6 @@ fn translate(p: &mut Point, dx: i32, dy: i32) {
     p.x += dx;   // visible to caller (reference)
     p.y += dy;
 }
-```
-
-### Move Syntax (not yet implemented)
-
-```wado
-// Default: deep copy (references alias)
-let a = some_value;
-let b = a;          // a is still usable; b is a copy
-
-// Explicit move
-let b = move a;     // a is invalidated
-println(a);         // Compile error: a has been moved
-
-// Move to function
-consume(move data);
-```
-
-### Unique Ownership (not yet implemented)
-
-```wado
-// Enforce unique ownership
-let unique handle = open_file("data.txt");
-let other = handle;       // Error: unique cannot be implicitly copied
-let other = move handle;  // OK: explicit move
 ```
 
 ## Type System
@@ -870,7 +845,6 @@ The **prelude** (`core:prelude`) is automatically imported into every module, pr
 - `String` - UTF-8 string type
 - `Array<T>` - Dynamic array type
 - `Tuple<T1, T2, ...>` - Alias for `[T1, T2, ...]`
-- `Reactive<T>` - Reactive value
 - `Option<T>` and its variants: `Some(x)`, `None` (also accessible via `null` keyword)
 - `Result<T, E>` and its variants: `Ok(x)`, `Err(e)`
 - `Stream<T>` - Component Model async stream
@@ -884,7 +858,7 @@ The **prelude** (`core:prelude`) is automatically imported into every module, pr
 #![no_prelude]  // At the top of a module
 
 // Now you must explicitly import everything
-use {String, Array, Tuple, Reactive, Option, Result, Stream, Future, Pollable} from "core:prelude";
+use {String, Array, Tuple, Option, Result, Stream, Future, Pollable} from "core:prelude";
 ```
 
 ### Primitive Types
@@ -1112,7 +1086,7 @@ fn countdown(mut n: i32) with Stdout {
 
 let x = 3;
 countdown(x);
-// x is still 3 — primitive parameters are value types
+// x is still 3 — every parameter is passed by value
 ```
 
 Closures also support `mut` parameters:
@@ -1138,8 +1112,8 @@ fn bad(n: i32) {
 
 **Design Principles**:
 
-- Value semantics: Conceptually behaves like a value type
-- Immutable content: String data cannot be modified in-place
+- Value semantics: deep-copied on assignment, parameter passing, and return — passing a `String` to a function gives the callee its own buffer
+- Mutable through the local binding: methods like `push_str` and operators like `+=` modify the receiver in place, but never the caller's binding
 - GC-managed: Memory is automatically managed by Wasm GC
 - UTF-8 encoding: Direct mapping to Component Model `string`
 
@@ -1246,33 +1220,6 @@ let mut result = String::with_capacity(1000);
 for let item of items {
     result += item;  // No reallocations if within capacity
 }
-```
-
-#### Semantic vs Implementation
-
-```wado
-// Semantically: value copy
-let s1 = "hello";
-let s2 = s1;  // s1 still usable
-
-// Implementation: reference sharing (safe because immutable)
-// No actual copy of string data occurs
-```
-
-**Explicit move**:
-
-```wado
-let s1 = "hello";
-let s2 = move s1;  // s1 invalidated, no copy
-// s1 is no longer accessible
-```
-
-**Implicit move optimization**:
-
-```wado
-let mut s = "hello";
-let temp = "world";
-s = temp;  // If temp is not used after, compiler may optimize to move
 ```
 
 #### Operator Consistency
@@ -3761,12 +3708,6 @@ test "add negative numbers" {
 }
 ```
 
-## Reactive System
-
-Wado has built-in reactive signals with compile-time dependency analysis and a push-pull update algorithm. See [WEP: Reactive Signals](./wep-2026-04-04-reactive-signals.md) for the full design. **Not yet implemented.**
-
----
-
 ## Concurrency Model
 
 ### Stack Switching Based (Colorless)
@@ -4241,38 +4182,6 @@ match result {
     Ok(value) => process(value),
     Err(e) => handle_error(e),
 }
-```
-
-## JSX
-
-JSX is built into the language:
-
-```wado
-fn App() -> Element with Dom {
-    let reactive mut count = 0;
-
-    return <div class="container">
-        <h1>Counter</h1>
-        <p>Count: {count}</p>
-        <button onclick={|_| count += 1}>
-            Increment
-        </button>
-    </div>;
-}
-
-// Conditional rendering
-<div>
-    {match status {
-        "loading" => <Spinner />,
-        "success" => <Content data={data} />,
-        "error" => <Error message={error} />,
-    }}
-</div>
-
-// Lists
-<ul>
-    {items.map(|item| <li key={item.id}>{item.name}</li>)}
-</ul>
 ```
 
 ## WASI / Browser Support
