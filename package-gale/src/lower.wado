@@ -1790,6 +1790,19 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
         ops.push(op);
     }
 
+    // For prefix LR alts (e.g. `'-' e` in `e : e '+' e | '-' e | …`),
+    // stamp the trailing self-ref RuleCall's `min_prec_arg` so emit
+    // doesn't need to thread the prec value through `ctx`. The
+    // surrounding alt walker (`gen_op_leaf`) reads
+    // `RuleCallOp.min_prec_arg` directly.
+    let prefix_prec = compute_prefix_self_ref_min_prec(rule, idx);
+    if prefix_prec > 0 && !ops.is_empty() {
+        let last_idx = ops.len() - 1;
+        if let Some(_) = find_self_ref_rule_call(&ops[last_idx], &rule.name) {
+            ops[last_idx] = rebind_self_ref_min_prec(ops[last_idx], prefix_prec);
+        }
+    }
+
     let fields = enumerate_alt_field_decls(&ops);
 
     return AltBody {
@@ -1799,7 +1812,7 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
         ops,
         fields,
         group_index_start: cumulative_group_index_start(rule, idx),
-        prefix_self_ref_min_prec: compute_prefix_self_ref_min_prec(rule, idx),
+        prefix_self_ref_min_prec: prefix_prec,
     };
 }
 

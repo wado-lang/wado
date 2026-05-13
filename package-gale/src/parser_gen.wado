@@ -2969,8 +2969,6 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
                     w.line("let start = p.peek().span.start;");
                     ctx.group_counter = ctx.alt_gc_starts[alt_idx];
                     let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
-                    let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
-                    ctx.prefix_self_ref_min_prec = body.prefix_self_ref_min_prec;
                     gen_alt_body(
                         w,
                         &type_name,
@@ -2980,7 +2978,6 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
                         body,
                         ctx,
                     );
-                    ctx.prefix_self_ref_min_prec = saved_prefix_prec;
                     w.end();
                     w.blank();
 
@@ -3194,8 +3191,6 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
 
         ctx.group_counter = ctx.alt_gc_starts[alt_idx];
         let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
-        let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
-        ctx.prefix_self_ref_min_prec = body.prefix_self_ref_min_prec;
         gen_alt_body(
             w,
             type_name,
@@ -3205,7 +3200,6 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
             body,
             ctx,
         );
-        ctx.prefix_self_ref_min_prec = saved_prefix_prec;
         w.end();
     }
 
@@ -3396,19 +3390,13 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext
             } else {
                 `parse_{r.target_snake}`;
             };
-            // The LR-atom prefix path (e.g. unary `'-' e` in
-            // `e : e '+' e | '-' e | …`) needs a `min_prec` argument
-            // on the inner self-ref so the LR loop climbs from the
-            // unary's own precedence. lower's `lower_op` does not see
-            // the LR context — `ctx.prefix_self_ref_min_prec` is set
-            // by `gen_parse_fn_named` per alt — so emit reads it here
-            // for self-recursive RuleCalls. `RuleCallOp.min_prec_arg`
-            // remains the canonical override for non-LR call sites
-            // that need an explicit `0` (today none of them do).
-            let use_prec = ctx.prefix_self_ref_min_prec > 0 && r.target_name == ctx.current_rule_name;
-            if use_prec {
-                w.line(`let {r.field} = {fn_name}(p, {ctx.prefix_self_ref_min_prec})?;`);
-            } else if let Some(min_prec) = r.min_prec_arg {
+            // `RuleCallOp.min_prec_arg` carries the resolved precedence
+            // for every self-recursive call that needs one — `lower_lr_alt_suffix`
+            // stamps internal LR-suffix self-refs via
+            // `stamp_lr_self_ref_min_prec`, and `lower_alt_body` stamps the
+            // trailing self-ref of a prefix LR alt (e.g. `'-' e`) so emit
+            // reads a single source.
+            if let Some(min_prec) = r.min_prec_arg {
                 w.line(`let {r.field} = {fn_name}(p, {min_prec})?;`);
             } else {
                 w.line(`let {r.field} = {fn_name}(p)?;`);
@@ -3674,11 +3662,11 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     if let RuleRef(r) = elem {
         let field_name = dedup_name(&r.field_name, name_counts);
         let follow = ctx.ruleref_call_follow;
-        // `prefix_self_ref_min_prec > 0` paths drive the LR climb — they
-        // don't go through follow-aware variants in v1, since variant
-        // emission only handles non-LR rules.
-        let use_prec = ctx.prefix_self_ref_min_prec > 0 && r.name == ctx.current_rule_name;
-        let variant_id = if !use_prec && !follow.is_empty() {
+        // Prefix LR alts' trailing self-ref is reached via `gen_op_leaf`
+        // on `RuleCallOp.min_prec_arg`; the legacy walker never fires
+        // for that case, so `gen_element` never has to thread the
+        // precedence here.
+        let variant_id = if !follow.is_empty() {
             ctx.intern_follow_variant(&r.name, &follow, false);
         } else {
             null;
@@ -3688,11 +3676,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         } else {
             `parse_{r.snake_name}`;
         };
-        if use_prec {
-            w.line(`let {field_name} = {fn_name}(p, {ctx.prefix_self_ref_min_prec})?;`);
-        } else {
-            w.line(`let {field_name} = {fn_name}(p)?;`);
-        }
+        w.line(`let {field_name} = {fn_name}(p)?;`);
         return;
     }
     if let Wildcard(_) = elem {
@@ -6473,8 +6457,6 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
             let alt = &alts[*idx];
             ctx.group_counter = ctx.alt_gc_starts[*idx];
             let body = rule_alt_body(lowered_rule, *idx).unwrap();
-            let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
-            ctx.prefix_self_ref_min_prec = body.prefix_self_ref_min_prec;
             gen_alt_body_skip(
                 w,
                 type_name,
@@ -6485,7 +6467,6 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                 ctx,
                 skip,
             );
-            ctx.prefix_self_ref_min_prec = saved_prefix_prec;
         }
         return;
     }
@@ -6697,8 +6678,6 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
             let alt = &rule.alternatives[alt_idx];
             ctx.group_counter = ctx.alt_gc_starts[alt_idx];
             let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
-            let saved_prefix_prec = ctx.prefix_self_ref_min_prec;
-            ctx.prefix_self_ref_min_prec = body.prefix_self_ref_min_prec;
             gen_alt_body(
                 w,
                 type_name,
@@ -6708,7 +6687,6 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
                 body,
                 ctx,
             );
-            ctx.prefix_self_ref_min_prec = saved_prefix_prec;
         } else {
             // Sort group by specificity before building prediction tree.
             let mut sorted_group = group.sorted();
