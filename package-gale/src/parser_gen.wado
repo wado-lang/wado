@@ -2320,7 +2320,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
         // already accounts for the variant mask; the additional
         // `caller_follow_first` subtraction matches the surface
         // emitter's `combined_follow = follow_first ∪ mask`.
-        let body_is_rulecall = if let RuleCall(_) = &re.body { true } else { false };
+        let body_is_rulecall = re.body matches { RuleCall(_) };
         let effective_first = if body_is_rulecall && !re.caller_follow_first.is_empty() {
             subtract_sets(&loop_first, &re.caller_follow_first);
         } else {
