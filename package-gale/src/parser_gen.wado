@@ -3429,13 +3429,37 @@ fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, op: &Op, elem: &Element,
                     );
                     return;
                 },
-                _ => panic("gen_op_inner_for_storable_repeat: only SingleAlt / TokenOnly Groups are storable here"),
+                SimpleCst(scst) => {
+                    gen_consume_group_store_op(
+                        w,
+                        scst,
+                        &g_op.alts,
+                        &g_op.scan_alts,
+                        &g_elem.alternatives,
+                        ctx,
+                        name_counts,
+                    );
+                    return;
+                },
+                General(gs) => {
+                    gen_general_group_store_op(
+                        w,
+                        gs,
+                        &g_op.alts,
+                        &g_op.scan_alts,
+                        &g_elem.alternatives,
+                        ctx,
+                        name_counts,
+                    );
+                    return;
+                },
+                _ => panic("gen_op_inner_for_storable_repeat: Transparent Group is not storable here"),
             };
         } else {
             panic("gen_op_inner_for_storable_repeat: Group op mapped to non-Group element");
         }
     }
-    panic("gen_op_inner_for_storable_repeat: caller must guard with op_is_leaf || Group(SingleAlt | TokenOnly)");
+    panic("gen_op_inner_for_storable_repeat: caller must guard with op_is_leaf || Group(SingleAlt | TokenOnly | SimpleCst | General)");
 }
 
 /// Bump `name_counts` for `elem` exactly the way `gen_element` would.
@@ -3913,15 +3937,9 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
     // `op_body_is_storable` covers exactly the inner shapes that surface
     // as a single CST field AND whose op-driven emit helper produces a
     // non-`Option<T>` binding ready to push into the outer list — every
-    // leaf, plus `Op::Group(SingleAlt | TokenOnly)`. `SimpleCst` and
-    // `General` go through `gen_consume_group_store_optional_op` /
-    // `gen_general_group_store_optional_op` which always emit an
-    // `Option<T>` (the standalone-element shape); calling them inside
-    // a Repeat's loop body would push an `Option<T>` into the
-    // `Array<T>` list. Until those grow non-Option op-driven twins,
-    // Star/Plus over `SimpleCst` / `General` and the Transparent /
-    // `body_has_field == false` cases keep falling through to the
-    // surface `gen_repeat_body` (Phase 2-G follow-ups).
+    // leaf, plus `Op::Group(SingleAlt | TokenOnly | SimpleCst | General)`.
+    // Transparent / `body_has_field == false` cases keep falling through
+    // to the surface `gen_repeat_body` (Phase 2-G follow-up).
     let is_star_or_plus = if let Star = rep.kind {
         true;
     } else if let Plus = rep.kind {
@@ -3936,7 +3954,7 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
             false;
         } else {
             match &g_op.shape {
-                SingleAlt(_) | TokenOnly(_) => true,
+                SingleAlt(_) | TokenOnly(_) | SimpleCst(_) | General(_) => true,
                 _ => false,
             };
         }
@@ -5567,6 +5585,124 @@ fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
     gen_consume_group_store_optional_op(w, null, null, null, alts, ctx, name_counts);
 }
 
+/// GIR-aware twin of the non-Option `gen_consume_group_store` (the
+/// "required" form used inside `Repeat`s where the outer loop guard
+/// already gates entry). Mirrors the Option variant's shape /
+/// `g_op_alts` reads, but emits the binding without an `Option<T>`
+/// wrapper:
+///
+/// - No overlap → `let var: T = if .. else ..;` (direct expression).
+/// - With overlap → `let var_opt: Option<T> = null; ...; let var =
+///   var_opt.unwrap();` (Option intermediate + unwrap so emit can
+///   reuse the scan-dispatch path that fills `var_opt`).
+///
+/// Used by `gen_op_inner_for_storable_repeat` so `Star` / `Plus` over
+/// `Group(SimpleCst)` consume the lowered `SimpleCstShape` and
+/// per-alt `AltBody`s directly.
+fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    let _ = dedup_name(&group_field_base_name(alts), name_counts);
+    let var_name = scst.field;
+    let type_name = scst.type_name;
+
+    let mut first_sets: Array<Array<String>> = [];
+    for let alt of alts {
+        let mut visiting: Array<String> = [];
+        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
+    }
+
+    let groups = compute_overlap_groups(&first_sets);
+    let has_overlaps = has_multi_alt_groups(&groups);
+
+    if !has_overlaps {
+        for let mut g = 0; g < groups.len(); g += 1 {
+            let alt_idx = groups[g][0];
+            if g == 0 {
+                w.begin(`let {var_name}: {type_name} = if {ctx.first_check_str(&first_sets[alt_idx])}`);
+            } else if g < groups.len() - 1 {
+                w.else_begin(`else if {ctx.first_check_str(&first_sets[alt_idx])}`);
+            } else {
+                w.else_begin("else");
+            }
+            let body = &g_op_alts[alt_idx];
+            if let RuleCall(rc) = &body.ops[0] {
+                let fn_name = if let Some(id) = rc.variant_id {
+                    `parse_{rc.target_snake}__follow_{id}`;
+                } else {
+                    `parse_{rc.target_snake}`;
+                };
+                let local_var = rc.target_snake;
+                w.line(`let {local_var} = {fn_name}(p)?;`);
+                w.line(`{type_name}::{body.case_name}({local_var})`);
+            } else {
+                panic("gen_consume_group_store_op: SimpleCst alt op is not RuleCall");
+            }
+        }
+        w.end_with(";");
+    } else {
+        let opt_var = dedup_name(&`{var_name}_opt`, name_counts);
+        w.line(`let mut {opt_var}: Option<{type_name}> = null;`);
+
+        let grp_var = dedup_name(&"grp_kind", name_counts);
+        w.line(`let {grp_var} = p.peek_kind();`);
+
+        for let mut g = 0; g < groups.len(); g += 1 {
+            let group = &groups[g];
+
+            let mut union_first: Array<String> = [];
+            for let idx of group {
+                dedup_append_arr(&mut union_first, &first_sets[*idx]);
+            }
+
+            let cond = ctx.kind_check_str(&union_first, &grp_var);
+            if g == 0 {
+                w.begin(`if {cond}`);
+            } else {
+                w.else_begin(`else if {cond}`);
+            }
+
+            if group.len() == 1 {
+                let alt_idx = group[0];
+                let body = &g_op_alts[alt_idx];
+                if let RuleCall(rc) = &body.ops[0] {
+                    let fn_name = if let Some(id) = rc.variant_id {
+                        `parse_{rc.target_snake}__follow_{id}`;
+                    } else {
+                        `parse_{rc.target_snake}`;
+                    };
+                    let local_var = rc.target_snake;
+                    w.line(`let {local_var} = {fn_name}(p)?;`);
+                    w.line(`{opt_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
+                } else {
+                    panic("gen_consume_group_store_op: SimpleCst alt op is not RuleCall");
+                }
+            } else {
+                let mut sorted_group = group.sorted();
+                sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
+
+                assert rule_ref_group_all_scannable(&sorted_group, alts, ctx),
+                    "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
+                gen_rule_ref_group_scan_dispatch(
+                    w,
+                    &sorted_group,
+                    alts,
+                    Option::<&Array<ScanBody>>::Some(g_op_scan_alts),
+                    &opt_var,
+                    type_name,
+                    ctx,
+                    name_counts,
+                );
+            }
+        }
+        w.end();
+
+        w.begin(`if let None = {opt_var}`);
+        let first_alt_name = group_case_name(&alts[0]);
+        w.line(`p.fail("{first_alt_name}")?;`);
+        w.end();
+        w.line(`let {var_name} = {opt_var}.unwrap();`);
+    }
+}
+
 /// GIR-aware twin of `gen_consume_group_store_optional`. When the
 /// caller has the lowered `SimpleCstShape` (top-level alt walker
 /// reaches the group through `Op::Group(g_op)`), pass it as `Some` so
@@ -5700,6 +5836,104 @@ fn gen_consume_single_alt_group(w: &mut CodeWriter, alt: &Alternative, ctx: &mut
 /// Generate a general group store with Option wrapper (standalone Group in an alternative).
 fn gen_general_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     gen_general_group_store_optional_op(w, null, null, null, alts, ctx, name_counts);
+}
+
+/// GIR-aware non-Option twin of `gen_general_group_store_optional_op`
+/// — the "required" form used inside `Repeat`s. Mirrors the Option
+/// variant's shape / `g_op_alts` reads, but emits the binding as a
+/// direct `let var: T = if .. else ..;` when first sets do not
+/// overlap, and as an Option intermediate + unwrap when they do.
+fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    ctx.group_counter = gs.group_index + 1;
+    let group_index = gs.group_index;
+    let gc_after_self = ctx.group_counter;
+    let _ = dedup_name(&general_group_field_name(group_index), name_counts);
+    let var_name = gs.field;
+    let type_name = gs.variant_type;
+
+    let mut first_sets: Array<Array<String>> = [];
+    for let alt of alts {
+        let mut visiting: Array<String> = [];
+        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
+    }
+
+    let groups = compute_overlap_groups(&first_sets);
+    let has_overlaps = has_multi_alt_groups(&groups);
+
+    if !has_overlaps {
+        let mut gc_max = gc_after_self;
+        for let mut g = 0; g < groups.len(); g += 1 {
+            let alt_idx = groups[g][0];
+            if g == 0 {
+                w.begin(`let {var_name}: {type_name} = if {ctx.first_check_str(&first_sets[alt_idx])}`);
+            } else if g < groups.len() - 1 {
+                w.else_begin(`else if {ctx.first_check_str(&first_sets[alt_idx])}`);
+            } else {
+                w.else_begin("else");
+            }
+            ctx.group_counter = gc_after_self;
+            gen_general_alt_construct(w, alts, Option::<&AltBody>::Some(&g_op_alts[alt_idx]), alt_idx, &type_name, ctx, name_counts, group_index);
+            if ctx.group_counter > gc_max {
+                gc_max = ctx.group_counter;
+            }
+        }
+        w.end_with(";");
+        ctx.group_counter = gc_max;
+    } else {
+        let opt_var = dedup_name(&`{var_name}_opt`, name_counts);
+        w.line(`let mut {opt_var}: Option<{type_name}> = null;`);
+
+        let grp_var = dedup_name(&"grp_kind", name_counts);
+        w.line(`let {grp_var} = p.peek_kind();`);
+
+        let mut gc_max = gc_after_self;
+        for let mut g = 0; g < groups.len(); g += 1 {
+            let group = &groups[g];
+
+            let mut union_first: Array<String> = [];
+            for let idx of group {
+                dedup_append_arr(&mut union_first, &first_sets[*idx]);
+            }
+
+            let cond = ctx.kind_check_str(&union_first, &grp_var);
+            if g == 0 {
+                w.begin(`if {cond}`);
+            } else {
+                w.else_begin(`else if {cond}`);
+            }
+
+            ctx.group_counter = gc_after_self;
+            if group.len() == 1 {
+                let alt_idx = group[0];
+                gen_general_alt_parse_and_store(w, alts, Option::<&AltBody>::Some(&g_op_alts[alt_idx]), alt_idx, &type_name, &opt_var, ctx, name_counts, group_index);
+            } else {
+                let mut sorted_group = group.sorted();
+                sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
+                gen_general_group_dispatch(
+                    w,
+                    alts,
+                    Option::<&Array<AltBody>>::Some(g_op_alts),
+                    Option::<&Array<ScanBody>>::Some(g_op_scan_alts),
+                    &sorted_group,
+                    &type_name,
+                    &opt_var,
+                    ctx,
+                    name_counts,
+                    group_index,
+                );
+            }
+            if ctx.group_counter > gc_max {
+                gc_max = ctx.group_counter;
+            }
+        }
+        w.end();
+        ctx.group_counter = gc_max;
+
+        w.begin(`if let None = {opt_var}`);
+        w.line(`p.fail("group alternative")?;`);
+        w.end();
+        w.line(`let {var_name} = {opt_var}.unwrap();`);
+    }
 }
 
 /// GIR-aware twin of `gen_general_group_store_optional`. When the
