@@ -3488,6 +3488,7 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
                 w,
                 Option::<&SimpleCstShape>::Some(scst),
                 Option::<&Array<AltBody>>::Some(&g_op.alts),
+                Option::<&Array<ScanBody>>::Some(&g_op.scan_alts),
                 &g_elem.alternatives,
                 ctx,
                 name_counts,
@@ -3496,6 +3497,7 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
                 w,
                 Option::<&GeneralShape>::Some(gen_shape),
                 Option::<&Array<AltBody>>::Some(&g_op.alts),
+                Option::<&Array<ScanBody>>::Some(&g_op.scan_alts),
                 &g_elem.alternatives,
                 ctx,
                 name_counts,
@@ -5314,7 +5316,7 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
 
                 assert rule_ref_group_all_scannable(&sorted_group, alts, ctx),
                     "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
-                gen_rule_ref_group_scan_dispatch(w, &sorted_group, alts, &opt_var, type_name, ctx, name_counts);
+                gen_rule_ref_group_scan_dispatch(w, &sorted_group, alts, null, &opt_var, type_name, ctx, name_counts);
             }
         }
         w.end();  // if/else if chain
@@ -5356,7 +5358,11 @@ fn rule_ref_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternat
 /// partition affordable when its alts transitively reference the LR rule
 /// `expr` — committing on first success skips the remaining 8 deep LR
 /// scans that a longest-match tournament would have run.
-fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32>, alts: &Array<Alternative>, opt_var: &String, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+///
+/// `scan_alts`, when present, drives the scan via the op-driven walker
+/// against the lowered `ScanBody`. The legacy fallback (no GIR
+/// available at the caller) keeps the surface walker.
+fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32>, alts: &Array<Alternative>, scan_alts: Option<&Array<ScanBody>>, opt_var: &String, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let winner_var = dedup_name(&"gd_winner", name_counts);
     let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
     w.line(`let mut {winner_var}: i32 = -1;`);
@@ -5366,12 +5372,18 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32
         if k == last {
             break;
         }
-        let alt = &alts[sorted_group[k]];
+        let alt_idx = sorted_group[k];
+        let alt = &alts[alt_idx];
         let scan_label = dedup_name(&"gd_scan", name_counts);
         w.begin(`{scan_label}:`);
         w.line("let tokens = &p.tokens;");
         w.line("let mut pos: i32 = p.pos;");
-        gen_scan_elements_in_block(w, &alt.elements, 0, alt.elements.len(), ctx, &scan_label);
+        if let Some(sa) = scan_alts {
+            let sb = &sa[alt_idx];
+            gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
+        } else {
+            gen_scan_elements_in_block(w, &alt.elements, 0, alt.elements.len(), ctx, &scan_label);
+        }
         w.line(`{winner_var} = {k};`);
         w.line(`break {dispatch_label};`);
         w.end();
@@ -5401,7 +5413,7 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32
 }
 
 fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    gen_consume_group_store_optional_op(w, null, null, alts, ctx, name_counts);
+    gen_consume_group_store_optional_op(w, null, null, null, alts, ctx, name_counts);
 }
 
 /// GIR-aware twin of `gen_consume_group_store_optional`. When the
@@ -5412,7 +5424,7 @@ fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
 /// per-alt RuleRef calls) walks `g_op.alts` when available, falling
 /// back to surface IR for the legacy `gen_consume_group_store_optional`
 /// path.
-fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: Option<&SimpleCstShape>, g_op_alts: Option<&Array<AltBody>>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: Option<&SimpleCstShape>, g_op_alts: Option<&Array<AltBody>>, g_op_scan_alts: Option<&Array<ScanBody>>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let var_name = if let Some(s) = scst {
         let _ = dedup_name(&group_field_base_name(alts), name_counts);
         s.field;
@@ -5485,7 +5497,7 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: Option<&SimpleC
 
             assert rule_ref_group_all_scannable(&sorted_group, alts, ctx),
                 "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
-            gen_rule_ref_group_scan_dispatch(w, &sorted_group, alts, &inner_var, type_name, ctx, name_counts);
+            gen_rule_ref_group_scan_dispatch(w, &sorted_group, alts, g_op_scan_alts, &inner_var, type_name, ctx, name_counts);
         }
     }
     w.end();  // if/else if chain
@@ -5536,7 +5548,7 @@ fn gen_consume_single_alt_group(w: &mut CodeWriter, alt: &Alternative, ctx: &mut
 
 /// Generate a general group store with Option wrapper (standalone Group in an alternative).
 fn gen_general_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    gen_general_group_store_optional_op(w, null, null, alts, ctx, name_counts);
+    gen_general_group_store_optional_op(w, null, null, null, alts, ctx, name_counts);
 }
 
 /// GIR-aware twin of `gen_general_group_store_optional`. When the
@@ -5545,7 +5557,7 @@ fn gen_general_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
 /// so emit reads the outer field name, variant type, and group
 /// index from lower's pre-baked shape — matching the values
 /// `gen_cst_types` already emitted for the corresponding enum.
-fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: Option<&GeneralShape>, g_op_alts: Option<&Array<AltBody>>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: Option<&GeneralShape>, g_op_alts: Option<&Array<AltBody>>, g_op_scan_alts: Option<&Array<ScanBody>>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let group_index = if let Some(g) = gs {
         // Lower already assigned a stable index in the shape; keep
         // emit's running counter aligned for the surface-IR helpers
@@ -5611,7 +5623,7 @@ fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: Option<&GeneralSh
         } else {
             let mut sorted_group = group.sorted();
             sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
-            gen_general_group_dispatch(w, alts, g_op_alts, &sorted_group, &type_name, &inner_var, ctx, name_counts, group_index);
+            gen_general_group_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, &type_name, &inner_var, ctx, name_counts, group_index);
         }
         if ctx.group_counter > gc_max {
             gc_max = ctx.group_counter;
@@ -5691,7 +5703,7 @@ fn gen_general_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
             } else {
                 let mut sorted_group = group.sorted();
                 sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
-                gen_general_group_dispatch(w, alts, null, &sorted_group, &type_name, &opt_var, ctx, name_counts, group_index);
+                gen_general_group_dispatch(w, alts, null, null, &sorted_group, &type_name, &opt_var, ctx, name_counts, group_index);
             }
             if ctx.group_counter > gc_max {
                 gc_max = ctx.group_counter;
@@ -5770,10 +5782,10 @@ fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, body
 /// alts. Asserts that every alt is fully scannable, then delegates to
 /// `gen_general_group_scan_dispatch`. Backtracking has been removed; an
 /// unscannable alt is a codegen-time error.
-fn gen_general_group_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, g_op_alts: Option<&Array<AltBody>>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
+fn gen_general_group_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, g_op_alts: Option<&Array<AltBody>>, g_op_scan_alts: Option<&Array<ScanBody>>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
     assert general_group_all_scannable(sorted_group, alts, ctx),
         "general group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
-    gen_general_group_scan_dispatch(w, alts, g_op_alts, sorted_group, type_name, inner_var, ctx, name_counts, group_index);
+    gen_general_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, sorted_group, type_name, inner_var, ctx, name_counts, group_index);
 }
 
 /// Returns true iff every alt in `sorted_group` has at least one element
@@ -5832,7 +5844,7 @@ fn ambiguous_node_all_scannable(sorted: &Array<i32>, alts: &Array<Alternative>, 
 /// rationale as `gen_group_scan_dispatch`: matches the longest-match
 /// tournament's pick on the longest-first sort while skipping the remaining
 /// scans, which matters when an alt's scan recurses through an LR rule.
-fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, g_op_alts: Option<&Array<AltBody>>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
+fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, g_op_alts: Option<&Array<AltBody>>, g_op_scan_alts: Option<&Array<ScanBody>>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
     let winner_var = dedup_name(&"gd_winner", name_counts);
     let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
     w.line(`let mut {winner_var}: i32 = -1;`);
@@ -5842,12 +5854,18 @@ fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>
         if k == last {
             break;
         }
-        let alt = &alts[sorted_group[k]];
+        let alt_idx = sorted_group[k];
+        let alt = &alts[alt_idx];
         let scan_label = dedup_name(&"gd_scan", name_counts);
         w.begin(`{scan_label}:`);
         w.line("let tokens = &p.tokens;");
         w.line("let mut pos: i32 = p.pos;");
-        gen_scan_elements_in_block(w, &alt.elements, 0, alt.elements.len(), ctx, &scan_label);
+        if let Some(sa) = g_op_scan_alts {
+            let sb = &sa[alt_idx];
+            gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
+        } else {
+            gen_scan_elements_in_block(w, &alt.elements, 0, alt.elements.len(), ctx, &scan_label);
+        }
         w.line(`{winner_var} = {k};`);
         w.line(`break {dispatch_label};`);
         w.end();
