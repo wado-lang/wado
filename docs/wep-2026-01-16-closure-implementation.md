@@ -394,11 +394,11 @@ resource closure-env {
 Closures have function types with capture annotations:
 
 ```wado
-// Type: Fn(i32) -> i32 with captures[count]
+// Type: fn(i32) -> i32 with captures[count]
 let f = |x| { return x + count; };
 
 // Generic function taking a closure
-fn apply<T, R>(f: Fn(T) -> R, x: T) -> R {
+fn apply<T, R>(f: fn(T) -> R, x: T) -> R {
     return f(x);
 }
 ```
@@ -411,8 +411,8 @@ fn apply<T, R>(f: Fn(T) -> R, x: T) -> R {
 **Subtyping:**
 
 ```wado
-Fn(T) -> R                    // Pure function (no captures)
-  <: Fn(T) -> R with captures[x]  // Can capture x
+fn(T) -> R                    // Pure function (no captures)
+  <: fn(T) -> R with captures[x]  // Can capture x
 ```
 
 A pure function can be used where a capturing function is expected, but not vice versa.
@@ -440,14 +440,14 @@ Per the [Value Semantics WEP](./wep-2026-01-12-value-semantics-and-stores.md), c
 
 ```wado
 // Closure type with captures
-fn register(f: Fn(i32) -> i32 with captures[0]) {
+fn register(f: fn(i32) -> i32 with captures[0]) {
     callbacks.push(f);
 }
 
 // Inferred captures
 let count = 0;
 let f = |x| { return x + count; };
-// Type: Fn(i32) -> i32 with captures[count]
+// Type: fn(i32) -> i32 with captures[count]
 ```
 
 **Implementation requirement:**
@@ -460,7 +460,7 @@ let f = |x| { return x + count; };
 **Heap promotion:**
 
 ```wado
-fn make_counter() -> Fn() -> i32 with captures[count] {
+fn make_counter() -> fn() -> i32 with captures[count] {
     let mut count = 0;  // Must be heap-promoted
     return || {
         count += 1;
@@ -623,7 +623,7 @@ When a closure escapes (returned from function, stored in struct, etc.), capture
 
 ```wado
 // Source
-fn make_counter() -> Fn() -> i32 with captures[count] {
+fn make_counter() -> fn() -> i32 with captures[count] {
     let mut count = 0;
     return || {
         count += 1;
@@ -706,8 +706,8 @@ Each unique `(params, ret, capture_types)` tuple generates distinct Wasm types.
 **Type checking:**
 
 ```wado
-fn takes_pure(f: Fn(i32) -> i32) { ... }
-fn takes_capturing(f: Fn(i32) -> i32 with captures[0]) { ... }
+fn takes_pure(f: fn(i32) -> i32) { ... }
+fn takes_capturing(f: fn(i32) -> i32 with captures[0]) { ... }
 
 let pure = |x| { return x + 1; };
 let capturing = |x| { return x + count; };
@@ -721,7 +721,7 @@ takes_capturing(capturing); // OK
 **Subtyping rule:**
 
 ```
-Fn(P) -> R  <:  Fn(P) -> R with captures[...]
+fn(P) -> R  <:  fn(P) -> R with captures[...]
 ```
 
 A pure function can be used where a capturing function is expected.
@@ -732,7 +732,7 @@ There is a single closure type. Captures are by value, so the closure body canno
 
 | Type         | Description           |
 | ------------ | --------------------- |
-| `Fn(T) -> U` | Closure (or function) |
+| `fn(T) -> U` | Closure (or function) |
 
 **Comparison with Rust:** Rust splits closures into `Fn` / `FnMut` / `FnOnce` so the borrow checker can track captured `&mut` borrows. Wado has no borrow checker and captures by deep copy, so the distinction is unnecessary: a closure that needs to mutate or share state captures a reference value, which aliases like any other reference.
 
@@ -744,7 +744,7 @@ Unlike Rust, Wado does not have bare function pointers. All callable values are 
 // Read-only capture
 let outer = 10;
 let f = |x: i32| x + outer;
-// Type: Fn(i32) -> i32
+// Type: fn(i32) -> i32
 
 // Mutation via captured reference (no special closure syntax)
 let mut count = 0;
@@ -753,7 +753,7 @@ let counter = || {
     *cref += 1;
     *cref
 };
-// Type: Fn() -> i32
+// Type: fn() -> i32
 ```
 
 **Compiler enforcement:**
@@ -777,7 +777,7 @@ At Component Model boundaries, closures cannot be passed directly (Component Mod
 
 ```wado
 // ERROR: Cannot export/import closures across Component Model boundary
-export fn take_callback(f: Fn() -> i32) { ... }
+export fn take_callback(f: fn() -> i32) { ... }
 ```
 
 **Option B: Resource adapter** (Future work)
@@ -859,7 +859,7 @@ The specialised path (closure local stays as `&__Closure_N`) does not use the vt
 2. **Shared mutable state via references**: Closures sharing a captured reference observe the same underlying value, without special-cased closure syntax
 3. **Type-safe**: Each closure signature has distinct Wasm types
 4. **Compatible with value semantics**: Closures follow the same deep-copy rule as assignment, parameter passing, and return — references remain the only types that alias
-5. **Single closure type**: No `Fn` / `FnMut` / `FnOnce` hierarchy; one `Fn(T) -> U`
+5. **Single closure type**: No `Fn` / `FnMut` / `FnOnce` hierarchy; one `fn(T) -> U`
 6. **Optimization-friendly**: Compiler can optimize non-escaping closures to use locals
 
 ### Negative
@@ -896,7 +896,7 @@ The specialised path (closure local stays as `&__Closure_N`) does not use the vt
    - Promote captured variables to environment struct
 
 6. **Phase 6: Type system integration**
-   - Implement subtyping for `Fn(P) -> R` <: `Fn(P) -> R with captures[...]`
+   - Implement subtyping for `fn(P) -> R` <: `fn(P) -> R with captures[...]`
    - Type check closure passing at call sites
 
 ### Future Work
@@ -905,7 +905,7 @@ The specialised path (closure local stays as `&__Closure_N`) does not use the vt
 - **Optimization**: Inline small closures at call sites
 - **Optimization**: Auto-switch between type-erased (`fn(T) -> U`) and monomorphized (generic `F`) forms based on whether closure escapes. This would enable inlining for iterator chains like `arr.iter().map(|x| x * 2).collect()`.
 - **Component Model export**: Support closures at CM boundary via resource adapters
-- **Generic closures**: Support `Fn<T>(T) -> T` with type parameters
+- **Generic closures**: Support `fn<T>(T) -> T` with type parameters
 
 ## References
 

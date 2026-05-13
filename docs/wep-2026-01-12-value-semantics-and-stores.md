@@ -147,7 +147,7 @@ fn process(data: &Data) -> Result {
 | ------------------------------ | ------------------------------------------- |
 | Named function with `&T` param | Must declare `stores[param]` if storing     |
 | Closure using outer variable   | Closure captures inferred from usage        |
-| Functor type (`Fn(...)`)       | Must declare `stores[0]` etc. if it stores  |
+| Functor type (`fn(...)`)       | Must declare `stores[0]` etc. if it stores  |
 | Functor value itself           | No stores needed (functors are value types) |
 
 **Note on functors**: In Wasm, functors are `funcref` values. Storing a functor itself (not its parameters) does not require `stores[...]` because functors have value semantics—they are copied when assigned or passed.
@@ -164,7 +164,7 @@ fn process(data: &Data) -> Result { ... }  // no stores = cannot store
 ```wado
 // Closure captures inferred from usage
 let f = || { return local_var; };
-// Inferred type: Fn() -> i32 (captures local_var)
+// Inferred type: fn() -> i32 (captures local_var)
 
 // Explicit stores annotation for parameters
 let g = |data| stores[data] { ... };
@@ -174,8 +174,8 @@ let g = |data| stores[data] { ... };
 
 ```wado
 // Must declare stores in type (positional: 0 = first parameter)
-fn take_storing(f: Fn(&Data) with stores[0]) { ... }
-fn take_pure(f: Fn(&Data) -> Result) { ... }  // cannot store
+fn take_storing(f: fn(&Data) with stores[0]) { ... }
+fn take_pure(f: fn(&Data) -> Result) { ... }  // cannot store
 ```
 
 ### 5. Heap Promotion Based on Stores
@@ -211,7 +211,7 @@ assert f() == 10;
 For stateful or shared-mutable closures, capture a reference. References (`&T`, `&mut T`) are the only types in Wado that alias their referent, so a copied reference still points to the same underlying value.
 
 ```wado
-fn make_counter() -> Fn() -> i32 {
+fn make_counter() -> fn() -> i32 {
     let mut count = 0;
     let cref: &mut i32 = &mut count;
     return || {
@@ -298,11 +298,11 @@ fn example(list: &mut Array<&Data>, data: &Data) with stores[data] {
 The compiler detects stores through type propagation:
 
 ```wado
-fn apply<T, R>(f: Fn(T) -> R, x: T) -> R {
+fn apply<T, R>(f: fn(T) -> R, x: T) -> R {
     return f(x);  // apply doesn't store, just passes through
 }
 
-// If f's type is Fn(&Data) -> R with stores[0],
+// If f's type is fn(&Data) -> R with stores[0],
 // compiler traces that x may be stored
 ```
 
@@ -394,7 +394,7 @@ The external component receives a **copy**, not a GC reference. Even if it "stor
    - **Mitigation**: Use `move` for large values, profiler will identify hotspots
 2. **Learning curve**: `stores[...]` is a new concept
    - **Mitigation**: Clear error messages when stores declaration is missing
-3. **Verbose functor types**: `Fn(&Data) with stores[0]` is long
+3. **Verbose functor types**: `fn(&Data) with stores[0]` is long
    - **Mitigation**: Type inference reduces explicit annotations
 4. **Different from Rust**: No lifetimes, different model
    - **Mitigation**: Simpler model is easier to learn
@@ -415,19 +415,19 @@ let c = move a; // move, `a` invalidated
 
 ```wado
 // Storing a functor: no stores needed (functors are value types)
-fn register_callback(cb: Fn(&Event)) -> Id {
+fn register_callback(cb: fn(&Event)) -> Id {
     callbacks.push(cb);  // OK: cb is a funcref, copied by value
     return new_id();
 }
 
 // Functor that stores its parameter
-fn register_storing_callback(cb: Fn(&Event) with stores[0]) -> Id {
+fn register_storing_callback(cb: fn(&Event) with stores[0]) -> Id {
     // cb may store references passed to it
     callbacks.push(cb);
     return new_id();
 }
 
-fn process_once(cb: Fn(&Event)) {
+fn process_once(cb: fn(&Event)) {
     cb(&event);  // uses but doesn't store
 }
 ```
@@ -435,7 +435,7 @@ fn process_once(cb: Fn(&Event)) {
 **Closure capture inference**:
 
 ```wado
-fn create_adder(x: i32) -> Fn(i32) -> i32 {
+fn create_adder(x: i32) -> fn(i32) -> i32 {
     return |y| { return x + y; };  // closure captures x (inferred)
 }
 ```
