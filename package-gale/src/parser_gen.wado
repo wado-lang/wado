@@ -3547,8 +3547,20 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
             Transparent => {
                 // Transparent groups inline their inner alt; emit
                 // walks the alt's elements directly with no struct
-                // construction. The surface fallback already does
-                // this via `gen_consume_group(alts.len() == 1)`.
+                // construction. The surface fallback walks the alt
+                // body through `gen_consume_group(alts.len() == 1)` —
+                // which in turn flows through
+                // `gen_elements_with_non_greedy_legacy` → surface
+                // `gen_repeat` / `gen_element` for any nested Repeat /
+                // Group. Lifting this to `gen_elements_with_non_greedy`
+                // on `g_op.alts[0].ops` is gated on aligning lower's
+                // `group_counter` with emit's: lower does not bump
+                // `ctx.group_counter` for the Transparent wrapper
+                // itself, while legacy emit's `element_field_info`
+                // implicitly walks the outer Group and reaches the
+                // inner General-group's `group_<idx>` at a different
+                // index. Retire as a follow-up once that mismatch is
+                // closed (Phase 2-G+1 — surface helper graph deletion).
                 gen_consume_group(w, &g_elem.alternatives, ctx, name_counts);
             },
         };
@@ -4214,7 +4226,14 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
             return;
         }
     }
-    gen_repeat(w, rep, ctx, name_counts, follow);
+    // Op-driven dispatch above covers every `RepeatOp.body` shape
+    // (every leaf, every `Group` shape including Transparent /
+    // `body_has_field == false`, plus non-greedy). The surface
+    // `gen_repeat` is unreachable here — keep a defensive `panic` so
+    // a future regression (a body shape lower might add later) is
+    // surfaced loudly instead of silently re-entering the legacy
+    // `gen_repeat_body` graph.
+    panic("gen_op_repeat_with_follow_override: op-driven dispatch did not cover this RepeatOp shape — extend the op-driven arms instead of relying on the surface fallback");
 }
 
 /// `ruleref_call_follow` is saved, cleared, and restored around the
