@@ -3386,25 +3386,31 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext
 }
 
 /// Dispatch a `RepeatOp.body` whose shape is "storable" (a leaf op
-/// or a `Group(SingleAlt | TokenOnly)` op) to the matching op-driven
-/// emit helper. Used by the Star / Plus arm of
-/// `gen_op_repeat_with_follow_override` so the loop body's per-
-/// iteration parse line can route through either `gen_op_leaf`
-/// (leaves) or the per-shape group helpers without duplicating the
-/// surrounding list / scan-guard / loop scaffolding.
+/// or a `Group(SingleAlt | TokenOnly | SimpleCst | General)` op) to
+/// the matching op-driven emit helper. Used by the Star / Plus and
+/// non-greedy arms of `gen_op_repeat_with_follow_override` so the
+/// loop body's per-iteration parse line can route through either
+/// `gen_op_leaf` (leaves), the SingleAlt / TokenOnly op-driven
+/// helpers, or the non-Option SimpleCst / General twins
+/// (`gen_consume_group_store_op` / `gen_general_group_store_op`)
+/// without duplicating the surrounding list / scan-guard / loop
+/// scaffolding.
 ///
 /// `elem` is the surface `Element` matching `op`; leaves consult it
-/// for `sync_name_counts_for_leaf`, the Group arm threads it through
-/// `gen_consume_*_group_op`. `outer_follow` carries the surrounding
-/// Repeat's iter-follow (`first(inner) ∪ outer_follow`) so nested
-/// non-greedy Repeats inside a `SingleAlt` body can union it onto
-/// their own `caller_follow_first` — the legacy `gen_group_store_any`
-/// /`gen_consume_single_alt_group` path's `outer_follow` propagation.
+/// for `sync_name_counts_for_leaf`, the Group arms thread it through
+/// the per-shape `gen_consume_*_group_op` helpers. `outer_follow`
+/// carries the surrounding Repeat's iter-follow (`first(inner) ∪
+/// outer_follow`) so nested non-greedy Repeats inside a `SingleAlt`
+/// body can union it onto their own `caller_follow_first` — the
+/// legacy `gen_group_store_any` / `gen_consume_single_alt_group`
+/// path's `outer_follow` propagation. `outer_follow` is unused for
+/// the other group shapes today (their inner walkers consume the
+/// baked `caller_follow_first` from lower).
 ///
 /// The caller must have already verified storability — Transparent
-/// groups (`body_has_field == false`), SimpleCst / General shapes
-/// (their `_optional_op` helpers always wrap in `Option<T>`), and
-/// other non-leaf shapes reach the surface fallback.
+/// groups and other shapes with `body_has_field == false` reach the
+/// surface fallback in `gen_op_repeat_with_follow_override`'s
+/// non-storable Group arm.
 fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
     if op_is_leaf(op) {
         gen_op_leaf(w, op, elem, ctx, name_counts);
@@ -3957,8 +3963,8 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
     // as a single CST field AND whose op-driven emit helper produces a
     // non-`Option<T>` binding ready to push into the outer list — every
     // leaf, plus `Op::Group(SingleAlt | TokenOnly | SimpleCst | General)`.
-    // Transparent / `body_has_field == false` cases keep falling through
-    // to the surface `gen_repeat_body` (Phase 2-G follow-up).
+    // Transparent / `body_has_field == false` cases are emitted by the
+    // sibling non-storable Group arm above (no list field, inner inline).
     let is_star_or_plus = if let Star = rep.kind {
         true;
     } else if let Plus = rep.kind {
