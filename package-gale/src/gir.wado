@@ -723,9 +723,11 @@ pub struct ScanRuleCallElem {
     /// Scan-side mirror of `RuleCallOp.min_prec_arg`. `Some(p)` when
     /// the call should pass `p` as the `min_prec` argument — set by
     /// `stamp_lr_self_ref_min_prec` for self-recursive RuleCalls
-    /// inside an LR suffix. `None` means "use the surrounding
-    /// `ctx.scan_ruleref_min_prec`" (bt-scan paths set it to
-    /// `i32::MAX`; every other call site keeps the default `0`).
+    /// inside an LR suffix. `None` means "use the caller-supplied
+    /// override" — `gen_scan_op_element` reads its `min_prec_override`
+    /// parameter, which `gen_bt_scan_op_elements` raises to `i32::MAX`
+    /// for the trailing self-ref and every other call site leaves at
+    /// the default `0`.
     pub min_prec_arg: Option<i32>,
 }
 
