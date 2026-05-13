@@ -147,7 +147,7 @@ fn process(data: &Data) -> Result {
 | ------------------------------ | ------------------------------------------- |
 | Named function with `&T` param | Must declare `stores[param]` if storing     |
 | Closure using outer variable   | Closure captures inferred from usage        |
-| Functor type (`Fn(...)`)       | Must declare `stores[0]` etc. if it stores  |
+| Functor type (`fn(...)`)       | Must declare `stores[0]` etc. if it stores  |
 | Functor value itself           | No stores needed (functors are value types) |
 
 **Note on functors**: In Wasm, functors are `funcref` values. Storing a functor itself (not its parameters) does not require `stores[...]` because functors have value semantics—they are copied when assigned or passed.
@@ -164,7 +164,7 @@ fn process(data: &Data) -> Result { ... }  // no stores = cannot store
 ```wado
 // Closure captures inferred from usage
 let f = || { return local_var; };
-// Inferred type: Fn() -> i32 (captures local_var)
+// Inferred type: fn() -> i32 (captures local_var)
 
 // Explicit stores annotation for parameters
 let g = |data| stores[data] { ... };
@@ -174,8 +174,8 @@ let g = |data| stores[data] { ... };
 
 ```wado
 // Must declare stores in type (positional: 0 = first parameter)
-fn take_storing(f: Fn(&Data) with stores[0]) { ... }
-fn take_pure(f: Fn(&Data) -> Result) { ... }  // cannot store
+fn take_storing(f: fn(&Data) with stores[0]) { ... }
+fn take_pure(f: fn(&Data) -> Result) { ... }  // cannot store
 ```
 
 ### 5. Heap Promotion Based on Stores
@@ -197,40 +197,44 @@ fn caller() {
 - No runtime checks needed
 - Transparent to programmer
 
-### 6. Closures Always Capture by Reference
+### 6. Closures Capture by Value
 
-Unlike C++ which distinguishes `[a]` (by value) vs `[&a]` (by reference), Wado closures always capture by reference:
+To keep one rule across the entire language, closures capture each free variable by **deep copy at closure creation time** — the same value semantics that applies to assignment, parameter passing, and return. The closure body operates on its own copies; later mutations to the outer binding are not observed by the closure, and the closure body cannot mutate outer variables directly.
 
 ```wado
-fn make_counter() -> Fn() -> i32 {
+let outer = 10;
+let f = || outer;          // outer is copied into the closure
+let outer = 20;            // rebinding the outer name does not affect f
+assert f() == 10;
+```
+
+For stateful or shared-mutable closures, capture a reference. References (`&T`, `&mut T`) are the only types in Wado that alias their referent, so a copied reference still points to the same underlying value.
+
+```wado
+fn make_counter() -> fn() -> i32 {
     let mut count = 0;
+    let cref: &mut i32 = &mut count;
     return || {
-        count += 1;  // captures `count` by reference
-        return count;
+        *cref += 1;        // mutation goes through the captured reference
+        return *cref;
     };
 }
 ```
 
-Note: Closures that capture variables use "capture" terminology (closures capture). The `stores[...]` keyword is for functions that store _parameters_ passed to them.
+A closure that needs to mutate or share state captures a reference, exactly like any other piece of code that wants to alias.
 
 **Rationale**:
 
-- Simpler mental model (one capture mode)
-- GC handles the lifetime
-- Consistent with value-to-heap promotion
+- One rule for the whole language; closures are not a special case
+- Aliasing requires the same syntactic marker (`&T` / `&mut T`) everywhere
+- GC manages the lifetime of any captured reference's referent
+- Escape tracking for closures reuses the existing `stores[...]` machinery — if a returned closure captures `&local`, the local is heap-promoted by the same rules that govern any escaping reference
 
-### 7. Implementation Optimization (Non-Normative)
+Note: Closures that capture variables use "capture" terminology; the `stores[...]` keyword is for functions that store reference _parameters_ passed to them.
 
-For non-mutable captured variables, the compiler MAY copy instead of heap-promote:
+### 7. Heap Promotion of Referents Captured by Closures (Non-Normative)
 
-```wado
-fn example() {
-    let x = 42;  // immutable
-    let f = || { return x; };  // compiler may copy x into closure
-}
-```
-
-This is an **implementation detail**, not language semantics. From the programmer's perspective, captures are always by reference.
+Because the language-level capture is always by value, the closure's environment struct itself contains plain copies and references. The compiler's job is the same one it does for escaping references in any other context: if a closure captures `&local` and the closure outlives `local`'s lexical scope (e.g. the closure is returned), `local` is heap-promoted via the rules in §2 / §5. No closure-specific lifetime tracking is required beyond the existing escape analysis.
 
 ### 8. Edge Cases
 
@@ -294,11 +298,11 @@ fn example(list: &mut Array<&Data>, data: &Data) with stores[data] {
 The compiler detects stores through type propagation:
 
 ```wado
-fn apply<T, R>(f: Fn(T) -> R, x: T) -> R {
+fn apply<T, R>(f: fn(T) -> R, x: T) -> R {
     return f(x);  // apply doesn't store, just passes through
 }
 
-// If f's type is Fn(&Data) -> R with stores[0],
+// If f's type is fn(&Data) -> R with stores[0],
 // compiler traces that x may be stored
 ```
 
@@ -318,25 +322,25 @@ fn use_int(x: &i32) -> i32 {
 }
 ```
 
-#### Multiple Closures Capturing Same Variable
+#### Multiple Closures Sharing Mutable State
 
-Multiple closures can capture the same variable. The variable is heap-promoted once:
+Closures capture by value, so two closures that name the same outer variable each receive their own copy. To share mutable state across closures, capture a reference and let aliasing do the work:
 
 ```wado
-fn multi_capture() {
+fn multi_share() {
     let mut x = 0;
+    let xref: &mut i32 = &mut x;
 
-    let inc = || { x += 1; };      // captures x by reference
-    let get = || { return x; };   // captures x by reference
+    let inc = || { *xref += 1; };
+    let get = || { return *xref; };
 
-    // Both closures share the same heap-promoted x
     inc();
     inc();
-    println(get());  // Prints: 2
+    println(get());  // Prints: 2 — both closures see the same i32 via the shared reference
 }
 ```
 
-Both closures capture `x` by reference. The compiler promotes `x` to the heap once, and both closures hold references to the same heap location.
+Each closure's environment holds its own copy of the reference value `xref`, but `&mut i32` aliases the underlying `i32`, so every read and write lands on the same location. If the closures escape `multi_share`, `x` is heap-promoted by the existing escape rules.
 
 ### 9. Component Model Boundaries
 
@@ -380,7 +384,7 @@ The external component receives a **copy**, not a GC reference. Even if it "stor
 4. **Type-safe escaping**: Can't accidentally escape references without declaration
 5. **Go-like ergonomics**: Escape analysis is familiar pattern
 6. **C++-like syntax**: `stores[...]` familiar to C++ developers (lambda capture syntax)
-7. **Simple closure capture model**: Always by reference, no `[a]` vs `[&a]` confusion
+7. **Uniform closure capture model**: Captures use the same value semantics as everything else; share mutable state via references (`&T` / `&mut T`), no closure-specific syntax
 8. **CM boundaries protect external calls**: No annotation needed for cross-component calls
 9. **Clear terminology**: "stores" for function parameters, "captures" for closures
 
@@ -390,7 +394,7 @@ The external component receives a **copy**, not a GC reference. Even if it "stor
    - **Mitigation**: Use `move` for large values, profiler will identify hotspots
 2. **Learning curve**: `stores[...]` is a new concept
    - **Mitigation**: Clear error messages when stores declaration is missing
-3. **Verbose functor types**: `Fn(&Data) with stores[0]` is long
+3. **Verbose functor types**: `fn(&Data) with stores[0]` is long
    - **Mitigation**: Type inference reduces explicit annotations
 4. **Different from Rust**: No lifetimes, different model
    - **Mitigation**: Simpler model is easier to learn
@@ -411,19 +415,19 @@ let c = move a; // move, `a` invalidated
 
 ```wado
 // Storing a functor: no stores needed (functors are value types)
-fn register_callback(cb: Fn(&Event)) -> Id {
+fn register_callback(cb: fn(&Event)) -> Id {
     callbacks.push(cb);  // OK: cb is a funcref, copied by value
     return new_id();
 }
 
 // Functor that stores its parameter
-fn register_storing_callback(cb: Fn(&Event) with stores[0]) -> Id {
+fn register_storing_callback(cb: fn(&Event) with stores[0]) -> Id {
     // cb may store references passed to it
     callbacks.push(cb);
     return new_id();
 }
 
-fn process_once(cb: Fn(&Event)) {
+fn process_once(cb: fn(&Event)) {
     cb(&event);  // uses but doesn't store
 }
 ```
@@ -431,7 +435,7 @@ fn process_once(cb: Fn(&Event)) {
 **Closure capture inference**:
 
 ```wado
-fn create_adder(x: i32) -> Fn(i32) -> i32 {
+fn create_adder(x: i32) -> fn(i32) -> i32 {
     return |y| { return x + y; };  // closure captures x (inferred)
 }
 ```

@@ -669,16 +669,18 @@ let compute = |x: i32| {
 // Struct literal return
 let make_point = |x: i32, y: i32| Point { x, y };
 
-// Capturing outer variables (value semantics - copy)
+// Capturing outer variables: deep copy at closure creation
 let multiplier = 10;
 let scale = |x: i32| x * multiplier;
 
-// Mutable capture: use &mut || to mutate captured variables
+// Shared mutable state: capture a reference (the only types that alias)
 let mut count = 0;
-let inc = &mut || { count += 1; };
+let cref: &mut i32 = &mut count;
+let inc = || { *cref += 1; };
+let get = || *cref;
 inc();
 inc();
-println(`{count}`);  // 2
+assert get() == 2;
 ```
 
 ### Mut Parameters

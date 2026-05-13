@@ -404,7 +404,7 @@ impl CodeWriter {
     fn dedent(&mut self) { self.indent -= 1; }
 
     // Block helper: emits opener, runs body indented, emits closer
-    fn block(&mut self, opener: &String, f: &mut || with stores[self]) { ... }
+    fn block(&mut self, opener: &String, f: fn()) { ... }
 
     // Unique ID generation (replaces manual counter threading)
     fn next_id(&mut self) -> i32 { ... }
@@ -417,13 +417,13 @@ Usage would look like:
 
 ```wado
 fn gen_lexer_struct(w: &mut CodeWriter) {
-    w.block("struct Lexer {", &mut || {
+    w.block("struct Lexer {", || {
         w.line("chars: Array<char>,");
         w.line("pos: i32,");
     });
     w.blank();
-    w.block("impl Lexer {", &mut || {
-        w.block("fn new(input: &String) -> Lexer {", &mut || {
+    w.block("impl Lexer {", || {
+        w.block("fn new(input: &String) -> Lexer {", || {
             w.line("return Lexer { chars: input.chars().collect(), pos: 0 };");
         });
         // ...
@@ -467,12 +467,12 @@ let s = WadoStruct::new("Lexer")
 w.emit_struct(&s);
 
 // Emit function with builder for signature, writer for body
-w.emit_fn("new", [Param::new("input", "&String")], "Lexer", &mut || {
+w.emit_fn("new", [Param::new("input", "&String")], "Lexer", || {
     w.line("return Lexer { chars: input.chars().collect(), pos: 0 };");
 });
 
 // Complex control flow still uses the writer
-w.block(`if pos >= chars.len() {`, &mut || {
+w.block(`if pos >= chars.len() {`, || {
     w.line(`{fail_action};`);
 });
 ```

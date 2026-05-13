@@ -12,8 +12,8 @@ let g = || { return count; };  // Captures outer variable 'count'
 The language design requires:
 
 1. First-class functions (closures can be passed as values)
-2. Capture by reference (per [WEP: Value Semantics and Reference Captures](./wep-2026-01-12-value-semantics-and-captures.md))
-3. Multiple closures can capture the same variable
+2. Capture by value (deep copy at closure creation, per [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md))
+3. Multiple closures can share state by each capturing a reference to the same target
 4. Closures must work with effect system and `captures[...]` tracking
 5. Efficient representation targeting Wasm GC
 
@@ -46,56 +46,61 @@ Create a Wasm GC struct to hold the environment, paired with a function referenc
 
 **Conceptual representation (desugared Wado):**
 
+Because captures are by value, each closure carries its own environment struct populated by a deep copy of the captured values at closure creation. Sharing mutable state is expressed by capturing a reference (which aliases per Wado's value semantics).
+
 ```wado
 // Original code:
 let mut count = 0;
-let inc = || { count += 1; };
-let get = || { return count; };
+let cref: &mut i32 = &mut count;
+let inc = || { *cref += 1; };
+let get = || { return *cref; };
 
 // Desugared to (conceptually):
-struct ClosureEnv_0 {
-    mut count: i32,
+struct ClosureEnv_Inc {
+    cref: &mut i32,   // reference value, copied at closure creation
 }
 
-fn closure_inc_impl(env: &mut ClosureEnv_0) {
-    env.count += 1;
+struct ClosureEnv_Get {
+    cref: &mut i32,
 }
 
-fn closure_get_impl(env: &ClosureEnv_0) -> i32 {
-    return env.count;
+fn closure_inc_impl(env: &ClosureEnv_Inc) {
+    *env.cref += 1;   // mutation goes through the captured reference
+}
+
+fn closure_get_impl(env: &ClosureEnv_Get) -> i32 {
+    return *env.cref;
 }
 
 struct Closure_Inc {
-    env: &mut ClosureEnv_0,
-    func: FnRef(&mut ClosureEnv_0),
+    env: ClosureEnv_Inc,
+    func: FnRef(&ClosureEnv_Inc),
 }
 
 struct Closure_Get {
-    env: &ClosureEnv_0,
-    func: FnRef(&ClosureEnv_0) -> i32,
+    env: ClosureEnv_Get,
+    func: FnRef(&ClosureEnv_Get) -> i32,
 }
 
-// Shared environment (allocated once)
-let shared_env = ClosureEnv_0 { count: 0 };
-
-// Both closures reference the same environment
+// Each closure builds its own environment from a deep copy of the captures.
+// `cref` is a reference value, so the copy still aliases the original i32.
 let inc = Closure_Inc {
-    env: &mut shared_env,
+    env: ClosureEnv_Inc { cref: cref },
     func: closure_inc_impl,
 };
 
 let get = Closure_Get {
-    env: &shared_env,
+    env: ClosureEnv_Get { cref: cref },
     func: closure_get_impl,
 };
 
-// Calling closures:
-inc.func(inc.env);      // count becomes 1
-inc.func(inc.env);      // count becomes 2
-println(get.func(get.env));  // Prints "2" ✓
+// Calling closures (env passed by reference to the impl function):
+inc.func(&inc.env);            // *cref becomes 1
+inc.func(&inc.env);            // *cref becomes 2
+println(get.func(&get.env));   // Prints "2" — both envs hold a copy of the same reference
 ```
 
-**Key insight:** Both `inc` and `get` share the same `shared_env` struct, so mutations in one closure are visible to the other.
+**Key insight:** Each environment is a deep-copy snapshot at closure creation time. Mutability and sharing come from capturing a reference, not from sharing the environment struct itself.
 
 **Wasm representation:**
 
@@ -131,8 +136,8 @@ println(get.func(get.env));  // Prints "2" ✓
 
 - Native Wasm GC representation
 - Environment is garbage collected automatically
-- Multiple closures can share the same environment struct (reference semantics)
-- Efficient: no copying, direct field access
+- Multiple closures share mutable state by independently capturing the same reference value (no special-cased shared-env struct required)
+- Efficient: direct field access on the captured copy
 - Type-safe: each closure has distinct struct type
 
 **Cons:**
@@ -389,11 +394,11 @@ resource closure-env {
 Closures have function types with capture annotations:
 
 ```wado
-// Type: Fn(i32) -> i32 with captures[count]
+// Type: fn(i32) -> i32 with captures[count]
 let f = |x| { return x + count; };
 
 // Generic function taking a closure
-fn apply<T, R>(f: Fn(T) -> R, x: T) -> R {
+fn apply<T, R>(f: fn(T) -> R, x: T) -> R {
     return f(x);
 }
 ```
@@ -406,8 +411,8 @@ fn apply<T, R>(f: Fn(T) -> R, x: T) -> R {
 **Subtyping:**
 
 ```wado
-Fn(T) -> R                    // Pure function (no captures)
-  <: Fn(T) -> R with captures[x]  // Can capture x
+fn(T) -> R                    // Pure function (no captures)
+  <: fn(T) -> R with captures[x]  // Can capture x
 ```
 
 A pure function can be used where a capturing function is expected, but not vice versa.
@@ -431,18 +436,18 @@ Most languages with GC targeting Wasm use **Option 1** (struct + funcref) becaus
 
 ### Integration with `captures[...]` Tracking
 
-Per the [Value Semantics WEP](./wep-2026-01-12-value-semantics-and-captures.md), closures that capture variables require `captures[...]` annotation in function types:
+Per the [Value Semantics WEP](./wep-2026-01-12-value-semantics-and-stores.md), closures that capture variables require `captures[...]` annotation in function types:
 
 ```wado
 // Closure type with captures
-fn register(f: Fn(i32) -> i32 with captures[0]) {
+fn register(f: fn(i32) -> i32 with captures[0]) {
     callbacks.push(f);
 }
 
 // Inferred captures
 let count = 0;
 let f = |x| { return x + count; };
-// Type: Fn(i32) -> i32 with captures[count]
+// Type: fn(i32) -> i32 with captures[count]
 ```
 
 **Implementation requirement:**
@@ -455,7 +460,7 @@ let f = |x| { return x + count; };
 **Heap promotion:**
 
 ```wado
-fn make_counter() -> Fn() -> i32 with captures[count] {
+fn make_counter() -> fn() -> i32 with captures[count] {
     let mut count = 0;  // Must be heap-promoted
     return || {
         count += 1;
@@ -618,7 +623,7 @@ When a closure escapes (returned from function, stored in struct, etc.), capture
 
 ```wado
 // Source
-fn make_counter() -> Fn() -> i32 with captures[count] {
+fn make_counter() -> fn() -> i32 with captures[count] {
     let mut count = 0;
     return || {
         count += 1;
@@ -701,8 +706,8 @@ Each unique `(params, ret, capture_types)` tuple generates distinct Wasm types.
 **Type checking:**
 
 ```wado
-fn takes_pure(f: Fn(i32) -> i32) { ... }
-fn takes_capturing(f: Fn(i32) -> i32 with captures[0]) { ... }
+fn takes_pure(f: fn(i32) -> i32) { ... }
+fn takes_capturing(f: fn(i32) -> i32 with captures[0]) { ... }
 
 let pure = |x| { return x + 1; };
 let capturing = |x| { return x + count; };
@@ -716,43 +721,39 @@ takes_capturing(capturing); // OK
 **Subtyping rule:**
 
 ```
-Fn(P) -> R  <:  Fn(P) -> R with captures[...]
+fn(P) -> R  <:  fn(P) -> R with captures[...]
 ```
 
 A pure function can be used where a capturing function is expected.
 
-#### Closure Mutability
+#### Closure Type
 
-Closures are distinguished by whether they mutate their captures:
+There is a single closure type. Captures are by value, so the closure body cannot write to outer bindings, and there is no `Fn` / `FnMut` / `FnOnce` hierarchy.
 
-| Type             | Description              |
-| ---------------- | ------------------------ |
-| `fn(T) -> U`     | Pure/stateless closure   |
-| `fn mut(T) -> U` | Stateful/mutable closure |
+| Type         | Description           |
+| ------------ | --------------------- |
+| `fn(T) -> U` | Closure (or function) |
 
-**Comparison with Rust:**
+**Comparison with Rust:** Rust splits closures into `Fn` / `FnMut` / `FnOnce` so the borrow checker can track captured `&mut` borrows. Wado has no borrow checker and captures by deep copy, so the distinction is unnecessary: a closure that needs to mutate or share state captures a reference value, which aliases like any other reference.
 
-| Wado             | Rust equivalent          |
-| ---------------- | ------------------------ |
-| `fn(T) -> U`     | `&dyn Fn(T) -> U`        |
-| `fn mut(T) -> U` | `&mut dyn FnMut(T) -> U` |
-
-Unlike Rust, Wado does not have bare function pointers (`fn(T) -> U` in Rust). All callable values are closures (reference types), possibly with empty captures. This simplifies the type system since functions without captures are just closures with empty functor structs.
+Unlike Rust, Wado does not have bare function pointers. All callable values are closures (reference types), possibly with an empty environment struct. Functions without captures are just closures with empty environments.
 
 **Syntax:**
 
 ```wado
-// Pure closure (default)
-let double = |x: i32| x * 2;
+// Read-only capture
+let outer = 10;
+let f = |x: i32| x + outer;
 // Type: fn(i32) -> i32
 
-// Stateful closure (explicit &mut prefix)
+// Mutation via captured reference (no special closure syntax)
 let mut count = 0;
-let counter = &mut || {
-    count += 1;
-    count
+let cref: &mut i32 = &mut count;
+let counter = || {
+    *cref += 1;
+    *cref
 };
-// Type: fn mut() -> i32
+// Type: fn() -> i32
 ```
 
 **Compiler enforcement:**
@@ -760,19 +761,13 @@ let counter = &mut || {
 ```wado
 let mut count = 0;
 
-// ERROR: closure mutates capture, must use &mut
+// ERROR: closure body cannot write to a value-captured binding
 let f = || { count += 1; count };
 
-// OK: explicit mutable closure
-let f = &mut || { count += 1; count };
-
-// OK: pure closure (reads only)
-let f = || count + 1;
+// OK: capture a reference; aliasing makes the write visible
+let cref: &mut i32 = &mut count;
+let f = || { *cref += 1; *cref };
 ```
-
-**Subtyping:**
-
-`fn(T) -> U` coerces to `fn mut(T) -> U`, but not vice versa.
 
 #### Component Model Boundary
 
@@ -782,7 +777,7 @@ At Component Model boundaries, closures cannot be passed directly (Component Mod
 
 ```wado
 // ERROR: Cannot export/import closures across Component Model boundary
-export fn take_callback(f: Fn() -> i32) { ... }
+export fn take_callback(f: fn() -> i32) { ... }
 ```
 
 **Option B: Resource adapter** (Future work)
@@ -861,10 +856,10 @@ The specialised path (closure local stays as `&__Closure_N`) does not use the vt
 ### Positive
 
 1. **Native Wasm GC representation**: Efficient, garbage collected automatically
-2. **Shared mutable state**: Multiple closures can capture and mutate the same variable correctly
+2. **Shared mutable state via references**: Closures sharing a captured reference observe the same underlying value, without special-cased closure syntax
 3. **Type-safe**: Each closure signature has distinct Wasm types
-4. **Matches Rust/Go/Swift semantics**: Familiar to users of these languages
-5. **Compatible with value semantics**: Closures capture by reference, consistent with WEP
+4. **Compatible with value semantics**: Closures follow the same deep-copy rule as assignment, parameter passing, and return — references remain the only types that alias
+5. **Single closure type**: No `Fn` / `FnMut` / `FnOnce` hierarchy; one `fn(T) -> U`
 6. **Optimization-friendly**: Compiler can optimize non-escaping closures to use locals
 
 ### Negative
@@ -901,7 +896,7 @@ The specialised path (closure local stays as `&__Closure_N`) does not use the vt
    - Promote captured variables to environment struct
 
 6. **Phase 6: Type system integration**
-   - Implement subtyping for `Fn(P) -> R` <: `Fn(P) -> R with captures[...]`
+   - Implement subtyping for `fn(P) -> R` <: `fn(P) -> R with captures[...]`
    - Type check closure passing at call sites
 
 ### Future Work
@@ -910,11 +905,11 @@ The specialised path (closure local stays as `&__Closure_N`) does not use the vt
 - **Optimization**: Inline small closures at call sites
 - **Optimization**: Auto-switch between type-erased (`fn(T) -> U`) and monomorphized (generic `F`) forms based on whether closure escapes. This would enable inlining for iterator chains like `arr.iter().map(|x| x * 2).collect()`.
 - **Component Model export**: Support closures at CM boundary via resource adapters
-- **Generic closures**: Support `Fn<T>(T) -> T` with type parameters
+- **Generic closures**: Support `fn<T>(T) -> T` with type parameters
 
 ## References
 
-- [WEP: Value Semantics and Reference Captures](./wep-2026-01-12-value-semantics-and-captures.md)
+- [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)
 - [WebAssembly GC Proposal](https://github.com/WebAssembly/gc)
 - [Wasm Component Model](https://github.com/WebAssembly/component-model)
 - [Rust Closure Implementation](https://doc.rust-lang.org/book/ch13-01-closures.html)
