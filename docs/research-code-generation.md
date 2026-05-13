@@ -404,7 +404,7 @@ impl CodeWriter {
     fn dedent(&mut self) { self.indent -= 1; }
 
     // Block helper: emits opener, runs body indented, emits closer
-    fn block(&mut self, opener: &String, f: fn() with stores[self]) { ... }
+    fn block(&mut self, opener: &String, f: fn()) { ... }
 
     // Unique ID generation (replaces manual counter threading)
     fn next_id(&mut self) -> i32 { ... }

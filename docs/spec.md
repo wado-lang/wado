@@ -1074,7 +1074,7 @@ fn normalize(mut s: String) -> String {
 }
 ```
 
-The `mut` keyword grants write access to the local parameter binding inside the function. Wado uses value semantics for every parameter: every value is deeply copied when passed to a function, except references (`&T`, `&mut T`) which share state with the caller. This applies uniformly to primitives, structs, `String`, and `Array<T>`. Inside the callee, both reassignment (`p = new_value`) and in-place mutations — field writes (`p.x = ...`), method calls (`s.push_str("!")`, `arr.push(0)`), and index writes (`arr[0] = ...`) — operate on the callee's local copy and are not visible to the caller. To let the callee mutate the caller's value, pass an explicit reference (`&mut p`).
+The `mut` keyword grants write access to the local parameter binding inside the function. Wado uses value semantics for every parameter: every value is deeply copied when passed to a function, except references (`&T`, `&mut T`) which share state with the caller. This applies uniformly to primitives, structs, `String`, and `Array<T>`. Inside the callee, both reassignment (`p = new_value`) and in-place mutations — field writes (`p.x = ...`), method calls (`s.push_str("!")`, `arr.push(0)`), and index writes (`arr[0] = ...`) — operate on the callee's local copy and are not visible to the caller. To let the callee mutate the caller's value, declare the parameter as `&mut T` and pass a `&mut`-reference at the call site.
 
 ```wado
 fn countdown(mut n: i32) with Stdout {

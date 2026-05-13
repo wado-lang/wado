@@ -73,12 +73,12 @@ fn closure_get_impl(env: &ClosureEnv_Get) -> i32 {
 }
 
 struct Closure_Inc {
-    env: &ClosureEnv_Inc,
+    env: ClosureEnv_Inc,
     func: FnRef(&ClosureEnv_Inc),
 }
 
 struct Closure_Get {
-    env: &ClosureEnv_Get,
+    env: ClosureEnv_Get,
     func: FnRef(&ClosureEnv_Get) -> i32,
 }
 
@@ -94,10 +94,10 @@ let get = Closure_Get {
     func: closure_get_impl,
 };
 
-// Calling closures:
-inc.func(inc.env);            // *cref becomes 1
-inc.func(inc.env);            // *cref becomes 2
-println(get.func(get.env));   // Prints "2" — both envs hold a copy of the same reference
+// Calling closures (env passed by reference to the impl function):
+inc.func(&inc.env);            // *cref becomes 1
+inc.func(&inc.env);            // *cref becomes 2
+println(get.func(&get.env));   // Prints "2" — both envs hold a copy of the same reference
 ```
 
 **Key insight:** Each environment is a deep-copy snapshot at closure creation time. Mutability and sharing come from capturing a reference, not from sharing the environment struct itself.
@@ -732,7 +732,7 @@ There is a single closure type. Captures are by value, so the closure body canno
 
 | Type         | Description           |
 | ------------ | --------------------- |
-| `fn(T) -> U` | Closure (or function) |
+| `Fn(T) -> U` | Closure (or function) |
 
 **Comparison with Rust:** Rust splits closures into `Fn` / `FnMut` / `FnOnce` so the borrow checker can track captured `&mut` borrows. Wado has no borrow checker and captures by deep copy, so the distinction is unnecessary: a closure that needs to mutate or share state captures a reference value, which aliases like any other reference.
 
@@ -744,7 +744,7 @@ Unlike Rust, Wado does not have bare function pointers. All callable values are 
 // Read-only capture
 let outer = 10;
 let f = |x: i32| x + outer;
-// Type: fn(i32) -> i32
+// Type: Fn(i32) -> i32
 
 // Mutation via captured reference (no special closure syntax)
 let mut count = 0;
@@ -753,7 +753,7 @@ let counter = || {
     *cref += 1;
     *cref
 };
-// Type: fn() -> i32
+// Type: Fn() -> i32
 ```
 
 **Compiler enforcement:**
@@ -859,7 +859,7 @@ The specialised path (closure local stays as `&__Closure_N`) does not use the vt
 2. **Shared mutable state via references**: Closures sharing a captured reference observe the same underlying value, without special-cased closure syntax
 3. **Type-safe**: Each closure signature has distinct Wasm types
 4. **Compatible with value semantics**: Closures follow the same deep-copy rule as assignment, parameter passing, and return — references remain the only types that alias
-5. **Single closure type**: No `Fn` / `FnMut` / `FnOnce` hierarchy; one `fn(T) -> U`
+5. **Single closure type**: No `Fn` / `FnMut` / `FnOnce` hierarchy; one `Fn(T) -> U`
 6. **Optimization-friendly**: Compiler can optimize non-escaping closures to use locals
 
 ### Negative
