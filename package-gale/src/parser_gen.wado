@@ -3139,7 +3139,7 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
         } else if let Group(g_op) = op {
             gen_op_group(w, g_op, elem, ctx, &mut name_counts);
         } else {
-            gen_element(w, elem, ctx, &mut name_counts);
+            panic("gen_alt_body_skip: unreachable op shape — every Op variant is handled");
         }
         ctx.ruleref_call_follow = [];
     }
@@ -3229,14 +3229,13 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<O
             let rep_op = if let Repeat(r) = op { r } else { panic("gen_alt_elements: Repeat element / op mismatch") };
             gen_op_repeat(w, rep, rep_op, ctx, &mut name_counts);
         } else if op_is_leaf(op) {
-            // Lower has resolved every leaf op (field name, token kind,
-            // variant id, min-prec) — emit reads them verbatim. The
-            // surface `gen_element` is bypassed for leaves at this
-            // top-level walker; group bodies and label / not cases still
-            // route through `gen_element` in their unmigrated helpers.
             gen_op_leaf(w, op, elem, ctx, &mut name_counts);
+        } else if let ListLabel(ll) = op {
+            gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
+        } else if let Group(g_op) = op {
+            gen_op_group(w, g_op, elem, ctx, &mut name_counts);
         } else {
-            gen_element(w, elem, ctx, &mut name_counts);
+            panic("gen_alt_elements: unreachable op shape — every Op variant is handled");
         }
         ctx.ruleref_call_follow = [];
     }
@@ -3285,7 +3284,7 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, o
         } else if let Group(g_op) = op {
             gen_op_group(w, g_op, elem, ctx, name_counts);
         } else {
-            gen_element(w, elem, ctx, name_counts);
+            panic("gen_elements_with_non_greedy: unreachable op shape — every Op variant is handled");
         }
         ctx.ruleref_call_follow = [];
     }
