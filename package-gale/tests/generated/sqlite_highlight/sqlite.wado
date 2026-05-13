@@ -7686,12 +7686,12 @@ fn scan_column_def(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_column_name(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_23(tokens[pos].kind) {
         let sp = pos;
         pos = scan_type_name(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && _gale_kind_set_23(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_24(tokens[pos].kind) {
         let sp = pos;
         pos = scan_column_constraint(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
@@ -7765,7 +7765,7 @@ fn scan_column_constraint(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     }
     let gp_138 = pos;
     let sgk_138 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    if _gale_kind_set_25(sgk_138) {
+    if _gale_kind_set_26(sgk_138) {
         sg_138: {
             pos = gp_138;
             sg_138_0: {
@@ -7773,7 +7773,7 @@ fn scan_column_constraint(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos].kind != TK_K_KEY { break sg_138_0; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_26(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_27(tokens[pos].kind) {
                     let sp = pos;
                     let gp_139 = pos;
                     sg_139: {
@@ -7841,7 +7841,7 @@ fn scan_column_constraint(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
                 pos += 1;
                 let gp_140 = pos;
                 let sgk_140 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-                if _gale_kind_set_29(sgk_140) {
+                if _gale_kind_set_30(sgk_140) {
                     let mut sg_140_best = -1;
                     sg_140: {
                         pos = gp_140;
@@ -7950,7 +7950,7 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_47(alt_kind) {
+        if _gale_kind_set_49(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_literal_value(tokens, pos, 0);
@@ -7958,7 +7958,7 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_48(alt_kind) {
+        } else if _gale_kind_set_50(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_literal_value(tokens, pos, 0);
@@ -7971,7 +7971,7 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 if pos < 0 { break try_4; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_4; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_31(tokens[pos].kind) {
                     let sp = pos;
                     let gp_143 = pos;
                     sg_143: {
@@ -8049,14 +8049,14 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_49(alt_kind) {
+        } else if _gale_kind_set_51(alt_kind) {
             pos = start;
             try_4: {
                 pos = scan_function_name(tokens, pos, 0);
                 if pos < 0 { break try_4; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_4; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_31(tokens[pos].kind) {
                     let sp = pos;
                     let gp_147 = pos;
                     sg_147: {
@@ -8131,7 +8131,7 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             try_8: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_K_CASE { break try_8; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_12(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_32(tokens[pos].kind) {
                     let sp = pos;
                     pos = scan_expr(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
@@ -8193,7 +8193,7 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 if pos < 0 { break try_4; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_4; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_31(tokens[pos].kind) {
                     let sp = pos;
                     let gp_154 = pos;
                     sg_154: {
@@ -8286,7 +8286,7 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 if pos < 0 { break try_4; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_4; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_31(tokens[pos].kind) {
                     let sp = pos;
                     let gp_158 = pos;
                     sg_158: {
@@ -8386,7 +8386,7 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 if pos < 0 { break try_4; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_4; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_31(tokens[pos].kind) {
                     let sp = pos;
                     let gp_164 = pos;
                     sg_164: {
@@ -8486,7 +8486,7 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 if pos < 0 { break try_4; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_4; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_31(tokens[pos].kind) {
                     let sp = pos;
                     let gp_170 = pos;
                     sg_170: {
@@ -8577,7 +8577,7 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 if pos < 0 { break try_4; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_4; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_31(tokens[pos].kind) {
                     let sp = pos;
                     let gp_174 = pos;
                     sg_174: {
@@ -8687,7 +8687,7 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 if pos < 0 { break try_4; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_4; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_31(tokens[pos].kind) {
                     let sp = pos;
                     let gp_180 = pos;
                     sg_180: {
@@ -8757,7 +8757,7 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_50(alt_kind) {
+        } else if _gale_kind_set_52(alt_kind) {
             pos = start;
             try_3: {
                 pos = scan_unary_operator(tokens, pos, 0);
@@ -9111,7 +9111,7 @@ fn scan_expr_lr_18(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_195 = pos;
     let sgk_195 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    if _gale_kind_set_31(sgk_195) {
+    if _gale_kind_set_33(sgk_195) {
         sg_195: {
             pos = gp_195;
             sg_195_0: {
@@ -9184,7 +9184,7 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             } else {
                 break;
             }
-        } else if _gale_kind_set_51(suffix_kind) {
+        } else if _gale_kind_set_53(suffix_kind) {
             if 13 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_5(tokens, pos);
@@ -9192,7 +9192,7 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             } else {
                 break;
             }
-        } else if _gale_kind_set_45(suffix_kind) {
+        } else if _gale_kind_set_47(suffix_kind) {
             if 12 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_6(tokens, pos);
@@ -9200,7 +9200,7 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             } else {
                 break;
             }
-        } else if _gale_kind_set_52(suffix_kind) {
+        } else if _gale_kind_set_54(suffix_kind) {
             if 11 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_7(tokens, pos);
@@ -9208,7 +9208,7 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             } else {
                 break;
             }
-        } else if _gale_kind_set_53(suffix_kind) {
+        } else if _gale_kind_set_55(suffix_kind) {
             if 10 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_8(tokens, pos);
@@ -9216,7 +9216,7 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             } else {
                 break;
             }
-        } else if _gale_kind_set_54(suffix_kind) {
+        } else if _gale_kind_set_56(suffix_kind) {
             if 9 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_9(tokens, pos);
@@ -9224,7 +9224,7 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             } else {
                 break;
             }
-        } else if _gale_kind_set_55(suffix_kind) {
+        } else if _gale_kind_set_57(suffix_kind) {
             if suffix_kind == TK_K_IN {
                 if 8 >= min_prec {
                     let lr_saved_pos = pos;
@@ -9299,7 +9299,7 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                     } else {
                         break;
                     }
-                } else if _gale_kind_set_56(second_kind) {
+                } else if _gale_kind_set_58(second_kind) {
                     if 4 >= min_prec {
                         let lr_saved_pos = pos;
                         pos = scan_expr_lr_17(tokens, pos);
@@ -9401,7 +9401,7 @@ fn scan_foreign_key_clause(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
         }
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && _gale_kind_set_32(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_34(tokens[pos].kind) {
         let sp = pos;
         let gp_198 = pos;
         sg_198: {
@@ -9427,7 +9427,7 @@ fn scan_foreign_key_clause(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
                 }
                 let gp_200 = pos;
                 let sgk_200 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-                if _gale_kind_set_33(sgk_200) {
+                if _gale_kind_set_35(sgk_200) {
                     let mut sg_200_best = -1;
                     sg_200: {
                         pos = gp_200;
@@ -9571,7 +9571,7 @@ fn scan_raise_function(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     pos += 1;
     let gp_207 = pos;
     let sgk_207 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    if _gale_kind_set_35(sgk_207) {
+    if _gale_kind_set_37(sgk_207) {
         sg_207: {
             pos = gp_207;
             sg_207_0: {
@@ -9635,7 +9635,7 @@ fn scan_indexed_column(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
         }
         if pos < 0 { pos = sp; }
     }
-    if pos < tokens.len() && _gale_kind_set_26(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_27(tokens[pos].kind) {
         let sp = pos;
         let gp_210 = pos;
         sg_210: {
@@ -9676,13 +9676,13 @@ fn scan_table_constraint(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     }
     let gp_212 = pos;
     let sgk_212 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    if _gale_kind_set_37(sgk_212) {
+    if _gale_kind_set_39(sgk_212) {
         sg_212: {
             pos = gp_212;
             sg_212_0: {
                 let gp_213 = pos;
                 let sgk_213 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-                if _gale_kind_set_36(sgk_213) {
+                if _gale_kind_set_38(sgk_213) {
                     sg_213: {
                         pos = gp_213;
                         sg_213_0: {
@@ -9822,7 +9822,7 @@ fn scan_qualified_table_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
     }
     pos = scan_table_name(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && _gale_kind_set_38(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_40(tokens[pos].kind) {
         let sp = pos;
         let gp_218 = pos;
         sg_218: {
@@ -9869,7 +9869,7 @@ fn scan_ordering_term(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
         }
         if pos < 0 { pos = sp; }
     }
-    if pos < tokens.len() && _gale_kind_set_26(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_27(tokens[pos].kind) {
         let sp = pos;
         let gp_220 = pos;
         sg_220: {
@@ -9897,7 +9897,7 @@ fn scan_pragma_value(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_27(alt_kind) {
+        if _gale_kind_set_28(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_signed_number(tokens, pos, 0);
@@ -9905,7 +9905,7 @@ fn scan_pragma_value(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_57(alt_kind) {
+        } else if _gale_kind_set_59(alt_kind) {
             pos = start;
             try_1: {
                 pos = scan_name(tokens, pos, 0);
@@ -10008,14 +10008,14 @@ fn scan_result_column(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
             try_2: {
                 pos = scan_expr(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_39(tokens[pos + 1].kind) {
+                if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_41(tokens[pos + 1].kind) {
                     sol_223: {
                         if pos >= tokens.len() || tokens[pos].kind != TK_K_AS { break sol_223; }
                         pos += 1;
                         pos = scan_column_alias(tokens, pos, 0);
                         if pos < 0 { break sol_223; }
                     }
-                } else if pos < tokens.len() && _gale_kind_set_39(tokens[pos].kind) {
+                } else if pos < tokens.len() && _gale_kind_set_41(tokens[pos].kind) {
                     sol_224: {
                         pos = scan_column_alias(tokens, pos, 0);
                         if pos < 0 { break sol_224; }
@@ -10024,19 +10024,19 @@ fn scan_result_column(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_58(alt_kind) {
+        } else if _gale_kind_set_60(alt_kind) {
             pos = start;
             try_2: {
                 pos = scan_expr(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_39(tokens[pos + 1].kind) {
+                if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_41(tokens[pos + 1].kind) {
                     sol_225: {
                         if pos >= tokens.len() || tokens[pos].kind != TK_K_AS { break sol_225; }
                         pos += 1;
                         pos = scan_column_alias(tokens, pos, 0);
                         if pos < 0 { break sol_225; }
                     }
-                } else if pos < tokens.len() && _gale_kind_set_39(tokens[pos].kind) {
+                } else if pos < tokens.len() && _gale_kind_set_41(tokens[pos].kind) {
                     sol_226: {
                         pos = scan_column_alias(tokens, pos, 0);
                         if pos < 0 { break sol_226; }
@@ -10057,7 +10057,7 @@ fn scan_table_or_subquery(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_59(alt_kind) {
+        if _gale_kind_set_61(alt_kind) {
             pos = start;
             try_1: {
                 if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) {
@@ -10107,14 +10107,14 @@ fn scan_table_or_subquery(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
                 }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_1; }
                 pos += 1;
-                if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_40(tokens[pos + 1].kind) {
+                if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_42(tokens[pos + 1].kind) {
                     sol_230: {
                         if pos >= tokens.len() || tokens[pos].kind != TK_K_AS { break sol_230; }
                         pos += 1;
                         pos = scan_table_alias(tokens, pos, 0);
                         if pos < 0 { break sol_230; }
                     }
-                } else if pos < tokens.len() && _gale_kind_set_40(tokens[pos].kind) {
+                } else if pos < tokens.len() && _gale_kind_set_42(tokens[pos].kind) {
                     sol_231: {
                         pos = scan_table_alias(tokens, pos, 0);
                         if pos < 0 { break sol_231; }
@@ -10140,20 +10140,20 @@ fn scan_table_or_subquery(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
                 }
                 pos = scan_table_name(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_40(tokens[pos + 1].kind) {
+                if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_42(tokens[pos + 1].kind) {
                     sol_233: {
                         if pos >= tokens.len() || tokens[pos].kind != TK_K_AS { break sol_233; }
                         pos += 1;
                         pos = scan_table_alias(tokens, pos, 0);
                         if pos < 0 { break sol_233; }
                     }
-                } else if pos < tokens.len() && _gale_kind_set_40(tokens[pos].kind) {
+                } else if pos < tokens.len() && _gale_kind_set_42(tokens[pos].kind) {
                     sol_234: {
                         pos = scan_table_alias(tokens, pos, 0);
                         if pos < 0 { break sol_234; }
                     }
                 }
-                if pos < tokens.len() && _gale_kind_set_38(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_40(tokens[pos].kind) {
                     let sp = pos;
                     let gp_235 = pos;
                     sg_235: {
@@ -10191,14 +10191,14 @@ fn scan_table_or_subquery(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
                 if pos < 0 { break try_3; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_3; }
                 pos += 1;
-                if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_40(tokens[pos + 1].kind) {
+                if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_42(tokens[pos + 1].kind) {
                     sol_236: {
                         if pos >= tokens.len() || tokens[pos].kind != TK_K_AS { break sol_236; }
                         pos += 1;
                         pos = scan_table_alias(tokens, pos, 0);
                         if pos < 0 { break sol_236; }
                     }
-                } else if pos < tokens.len() && _gale_kind_set_40(tokens[pos].kind) {
+                } else if pos < tokens.len() && _gale_kind_set_42(tokens[pos].kind) {
                     sol_237: {
                         pos = scan_table_alias(tokens, pos, 0);
                         if pos < 0 { break sol_237; }
@@ -10299,14 +10299,14 @@ fn scan_table_or_subquery(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
                 }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_1; }
                 pos += 1;
-                if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_40(tokens[pos + 1].kind) {
+                if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_42(tokens[pos + 1].kind) {
                     sol_243: {
                         if pos >= tokens.len() || tokens[pos].kind != TK_K_AS { break sol_243; }
                         pos += 1;
                         pos = scan_table_alias(tokens, pos, 0);
                         if pos < 0 { break sol_243; }
                     }
-                } else if pos < tokens.len() && _gale_kind_set_40(tokens[pos].kind) {
+                } else if pos < tokens.len() && _gale_kind_set_42(tokens[pos].kind) {
                     sol_244: {
                         pos = scan_table_alias(tokens, pos, 0);
                         if pos < 0 { break sol_244; }
@@ -10332,20 +10332,20 @@ fn scan_table_or_subquery(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
                 }
                 pos = scan_table_name(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_40(tokens[pos + 1].kind) {
+                if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_42(tokens[pos + 1].kind) {
                     sol_246: {
                         if pos >= tokens.len() || tokens[pos].kind != TK_K_AS { break sol_246; }
                         pos += 1;
                         pos = scan_table_alias(tokens, pos, 0);
                         if pos < 0 { break sol_246; }
                     }
-                } else if pos < tokens.len() && _gale_kind_set_40(tokens[pos].kind) {
+                } else if pos < tokens.len() && _gale_kind_set_42(tokens[pos].kind) {
                     sol_247: {
                         pos = scan_table_alias(tokens, pos, 0);
                         if pos < 0 { break sol_247; }
                     }
                 }
-                if pos < tokens.len() && _gale_kind_set_38(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_40(tokens[pos].kind) {
                     let sp = pos;
                     let gp_248 = pos;
                     sg_248: {
@@ -10385,7 +10385,7 @@ fn scan_join_clause(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_table_or_subquery(tokens, pos, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_41(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_43(tokens[pos].kind) {
         let sp = pos;
         sg_249_done: {
             sg_249: {
@@ -10418,7 +10418,7 @@ fn scan_join_operator(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_42(alt_kind) {
+        } else if _gale_kind_set_44(alt_kind) {
             pos = start;
             try_1: {
                 if pos < tokens.len() && tokens[pos].kind == TK_K_NATURAL {
@@ -10426,7 +10426,7 @@ fn scan_join_operator(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
                     if pos >= tokens.len() || tokens[pos].kind != TK_K_NATURAL { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
                 }
-                if pos < tokens.len() && _gale_kind_set_43(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_45(tokens[pos].kind) {
                     let sp = pos;
                     let gp_250 = pos;
                     sg_250: {
@@ -10471,7 +10471,7 @@ fn scan_join_operator(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
 
 fn scan_join_constraint(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && _gale_kind_set_44(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_46(tokens[pos].kind) {
         let sp = pos;
         let gp_251 = pos;
         sg_251: {
@@ -10820,7 +10820,7 @@ fn scan_compound_operator(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
 
 fn scan_signed_number(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && _gale_kind_set_45(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_47(tokens[pos].kind) {
         let sp = pos;
         let gp_268 = pos;
         sg_268: {
@@ -10846,14 +10846,14 @@ fn scan_signed_number(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
 }
 
 fn scan_literal_value(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_28(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_29(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
 fn scan_unary_operator(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_60(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_62(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
@@ -10871,7 +10871,7 @@ fn scan_module_argument(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_58(alt_kind) {
+        if _gale_kind_set_60(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_expr(tokens, pos, 0);
@@ -10901,14 +10901,14 @@ fn scan_module_argument(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i
 }
 
 fn scan_column_alias(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_39(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_41(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
 fn scan_keyword(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_46(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_48(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
@@ -11093,7 +11093,7 @@ fn scan_any_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_46(alt_kind) {
+        } else if _gale_kind_set_48(alt_kind) {
             pos = start;
             try_1: {
                 pos = scan_keyword(tokens, pos, 0);
@@ -12156,7 +12156,7 @@ fn parse_create_table_stmt(p: &mut Parser) -> Result<CreateTableStmtNode, ParseE
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let column_def = parse_column_def(p)?;
         let mut comma_column_def_list: Array<CommaColumnDefItem> = [];
-        while (p.peek_kind() == TK_LIT_COMMA) && (_gale_kind_set_61(p.peek_at(1))) {
+        while (p.peek_kind() == TK_LIT_COMMA) && (_gale_kind_set_63(p.peek_at(1))) {
             let comma = p.expect(TK_LIT_COMMA)?;
             let column_def = parse_column_def(p)?;
             let comma_column_def = CommaColumnDefItem {
@@ -15178,7 +15178,7 @@ fn parse_vacuum_stmt(p: &mut Parser) -> Result<VacuumStmtNode, ParseError> {
 fn parse_column_def(p: &mut Parser) -> Result<ColumnDefNode, ParseError> {
     let start = p.peek().span.start;
     let column_name = parse_column_name(p)?;
-    let type_name: Option<TypeNameNode> = if _gale_kind_set_62(p.peek_kind()) {
+    let type_name: Option<TypeNameNode> = if _gale_kind_set_23(p.peek_kind()) {
         let type_name = parse_type_name(p)?;
         Option::<TypeNameNode>::Some(type_name)
     } else {
@@ -15369,7 +15369,7 @@ fn parse_column_constraint(p: &mut Parser) -> Result<ColumnConstraintNode, Parse
             conflict_clause,
             k_autoincrement,
         }));
-    } else if _gale_kind_set_24(grp_kind) {
+    } else if _gale_kind_set_25(grp_kind) {
         let k_not: Option<Token> = if p.peek_kind() == TK_K_NOT {
             let k_not = p.expect(TK_K_NOT)?;
             Option::<Token>::Some(k_not)
@@ -15405,7 +15405,7 @@ fn parse_column_constraint(p: &mut Parser) -> Result<ColumnConstraintNode, Parse
         let k_default = p.expect(TK_K_DEFAULT)?;
         let mut group_1_inner: Option<ColumnConstraintGroup1> = null;
         let grp_kind = p.peek_kind();
-        if _gale_kind_set_63(grp_kind) {
+        if _gale_kind_set_64(grp_kind) {
             let mut gd_winner: i32 = -1;
             gd_dispatch: {
                 gd_scan: {
@@ -15524,7 +15524,7 @@ fn parse_expr_scan_15(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_expr_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let k_case = p.expect(TK_K_CASE)?;
-    let expr: Option<ExprNode> = if _gale_kind_set_64(p.peek_kind()) {
+    let expr: Option<ExprNode> = if _gale_kind_set_32(p.peek_kind()) {
         let expr = parse_expr(p)?;
         Option::<ExprNode>::Some(expr)
     } else {
@@ -15590,7 +15590,7 @@ fn parse_expr_scan_22(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_CASE { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_64(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_32(tokens[pos].kind) {
         let sp = pos;
         pos = scan_expr(tokens, pos, 0);
         if pos < 0 { pos = sp; }
@@ -15867,7 +15867,7 @@ fn parse_expr_scan_13(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_31(tokens[pos].kind) {
         let sp = pos;
         let gp_307 = pos;
         sg_307: {
@@ -16211,11 +16211,11 @@ fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
                 return parse_expr_bt_2(p);
             }
             return parse_expr_bt_2(p);
-        } else if _gale_kind_set_50(p.peek_kind()) {
+        } else if _gale_kind_set_52(p.peek_kind()) {
             return parse_expr_bt_3(p);
-        } else if _gale_kind_set_47(p.peek_kind()) {
+        } else if _gale_kind_set_49(p.peek_kind()) {
             return parse_expr_bt_0(p);
-        } else if _gale_kind_set_48(p.peek_kind()) {
+        } else if _gale_kind_set_50(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_0 = parse_expr_scan_0(_sd_tokens, _sd_pos);
@@ -16245,7 +16245,7 @@ fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
                 return parse_expr_bt_2(p);
             }
             return parse_expr_bt_2(p);
-        } else if _gale_kind_set_49(p.peek_kind()) {
+        } else if _gale_kind_set_51(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_13 = parse_expr_scan_13(_sd_tokens, _sd_pos);
@@ -16700,7 +16700,7 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
             } else {
                 break;
             }
-        } else if _gale_kind_set_51(suffix_kind) {
+        } else if _gale_kind_set_53(suffix_kind) {
             if 13 >= min_prec {
                 if scan_expr_lr_5(&p.tokens, p.pos) < 0 {
                     break;
@@ -16709,7 +16709,7 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
             } else {
                 break;
             }
-        } else if _gale_kind_set_45(suffix_kind) {
+        } else if _gale_kind_set_47(suffix_kind) {
             if 12 >= min_prec {
                 if scan_expr_lr_6(&p.tokens, p.pos) < 0 {
                     break;
@@ -16718,7 +16718,7 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
             } else {
                 break;
             }
-        } else if _gale_kind_set_52(suffix_kind) {
+        } else if _gale_kind_set_54(suffix_kind) {
             if 11 >= min_prec {
                 if scan_expr_lr_7(&p.tokens, p.pos) < 0 {
                     break;
@@ -16727,7 +16727,7 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
             } else {
                 break;
             }
-        } else if _gale_kind_set_53(suffix_kind) {
+        } else if _gale_kind_set_55(suffix_kind) {
             if 10 >= min_prec {
                 if scan_expr_lr_8(&p.tokens, p.pos) < 0 {
                     break;
@@ -16736,7 +16736,7 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
             } else {
                 break;
             }
-        } else if _gale_kind_set_54(suffix_kind) {
+        } else if _gale_kind_set_56(suffix_kind) {
             if 9 >= min_prec {
                 if scan_expr_lr_9(&p.tokens, p.pos) < 0 {
                     break;
@@ -16745,7 +16745,7 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
             } else {
                 break;
             }
-        } else if _gale_kind_set_55(suffix_kind) {
+        } else if _gale_kind_set_57(suffix_kind) {
             if suffix_kind == TK_K_IN {
                 if 8 >= min_prec {
                     if scan_expr_lr_10(&p.tokens, p.pos) < 0 {
@@ -16828,7 +16828,7 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
                     } else {
                         break;
                     }
-                } else if _gale_kind_set_56(p.peek_at(1)) {
+                } else if _gale_kind_set_58(p.peek_at(1)) {
                     if 4 >= min_prec {
                         if scan_expr_lr_17(&p.tokens, p.pos) < 0 {
                             break;
@@ -16947,7 +16947,7 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
             let mut pos: i32 = p.pos;
             let gp_315 = pos;
             let sgk_315 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-            if _gale_kind_set_32(sgk_315) {
+            if _gale_kind_set_34(sgk_315) {
                 sg_315: {
                     pos = gp_315;
                     sg_315_0: {
@@ -16971,7 +16971,7 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
                         }
                         let gp_317 = pos;
                         let sgk_317 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-                        if _gale_kind_set_33(sgk_317) {
+                        if _gale_kind_set_35(sgk_317) {
                             let mut sg_317_best = -1;
                             sg_317: {
                                 pos = gp_317;
@@ -17310,7 +17310,7 @@ fn parse_raise_function(p: &mut Parser) -> Result<RaiseFunctionNode, ParseError>
         group_0_inner = Option::<RaiseFunctionGroup0>::Some(RaiseFunctionGroup0::Alt0(RaiseFunctionGroup0Alt0 {
             k_ignore,
         }));
-    } else if _gale_kind_set_34(grp_kind) {
+    } else if _gale_kind_set_36(grp_kind) {
         let k_rollback_or_k_abort_or_k_fail = p.advance();
         let comma = p.expect(TK_LIT_COMMA)?;
         let error_message = parse_error_message(p)?;
@@ -17396,7 +17396,7 @@ fn parse_table_constraint(p: &mut Parser) -> Result<TableConstraintNode, ParseEr
     };
     let mut group_0_inner: Option<TableConstraintGroup0> = null;
     let grp_kind = p.peek_kind();
-    if _gale_kind_set_36(grp_kind) {
+    if _gale_kind_set_38(grp_kind) {
         let mut group_1_inner: Option<TableConstraintGroup1> = null;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_PRIMARY {
@@ -17713,7 +17713,7 @@ fn parse_pragma_value_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_pragma_value(p: &mut Parser) -> Result<PragmaValueNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if _gale_kind_set_27(kind) {
+    if _gale_kind_set_28(kind) {
         let signed_number = parse_signed_number(p)?;
         return Result::<PragmaValueNode, ParseError>::Ok(PragmaValueNode::Alt0(PragmaValueAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -17743,7 +17743,7 @@ fn parse_pragma_value(p: &mut Parser) -> Result<PragmaValueNode, ParseError> {
                 return parse_pragma_value_bt_2(p);
             }
             return parse_pragma_value_bt_2(p);
-        } else if _gale_kind_set_57(p.peek_kind()) {
+        } else if _gale_kind_set_59(p.peek_kind()) {
             return parse_pragma_value_bt_1(p);
         }
     }
@@ -17835,7 +17835,7 @@ fn parse_result_column_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_result_column_bt_2(p: &mut Parser) -> Result<ResultColumnNode, ParseError> {
     let start = p.peek().span.start;
     let expr = parse_expr(p)?;
-    let k_as_column_alias: Option<KAsOptColumnAliasItem> = if p.peek_kind() == TK_K_AS && _gale_kind_set_39(p.peek_at(1)) {
+    let k_as_column_alias: Option<KAsOptColumnAliasItem> = if p.peek_kind() == TK_K_AS && _gale_kind_set_41(p.peek_at(1)) {
         let k_as: Option<Token> = if p.peek_kind() == TK_K_AS {
             let k_as = p.expect(TK_K_AS)?;
             Option::<Token>::Some(k_as)
@@ -17848,7 +17848,7 @@ fn parse_result_column_bt_2(p: &mut Parser) -> Result<ResultColumnNode, ParseErr
             column_alias,
         };
         Option::<KAsOptColumnAliasItem>::Some(k_as_column_alias)
-    } else if _gale_kind_set_39(p.peek_kind()) {
+    } else if _gale_kind_set_41(p.peek_kind()) {
         let k_as: Option<Token> = null;
         let column_alias = parse_column_alias(p)?;
         let k_as_column_alias = KAsOptColumnAliasItem {
@@ -17870,14 +17870,14 @@ fn parse_result_column_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_expr(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_39(tokens[pos + 1].kind) {
+    if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_41(tokens[pos + 1].kind) {
         sol_323: {
             if pos >= tokens.len() || tokens[pos].kind != TK_K_AS { break sol_323; }
             pos += 1;
             pos = scan_column_alias(tokens, pos, 0);
             if pos < 0 { break sol_323; }
         }
-    } else if pos < tokens.len() && _gale_kind_set_39(tokens[pos].kind) {
+    } else if pos < tokens.len() && _gale_kind_set_41(tokens[pos].kind) {
         sol_324: {
             pos = scan_column_alias(tokens, pos, 0);
             if pos < 0 { break sol_324; }
@@ -17919,7 +17919,7 @@ fn parse_result_column(p: &mut Parser) -> Result<ResultColumnNode, ParseError> {
                 return parse_result_column_bt_2(p);
             }
             return parse_result_column_bt_2(p);
-        } else if _gale_kind_set_58(p.peek_kind()) {
+        } else if _gale_kind_set_60(p.peek_kind()) {
             return parse_result_column_bt_2(p);
         }
     }
@@ -17935,7 +17935,7 @@ fn parse_table_or_subquery_bt_3(p: &mut Parser) -> Result<TableOrSubqueryNode, P
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let select_stmt = parse_select_stmt(p)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
-    let k_as_table_alias: Option<KAsOptTableAliasItem> = if p.peek_kind() == TK_K_AS && _gale_kind_set_40(p.peek_at(1)) {
+    let k_as_table_alias: Option<KAsOptTableAliasItem> = if p.peek_kind() == TK_K_AS && _gale_kind_set_42(p.peek_at(1)) {
         let k_as: Option<Token> = if p.peek_kind() == TK_K_AS {
             let k_as = p.expect(TK_K_AS)?;
             Option::<Token>::Some(k_as)
@@ -17948,7 +17948,7 @@ fn parse_table_or_subquery_bt_3(p: &mut Parser) -> Result<TableOrSubqueryNode, P
             table_alias,
         };
         Option::<KAsOptTableAliasItem>::Some(k_as_table_alias)
-    } else if _gale_kind_set_40(p.peek_kind()) {
+    } else if _gale_kind_set_42(p.peek_kind()) {
         let k_as: Option<Token> = null;
         let table_alias = parse_table_alias(p)?;
         let k_as_table_alias = KAsOptTableAliasItem {
@@ -17976,14 +17976,14 @@ fn parse_table_or_subquery_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_40(tokens[pos + 1].kind) {
+    if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_42(tokens[pos + 1].kind) {
         sol_325: {
             if pos >= tokens.len() || tokens[pos].kind != TK_K_AS { break sol_325; }
             pos += 1;
             pos = scan_table_alias(tokens, pos, 0);
             if pos < 0 { break sol_325; }
         }
-    } else if pos < tokens.len() && _gale_kind_set_40(tokens[pos].kind) {
+    } else if pos < tokens.len() && _gale_kind_set_42(tokens[pos].kind) {
         sol_326: {
             pos = scan_table_alias(tokens, pos, 0);
             if pos < 0 { break sol_326; }
@@ -18180,7 +18180,7 @@ fn parse_table_or_subquery_bt_1(p: &mut Parser) -> Result<TableOrSubqueryNode, P
         null
     };
     let rparen = p.expect(TK_LIT_RPAREN)?;
-    let k_as_table_alias: Option<KAsOptTableAliasItem> = if p.peek_kind() == TK_K_AS && _gale_kind_set_40(p.peek_at(1)) {
+    let k_as_table_alias: Option<KAsOptTableAliasItem> = if p.peek_kind() == TK_K_AS && _gale_kind_set_42(p.peek_at(1)) {
         let k_as: Option<Token> = if p.peek_kind() == TK_K_AS {
             let k_as = p.expect(TK_K_AS)?;
             Option::<Token>::Some(k_as)
@@ -18193,7 +18193,7 @@ fn parse_table_or_subquery_bt_1(p: &mut Parser) -> Result<TableOrSubqueryNode, P
             table_alias,
         };
         Option::<KAsOptTableAliasItem>::Some(k_as_table_alias)
-    } else if _gale_kind_set_40(p.peek_kind()) {
+    } else if _gale_kind_set_42(p.peek_kind()) {
         let k_as: Option<Token> = null;
         let table_alias = parse_table_alias(p)?;
         let k_as_table_alias = KAsOptTableAliasItem {
@@ -18264,14 +18264,14 @@ fn parse_table_or_subquery_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_40(tokens[pos + 1].kind) {
+    if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_42(tokens[pos + 1].kind) {
         sol_333: {
             if pos >= tokens.len() || tokens[pos].kind != TK_K_AS { break sol_333; }
             pos += 1;
             pos = scan_table_alias(tokens, pos, 0);
             if pos < 0 { break sol_333; }
         }
-    } else if pos < tokens.len() && _gale_kind_set_40(tokens[pos].kind) {
+    } else if pos < tokens.len() && _gale_kind_set_42(tokens[pos].kind) {
         sol_334: {
             pos = scan_table_alias(tokens, pos, 0);
             if pos < 0 { break sol_334; }
@@ -18304,7 +18304,7 @@ fn parse_table_or_subquery_bt_0(p: &mut Parser) -> Result<TableOrSubqueryNode, P
         null
     };
     let table_name = parse_table_name(p)?;
-    let k_as_table_alias: Option<KAsOptTableAliasItem> = if p.peek_kind() == TK_K_AS && _gale_kind_set_40(p.peek_at(1)) {
+    let k_as_table_alias: Option<KAsOptTableAliasItem> = if p.peek_kind() == TK_K_AS && _gale_kind_set_42(p.peek_at(1)) {
         let k_as: Option<Token> = if p.peek_kind() == TK_K_AS {
             let k_as = p.expect(TK_K_AS)?;
             Option::<Token>::Some(k_as)
@@ -18317,7 +18317,7 @@ fn parse_table_or_subquery_bt_0(p: &mut Parser) -> Result<TableOrSubqueryNode, P
             table_alias,
         };
         Option::<KAsOptTableAliasItem>::Some(k_as_table_alias)
-    } else if _gale_kind_set_40(p.peek_kind()) {
+    } else if _gale_kind_set_42(p.peek_kind()) {
         let k_as: Option<Token> = null;
         let table_alias = parse_table_alias(p)?;
         let k_as_table_alias = KAsOptTableAliasItem {
@@ -18405,20 +18405,20 @@ fn parse_table_or_subquery_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     }
     pos = scan_table_name(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_40(tokens[pos + 1].kind) {
+    if pos < tokens.len() && tokens[pos].kind == TK_K_AS && pos + 1 < tokens.len() && _gale_kind_set_42(tokens[pos + 1].kind) {
         sol_337: {
             if pos >= tokens.len() || tokens[pos].kind != TK_K_AS { break sol_337; }
             pos += 1;
             pos = scan_table_alias(tokens, pos, 0);
             if pos < 0 { break sol_337; }
         }
-    } else if pos < tokens.len() && _gale_kind_set_40(tokens[pos].kind) {
+    } else if pos < tokens.len() && _gale_kind_set_42(tokens[pos].kind) {
         sol_338: {
             pos = scan_table_alias(tokens, pos, 0);
             if pos < 0 { break sol_338; }
         }
     }
-    if pos < tokens.len() && _gale_kind_set_38(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_40(tokens[pos].kind) {
         let sp = pos;
         let gp_339 = pos;
         sg_339: {
@@ -18489,7 +18489,7 @@ fn parse_table_or_subquery(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseE
                 return parse_table_or_subquery_bt_0(p);
             }
             return parse_table_or_subquery_bt_0(p);
-        } else if _gale_kind_set_59(p.peek_kind()) {
+        } else if _gale_kind_set_61(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_1 = parse_table_or_subquery_scan_1(_sd_tokens, _sd_pos);
@@ -18566,7 +18566,7 @@ fn parse_join_operator(p: &mut Parser) -> Result<JoinOperatorNode, ParseError> {
             comma,
         }));
     }
-    if _gale_kind_set_42(kind) {
+    if _gale_kind_set_44(kind) {
         let k_natural: Option<Token> = if p.peek_kind() == TK_K_NATURAL {
             let k_natural = p.expect(TK_K_NATURAL)?;
             Option::<Token>::Some(k_natural)
@@ -19332,7 +19332,7 @@ fn parse_module_argument(p: &mut Parser) -> Result<ModuleArgumentNode, ParseErro
                 return parse_module_argument_bt_1(p);
             }
             return parse_module_argument_bt_1(p);
-        } else if _gale_kind_set_58(p.peek_kind()) {
+        } else if _gale_kind_set_60(p.peek_kind()) {
             return parse_module_argument_bt_0(p);
         }
     }
@@ -20452,7 +20452,7 @@ fn parse_any_name(p: &mut Parser) -> Result<AnyNameNode, ParseError> {
             identifier,
         }));
     }
-    if _gale_kind_set_46(kind) {
+    if _gale_kind_set_48(kind) {
         let keyword = parse_keyword(p)?;
         return Result::<AnyNameNode, ParseError>::Ok(AnyNameNode::Alt1(AnyNameAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -23670,171 +23670,171 @@ fn _gale_kind_set_22(k: i32) -> bool {
 }
 
 fn _gale_kind_set_23(k: i32) -> bool {
-    return k matches { TK_K_CHECK | TK_K_COLLATE | TK_K_CONSTRAINT | TK_K_DEFAULT | TK_K_NOT | TK_K_NULL | TK_K_PRIMARY | TK_K_REFERENCES | TK_K_UNIQUE };
-}
-
-fn _gale_kind_set_24(k: i32) -> bool {
-    return k matches { TK_K_NOT | TK_K_NULL };
-}
-
-fn _gale_kind_set_25(k: i32) -> bool {
-    return k matches { TK_K_CHECK | TK_K_COLLATE | TK_K_DEFAULT | TK_K_NOT | TK_K_NULL | TK_K_PRIMARY | TK_K_REFERENCES | TK_K_UNIQUE };
-}
-
-fn _gale_kind_set_26(k: i32) -> bool {
-    return k matches { TK_K_ASC | TK_K_DESC };
-}
-
-fn _gale_kind_set_27(k: i32) -> bool {
-    return k matches { TK_LIT_MINUS | TK_LIT_PLUS | TK_NUMERIC_LITERAL };
-}
-
-fn _gale_kind_set_28(k: i32) -> bool {
-    return k matches { TK_BLOB_LITERAL | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_NULL | TK_NUMERIC_LITERAL | TK_STRING_LITERAL };
-}
-
-fn _gale_kind_set_29(k: i32) -> bool {
-    return k matches { TK_BLOB_LITERAL | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_NULL | TK_LIT_LPAREN | TK_LIT_MINUS | TK_LIT_PLUS | TK_NUMERIC_LITERAL | TK_STRING_LITERAL };
-}
-
-fn _gale_kind_set_30(k: i32) -> bool {
-    return k matches { TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_LIT_LPAREN | TK_LIT_MINUS | TK_LIT_PLUS | TK_LIT_STAR | TK_LIT_TILDE | TK_NUMERIC_LITERAL | TK_STRING_LITERAL };
-}
-
-fn _gale_kind_set_31(k: i32) -> bool {
-    return k matches { TK_K_ISNULL | TK_K_NOT | TK_K_NOTNULL };
-}
-
-fn _gale_kind_set_32(k: i32) -> bool {
-    return k matches { TK_K_MATCH | TK_K_ON };
-}
-
-fn _gale_kind_set_33(k: i32) -> bool {
-    return k matches { TK_K_CASCADE | TK_K_NO | TK_K_RESTRICT | TK_K_SET };
-}
-
-fn _gale_kind_set_34(k: i32) -> bool {
-    return k matches { TK_K_ABORT | TK_K_FAIL | TK_K_ROLLBACK };
-}
-
-fn _gale_kind_set_35(k: i32) -> bool {
-    return k matches { TK_K_ABORT | TK_K_FAIL | TK_K_IGNORE | TK_K_ROLLBACK };
-}
-
-fn _gale_kind_set_36(k: i32) -> bool {
-    return k matches { TK_K_PRIMARY | TK_K_UNIQUE };
-}
-
-fn _gale_kind_set_37(k: i32) -> bool {
-    return k matches { TK_K_CHECK | TK_K_FOREIGN | TK_K_PRIMARY | TK_K_UNIQUE };
-}
-
-fn _gale_kind_set_38(k: i32) -> bool {
-    return k matches { TK_K_INDEXED | TK_K_NOT };
-}
-
-fn _gale_kind_set_39(k: i32) -> bool {
-    return k matches { TK_IDENTIFIER | TK_STRING_LITERAL };
-}
-
-fn _gale_kind_set_40(k: i32) -> bool {
-    return k matches { TK_IDENTIFIER | TK_LIT_LPAREN | TK_STRING_LITERAL };
-}
-
-fn _gale_kind_set_41(k: i32) -> bool {
-    return k matches { TK_K_CROSS | TK_K_INNER | TK_K_JOIN | TK_K_LEFT | TK_K_NATURAL | TK_LIT_COMMA };
-}
-
-fn _gale_kind_set_42(k: i32) -> bool {
-    return k matches { TK_K_CROSS | TK_K_INNER | TK_K_JOIN | TK_K_LEFT | TK_K_NATURAL };
-}
-
-fn _gale_kind_set_43(k: i32) -> bool {
-    return k matches { TK_K_CROSS | TK_K_INNER | TK_K_LEFT };
-}
-
-fn _gale_kind_set_44(k: i32) -> bool {
-    return k matches { TK_K_ON | TK_K_USING };
-}
-
-fn _gale_kind_set_45(k: i32) -> bool {
-    return k matches { TK_LIT_MINUS | TK_LIT_PLUS };
-}
-
-fn _gale_kind_set_46(k: i32) -> bool {
-    return k matches { TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT };
-}
-
-fn _gale_kind_set_47(k: i32) -> bool {
-    return k matches { TK_BLOB_LITERAL | TK_NUMERIC_LITERAL };
-}
-
-fn _gale_kind_set_48(k: i32) -> bool {
-    return k matches { TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_NULL | TK_STRING_LITERAL };
-}
-
-fn _gale_kind_set_49(k: i32) -> bool {
-    return k matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOTNULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT };
-}
-
-fn _gale_kind_set_50(k: i32) -> bool {
-    return k matches { TK_LIT_MINUS | TK_LIT_PLUS | TK_LIT_TILDE };
-}
-
-fn _gale_kind_set_51(k: i32) -> bool {
-    return k matches { TK_LIT_PERCENT | TK_LIT_SLASH | TK_LIT_STAR };
-}
-
-fn _gale_kind_set_52(k: i32) -> bool {
-    return k matches { TK_LIT_AMP | TK_LIT_GTGT | TK_LIT_LTLT | TK_LIT_PIPE };
-}
-
-fn _gale_kind_set_53(k: i32) -> bool {
-    return k matches { TK_LIT_GT | TK_LIT_GTEQ | TK_LIT_LT | TK_LIT_LTEQ };
-}
-
-fn _gale_kind_set_54(k: i32) -> bool {
-    return k matches { TK_LIT_BANGEQ | TK_LIT_EQ | TK_LIT_EQEQ | TK_LIT_LTGT };
-}
-
-fn _gale_kind_set_55(k: i32) -> bool {
-    return k matches { TK_K_BETWEEN | TK_K_GLOB | TK_K_IN | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_REGEXP };
-}
-
-fn _gale_kind_set_56(k: i32) -> bool {
-    return k matches { TK_K_GLOB | TK_K_LIKE | TK_K_MATCH | TK_K_REGEXP };
-}
-
-fn _gale_kind_set_57(k: i32) -> bool {
-    return k matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_LIT_LPAREN };
-}
-
-fn _gale_kind_set_58(k: i32) -> bool {
-    return k matches { TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_LIT_MINUS | TK_LIT_PLUS | TK_LIT_TILDE | TK_NUMERIC_LITERAL };
-}
-
-fn _gale_kind_set_59(k: i32) -> bool {
-    return k matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL };
-}
-
-fn _gale_kind_set_60(k: i32) -> bool {
-    return k matches { TK_K_NOT | TK_LIT_MINUS | TK_LIT_PLUS | TK_LIT_TILDE };
-}
-
-fn _gale_kind_set_61(k: i32) -> bool {
-    return k matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_LIT_LPAREN | TK_STRING_LITERAL };
-}
-
-fn _gale_kind_set_62(k: i32) -> bool {
     return k matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOTNULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_LIT_LPAREN | TK_STRING_LITERAL };
 }
 
+fn _gale_kind_set_24(k: i32) -> bool {
+    return k matches { TK_K_CHECK | TK_K_COLLATE | TK_K_CONSTRAINT | TK_K_DEFAULT | TK_K_NOT | TK_K_NULL | TK_K_PRIMARY | TK_K_REFERENCES | TK_K_UNIQUE };
+}
+
+fn _gale_kind_set_25(k: i32) -> bool {
+    return k matches { TK_K_NOT | TK_K_NULL };
+}
+
+fn _gale_kind_set_26(k: i32) -> bool {
+    return k matches { TK_K_CHECK | TK_K_COLLATE | TK_K_DEFAULT | TK_K_NOT | TK_K_NULL | TK_K_PRIMARY | TK_K_REFERENCES | TK_K_UNIQUE };
+}
+
+fn _gale_kind_set_27(k: i32) -> bool {
+    return k matches { TK_K_ASC | TK_K_DESC };
+}
+
+fn _gale_kind_set_28(k: i32) -> bool {
+    return k matches { TK_LIT_MINUS | TK_LIT_PLUS | TK_NUMERIC_LITERAL };
+}
+
+fn _gale_kind_set_29(k: i32) -> bool {
+    return k matches { TK_BLOB_LITERAL | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_NULL | TK_NUMERIC_LITERAL | TK_STRING_LITERAL };
+}
+
+fn _gale_kind_set_30(k: i32) -> bool {
+    return k matches { TK_BLOB_LITERAL | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_NULL | TK_LIT_LPAREN | TK_LIT_MINUS | TK_LIT_PLUS | TK_NUMERIC_LITERAL | TK_STRING_LITERAL };
+}
+
+fn _gale_kind_set_31(k: i32) -> bool {
+    return k matches { TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_LIT_LPAREN | TK_LIT_MINUS | TK_LIT_PLUS | TK_LIT_STAR | TK_LIT_TILDE | TK_NUMERIC_LITERAL | TK_STRING_LITERAL };
+}
+
+fn _gale_kind_set_32(k: i32) -> bool {
+    return k matches { TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_LIT_LPAREN | TK_LIT_MINUS | TK_LIT_PLUS | TK_LIT_TILDE | TK_NUMERIC_LITERAL | TK_STRING_LITERAL };
+}
+
+fn _gale_kind_set_33(k: i32) -> bool {
+    return k matches { TK_K_ISNULL | TK_K_NOT | TK_K_NOTNULL };
+}
+
+fn _gale_kind_set_34(k: i32) -> bool {
+    return k matches { TK_K_MATCH | TK_K_ON };
+}
+
+fn _gale_kind_set_35(k: i32) -> bool {
+    return k matches { TK_K_CASCADE | TK_K_NO | TK_K_RESTRICT | TK_K_SET };
+}
+
+fn _gale_kind_set_36(k: i32) -> bool {
+    return k matches { TK_K_ABORT | TK_K_FAIL | TK_K_ROLLBACK };
+}
+
+fn _gale_kind_set_37(k: i32) -> bool {
+    return k matches { TK_K_ABORT | TK_K_FAIL | TK_K_IGNORE | TK_K_ROLLBACK };
+}
+
+fn _gale_kind_set_38(k: i32) -> bool {
+    return k matches { TK_K_PRIMARY | TK_K_UNIQUE };
+}
+
+fn _gale_kind_set_39(k: i32) -> bool {
+    return k matches { TK_K_CHECK | TK_K_FOREIGN | TK_K_PRIMARY | TK_K_UNIQUE };
+}
+
+fn _gale_kind_set_40(k: i32) -> bool {
+    return k matches { TK_K_INDEXED | TK_K_NOT };
+}
+
+fn _gale_kind_set_41(k: i32) -> bool {
+    return k matches { TK_IDENTIFIER | TK_STRING_LITERAL };
+}
+
+fn _gale_kind_set_42(k: i32) -> bool {
+    return k matches { TK_IDENTIFIER | TK_LIT_LPAREN | TK_STRING_LITERAL };
+}
+
+fn _gale_kind_set_43(k: i32) -> bool {
+    return k matches { TK_K_CROSS | TK_K_INNER | TK_K_JOIN | TK_K_LEFT | TK_K_NATURAL | TK_LIT_COMMA };
+}
+
+fn _gale_kind_set_44(k: i32) -> bool {
+    return k matches { TK_K_CROSS | TK_K_INNER | TK_K_JOIN | TK_K_LEFT | TK_K_NATURAL };
+}
+
+fn _gale_kind_set_45(k: i32) -> bool {
+    return k matches { TK_K_CROSS | TK_K_INNER | TK_K_LEFT };
+}
+
+fn _gale_kind_set_46(k: i32) -> bool {
+    return k matches { TK_K_ON | TK_K_USING };
+}
+
+fn _gale_kind_set_47(k: i32) -> bool {
+    return k matches { TK_LIT_MINUS | TK_LIT_PLUS };
+}
+
+fn _gale_kind_set_48(k: i32) -> bool {
+    return k matches { TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT };
+}
+
+fn _gale_kind_set_49(k: i32) -> bool {
+    return k matches { TK_BLOB_LITERAL | TK_NUMERIC_LITERAL };
+}
+
+fn _gale_kind_set_50(k: i32) -> bool {
+    return k matches { TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_NULL | TK_STRING_LITERAL };
+}
+
+fn _gale_kind_set_51(k: i32) -> bool {
+    return k matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOTNULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT };
+}
+
+fn _gale_kind_set_52(k: i32) -> bool {
+    return k matches { TK_LIT_MINUS | TK_LIT_PLUS | TK_LIT_TILDE };
+}
+
+fn _gale_kind_set_53(k: i32) -> bool {
+    return k matches { TK_LIT_PERCENT | TK_LIT_SLASH | TK_LIT_STAR };
+}
+
+fn _gale_kind_set_54(k: i32) -> bool {
+    return k matches { TK_LIT_AMP | TK_LIT_GTGT | TK_LIT_LTLT | TK_LIT_PIPE };
+}
+
+fn _gale_kind_set_55(k: i32) -> bool {
+    return k matches { TK_LIT_GT | TK_LIT_GTEQ | TK_LIT_LT | TK_LIT_LTEQ };
+}
+
+fn _gale_kind_set_56(k: i32) -> bool {
+    return k matches { TK_LIT_BANGEQ | TK_LIT_EQ | TK_LIT_EQEQ | TK_LIT_LTGT };
+}
+
+fn _gale_kind_set_57(k: i32) -> bool {
+    return k matches { TK_K_BETWEEN | TK_K_GLOB | TK_K_IN | TK_K_ISNULL | TK_K_LIKE | TK_K_MATCH | TK_K_NOT | TK_K_NOTNULL | TK_K_REGEXP };
+}
+
+fn _gale_kind_set_58(k: i32) -> bool {
+    return k matches { TK_K_GLOB | TK_K_LIKE | TK_K_MATCH | TK_K_REGEXP };
+}
+
+fn _gale_kind_set_59(k: i32) -> bool {
+    return k matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_LIT_LPAREN };
+}
+
+fn _gale_kind_set_60(k: i32) -> bool {
+    return k matches { TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_LIT_MINUS | TK_LIT_PLUS | TK_LIT_TILDE | TK_NUMERIC_LITERAL };
+}
+
+fn _gale_kind_set_61(k: i32) -> bool {
+    return k matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL };
+}
+
+fn _gale_kind_set_62(k: i32) -> bool {
+    return k matches { TK_K_NOT | TK_LIT_MINUS | TK_LIT_PLUS | TK_LIT_TILDE };
+}
+
 fn _gale_kind_set_63(k: i32) -> bool {
-    return k matches { TK_BLOB_LITERAL | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_NULL | TK_LIT_MINUS | TK_LIT_PLUS | TK_NUMERIC_LITERAL | TK_STRING_LITERAL };
+    return k matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_LIT_LPAREN | TK_STRING_LITERAL };
 }
 
 fn _gale_kind_set_64(k: i32) -> bool {
-    return k matches { TK_BIND_PARAMETER | TK_BLOB_LITERAL | TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_LIT_LPAREN | TK_LIT_MINUS | TK_LIT_PLUS | TK_LIT_TILDE | TK_NUMERIC_LITERAL | TK_STRING_LITERAL };
+    return k matches { TK_BLOB_LITERAL | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_NULL | TK_LIT_MINUS | TK_LIT_PLUS | TK_NUMERIC_LITERAL | TK_STRING_LITERAL };
 }
 
 fn _gale_kind_set_65(k: i32) -> bool {

@@ -9153,11 +9153,6 @@ fn scan_optional_parameter(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
     }
     sg_19_done: {
         sg_19: {
-            if pos < tokens.len() && _gale_kind_set_13(tokens[pos].kind) {
-                let sp = pos;
-                pos = scan_accessibility_modifier(tokens, pos, 0);
-                if pos < 0 { pos = sp; }
-            }
             pos = scan_identifier_or_pattern(tokens, pos, 0);
             if pos < 0 { break sg_19; }
             let gp_20 = pos;
@@ -9215,11 +9210,6 @@ fn scan_required_parameter(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
     if pos < tokens.len() && tokens[pos].kind == TK_LIT_AT {
         let sp = pos;
         pos = scan_decorator_list(tokens, pos, 0);
-        if pos < 0 { pos = sp; }
-    }
-    if pos < tokens.len() && _gale_kind_set_13(tokens[pos].kind) {
-        let sp = pos;
-        pos = scan_accessibility_modifier(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     pos = scan_identifier_or_pattern(tokens, pos, 0);
@@ -10510,11 +10500,6 @@ fn scan_import_from_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
         if _gale_kind_set_22(alt_kind) {
             pos = start;
             try_0: {
-                if pos < tokens.len() && _gale_kind_set_9(tokens[pos].kind) {
-                    let sp = pos;
-                    pos = scan_import_default(tokens, pos, 0);
-                    if pos < 0 { pos = sp; }
-                }
                 let gp_30 = pos;
                 let sgk_30 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
                 if _gale_kind_set_22(sgk_30) {
@@ -12599,11 +12584,6 @@ fn scan_formal_parameter_arg(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
     if pos < tokens.len() && tokens[pos].kind == TK_LIT_AT {
         let sp = pos;
         pos = scan_decorator(tokens, pos, 0);
-        if pos < 0 { pos = sp; }
-    }
-    if pos < tokens.len() && _gale_kind_set_13(tokens[pos].kind) {
-        let sp = pos;
-        pos = scan_accessibility_modifier(tokens, pos, 0);
         if pos < 0 { pos = sp; }
     }
     pos = scan_assignable(tokens, pos, 0);
