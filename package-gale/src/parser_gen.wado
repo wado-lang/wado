@@ -3874,6 +3874,13 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
         let inner = &rep.element;
         let follow_first = follow;
         let follow_second = &rep_op.caller_follow_second;
+        // Mirror the Star/Plus storable check so non-greedy covers
+        // every shape that `gen_op_inner_for_storable_repeat` handles
+        // (every leaf, plus all storable `Op::Group` shapes —
+        // `SingleAlt` / `TokenOnly` / `SimpleCst` / `General`).
+        // Transparent / `body_has_field == false` falls through to
+        // legacy `gen_repeat_non_greedy` (the inner emit there walks
+        // surface IR; no test grammar exercises this combination today).
         let body_op_storable = if op_is_leaf(&rep_op.body) {
             true;
         } else if let Group(g_op) = &rep_op.body {
@@ -3881,7 +3888,7 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
                 false;
             } else {
                 match &g_op.shape {
-                    SingleAlt(_) | TokenOnly(_) => true,
+                    SingleAlt(_) | TokenOnly(_) | SimpleCst(_) | General(_) => true,
                     _ => false,
                 };
             }
