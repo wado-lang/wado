@@ -3385,6 +3385,59 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext
     };
 }
 
+/// Dispatch a `RepeatOp.body` whose shape is "storable" (a leaf op
+/// or a `Group(SingleAlt | TokenOnly)` op) to the matching op-driven
+/// emit helper. Used by the Star / Plus arm of
+/// `gen_op_repeat_with_follow_override` so the loop body's per-
+/// iteration parse line can route through either `gen_op_leaf`
+/// (leaves) or the per-shape group helpers without duplicating the
+/// surrounding list / scan-guard / loop scaffolding.
+///
+/// `elem` is the surface `Element` matching `op`; leaves consult it
+/// for `sync_name_counts_for_leaf`, the Group arm threads it through
+/// `gen_consume_*_group_op`. `outer_follow` carries the surrounding
+/// Repeat's iter-follow (`first(inner) ∪ outer_follow`) so nested
+/// non-greedy Repeats inside a `SingleAlt` body can union it onto
+/// their own `caller_follow_first` — the legacy `gen_group_store_any`
+/// /`gen_consume_single_alt_group` path's `outer_follow` propagation.
+///
+/// The caller must have already verified storability — Transparent
+/// groups (`body_has_field == false`), SimpleCst / General shapes
+/// (their `_optional_op` helpers always wrap in `Option<T>`), and
+/// other non-leaf shapes reach the surface fallback.
+fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
+    if op_is_leaf(op) {
+        gen_op_leaf(w, op, elem, ctx, name_counts);
+        return;
+    }
+    if let Group(g_op) = op {
+        if let Group(g_elem) = elem {
+            match &g_op.shape {
+                TokenOnly(to) => {
+                    gen_consume_token_group_op(w, to, &g_elem.alternatives, name_counts);
+                    return;
+                },
+                SingleAlt(sa) => {
+                    gen_consume_single_alt_group_op(
+                        w,
+                        sa,
+                        &g_op.alts[0],
+                        &g_elem.alternatives[0],
+                        ctx,
+                        name_counts,
+                        outer_follow,
+                    );
+                    return;
+                },
+                _ => panic("gen_op_inner_for_storable_repeat: only SingleAlt / TokenOnly Groups are storable here"),
+            };
+        } else {
+            panic("gen_op_inner_for_storable_repeat: Group op mapped to non-Group element");
+        }
+    }
+    panic("gen_op_inner_for_storable_repeat: caller must guard with op_is_leaf || Group(SingleAlt | TokenOnly)");
+}
+
 /// Bump `name_counts` for `elem` exactly the way `gen_element` would.
 /// Used by `gen_op_leaf` so siblings that still route through the
 /// surface walker see lower-consistent dedup state. Mirrors the
@@ -3779,14 +3832,30 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
         gen_repeat_non_greedy(w, rep, ctx, follow, &rep_op.caller_follow_second, name_counts);
         return;
     }
-    // Star / Plus + leaf-shaped inner: emit the list field and a
+    // Star / Plus + storable body: emit the list field and a
     // scan-guarded or first-check loop based on `body_scannable`.
-    // Inner emit goes through `gen_op_leaf` and consumes lower's
-    // baked field / variant / kind values.
+    // Inner emit goes through `gen_op_inner_for_storable_repeat`,
+    // which dispatches leaves (`Op::Token` / `Literal` / `RuleCall` /
+    // `Wildcard` / `Excluded`) to `gen_op_leaf` and storable
+    // `Op::Group` inners to `gen_op_group`. Both consume lower's
+    // baked field / variant / shape values.
     //
     // Optional + leaf falls through to the per-kind dispatch below so
     // the dedup / emit decisions match `gen_repeat_body`'s Optional
     // arm (the Optional flavour does not produce an `Array<…>` list).
+    //
+    // `op_body_is_storable` covers exactly the inner shapes that surface
+    // as a single CST field AND whose op-driven emit helper produces a
+    // non-`Option<T>` binding ready to push into the outer list — every
+    // leaf, plus `Op::Group(SingleAlt | TokenOnly)`. `SimpleCst` and
+    // `General` go through `gen_consume_group_store_optional_op` /
+    // `gen_general_group_store_optional_op` which always emit an
+    // `Option<T>` (the standalone-element shape); calling them inside
+    // a Repeat's loop body would push an `Option<T>` into the
+    // `Array<T>` list. Until those grow non-Option op-driven twins,
+    // Star/Plus over `SimpleCst` / `General` and the Transparent /
+    // `body_has_field == false` cases keep falling through to the
+    // surface `gen_repeat_body` (Phase 2-G follow-ups).
     let is_star_or_plus = if let Star = rep.kind {
         true;
     } else if let Plus = rep.kind {
@@ -3794,7 +3863,21 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
     } else {
         false;
     };
-    if is_star_or_plus && op_is_leaf(&rep_op.body) {
+    let op_body_is_storable = if op_is_leaf(&rep_op.body) {
+        true;
+    } else if let Group(g_op) = &rep_op.body {
+        if !rep_op.body_has_field {
+            false;
+        } else {
+            match &g_op.shape {
+                SingleAlt(_) | TokenOnly(_) => true,
+                _ => false,
+            };
+        }
+    } else {
+        false;
+    };
+    if is_star_or_plus && op_body_is_storable {
         let inner = &rep.element;
         let mut visiting: Array<String> = [];
         let inner_first = ctx.first_of_element(inner, &mut visiting);
@@ -3808,6 +3891,12 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
         } else {
             inner_first;
         };
+        // `iter_follow` is the per-iteration follow propagated into
+        // a nested non-greedy Repeat inside a SingleAlt body. Mirrors
+        // legacy `gen_repeat_body`'s `compute_iter_follow` call site —
+        // `first(inner) ∪ outer_follow`, with the latter being the
+        // outer Repeat's `caller_follow_first`-derived `follow` param.
+        let iter_follow = compute_iter_follow(inner, &inner_first, follow);
         let inner_type = op_field_type(&rep_op.body);
         let inner_field = op_field(&rep_op.body);
         let list_field = rep_op.field;
@@ -3820,13 +3909,13 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
                 let scan_pos = emit_rep_scan_guard(w, inner, ctx, name_counts);
                 w.line(`if {scan_pos} < 0 \{ break; \}`);
                 let mut nc: Array<[String, i32]> = [];
-                gen_op_leaf(w, &rep_op.body, inner, ctx, &mut nc);
+                gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
                 w.line(`{list_field}.push({inner_field});`);
                 w.end();
             } else {
                 w.begin(`while {ctx.first_check_str(&loop_first)}`);
                 let mut nc: Array<[String, i32]> = [];
-                gen_op_leaf(w, &rep_op.body, inner, ctx, &mut nc);
+                gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
                 w.line(`{list_field}.push({inner_field});`);
                 w.end();
             }
@@ -3845,7 +3934,7 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
                 w.end();
                 w.line(`{plus_flag} = false;`);
                 let mut nc: Array<[String, i32]> = [];
-                gen_op_leaf(w, &rep_op.body, inner, ctx, &mut nc);
+                gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
                 w.line(`{list_field}.push({inner_field});`);
                 w.end();
             } else {
@@ -3854,7 +3943,7 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
                 w.begin(`while {plus_flag} || {ctx.first_check_str(&inner_first)}`);
                 w.line(`{plus_flag} = false;`);
                 let mut nc: Array<[String, i32]> = [];
-                gen_op_leaf(w, &rep_op.body, inner, ctx, &mut nc);
+                gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
                 w.line(`{list_field}.push({inner_field});`);
                 w.end();
             }
