@@ -3961,6 +3961,72 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
     } else {
         false;
     };
+    // Star / Plus + non-storable `Op::Group` body (Transparent, or any
+    // other shape with `body_has_field == false`). The legacy emit
+    // walks the loop without a list — each iteration's inner emit
+    // discards its binding (`gen_consume_group` for Transparent
+    // inlines the single alt's elements). Mirror that shape but drive
+    // the loop scaffolding off `RepeatOp`. `rep_op.field` is deduped
+    // at lower time even though no list is emitted (legacy gates the
+    // list on `has_field(inner)`, the surface predicate); bump emit's
+    // `name_counts` to stay in sync with lower's count sequence.
+    if is_star_or_plus {
+        if let Group(g_op) = &rep_op.body {
+            if !rep_op.body_has_field {
+                let inner = &rep.element;
+                let mut visiting: Array<String> = [];
+                let inner_first = ctx.first_of_element(inner, &mut visiting);
+                let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
+                    s.effective_first;
+                } else {
+                    inner_first;
+                };
+                let _ = dedup_name(&rep_op.field, name_counts);
+
+                if let Star = rep.kind {
+                    if rep_op.body_scannable {
+                        w.begin("loop");
+                        let scan_pos = emit_rep_scan_guard(w, inner, ctx, name_counts);
+                        w.line(`if {scan_pos} < 0 \{ break; \}`);
+                        let mut nc: Array<[String, i32]> = [];
+                        gen_op_group(w, g_op, inner, ctx, &mut nc);
+                        w.end();
+                    } else {
+                        w.begin(`while {ctx.first_check_str(&loop_first)}`);
+                        let mut nc: Array<[String, i32]> = [];
+                        gen_op_group(w, g_op, inner, ctx, &mut nc);
+                        w.end();
+                    }
+                    return;
+                }
+                if let Plus = rep.kind {
+                    if rep_op.body_scannable {
+                        let plus_flag = dedup_name(&"_plus_first", name_counts);
+                        w.line(`let mut {plus_flag} = true;`);
+                        w.begin("loop");
+                        w.begin(`if !{plus_flag}`);
+                        let scan_pos = emit_rep_scan_guard(w, inner, ctx, name_counts);
+                        w.line(`if {scan_pos} < 0 \{ break; \}`);
+                        w.end();
+                        w.line(`{plus_flag} = false;`);
+                        let mut nc: Array<[String, i32]> = [];
+                        gen_op_group(w, g_op, inner, ctx, &mut nc);
+                        w.end();
+                    } else {
+                        // Plus + non-scannable + no-field: legacy emits
+                        // the first iteration explicitly (no `_plus_first`
+                        // flag) and then a `while first` loop. Mirror.
+                        gen_op_group(w, g_op, inner, ctx, name_counts);
+                        w.begin(`while {ctx.first_check_str(&inner_first)}`);
+                        let mut nc: Array<[String, i32]> = [];
+                        gen_op_group(w, g_op, inner, ctx, &mut nc);
+                        w.end();
+                    }
+                    return;
+                }
+            }
+        }
+    }
     if is_star_or_plus && op_body_is_storable {
         let inner = &rep.element;
         let mut visiting: Array<String> = [];
