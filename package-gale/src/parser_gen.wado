@@ -6627,7 +6627,22 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                     gen_element(w, elem, ctx, &mut name_counts);
                 }
             } else if let Repeat(rep) = elem {
-                gen_repeat(w, rep, ctx, &mut name_counts, &([] as Array<String>));
+                // LR suffix Repeat — route through the op-driven
+                // dispatcher so emit consumes the lowered `RepeatOp`
+                // (already in `lr_alt.suffix.ops`) rather than
+                // re-deriving everything from the surface element.
+                let rep_op = if let Repeat(r) = suffix_op {
+                    r;
+                } else {
+                    panic("gen_lr_suffix_helpers: Repeat element / op mismatch");
+                };
+                gen_op_repeat(w, rep, rep_op, ctx, &mut name_counts);
+            } else if op_is_leaf(suffix_op) {
+                // Leaf-shaped suffix elements (Token / Literal /
+                // Wildcard / Excluded / non-self-ref RuleCall already
+                // handled above). Route through `gen_op_leaf` so the
+                // suffix walker stops reaching surface `gen_element`.
+                gen_op_leaf(w, suffix_op, elem, ctx, &mut name_counts);
             } else {
                 gen_element(w, elem, ctx, &mut name_counts);
             }
