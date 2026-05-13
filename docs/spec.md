@@ -1890,35 +1890,29 @@ let result = compute(4);  // 20
 // Pure closure (no captures)
 let pure = |x: i32| x * 2;
 
-// Capturing outer variables (value semantics - copy)
+// Capturing outer variables: deep copy at closure creation
 let outer = 10;
-let capture = |x: i32| x + outer;  // Captures `outer` by value
+let capture = |x: i32| x + outer;  // outer is copied into the closure
 capture(5);  // Returns 15
 ```
 
-Closures capture variables by value (copy semantics) by default. Use `&mut ||` for mutable capture (see below).
+Closures capture each free variable by deep copy at closure creation time — the same value semantics that applies to assignment, parameter passing, and return (see [Value Semantics](#value-semantics)). The closure body operates on its own copies and cannot write to outer bindings.
 
-Note: `stores[...]` is a separate concept for declaring that a _function_ stores reference _parameters_ beyond the call. It is not yet implemented. See [Reference Storage](#reference-storage-stores) and [`docs/wep-2026-01-12-value-semantics-and-stores.md`](./wep-2026-01-12-value-semantics-and-stores.md).
-
-**Mutable Closures (`&mut ||`):**
-
-`&mut ||` creates a closure that captures variables by mutable reference instead of by value:
+For shared mutable state across closures, capture a reference. References (`&T`, `&mut T`) are the only types in Wado that alias their referent, so the copied reference value still points to the same underlying location:
 
 ```wado
 let mut count = 0;
-let inc = &mut || { count += 1; };
+let cref: &mut i32 = &mut count;
+let inc = || { *cref += 1; };
+let get = || *cref;
 inc();
 inc();
-println(`{count}`);  // 2
-
-// Multiple closures sharing the same mutable variable
-let mut count = 0;
-let inc = &mut || { count += 1; };
-let get = || count;
-inc();
-inc();
-println(`{get()}`);  // 2
+assert get() == 2;   // both closures observe mutation through the shared reference
 ```
+
+There is no special `&mut ||` syntax; closures use the same value semantics as the rest of the language and reach mutable state via references.
+
+Note: `stores[...]` is a separate concept for declaring that a _function_ stores reference _parameters_ beyond the call. It is not yet implemented. See [Reference Storage](#reference-storage-stores) and [`docs/wep-2026-01-12-value-semantics-and-stores.md`](./wep-2026-01-12-value-semantics-and-stores.md).
 
 ### Default Arguments
 

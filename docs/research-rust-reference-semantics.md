@@ -481,9 +481,9 @@ println!("{}", val);  // OK after last use of c (NLL)
 
 Wado's closure design is simpler due to GC:
 
-- **No `Fn`/`FnMut`/`FnOnce` distinction**: Wado uses `fn(...)` type and `&mut ||` syntax for mutable captures. No ownership-based hierarchy needed.
-- **No `move` keyword**: With value semantics, closures capture by copy (primitives) or by reference (heap types). `&mut ||` explicitly opts into mutable capture.
-- **No uniqueness conflicts**: Multiple closures can capture `&mut` to the same variable without compiler errors. This is a deliberate design choice (no borrow checker).
+- **No `Fn`/`FnMut`/`FnOnce` distinction**: Wado has a single `fn(...)` closure type. Captures are always by deep copy at closure creation, so no Fn/FnMut split is needed to police mutable borrows.
+- **No `move` keyword**: All captures are already by value; there is no alternative mode to opt out of.
+- **No uniqueness conflicts**: Multiple closures can each capture a copy of the same `&mut T` reference value, and writes through any of them are visible to the others (references are the only aliasing types in Wado). This is a deliberate design choice (no borrow checker).
 
 ## Summary: What Wado Should Adopt vs Skip
 
