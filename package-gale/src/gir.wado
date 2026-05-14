@@ -552,6 +552,18 @@ pub struct RepeatOp {
     /// shapes. Precomputed so emit doesn't re-run
     /// `ctx.is_element_scannable` at each Repeat dispatch.
     pub body_scannable: bool,
+    /// FIRST set of the inner element. Used by emit's per-shape
+    /// dispatchers for the `while peek ∈ first` loop guard, the
+    /// `subtract_sets(first, follow)` Optional+RuleCall gate, and
+    /// `compute_iter_follow`'s iter-follow union. Precomputed so
+    /// emit doesn't re-run `ctx.first_of_element` at each dispatch.
+    pub body_first_set: Array<String>,
+    /// True iff the inner element is a single-alt `Group` — i.e.
+    /// `compute_iter_follow` should union the body's first set with
+    /// the outer follow rather than using outer alone. Mirrors the
+    /// surface `if let Group(g) = inner && g.alternatives.len() == 1`
+    /// check the iter-follow computation used to perform at emit time.
+    pub body_is_single_alt_group: bool,
     /// True iff the inner element contributes a CST field — i.e.
     /// emit's Repeat surfaces a storable `Option<T>` (`Optional`) or
     /// `Array<T>` (`Star` / `Plus`) field. False for `Transparent`

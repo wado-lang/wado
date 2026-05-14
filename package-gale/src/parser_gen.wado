@@ -3819,8 +3819,7 @@ fn gen_op_repeat_optional_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op
 /// emit reads the field name / inner type from `rep_op`.
 fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
     let inner = &rep.element;
-    let mut visiting: Array<String> = [];
-    let raw_first = ctx.first_of_element(inner, &mut visiting);
+    let raw_first = rep_op.body_first_set;
     let combined_follow = if ctx.current_follow_mask.is_empty() {
         *follow;
     } else {
@@ -3862,12 +3861,10 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
 /// it applies.
 fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let inner = &rep.element;
-    let mut visiting: Array<String> = [];
-    let inner_first = ctx.first_of_element(inner, &mut visiting);
     let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
         s.effective_first;
     } else {
-        inner_first;
+        rep_op.body_first_set;
     };
     let inner_type = op_field_type(&rep_op.body);
     let opt_field = rep_op.field;
@@ -3909,8 +3906,7 @@ fn gen_op_repeat_star_plus_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_o
 /// lower time; bump emit's `name_counts` to stay in sync.
 fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let inner = &rep.element;
-    let mut visiting: Array<String> = [];
-    let inner_first = ctx.first_of_element(inner, &mut visiting);
+    let inner_first = rep_op.body_first_set;
     let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
         s.effective_first;
     } else {
@@ -3969,8 +3965,7 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
 /// `while plus_first || …`.
 fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
     let inner = &rep.element;
-    let mut visiting: Array<String> = [];
-    let inner_first = ctx.first_of_element(inner, &mut visiting);
+    let inner_first = rep_op.body_first_set;
     let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
         s.effective_first;
     } else {
@@ -3978,7 +3973,11 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
     };
     // Per-iteration follow propagated into a nested non-greedy Repeat
     // inside a SingleAlt body — `first(inner) ∪ outer_follow`.
-    let iter_follow = compute_iter_follow(inner, &inner_first, follow);
+    let iter_follow = if rep_op.body_is_single_alt_group {
+        union_sets(&inner_first, follow);
+    } else {
+        *follow;
+    };
     let inner_type = op_field_type(&rep_op.body);
     let inner_field = op_field(&rep_op.body);
     let list_field = rep_op.field;
@@ -4033,18 +4032,6 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
 }
 
 
-fn compute_iter_follow(inner: &Element, first_of_inner: &Array<String>, outer_follow: &Array<String>) -> Array<String> {
-    // For a Plus/Star whose inner is a single-alt Group, each iteration can
-    // be followed by either another iteration (first(inner)) or the exit
-    // (outer_follow). For non-Group inners we use outer_follow alone — the
-    // inner has no sub-structure that could host a nested non-greedy tail.
-    if let Group(g) = inner {
-        if g.alternatives.len() == 1 {
-            return union_sets(first_of_inner, outer_follow);
-        }
-    }
-    return *outer_follow;
-}
 
 fn wildcard_non_greedy_condition(ctx: &mut GenContext, follow_first: &Array<String>) -> String {
     // Continue while peek is not EOF and not in the follow set. `follow_first`
