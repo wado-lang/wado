@@ -19996,12 +19996,7 @@ fn parse_variable_declaration(p: &mut Parser) -> Result<VariableDeclarationNode,
     };
     let eq_type_parameters_single_expression: Option<EqTypeParametersOptSingleExpressionItem> = if p.peek_kind() == TK_LIT_EQ {
         let eq = p.expect(TK_LIT_EQ)?;
-        let type_parameters: Option<TypeParametersNode> = if p.peek_kind() == TK_LIT_LT {
-            let type_parameters = parse_type_parameters(p)?;
-            Option::<TypeParametersNode>::Some(type_parameters)
-        } else {
-            null
-        };
+        let type_parameters: Option<TypeParametersNode> = null;
         let single_expression = parse_single_expression(p)?;
         let eq_type_parameters_single_expression = EqTypeParametersOptSingleExpressionItem {
             eq,

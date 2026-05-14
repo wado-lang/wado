@@ -18017,7 +18017,7 @@ fn parse_use_tree_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_use_tree_bt_0(p: &mut Parser) -> Result<UseTreeNode, ParseError> {
     let start = p.peek().span.start;
     let simple_path_pathsep: Option<SimplePathOptPathsepItem> = if _gale_kind_set_9(p.peek_kind()) && p.peek_at(1) == TK_PATHSEP {
-        let simple_path: Option<SimplePathNode> = if _gale_kind_set_9(p.peek_kind()) {
+        let simple_path: Option<SimplePathNode> = if _gale_kind_set_69(p.peek_kind()) {
             let simple_path = parse_simple_path(p)?;
             Option::<SimplePathNode>::Some(simple_path)
         } else {
@@ -19444,7 +19444,7 @@ fn parse_trait_(p: &mut Parser) -> Result<TraitNode, ParseError> {
     let colon_type_param_bounds: Option<ColonTypeParamBoundsOptItem> = if p.peek_kind() == TK_COLON {
         let colon = p.expect(TK_COLON)?;
         let type_param_bounds: Option<TypeParamBoundsNode> = if _gale_kind_set_34(p.peek_kind()) {
-            let type_param_bounds = parse_type_param_bounds(p)?;
+            let type_param_bounds = parse_type_param_bounds__follow_4(p)?;
             Option::<TypeParamBoundsNode>::Some(type_param_bounds)
         } else {
             null
@@ -20024,7 +20024,7 @@ fn parse_type_param(p: &mut Parser) -> Result<TypeParamNode, ParseError> {
     let colon_type_param_bounds: Option<ColonTypeParamBoundsOptItem> = if p.peek_kind() == TK_COLON {
         let colon = p.expect(TK_COLON)?;
         let type_param_bounds: Option<TypeParamBoundsNode> = if _gale_kind_set_34(p.peek_kind()) {
-            let type_param_bounds = parse_type_param_bounds(p)?;
+            let type_param_bounds = parse_type_param_bounds__follow_4(p)?;
             Option::<TypeParamBoundsNode>::Some(type_param_bounds)
         } else {
             null
@@ -25763,7 +25763,7 @@ fn parse_tuple_type(p: &mut Parser) -> Result<TupleTypeNode, ParseError> {
             type__comma_list.push(type__comma);
         }
         let type_: Option<TypeNode> = if _gale_kind_set_28(p.peek_kind()) {
-            let type_ = parse_type_(p)?;
+            let type_ = parse_type___follow_12(p)?;
             Option::<TypeNode>::Some(type_)
         } else {
             null
