@@ -3468,6 +3468,370 @@ fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, op: &Op, elem: &Element,
     panic("gen_op_inner_for_storable_repeat: caller must guard with op_is_leaf || Group(SingleAlt | TokenOnly | SimpleCst | General)");
 }
 
+/// Op-driven single-element dispatch. Routes a single `Op` + matching
+/// surface `Element` to the right `gen_op_*` helper based on op kind.
+/// Used by `emit_op_optional_with_shape_lookahead_*` so each shape's
+/// per-element parse routes through op-driven helpers instead of the
+/// surface `gen_element` graph.
+fn gen_op_dispatch_element(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    if op_is_leaf(op) {
+        gen_op_leaf(w, op, elem, ctx, name_counts);
+        return;
+    }
+    if let Repeat(rep_op) = op {
+        let rep = if let Repeat(r) = elem {
+            r;
+        } else {
+            panic("gen_op_dispatch_element: Repeat op mapped to non-Repeat element");
+        };
+        gen_op_repeat(w, rep, rep_op, ctx, name_counts);
+        return;
+    }
+    if let Group(g_op) = op {
+        gen_op_group(w, g_op, elem, ctx, name_counts);
+        return;
+    }
+    if let ListLabel(ll) = op {
+        gen_op_list_label(w, ll, elem, ctx, name_counts);
+        return;
+    }
+    panic("gen_op_dispatch_element: unreachable op shape — every Op variant is handled");
+}
+
+/// Op-driven absent-element decl for shape lookahead. Mirrors the
+/// surface `gen_absent_optional_field`: when a shape elides an
+/// `Optional` / list-label / `Star` / `Plus` element, the struct
+/// still needs the corresponding field in scope (`null` for `Option`,
+/// empty `Array` for list / `Star` / `Plus`) so the alt-struct
+/// construction below can name it. Leaf ops never appear in an
+/// absent shape branch — only nullable shapes (Optional Repeats and
+/// list labels) get elided from the shape's parse path. The caller
+/// is `emit_op_optional_with_shape_lookahead_storable`.
+fn gen_op_absent_optional_field(w: &mut CodeWriter, op: &Op, name_counts: &mut Array<[String, i32]>) {
+    if let Repeat(rep_op) = op {
+        if !rep_op.body_has_field {
+            return;
+        }
+        let inner_type = op_field_type(&rep_op.body);
+        let _ = dedup_name(&rep_op.field, name_counts);
+        match rep_op.kind {
+            Optional => w.line(`let {rep_op.field}: Option<{inner_type}> = null;`),
+            Star | Plus => w.line(`let mut {rep_op.field}: Array<{inner_type}> = [];`),
+        };
+        return;
+    }
+    if let ListLabel(ll) = op {
+        let inner_type = op_field_type(&ll.inner);
+        let _ = dedup_name(&ll.field, name_counts);
+        w.line(`let mut {ll.field}: Array<{inner_type}> = [];`);
+    }
+    // Leaves never appear absent — they're always required.
+}
+
+/// Op-driven `unwrap_optional` analogue. Peels through an Optional
+/// `Op::Repeat` wrapper to its inner op. Used by the Transparent
+/// shape-lookahead walker so each present optional element is
+/// dispatched at its unwrapped op (which carries the actual emit
+/// shape) rather than through `gen_op_repeat`'s optional gate (the
+/// shape already promised the element is present).
+fn unwrap_optional_op(op: &Op) -> &Op with stores[op] {
+    if let Repeat(rep_op) = op {
+        if let Optional = rep_op.kind {
+            return &rep_op.body;
+        }
+    }
+    return op;
+}
+
+/// Op-driven scan-guard for a `Group`-shaped Optional inner. Mirrors
+/// `emit_opt_scan_guard` but walks the scan side via op-driven
+/// helpers (`gen_scan_op_elements_in_block` / `gen_scan_op_group`)
+/// using `g_op.scan_alts` / `g_op.scan_dispatch` directly, instead
+/// of the surface `gen_scan_elements_in_block` / `gen_scan_group`
+/// graph. `g_elem` is the surface `Group` matching `g_op`; it is
+/// consulted only to compute per-alt first sets for the multi-alt
+/// dispatch (lower bakes these on `ScanGroupElem.alt_first_sets` but
+/// the `GroupOp` itself does not surface them — recomputing matches
+/// what `lower_scan_group` does).
+fn emit_op_opt_scan_guard_for_group(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) -> String {
+    let scan_pos_var = dedup_name(&"opt_scan_pos", name_counts);
+    let scan_label = dedup_name(&"opt_scan", name_counts);
+    w.line(`let mut {scan_pos_var}: i32 = -1;`);
+    w.begin(`{scan_label}:`);
+    w.line("let tokens = &p.tokens;");
+    w.line("let mut pos: i32 = p.pos;");
+    let fail = `break {scan_label};`;
+    if g_op.scan_alts.len() == 1 {
+        let body = &g_op.scan_alts[0];
+        gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &scan_label);
+    } else {
+        let mut alt_first_sets: Array<Array<String>> = [];
+        for let alt of &g_elem.alternatives {
+            let mut visiting: Array<String> = [];
+            alt_first_sets.push(ctx.first_of_alt(alt, &mut visiting));
+        }
+        let scan_elem = ScanGroupElem {
+            alts: g_op.scan_alts,
+            dispatch: g_op.scan_dispatch,
+            lenient: false,
+            alt_first_sets,
+        };
+        gen_scan_op_group(w, &scan_elem, ctx, &fail, false);
+    }
+    w.line(`{scan_pos_var} = pos;`);
+    w.end();
+    return scan_pos_var;
+}
+
+/// Op-driven emit for Optional + storable Group. Re-derives the
+/// legacy dispatch criteria from the surface element so the
+/// generated code matches `gen_storable_optional` exactly:
+///
+/// 1. `optional_lookahead_depth(inner) >= 1` → k-token lookahead
+///    (`if peek == TK_A && peek_at(1) == TK_B { ... }`).
+/// 2. `has_nested_optionals(inner)` → shape-based lookahead (one
+///    branch per combination of present optionals).
+/// 3. Otherwise → scan-guard (scan first, parse on success).
+///
+/// In every case the inner parse is dispatched through op-driven
+/// helpers — `gen_op_inner_for_storable_repeat` for the k-token /
+/// scan-guard cases, and per-element `gen_op_dispatch_element` /
+/// `gen_op_absent_optional_field` for the shape variant. Lower's
+/// `RepeatOp.strategy` is not consulted: it's narrower than the
+/// legacy criteria (no `la_depth == 1` case, no shape-lookahead
+/// case), so dispatching from it would change emit shape for the
+/// most common Optional + leading-fixed-token construct.
+fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    let opt_field = rep_op.field;
+    let inner_type = op_field_type(&rep_op.body);
+    let inner_field = op_field(&rep_op.body);
+    let _ = dedup_name(&opt_field, name_counts);
+    let inner_elem = &rep.element;
+
+    let la_depth = optional_lookahead_depth(inner_elem);
+    if la_depth >= 1 {
+        let la_tokens = optional_lookahead_tokens(inner_elem, la_depth);
+        let cond = build_kind_check_conjunction(&la_tokens);
+        w.begin(`let {opt_field}: Option<{inner_type}> = if {cond}`);
+        let mut nc: Array<[String, i32]> = [];
+        gen_op_inner_for_storable_repeat(w, &rep_op.body, inner_elem, ctx, &mut nc, &([] as Array<String>));
+        w.line(`Option::<{inner_type}>::Some({inner_field})`);
+        w.else_begin("else");
+        w.line("null");
+        w.end_with(";");
+        return;
+    }
+    if has_nested_optionals(inner_elem) {
+        emit_op_optional_with_shape_lookahead_storable(w, g_op, g_elem, ctx, name_counts, &opt_field, &inner_type, &inner_field);
+        return;
+    }
+    // Scan-guard fallback: the inner must be fully scannable, just
+    // like the legacy `gen_storable_optional_with_scan_guard` asserts.
+    let mut visiting: Array<String> = [];
+    assert ctx.is_element_scannable(inner_elem, &mut visiting),
+        "gen_op_storable_optional: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
+    let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
+    w.begin(`let {opt_field}: Option<{inner_type}> = if {scan_pos_var} >= 0`);
+    let mut nc: Array<[String, i32]> = [];
+    gen_op_inner_for_storable_repeat(w, &rep_op.body, inner_elem, ctx, &mut nc, &([] as Array<String>));
+    w.line(`Option::<{inner_type}>::Some({inner_field})`);
+    w.else_begin("else");
+    w.line("null");
+    w.end_with(";");
+}
+
+/// Op-driven emit for Optional + non-storable (Transparent) Group.
+/// Mirrors `gen_optional_with_scan_guard`'s dispatch (note the order
+/// differs from the storable variant — shape lookahead is checked
+/// *before* k-token lookahead, matching legacy behaviour).
+///
+/// 1. `has_nested_optionals(inner)` → shape-based lookahead, inlined.
+/// 2. `optional_lookahead_depth(inner) >= 1` → k-token lookahead,
+///    inlined.
+/// 3. Otherwise → scan-guard, inlined.
+///
+/// No outer `Option<T>` wrapping — the alt body is inlined within
+/// the matching `if` branch. The struct construction step that the
+/// storable variant emits is also skipped (Transparent groups have
+/// no own struct).
+fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    let _ = dedup_name(&rep_op.field, name_counts);
+    let inner_elem = &rep.element;
+
+    if has_nested_optionals(inner_elem) {
+        emit_op_optional_with_shape_lookahead_transparent(w, g_op, g_elem, ctx, name_counts);
+        return;
+    }
+    let la_depth = optional_lookahead_depth(inner_elem);
+    if la_depth >= 1 {
+        let la_tokens = optional_lookahead_tokens(inner_elem, la_depth);
+        let cond = build_kind_check_conjunction(&la_tokens);
+        w.begin(`if {cond}`);
+        let mut nc: Array<[String, i32]> = [];
+        // Walk the single-alt body's ops directly (Transparent inlines).
+        let body = &g_op.alts[0];
+        let alt = &g_elem.alternatives[0];
+        for let mut i = 0; i < alt.elements.len(); i += 1 {
+            gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc);
+        }
+        w.end();
+        return;
+    }
+    let mut visiting: Array<String> = [];
+    assert ctx.is_element_scannable(inner_elem, &mut visiting),
+        "gen_op_transparent_optional: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
+    let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
+    w.begin(`if {scan_pos_var} >= 0`);
+    let mut nc: Array<[String, i32]> = [];
+    let body = &g_op.alts[0];
+    let alt = &g_elem.alternatives[0];
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc);
+    }
+    w.end();
+}
+
+/// Op-driven shape-lookahead emit for the storable Optional + SingleAlt
+/// case. Mirrors `gen_storable_optional_with_lookahead` exactly except
+/// the inner per-element parse routes through op-driven dispatch
+/// (`gen_op_dispatch_element` / `gen_op_absent_optional_field`), and
+/// the struct construction reads `body.fields` (lower's canonical
+/// field list).
+fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, opt_field: &String, inner_type: &String, inner_field: &String) {
+    let sa = if let SingleAlt(s) = &g_op.shape {
+        s;
+    } else {
+        panic("emit_op_optional_with_shape_lookahead_storable: shape lookahead is only valid on SingleAlt Group inners");
+    };
+    let body = &g_op.alts[0];
+    let alt = &g_elem.alternatives[0];
+    let elements = &alt.elements;
+    let shapes = compute_shapes(elements);
+    let gc_shapes_start = ctx.group_counter;
+    let mut is_first = true;
+    for let mut si = 0; si < shapes.len(); si += 1 {
+        let shape = &shapes[si];
+        let sig = shape_lookahead_signature(shape, elements, ctx);
+        if sig.len() == 0 {
+            continue;
+        }
+        let cond = gen_lookahead_condition(ctx, &sig);
+
+        if is_first {
+            w.begin(`let {*opt_field}: Option<{*inner_type}> = if {cond}`);
+            is_first = false;
+        } else {
+            w.else_begin(`else if {cond}`);
+        }
+
+        ctx.group_counter = gc_shapes_start;
+        let mut nc: Array<[String, i32]> = [];
+        for let mut i = 0; i < elements.len(); i += 1 {
+            let mut in_shape = false;
+            for let mut k = 0; k < shape.len(); k += 1 {
+                if shape[k] == i {
+                    in_shape = true;
+                }
+            }
+            if in_shape {
+                gen_op_dispatch_element(w, &body.ops[i], &elements[i], ctx, &mut nc);
+            } else {
+                gen_op_absent_optional_field(w, &body.ops[i], &mut nc);
+            }
+        }
+
+        w.line(`let {sa.field} = {sa.struct_name} \{`);
+        w.indent();
+        emit_field_assignments_from_fields(w, &body.fields);
+        w.dedent();
+        w.line("};");
+        w.line(`Option::<{*inner_type}>::Some({*inner_field})`);
+    }
+    if !is_first {
+        w.else_begin("else");
+        w.line("null");
+        w.end_with(";");
+    }
+}
+
+/// Op-driven shape-lookahead emit for the Transparent Optional case.
+/// Mirrors `gen_optional_with_lookahead`: each shape branch walks
+/// only the present-positions, peeling Optional Repeats via
+/// `unwrap_optional` / `unwrap_optional_op` so the inner parse is
+/// dispatched directly at the unwrapped op shape (the shape already
+/// promised the optional fires). No struct construction.
+fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    let body = &g_op.alts[0];
+    let alt = &g_elem.alternatives[0];
+    let elements = &alt.elements;
+    let shapes = compute_shapes(elements);
+
+    let mut is_first = true;
+    for let mut si = 0; si < shapes.len(); si += 1 {
+        let shape = &shapes[si];
+        let sig = shape_lookahead_signature(shape, elements, ctx);
+        if sig.len() == 0 {
+            continue;
+        }
+        let cond = gen_lookahead_condition(ctx, &sig);
+
+        if is_first {
+            w.begin(`if {cond}`);
+            is_first = false;
+        } else {
+            w.else_begin(`else if {cond}`);
+        }
+
+        let mut nc: Array<[String, i32]> = [];
+        for let mut k = 0; k < shape.len(); k += 1 {
+            let idx = shape[k];
+            let elem = &elements[idx];
+            let body_op = &body.ops[idx];
+            let actual_elem = unwrap_optional(elem);
+            let actual_op = unwrap_optional_op(body_op);
+            if let Group(g) = actual_elem {
+                if g.alternatives.len() == 1 {
+                    if let Group(inner_g_op) = actual_op {
+                        let inner_body = &inner_g_op.alts[0];
+                        let inner_alt = &g.alternatives[0];
+                        for let mut j = 0; j < inner_alt.elements.len(); j += 1 {
+                            gen_op_dispatch_element(w, &inner_body.ops[j], &inner_alt.elements[j], ctx, &mut nc);
+                        }
+                    } else {
+                        panic("emit_op_optional_with_shape_lookahead_transparent: single-alt Group surface but non-Group op");
+                    }
+                } else {
+                    gen_op_dispatch_element(w, actual_op, actual_elem, ctx, &mut nc);
+                }
+            } else {
+                gen_op_dispatch_element(w, actual_op, actual_elem, ctx, &mut nc);
+            }
+        }
+    }
+    if !is_first {
+        w.end();
+    }
+}
+
+/// Build the per-position conjunction for k-token Optional lookahead.
+/// Matches the loop in `gen_storable_optional` / `gen_optional_with_scan_guard`:
+/// `p.peek_kind() == TK_A && p.peek_at(1) == TK_B && ...`.
+fn build_kind_check_conjunction(la_tokens: &Array<String>) -> String {
+    let mut cond_parts: Array<String> = [];
+    for let mut d = 0; d < la_tokens.len(); d += 1 {
+        let check = if d == 0 { "p.peek_kind()" } else { `p.peek_at({d})` };
+        cond_parts.push(`{check} == {la_tokens[d]}`);
+    }
+    let mut cond = String::with_capacity(128);
+    for let mut i = 0; i < cond_parts.len(); i += 1 {
+        if i > 0 {
+            cond.push_str(" && ");
+        }
+        cond.push_str(cond_parts[i]);
+    }
+    return cond;
+}
+
 /// Bump `name_counts` for `elem` exactly the way `gen_element` would.
 /// Used by `gen_op_leaf` so siblings that still route through the
 /// surface walker see lower-consistent dedup state. Mirrors the
@@ -4164,35 +4528,28 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
             }
             return;
         }
-        // Optional + Group body. Dispatches to the existing surface
-        // helpers (`gen_storable_optional` for storable shapes,
-        // `gen_optional_with_scan_guard` for Transparent / non-storable),
-        // bypassing the surface `gen_repeat_body` middle layer so emit
-        // reads the outer field name / type from the lowered `GroupOp`
-        // / `RepeatOp`. The helpers themselves remain surface-IR —
-        // their internal `gen_group_store_any` / shape-based lookahead
-        // analysis still consults the surface element directly — but
-        // every reach into `gen_repeat_body` from a Repeat element is
-        // already gone after this arm. Going fully op-driven here is
-        // gated on aligning the lower-time strategy with the legacy
-        // k-token / shape lookahead dispatch (lower's narrower
-        // OptionalLookahead can't replace legacy's la_depth-1 case),
-        // which is a separate slice.
+        // Optional + Group body. Routes through op-driven helpers
+        // (`gen_op_storable_optional` / `gen_op_transparent_optional`)
+        // which re-derive the legacy strategy criteria (la_depth,
+        // has_nested_optionals) at emit time so the generated code
+        // matches `gen_storable_optional` / `gen_optional_with_scan_guard`
+        // exactly, but the inner per-element parse routes through
+        // op-driven dispatch (`gen_op_inner_for_storable_repeat`,
+        // `gen_op_dispatch_element`) instead of the surface
+        // `gen_group_store_any` → `gen_element` graph. Closes the
+        // last entry point into surface `gen_repeat` / `gen_element`
+        // from the op-driven Repeat dispatcher.
         if let Group(g_op) = &rep_op.body {
             let inner = &rep.element;
-            if rep_op.body_has_field {
-                let inner_type = op_field_type(&rep_op.body);
-                let inner_field = op_field(&rep_op.body);
-                let opt_field = rep_op.field;
-                let _ = dedup_name(&opt_field, name_counts);
-                gen_storable_optional(w, inner, ctx, name_counts, &inner_type, &opt_field, &inner_field);
+            let g_elem = if let Group(g) = inner {
+                g;
             } else {
-                // Transparent Group (no own field): conditional inline
-                // via scan-guard or k-token lookahead. The helper
-                // accepts the surface inner directly; no outer Option
-                // wrapping is emitted.
-                let _ = dedup_name(&rep_op.field, name_counts);
-                gen_optional_with_scan_guard(w, inner, ctx, name_counts);
+                panic("gen_op_repeat_with_follow_override: Optional+Group body op mapped to non-Group element");
+            };
+            if rep_op.body_has_field {
+                gen_op_storable_optional(w, rep, rep_op, g_op, g_elem, ctx, name_counts);
+            } else {
+                gen_op_transparent_optional(w, rep, rep_op, g_op, g_elem, ctx, name_counts);
             }
             return;
         }
@@ -5968,7 +6325,16 @@ fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: 
     let gc_after_self = ctx.group_counter;
     let _ = dedup_name(&general_group_field_name(group_index), name_counts);
     let var_name = gs.field;
-    let type_name = gs.variant_type;
+    // Derive `type_name` from `ctx.current_rule_name` rather than
+    // `gs.variant_type`. When the General lives inside a shared
+    // (monomorphized) SingleAlt body, lower bakes `gs.variant_type`
+    // using the rule that originally lowered it, while CST type emit
+    // deduplicates the General under the SingleAlt's `owner_rule` —
+    // those names differ. The surrounding `gen_consume_single_alt_group_op`
+    // sets `ctx.current_rule_name` to the SingleAlt's `owner_rule`
+    // via `ctx.general_group_rule_name(...)`, so re-deriving here
+    // matches the deduplicated CST type name.
+    let type_name = general_group_type_name(&ctx.current_rule_name, group_index);
 
     let mut first_sets: Array<Array<String>> = [];
     for let alt of alts {
@@ -6080,11 +6446,13 @@ fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: Option<&GeneralSh
     } else {
         dedup_name(&general_group_field_name(group_index), name_counts);
     };
-    let type_name = if let Some(g) = gs {
-        g.variant_type;
-    } else {
-        general_group_type_name(&ctx.current_rule_name, group_index);
-    };
+    // Always derive `type_name` from `ctx.current_rule_name`. For the
+    // `gs == Some` path, lower bakes `g.variant_type` using the rule
+    // that originally lowered the General; CST type emit deduplicates
+    // the General under the surrounding SingleAlt's `owner_rule`, so
+    // those names differ for shared SingleAlt bodies (see
+    // `gen_general_group_store_op`'s comment for details).
+    let type_name = general_group_type_name(&ctx.current_rule_name, group_index);
 
     let mut first_sets: Array<Array<String>> = [];
     for let alt of alts {
