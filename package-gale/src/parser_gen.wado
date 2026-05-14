@@ -3281,20 +3281,19 @@ fn gen_elements_with_non_greedy_legacy(w: &mut CodeWriter, elements: &Array<Elem
         ctx.ruleref_call_follow = compute_ruleref_call_follow(elements, i, ctx);
         let elem = &elements[i];
         if let Repeat(rep) = elem {
-            if rep.non_greedy {
-                let mut follow = ctx.first_of_elements_from(elements, i + 1);
-                if ctx.tail_is_nullable_deep(elements, i + 1) {
-                    follow = union_sets(&follow, outer_follow);
-                }
-                let follow_second = compute_follow_second(elements, i + 1, ctx);
-                gen_repeat_non_greedy(w, rep, ctx, &follow, &follow_second, name_counts);
-            } else {
-                let mut rep_follow = ctx.first_of_elements_from(elements, i + 1);
-                if ctx.tail_is_nullable_deep(elements, i + 1) {
-                    rep_follow = union_sets(&rep_follow, outer_follow);
-                }
-                gen_repeat(w, rep, ctx, name_counts, &rep_follow);
-            }
+            // gen_repeat / gen_repeat_non_greedy were retired —
+            // every op-driven emit path dispatches Repeat through
+            // `gen_op_repeat_with_follow_override` directly. The
+            // surface walker keeps the conditional shape for the
+            // small set of `gen_element` callers (gen_storable_optional
+            // / gen_optional_with_scan_guard / gen_consume_group)
+            // that still walk surface IR, but those callers no longer
+            // encounter Repeat elements at this layer — the inline
+            // emit decisions happen op-side. If a future caller
+            // routes a surface Repeat through here, the panic
+            // surfaces it instead of silently bypassing the op-driven
+            // dispatcher.
+            panic("gen_elements_with_non_greedy_legacy: Repeat element reached the retired surface walker — route through op-driven `gen_elements_with_non_greedy`");
         } else {
             gen_element(w, elem, ctx, name_counts);
         }
@@ -4116,9 +4115,17 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         w.line(`let {field_name} = {check}?;`);
         return;
     }
-    if let Repeat(rep) = elem {
-        gen_repeat(w, rep, ctx, name_counts, &([] as Array<String>));
-        return;
+    if let Repeat(_) = elem {
+        // `gen_repeat` and `gen_repeat_body` were retired — every
+        // op-driven Repeat dispatch flows through
+        // `gen_op_repeat_with_follow_override` against the lowered
+        // `RepeatOp` directly. The surface `gen_element` still has
+        // many callers (`gen_storable_optional` / `gen_consume_group`
+        // / shape-lookahead helpers) but lower no longer emits a
+        // Repeat element at any position those callers visit, so
+        // this arm is dead in practice. Probe with a panic so a
+        // future regression is surfaced.
+        panic("gen_element: Repeat element reached the retired surface walker — route through op-driven `gen_op_repeat_with_follow_override`");
     }
     if let Group(g) = elem {
         if is_simple_cst_group(&g.alternatives) {
@@ -4256,8 +4263,15 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
             false;
         };
         if !body_op_storable {
-            gen_repeat_non_greedy(w, rep, ctx, follow_first, follow_second, name_counts);
-            return;
+            // `gen_repeat_non_greedy` was retired together with
+            // `gen_repeat` / `gen_repeat_body`. Non-greedy Repeats
+            // over non-storable body shapes (Transparent Group /
+            // `body_has_field == false`) are not exercised by any
+            // committed grammar; the legacy surface emit would have
+            // panicked at `gen_optional_with_scan_guard`'s
+            // scannability assert anyway. Surface the path loudly if
+            // a future grammar reaches it.
+            panic("gen_op_repeat_with_follow_override: non-greedy Repeat over non-storable body — extend the op-driven non-greedy arm");
         }
         let is_plus = if let Plus = rep.kind { true } else { false };
         let while_cond = compute_non_greedy_condition(inner, follow_first, follow_second, ctx);
@@ -4599,257 +4613,6 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
     panic("gen_op_repeat_with_follow_override: op-driven dispatch did not cover this RepeatOp shape — extend the op-driven arms instead of relying on the surface fallback");
 }
 
-/// `ruleref_call_follow` is saved, cleared, and restored around the
-/// emit body — see `gen_scan_repeat` for the rationale (the outer
-/// alt walker's value is for the Repeat element's own position, not
-/// the inner element's iteration follow).
-fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
-    let saved_call_follow = ctx.ruleref_call_follow;
-    ctx.ruleref_call_follow = [];
-    gen_repeat_body(w, rep, ctx, name_counts, outer_follow);
-    ctx.ruleref_call_follow = saved_call_follow;
-}
-
-fn gen_repeat_body(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
-    let inner = &rep.element;
-    let mut visiting: Array<String> = [];
-    let first = ctx.first_of_element(inner, &mut visiting);
-    let mut visiting_scan: Array<String> = [];
-    let scannable = ctx.is_element_scannable(inner, &mut visiting_scan);
-
-    // Follow-aware variant emission: subtract `current_follow_mask`
-    // from the iteration / optional-fire condition so tokens the
-    // caller claims do not get greedily consumed here. For Plus the
-    // first iteration is mandatory; the mask only narrows the loop.
-    let loop_first = if ctx.current_follow_mask.is_empty() {
-        first;
-    } else {
-        subtract_sets(&first, &ctx.current_follow_mask);
-    };
-    let mask_active = !ctx.current_follow_mask.is_empty() && loop_first.len() != first.len();
-
-    // For Plus/Star with a single-alt Group inner, the body's "end-of-iteration
-    // follow" is: first(group) (next iteration can start here) ∪ outer_follow
-    // (the repeat can also exit). Non-greedy repeats at the tail of the group
-    // need this to stop before the next iteration's first token.
-    let iter_follow = compute_iter_follow(inner, &first, outer_follow);
-
-    // `(items+=item)*` / `items+=item+` / `items+=item?` — the list label
-    // already implies Array, so use the label name directly and push the
-    // inner element on each iteration.
-    if is_list_label(inner) {
-        if let Label(lab) = inner {
-            let inner_info = element_field_info(&lab.element, ctx);
-            let lab_name = dedup_name(&lab.field_name, name_counts);
-            w.line(`let mut {lab_name}: Array<{inner_info.1}> = [];`);
-            if let Star = rep.kind {
-                if scannable {
-                    w.begin("loop");
-                    let scan_pos_var = emit_rep_scan_guard(w, inner, ctx, name_counts);
-                    w.line(`if {scan_pos_var} < 0 \{ break; \}`);
-                    let mut nc: Array<[String, i32]> = [];
-                    gen_element(w, &lab.element, ctx, &mut nc);
-                    w.line(`{lab_name}.push({inner_info.0});`);
-                    w.end();
-                } else {
-                    w.begin(`while {ctx.first_check_str(&first)}`);
-                    let mut nc: Array<[String, i32]> = [];
-                    gen_element(w, &lab.element, ctx, &mut nc);
-                    w.line(`{lab_name}.push({inner_info.0});`);
-                    w.end();
-                }
-            }
-            if let Plus = rep.kind {
-                if scannable {
-                    let plus_flag = dedup_name(&"_plus_first", name_counts);
-                    w.line(`let mut {plus_flag} = true;`);
-                    w.begin("loop");
-                    w.begin(`if !{plus_flag}`);
-                    let scan_pos_var = emit_rep_scan_guard(w, inner, ctx, name_counts);
-                    w.line(`if {scan_pos_var} < 0 \{ break; \}`);
-                    w.end();
-                    w.line(`{plus_flag} = false;`);
-                    let mut nc: Array<[String, i32]> = [];
-                    gen_element(w, &lab.element, ctx, &mut nc);
-                    w.line(`{lab_name}.push({inner_info.0});`);
-                    w.end();
-                } else {
-                    let plus_flag = dedup_name(&"_plus_first", name_counts);
-                    w.line(`let mut {plus_flag} = true;`);
-                    w.begin(`while {plus_flag} || {ctx.first_check_str(&first)}`);
-                    w.line(`{plus_flag} = false;`);
-                    let mut nc: Array<[String, i32]> = [];
-                    gen_element(w, &lab.element, ctx, &mut nc);
-                    w.line(`{lab_name}.push({inner_info.0});`);
-                    w.end();
-                }
-            }
-            if let Optional = rep.kind {
-                w.begin(`if {ctx.first_check_str(&first)}`);
-                let mut nc: Array<[String, i32]> = [];
-                gen_element(w, &lab.element, ctx, &mut nc);
-                w.line(`{lab_name}.push({inner_info.0});`);
-                w.end();
-            }
-            return;
-        }
-    }
-
-    if has_field(inner) {
-        // Save counter before element_field_info, which may increment it for
-        // general groups. The generation functions (gen_group_store_any, etc.)
-        // also increment the counter, so we restore before calling them to
-        // avoid double-counting.
-        let gc_before = ctx.group_counter;
-        let field_info = element_field_info(inner, ctx);
-        let is_group_store = is_group_with_store(inner);
-        if let Star = rep.kind {
-            let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
-            w.line(`let mut {list_name}: Array<{field_info.1}> = [];`);
-            if scannable {
-                w.begin("loop");
-                let scan_pos_var = emit_rep_scan_guard(w, inner, ctx, name_counts);
-                w.line(`if {scan_pos_var} < 0 \{ break; \}`);
-                let mut nc: Array<[String, i32]> = [];
-                if is_group_store {
-                    ctx.group_counter = gc_before;
-                    gen_group_store_any(w, inner, ctx, &mut nc, &iter_follow);
-                } else {
-                    gen_element(w, inner, ctx, &mut nc);
-                }
-                w.line(`{list_name}.push({field_info.0});`);
-                w.end();
-            } else {
-                w.begin(`while {ctx.first_check_str(&first)}`);
-                let mut nc: Array<[String, i32]> = [];
-                if is_group_store {
-                    ctx.group_counter = gc_before;
-                    gen_group_store_any(w, inner, ctx, &mut nc, &iter_follow);
-                } else {
-                    gen_element(w, inner, ctx, &mut nc);
-                }
-                w.line(`{list_name}.push({field_info.0});`);
-                w.end();
-            }
-        }
-        if let Plus = rep.kind {
-            let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
-            w.line(`let mut {list_name}: Array<{field_info.1}> = [];`);
-            if scannable {
-                let plus_flag = dedup_name(&"_plus_first", name_counts);
-                w.line(`let mut {plus_flag} = true;`);
-                w.begin("loop");
-                w.begin(`if !{plus_flag}`);
-                let scan_pos_var = emit_rep_scan_guard(w, inner, ctx, name_counts);
-                w.line(`if {scan_pos_var} < 0 \{ break; \}`);
-                w.end();
-                w.line(`{plus_flag} = false;`);
-                let mut nc: Array<[String, i32]> = [];
-                if is_group_store {
-                    ctx.group_counter = gc_before;
-                    gen_group_store_any(w, inner, ctx, &mut nc, &iter_follow);
-                } else {
-                    gen_element(w, inner, ctx, &mut nc);
-                }
-                w.line(`{list_name}.push({field_info.0});`);
-                w.end();
-            } else {
-                let plus_flag = dedup_name(&"_plus_first", name_counts);
-                w.line(`let mut {plus_flag} = true;`);
-                w.begin(`while {plus_flag} || {ctx.first_check_str(&first)}`);
-                w.line(`{plus_flag} = false;`);
-                let mut nc: Array<[String, i32]> = [];
-                if is_group_store {
-                    ctx.group_counter = gc_before;
-                    gen_group_store_any(w, inner, ctx, &mut nc, &iter_follow);
-                } else {
-                    gen_element(w, inner, ctx, &mut nc);
-                }
-                w.line(`{list_name}.push({field_info.0});`);
-                w.end();
-            }
-        }
-        if let Optional = rep.kind {
-            let type_str = field_info.1;
-            let opt_name = dedup_name(&field_info.0, name_counts);
-            if is_group_store {
-                ctx.group_counter = gc_before;
-                gen_storable_optional(w, inner, ctx, name_counts, &type_str, &opt_name, &field_info.0);
-            } else if mask_active && loop_first.is_empty() {
-                // Follow-aware variant: caller claims every token this
-                // optional could fire on, so it never fires here.
-                w.line(`let {opt_name}: Option<{type_str}> = null;`);
-            } else {
-                w.begin(`let {opt_name}: Option<{type_str}> = if {ctx.first_check_str(&loop_first)}`);
-                let mut nc: Array<[String, i32]> = [];
-                gen_element(w, inner, ctx, &mut nc);
-                w.line(`Option::<{type_str}>::Some({field_info.0})`);
-                w.else_begin("else");
-                w.line("null");
-                w.end_with(";");
-            }
-        }
-    } else {
-        if let Star = rep.kind {
-            if scannable {
-                w.begin("loop");
-                let scan_pos_var = emit_rep_scan_guard(w, inner, ctx, name_counts);
-                w.line(`if {scan_pos_var} < 0 \{ break; \}`);
-                let mut nc: Array<[String, i32]> = [];
-                gen_element(w, inner, ctx, &mut nc);
-                w.end();
-            } else {
-                w.begin(`while {ctx.first_check_str(&first)}`);
-                let mut nc: Array<[String, i32]> = [];
-                gen_element(w, inner, ctx, &mut nc);
-                w.end();
-            }
-        }
-        if let Plus = rep.kind {
-            if scannable {
-                let plus_flag = dedup_name(&"_plus_first", name_counts);
-                w.line(`let mut {plus_flag} = true;`);
-                w.begin("loop");
-                w.begin(`if !{plus_flag}`);
-                let scan_pos_var = emit_rep_scan_guard(w, inner, ctx, name_counts);
-                w.line(`if {scan_pos_var} < 0 \{ break; \}`);
-                w.end();
-                w.line(`{plus_flag} = false;`);
-                let mut nc: Array<[String, i32]> = [];
-                gen_element(w, inner, ctx, &mut nc);
-                w.end();
-            } else {
-                gen_element(w, inner, ctx, name_counts);
-                w.begin(`while {ctx.first_check_str(&first)}`);
-                let mut nc: Array<[String, i32]> = [];
-                gen_element(w, inner, ctx, &mut nc);
-                w.end();
-            }
-        }
-
-        if let Optional = rep.kind {
-            gen_optional_with_scan_guard(w, inner, ctx, name_counts);
-        }
-    }
-}
-
-fn compute_follow_second(elements: &Array<Element>, follow_start: i32, ctx: &mut GenContext) -> Array<String> {
-    // Compute first set of the 2nd token of the follow element.
-    // For patterns like (',' table_constraint)*, the follow's inner group is [',' table_constraint].
-    // We want first(table_constraint), not first(',').
-    if follow_start >= elements.len() {
-        return [];
-    }
-    let follow_elem = &elements[follow_start];
-    if let Repeat(rep) = follow_elem {
-        if let Group(g) = rep.element {
-            if g.alternatives.len() == 1 && g.alternatives[0].elements.len() >= 2 {
-                return ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
-            }
-        }
-    }
-    return [];
-}
 
 fn compute_iter_follow(inner: &Element, first_of_inner: &Array<String>, outer_follow: &Array<String>) -> Array<String> {
     // For a Plus/Star whose inner is a single-alt Group, each iteration can
@@ -4932,54 +4695,6 @@ fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, f
     // Fallback: can't disambiguate, don't loop (match minimum)
     return "false";
 }
-
-fn gen_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, follow_first: &Array<String>, follow_second: &Array<String>, name_counts: &mut Array<[String, i32]>) {
-    let inner = &rep.element;
-    let is_plus = if let Plus = rep.kind {
-        true;
-    } else {
-        false;
-    };
-    let while_cond = compute_non_greedy_condition(inner, follow_first, follow_second, ctx);
-
-    if has_field(inner) {
-        let field_info = element_field_info(inner, ctx);
-        if is_plus {
-            let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, ctx, &mut nc);
-            let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
-            w.line(`let mut {list_name}: Array<{field_info.1}> = [{field_info.0}];`);
-            if while_cond != "false" {
-                w.begin(`while {while_cond}`);
-                let mut nc2: Array<[String, i32]> = [];
-                gen_element(w, inner, ctx, &mut nc2);
-                w.line(`{list_name}.push({field_info.0});`);
-                w.end();
-            }
-        } else {
-            let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
-            w.line(`let mut {list_name}: Array<{field_info.1}> = [];`);
-            if while_cond != "false" {
-                w.begin(`while {while_cond}`);
-                let mut nc: Array<[String, i32]> = [];
-                gen_element(w, inner, ctx, &mut nc);
-                w.line(`{list_name}.push({field_info.0});`);
-                w.end();
-            }
-        }
-    } else {
-        if is_plus {
-            gen_element(w, inner, ctx, name_counts);
-        }
-        if while_cond != "false" {
-            w.begin(`while {while_cond}`);
-            let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, ctx, &mut nc);
-            w.end();
-        }
-    }
-}
-
 /// Per-position caller-side FOLLOW used by alt walkers to decide
 /// whether to register a `__follow_<id>` variant for a `RuleRef` at
 /// position `i` in `elements`.
@@ -6828,13 +6543,12 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
         let elems = &alts[*idx].elements;
         for let mut i = skip; i < elems.len(); i += 1 {
             let elem = &elems[i];
-            if let Repeat(rep) = elem {
-                if rep.non_greedy {
-                    let follow = ctx.first_of_elements_from(elems, i + 1);
-                    let follow_second = compute_follow_second(elems, i + 1, ctx);
-                    gen_repeat_non_greedy(w, rep, ctx, &follow, &follow_second, name_counts);
-                    continue;
-                }
+            if let Repeat(_) = elem {
+                // `gen_repeat` / `gen_repeat_non_greedy` retired —
+                // see the panic at the dispatcher entry in
+                // `gen_op_repeat_with_follow_override` for the
+                // op-driven equivalent.
+                panic("gen_group_prediction_code_skip: Repeat element reached the retired surface walker — route through op-driven `gen_op_repeat_with_follow_override`");
             }
             gen_element(w, elem, ctx, name_counts);
         }
@@ -7034,6 +6748,18 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                 } else if is_simple_token_group(alts) {
                     let discard = dedup_name(&"op_tok", &mut name_counts);
                     w.line(`let {discard} = p.advance();`);
+                } else if let Group(g_op) = suffix_op {
+                    // Route the LR suffix's nested Group through the
+                    // op-driven dispatcher so emit no longer falls
+                    // back into the surface `gen_element` → group
+                    // helper graph. `gen_op_group` handles every
+                    // `GroupShape` (Transparent / SingleAlt /
+                    // TokenOnly / SimpleCst / General) via the
+                    // op-driven walkers; the token-only / simple-token
+                    // shortcuts above remain as inline emit because
+                    // they bypass the dispatcher's per-shape struct
+                    // construction entirely.
+                    gen_op_group(w, g_op, elem, ctx, &mut name_counts);
                 } else {
                     gen_element(w, elem, ctx, &mut name_counts);
                 }
