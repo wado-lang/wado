@@ -1692,18 +1692,27 @@ impl Parser {
         let id = self.alloc_ast_id();
         self.expect(&TokenKind::Return)?;
 
-        let value = if self.check(&TokenKind::Semicolon) {
+        let value = if self.check(&TokenKind::Semicolon) || self.check(&TokenKind::RBrace) {
             None
         } else {
             Some(self.parse_expr()?)
         };
 
-        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
+        let end_span = if self.check(&TokenKind::Semicolon) {
+            self.advance().span
+        } else if self.check(&TokenKind::RBrace) {
+            value.as_ref().map(Expr::span).unwrap_or(start_span)
+        } else {
+            return Err(self.error_at_span(
+                self.peek().span,
+                &format!("expected Semicolon, found {:?}", self.peek_kind()),
+            ));
+        };
 
         Ok(Stmt::Return(ReturnStmt {
             id,
             value,
-            span: start_span.merge(&semi_span),
+            span: start_span.merge(&end_span),
         }))
     }
 
@@ -1717,12 +1726,22 @@ impl Parser {
         self.expect(&TokenKind::Return)?;
 
         let value = self.parse_expr()?;
-        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
+
+        let end_span = if self.check(&TokenKind::Semicolon) {
+            self.advance().span
+        } else if self.check(&TokenKind::RBrace) {
+            value.span()
+        } else {
+            return Err(self.error_at_span(
+                self.peek().span,
+                &format!("expected Semicolon, found {:?}", self.peek_kind()),
+            ));
+        };
 
         Ok(Stmt::TaskReturn(TaskReturnStmt {
             id,
             value,
-            span: start_span.merge(&semi_span),
+            span: start_span.merge(&end_span),
         }))
     }
 
@@ -2102,13 +2121,26 @@ impl Parser {
             (None, None)
         };
 
-        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
+        let end_span = if self.check(&TokenKind::Semicolon) {
+            self.advance().span
+        } else if self.check(&TokenKind::RBrace) {
+            value
+                .as_ref()
+                .map(|v| v.span())
+                .or(label.as_ref().map(|_| self.peek().span))
+                .unwrap_or(start_span)
+        } else {
+            return Err(self.error_at_span(
+                self.peek().span,
+                &format!("expected Semicolon, found {:?}", self.peek_kind()),
+            ));
+        };
 
         Ok(Stmt::Break(BreakStmt {
             id,
             label,
             value,
-            span: start_span.merge(&semi_span),
+            span: start_span.merge(&end_span),
         }))
     }
 
@@ -2117,7 +2149,15 @@ impl Parser {
         let span = self.peek().span;
         let id = self.alloc_ast_id();
         self.expect(&TokenKind::Continue)?;
-        self.expect(&TokenKind::Semicolon)?;
+
+        if self.check(&TokenKind::Semicolon) {
+            self.advance();
+        } else if !self.check(&TokenKind::RBrace) {
+            return Err(self.error_at_span(
+                self.peek().span,
+                &format!("expected Semicolon, found {:?}", self.peek_kind()),
+            ));
+        }
 
         Ok(Stmt::Continue(ContinueStmt { id, span }))
     }

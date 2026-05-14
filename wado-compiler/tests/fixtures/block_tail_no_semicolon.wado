@@ -1,0 +1,50 @@
+variant V { A(i32), B }
+
+fn early_return_no_semi(v: &V) -> i32 {
+    if let B = v { return 0 }
+    return 1;
+}
+
+fn early_return_value_no_semi(n: i32) -> i32 {
+    if n < 0 { return -1 }
+    return n * 2;
+}
+
+fn sum_until_neg(arr: &Array<i32>) -> i32 {
+    let mut total = 0;
+    let mut i = 0;
+    while i < arr.len() {
+        let x = arr[i];
+        if x < 0 { break }
+        total += x;
+        i += 1;
+    }
+    return total;
+}
+
+fn sum_positives(arr: &Array<i32>) -> i32 {
+    let mut total = 0;
+    let mut i = 0;
+    while i < arr.len() {
+        let x = arr[i];
+        i += 1;
+        if x <= 0 { continue }
+        total += x;
+    }
+    return total;
+}
+
+export fn run() {
+    assert early_return_no_semi(&V::A(42)) == 1;
+    assert early_return_no_semi(&V::B) == 0;
+
+    assert early_return_value_no_semi(5) == 10;
+    assert early_return_value_no_semi(-3) == -1;
+
+    let a: Array<i32> = [1, 2, 3, -1, 5];
+    assert sum_until_neg(&a) == 6;
+    assert sum_positives(&a) == 11;
+}
+
+__DATA__
+{"stdout": ""}
