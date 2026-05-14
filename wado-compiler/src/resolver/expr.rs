@@ -55,7 +55,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .last()
                     .and_then(|s| match &s.kind {
                         TirStmtKind::Expr(e) => Some(e.type_id),
-                        TirStmtKind::Return { .. } => Some(TypeTable::NEVER),
+                        TirStmtKind::Return { .. }
+                        | TirStmtKind::Break { .. }
+                        | TirStmtKind::Continue => Some(TypeTable::NEVER),
                         _ => None,
                     })
                     .unwrap_or(TypeTable::UNIT);
