@@ -5679,20 +5679,6 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: Option<&SimpleC
     w.line(`let {var_name} = {inner_var};`);
 }
 
-fn gen_group_store_any(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
-    if let Group(g) = inner {
-        let alts = &g.alternatives;
-        if is_simple_cst_group(alts) {
-            gen_consume_group_store(w, alts, ctx, name_counts);
-        } else if is_token_only_group(alts) {
-            gen_consume_token_group(w, alts, ctx, name_counts);
-        } else if is_single_alt_group(alts) {
-            gen_consume_single_alt_group(w, &alts[0], ctx, name_counts, outer_follow);
-        } else if is_general_group(alts) {
-            gen_general_group_store(w, alts, ctx, name_counts);
-        }
-    }
-}
 
 fn gen_consume_token_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let var_name = dedup_name(&token_group_field_name(alts), name_counts);
