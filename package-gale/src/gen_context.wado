@@ -74,10 +74,14 @@ pub struct FollowVariantEntry {
 /// after the walker counter retirement) is gone too. `current_follow_mask` and
 /// `current_outer_follow` were retired in (5d) — lower threads the
 /// surrounding variant's mask as `variant_mask: &Array<String>`
-/// through every lowering function and bakes `caller_follow_with_mask`
-/// on each `RepeatOp` for emit's `gen_op_repeat_optional_rulecall`;
-/// `compute_call_site_follow` takes the mask as an explicit parameter
-/// for the deep-nullable suffix propagation. With these fields gone,
+/// through every lowering function and the per-outer-position mask as
+/// `outer_position_mask: &Array<String>` alongside it; the latter is
+/// baked on `RepeatOp.position_mask`, which emit's
+/// `gen_op_repeat_optional_rulecall` unions with its caller-supplied
+/// follow (which `inner_walker_follow_for_repeat` clears to `[]` for
+/// inner greedy Optionals). `compute_call_site_follow` takes the
+/// variant mask as an explicit parameter for the deep-nullable suffix
+/// propagation. With these fields gone,
 /// `GenContext` no longer carries any walker-mutable state — every
 /// caching / registry field is set up at construction and bookkeeping
 /// is local to its writer.

@@ -1046,9 +1046,10 @@ fn emit_follow_variant_from_gir(w: &mut CodeWriter, variant_rule: &Rule, ctx: &m
 
     // The variant's mask is baked at lower time on every
     // mask-sensitive op (greedy strategies via `RepeatStrategy`,
-    // Optional+RuleCall via `RepeatOp.caller_follow_with_mask`), so
-    // emit just runs the regular function-body emitters; no walker
-    // state needs to be swapped here.
+    // Optional+RuleCall via `RepeatOp.position_mask` unioned with
+    // the caller-supplied follow at emit time), so emit just runs
+    // the regular function-body emitters; no walker state needs to
+    // be swapped here.
     let scan_name = `scan_{rule.snake_name}__follow_{entry.id}`;
     let parse_name = `parse_{rule.snake_name}__follow_{entry.id}`;
     if entry.scan_used {
@@ -2389,10 +2390,11 @@ fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule
 /// `fn_name = parse_<rule>__follow_<id>` against a `variant_rule` that
 /// lower already produced with `variant_mask = entry.mask` threaded
 /// through — so the regular emit path produces the variant's body
-/// unmodified. Tail-greedy suppression / mask subtraction is baked on
-/// `RepeatOp.strategy` / `RepeatOp.caller_follow_with_mask`, and
-/// `RuleCallOp.variant_id` carries the variant-selection decision at
-/// inner `RuleRef` sites.
+/// unmodified. Tail-greedy suppression is baked on
+/// `RepeatOp.strategy`, the per-outer-position mask emit unions with
+/// the caller-supplied follow at Optional+RuleCall lives on
+/// `RepeatOp.position_mask`, and `RuleCallOp.variant_id` carries the
+/// variant-selection decision at inner `RuleRef` sites.
 ///
 /// `emit_visibility` is `false` for variant emission to suppress the
 /// `pub`/`export` doc comment on the variant function (variants are
@@ -2767,8 +2769,10 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, o
 /// overlaps the inner's first by design there (`(= typeParameters?
 /// singleExpression)?` patterns), and applying it would empty the gate
 /// and silently skip the optional. Clearing the follow at inner
-/// positions defers to `caller_follow_with_mask` (the variant-level
-/// expectation baked at the outer position) instead.
+/// positions defers the gate to `rep_op.position_mask` (the
+/// variant-level expectation at the outer alt-position) which emit
+/// unions with the cleared follow inside
+/// `gen_op_repeat_optional_rulecall`.
 ///
 /// Star / Plus and non-greedy still need the caller-side follow:
 /// greedy Star / Plus reads it as the iter-follow for nested
@@ -3740,7 +3744,7 @@ fn gen_op_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
 /// `WithFollowSubtraction`.
 fn gen_op_repeat_optional_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
     if op_is_rulecall(&rep_op.body) {
-        gen_op_repeat_optional_rulecall(w, rep, rep_op, ctx, name_counts);
+        gen_op_repeat_optional_rulecall(w, rep, rep_op, ctx, name_counts, follow);
         return;
     }
     if let Group(g_op) = &rep_op.body {
@@ -3769,14 +3773,23 @@ fn gen_op_repeat_optional_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op
 /// `selector : simpleSelectorSequence ws (combinator ws)*` doesn't
 /// greedily eat the `Space` that belongs to the next iteration's
 /// `combinator`. Inline replacement of the retired `gen_repeat_with_follow`;
-/// emit reads the field name / inner type from `rep_op`. The combined
-/// caller-follow-plus-variant-mask is baked into `rep_op.caller_follow_with_mask`
-/// at lower time so emit consumes it directly (the surrounding variant
-/// mask is no longer threaded through walker state).
-fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+/// emit reads the field name / inner type from `rep_op`. The
+/// variant-level mask at this Repeat's outer alt-position is baked
+/// on `rep_op.position_mask` (always `[]` for non-variant bodies);
+/// emit unions it with the caller-supplied `follow` (which
+/// `inner_walker_follow_for_repeat` can legitimately clear to `[]` for
+/// inner greedy Optionals — e.g. `accessibilityModifier?` inside
+/// `optionalParameter`, where the next sibling's first overlaps the
+/// inner's first by design).
+fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
     let inner = &rep.element;
     let raw_first = rep_op.body_first_set;
-    let first = subtract_sets(&raw_first, &rep_op.caller_follow_with_mask);
+    let combined_follow = if rep_op.position_mask.is_empty() {
+        *follow;
+    } else {
+        union_sets(follow, &rep_op.position_mask);
+    };
+    let first = subtract_sets(&raw_first, &combined_follow);
     let inner_type = op_field_type(&rep_op.body);
     let opt_field = rep_op.field;
     let _ = dedup_name(&opt_field, name_counts);

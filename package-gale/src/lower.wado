@@ -955,11 +955,11 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
     let outer_follow: Array<String> = [];
     for let mut i = 1; i < alt.elements.len(); i += 1 {
         let elem_follow = inner_follow_at(&alt.elements, i, ctx, variant_mask);
-        let mut op = lower_op(&alt.elements[i], &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow, variant_mask);
+        let position_mask = position_mask_at(&alt.elements, i, ctx, variant_mask);
+        let mut op = lower_op(&alt.elements[i], &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow, variant_mask, &position_mask);
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            let with_mask = caller_follow_with_mask_at(&alt.elements, i, &basic_follow, ctx, variant_mask);
             op = Op::Repeat(RepeatOp {
                 kind: rep_op.kind,
                 body: rep_op.body,
@@ -967,7 +967,7 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
                 strategy: rep_op.strategy,
                 field: rep_op.field,
                 caller_follow_first: basic_follow,
-                caller_follow_with_mask: with_mask,
+                position_mask: rep_op.position_mask,
                 caller_follow_second: basic_second,
                 body_scannable: rep_op.body_scannable,
                 body_has_field: rep_op.body_has_field,
@@ -1796,16 +1796,20 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
         let elem_follow = inner_follow_at(&alt.elements, i, ctx, variant_mask);
-        let mut op = lower_op(elem, &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow, variant_mask);
+        let position_mask = position_mask_at(&alt.elements, i, ctx, variant_mask);
+        let mut op = lower_op(elem, &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow, variant_mask, &position_mask);
         // For Repeat ops, replace `caller_follow_first` with the basic
         // first set of the surrounding suffix. `inner_follow_at` returns
         // the variant-interning follow (which considers deep-nullable
         // suffixes via the threaded `variant_mask`); emit's per-position
         // `gen_repeat*` decisions use the simpler `first_of_elements_from`.
+        // `position_mask` is already baked by `lower_repeat_op`'s initial
+        // RepeatOp (seeded from the threaded `outer_position_mask`); we
+        // re-state it here verbatim because the surrounding RepeatOp
+        // builder needs every field listed.
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            let with_mask = caller_follow_with_mask_at(&alt.elements, i, &basic_follow, ctx, variant_mask);
             op = Op::Repeat(RepeatOp {
                 kind: rep_op.kind,
                 body: rep_op.body,
@@ -1813,7 +1817,7 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
                 strategy: rep_op.strategy,
                 field: rep_op.field,
                 caller_follow_first: basic_follow,
-                caller_follow_with_mask: with_mask,
+                position_mask: rep_op.position_mask,
                 caller_follow_second: basic_second,
                 body_scannable: rep_op.body_scannable,
                 body_has_field: rep_op.body_has_field,
@@ -1856,7 +1860,7 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
 /// live under). Phase 2.1 covers the trivial leaf elements; the
 /// remaining shapes panic with their own `TODO Phase 2.x` markers
 /// so a half-lowered alt body can't quietly reach codegen.
-fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &Array<String>, variant_mask: &Array<String>) -> Op {
+fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &Array<String>, variant_mask: &Array<String>, outer_position_mask: &Array<String>) -> Op {
     return match *elem {
         TokenRef(t) => Op::Token(TokenOp {
             kind: `TK_{t.name}`,
@@ -1880,9 +1884,9 @@ fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>, rule_name: &
             kinds: collect_excluded_kinds(&ne.element),
             field: dedup_name(&not_element_field_name(&ne.element), name_counts),
         }),
-        Repeat(rep) => lower_repeat_op(rep, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask),
-        Group(g) => lower_group_op(g, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask),
-        Label(lab) => lower_label_op(lab, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask),
+        Repeat(rep) => lower_repeat_op(rep, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask, outer_position_mask),
+        Group(g) => lower_group_op(g, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask, outer_position_mask),
+        Label(lab) => lower_label_op(lab, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask, outer_position_mask),
     };
 }
 
@@ -1905,7 +1909,7 @@ fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>, rule_name: &
 /// * Phase 2.x.simplecst — every alt a single distinct RuleRef →
 ///   `GroupShape::SimpleCst`
 /// * Phase 2.x.general — multi-alt non-trivial → `GroupShape::General`
-fn lower_group_op(g: &GroupElement, name_counts: &mut Array<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &Array<String>, variant_mask: &Array<String>) -> Op {
+fn lower_group_op(g: &GroupElement, name_counts: &mut Array<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &Array<String>, variant_mask: &Array<String>, outer_position_mask: &Array<String>) -> Op {
     let alts = &g.alternatives;
     assert alts.len() > 0,
         "Group with no alts is not a valid lowering input";
@@ -1914,9 +1918,9 @@ fn lower_group_op(g: &GroupElement, name_counts: &mut Array<[String, i32]>, rule
         assert alt.elements.len() > 0,
             "Group with empty alt is not a valid lowering input";
         if alt.elements.len() == 1 {
-            return lower_transparent_group(&alt.elements[0], name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask);
+            return lower_transparent_group(&alt.elements[0], name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask, outer_position_mask);
         }
-        return lower_single_alt_group(alt, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask);
+        return lower_single_alt_group(alt, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask, outer_position_mask);
     }
     if is_token_only_group(alts) {
         return lower_token_only_group(alts, name_counts, ctx, variant_mask);
@@ -1925,21 +1929,21 @@ fn lower_group_op(g: &GroupElement, name_counts: &mut Array<[String, i32]>, rule
         return lower_simple_cst_group(alts, name_counts, ctx, variant_mask);
     }
     if is_general_group(alts) {
-        return lower_general_group(alts, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask);
+        return lower_general_group(alts, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask, outer_position_mask);
     }
     panic("Group shape unrecognised by classifier — should be impossible");
 }
 
 /// Single-element single-alt: `(e)` lowers to `e` with no struct of
 /// its own. The binding nests in the surrounding alt's name table.
-fn lower_transparent_group(inner: &Element, name_counts: &mut Array<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &Array<String>, variant_mask: &Array<String>) -> Op {
+fn lower_transparent_group(inner: &Element, name_counts: &mut Array<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &Array<String>, variant_mask: &Array<String>, outer_position_mask: &Array<String>) -> Op {
     // Nested inner is allowed: `((a))` / `(a*)` / `(name=a)`.
     // The Op carries whatever shape `lower_op` produces; the
     // surrounding emit-side Transparent path inlines it directly.
     // A Transparent group adds nothing between the inner and the
     // outer alt, so `outer_follow` passes through verbatim.
 
-    let inner_op = lower_op(inner, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask);
+    let inner_op = lower_op(inner, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask, outer_position_mask);
     let body = AltBody {
         alt_index: 0,
         case_name: "",
@@ -1974,7 +1978,7 @@ fn lower_transparent_group(inner: &Element, name_counts: &mut Array<[String, i32
 /// monomorph table key (`<RuleName>Group<idx>`). For Phase
 /// 2.x.singlealt the inner ops are leaves only; nested groups land
 /// in Phase 2.x.nested.
-fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &Array<String>, variant_mask: &Array<String>) -> Op {
+fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &Array<String>, variant_mask: &Array<String>, outer_position_mask: &Array<String>) -> Op {
     // Nested elements are allowed: `(a (b c))` / `(a*)` /
     // `(name=a b)`. Each elem is lowered through the standard
     // `lower_op` recursion.
@@ -2004,7 +2008,10 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
         // group's alt. The last position inherits the surrounding
         // alt's `outer_follow`.
         let elem_follow = inner_follow_at(&alt.elements, i, ctx, variant_mask);
-        let mut op = lower_op(elem, &mut inner_counts, &owner_rule, ctx, group_counter, &elem_follow, variant_mask);
+        // Inner elements inherit the outer position's mask — `(a? b)?`
+        // inside `outer ... (a? b)? rest` reads the same mask emit used
+        // to install on `ctx.current_follow_mask` at the OUTER position.
+        let mut op = lower_op(elem, &mut inner_counts, &owner_rule, ctx, group_counter, &elem_follow, variant_mask, outer_position_mask);
         let mut se = lower_scan_element(elem, ctx, &elem_follow, variant_mask);
         // Gate `basic_follow` on either side actually being a Repeat —
         // `first_of_elements_from` walks the suffix and isn't free.
@@ -2019,7 +2026,11 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             if let Repeat(rep_op) = &op {
                 let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-                let with_mask = caller_follow_with_mask_at(&alt.elements, i, &basic_follow, ctx, variant_mask);
+                // `position_mask` was seeded from the OUTER alt's
+                // position by `lower_repeat_op` — inherited through
+                // the `outer_position_mask` parameter — so we keep
+                // the existing value rather than recomputing against
+                // this inner group's tail.
                 op = Op::Repeat(RepeatOp {
                     kind: rep_op.kind,
                     body: rep_op.body,
@@ -2027,7 +2038,7 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
                     strategy: rep_op.strategy,
                     field: rep_op.field,
                     caller_follow_first: basic_follow,
-                    caller_follow_with_mask: with_mask,
+                    position_mask: rep_op.position_mask,
                     caller_follow_second: basic_second,
                     body_scannable: rep_op.body_scannable,
                     body_has_field: rep_op.body_has_field,
@@ -2275,7 +2286,7 @@ fn simple_cst_alt_target_name(alt: &Alternative) -> String {
 /// names inside the group's struct, not the outer alt. The shared
 /// `group_counter` is bumped before lowering inner alts so any
 /// nested general groups get the next sequential ids.
-fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &Array<String>, variant_mask: &Array<String>) -> Op {
+fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &Array<String>, variant_mask: &Array<String>, outer_position_mask: &Array<String>) -> Op {
     let group_index = *group_counter;
     *group_counter += 1;
 
@@ -2308,7 +2319,10 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
         for let mut ei = 0; ei < alt.elements.len(); ei += 1 {
             let elem = &alt.elements[ei];
             let elem_follow = inner_follow_at(&alt.elements, ei, ctx, variant_mask);
-            let mut op = lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow, variant_mask);
+            // See `lower_single_alt_group` — inner elements inherit
+            // the outer position's mask, mirroring emit's inner-walker
+            // semantics on the retired `ctx.current_follow_mask`.
+            let mut op = lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow, variant_mask, outer_position_mask);
             let mut se = lower_scan_element(elem, ctx, &elem_follow, variant_mask);
             let op_is_repeat = op matches { Repeat(_) };
             let se_is_repeat = se matches { Repeat(_) };
@@ -2316,7 +2330,10 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
                 let basic_follow = ctx.first_of_elements_from(&alt.elements, ei + 1);
                 if let Repeat(rep_op) = &op {
                     let basic_second = compute_caller_follow_second(&alt.elements, ei + 1, ctx);
-                    let with_mask = caller_follow_with_mask_at(&alt.elements, ei, &basic_follow, ctx, variant_mask);
+                    // See `lower_single_alt_group` — `position_mask`
+                    // stays as `outer_position_mask` (the OUTER alt's
+                    // mask, inherited through the threaded parameter),
+                    // matching emit's old inner-walker semantics.
                     op = Op::Repeat(RepeatOp {
                         kind: rep_op.kind,
                         body: rep_op.body,
@@ -2324,7 +2341,7 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
                         strategy: rep_op.strategy,
                         field: rep_op.field,
                         caller_follow_first: basic_follow,
-                        caller_follow_with_mask: with_mask,
+                        position_mask: rep_op.position_mask,
                         caller_follow_second: basic_second,
                         body_scannable: rep_op.body_scannable,
                         body_has_field: rep_op.body_has_field,
@@ -2385,7 +2402,7 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
 /// shadow or dedup against the surrounding alt's bindings (the
 /// outer alt's list-typed field comes from `FieldDecl` in Phase 2.9,
 /// independent of the inner binding).
-fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &Array<String>, variant_mask: &Array<String>) -> Op {
+fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &Array<String>, variant_mask: &Array<String>, outer_position_mask: &Array<String>) -> Op {
     // Outer struct field name for the alt that contains this
     // Repeat. For `Star` / `Plus` it's `<inner_base>_list` (the
     // struct holds an `Array<...>`); for `Optional` it's just the
@@ -2476,13 +2493,13 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     // references the binding as `<outer_field>.push(...)`) matches.
     let body = if repeat_inner_is_list_label(&rep.element) {
         if let Label(lab) = &rep.element {
-            let inner_op = lower_op(&lab.element, &mut inner_counts, rule_name, ctx, group_counter, &iter_follow, variant_mask);
+            let inner_op = lower_op(&lab.element, &mut inner_counts, rule_name, ctx, group_counter, &iter_follow, variant_mask, outer_position_mask);
             rebind_op_field(inner_op, &outer_field);
         } else {
             panic("repeat_inner_is_list_label returned true for non-Label");
         }
     } else {
-        lower_op(&rep.element, &mut inner_counts, rule_name, ctx, group_counter, &iter_follow, variant_mask);
+        lower_op(&rep.element, &mut inner_counts, rule_name, ctx, group_counter, &iter_follow, variant_mask, outer_position_mask);
     };
     let mut body_visiting: Array<String> = [];
     let body_scannable = ctx.is_element_scannable(&rep.element, &mut body_visiting);
@@ -2509,10 +2526,14 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
         // nested Repeats (not at alt position) carry a sensible value. The
         // alt-level post-pass in `lower_alt_body` / `lower_lr_alt_suffix`
         // / `lower_single_alt_group` / `lower_general_group` overwrites
-        // both `caller_follow_first` and `caller_follow_with_mask` with
-        // the position-aware values once it knows the position index.
+        // `caller_follow_first` / `caller_follow_second` with the
+        // position-aware values once it knows the position index.
+        // `position_mask` is the OUTER alt-position's mask threaded
+        // from the alt walker — emit's `gen_op_repeat_optional_rulecall`
+        // unions it with the caller-supplied `follow` (which the inner
+        // walker can clear to `[]` for greedy Optionals).
         caller_follow_first: *outer_follow,
-        caller_follow_with_mask: *outer_follow,
+        position_mask: *outer_position_mask,
         caller_follow_second: [],
         body_scannable,
         body_has_field,
@@ -2855,23 +2876,22 @@ fn inner_follow_at(elements: &Array<Element>, i: i32, ctx: &mut GenContext, vari
     return ctx.compute_call_site_follow(elements, i, variant_mask);
 }
 
-/// Combine the basic caller-side follow at position `i` with the
-/// surrounding variant's mask when the alt's tail starting at `i + 1`
-/// is deep-nullable. Mirrors `compute_call_site_follow` but returns
-/// the simpler `basic_follow` (rather than `outer_follow` alone) when
-/// the suffix is NOT first-exact — emit's `gen_op_repeat_optional_rulecall`
-/// uses this combined follow to subtract a mask-aware iter-follow from
-/// the body's first set, ensuring tail-position Optional-RuleCall
-/// Repeats yield Space / Greater / Tilde tokens to the next iteration's
-/// `combinator` (the CSS3 `selector` case).
-fn caller_follow_with_mask_at(elements: &Array<Element>, i: i32, basic_follow: &Array<String>, ctx: &mut GenContext, variant_mask: &Array<String>) -> Array<String> {
+/// `variant_mask` if the alt's tail starting at `i + 1` is
+/// deep-nullable; `[]` otherwise (and always `[]` when
+/// `variant_mask` itself is empty). Mirrors emit's old per-iteration
+/// `ctx.current_follow_mask = if tail_is_nullable_deep then saved
+/// else []` adjustment in `gen_alt_elements` / `gen_alt_body_skip`.
+/// Consumed by `RepeatOp.position_mask`, which emit's
+/// `gen_op_repeat_optional_rulecall` unions with the caller-supplied
+/// follow before subtracting from the body's first set.
+fn position_mask_at(elements: &Array<Element>, i: i32, ctx: &mut GenContext, variant_mask: &Array<String>) -> Array<String> {
     if variant_mask.is_empty() {
-        return *basic_follow;
+        return [];
     }
     if !ctx.tail_is_nullable_deep(elements, i + 1) {
-        return *basic_follow;
+        return [];
     }
-    return union_arrays(basic_follow, variant_mask);
+    return *variant_mask;
 }
 
 /// True iff `elem` is a list-label (`+=`). Used by
@@ -2965,10 +2985,10 @@ fn repeat_inner_group_base_name(g: &GroupElement, gc_speculative: i32) -> String
 /// rebind can be expressed. List labels (`+=`) need an additional
 /// `Array<...>`-typed wrapper field; that wrapping is handled by
 /// the CST `FieldDecl` enumeration in Phase 2.9.
-fn lower_label_op(lab: &LabelElement, name_counts: &mut Array<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &Array<String>, variant_mask: &Array<String>) -> Op {
+fn lower_label_op(lab: &LabelElement, name_counts: &mut Array<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &Array<String>, variant_mask: &Array<String>, outer_position_mask: &Array<String>) -> Op {
     let label_field = dedup_name(&lab.field_name, name_counts);
     let mut inner_counts: Array<[String, i32]> = [];
-    let inner_op = lower_op(&lab.element, &mut inner_counts, rule_name, ctx, group_counter, outer_follow, variant_mask);
+    let inner_op = lower_op(&lab.element, &mut inner_counts, rule_name, ctx, group_counter, outer_follow, variant_mask, outer_position_mask);
     if lab.list {
         // `name+=elem` outside a Repeat: the outer CST struct stores
         // the matched value in an `Array<inner_type>`. Wrap the inner
@@ -3213,7 +3233,7 @@ fn rebind_op_field(op: Op, new_field: &String) -> Op {
             strategy: rep.strategy,
             field: *new_field,
             caller_follow_first: rep.caller_follow_first,
-            caller_follow_with_mask: rep.caller_follow_with_mask,
+            position_mask: rep.position_mask,
             caller_follow_second: rep.caller_follow_second,
             body_scannable: rep.body_scannable,
             body_has_field: rep.body_has_field,
