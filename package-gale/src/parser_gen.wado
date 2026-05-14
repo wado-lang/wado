@@ -1924,35 +1924,6 @@ fn i32_arrays_equal(a: &Array<i32>, b: &Array<i32>) -> bool {
     return true;
 }
 
-/// Scan-side twin of `gen_repeat_with_follow`. Subtracts `follow_first`
-/// from the Optional inner's first-set so the Optional does not fire on
-/// tokens that belong to the enclosing sequence's next element — the
-/// same disambiguation the parse side applies to `RuleRef?` optionals.
-/// If the pruned first-set is empty the Optional can never fire, so
-/// nothing is emitted.
-fn gen_scan_repeat_optional_with_follow(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, follow_first: &Array<String>) {
-    let inner = &rep.element;
-    let mut visiting: Array<String> = [];
-    let raw_first = ctx.first_of_element(inner, &mut visiting);
-    let combined_follow = if ctx.current_follow_mask.is_empty() {
-        *follow_first;
-    } else {
-        union_sets(follow_first, &ctx.current_follow_mask);
-    };
-    let first = subtract_sets(&raw_first, &combined_follow);
-
-    if first.len() == 0 {
-        return;
-    }
-
-    let check = ctx.kind_check_str(&first, &"tokens[pos].kind");
-    w.begin(`if pos < tokens.len() && {check}`);
-    w.line("let sp = pos;");
-    gen_scan_element_assign(w, inner, ctx);
-    w.line("if pos < 0 { pos = sp; }");
-    w.end();
-}
-
 /// Op-driven bt-scan walker. Passes `i32::MAX` as the
 /// `min_prec_override` for the LAST element when it is a self-
 /// recursive `ScanRuleCall`, so the trailing self-ref short-
@@ -1981,172 +1952,6 @@ fn is_self_ref_scan_call(se: &ScanElement, rule_name: &String) -> bool {
         return rc.target_snake == to_snake_case(rule_name);
     }
     return false;
-}
-
-/// `gen_scan_elements` variant that routes non-Optional failures through
-/// `break {label};` so the sequence lives inside a labeled block.
-fn gen_scan_elements_in_block(w: &mut CodeWriter, elements: &Array<Element>, start: i32, end: i32, ctx: &mut GenContext, label: &String) {
-    let fail = `break {*label};`;
-    let saved_mask = ctx.current_follow_mask;
-    let saved_call_follow = ctx.ruleref_call_follow;
-    for let mut i = start; i < end; i += 1 {
-        ctx.current_follow_mask = if ctx.tail_is_nullable_deep(elements, i + 1) { saved_mask } else { [] };
-        ctx.ruleref_call_follow = compute_ruleref_call_follow(elements, i, ctx);
-        let elem = &elements[i];
-        if let Repeat(rep) = elem {
-            if let Optional = rep.kind {
-                if is_ruleref_optional(&rep.element) {
-                    let follow = ctx.first_of_elements_from(elements, i + 1);
-                    gen_scan_repeat_optional_with_follow(w, rep, ctx, &follow);
-                    continue;
-                }
-            }
-        }
-        gen_scan_element(w, elem, ctx, &fail);
-        ctx.ruleref_call_follow = [];
-    }
-    ctx.current_follow_mask = saved_mask;
-    ctx.ruleref_call_follow = saved_call_follow;
-}
-
-/// `fail_stmt` describes how to report failure to the caller when the
-/// mandatory first iteration of `+` fails (Optional/Star never fail).
-///
-/// `ruleref_call_follow` is saved, cleared, and restored around the
-/// emit body — the outer alt walker's value applies to the Repeat
-/// element's own position, but the inner element's iteration follow
-/// is different, so an inner `RuleRef` would otherwise inadvertently
-/// target a variant computed from the wrong follow set.
-fn gen_scan_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, fail_stmt: &String) {
-    let saved_call_follow = ctx.ruleref_call_follow;
-    ctx.ruleref_call_follow = [];
-    gen_scan_repeat_body(w, rep, ctx, fail_stmt);
-    ctx.ruleref_call_follow = saved_call_follow;
-}
-
-fn gen_scan_repeat_body(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, fail_stmt: &String) {
-    let mut visiting: Array<String> = [];
-    let inner_first = ctx.first_of_element(&rep.element, &mut visiting);
-
-    // Follow-aware variant emission: subtract `current_follow_mask`
-    // from the loop / optional-fire condition so tokens the caller
-    // claims do not get greedily consumed here. For Plus the
-    // mandatory first iteration is unaffected (Plus must consume ≥1).
-    let loop_first = if ctx.current_follow_mask.is_empty() {
-        inner_first;
-    } else {
-        subtract_sets(&inner_first, &ctx.current_follow_mask);
-    };
-
-    if let Optional = rep.kind {
-        // If the optional's inner has nested optionals (e.g.
-        // `( (schema '.')? table '.' )?`), plain first-set dispatch
-        // is unsound: the inner optional may greedily fire and cause
-        // the outer sequence to fail without trying the shorter shape.
-        // Mirror the parse side's LL(k) shape dispatch.
-        if has_nested_optionals(&rep.element) {
-            if let Group(g) = &rep.element {
-                gen_scan_optional_with_lookahead(w, &g.alternatives[0].elements, ctx);
-                return;
-            }
-        }
-        if loop_first.is_empty() {
-            // Optional fully suppressed by follow mask.
-            return;
-        }
-        let check = ctx.kind_check_str(&loop_first, "tokens[pos].kind");
-        w.begin(`if pos < tokens.len() && {check}`);
-        w.line("let sp = pos;");
-        gen_scan_element_assign(w, &rep.element, ctx);
-        w.line("if pos < 0 { pos = sp; }");
-        w.end();
-        return;
-    }
-    if let Star = rep.kind {
-        if loop_first.is_empty() {
-            return;
-        }
-        let check = ctx.kind_check_str(&loop_first, "tokens[pos].kind");
-        w.begin(`while pos < tokens.len() && {check}`);
-        w.line("let sp = pos;");
-        gen_scan_element_assign(w, &rep.element, ctx);
-        // Stop on failure or on 0-advance (lenient inner scan would loop).
-        w.line("if pos < 0 { pos = sp; break; }");
-        w.line("if pos == sp { break; }");
-        w.end();
-        return;
-    }
-    if let Plus = rep.kind {
-        // First iteration is mandatory: its failure goes through fail_stmt.
-        // The follow mask must NOT suppress it — Plus is `≥1`.
-        gen_scan_element(w, &rep.element, ctx, fail_stmt);
-        if loop_first.is_empty() {
-            return;
-        }
-        let check = ctx.kind_check_str(&loop_first, "tokens[pos].kind");
-        w.begin(`while pos < tokens.len() && {check}`);
-        w.line("let sp = pos;");
-        gen_scan_element_assign(w, &rep.element, ctx);
-        w.line("if pos < 0 { pos = sp; break; }");
-        w.line("if pos == sp { break; }");
-        w.end();
-        return;
-    }
-}
-
-/// Scan-side twin of `gen_optional_with_lookahead`. Enumerates 2^n
-/// shape combinations of the optional's inner elements (longest first)
-/// and emits an if/else-if chain that picks the first shape whose
-/// per-position lookahead matches.
-///
-/// Each shape body is wrapped in a labeled block so that an inner
-/// element failure (`pos = -1`) short-circuits the shape instead of
-/// executing later elements at a bogus `pos`.
-fn gen_scan_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<Element>, ctx: &mut GenContext) {
-    let shapes = compute_shapes_for_alt(group_elements);
-
-    let mut is_first = true;
-    for let mut si = 0; si < shapes.len(); si += 1 {
-        let shape = &shapes[si];
-        let sig = shape_lookahead_signature_for_alt(shape, group_elements, ctx);
-        if sig.len() == 0 {
-            continue;
-        }
-        let cond = gen_scan_lookahead_condition(ctx, &sig);
-
-        if is_first {
-            w.begin(`if {cond}`);
-            is_first = false;
-        } else {
-            w.else_begin(`else if {cond}`);
-        }
-
-        let gc = SCAN_GROUP_COUNTER;
-        SCAN_GROUP_COUNTER += 1;
-        let shape_label = `sol_{gc}`;
-        let fail = `break {shape_label};`;
-        w.begin(`{shape_label}:`);
-        for let mut k = 0; k < shape.len(); k += 1 {
-            let idx = shape[k];
-            let elem = &group_elements[idx];
-            let actual = unwrap_optional(elem);
-            if let Group(g) = actual {
-                if g.alternatives.len() == 1 {
-                    for let mut j = 0; j < g.alternatives[0].elements.len(); j += 1 {
-                        gen_scan_element(w, &g.alternatives[0].elements[j], ctx, &fail);
-                    }
-                } else {
-                    gen_scan_element(w, actual, ctx, &fail);
-                }
-            } else {
-                gen_scan_element(w, actual, ctx, &fail);
-            }
-        }
-        w.end();
-    }
-    if !is_first {
-        w.end();
-    }
 }
 
 /// Scan-side twin of `gen_lookahead_condition`. Uses
@@ -2543,282 +2348,7 @@ fn gen_scan_op_elements_in_block(w: &mut CodeWriter, scan_elems: &Array<ScanElem
     }
 }
 
-/// Generate scan code for a single element, emitting `fail_stmt` on failure.
-/// Pass `&"return -1;"` for the top-level scan entry point, or
-/// `&\`break {label};\`` inside a labeled block.
-fn gen_scan_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, fail_stmt: &String) {
-    if let Label(lab) = elem {
-        gen_scan_element(w, &lab.element, ctx, fail_stmt);
-        return;
-    }
-    if let TokenRef(t) = elem {
-        let const_name = `TK_{t.name}`;
-        w.line(`if pos >= tokens.len() || tokens[pos].kind != {const_name} \{ {*fail_stmt} \}`);
-        w.line("pos += 1;");
-        return;
-    }
-    if let Literal(l) = elem {
-        let const_name = literal_const_name(&l.text);
-        w.line(`if pos >= tokens.len() || tokens[pos].kind != {const_name} \{ {*fail_stmt} \}`);
-        w.line("pos += 1;");
-        return;
-    }
-    if let RuleRef(r) = elem {
-        // Always pass min_prec — non-LR `scan_<rule>` accept and
-        // ignore it. The legacy surface walker is only reached from
-        // emit paths that aren't the bt-scan trailing-self-ref site,
-        // so the override is always the rule's default `0`.
-        let follow = ctx.ruleref_call_follow;
-        let variant_id = if follow.is_empty() { null } else { ctx.intern_follow_variant(&r.name, &follow, true) };
-        let call = if let Some(id) = variant_id {
-            `scan_{r.snake_name}__follow_{id}(tokens, pos, 0)`;
-        } else {
-            `scan_{r.snake_name}(tokens, pos, 0)`;
-        };
-        w.line(`pos = {call};`);
-        w.line(`if pos < 0 \{ {*fail_stmt} \}`);
-        return;
-    }
-    if let Wildcard(_) = elem {
-        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF \{ {*fail_stmt} \}`);
-        w.line("pos += 1;");
-        return;
-    }
-    if let Not(ne) = elem {
-        let check = not_scan_check(&ne.element);
-        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ {*fail_stmt} \}`);
-        w.line("pos += 1;");
-        return;
-    }
-    if let Repeat(rep) = elem {
-        gen_scan_repeat(w, rep, ctx, fail_stmt);
-        return;
-    }
-    if let Group(g) = elem {
-        gen_scan_group(w, &g.alternatives, ctx, fail_stmt, is_lenient_group(&g.alternatives));
-        return;
-    }
-}
-
-/// Emit scan code for an element that assigns to `pos` (may set -1 on failure).
-/// Used inside optional/repetition blocks where failure means "skip this
-/// iteration / branch", not abort.
-fn gen_scan_element_assign(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext) {
-    if let Label(lab) = elem {
-        gen_scan_element_assign(w, &lab.element, ctx);
-        return;
-    }
-    if let TokenRef(t) = elem {
-        let const_name = `TK_{t.name}`;
-        w.line(`if pos >= tokens.len() || tokens[pos].kind != {const_name} \{ pos = -1; \} else \{ pos += 1; \}`);
-        return;
-    }
-    if let Literal(l) = elem {
-        let const_name = literal_const_name(&l.text);
-        w.line(`if pos >= tokens.len() || tokens[pos].kind != {const_name} \{ pos = -1; \} else \{ pos += 1; \}`);
-        return;
-    }
-    if let RuleRef(r) = elem {
-        w.line(`pos = scan_{r.snake_name}(tokens, pos, 0);`);
-        return;
-    }
-    if let Wildcard(_) = elem {
-        w.line("if pos >= tokens.len() || tokens[pos].kind == TK_EOF { pos = -1; } else { pos += 1; }");
-        return;
-    }
-    if let Not(ne) = elem {
-        let check = not_scan_check(&ne.element);
-        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ pos = -1; \} else \{ pos += 1; \}`);
-        return;
-    }
-    if let Group(g) = elem {
-        // Rep body: must be strict so a 0-advance iteration doesn't infinite-loop.
-        gen_scan_group(w, &g.alternatives, ctx, &"pos = -1;", false);
-        return;
-    }
-    if let Repeat(rep) = elem {
-        gen_scan_repeat(w, rep, ctx, &"pos = -1;");
-        return;
-    }
-}
-
-/// Build a scan-time check expression for `~ X`. Returns "tokens[pos].kind == TK_X"
-/// or "(tokens[pos].kind == TK_A || tokens[pos].kind == TK_B)" for a set.
-fn not_scan_check(inner: &Element) -> String {
-    if let TokenRef(t) = inner {
-        let const_name = `TK_{t.name}`;
-        return `tokens[pos].kind == {const_name}`;
-    }
-    if let Literal(l) = inner {
-        let const_name = literal_const_name(&l.text);
-        return `tokens[pos].kind == {const_name}`;
-    }
-    if let Group(g) = inner {
-        let mut kinds: Array<String> = [];
-        if collect_not_set_tokens(&g.alternatives, &mut kinds) {
-            let mut out = String::with_capacity(64);
-            out.push('(');
-            for let mut i = 0; i < kinds.len(); i += 1 {
-                if i > 0 {
-                    out.push_str(" || ");
-                }
-                out.push_str(`tokens[pos].kind == {kinds[i]}`);
-            }
-            out.push(')');
-            return out;
-        }
-    }
-    panic("not_scan_check: unsupported inner element for parser-side ~");
-    return "";
-}
-
 global mut SCAN_GROUP_COUNTER: i32 = 0;
-
-/// Generate scan code for a Group (choice of alternatives).
-/// `fail_stmt` is emitted when the group exhausts all alternatives without a
-/// match. Typical values:
-///   - "return -1;"  → top-level scan context (abort whole scan fn)
-///   - "break LBL;"  → nested inside a labeled try/alt block
-///   - "pos = -1;"   → assign context (caller checks `pos < 0` afterward)
-/// When `lenient` is true, the group succeeds with pos unchanged if no
-/// alternative matches (mirrors the parse-side `Option<T> = null` fallback
-/// emitted by `gen_consume_group_store_optional` / `gen_general_group_store_optional`).
-/// Use lenient=true only in contexts that cannot infinite-loop on 0-advance
-/// success (main alt body); use lenient=false inside repeat bodies and rep guards.
-fn gen_scan_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, fail_stmt: &String, lenient: bool) {
-    if alts.len() == 1 {
-        // Single alt: outer `done` wraps inner `body`.
-        //   sg_N_done: { sg_N: { ...; break sg_N_done; } fail_stmt; }
-        // Element failure → break sg_N, falls to fail_stmt.
-        // Success → break sg_N_done, skips fail_stmt.
-        let gc = SCAN_GROUP_COUNTER;
-        SCAN_GROUP_COUNTER += 1;
-        let body = `sg_{gc}`;
-        let done = `sg_{gc}_done`;
-        let save_var = `sg_{gc}_save`;
-        if lenient {
-            w.line(`let {save_var} = pos;`);
-        }
-        w.begin(`{done}:`);
-        w.begin(`{body}:`);
-        gen_scan_elements_in_block(w, &alts[0].elements, 0, alts[0].elements.len(), ctx, &body);
-        w.line(`break {done};`);
-        w.end();
-        if lenient {
-            w.line(`pos = {save_var};`);
-        } else {
-            w.line(*fail_stmt);
-        }
-        w.end();
-        return;
-    }
-    // Multi-alternative group: try each alternative, fall through to fail.
-    let gc = SCAN_GROUP_COUNTER;
-    SCAN_GROUP_COUNTER += 1;
-    let outer = `sg_{gc}`;
-    let gp_var = `gp_{gc}`;
-    let best_var = `sg_{gc}_best`;
-    w.line(`let {gp_var} = pos;`);
-
-    // Compute per-alt first-sets once for both the lenient gate and
-    // ambiguity detection below.
-    let n = alts.len();
-    let mut first_sets: Array<Array<String>> = [];
-    for let alt of alts {
-        let mut visiting: Array<String> = [];
-        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
-    }
-
-    // Mirror the rule-level `gen_scan_multi_alt` longest-match dispatch:
-    // when several alts share a first-token, the first-match winner may
-    // advance a shorter distance than a later alt with the same prefix
-    // (e.g. in `select_core` the FROM group `( table_or_subquery … | join_clause )`
-    // both start with `table_or_subquery` but `join_clause` consumes further
-    // when joins are present). Mark any alt that shares a first-token with
-    // another as ambiguous; ambiguous alts record their advancement into
-    // `best_var` and the group commits to the longest match at the end.
-    // Non-ambiguous alts keep the cheap `break {outer}` fast path since
-    // their first-token uniquely identifies them.
-    let mut is_ambiguous: Array<bool> = [];
-    for let mut i = 0; i < n; i += 1 {
-        is_ambiguous.push(false);
-    }
-    for let mut i = 0; i < n; i += 1 {
-        for let mut j = 0; j < n; j += 1 {
-            if i == j {
-                continue;
-            }
-            if sets_overlap(&first_sets[i], &first_sets[j]) {
-                is_ambiguous[i] = true;
-                is_ambiguous[j] = true;
-            }
-        }
-    }
-    let mut any_ambiguous = false;
-    for let mut i = 0; i < n; i += 1 {
-        if is_ambiguous[i] {
-            any_ambiguous = true;
-        }
-    }
-
-    // For lenient groups, mirror the parse-side first-set gate: if peek is not
-    // in any alt's first set, skip the try-each-alt block without advancing.
-    // This keeps scan_X consistent with parse_X (both 0-advance when no alt
-    // fires), so rep-scan-guard's require_advance check can detect stalls.
-    let mut union_first: Array<String> = [];
-    if lenient {
-        for let fs of &first_sets {
-            dedup_append_arr(&mut union_first, fs);
-        }
-    }
-    let gate_emitted = lenient && union_first.len() > 0;
-    if gate_emitted {
-        let sgk_var = `sgk_{gc}`;
-        w.line(`let {sgk_var} = if pos < tokens.len() \{ tokens[pos].kind \} else \{ TK_EOF \};`);
-        let gate = ctx.kind_check_str(&union_first, &sgk_var);
-        w.begin(`if {gate}`);
-    }
-
-    if any_ambiguous {
-        w.line(`let mut {best_var} = -1;`);
-    }
-
-    w.begin(`{outer}:`);
-    for let mut i = 0; i < n; i += 1 {
-        let alt = &alts[i];
-        let inner = `sg_{gc}_{i}`;
-        w.line(`pos = {gp_var};`);
-        w.begin(`{inner}:`);
-        gen_scan_elements_in_block(w, &alt.elements, 0, alt.elements.len(), ctx, &inner);
-        if is_ambiguous[i] {
-            w.line(`if pos > {best_var} \{ {best_var} = pos; \}`);
-        } else {
-            w.line(`break {outer};`);
-        }
-        w.end();
-    }
-    if any_ambiguous {
-        w.line(`if {best_var} >= 0 \{ pos = {best_var}; break {outer}; \}`);
-    }
-    if lenient {
-        w.line(`pos = {gp_var};`);
-    } else {
-        w.line(*fail_stmt);
-    }
-    w.end();  // close outer labeled block
-
-    if gate_emitted {
-        w.end();  // close the first-set gate
-    }
-}
-
-/// True iff the parse side dispatches `Group(alts)` leniently (produces
-/// `Option<T> = null` on no match rather than failing). Mirrors the if-chain
-/// in `gen_element` at the Group branch: simple-cst and general groups use
-/// the Option wrapper; token-only and single-alt groups do not.
-fn is_lenient_group(alts: &Array<Alternative>) -> bool {
-    return is_simple_cst_group(alts) || is_general_group(alts);
-}
 
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
     // Phase 4 — dispatch on the GIR `Rule` variant. Each shape gets
@@ -3297,16 +2827,6 @@ fn inner_walker_follow_for_repeat(rep: &RepeatElement, rep_op: &RepeatOp, elemen
         follow = union_sets(&follow, outer_follow);
     }
     return follow;
-}
-
-fn is_ruleref_optional(elem: &Element) -> bool {
-    if let RuleRef(_) = elem {
-        return true;
-    }
-    if let Label(lab) = elem {
-        return is_ruleref_optional(&lab.element);
-    }
-    return false;
 }
 
 /// True when the lowered op is a leaf shape that emit can render
@@ -4303,7 +3823,7 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
                 if let Star = rep.kind {
                     if rep_op.body_scannable {
                         w.begin("loop");
-                        let scan_pos = emit_rep_scan_guard(w, inner, ctx, name_counts);
+                        let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
                         w.line(`if {scan_pos} < 0 \{ break; \}`);
                         let mut nc: Array<[String, i32]> = [];
                         gen_op_group(w, g_op, inner, ctx, &mut nc);
@@ -4322,7 +3842,7 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
                         w.line(`let mut {plus_flag} = true;`);
                         w.begin("loop");
                         w.begin(`if !{plus_flag}`);
-                        let scan_pos = emit_rep_scan_guard(w, inner, ctx, name_counts);
+                        let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
                         w.line(`if {scan_pos} < 0 \{ break; \}`);
                         w.end();
                         w.line(`{plus_flag} = false;`);
@@ -4372,7 +3892,7 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
             w.line(`let mut {list_field}: Array<{inner_type}> = [];`);
             if rep_op.body_scannable {
                 w.begin("loop");
-                let scan_pos = emit_rep_scan_guard(w, inner, ctx, name_counts);
+                let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
                 w.line(`if {scan_pos} < 0 \{ break; \}`);
                 let mut nc: Array<[String, i32]> = [];
                 gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
@@ -4395,7 +3915,7 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
                 w.line(`let mut {plus_flag} = true;`);
                 w.begin("loop");
                 w.begin(`if !{plus_flag}`);
-                let scan_pos = emit_rep_scan_guard(w, inner, ctx, name_counts);
+                let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
                 w.line(`if {scan_pos} < 0 \{ break; \}`);
                 w.end();
                 w.line(`{plus_flag} = false;`);
@@ -4611,32 +4131,6 @@ fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, f
     // Fallback: can't disambiguate, don't loop (match minimum)
     return "false";
 }
-/// Per-position caller-side FOLLOW used by alt walkers to decide
-/// whether to register a `__follow_<id>` variant for a `RuleRef` at
-/// position `i` in `elements`.
-///
-/// - When the immediate suffix `elements[i+1..]` is strictly required
-///   (not deep-nullable), use its `first` set verbatim.
-/// - When the suffix is deep-nullable AND first-exact (every walked
-///   element's first uniquely predicts that element matching, see
-///   `GenContext::element_is_first_exact`), union the suffix's first
-///   with the outer follow. This closes `ll_nullable_suffix`'s gap:
-///   `b?` where `b : Y` is first-exact, so `Y` legitimately enters
-///   the preceding `RuleRef`'s follow.
-/// - When the suffix is deep-nullable but NOT first-exact (e.g. a
-///   `Star` over a multi-element Group like CSS3 `(combinator sss
-///   ws)*`), drop the suffix's first and propagate only the outer
-///   follow. This is the "first-exact deep-nullable suffix"
-///   soundness invariant from `antlr4-compatibility.md`'s
-///   "LL prediction → Soundness invariants" section: `combinator`'s
-///   first contains `Space` but `combinator` requires `Space sss`
-///   together, so suppressing `Space` at the preceding `ws` would
-///   leave the runtime stranded on a lone `Space`. See also
-///   `package-gale/CLAUDE.md` "Failed Approaches" #3 for the
-///   historical narrative of how this guard was narrowed back.
-fn compute_ruleref_call_follow(elements: &Array<Element>, i: i32, ctx: &mut GenContext) -> Array<String> {
-    return ctx.compute_call_site_follow(elements, i);
-}
 
 fn union_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
     let mut result: Array<String> = [];
@@ -4740,11 +4234,11 @@ fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
 /// Same shape as emit_opt_scan_guard but uses `rep_scan_*` naming. Requires
 /// the scan to advance at least one token; 0-advance is treated as failure
 /// so lenient scans of LR rules (which can no-op at EOF) don't loop forever.
-fn emit_rep_scan_guard(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) -> String {
-    return emit_scan_guard_with_prefix(w, inner, ctx, name_counts, &"rep_scan_pos", &"rep_scan", true);
+fn emit_rep_scan_guard(w: &mut CodeWriter, scan_inner: &ScanElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) -> String {
+    return emit_scan_guard_with_prefix(w, scan_inner, ctx, name_counts, &"rep_scan_pos", &"rep_scan", true);
 }
 
-fn emit_scan_guard_with_prefix(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, pos_prefix: &String, label_prefix: &String, require_advance: bool) -> String {
+fn emit_scan_guard_with_prefix(w: &mut CodeWriter, scan_inner: &ScanElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, pos_prefix: &String, label_prefix: &String, require_advance: bool) -> String {
     let scan_pos_var = dedup_name(pos_prefix, name_counts);
     let scan_label = dedup_name(label_prefix, name_counts);
     w.line(`let mut {scan_pos_var}: i32 = -1;`);
@@ -4752,23 +4246,7 @@ fn emit_scan_guard_with_prefix(w: &mut CodeWriter, inner: &Element, ctx: &mut Ge
     w.line("let tokens = &p.tokens;");
     w.line("let mut pos: i32 = p.pos;");
     let fail = `break {scan_label};`;
-    if let Group(g) = inner {
-        if g.alternatives.len() == 1 {
-            gen_scan_elements_in_block(
-                w,
-                &g.alternatives[0].elements,
-                0,
-                g.alternatives[0].elements.len(),
-                ctx,
-                &scan_label,
-            );
-        } else {
-            // Rep guard: must be strict so scan failure terminates the rep loop.
-            gen_scan_group(w, &g.alternatives, ctx, &fail, false);
-        }
-    } else {
-        gen_scan_element(w, inner, ctx, &fail);
-    }
+    gen_scan_op_element(w, scan_inner, ctx, &fail);
     if require_advance {
         w.line(`if pos <= p.pos \{ break {scan_label}; \}`);
     }

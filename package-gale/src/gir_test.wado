@@ -180,9 +180,11 @@ test "Op::Wildcard / Excluded round-trip" {
 
 test "Op::Repeat carries inner element and strategy" {
     let inner = Op::Token(TokenOp { kind: "TK_X", field: "x" });
+    let scan_inner = ScanElement::Token(ScanTokenElem { kind: "TK_X" });
     let rep = Op::Repeat(RepeatOp {
         kind: RepeatKind::Star,
         body: inner,
+        scan_body: scan_inner,
         strategy: RepeatStrategy::Plain,
         field: "x_list",
         caller_follow_first: [],

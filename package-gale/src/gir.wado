@@ -525,6 +525,12 @@ pub struct RepeatOp {
     /// the recursive type-reference; the variant boxes through the
     /// payload struct.
     pub body: Op,
+    /// Scan-side mirror of `body`. Lower computes it alongside the
+    /// parse-side op so emit's scan-guard helpers
+    /// (`emit_rep_scan_guard`, `emit_scan_guard_with_prefix`) can
+    /// drive an op-driven scan walker over the inner element without
+    /// the surface `gen_scan_*` graph as fallback.
+    pub scan_body: ScanElement,
     pub strategy: RepeatStrategy,
     /// Outer struct field name. For `e*` / `e+` this is
     /// `<inner_base>_list`; for `e?` it's the inner element's base

@@ -963,6 +963,7 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
             op = Op::Repeat(RepeatOp {
                 kind: rep_op.kind,
                 body: rep_op.body,
+                scan_body: rep_op.scan_body,
                 strategy: rep_op.strategy,
                 field: rep_op.field,
                 caller_follow_first: basic_follow,
@@ -1803,6 +1804,7 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
             op = Op::Repeat(RepeatOp {
                 kind: rep_op.kind,
                 body: rep_op.body,
+                scan_body: rep_op.scan_body,
                 strategy: rep_op.strategy,
                 field: rep_op.field,
                 caller_follow_first: basic_follow,
@@ -2019,6 +2021,7 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
                 op = Op::Repeat(RepeatOp {
                     kind: rep_op.kind,
                     body: rep_op.body,
+                    scan_body: rep_op.scan_body,
                     strategy: rep_op.strategy,
                     field: rep_op.field,
                     caller_follow_first: basic_follow,
@@ -2316,6 +2319,7 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
                     op = Op::Repeat(RepeatOp {
                         kind: rep_op.kind,
                         body: rep_op.body,
+                        scan_body: rep_op.scan_body,
                         strategy: rep_op.strategy,
                         field: rep_op.field,
                         caller_follow_first: basic_follow,
@@ -2477,9 +2481,18 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     };
     let mut body_visiting: Array<String> = [];
     let body_scannable = ctx.is_element_scannable(&rep.element, &mut body_visiting);
+    // Scan-side mirror of `body`. Computed here so emit's scan-guard
+    // helpers (`emit_rep_scan_guard` / `emit_scan_guard_with_prefix`)
+    // can scan the inner element via the op-driven scan walker
+    // (`gen_scan_op_element`) without falling back to the surface
+    // `gen_scan_*` walker graph. Uses the same `iter_follow` as the
+    // parse side so per-position context (`caller_follow_first`
+    // baked on nested `ScanRepeatElem`s) lines up.
+    let scan_body = lower_scan_element(&rep.element, ctx, &iter_follow);
     return Op::Repeat(RepeatOp {
         kind: rep.kind,
         body,
+        scan_body,
         strategy: strategy,
         field: outer_field,
         caller_follow_first: *outer_follow,
@@ -3158,6 +3171,7 @@ fn rebind_op_field(op: Op, new_field: &String) -> Op {
         Repeat(rep) => Op::Repeat(RepeatOp {
             kind: rep.kind,
             body: rep.body,
+            scan_body: rep.scan_body,
             strategy: rep.strategy,
             field: *new_field,
             caller_follow_first: rep.caller_follow_first,
