@@ -933,10 +933,16 @@ fn parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break rep_scan; }
-            pos += 1;
-            pos = scan_expr(tokens, pos, 0);
-            if pos < 0 { break rep_scan; }
+            sg_1_done: {
+                sg_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_1; }
+                    pos += 1;
+                    pos = scan_expr(tokens, pos, 0);
+                    if pos < 0 { break sg_1; }
+                    break sg_1_done;
+                }
+                break rep_scan;
+            }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }

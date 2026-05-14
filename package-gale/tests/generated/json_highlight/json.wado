@@ -1261,10 +1261,16 @@ fn parse_obj_bt_0(p: &mut Parser) -> Result<ObjNode, ParseError> {
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break rep_scan; }
-            pos += 1;
-            pos = scan_pair(tokens, pos, 0);
-            if pos < 0 { break rep_scan; }
+            sg_2_done: {
+                sg_2: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_2; }
+                    pos += 1;
+                    pos = scan_pair(tokens, pos, 0);
+                    if pos < 0 { break sg_2; }
+                    break sg_2_done;
+                }
+                break rep_scan;
+            }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
@@ -1295,13 +1301,13 @@ fn parse_obj_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
         let sp = pos;
-        sg_2_done: {
-            sg_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_2; }
+        sg_3_done: {
+            sg_3: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_3; }
                 pos += 1;
                 pos = scan_pair(tokens, pos, 0);
-                if pos < 0 { break sg_2; }
-                break sg_2_done;
+                if pos < 0 { break sg_3; }
+                break sg_3_done;
             }
             pos = -1;
         }
@@ -1346,10 +1352,16 @@ fn parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
                 rep_scan: {
                     let tokens = &p.tokens;
                     let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break rep_scan; }
-                    pos += 1;
-                    pos = scan_pair(tokens, pos, 0);
-                    if pos < 0 { break rep_scan; }
+                    sg_4_done: {
+                        sg_4: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_4; }
+                            pos += 1;
+                            pos = scan_pair(tokens, pos, 0);
+                            if pos < 0 { break sg_4; }
+                            break sg_4_done;
+                        }
+                        break rep_scan;
+                    }
                     if pos <= p.pos { break rep_scan; }
                     rep_scan_pos = pos;
                 }
@@ -1409,10 +1421,16 @@ fn parse_arr_bt_0(p: &mut Parser) -> Result<ArrNode, ParseError> {
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break rep_scan; }
-            pos += 1;
-            pos = scan_value(tokens, pos, 0);
-            if pos < 0 { break rep_scan; }
+            sg_5_done: {
+                sg_5: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_5; }
+                    pos += 1;
+                    pos = scan_value(tokens, pos, 0);
+                    if pos < 0 { break sg_5; }
+                    break sg_5_done;
+                }
+                break rep_scan;
+            }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
@@ -1443,13 +1461,13 @@ fn parse_arr_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
         let sp = pos;
-        sg_3_done: {
-            sg_3: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_3; }
+        sg_6_done: {
+            sg_6: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_6; }
                 pos += 1;
                 pos = scan_value(tokens, pos, 0);
-                if pos < 0 { break sg_3; }
-                break sg_3_done;
+                if pos < 0 { break sg_6; }
+                break sg_6_done;
             }
             pos = -1;
         }
@@ -1494,10 +1512,16 @@ fn parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
                 rep_scan: {
                     let tokens = &p.tokens;
                     let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break rep_scan; }
-                    pos += 1;
-                    pos = scan_value(tokens, pos, 0);
-                    if pos < 0 { break rep_scan; }
+                    sg_7_done: {
+                        sg_7: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_7; }
+                            pos += 1;
+                            pos = scan_value(tokens, pos, 0);
+                            if pos < 0 { break sg_7; }
+                            break sg_7_done;
+                        }
+                        break rep_scan;
+                    }
                     if pos <= p.pos { break rep_scan; }
                     rep_scan_pos = pos;
                 }

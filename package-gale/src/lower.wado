@@ -104,6 +104,8 @@ use {
     NonGreedyStrategy,
     WithFollowSubtractionStrategy,
     OptionalLookaheadStrategy,
+    OptionalShapeLookaheadStrategy,
+    OptionalLookaheadShape,
     GroupOp,
     GroupShape,
     SingleAltShape,
@@ -961,12 +963,15 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
             op = Op::Repeat(RepeatOp {
                 kind: rep_op.kind,
                 body: rep_op.body,
+                scan_body: rep_op.scan_body,
                 strategy: rep_op.strategy,
                 field: rep_op.field,
                 caller_follow_first: basic_follow,
                 caller_follow_second: basic_second,
                 body_scannable: rep_op.body_scannable,
                 body_has_field: rep_op.body_has_field,
+                body_first_set: rep_op.body_first_set,
+                body_is_single_alt_group: rep_op.body_is_single_alt_group,
             });
         }
         ops.push(op);
@@ -1662,7 +1667,7 @@ fn surface_unwrap_optional(elem: &Element) -> &Element with stores[elem] {
 /// alt. Mirrors `parser_gen::compute_shapes`: bit-mask from
 /// `(2^n - 1)` down to 0; higher bits = more optionals included =
 /// longer shape = tried first.
-fn compute_shapes_for_alt(elements: &Array<Element>) -> Array<Array<i32>> {
+pub fn compute_shapes_for_alt(elements: &Array<Element>) -> Array<Array<i32>> {
     let mut opt_indices: Array<i32> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
         if is_nullable(&elements[i]) {
@@ -1699,7 +1704,7 @@ fn compute_shapes_for_alt(elements: &Array<Element>) -> Array<Array<i32>> {
 /// Per-shape lookahead signature: for each element in the shape (in
 /// the shape's selection order), compute the per-position first set.
 /// Mirrors `parser_gen::shape_lookahead_signature`.
-fn shape_lookahead_signature_for_alt(shape: &Array<i32>, elements: &Array<Element>, ctx: &mut GenContext) -> Array<Array<String>> {
+pub fn shape_lookahead_signature_for_alt(shape: &Array<i32>, elements: &Array<Element>, ctx: &mut GenContext) -> Array<Array<String>> {
     let mut sig: Array<Array<String>> = [];
     for let mut si = 0; si < shape.len(); si += 1 {
         let idx = shape[si];
@@ -1801,12 +1806,15 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
             op = Op::Repeat(RepeatOp {
                 kind: rep_op.kind,
                 body: rep_op.body,
+                scan_body: rep_op.scan_body,
                 strategy: rep_op.strategy,
                 field: rep_op.field,
                 caller_follow_first: basic_follow,
                 caller_follow_second: basic_second,
                 body_scannable: rep_op.body_scannable,
                 body_has_field: rep_op.body_has_field,
+                body_first_set: rep_op.body_first_set,
+                body_is_single_alt_group: rep_op.body_is_single_alt_group,
             });
         }
         ops.push(op);
@@ -2017,12 +2025,15 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
                 op = Op::Repeat(RepeatOp {
                     kind: rep_op.kind,
                     body: rep_op.body,
+                    scan_body: rep_op.scan_body,
                     strategy: rep_op.strategy,
                     field: rep_op.field,
                     caller_follow_first: basic_follow,
                     caller_follow_second: basic_second,
                     body_scannable: rep_op.body_scannable,
                     body_has_field: rep_op.body_has_field,
+                    body_first_set: rep_op.body_first_set,
+                    body_is_single_alt_group: rep_op.body_is_single_alt_group,
                 });
             }
             if se_is_repeat {
@@ -2314,12 +2325,15 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
                     op = Op::Repeat(RepeatOp {
                         kind: rep_op.kind,
                         body: rep_op.body,
+                        scan_body: rep_op.scan_body,
                         strategy: rep_op.strategy,
                         field: rep_op.field,
                         caller_follow_first: basic_follow,
                         caller_follow_second: basic_second,
                         body_scannable: rep_op.body_scannable,
                         body_has_field: rep_op.body_has_field,
+                        body_first_set: rep_op.body_first_set,
+                        body_is_single_alt_group: rep_op.body_is_single_alt_group,
                     });
                 }
                 if se_is_repeat {
@@ -2411,29 +2425,29 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     let mut inner_visiting: Array<String> = [];
     let inner_first = ctx.first_of_element(&rep.element, &mut inner_visiting);
 
-    // Optional `?` has two specialised strategies that supersede
+    // Optional `?` has three specialised strategies that supersede
     // the mask-aware decision when applicable:
     //
-    // * `OptionalLookahead` — single-alt Group whose leading
-    //   elements are fixed tokens (≥ 2 of them). emit conjunctively
-    //   guards on the per-position kind checks.
-    // * `OptionalScanGuard` — any other Optional shape (Group with
-    //   non-token leading element, or scan-only mismatch) where the
-    //   inner is fully scannable. emit runs the scan helper as a
-    //   commit gate, then parses on success.
+    // * `OptionalLookahead` — inner is a single-alt Group whose
+    //   leading elements are fixed tokens (`TokenRef` / `Literal`).
+    //   Bare leaf Optionals (`TokenRef?` / `Literal?`) stay at
+    //   `Plain` and are handled by emit's Optional+leaf arm.
+    // * `OptionalShapeLookahead` — inner is a single-alt Group with
+    //   nested Optionals; emit enumerates 2^n shapes (longest-first).
+    // * `OptionalScanGuard` — any other Optional shape where the
+    //   inner is fully scannable; emit runs the scan helper as a
+    //   commit gate.
     //
-    // Both kick in only outside a follow-mask suppression window;
-    // when the mask fully blocks the loop (`Suppressed`), the
-    // specialised strategies are unnecessary.
+    // `pick_optional_specialised` resolves which one fires using the
+    // `body_has_field` storability flag to match emit's storable /
+    // transparent dispatch order. All three kick in only outside a
+    // follow-mask suppression window; when the mask fully blocks the
+    // loop (`Suppressed`), the specialised strategies are unnecessary.
+    let body_has_field = element_has_field(&rep.element);
     let mut opt_specialised: Option<RepeatStrategy> = null;
     if !rep.non_greedy {
         if let Optional = rep.kind {
-            let la = try_optional_lookahead(&rep.element);
-            if let Some(strat) = la {
-                opt_specialised = Option::<RepeatStrategy>::Some(strat);
-            } else {
-                opt_specialised = try_optional_scan_guard(&rep.element, ctx);
-            }
+            opt_specialised = pick_optional_specialised(&rep.element, body_has_field, ctx);
         }
     }
 
@@ -2477,16 +2491,31 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     };
     let mut body_visiting: Array<String> = [];
     let body_scannable = ctx.is_element_scannable(&rep.element, &mut body_visiting);
-    let body_has_field = element_has_field(&rep.element);
+    // Scan-side mirror of `body`. Computed here so emit's scan-guard
+    // helpers (`emit_rep_scan_guard` / `emit_scan_guard_with_prefix`)
+    // can scan the inner element via the op-driven scan walker
+    // (`gen_scan_op_element`) without falling back to the surface
+    // `gen_scan_*` walker graph. Uses the same `iter_follow` as the
+    // parse side so per-position context (`caller_follow_first`
+    // baked on nested `ScanRepeatElem`s) lines up.
+    let scan_body = lower_scan_element(&rep.element, ctx, &iter_follow);
+    let body_is_single_alt_group = if let Group(g) = &rep.element {
+        g.alternatives.len() == 1;
+    } else {
+        false;
+    };
     return Op::Repeat(RepeatOp {
         kind: rep.kind,
         body,
+        scan_body,
         strategy: strategy,
         field: outer_field,
         caller_follow_first: *outer_follow,
         caller_follow_second: [],
         body_scannable,
         body_has_field,
+        body_first_set: inner_first,
+        body_is_single_alt_group,
     });
 }
 
@@ -2529,47 +2558,125 @@ fn element_has_field(elem: &Element) -> bool {
     return false;
 }
 
-/// Try to materialise an `OptionalLookahead` strategy for an
-/// `Optional` Repeat whose inner is a single-alt Group of fixed
-/// tokens. Returns `null` when the inner doesn't yield a usable
-/// signature; the caller then falls through to the mask-aware
-/// `Plain` / `WithFollowSubtraction` / `Suppressed` decision.
+/// Pick the specialised `Optional` strategy lower bakes into a Repeat's
+/// `RepeatOp.strategy`. The dispatch order depends on whether the inner
+/// will be wrapped in a CST struct (storable) or inlined (transparent):
 ///
-/// Mirrors `parser_gen::optional_lookahead_depth` /
-/// `optional_lookahead_tokens` — emit's
-/// `gen_optional_with_lookahead` consumes the signature as a
-/// conjunction of per-position kind checks. The strategy fires
-/// only when the depth is ≥ 2; single-token inners already get
-/// the right behaviour from `Plain`.
-fn try_optional_lookahead(inner: &Element) -> Option<RepeatStrategy> {
+/// * Storable (`body_has_field == true`): a single k-token check is
+///   preferred when applicable because the outer struct only needs
+///   one entry point; falls back to shape-disjunction when the inner
+///   has nested optionals, then to scan-guard.
+/// * Transparent (`body_has_field == false`): shape-disjunction is
+///   preferred because each shape inlines different elements
+///   directly; falls back to k-token, then scan-guard.
+///
+/// Returns `null` when none apply; the caller falls through to the
+/// mask-aware `Plain` / `WithFollowSubtraction` / `Suppressed` decision.
+/// This function is the single source of truth for the
+/// Optional+Group dispatch decision — emit consumes the resulting
+/// strategy variant directly via `gen_op_storable_optional` /
+/// `gen_op_transparent_optional`.
+fn pick_optional_specialised(inner: &Element, body_has_field: bool, ctx: &mut GenContext) -> Option<RepeatStrategy> {
+    let k_token = try_optional_k_token_lookahead(inner);
+    let shape = try_optional_shape_lookahead(inner, ctx);
+    let scan_guard = try_optional_scan_guard(inner, ctx);
+    if body_has_field {
+        if let Some(s) = k_token { return Option::<RepeatStrategy>::Some(s); }
+        if let Some(s) = shape { return Option::<RepeatStrategy>::Some(s); }
+        if let Some(s) = scan_guard { return Option::<RepeatStrategy>::Some(s); }
+    } else {
+        if let Some(s) = shape { return Option::<RepeatStrategy>::Some(s); }
+        if let Some(s) = k_token { return Option::<RepeatStrategy>::Some(s); }
+        if let Some(s) = scan_guard { return Option::<RepeatStrategy>::Some(s); }
+    }
+    return null;
+}
+
+/// Try to materialise an `OptionalLookahead` strategy (k-token mode).
+/// Fires when the inner is a single-alt Group with a non-empty
+/// leading run of fixed tokens (`TokenRef` / `Literal`); returns
+/// `null` for non-Group inners. Bare leaf Optionals stay at
+/// `Plain` — the Optional+leaf arm of
+/// `gen_op_repeat_with_follow_override` emits the single-token
+/// guard directly from `body_first_set`, so the specialisation is
+/// unnecessary there.
+fn try_optional_k_token_lookahead(inner: &Element) -> Option<RepeatStrategy> {
+    let tokens = collect_optional_leading_tokens(inner);
+    if tokens.is_empty() {
+        return null;
+    }
+    let mut sig: Array<Array<String>> = [];
+    for let tk of &tokens {
+        sig.push([*tk]);
+    }
+    return Option::<RepeatStrategy>::Some(RepeatStrategy::OptionalLookahead(
+        OptionalLookaheadStrategy { sig: sig },
+    ));
+}
+
+/// Collect leading fixed-token kinds from an Optional's single-alt
+/// Group inner. Walks the alt's elements until the first non-fixed one.
+/// Returns `[]` for non-Group inners — leaf Optionals (`TokenRef?` /
+/// `Literal?`) are handled by `gen_op_repeat_with_follow_override`'s
+/// Optional+leaf arm using `inner_first` directly, so we keep their
+/// strategy at the mask-aware `Plain` / `WithFollowSubtraction`.
+fn collect_optional_leading_tokens(inner: &Element) -> Array<String> {
+    let mut tokens: Array<String> = [];
     if let Group(g) = inner {
-        let alts = &g.alternatives;
-        if alts.len() != 1 {
-            return null;
+        if g.alternatives.len() != 1 {
+            return tokens;
         }
-        let mut sig: Array<String> = [];
-        for let elem of &alts[0].elements {
+        for let elem of &g.alternatives[0].elements {
             if let TokenRef(t) = elem {
-                sig.push(`TK_{t.name}`);
+                tokens.push(`TK_{t.name}`);
             } else if let Literal(l) = elem {
-                sig.push(literal_const_name(&l.text));
+                tokens.push(literal_const_name(&l.text));
             } else {
                 break;
             }
         }
-        if sig.len() < 2 {
+    }
+    return tokens;
+}
+
+/// Try to materialise an `OptionalShapeLookahead` strategy. Fires
+/// when the inner is a single-alt Group with at least one nested
+/// Optional Repeat — emit enumerates 2^n shapes (longest-first) and
+/// guards each on the per-position kind set computed from
+/// `ctx.first_of_element`. Returns `null` for other inner shapes.
+fn try_optional_shape_lookahead(inner: &Element, ctx: &mut GenContext) -> Option<RepeatStrategy> {
+    if let Group(g) = inner {
+        if g.alternatives.len() != 1 {
             return null;
         }
-        // Wrap each token in its own per-position array (the GIR's
-        // `sigs` shape allows multi-shape inner alts; for the
-        // single-alt fixed-token case each position has exactly one
-        // valid kind).
-        let mut per_position: Array<Array<String>> = [];
-        for let tk of &sig {
-            per_position.push([*tk]);
+        let elements = &g.alternatives[0].elements;
+        let mut has_nested = false;
+        for let elem of elements {
+            if surface_is_optional_repeat(elem) {
+                has_nested = true;
+                break;
+            }
         }
-        return Option::<RepeatStrategy>::Some(RepeatStrategy::OptionalLookahead(
-            OptionalLookaheadStrategy { sigs: [per_position] },
+        if !has_nested {
+            return null;
+        }
+        let shapes = compute_shapes_for_alt(elements);
+        let mut shape_entries: Array<OptionalLookaheadShape> = [];
+        for let shape of &shapes {
+            let sig = shape_lookahead_signature_for_alt(shape, elements, ctx);
+            if sig.is_empty() {
+                continue;
+            }
+            shape_entries.push(OptionalLookaheadShape {
+                positions: *shape,
+                sig: sig,
+            });
+        }
+        if shape_entries.is_empty() {
+            return null;
+        }
+        return Option::<RepeatStrategy>::Some(RepeatStrategy::OptionalShapeLookahead(
+            OptionalShapeLookaheadStrategy { shapes: shape_entries },
         ));
     }
     return null;
@@ -2589,18 +2696,15 @@ fn pick_greedy_strategy(mask_decision: RepeatStrategy, specialised: Option<Repea
 }
 
 /// Try to materialise an `OptionalScanGuard` strategy for an
-/// `Optional` Repeat whose inner cannot be decided by k-token
-/// lookahead but IS fully scannable. emit's
-/// `gen_optional_with_scan_guard` runs the scan helper and only
-/// parses the body when the scan succeeds.
+/// `Optional` Repeat whose inner cannot be decided by lookahead but
+/// IS fully scannable. emit runs the scan helper as a commit gate
+/// and only parses the body on success.
 ///
 /// Returns `null` for:
 /// * leaf inners (Token / Literal / Wildcard / Not — `Plain`
 ///   handles them without a scan probe);
-/// * unscannable inners (the runtime has no save-and-rewind path,
-///   so an unscannable `?` is a codegen-time error — surface that
-///   by leaving the decision to `Plain` so emit can panic with the
-///   "no backtracking" message);
+/// * unscannable inners (no save-and-rewind path; emit will panic
+///   with the "no backtracking" message);
 /// * RuleRef inners that are unscannable (same reason).
 fn try_optional_scan_guard(inner: &Element, ctx: &mut GenContext) -> Option<RepeatStrategy> {
     let needs_guard = match *inner {
@@ -3088,12 +3192,15 @@ fn rebind_op_field(op: Op, new_field: &String) -> Op {
         Repeat(rep) => Op::Repeat(RepeatOp {
             kind: rep.kind,
             body: rep.body,
+            scan_body: rep.scan_body,
             strategy: rep.strategy,
             field: *new_field,
             caller_follow_first: rep.caller_follow_first,
             caller_follow_second: rep.caller_follow_second,
             body_scannable: rep.body_scannable,
             body_has_field: rep.body_has_field,
+            body_first_set: rep.body_first_set,
+            body_is_single_alt_group: rep.body_is_single_alt_group,
         }),
         Group(g) => Op::Group(GroupOp {
             shape: rebind_group_shape(g.shape, new_field),

@@ -2587,7 +2587,7 @@ test "lower Optional Repeat over multi-token Group uses OptionalLookahead strate
     // `r : ('-' '>')? ;` — single-alt Group with two fixed-token
     // elements. The Optional needs a 2-token lookahead to commit
     // to firing. Emits `OptionalLookahead` carrying the
-    // per-position signatures.
+    // per-position signature.
     let mut g = empty_grammar(&"T");
     g.parser_rules = [
         ParserRule::new(
@@ -2615,12 +2615,10 @@ test "lower Optional Repeat over multi-token Group uses OptionalLookahead strate
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(rep) = &s.body.ops[0] {
             if let OptionalLookahead(ol) = &rep.strategy {
-                // Single inner alt → one outer entry; per-position
-                // sigs are [[TK_LIT_MINUS], [TK_LIT_GT]].
-                assert ol.sigs.len() == 1;
-                assert ol.sigs[0].len() == 2, `expected 2 positions, got {ol.sigs[0].len()}`;
-                assert ol.sigs[0][0][0] == "TK_LIT_MINUS", ol.sigs[0][0][0];
-                assert ol.sigs[0][1][0] == "TK_LIT_GT", ol.sigs[0][1][0];
+                // Per-position signature: [[TK_LIT_MINUS], [TK_LIT_GT]].
+                assert ol.sig.len() == 2, `expected 2 positions, got {ol.sig.len()}`;
+                assert ol.sig[0][0] == "TK_LIT_MINUS", ol.sig[0][0];
+                assert ol.sig[1][0] == "TK_LIT_GT", ol.sig[1][0];
             } else {
                 panic("expected RepeatStrategy::OptionalLookahead");
             }
@@ -2633,9 +2631,11 @@ test "lower Optional Repeat over multi-token Group uses OptionalLookahead strate
 }
 
 test "lower Optional Repeat with single-token inner stays Plain" {
-    // `r : INT? ;` — single-token Optional. The lookahead depth is
-    // only 1, so OptionalLookahead doesn't fire (`Plain` already
-    // handles single-token guards).
+    // `r : INT? ;` — bare leaf Optional. Lower keeps the strategy at
+    // `Plain`; emit's Optional+leaf arm in
+    // `gen_op_repeat_with_follow_override` emits the single-token
+    // guard directly from `inner_first`, so the `OptionalLookahead`
+    // specialisation is unnecessary here.
     let mut g = empty_grammar(&"T");
     g.parser_rules = [
         ParserRule::new(
@@ -2660,7 +2660,7 @@ test "lower Optional Repeat with single-token inner stays Plain" {
             if let Plain = &rep.strategy {
                 assert true;
             } else {
-                panic("expected RepeatStrategy::Plain for single-token Optional");
+                panic("expected RepeatStrategy::Plain for single-token leaf Optional");
             }
         } else {
             panic("expected Op::Repeat");
@@ -2670,16 +2670,13 @@ test "lower Optional Repeat with single-token inner stays Plain" {
     }
 }
 
-test "lower Optional Repeat over RuleRef inner uses OptionalScanGuard" {
-    // `r : a? ; a : X ;` — Optional Repeat whose inner is a RuleRef
-    // with no fixed-token prefix (the rule body is a single TokenRef,
-    // so lookahead depth could be 1, but OptionalLookahead requires
-    // ≥ 2 — `Plain` already handles single-token guards). The inner
-    // `a` is scannable, so `OptionalScanGuard` applies: emit gates
-    // entry on a scan probe.
-    //
-    // To force a scan-guard (not lookahead, not Plain), use a
-    // multi-element single-alt RuleRef-led group inner.
+test "lower Optional Repeat over RuleRef-led Group inner uses OptionalScanGuard" {
+    // `r : (a X)? ; a : Y ;` — Optional Repeat whose inner is a
+    // single-alt Group starting with a RuleRef (not a fixed token).
+    // K-token lookahead can't materialise (no leading literal /
+    // TokenRef), and the elements include no nested Optionals so
+    // shape lookahead doesn't apply either. The inner is scannable,
+    // so `OptionalScanGuard` is the strategy emit picks.
     let mut g = empty_grammar(&"T");
     g.parser_rules = [
         ParserRule::new(

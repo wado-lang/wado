@@ -1104,10 +1104,16 @@ fn parse_mix_stmt(p: &mut Parser) -> Result<MixStmtNode, ParseError> {
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break rep_scan; }
-            pos += 1;
-            if pos >= tokens.len() || tokens[pos].kind != TK_ID { break rep_scan; }
-            pos += 1;
+            sg_1_done: {
+                sg_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_1; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_ID { break sg_1; }
+                    pos += 1;
+                    break sg_1_done;
+                }
+                break rep_scan;
+            }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }

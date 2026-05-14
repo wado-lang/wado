@@ -2525,10 +2525,16 @@ fn parse_expression_list(p: &mut Parser) -> Result<ExpressionListNode, ParseErro
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break rep_scan; }
-            pos += 1;
-            pos = scan_e(tokens, pos, 0);
-            if pos < 0 { break rep_scan; }
+            sg_13_done: {
+                sg_13: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_13; }
+                    pos += 1;
+                    pos = scan_e(tokens, pos, 0);
+                    if pos < 0 { break sg_13; }
+                    break sg_13_done;
+                }
+                break rep_scan;
+            }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
@@ -2742,12 +2748,18 @@ fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
                     rep_scan: {
                         let tokens = &p.tokens;
                         let mut pos: i32 = p.pos;
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { break rep_scan; }
-                        pos += 1;
-                        pos = scan_e(tokens, pos, 0);
-                        if pos < 0 { break rep_scan; }
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { break rep_scan; }
-                        pos += 1;
+                        sg_14_done: {
+                            sg_14: {
+                                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { break sg_14; }
+                                pos += 1;
+                                pos = scan_e(tokens, pos, 0);
+                                if pos < 0 { break sg_14; }
+                                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { break sg_14; }
+                                pos += 1;
+                                break sg_14_done;
+                            }
+                            break rep_scan;
+                        }
                         if pos <= p.pos { break rep_scan; }
                         rep_scan_pos = pos;
                     }

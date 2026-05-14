@@ -2404,7 +2404,7 @@ fn parse_html_document(p: &mut Parser) -> Result<HtmlDocumentNode, ParseError> {
         rep_scan_4: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            pos = scan_html_elements(tokens, pos, 0);
+            pos = scan_html_elements__follow_0(tokens, pos, 0);
             if pos < 0 { break rep_scan_4; }
             if pos <= p.pos { break rep_scan_4; }
             rep_scan_pos_4 = pos;
@@ -2608,35 +2608,41 @@ fn parse_html_content(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            let gp_7 = pos;
-            let sgk_7 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-            if _gale_kind_set_8(sgk_7) {
+            sg_7_done: {
                 sg_7: {
-                    pos = gp_7;
-                    sg_7_0: {
-                        pos = scan_html_element(tokens, pos, 0);
-                        if pos < 0 { break sg_7_0; }
-                        break sg_7;
+                    let gp_8 = pos;
+                    let sgk_8 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+                    if _gale_kind_set_8(sgk_8) {
+                        sg_8: {
+                            pos = gp_8;
+                            sg_8_0: {
+                                pos = scan_html_element(tokens, pos, 0);
+                                if pos < 0 { break sg_8_0; }
+                                break sg_8;
+                            }
+                            pos = gp_8;
+                            sg_8_1: {
+                                if pos >= tokens.len() || tokens[pos].kind != TK_CDATA { break sg_8_1; }
+                                pos += 1;
+                                break sg_8;
+                            }
+                            pos = gp_8;
+                            sg_8_2: {
+                                pos = scan_html_comment(tokens, pos, 0);
+                                if pos < 0 { break sg_8_2; }
+                                break sg_8;
+                            }
+                            pos = gp_8;
+                        }
                     }
-                    pos = gp_7;
-                    sg_7_1: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_CDATA { break sg_7_1; }
-                        pos += 1;
-                        break sg_7;
+                    if pos < tokens.len() && _gale_kind_set_7(tokens[pos].kind) {
+                        let sp = pos;
+                        pos = scan_html_chardata(tokens, pos, 0);
+                        if pos < 0 { pos = sp; }
                     }
-                    pos = gp_7;
-                    sg_7_2: {
-                        pos = scan_html_comment(tokens, pos, 0);
-                        if pos < 0 { break sg_7_2; }
-                        break sg_7;
-                    }
-                    pos = gp_7;
+                    break sg_7_done;
                 }
-            }
-            if pos < tokens.len() && _gale_kind_set_7(tokens[pos].kind) {
-                let sp = pos;
-                pos = scan_html_chardata(tokens, pos, 0);
-                if pos < 0 { pos = sp; }
+                break rep_scan;
             }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;

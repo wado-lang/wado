@@ -31,6 +31,8 @@ use {
     WithFollowSubtractionStrategy,
     NonGreedyStrategy,
     OptionalLookaheadStrategy,
+    OptionalShapeLookaheadStrategy,
+    OptionalLookaheadShape,
     GroupShape,
     SimpleCstShape,
     TokenOnlyShape,
@@ -178,15 +180,19 @@ test "Op::Wildcard / Excluded round-trip" {
 
 test "Op::Repeat carries inner element and strategy" {
     let inner = Op::Token(TokenOp { kind: "TK_X", field: "x" });
+    let scan_inner = ScanElement::Token(ScanTokenElem { kind: "TK_X" });
     let rep = Op::Repeat(RepeatOp {
         kind: RepeatKind::Star,
         body: inner,
+        scan_body: scan_inner,
         strategy: RepeatStrategy::Plain,
         field: "x_list",
         caller_follow_first: [],
         caller_follow_second: [],
         body_scannable: true,
         body_has_field: true,
+        body_first_set: ["TK_X"],
+        body_is_single_alt_group: false,
     });
     if let Repeat(r) = &rep {
         if let Star = r.kind {
@@ -207,9 +213,22 @@ test "RepeatStrategy variants round-trip" {
         exit_second: [],
     });
     let lookahead_strategy = OptionalLookaheadStrategy {
-        sigs: [[["TK_X"], ["TK_Y"]]],
+        sig: [["TK_X"], ["TK_Y"]],
     };
     let lookahead = RepeatStrategy::OptionalLookahead(lookahead_strategy);
+    let shape_strategy = OptionalShapeLookaheadStrategy {
+        shapes: [
+            OptionalLookaheadShape {
+                positions: [0, 1],
+                sig: [["TK_X"], ["TK_Y"]],
+            },
+            OptionalLookaheadShape {
+                positions: [0],
+                sig: [["TK_X"]],
+            },
+        ],
+    };
+    let shape_lookahead = RepeatStrategy::OptionalShapeLookahead(shape_strategy);
     let scan_guard = RepeatStrategy::OptionalScanGuard;
     let suppressed = RepeatStrategy::Suppressed;
 
@@ -229,9 +248,18 @@ test "RepeatStrategy variants round-trip" {
         panic("NonGreedy");
     }
     if let OptionalLookahead(s) = &lookahead {
-        assert s.sigs[0][0][0] == "TK_X";
+        assert s.sig[0][0] == "TK_X";
+        assert s.sig[1][0] == "TK_Y";
     } else {
         panic("OptionalLookahead");
+    }
+    if let OptionalShapeLookahead(s) = &shape_lookahead {
+        assert s.shapes.len() == 2;
+        assert s.shapes[0].positions[0] == 0;
+        assert s.shapes[0].positions[1] == 1;
+        assert s.shapes[0].sig[0][0] == "TK_X";
+    } else {
+        panic("OptionalShapeLookahead");
     }
     if let OptionalScanGuard = &scan_guard {
         assert true;

@@ -792,10 +792,16 @@ fn parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos].kind != TK_SEMICOLON { break rep_scan; }
-            pos += 1;
-            pos = scan_item(tokens, pos, 0);
-            if pos < 0 { break rep_scan; }
+            sg_1_done: {
+                sg_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_SEMICOLON { break sg_1; }
+                    pos += 1;
+                    pos = scan_item(tokens, pos, 0);
+                    if pos < 0 { break sg_1; }
+                    break sg_1_done;
+                }
+                break rep_scan;
+            }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
