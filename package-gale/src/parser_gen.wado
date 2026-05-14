@@ -3295,40 +3295,6 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, o
     }
 }
 
-/// Surface-IR variant of `gen_elements_with_non_greedy` for callers
-/// that don't have a corresponding `AltBody` handy (transitively
-/// reachable from `gen_element`'s Group / Repeat arms). Uses
-/// `gen_element` fallback for every non-Repeat element. This walker
-/// disappears once `gen_element` is retired (Phase 2-F); each remaining
-/// caller migrates as the surrounding `AltBody.ops` becomes
-/// thread-able.
-fn gen_elements_with_non_greedy_legacy(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
-    let saved_call_follow = ctx.ruleref_call_follow;
-    for let mut i = 0; i < elements.len(); i += 1 {
-        ctx.ruleref_call_follow = compute_ruleref_call_follow(elements, i, ctx);
-        let elem = &elements[i];
-        if let Repeat(rep) = elem {
-            // gen_repeat / gen_repeat_non_greedy were retired —
-            // every op-driven emit path dispatches Repeat through
-            // `gen_op_repeat_with_follow_override` directly. The
-            // surface walker keeps the conditional shape for the
-            // small set of `gen_element` callers (gen_storable_optional
-            // / gen_optional_with_scan_guard / gen_consume_group)
-            // that still walk surface IR, but those callers no longer
-            // encounter Repeat elements at this layer — the inline
-            // emit decisions happen op-side. If a future caller
-            // routes a surface Repeat through here, the panic
-            // surfaces it instead of silently bypassing the op-driven
-            // dispatcher.
-            panic("gen_elements_with_non_greedy_legacy: Repeat element reached the retired surface walker — route through op-driven `gen_elements_with_non_greedy`");
-        } else {
-            gen_element(w, elem, ctx, name_counts);
-        }
-        ctx.ruleref_call_follow = [];
-    }
-    ctx.ruleref_call_follow = saved_call_follow;
-}
-
 fn is_ruleref_optional(elem: &Element) -> bool {
     if let RuleRef(_) = elem {
         return true;
@@ -3924,18 +3890,18 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
             ),
             SimpleCst(scst) => gen_consume_group_store_optional_op(
                 w,
-                Option::<&SimpleCstShape>::Some(scst),
-                Option::<&Array<AltBody>>::Some(&g_op.alts),
-                Option::<&Array<ScanBody>>::Some(&g_op.scan_alts),
+                scst,
+                &g_op.alts,
+                &g_op.scan_alts,
                 &g_elem.alternatives,
                 ctx,
                 name_counts,
             ),
             General(gen_shape) => gen_general_group_store_optional_op(
                 w,
-                Option::<&GeneralShape>::Some(gen_shape),
-                Option::<&Array<AltBody>>::Some(&g_op.alts),
-                Option::<&Array<ScanBody>>::Some(&g_op.scan_alts),
+                gen_shape,
+                &g_op.alts,
+                &g_op.scan_alts,
                 &g_elem.alternatives,
                 ctx,
                 name_counts,
@@ -4155,17 +4121,17 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         panic("gen_element: Repeat element reached the retired surface walker — route through op-driven `gen_op_repeat_with_follow_override`");
     }
     if let Group(g) = elem {
-        if is_simple_cst_group(&g.alternatives) {
-            gen_consume_group_store_optional(w, &g.alternatives, ctx, name_counts);
-        } else if is_token_only_group(&g.alternatives) {
-            gen_consume_token_group(w, &g.alternatives, ctx, name_counts);
-        } else if is_single_alt_group(&g.alternatives) {
-            gen_consume_single_alt_group(w, &g.alternatives[0], ctx, name_counts, &([] as Array<String>));
-        } else if is_general_group(&g.alternatives) {
-            gen_general_group_store_optional(w, &g.alternatives, ctx, name_counts);
-        } else {
-            gen_consume_group(w, &g.alternatives, ctx, name_counts);
-        }
+        // `gen_element` is the surface-IR leaf walker. After the
+        // Phase 2-G op-driven migration, only token-only groups
+        // reach this arm — every other classification (SimpleCst,
+        // SingleAlt, General, fallback) is handled by op-driven
+        // walkers before the surface walker is reached. The retired
+        // arms used to call `gen_consume_group_store_optional_op`,
+        // `gen_consume_single_alt_group`, `gen_general_group_store_optional_op`,
+        // and `gen_consume_group` with surface IR.
+        assert is_token_only_group(&g.alternatives),
+            "gen_element: only token-only groups reach the surface walker; other classifications must be handled op-driven before gen_element is invoked";
+        gen_consume_token_group(w, &g.alternatives, ctx, name_counts);
         return;
     }
     if let Label(lab) = elem {
@@ -4958,10 +4924,6 @@ fn optional_lookahead_tokens(inner: &Element, max_depth: i32) -> Array<String> {
 ///
 /// Returns the name of the outer pos variable (`-1` on scan failure, end-pos on success).
 /// Caller emits `if {pos_var} >= 0 { /* commit parse */ }`.
-fn emit_opt_scan_guard(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) -> String {
-    return emit_scan_guard_with_prefix(w, inner, ctx, name_counts, &"opt_scan_pos", &"opt_scan", false);
-}
-
 /// Emit an inline scan guard for a repetition's inner element.
 /// Same shape as emit_opt_scan_guard but uses `rep_scan_*` naming. Requires
 /// the scan to advance at least one token; 0-advance is treated as failure
@@ -5047,13 +5009,6 @@ fn collect_not_set_tokens(alts: &Array<Alternative>, out: &mut Array<String>) ->
         }
     }
     return true;
-}
-
-fn is_group_with_store(elem: &Element) -> bool {
-    if let Group(g) = elem {
-        return is_storable_group(&g.alternatives);
-    }
-    return false;
 }
 
 fn has_field(elem: &Element) -> bool {
@@ -5276,143 +5231,6 @@ fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>, 
     }
 }
 
-fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    if alts.len() == 0 {
-        return;
-    }
-    if alts.len() == 1 {
-        gen_elements_with_non_greedy_legacy(w, &alts[0].elements, ctx, name_counts, &([] as Array<String>));
-        return;
-    }
-
-    let mut first_sets: Array<Array<String>> = [];
-    for let alt of alts {
-        let mut visiting: Array<String> = [];
-        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
-    }
-    let groups = compute_overlap_groups(&first_sets);
-
-    let grp_var = dedup_name(&"grp_kind", name_counts);
-    w.line(`let {grp_var} = p.peek_kind();`);
-
-    for let mut g = 0; g < groups.len(); g += 1 {
-        let group = &groups[g];
-
-        let mut union_first: Array<String> = [];
-        for let idx of group {
-            dedup_append_arr(&mut union_first, &first_sets[*idx]);
-        }
-
-        let cond = ctx.kind_check_str(&union_first, &grp_var);
-        if g == 0 {
-            w.begin(`if {cond}`);
-        } else {
-            w.else_begin(`else if {cond}`);
-        }
-
-        if group.len() == 1 {
-            let alt_idx = group[0];
-            let mut nc: Array<[String, i32]> = [];
-            gen_elements_with_non_greedy_legacy(w, &alts[alt_idx].elements, ctx, &mut nc, &([] as Array<String>));
-        } else {
-            let mut sorted_group = group.sorted();
-            // LL-correct: longer alts first so first-success-wins picks
-            // the longer match for prefix-overlap groups (rule-level
-            // dispatch keeps the priority-based sort).
-            sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
-            let mut nc: Array<[String, i32]> = [];
-            gen_prediction_body(w, &sorted_group, alts, ctx, &mut nc);
-        }
-    }
-    w.end();
-}
-
-fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    let var_name = dedup_name(&group_field_base_name(alts), name_counts);
-    let type_name = group_variant_type_name(alts);
-
-    let mut first_sets: Array<Array<String>> = [];
-    for let alt of alts {
-        let mut visiting: Array<String> = [];
-        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
-    }
-
-    let groups = compute_overlap_groups(&first_sets);
-    let has_overlaps = has_multi_alt_groups(&groups);
-
-    if !has_overlaps {
-        // Simple case: no overlapping FIRST sets
-        for let mut i = 0; i < alts.len(); i += 1 {
-            if let RuleRef(r) = &alts[i].elements[0] {
-                let fn_name = `parse_{r.snake_name}`;
-                let local_var = r.snake_name;
-                let case_name = group_case_name(&alts[i]);
-
-                if i == 0 {
-                    w.begin(`let {var_name}: {type_name} = if {ctx.first_check_str(&first_sets[i])}`);
-                } else if i < alts.len() - 1 {
-                    w.else_begin(`else if {ctx.first_check_str(&first_sets[i])}`);
-                } else {
-                    w.else_begin("else");
-                }
-
-                w.line(`let {local_var} = {fn_name}(p)?;`);
-                w.line(`{type_name}::{case_name}({local_var})`);
-            }
-        }
-        w.end_with(";");
-    } else {
-        // Complex case: overlapping FIRST sets, use Option + scan dispatch
-        let opt_var = dedup_name(&`{var_name}_opt`, name_counts);
-        w.line(`let mut {opt_var}: Option<{type_name}> = null;`);
-
-        let grp_var = dedup_name(&"grp_kind", name_counts);
-        w.line(`let {grp_var} = p.peek_kind();`);
-
-        for let mut g = 0; g < groups.len(); g += 1 {
-            let group = &groups[g];
-
-            let mut union_first: Array<String> = [];
-            for let idx of group {
-                dedup_append_arr(&mut union_first, &first_sets[*idx]);
-            }
-
-            let cond = ctx.kind_check_str(&union_first, &grp_var);
-            if g == 0 {
-                w.begin(`if {cond}`);
-            } else {
-                w.else_begin(`else if {cond}`);
-            }
-
-            if group.len() == 1 {
-                let alt_idx = group[0];
-                if let RuleRef(r) = &alts[alt_idx].elements[0] {
-                    let fn_name = `parse_{r.snake_name}`;
-                    let local_var = r.snake_name;
-                    let case_name = group_case_name(&alts[alt_idx]);
-                    w.line(`let {local_var} = {fn_name}(p)?;`);
-                    w.line(`{opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
-                }
-            } else {
-                let mut sorted_group = group.sorted();
-                sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
-
-                assert rule_ref_group_all_scannable(&sorted_group, alts, ctx),
-                    "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
-                gen_rule_ref_group_scan_dispatch(w, &sorted_group, alts, null, &opt_var, type_name, ctx, name_counts);
-            }
-        }
-        w.end();  // if/else if chain
-
-        w.begin(`if let None = {opt_var}`);
-        let first_alt_name = group_case_name(&alts[0]);
-        w.line(`p.fail("{first_alt_name}")?;`);
-        w.end();
-        w.line(`let {var_name} = {opt_var}.unwrap();`);
-    }
-}
-
-/// Returns true if every RuleRef in a group of single-RuleRef alts is scannable.
 fn rule_ref_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext) -> bool {
     if sorted_group.len() < 2 {
         return false;
@@ -5442,10 +5260,9 @@ fn rule_ref_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternat
 /// `expr` — committing on first success skips the remaining 8 deep LR
 /// scans that a longest-match tournament would have run.
 ///
-/// `scan_alts`, when present, drives the scan via the op-driven walker
-/// against the lowered `ScanBody`. The legacy fallback (no GIR
-/// available at the caller) keeps the surface walker.
-fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32>, alts: &Array<Alternative>, scan_alts: Option<&Array<ScanBody>>, opt_var: &String, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+/// `scan_alts` drives the scan via the op-driven walker against the
+/// lowered `ScanBody`.
+fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32>, alts: &Array<Alternative>, scan_alts: &Array<ScanBody>, opt_var: &String, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let winner_var = dedup_name(&"gd_winner", name_counts);
     let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
     w.line(`let mut {winner_var}: i32 = -1;`);
@@ -5456,17 +5273,12 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32
             break;
         }
         let alt_idx = sorted_group[k];
-        let alt = &alts[alt_idx];
         let scan_label = dedup_name(&"gd_scan", name_counts);
         w.begin(`{scan_label}:`);
         w.line("let tokens = &p.tokens;");
         w.line("let mut pos: i32 = p.pos;");
-        if let Some(sa) = scan_alts {
-            let sb = &sa[alt_idx];
-            gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
-        } else {
-            gen_scan_elements_in_block(w, &alt.elements, 0, alt.elements.len(), ctx, &scan_label);
-        }
+        let sb = &scan_alts[alt_idx];
+        gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
         w.line(`{winner_var} = {k};`);
         w.line(`break {dispatch_label};`);
         w.end();
@@ -5495,24 +5307,6 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32
     w.end();
 }
 
-fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    gen_consume_group_store_optional_op(w, null, null, null, alts, ctx, name_counts);
-}
-
-/// GIR-aware twin of the non-Option `gen_consume_group_store` (the
-/// "required" form used inside `Repeat`s where the outer loop guard
-/// already gates entry). Mirrors the Option variant's shape /
-/// `g_op_alts` reads, but emits the binding without an `Option<T>`
-/// wrapper:
-///
-/// - No overlap → `let var: T = if .. else ..;` (direct expression).
-/// - With overlap → `let var_opt: Option<T> = null; ...; let var =
-///   var_opt.unwrap();` (Option intermediate + unwrap so emit can
-///   reuse the scan-dispatch path that fills `var_opt`).
-///
-/// Used by `gen_op_inner_for_storable_repeat` so `Star` / `Plus` over
-/// `Group(SimpleCst)` consume the lowered `SimpleCstShape` and
-/// per-alt `AltBody`s directly.
 fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let _ = dedup_name(&group_field_base_name(alts), name_counts);
     let var_name = scst.field;
@@ -5599,7 +5393,7 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
                     w,
                     &sorted_group,
                     alts,
-                    Option::<&Array<ScanBody>>::Some(g_op_scan_alts),
+                    g_op_scan_alts,
                     &opt_var,
                     type_name,
                     ctx,
@@ -5617,26 +5411,16 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
     }
 }
 
-/// GIR-aware twin of `gen_consume_group_store_optional`. When the
-/// caller has the lowered `SimpleCstShape` (top-level alt walker
-/// reaches the group through `Op::Group(g_op)`), pass it as `Some` so
-/// emit reads the outer field name and variant type from lower
-/// directly. The internal dispatch (overlap groups, scan helpers,
-/// per-alt RuleRef calls) walks `g_op.alts` when available, falling
-/// back to surface IR for the legacy `gen_consume_group_store_optional`
-/// path.
-fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: Option<&SimpleCstShape>, g_op_alts: Option<&Array<AltBody>>, g_op_scan_alts: Option<&Array<ScanBody>>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    let var_name = if let Some(s) = scst {
-        let _ = dedup_name(&group_field_base_name(alts), name_counts);
-        s.field;
-    } else {
-        dedup_name(&group_field_base_name(alts), name_counts);
-    };
-    let type_name = if let Some(s) = scst {
-        s.type_name;
-    } else {
-        group_variant_type_name(alts);
-    };
+/// Op-driven SimpleCst-group emitter. Reads the outer field name and
+/// variant type from the lowered `SimpleCstShape`, and dispatches each
+/// alt through the lowered `Op::RuleCall` data (variant id, dedupped
+/// field). The retired surface-IR fallback (when `scst`/`g_op_alts`
+/// were `null`) flowed from `gen_element`'s Group arm — that path no
+/// longer exists post Phase 2-G.
+fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    let _ = dedup_name(&group_field_base_name(alts), name_counts);
+    let var_name = scst.field;
+    let type_name = scst.type_name;
 
     let mut first_sets: Array<Array<String>> = [];
     for let alt of alts {
@@ -5670,27 +5454,16 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: Option<&SimpleC
 
         if group.len() == 1 {
             let alt_idx = group[0];
-            // Prefer lowered `Op::RuleCall` (carries dedupped field,
-            // resolved variant id, etc.) when `g_op_alts` is `Some`.
-            // Fallback path reads the surface RuleRef directly.
-            if let Some(bodies) = g_op_alts {
-                let body = &bodies[alt_idx];
-                if let RuleCall(rc) = &body.ops[0] {
-                    let fn_name = if let Some(id) = rc.variant_id {
-                        `parse_{rc.target_snake}__follow_{id}`;
-                    } else {
-                        `parse_{rc.target_snake}`;
-                    };
-                    let local_var = rc.target_snake;
-                    w.line(`let {local_var} = {fn_name}(p)?;`);
-                    w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
-                }
-            } else if let RuleRef(r) = &alts[alt_idx].elements[0] {
-                let fn_name = `parse_{r.snake_name}`;
-                let local_var = r.snake_name;
-                let case_name = group_case_name(&alts[alt_idx]);
+            let body = &g_op_alts[alt_idx];
+            if let RuleCall(rc) = &body.ops[0] {
+                let fn_name = if let Some(id) = rc.variant_id {
+                    `parse_{rc.target_snake}__follow_{id}`;
+                } else {
+                    `parse_{rc.target_snake}`;
+                };
+                let local_var = rc.target_snake;
                 w.line(`let {local_var} = {fn_name}(p)?;`);
-                w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
+                w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
             }
         } else {
             let mut sorted_group = group.sorted();
@@ -5712,37 +5485,7 @@ fn gen_consume_token_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
     w.line(`let {var_name} = p.advance();`);
 }
 
-fn gen_consume_single_alt_group(w: &mut CodeWriter, alt: &Alternative, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
-    let type_name = single_alt_group_type_name(alt);
-    let field_name = dedup_name(&single_alt_group_field_name(alt), name_counts);
-    // Use the owning rule's name for general group types inside shared single-alt groups
-    let saved_rule_name = ctx.current_rule_name;
-    ctx.current_rule_name = ctx.general_group_rule_name(&type_name);
-    let nc_snapshot = *name_counts;
-    let gc_start = ctx.group_counter;
-    gen_elements_with_non_greedy_legacy(w, &alt.elements, ctx, name_counts, outer_follow);
-    w.line(`let {field_name} = {type_name} \{`);
-    w.indent();
-    ctx.group_counter = gc_start;
-    let mut assign_nc = nc_snapshot;
-    for let elem of &alt.elements {
-        gen_field_assignment(w, elem, &mut assign_nc, ctx);
-    }
-    w.dedent();
-    w.line("};");
-    ctx.current_rule_name = saved_rule_name;
-}
-
 /// Generate a general group store with Option wrapper (standalone Group in an alternative).
-fn gen_general_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    gen_general_group_store_optional_op(w, null, null, null, alts, ctx, name_counts);
-}
-
-/// GIR-aware non-Option twin of `gen_general_group_store_optional_op`
-/// — the "required" form used inside `Repeat`s. Mirrors the Option
-/// variant's shape / `g_op_alts` reads, but emits the binding as a
-/// direct `let var: T = if .. else ..;` when first sets do not
-/// overlap, and as an Option intermediate + unwrap when they do.
 fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     ctx.group_counter = gs.group_index + 1;
     let group_index = gs.group_index;
@@ -5781,7 +5524,7 @@ fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: 
                 w.else_begin("else");
             }
             ctx.group_counter = gc_after_self;
-            gen_general_alt_construct(w, alts, Option::<&AltBody>::Some(&g_op_alts[alt_idx]), alt_idx, &type_name, ctx, name_counts, group_index);
+            gen_general_alt_construct(w, alts, &g_op_alts[alt_idx], alt_idx, &type_name, ctx, name_counts, group_index);
             if ctx.group_counter > gc_max {
                 gc_max = ctx.group_counter;
             }
@@ -5814,15 +5557,15 @@ fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: 
             ctx.group_counter = gc_after_self;
             if group.len() == 1 {
                 let alt_idx = group[0];
-                gen_general_alt_parse_and_store(w, alts, Option::<&AltBody>::Some(&g_op_alts[alt_idx]), alt_idx, &type_name, &opt_var, ctx, name_counts, group_index);
+                gen_general_alt_parse_and_store(w, alts, &g_op_alts[alt_idx], alt_idx, &type_name, &opt_var, ctx, name_counts, group_index);
             } else {
                 let mut sorted_group = group.sorted();
                 sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
                 gen_general_group_dispatch(
                     w,
                     alts,
-                    Option::<&Array<AltBody>>::Some(g_op_alts),
-                    Option::<&Array<ScanBody>>::Some(g_op_scan_alts),
+                    g_op_alts,
+                    g_op_scan_alts,
                     &sorted_group,
                     &type_name,
                     &opt_var,
@@ -5845,37 +5588,26 @@ fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: 
     }
 }
 
-/// GIR-aware twin of `gen_general_group_store_optional`. When the
-/// caller has the lowered `GeneralShape` (top-level alt walker
-/// reaches the group through `Op::Group(g_op)`), pass it as `Some`
-/// so emit reads the outer field name, variant type, and group
-/// index from lower's pre-baked shape — matching the values
-/// `gen_cst_types` already emitted for the corresponding enum.
-fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: Option<&GeneralShape>, g_op_alts: Option<&Array<AltBody>>, g_op_scan_alts: Option<&Array<ScanBody>>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    let group_index = if let Some(g) = gs {
-        // Lower already assigned a stable index in the shape; keep
-        // emit's running counter aligned for the surface-IR helpers
-        // that still consult it (e.g. nested general groups inside).
-        ctx.group_counter = g.group_index + 1;
-        g.group_index;
-    } else {
-        let idx = ctx.group_counter;
-        ctx.group_counter += 1;
-        idx;
-    };
+/// Op-driven General-group emitter. Reads the outer field name, group
+/// index, and scan bodies from the lowered `GeneralShape`/`AltBody`
+/// graph. The retired surface-IR fallback (when `gs`/`g_op_alts` were
+/// `null`) flowed from `gen_element`'s Group arm — that path no longer
+/// exists post Phase 2-G.
+fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    // Lower already assigned a stable index in the shape; keep
+    // emit's running counter aligned for the surface-IR helpers
+    // that still consult it (e.g. nested general groups inside).
+    ctx.group_counter = gs.group_index + 1;
+    let group_index = gs.group_index;
     let gc_after_self = ctx.group_counter;
-    let var_name = if let Some(g) = gs {
-        let _ = dedup_name(&general_group_field_name(group_index), name_counts);
-        g.field;
-    } else {
-        dedup_name(&general_group_field_name(group_index), name_counts);
-    };
-    // Always derive `type_name` from `ctx.current_rule_name`. For the
-    // `gs == Some` path, lower bakes `g.variant_type` using the rule
-    // that originally lowered the General; CST type emit deduplicates
-    // the General under the surrounding SingleAlt's `owner_rule`, so
-    // those names differ for shared SingleAlt bodies (see
-    // `gen_general_group_store_op`'s comment for details).
+    let _ = dedup_name(&general_group_field_name(group_index), name_counts);
+    let var_name = gs.field;
+    // Always derive `type_name` from `ctx.current_rule_name`. Lower
+    // bakes `gs.variant_type` using the rule that originally lowered
+    // the General; CST type emit deduplicates the General under the
+    // surrounding SingleAlt's `owner_rule`, so those names differ for
+    // shared SingleAlt bodies (see `gen_general_group_store_op`'s
+    // comment for details).
     let type_name = general_group_type_name(&ctx.current_rule_name, group_index);
 
     let mut first_sets: Array<Array<String>> = [];
@@ -5911,11 +5643,7 @@ fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: Option<&GeneralSh
         ctx.group_counter = gc_after_self;
         if group.len() == 1 {
             let alt_idx = group[0];
-            if let Some(bs) = g_op_alts {
-                gen_general_alt_parse_and_store(w, alts, Option::<&AltBody>::Some(&bs[alt_idx]), alt_idx, &type_name, &inner_var, ctx, name_counts, group_index);
-            } else {
-                gen_general_alt_parse_and_store(w, alts, null, alt_idx, &type_name, &inner_var, ctx, name_counts, group_index);
-            }
+            gen_general_alt_parse_and_store(w, alts, &g_op_alts[alt_idx], alt_idx, &type_name, &inner_var, ctx, name_counts, group_index);
         } else {
             let mut sorted_group = group.sorted();
             sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
@@ -5932,126 +5660,27 @@ fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: Option<&GeneralSh
 }
 
 /// Generate a general group store without Option wrapper (required, inside Repeat).
-fn gen_general_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    let group_index = ctx.group_counter;
-    ctx.group_counter += 1;
-    let gc_after_self = ctx.group_counter;
-    let var_name = dedup_name(&general_group_field_name(group_index), name_counts);
-    let type_name = general_group_type_name(&ctx.current_rule_name, group_index);
-
-    let mut first_sets: Array<Array<String>> = [];
-    for let alt of alts {
-        let mut visiting: Array<String> = [];
-        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
-    }
-
-    let groups = compute_overlap_groups(&first_sets);
-    let has_overlaps = has_multi_alt_groups(&groups);
-
-    if !has_overlaps {
-        // Simple case: no overlapping FIRST sets — use if/else expression
-        let mut gc_max = gc_after_self;
-        for let mut g = 0; g < groups.len(); g += 1 {
-            let alt_idx = groups[g][0];
-            if g == 0 {
-                w.begin(`let {var_name}: {type_name} = if {ctx.first_check_str(&first_sets[alt_idx])}`);
-            } else if g < groups.len() - 1 {
-                w.else_begin(`else if {ctx.first_check_str(&first_sets[alt_idx])}`);
-            } else {
-                w.else_begin("else");
-            }
-            ctx.group_counter = gc_after_self;
-            gen_general_alt_construct(w, alts, null, alt_idx, &type_name, ctx, name_counts, group_index);
-            if ctx.group_counter > gc_max {
-                gc_max = ctx.group_counter;
-            }
-        }
-        w.end_with(";");
-        ctx.group_counter = gc_max;
-    } else {
-        // Overlapping FIRST sets — use Option + scan dispatch
-        let opt_var = dedup_name(&`{var_name}_opt`, name_counts);
-        w.line(`let mut {opt_var}: Option<{type_name}> = null;`);
-
-        let grp_var = dedup_name(&"grp_kind", name_counts);
-        w.line(`let {grp_var} = p.peek_kind();`);
-
-        let mut gc_max = gc_after_self;
-        for let mut g = 0; g < groups.len(); g += 1 {
-            let group = &groups[g];
-
-            let mut union_first: Array<String> = [];
-            for let idx of group {
-                dedup_append_arr(&mut union_first, &first_sets[*idx]);
-            }
-
-            let cond = ctx.kind_check_str(&union_first, &grp_var);
-            if g == 0 {
-                w.begin(`if {cond}`);
-            } else {
-                w.else_begin(`else if {cond}`);
-            }
-
-            ctx.group_counter = gc_after_self;
-            if group.len() == 1 {
-                let alt_idx = group[0];
-                gen_general_alt_parse_and_store(w, alts, null, alt_idx, &type_name, &opt_var, ctx, name_counts, group_index);
-            } else {
-                let mut sorted_group = group.sorted();
-                sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
-                gen_general_group_dispatch(w, alts, null, null, &sorted_group, &type_name, &opt_var, ctx, name_counts, group_index);
-            }
-            if ctx.group_counter > gc_max {
-                gc_max = ctx.group_counter;
-            }
-        }
-        w.end();
-        ctx.group_counter = gc_max;
-
-        w.begin(`if let None = {opt_var}`);
-        w.line(`p.fail("group alternative")?;`);
-        w.end();
-        w.line(`let {var_name} = {opt_var}.unwrap();`);
-    }
-}
-
-/// Parse one alt's elements and store into the variant Option variable.
-/// When `body` is `Some`, the walker uses `body.ops` (GIR-driven inner
-/// emit + struct construction). The `None` path remains for surface-IR
-/// callers reachable through `gen_element`'s Group arm.
-fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &Array<Alternative>, body: Option<&AltBody>, alt_idx: i32, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
+fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &Array<Alternative>, body: &AltBody, alt_idx: i32, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
     let alt = &alts[alt_idx];
     let struct_name = general_group_alt_struct_name(&ctx.current_rule_name, group_index, alt_idx);
 
     let mut nc: Array<[String, i32]> = [];
     let gc_start = ctx.group_counter;
-    if let Some(b) = body {
-        gen_elements_with_non_greedy(w, &alt.elements, &b.ops, ctx, &mut nc, &([] as Array<String>));
-    } else {
-        gen_elements_with_non_greedy_legacy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
-    }
+    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as Array<String>));
     // The element walk above bumped `ctx.group_counter` for every
     // nested General group encountered. Reset to `gc_start` so the
     // second pass below (field assignments) starts from the same
-    // point and reproduces the same indices. The op-driven
+    // point and reproduces the same indices.
     // `emit_field_assignments_from_fields` doesn't walk elements at
     // all — it just emits field names — so it leaves the counter
     // un-bumped, which would drop the surrounding caller's `gc_max`
     // tracking. Save the post-walk max and propagate it after the
-    // reset so both the legacy and op-driven flows leave the same
-    // post-call counter for the caller.
+    // reset.
     let gc_after_walk = ctx.group_counter;
     w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
     w.indent();
     ctx.group_counter = gc_start;
-    if let Some(b) = body {
-        emit_field_assignments_from_fields(w, &b.fields);
-    } else {
-        let mut assign_nc: Array<[String, i32]> = [];
-        for let elem of &alt.elements {
-            gen_field_assignment(w, elem, &mut assign_nc, ctx);
-        }
-    }
+    emit_field_assignments_from_fields(w, &body.fields);
     w.dedent();
     w.line("}));");
     if ctx.group_counter < gc_after_walk {
@@ -6060,31 +5689,20 @@ fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &Array<Alternative>
 }
 
 /// Parse one alt's elements and return as variant value (for if/else expression).
-fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, body: Option<&AltBody>, alt_idx: i32, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
+fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, body: &AltBody, alt_idx: i32, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
     let alt = &alts[alt_idx];
     let struct_name = general_group_alt_struct_name(&ctx.current_rule_name, group_index, alt_idx);
 
     let mut nc: Array<[String, i32]> = [];
     let gc_start = ctx.group_counter;
-    if let Some(b) = body {
-        gen_elements_with_non_greedy(w, &alt.elements, &b.ops, ctx, &mut nc, &([] as Array<String>));
-    } else {
-        gen_elements_with_non_greedy_legacy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
-    }
+    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as Array<String>));
     // See the docstring on `gen_general_alt_parse_and_store` — same
     // two-pass dance, same propagation of the post-walk max.
     let gc_after_walk = ctx.group_counter;
     w.line(`{type_name}::Alt{alt_idx}({struct_name} \{`);
     w.indent();
     ctx.group_counter = gc_start;
-    if let Some(b) = body {
-        emit_field_assignments_from_fields(w, &b.fields);
-    } else {
-        let mut assign_nc: Array<[String, i32]> = [];
-        for let elem of &alt.elements {
-            gen_field_assignment(w, elem, &mut assign_nc, ctx);
-        }
-    }
+    emit_field_assignments_from_fields(w, &body.fields);
     w.dedent();
     w.line("})");
     if ctx.group_counter < gc_after_walk {
@@ -6096,7 +5714,7 @@ fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, body
 /// alts. Asserts that every alt is fully scannable, then delegates to
 /// `gen_general_group_scan_dispatch`. Backtracking has been removed; an
 /// unscannable alt is a codegen-time error.
-fn gen_general_group_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, g_op_alts: Option<&Array<AltBody>>, g_op_scan_alts: Option<&Array<ScanBody>>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
+fn gen_general_group_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
     assert general_group_all_scannable(sorted_group, alts, ctx),
         "general group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
     gen_general_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, sorted_group, type_name, inner_var, ctx, name_counts, group_index);
@@ -6124,33 +5742,6 @@ fn general_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternati
     return true;
 }
 
-/// Returns true iff every alt's remaining suffix `[skip..]` is fully
-/// scannable. Used as the precondition for the prediction-tree
-/// `Ambiguous` branch to fall through to scan dispatch. An empty suffix
-/// (`skip == alt.elements.len()`, i.e. an at-end alt produced by
-/// `build_sll_node`'s `at_end_alts` path) is treated as scannable: its
-/// scan trivially succeeds at the current position, and `sort_group_by_
-/// element_count` sorts it last so it acts as the unconditional
-/// fallback in `gen_group_scan_dispatch`.
-fn ambiguous_node_all_scannable(sorted: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext, skip: i32) -> bool {
-    if sorted.len() < 2 {
-        return false;
-    }
-    for let mut k = 0; k < sorted.len(); k += 1 {
-        let alt = &alts[sorted[k]];
-        if skip > alt.elements.len() {
-            return false;
-        }
-        for let mut i = skip; i < alt.elements.len(); i += 1 {
-            let mut visiting: Array<String> = [];
-            if !ctx.is_element_scannable(&alt.elements[i], &mut visiting) {
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
 /// First-success-wins scan dispatch for general groups (overlapping alts).
 /// `sorted_group` is already in `sort_group_by_element_count` (longest-
 /// first) order; we scan candidates in that order and commit to the first
@@ -6158,7 +5749,7 @@ fn ambiguous_node_all_scannable(sorted: &Array<i32>, alts: &Array<Alternative>, 
 /// rationale as `gen_group_scan_dispatch`: matches the longest-match
 /// tournament's pick on the longest-first sort while skipping the remaining
 /// scans, which matters when an alt's scan recurses through an LR rule.
-fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, g_op_alts: Option<&Array<AltBody>>, g_op_scan_alts: Option<&Array<ScanBody>>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
+fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
     let winner_var = dedup_name(&"gd_winner", name_counts);
     let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
     w.line(`let mut {winner_var}: i32 = -1;`);
@@ -6169,17 +5760,12 @@ fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>
             break;
         }
         let alt_idx = sorted_group[k];
-        let alt = &alts[alt_idx];
         let scan_label = dedup_name(&"gd_scan", name_counts);
         w.begin(`{scan_label}:`);
         w.line("let tokens = &p.tokens;");
         w.line("let mut pos: i32 = p.pos;");
-        if let Some(sa) = g_op_scan_alts {
-            let sb = &sa[alt_idx];
-            gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
-        } else {
-            gen_scan_elements_in_block(w, &alt.elements, 0, alt.elements.len(), ctx, &scan_label);
-        }
+        let sb = &g_op_scan_alts[alt_idx];
+        gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
         w.line(`{winner_var} = {k};`);
         w.line(`break {dispatch_label};`);
         w.end();
@@ -6204,169 +5790,14 @@ fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>
         ctx.group_counter = gc_entry;
         let mut nc: Array<[String, i32]> = [];
         let gc_alt = ctx.group_counter;
-        if let Some(bs) = g_op_alts {
-            let b = &bs[alt_idx];
-            gen_elements_with_non_greedy(w, &alt.elements, &b.ops, ctx, &mut nc, &([] as Array<String>));
-            w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
-            w.indent();
-            ctx.group_counter = gc_alt;
-            emit_field_assignments_from_fields(w, &b.fields);
-        } else {
-            gen_elements_with_non_greedy_legacy(w, &alt.elements, ctx, &mut nc, &([] as Array<String>));
-            w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
-            w.indent();
-            ctx.group_counter = gc_alt;
-            let mut assign_nc: Array<[String, i32]> = [];
-            for let elem of &alt.elements {
-                gen_field_assignment(w, elem, &mut assign_nc, ctx);
-            }
-        }
+        let b = &g_op_alts[alt_idx];
+        gen_elements_with_non_greedy(w, &alt.elements, &b.ops, ctx, &mut nc, &([] as Array<String>));
+        w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
+        w.indent();
+        ctx.group_counter = gc_alt;
+        emit_field_assignments_from_fields(w, &b.fields);
         w.dedent();
         w.line("}));");
-    }
-    w.end();
-}
-
-fn gen_prediction_body(w: &mut CodeWriter, group: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    // Build prediction tree for the group alternatives.
-    let mut pred_indices: Array<i32> = [];
-    let mut pred_firsts: Array<Array<String>> = [];
-    let mut pred_elements: Array<Array<Element>> = [];
-    for let mut k = 0; k < group.len(); k += 1 {
-        let alt_idx = group[k];
-        pred_indices.push(alt_idx);
-        let mut visiting: Array<String> = [];
-        pred_firsts.push(ctx.first_of_alt(&alts[alt_idx], &mut visiting));
-        pred_elements.push(alts[alt_idx].elements);
-    }
-    let tree = build_prediction(&pred_indices, &pred_firsts, &pred_elements, 0, 5, ctx);
-    gen_group_prediction_code(w, &tree, alts, ctx, name_counts);
-}
-
-fn gen_group_prediction_code(w: &mut CodeWriter, node: &PredictionNode, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    gen_group_prediction_code_skip(w, node, alts, ctx, name_counts, 0);
-}
-
-fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, skip: i32) {
-    if let Leaf(idx) = node {
-        let elems = &alts[*idx].elements;
-        for let mut i = skip; i < elems.len(); i += 1 {
-            let elem = &elems[i];
-            if let Repeat(_) = elem {
-                // `gen_repeat` / `gen_repeat_non_greedy` retired —
-                // see the panic at the dispatcher entry in
-                // `gen_op_repeat_with_follow_override` for the
-                // op-driven equivalent.
-                panic("gen_group_prediction_code_skip: Repeat element reached the retired surface walker — route through op-driven `gen_op_repeat_with_follow_override`");
-            }
-            gen_element(w, elem, ctx, name_counts);
-        }
-        return;
-    }
-    if let Consume(c) = node {
-        gen_element(w, &c.element, ctx, name_counts);
-        gen_group_prediction_code_skip(w, &c.child, alts, ctx, name_counts, skip + 1);
-        return;
-    }
-    if let Ambiguous(indices) = node {
-        let mut sorted = indices.sorted();
-        // LL-correct ordering: longer alts first so first-success-wins
-        // picks the longer match for prefix-overlap groups. The
-        // priority-based `sort_group_by_element_count` is right for
-        // rule-level dispatch (shorter alts are catch-alls) but wrong
-        // here — see ANTLR4 LL prediction in
-        // `vendor/antlr4/runtime/Java/src/org/antlr/v4/runtime/atn/
-        // ParserATNSimulator.java`'s full-context fallback.
-        sort_group_by_mandatory_count_desc(&mut sorted, alts, ctx);
-
-        // Every alt's remaining elements must be fully scannable. Backtracking
-        // has been removed; an unscannable suffix is a codegen-time error.
-        assert ambiguous_node_all_scannable(&sorted, alts, ctx, skip),
-            "prediction Ambiguous node has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
-        gen_group_scan_dispatch(w, &sorted, alts, ctx, name_counts, skip);
-        return;
-    }
-    if let Dispatch(d) = node {
-        let check_var = if d.depth == 0 { "p.peek_kind()" } else { `p.peek_at({d.depth})` };
-        for let mut i = 0; i < d.branches.len(); i += 1 {
-            let branch = &d.branches[i];
-            let cond = ctx.kind_check_str(&branch.tokens, &check_var);
-            if i == 0 {
-                w.begin(`if {cond}`);
-            } else {
-                w.else_begin(`else if {cond}`);
-            }
-            gen_group_prediction_code_skip(w, &branch.child, alts, ctx, name_counts, skip);
-        }
-        w.end();
-    }
-}
-
-/// First-success-wins scan dispatch for `gen_group_prediction_code`'s
-/// `Ambiguous` node. The `sorted` parameter has already been ordered by
-/// `sort_group_by_element_count` (longest-first), so scanning candidates
-/// in that order and committing on first success matches what a
-/// longest-match tournament would have picked while skipping the remaining
-/// scans. Critical for performance when any alt's scan recurses through
-/// an LR rule (`AGENTS.md` "Failed Approaches: Removing the LR Gate
-/// ... 2026-04").
-///
-/// Each alt's remaining elements (from `skip`) are scanned inline. The
-/// matching alt index is recorded in `gd_winner` and the winner is parsed
-/// once via the trailing `if/else if/else` chain. The last alt is the
-/// unconditional fallback so a real parse error surfaces when no scan
-/// matched (or so an at-end empty-suffix alt acts as the epsilon
-/// fallback — its scan trivially succeeds with zero tokens consumed).
-fn gen_group_scan_dispatch(w: &mut CodeWriter, sorted: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, skip: i32) {
-    let winner_var = dedup_name(&"gd_winner", name_counts);
-    let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
-    w.line(`let mut {winner_var}: i32 = -1;`);
-    w.begin(`{dispatch_label}:`);
-    let last = sorted.len() - 1;
-    for let mut k = 0; k < sorted.len(); k += 1 {
-        // The last alt is the unconditional parse fallback — no scan needed.
-        if k == last {
-            break;
-        }
-        let alt = &alts[sorted[k]];
-        let scan_label = dedup_name(&"gd_scan", name_counts);
-        w.begin(`{scan_label}:`);
-        w.line("let tokens = &p.tokens;");
-        w.line("let mut pos: i32 = p.pos;");
-        gen_scan_elements_in_block(w, &alt.elements, skip, alt.elements.len(), ctx, &scan_label);
-        w.line(`{winner_var} = {k};`);
-        w.line(`break {dispatch_label};`);
-        w.end();
-    }
-    w.end();
-
-    for let mut k = 0; k < sorted.len(); k += 1 {
-        let alt = &alts[sorted[k]];
-        let is_last = k == last;
-        if k == 0 && !is_last {
-            w.begin(`if {winner_var} == {k}`);
-        } else if is_last {
-            w.else_begin("else");
-        } else {
-            w.else_begin(`else if {winner_var} == {k}`);
-        }
-        let mut nc: Array<[String, i32]> = [];
-        let saved_mask = ctx.current_follow_mask;
-        let saved_call_follow = ctx.ruleref_call_follow;
-        for let mut i = skip; i < alt.elements.len(); i += 1 {
-            // Same per-position threading as `gen_alt_elements`. Mask
-            // propagates only into tail-position elements; cleared
-            // otherwise so a `Repeat` here does not accidentally
-            // suppress on the variant's caller-follow. See
-            // `compute_ruleref_call_follow` for the variant-selection
-            // policy on the call-follow side.
-            ctx.current_follow_mask = if ctx.tail_is_nullable_deep(&alt.elements, i + 1) { saved_mask } else { [] };
-            ctx.ruleref_call_follow = compute_ruleref_call_follow(&alt.elements, i, ctx);
-            gen_element(w, &alt.elements[i], ctx, &mut nc);
-            ctx.ruleref_call_follow = [];
-        }
-        ctx.current_follow_mask = saved_mask;
-        ctx.ruleref_call_follow = saved_call_follow;
     }
     w.end();
 }
