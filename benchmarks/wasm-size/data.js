@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778765000402,
+  "lastUpdate": 1778767772215,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21573,6 +21573,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fa29f9557d20b938d1d2ff8fdf9fe89aa8f48317"
         },
         "date": 1778765000008,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 512226,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ad65d3d45607da2d4a1c74567a85dda2d714dae4",
+          "message": "Merge pull request #1060 from wado-lang/devin/1778764039-matches-prefix-error-message\n\nImprove parse error for prefix usage of `matches` operator",
+          "timestamp": "2026-05-14T23:00:31+09:00",
+          "tree_id": "461a1c26e8725601151346607d901f36839db18c",
+          "url": "https://github.com/wado-lang/wado/commit/ad65d3d45607da2d4a1c74567a85dda2d714dae4"
+        },
+        "date": 1778767771819,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
