@@ -329,13 +329,15 @@ Implementation references:
   `intern_follow_variant`, `FollowVariantEntry`,
   `current_outer_follow`, plus the threaded `current_follow_mask`
   consumed by `gen_*_repeat`.
-- `package-gale/src/parser_gen.wado` — `compute_ruleref_call_follow`
-  (the per-position follow helper used by every alt walker),
-  `emit_follow_variant` (single dispatcher behind the fixed-point
-  variant emit loop), `gen_parse_fn_named` and
-  `gen_scan_function_named` (mask-aware body emitters), the LR
-  helpers (`gen_lr_*` / `gen_scan_lr_*`) parameterised by `fn_name`,
-  and `ll_match_length` (the LL-aware group-dispatch sort key).
+- `package-gale/src/parser_gen.wado` — `emit_follow_variant` (single
+  dispatcher behind the fixed-point variant emit loop),
+  `gen_parse_fn_named` and `gen_scan_function_named` (mask-aware
+  body emitters), the LR helpers (`gen_lr_*` / `gen_scan_lr_*`)
+  parameterised by `fn_name`, and `ll_match_length` (the LL-aware
+  group-dispatch sort key). The per-position follow helper that
+  used to live here as `compute_ruleref_call_follow` is now baked
+  into `RuleCallOp.variant_id` / `ScanRuleCallElem.variant_id` by
+  lower's `compute_call_site_follow`.
 
 ### Soundness invariants
 

@@ -1726,10 +1726,8 @@ pub fn shape_lookahead_signature_for_alt(shape: &Array<i32>, elements: &Array<El
 
 /// Build the `RuleHeader` shared by every `Rule` variant. The cached
 /// snake/field names on `ParserRule` are reused so we don't recompute
-/// `to_snake_case`. `case_names` and `alt_gc_starts` are derived
-/// from the alternative list with the same helpers the legacy
-/// `parser_gen.wado` uses, so the result is observationally
-/// identical.
+/// `to_snake_case`. `case_names` is derived from the alternative list
+/// with the same helper `parser_gen.wado` uses.
 fn lower_header(rule: &ParserRule) -> RuleHeader {
     return RuleHeader {
         name: rule.name,
@@ -1739,15 +1737,16 @@ fn lower_header(rule: &ParserRule) -> RuleHeader {
         visibility: rule.visibility,
         variant_of: null,
         case_names: case_names_for_rule(&rule.alternatives),
-        alt_gc_starts: compute_alt_gc_starts(&rule.alternatives),
     };
 }
 
 /// Cumulative `general_group` counter starts per alternative.
-/// Mirrors `parser_gen::gen_parse_fn_named`'s `alt_gc_starts`
-/// computation: each alt records the running counter at its start,
-/// then `count_general_groups(&alt.elements)` advances it for the
-/// next alt.
+/// Each alt records the running counter at its start, then
+/// `count_general_groups(&alt.elements)` advances it for the next
+/// alt. Consumed locally by `lower_lr_alt_suffix` to seed the LR
+/// suffix's per-alt counter; surface emit reads
+/// `AltBody.group_index_start` (computed via
+/// `cumulative_group_index_start`) instead.
 fn compute_alt_gc_starts(alternatives: &Array<Alternative>) -> Array<i32> {
     let mut starts: Array<i32> = [];
     let mut running: i32 = 0;
@@ -1779,7 +1778,9 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
     // The general-group counter is per-rule but its starting value
     // for this alt is fixed by `compute_alt_gc_starts`, so init from
     // there. Each general group encountered while lowering bumps it
-    // by 1 (mirrors `parser_gen::ctx.group_counter`).
+    // by 1; the final value is consumed by `lower_general_group` to
+    // assign `GeneralShape.group_index` and by `AltBody`'s
+    // `group_index_start` so emit can re-seed the same counter.
     let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
     let mut group_counter: i32 = alt_gc_starts[idx];
 
@@ -1846,12 +1847,9 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
     };
 }
 
-/// Sum of `count_general_groups` for all alts before `idx`. Mirrors
-/// the per-alt counter `parser_gen::gen_parse_fn_named` builds at
-/// emit time. Recomputed (rather than reading
-/// `RuleHeader.alt_gc_starts`) so this fn doesn't take an extra
-/// parameter; the cost is negligible for the alt counts that occur
-/// in real grammars.
+/// Sum of `count_general_groups` for all alts before `idx`. Drives
+/// `AltBody.group_index_start`, which parser_gen consumes when
+/// initialising the per-alt general-group counter.
 fn cumulative_group_index_start(rule: &ParserRule, idx: i32) -> i32 {
     let mut running: i32 = 0;
     for let mut i = 0; i < idx; i += 1 {
@@ -1994,6 +1992,15 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
     let struct_name = single_alt_group_type_name(alt);
     let field = dedup_name(&single_alt_group_field_name(alt), name_counts);
 
+    // Canonical owner for this single-alt struct: when the same body
+    // appears in multiple rules CST emit deduplicates under the first
+    // rule that defines it (see `build_single_alt_owner_map`). Lower
+    // nested elements with the owner as `rule_name` so any inner
+    // `lower_general_group` bakes type names (`<Owner>Group<idx>`)
+    // that match the deduplicated CST types directly. Without this,
+    // emit had to re-derive the names through `ctx.current_rule_name`.
+    let owner_rule = ctx.general_group_rule_name(&struct_name, rule_name);
+
     // Inner ops use a fresh name table — bindings inside the
     // group's struct don't dedup against the outer alt.
     let mut inner_counts: Array<[String, i32]> = [];
@@ -2007,7 +2014,7 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
         // group's alt. The last position inherits the surrounding
         // alt's `outer_follow`.
         let elem_follow = inner_follow_at(&alt.elements, i, ctx);
-        let mut op = lower_op(elem, &mut inner_counts, rule_name, ctx, group_counter, &elem_follow);
+        let mut op = lower_op(elem, &mut inner_counts, &owner_rule, ctx, group_counter, &elem_follow);
         let mut se = lower_scan_element(elem, ctx, &elem_follow);
         // Gate `basic_follow` on either side actually being a Repeat —
         // `first_of_elements_from` walks the suffix and isn't free.
@@ -2058,7 +2065,7 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
         shape: GroupShape::SingleAlt(SingleAltShape {
             struct_name: struct_name,
             field: field,
-            owner_rule: *rule_name,
+            owner_rule: owner_rule,
         }),
         alts: [body],
         scan_alts: [scan_body],
@@ -2208,18 +2215,16 @@ fn lower_simple_cst_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, 
         let alt = &alts[i];
         let elem = &alt.elements[0];
         // Pass `outer_follow` (not an empty per-position follow) here so
-        // lower's variant-registry stays in lock-step with surface emit's
-        // re-walk of the variant body — `lower_variant_rules` seeds
-        // `current_outer_follow` with the variant's mask, and any RuleRef
-        // call inside the variant re-lowers with that mask propagated
-        // through `compute_call_site_follow`. Cutting the follow to `[]`
-        // here makes lower under-register at this site while emit's
-        // surface walker (which still re-evaluates `ruleref_call_follow`)
-        // continues to register — and `gen_parser`'s post-lower assert
-        // catches the divergence. The spurious `scan_X__follow_N` cases
-        // this re-introduces (e.g. `scan_sql_stmt_list__follow_0`) are
-        // currently observable; see the matching commit message for the
-        // tradeoff.
+        // lower's variant-registry stays in lock-step across the variant
+        // body: `lower_variant_rules` seeds `current_outer_follow` with
+        // the variant's mask, and any RuleRef call inside the variant
+        // re-lowers with that mask propagated through
+        // `compute_call_site_follow`. Cutting the follow to `[]` here
+        // would make lower under-register variants at this site — and
+        // `gen_parser`'s post-lower assert catches such divergence. The
+        // spurious `scan_X__follow_N` cases this approach re-introduces
+        // (e.g. `scan_sql_stmt_list__follow_0`) are currently
+        // observable; see the matching commit message for the tradeoff.
         // SimpleCst alts are single RuleRefs by construction
         // (`is_simple_cst_group`), so `lower_scan_element` produces a
         // `ScanRuleCall` here, never a Repeat — no caller-follow
@@ -2843,16 +2848,14 @@ fn union_arrays(a: &Array<String>, b: &Array<String>) -> Array<String> {
 
 /// Follow set for the element at index `i` in `elements`. Delegates
 /// to `ctx.compute_call_site_follow`, the single source of truth
-/// shared with `parser_gen` emit's per-position follow computation
-/// (formerly `compute_ruleref_call_follow`).
+/// for per-position follow computation.
 ///
 /// `compute_call_site_follow` reads the variant mask from
 /// `ctx.current_outer_follow` — set by `lower_variant_rules` before
 /// any per-rule lowering runs — so callers do not need to pass an
 /// `outer_follow` argument here. For non-variant bodies the mask is
 /// `[]` and a deep-nullable suffix yields `[]`; for variant bodies
-/// the mask propagates through deep-nullable suffixes, matching what
-/// emit's `compute_ruleref_call_follow` produces.
+/// the mask propagates through deep-nullable suffixes.
 fn inner_follow_at(elements: &Array<Element>, i: i32, ctx: &mut GenContext) -> Array<String> {
     return ctx.compute_call_site_follow(elements, i);
 }

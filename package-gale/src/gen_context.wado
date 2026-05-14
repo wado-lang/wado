@@ -53,13 +53,28 @@ pub struct FollowVariantEntry {
 /// they were retired in Phase 2-F slice 5 once the corresponding
 /// values landed directly on the GIR (`RuleCallOp.min_prec_arg`,
 /// `ScanRuleCallElem.min_prec_arg`) or were threaded as explicit
-/// parameters (`gen_scan_op_element`'s `min_prec_override`). The
-/// remaining mutable walker fields (`group_counter` /
-/// `alt_gc_starts` / `current_follow_mask` / `ruleref_call_follow` /
-/// `current_outer_follow` / `current_rule_name`) are still
-/// consulted by the legacy `gen_element` / `gen_repeat` surface
-/// walker family; they retire once that family is migrated to GIR
-/// in Phase 2-G.
+/// parameters (`gen_scan_op_element`'s `min_prec_override`).
+/// `ruleref_call_follow` was retired in issue #1043 step (5a) — the
+/// op-driven walkers consume the per-call-site follow via
+/// `RuleCallOp.variant_id` (baked by lower's
+/// `compute_call_site_follow`) and the surface `gen_element` RuleRef
+/// arm now always emits the regular `parse_X` (no variant).
+/// `current_rule_name` was retired in (5b) — the General-group
+/// emitters consume `GeneralShape.variant_type` /
+/// `alt_struct_names` (baked under the canonical
+/// `single_alt_owner`-resolved name in `lower_single_alt_group`),
+/// `gen_bt_scan_op_elements` accepts the surrounding rule name as
+/// an explicit parameter, and the residual surface walker reader in
+/// `element_field_info` is unreachable post Phase 2-G (guarded by a
+/// regression panic). `alt_gc_starts` and `group_counter` were
+/// retired in (5c) — per-alt counter seeds now come from
+/// `AltBody.group_index_start` / `LrAlt.suffix.group_index_start`,
+/// and every general-group emit site reads `GeneralShape.group_index`
+/// / `GeneralShape.variant_type` / `GeneralShape.alt_struct_names`
+/// directly off the lowered IR. The remaining mutable walker fields
+/// (`current_follow_mask` / `current_outer_follow`) still back the
+/// legacy surface walker family; they retire once that family is
+/// migrated to GIR in Phase 2-G.
 pub struct GenContext {
     pub parser_rules: Array<ParserRule>,
     pub lit_tokens: Array<LitToken>,
@@ -68,9 +83,6 @@ pub struct GenContext {
     single_token_cache: TreeMap<String, bool>,
     nullable_cache: TreeMap<String, bool>,
     scannable_cache: TreeMap<String, bool>,
-    pub current_rule_name: String,
-    pub group_counter: i32,
-    pub alt_gc_starts: Array<i32>,
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: TreeMap<String, String>,
@@ -96,18 +108,6 @@ pub struct GenContext {
     /// subtracted set is empty, the repeat is suppressed. Element
     /// emission outside tail position ignores it.
     pub current_follow_mask: Array<String>,
-    /// Caller-local FOLLOW set at the current `RuleRef` emission site.
-    /// Set by alt-element walkers (`gen_scan_elements`, `gen_alt_elements`,
-    /// `gen_scan_elements_in_block`) right before delegating to
-    /// `gen_scan_element` / `gen_element`, then cleared after the
-    /// delegation returns. Nested element emitters (`gen_scan_repeat`,
-    /// `gen_repeat`, `gen_scan_group`, `gen_group_*`) save and clear
-    /// this field for the duration of their inner emission so that an
-    /// inner `RuleRef` inside a `Repeat` / `Group` does not pick up
-    /// the outer site's follow. RuleRef branches consult it via
-    /// `intern_follow_variant` to choose between the regular function
-    /// and a `__follow_<id>` variant.
-    pub ruleref_call_follow: Array<String>,
     /// FOLLOW set propagated from outside the alt currently being
     /// walked. Empty during regular `parse_X` / `scan_X` emission;
     /// set to the variant's mask while emitting a `__follow_<id>`
@@ -138,16 +138,12 @@ impl GenContext {
             single_token_cache: TreeMap::<String, bool>::new(),
             nullable_cache: TreeMap::<String, bool>::new(),
             scannable_cache: TreeMap::<String, bool>::new(),
-            current_rule_name: "",
-            group_counter: 0,
-            alt_gc_starts: [],
             single_alt_owner,
             kind_set_registry: TreeMap::<String, KindSetEntry>::new(),
             tail_greedy_cache: TreeMap::<String, Array<String>>::new(),
             follow_variant_registry: TreeMap::<String, FollowVariantEntry>::new(),
             follow_variant_order: [],
             current_follow_mask: [],
-            ruleref_call_follow: [],
             current_outer_follow: [],
         };
     }
@@ -483,9 +479,7 @@ impl GenContext {
     /// - Suffix is deep-nullable but NOT first-exact: drop the suffix's
     ///   first and propagate only `current_outer_follow`. This is the
     ///   "first-exact deep-nullable suffix" soundness invariant — see
-    ///   `compute_ruleref_call_follow`'s historical doc in
-    ///   `parser_gen.wado` and `CLAUDE.md` "Failed Approaches" #3 for
-    ///   the rationale.
+    ///   `CLAUDE.md` "Failed Approaches" #3 for the rationale.
     ///
     /// Callers must have already installed `current_outer_follow` to
     /// the surrounding variant's mask (or `[]` for regular bodies).
@@ -646,12 +640,15 @@ impl GenContext {
     }
 
     /// Get the rule name that owns the general group types inside a given
-    /// single-alt group. Returns the current_rule_name if no shared group found.
-    pub fn general_group_rule_name(&self, single_alt_type_name: &String) -> String {
+    /// single-alt group. Returns `fallback` if the type name is not a
+    /// shared single-alt group (in practice every reached single-alt
+    /// group is in the map; callers pass the surrounding rule's name as
+    /// a defensive fallback).
+    pub fn general_group_rule_name(&self, single_alt_type_name: &String, fallback: &String) -> String {
         if let Some(owner) = self.single_alt_owner.get(*single_alt_type_name) {
             return owner;
         }
-        return self.current_rule_name;
+        return *fallback;
     }
 
     /// Intern a token-kind set. The same set (regardless of input order
