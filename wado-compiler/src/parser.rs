@@ -3168,7 +3168,9 @@ impl Parser {
             TokenKind::With => self.parse_with_handler_expr(),
             TokenKind::Hash => self.parse_compile_time_literal_expr(start_span),
             TokenKind::Matches => Err(ParseError {
-                message: "'matches' is an infix operator — write 'expr matches { pattern }' instead".to_owned(),
+                message:
+                    "'matches' is an infix operator — write 'expr matches { pattern }' instead"
+                        .to_owned(),
                 span: start_span,
             }),
             _ => Err(ParseError {
