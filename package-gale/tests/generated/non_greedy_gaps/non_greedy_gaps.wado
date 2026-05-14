@@ -889,8 +889,14 @@ fn parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
             rep_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                pos = scan_constant(tokens, pos, 0);
-                if pos < 0 { break rep_scan; }
+                sg_2_done: {
+                    sg_2: {
+                        pos = scan_constant(tokens, pos, 0);
+                        if pos < 0 { break sg_2; }
+                        break sg_2_done;
+                    }
+                    break rep_scan;
+                }
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }

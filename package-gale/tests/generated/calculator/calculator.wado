@@ -1742,24 +1742,30 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            let gp_6 = pos;
-            sg_6: {
-                pos = gp_6;
-                sg_6_0: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_PLUS { break sg_6_0; }
-                    pos += 1;
-                    break sg_6;
-                }
-                pos = gp_6;
-                sg_6_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_MINUS { break sg_6_1; }
-                    pos += 1;
-                    break sg_6;
+            sg_6_done: {
+                sg_6: {
+                    let gp_7 = pos;
+                    sg_7: {
+                        pos = gp_7;
+                        sg_7_0: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_PLUS { break sg_7_0; }
+                            pos += 1;
+                            break sg_7;
+                        }
+                        pos = gp_7;
+                        sg_7_1: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_MINUS { break sg_7_1; }
+                            pos += 1;
+                            break sg_7;
+                        }
+                        break sg_6;
+                    }
+                    pos = scan_multiplying_expression(tokens, pos, 0);
+                    if pos < 0 { break sg_6; }
+                    break sg_6_done;
                 }
                 break rep_scan;
             }
-            pos = scan_multiplying_expression(tokens, pos, 0);
-            if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
@@ -1788,24 +1794,30 @@ fn parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpressionN
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            let gp_7 = pos;
-            sg_7: {
-                pos = gp_7;
-                sg_7_0: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_TIMES { break sg_7_0; }
-                    pos += 1;
-                    break sg_7;
-                }
-                pos = gp_7;
-                sg_7_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_DIV { break sg_7_1; }
-                    pos += 1;
-                    break sg_7;
+            sg_8_done: {
+                sg_8: {
+                    let gp_9 = pos;
+                    sg_9: {
+                        pos = gp_9;
+                        sg_9_0: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_TIMES { break sg_9_0; }
+                            pos += 1;
+                            break sg_9;
+                        }
+                        pos = gp_9;
+                        sg_9_1: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_DIV { break sg_9_1; }
+                            pos += 1;
+                            break sg_9;
+                        }
+                        break sg_8;
+                    }
+                    pos = scan_pow_expression(tokens, pos, 0);
+                    if pos < 0 { break sg_8; }
+                    break sg_8_done;
                 }
                 break rep_scan;
             }
-            pos = scan_pow_expression(tokens, pos, 0);
-            if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
@@ -1834,10 +1846,16 @@ fn parse_pow_expression(p: &mut Parser) -> Result<PowExpressionNode, ParseError>
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos].kind != TK_POW { break rep_scan; }
-            pos += 1;
-            pos = scan_signed_atom(tokens, pos, 0);
-            if pos < 0 { break rep_scan; }
+            sg_10_done: {
+                sg_10: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_POW { break sg_10; }
+                    pos += 1;
+                    pos = scan_signed_atom(tokens, pos, 0);
+                    if pos < 0 { break sg_10; }
+                    break sg_10_done;
+                }
+                break rep_scan;
+            }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
@@ -2001,10 +2019,16 @@ fn parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break rep_scan; }
-            pos += 1;
-            pos = scan_expression(tokens, pos, 0);
-            if pos < 0 { break rep_scan; }
+            sg_11_done: {
+                sg_11: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_11; }
+                    pos += 1;
+                    pos = scan_expression(tokens, pos, 0);
+                    if pos < 0 { break sg_11; }
+                    break sg_11_done;
+                }
+                break rep_scan;
+            }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
