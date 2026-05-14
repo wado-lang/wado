@@ -3331,6 +3331,27 @@ fn op_is_rulecall(op: &Op) -> bool {
     return false;
 }
 
+/// True when `gen_op_inner_for_storable_repeat` can handle this op as
+/// the body of a Star / Plus / non-greedy Repeat — every leaf op plus
+/// every storable `Op::Group` shape (`SingleAlt` / `TokenOnly` /
+/// `SimpleCst` / `General`). Transparent groups and any other shape
+/// with `body_has_field == false` are not storable here.
+fn op_body_is_storable(rep_op: &RepeatOp) -> bool {
+    if op_is_leaf(&rep_op.body) {
+        return true;
+    }
+    if let Group(g_op) = &rep_op.body {
+        if !rep_op.body_has_field {
+            return false;
+        }
+        return match &g_op.shape {
+            SingleAlt(_) | TokenOnly(_) | SimpleCst(_) | General(_) => true,
+            _ => false,
+        };
+    }
+    return false;
+}
+
 /// Emit a single leaf-op parse line, reading the deduped field name
 /// and resolved token / variant / min-prec values straight from
 /// `Op`. Lower's `lower_alt_body` / `lower_label_op` / etc. have
@@ -4228,28 +4249,12 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
         let inner = &rep.element;
         let follow_first = follow;
         let follow_second = &rep_op.caller_follow_second;
-        // Mirror the Star/Plus storable check so non-greedy covers
-        // every shape that `gen_op_inner_for_storable_repeat` handles
-        // (every leaf, plus all storable `Op::Group` shapes —
-        // `SingleAlt` / `TokenOnly` / `SimpleCst` / `General`).
-        // Transparent / `body_has_field == false` falls through to
-        // legacy `gen_repeat_non_greedy` (the inner emit there walks
-        // surface IR; no test grammar exercises this combination today).
-        let body_op_storable = if op_is_leaf(&rep_op.body) {
-            true;
-        } else if let Group(g_op) = &rep_op.body {
-            if !rep_op.body_has_field {
-                false;
-            } else {
-                match &g_op.shape {
-                    SingleAlt(_) | TokenOnly(_) | SimpleCst(_) | General(_) => true,
-                    _ => false,
-                };
-            }
-        } else {
-            false;
-        };
-        if !body_op_storable {
+        // Non-greedy covers every shape that
+        // `gen_op_inner_for_storable_repeat` can handle. Transparent /
+        // `body_has_field == false` is not exercised by any committed
+        // grammar and would have hit the retired surface non-greedy
+        // emitter; surface it loudly below.
+        if !op_body_is_storable(rep_op) {
             // `gen_repeat_non_greedy` was retired together with
             // `gen_repeat` / `gen_repeat_body`. Non-greedy Repeats
             // over non-storable body shapes (Transparent Group /
@@ -4327,20 +4332,7 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
     } else {
         false;
     };
-    let op_body_is_storable = if op_is_leaf(&rep_op.body) {
-        true;
-    } else if let Group(g_op) = &rep_op.body {
-        if !rep_op.body_has_field {
-            false;
-        } else {
-            match &g_op.shape {
-                SingleAlt(_) | TokenOnly(_) | SimpleCst(_) | General(_) => true,
-                _ => false,
-            };
-        }
-    } else {
-        false;
-    };
+    let body_storable = op_body_is_storable(rep_op);
     // Star / Plus + non-storable `Op::Group` body (Transparent, or any
     // other shape with `body_has_field == false`). The legacy emit
     // walks the loop without a list — each iteration's inner emit
@@ -4406,7 +4398,7 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
             }
         }
     }
-    if is_star_or_plus && op_body_is_storable {
+    if is_star_or_plus && body_storable {
         let inner = &rep.element;
         let mut visiting: Array<String> = [];
         let inner_first = ctx.first_of_element(inner, &mut visiting);
