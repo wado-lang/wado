@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778705956117,
+  "lastUpdate": 1778765000402,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21549,6 +21549,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 511920,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fa29f9557d20b938d1d2ff8fdf9fe89aa8f48317",
+          "message": "Merge pull request #1056 from wado-lang/gfx/gale-phase2g-star-plus-nonleaf\n\nrefactor(gale): op-driven emit phases 2-G through 2-I — retire surface walker family",
+          "timestamp": "2026-05-14T22:16:24+09:00",
+          "tree_id": "1cb2302105f93e881639305edda786161054c542",
+          "url": "https://github.com/wado-lang/wado/commit/fa29f9557d20b938d1d2ff8fdf9fe89aa8f48317"
+        },
+        "date": 1778765000008,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 512226,
             "unit": "bytes"
           }
         ]
