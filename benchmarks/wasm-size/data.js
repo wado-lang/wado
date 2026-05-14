@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778767772215,
+  "lastUpdate": 1778770376995,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21617,6 +21617,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ad65d3d45607da2d4a1c74567a85dda2d714dae4"
         },
         "date": 1778767771819,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 512226,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ac8416b4feefabff3228fc28e93cd47a435f944d",
+          "message": "Merge pull request #1061 from wado-lang/copilot/fix-ci-job-1046\n\nUpdate Cargo.lock to fix --locked CI failure",
+          "timestamp": "2026-05-14T23:43:21+09:00",
+          "tree_id": "ba37e63748d00c0c6b19ad1d543867d6f62659e5",
+          "url": "https://github.com/wado-lang/wado/commit/ac8416b4feefabff3228fc28e93cd47a435f944d"
+        },
+        "date": 1778770376604,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
