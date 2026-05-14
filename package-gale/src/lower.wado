@@ -1664,7 +1664,7 @@ fn surface_unwrap_optional(elem: &Element) -> &Element with stores[elem] {
 /// alt. Mirrors `parser_gen::compute_shapes`: bit-mask from
 /// `(2^n - 1)` down to 0; higher bits = more optionals included =
 /// longer shape = tried first.
-fn compute_shapes_for_alt(elements: &Array<Element>) -> Array<Array<i32>> {
+pub fn compute_shapes_for_alt(elements: &Array<Element>) -> Array<Array<i32>> {
     let mut opt_indices: Array<i32> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
         if is_nullable(&elements[i]) {
@@ -1701,7 +1701,7 @@ fn compute_shapes_for_alt(elements: &Array<Element>) -> Array<Array<i32>> {
 /// Per-shape lookahead signature: for each element in the shape (in
 /// the shape's selection order), compute the per-position first set.
 /// Mirrors `parser_gen::shape_lookahead_signature`.
-fn shape_lookahead_signature_for_alt(shape: &Array<i32>, elements: &Array<Element>, ctx: &mut GenContext) -> Array<Array<String>> {
+pub fn shape_lookahead_signature_for_alt(shape: &Array<i32>, elements: &Array<Element>, ctx: &mut GenContext) -> Array<Array<String>> {
     let mut sig: Array<Array<String>> = [];
     for let mut si = 0; si < shape.len(); si += 1 {
         let idx = shape[si];

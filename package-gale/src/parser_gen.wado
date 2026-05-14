@@ -78,6 +78,7 @@ use {
     rule_alt_scan_body,
 } from "./gir.wado";
 use { unwrap_label } from "./lr_util.wado";
+use { compute_shapes_for_alt, shape_lookahead_signature_for_alt } from "./lower.wado";
 
 fn first_contains(first: &Array<String>, token: &String) -> bool {
     for let item of first {
@@ -2102,12 +2103,12 @@ fn gen_scan_repeat_body(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenCo
 /// element failure (`pos = -1`) short-circuits the shape instead of
 /// executing later elements at a bogus `pos`.
 fn gen_scan_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<Element>, ctx: &mut GenContext) {
-    let shapes = compute_shapes(group_elements);
+    let shapes = compute_shapes_for_alt(group_elements);
 
     let mut is_first = true;
     for let mut si = 0; si < shapes.len(); si += 1 {
         let shape = &shapes[si];
-        let sig = shape_lookahead_signature(shape, group_elements, ctx);
+        let sig = shape_lookahead_signature_for_alt(shape, group_elements, ctx);
         if sig.len() == 0 {
             continue;
         }
@@ -2888,8 +2889,8 @@ fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule
 /// `pub`/`export` doc comment on the variant function (variants are
 /// implementation details, not part of the rule's exposed surface).
 fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String, emit_visibility: bool) {
-    // Variant emission and the (legacy) single shared dispatch route
-    // through here. Single-alt rules are handled by the dedicated
+    // Variant emission and the shared dispatch path route through
+    // here. Single-alt rules are handled by the dedicated
     // \`gen_parse_fn_simple_named\` so the heavy multi-alt + LR setup
     // below doesn't run for the trivial shape.
     if rule.alternatives.len() == 1 {
@@ -3088,8 +3089,7 @@ fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<Str
 /// `emit_clamped_span_field` writes immediately before. `body.fields`
 /// is lower's canonical struct shape (matches what
 /// `codegen.wado::gen_cst_types` emits), so the struct literal stays
-/// in lockstep with the type definition. Replaces the legacy surface-
-/// IR walking `gen_field_assignments`.
+/// in lockstep with the type definition.
 fn emit_field_assignments_from_fields(w: &mut CodeWriter, fields: &Array<FieldDecl>) {
     for let mut i = 0; i < fields.len(); i += 1 {
         if let Span = &fields[i].kind {
@@ -3418,16 +3418,14 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext
 /// the per-shape `gen_consume_*_group_op` helpers. `outer_follow`
 /// carries the surrounding Repeat's iter-follow (`first(inner) ∪
 /// outer_follow`) so nested non-greedy Repeats inside a `SingleAlt`
-/// body can union it onto their own `caller_follow_first` — the
-/// legacy `gen_group_store_any` / `gen_consume_single_alt_group`
-/// path's `outer_follow` propagation. `outer_follow` is unused for
-/// the other group shapes today (their inner walkers consume the
-/// baked `caller_follow_first` from lower).
+/// body can union it onto their own `caller_follow_first`.
+/// `outer_follow` is unused for the other group shapes today (their
+/// inner walkers consume the baked `caller_follow_first` from lower).
 ///
 /// The caller must have already verified storability — Transparent
-/// groups and other shapes with `body_has_field == false` reach the
-/// surface fallback in `gen_op_repeat_with_follow_override`'s
-/// non-storable Group arm.
+/// groups and other shapes with `body_has_field == false` are
+/// handled by `gen_op_repeat_with_follow_override`'s non-storable
+/// Group arm.
 fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
     if op_is_leaf(op) {
         gen_op_leaf(w, op, elem, ctx, name_counts);
@@ -4210,10 +4208,9 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
             // `gen_repeat` / `gen_repeat_body`. Non-greedy Repeats
             // over non-storable body shapes (Transparent Group /
             // `body_has_field == false`) are not exercised by any
-            // committed grammar; the legacy surface emit would have
-            // panicked at `gen_optional_with_scan_guard`'s
-            // scannability assert anyway. Surface the path loudly if
-            // a future grammar reaches it.
+            // committed grammar; the retired surface non-greedy
+            // emitter would have asserted scannability anyway.
+            // Surface the path loudly if a future grammar reaches it.
             panic("gen_op_repeat_with_follow_override: non-greedy Repeat over non-storable body — extend the op-driven non-greedy arm");
         }
         let is_plus = if let Plus = rep.kind { true } else { false };
@@ -4285,14 +4282,12 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
     };
     let body_storable = op_body_is_storable(rep_op);
     // Star / Plus + non-storable `Op::Group` body (Transparent, or any
-    // other shape with `body_has_field == false`). The legacy emit
-    // walks the loop without a list — each iteration's inner emit
-    // discards its binding (Transparent groups inline the single
-    // alt's elements). Mirror that shape but drive the loop
-    // scaffolding off `RepeatOp`. `rep_op.field` is deduped at lower
-    // time even though no list is emitted (legacy gates the list on
-    // `has_field(inner)`, the surface predicate); bump emit's
-    // `name_counts` to stay in sync with lower's count sequence.
+    // other shape with `body_has_field == false`). Walks the loop
+    // without a list — each iteration's inner emit discards its
+    // binding (Transparent groups inline the single alt's elements).
+    // `rep_op.field` is deduped at lower time even though no list is
+    // emitted (lower keys the list emission on `body_has_field`); bump
+    // emit's `name_counts` to stay in sync with lower's count sequence.
     if is_star_or_plus {
         if let Group(g_op) = &rep_op.body {
             if !rep_op.body_has_field {
@@ -4335,9 +4330,9 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
                         gen_op_group(w, g_op, inner, ctx, &mut nc);
                         w.end();
                     } else {
-                        // Plus + non-scannable + no-field: legacy emits
-                        // the first iteration explicitly (no `_plus_first`
-                        // flag) and then a `while first` loop. Mirror.
+                        // Plus + non-scannable + no-field: emit the first
+                        // iteration explicitly (no `_plus_first` flag) and
+                        // then a `while first` loop.
                         gen_op_group(w, g_op, inner, ctx, name_counts);
                         w.begin(`while {ctx.first_check_str(&inner_first)}`);
                         let mut nc: Array<[String, i32]> = [];
@@ -4364,8 +4359,7 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
             inner_first;
         };
         // `iter_follow` is the per-iteration follow propagated into
-        // a nested non-greedy Repeat inside a SingleAlt body. Mirrors
-        // legacy `gen_repeat_body`'s `compute_iter_follow` call site —
+        // a nested non-greedy Repeat inside a SingleAlt body —
         // `first(inner) ∪ outer_follow`, with the latter being the
         // outer Repeat's `caller_follow_first`-derived `follow` param.
         let iter_follow = compute_iter_follow(inner, &inner_first, follow);
@@ -4529,11 +4523,9 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
     }
     // Op-driven dispatch above covers every `RepeatOp.body` shape
     // (every leaf, every `Group` shape including Transparent /
-    // `body_has_field == false`, plus non-greedy). The surface
-    // `gen_repeat` is unreachable here — keep a defensive `panic` so
-    // a future regression (a body shape lower might add later) is
-    // surfaced loudly instead of silently re-entering the legacy
-    // `gen_repeat_body` graph.
+    // `body_has_field == false`, plus non-greedy). Keep a defensive
+    // `panic` so a future regression (a body shape lower might add
+    // later) is surfaced loudly instead of silently emitting nothing.
     panic("gen_op_repeat_with_follow_override: op-driven dispatch did not cover this RepeatOp shape — extend the op-driven arms instead of relying on the surface fallback");
 }
 
@@ -4698,65 +4690,6 @@ fn has_nested_optionals(inner: &Element) -> bool {
         }
     }
     return false;
-}
-
-fn compute_shapes(elements: &Array<Element>) -> Array<Array<i32>> {
-    let mut opt_indices: Array<i32> = [];
-    for let mut i = 0; i < elements.len(); i += 1 {
-        if is_nullable(&elements[i]) {
-            opt_indices.push(i);
-        }
-    }
-    let n = opt_indices.len();
-    let mut shapes: Array<Array<i32>> = [];
-    // Enumerate 2^n combinations: bit mask from (2^n - 1) down to 0
-    // Higher bits = more optionals included = longer shape = tried first
-    let total = 1 << n;
-    for let mut mask = total - 1; mask >= 0; mask -= 1 {
-        let mut shape: Array<i32> = [];
-        for let mut i = 0; i < elements.len(); i += 1 {
-            let mut is_opt = false;
-            let mut opt_bit = -1;
-            for let mut j = 0; j < opt_indices.len(); j += 1 {
-                if opt_indices[j] == i {
-                    is_opt = true;
-                    opt_bit = j;
-                }
-            }
-            if is_opt {
-                if mask >> opt_bit & 1 == 1 {
-                    shape.push(i);
-                }
-            } else {
-                shape.push(i);
-            }
-        }
-        shapes.push(shape);
-    }
-    return shapes;
-}
-
-fn shape_lookahead_signature(shape: &Array<i32>, elements: &Array<Element>, ctx: &mut GenContext) -> Array<Array<String>> {
-    let mut sig: Array<Array<String>> = [];
-    for let mut si = 0; si < shape.len(); si += 1 {
-        let idx = shape[si];
-        let elem = &elements[idx];
-        let actual = unwrap_optional(elem);
-        // For a Group with single alt, compute token-by-token signature
-        if let Group(g) = actual {
-            if g.alternatives.len() == 1 {
-                for let mut j = 0; j < g.alternatives[0].elements.len(); j += 1 {
-                    let mut visiting: Array<String> = [];
-                    sig.push(ctx.first_of_element(&g.alternatives[0].elements[j], &mut visiting));
-                }
-                continue;
-            }
-        }
-        // For simple elements (RuleRef, TokenRef, Literal), one position
-        let mut visiting: Array<String> = [];
-        sig.push(ctx.first_of_element(actual, &mut visiting));
-    }
-    return sig;
 }
 
 fn gen_lookahead_condition(ctx: &mut GenContext, sig: &Array<Array<String>>) -> String {
