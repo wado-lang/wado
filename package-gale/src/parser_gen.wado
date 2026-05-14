@@ -3245,14 +3245,41 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, o
         let op = &ops[i];
         if let Repeat(rep) = elem {
             let rep_op = if let Repeat(r) = op { r } else { panic("gen_elements_with_non_greedy: Repeat element / op mismatch") };
-            // For nested constructs within a surrounding Repeat the
-            // iter_follow must be unioned on top of lower's per-
-            // position `caller_follow_first` when this position's
-            // within-group tail is deep-nullable. The override is
-            // computed here and applied via the `_with_outer_follow`
-            // entry point.
-            let mut follow = rep_op.caller_follow_first;
-            if ctx.tail_is_nullable_deep(elements, i + 1) {
+            // Greedy Optional Repeats receive `follow = []` here.
+            // Rationale: legacy's `gen_repeat` saved / cleared /
+            // restored `ctx.ruleref_call_follow` around the inner
+            // emit, so the surface `gen_repeat_body`'s Optional +
+            // RuleRef gate used `first - current_follow_mask` only
+            // (no caller-follow subtraction). My op-driven Optional
+            // + RuleCall arm subtracts `follow` from the gate at
+            // top-level (`gen_alt_elements` → `gen_op_repeat`) to
+            // emulate the historical `gen_repeat_with_follow`
+            // contract — which prevents typeNamespacePrefix? from
+            // greedily matching Ident that belongs to the next
+            // elementName in CSS3 / SQLite alt-level shapes. The
+            // same subtraction at INNER positions (this walker)
+            // empties the gate for the common TypeScript pattern
+            // `(= typeParameters? singleExpression)?` because lower
+            // bakes `caller_follow_first = first(singleExpression)`,
+            // which overlaps the inner first by design. Match the
+            // legacy clear semantic at inner positions to preserve
+            // both behaviours.
+            //
+            // Star / Plus and non-greedy still need the caller-side
+            // follow: greedy Star / Plus reads it as the iter-follow
+            // for nested non-greedy gates, non-greedy reads it as
+            // the exit-first set.
+            let is_greedy_optional = if let Optional = rep.kind {
+                !rep.non_greedy;
+            } else {
+                false;
+            };
+            let mut follow = if is_greedy_optional {
+                ([] as Array<String>);
+            } else {
+                rep_op.caller_follow_first;
+            };
+            if !is_greedy_optional && ctx.tail_is_nullable_deep(elements, i + 1) {
                 follow = union_sets(&follow, outer_follow);
             }
             gen_op_repeat_with_follow_override(w, rep, rep_op, ctx, name_counts, &follow);
