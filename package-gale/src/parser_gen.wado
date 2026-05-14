@@ -3680,373 +3680,356 @@ fn gen_op_repeat(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx
 /// `caller_follow_first` computation alone (lower doesn't see the
 /// outer iter_follow at group-alt time).
 fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
-    // Suppressed short-circuit (Optional / Star — Plus is mandatory,
-    // so even with a covering mask the existing emit's mandatory-first
-    // path is left in place).
+    // Suppressed short-circuit. Plus is mandatory (must consume ≥ 1),
+    // so even with a covering mask its loop must still emit — fall
+    // through to the Star/Plus arm in that case.
     if let Suppressed = &rep_op.strategy {
-        if rep_op.body_has_field {
-            let inner_type = op_field_type(&rep_op.body);
-            if let Optional = rep.kind {
-                let _ = dedup_name(&rep_op.field, name_counts);
-                w.line(`let {rep_op.field}: Option<{inner_type}> = null;`);
-                return;
-            }
-            if let Star = rep.kind {
-                let _ = dedup_name(&rep_op.field, name_counts);
-                w.line(`let mut {rep_op.field}: Array<{inner_type}> = [];`);
-                return;
-            }
-        } else {
-            if let Optional = rep.kind {
-                return;
-            }
-            if let Star = rep.kind {
-                return;
-            }
+        let is_plus = if let Plus = rep.kind { true } else { false };
+        if !is_plus {
+            gen_op_repeat_suppressed(w, rep, rep_op, name_counts);
+            return;
         }
     }
-    // Non-greedy `*?` / `+?`. The inner emit dispatches through
-    // op-driven helpers when the body is a leaf or a storable
-    // `Group(SingleAlt | TokenOnly)`; other shapes
-    // (SimpleCst / General / Transparent Group) still fall through
-    // to the surface `gen_repeat_non_greedy`. `compute_non_greedy_condition`
-    // continues to consume the surface inner — its analysis depends
-    // on the inner element shape (Wildcard / Not vs. Group sub-position
-    // second-token disambiguation) and that information is not yet
-    // surfaced on `RepeatStrategy::NonGreedy`.
     if rep.non_greedy {
-        let inner = &rep.element;
-        let follow_first = follow;
-        let follow_second = &rep_op.caller_follow_second;
-        // Non-greedy covers every shape that
-        // `gen_op_inner_for_storable_repeat` can handle. Transparent /
-        // `body_has_field == false` is not exercised by any committed
-        // grammar and would have hit the retired surface non-greedy
-        // emitter; surface it loudly below.
-        if !op_body_is_storable(rep_op) {
-            // `gen_repeat_non_greedy` was retired together with
-            // `gen_repeat` / `gen_repeat_body`. Non-greedy Repeats
-            // over non-storable body shapes (Transparent Group /
-            // `body_has_field == false`) are not exercised by any
-            // committed grammar; the retired surface non-greedy
-            // emitter would have asserted scannability anyway.
-            // Surface the path loudly if a future grammar reaches it.
-            panic("gen_op_repeat_with_follow_override: non-greedy Repeat over non-storable body — extend the op-driven non-greedy arm");
-        }
-        let is_plus = if let Plus = rep.kind { true } else { false };
-        let while_cond = compute_non_greedy_condition(inner, follow_first, follow_second, ctx);
-        let iter_follow_unused = ([] as Array<String>);
-        if rep_op.body_has_field {
-            let inner_field = op_field(&rep_op.body);
-            let inner_type = op_field_type(&rep_op.body);
-            let list_field = rep_op.field;
-            let _ = dedup_name(&list_field, name_counts);
-            if is_plus {
-                let mut nc: Array<[String, i32]> = [];
-                gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow_unused);
-                w.line(`let mut {list_field}: Array<{inner_type}> = [{inner_field}];`);
-                if while_cond != "false" {
-                    w.begin(`while {while_cond}`);
-                    let mut nc2: Array<[String, i32]> = [];
-                    gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc2, &iter_follow_unused);
-                    w.line(`{list_field}.push({inner_field});`);
-                    w.end();
-                }
-            } else {
-                w.line(`let mut {list_field}: Array<{inner_type}> = [];`);
-                if while_cond != "false" {
-                    w.begin(`while {while_cond}`);
-                    let mut nc: Array<[String, i32]> = [];
-                    gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow_unused);
-                    w.line(`{list_field}.push({inner_field});`);
-                    w.end();
-                }
+        gen_op_repeat_non_greedy(w, rep, rep_op, ctx, name_counts, follow);
+        return;
+    }
+    if let Optional = rep.kind {
+        gen_op_repeat_optional_greedy(w, rep, rep_op, ctx, name_counts, follow);
+        return;
+    }
+    // Star / Plus, greedy.
+    gen_op_repeat_star_plus_greedy(w, rep, rep_op, ctx, name_counts, follow);
+}
+
+/// `RepeatStrategy::Suppressed` short-circuit. The enclosing variant's
+/// follow mask covers every iteration's first token, so the loop never
+/// enters at runtime. Emit just allocates the storage (Optional → null;
+/// Star → empty list) when the body contributes a CST field. Plus is
+/// mandatory, so a `Suppressed` strategy on Plus is a lower-side bug
+/// and the caller's later panic will surface it.
+fn gen_op_repeat_suppressed(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, name_counts: &mut Array<[String, i32]>) {
+    if !rep_op.body_has_field {
+        return;
+    }
+    let inner_type = op_field_type(&rep_op.body);
+    let _ = dedup_name(&rep_op.field, name_counts);
+    if let Optional = rep.kind {
+        w.line(`let {rep_op.field}: Option<{inner_type}> = null;`);
+        return;
+    }
+    if let Star = rep.kind {
+        w.line(`let mut {rep_op.field}: Array<{inner_type}> = [];`);
+        return;
+    }
+}
+
+/// Non-greedy `*?` / `+?`. Body must be op-storable today (every leaf,
+/// plus every `Group` shape lower marks `body_has_field`); other shapes
+/// are not exercised and `op_body_is_storable` rejects them with a panic
+/// via the caller. `compute_non_greedy_condition` still walks the
+/// surface inner: its analysis (Wildcard / Not, sub-position second-
+/// token disambiguation) isn't yet captured on `RepeatStrategy::NonGreedy`.
+fn gen_op_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
+    if !op_body_is_storable(rep_op) {
+        panic("gen_op_repeat_non_greedy: non-greedy Repeat over non-storable body — extend the op-driven non-greedy arm");
+    }
+    let inner = &rep.element;
+    let follow_second = &rep_op.caller_follow_second;
+    let is_plus = if let Plus = rep.kind { true } else { false };
+    let while_cond = compute_non_greedy_condition(inner, follow, follow_second, ctx);
+    let iter_follow_unused = ([] as Array<String>);
+    if rep_op.body_has_field {
+        let inner_field = op_field(&rep_op.body);
+        let inner_type = op_field_type(&rep_op.body);
+        let list_field = rep_op.field;
+        let _ = dedup_name(&list_field, name_counts);
+        if is_plus {
+            let mut nc: Array<[String, i32]> = [];
+            gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow_unused);
+            w.line(`let mut {list_field}: Array<{inner_type}> = [{inner_field}];`);
+            if while_cond != "false" {
+                w.begin(`while {while_cond}`);
+                let mut nc2: Array<[String, i32]> = [];
+                gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc2, &iter_follow_unused);
+                w.line(`{list_field}.push({inner_field});`);
+                w.end();
             }
         } else {
-            if is_plus {
-                gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, name_counts, &iter_follow_unused);
-            }
+            w.line(`let mut {list_field}: Array<{inner_type}> = [];`);
             if while_cond != "false" {
                 w.begin(`while {while_cond}`);
                 let mut nc: Array<[String, i32]> = [];
                 gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow_unused);
+                w.line(`{list_field}.push({inner_field});`);
                 w.end();
             }
         }
         return;
     }
-    // Star / Plus + storable body: emit the list field and a
-    // scan-guarded or first-check loop based on `body_scannable`.
-    // Inner emit goes through `gen_op_inner_for_storable_repeat`,
-    // which dispatches leaves (`Op::Token` / `Literal` / `RuleCall` /
-    // `Wildcard` / `Excluded`) to `gen_op_leaf` and storable
-    // `Op::Group` inners to `gen_op_group`. Both consume lower's
-    // baked field / variant / shape values.
-    //
-    // Optional + leaf falls through to the per-kind dispatch below so
-    // the dedup / emit decisions match `gen_repeat_body`'s Optional
-    // arm (the Optional flavour does not produce an `Array<…>` list).
-    //
-    // `op_body_is_storable` covers exactly the inner shapes that surface
-    // as a single CST field AND whose op-driven emit helper produces a
-    // non-`Option<T>` binding ready to push into the outer list — every
-    // leaf, plus `Op::Group(SingleAlt | TokenOnly | SimpleCst | General)`.
-    // Transparent / `body_has_field == false` cases are emitted by the
-    // sibling non-storable Group arm above (no list field, inner inline).
-    let is_star_or_plus = if let Star = rep.kind {
-        true;
-    } else if let Plus = rep.kind {
-        true;
-    } else {
-        false;
-    };
-    let body_storable = op_body_is_storable(rep_op);
-    // Star / Plus + non-storable `Op::Group` body (Transparent, or any
-    // other shape with `body_has_field == false`). Walks the loop
-    // without a list — each iteration's inner emit discards its
-    // binding (Transparent groups inline the single alt's elements).
-    // `rep_op.field` is deduped at lower time even though no list is
-    // emitted (lower keys the list emission on `body_has_field`); bump
-    // emit's `name_counts` to stay in sync with lower's count sequence.
-    if is_star_or_plus {
-        if let Group(g_op) = &rep_op.body {
-            if !rep_op.body_has_field {
-                let inner = &rep.element;
-                let mut visiting: Array<String> = [];
-                let inner_first = ctx.first_of_element(inner, &mut visiting);
-                let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
-                    s.effective_first;
-                } else {
-                    inner_first;
-                };
-                let _ = dedup_name(&rep_op.field, name_counts);
-                if let Star = rep.kind {
-                    if rep_op.body_scannable {
-                        w.begin("loop");
-                        let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-                        w.line(`if {scan_pos} < 0 \{ break; \}`);
-                        let mut nc: Array<[String, i32]> = [];
-                        gen_op_group(w, g_op, inner, ctx, &mut nc);
-                        w.end();
-                    } else {
-                        w.begin(`while {ctx.first_check_str(&loop_first)}`);
-                        let mut nc: Array<[String, i32]> = [];
-                        gen_op_group(w, g_op, inner, ctx, &mut nc);
-                        w.end();
-                    }
-                    return;
-                }
-                if let Plus = rep.kind {
-                    if rep_op.body_scannable {
-                        let plus_flag = dedup_name(&"_plus_first", name_counts);
-                        w.line(`let mut {plus_flag} = true;`);
-                        w.begin("loop");
-                        w.begin(`if !{plus_flag}`);
-                        let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-                        w.line(`if {scan_pos} < 0 \{ break; \}`);
-                        w.end();
-                        w.line(`{plus_flag} = false;`);
-                        let mut nc: Array<[String, i32]> = [];
-                        gen_op_group(w, g_op, inner, ctx, &mut nc);
-                        w.end();
-                    } else {
-                        // Plus + non-scannable + no-field: emit the first
-                        // iteration explicitly (no `_plus_first` flag) and
-                        // then a `while first` loop.
-                        gen_op_group(w, g_op, inner, ctx, name_counts);
-                        w.begin(`while {ctx.first_check_str(&inner_first)}`);
-                        let mut nc: Array<[String, i32]> = [];
-                        gen_op_group(w, g_op, inner, ctx, &mut nc);
-                        w.end();
-                    }
-                    return;
-                }
-            }
-        }
+    if is_plus {
+        gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, name_counts, &iter_follow_unused);
     }
-    if is_star_or_plus && body_storable {
+    if while_cond != "false" {
+        w.begin(`while {while_cond}`);
+        let mut nc: Array<[String, i32]> = [];
+        gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow_unused);
+        w.end();
+    }
+}
+
+/// Greedy `?` Repeat. Dispatches on the body op shape: RuleCall uses
+/// caller-follow subtraction (the "next-sibling first" disambiguation);
+/// Group delegates to `gen_op_storable_optional` /
+/// `gen_op_transparent_optional` which consume the baked strategy
+/// variants; other leaves (Token / Literal / Wildcard / Excluded) use
+/// `inner_first` with the mask subtraction baked into
+/// `WithFollowSubtraction`.
+fn gen_op_repeat_optional_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
+    if op_is_rulecall(&rep_op.body) {
+        gen_op_repeat_optional_rulecall(w, rep, rep_op, ctx, name_counts, follow);
+        return;
+    }
+    if let Group(g_op) = &rep_op.body {
         let inner = &rep.element;
-        let mut visiting: Array<String> = [];
-        let inner_first = ctx.first_of_element(inner, &mut visiting);
-        // Star: mask subtraction comes from `WithFollowSubtraction`
-        // strategy when lower's variant analysis says iterations
-        // should yield mask-tokens to the caller. Plain uses raw
-        // `inner_first` — matching what the existing `gen_repeat_body`
-        // Star path emits (no mask subtraction at the while condition).
-        let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
-            s.effective_first;
+        let g_elem = if let Group(g) = inner {
+            g;
         } else {
-            inner_first;
+            panic("gen_op_repeat_optional_greedy: Optional+Group body op mapped to non-Group element");
         };
-        // `iter_follow` is the per-iteration follow propagated into
-        // a nested non-greedy Repeat inside a SingleAlt body —
-        // `first(inner) ∪ outer_follow`, with the latter being the
-        // outer Repeat's `caller_follow_first`-derived `follow` param.
-        let iter_follow = compute_iter_follow(inner, &inner_first, follow);
-        let inner_type = op_field_type(&rep_op.body);
-        let inner_field = op_field(&rep_op.body);
-        let list_field = rep_op.field;
-        let _ = dedup_name(&list_field, name_counts);
-
-        if let Star = rep.kind {
-            w.line(`let mut {list_field}: Array<{inner_type}> = [];`);
-            if rep_op.body_scannable {
-                w.begin("loop");
-                let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-                w.line(`if {scan_pos} < 0 \{ break; \}`);
-                let mut nc: Array<[String, i32]> = [];
-                gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
-                w.line(`{list_field}.push({inner_field});`);
-                w.end();
-            } else {
-                w.begin(`while {ctx.first_check_str(&loop_first)}`);
-                let mut nc: Array<[String, i32]> = [];
-                gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
-                w.line(`{list_field}.push({inner_field});`);
-                w.end();
-            }
-            return;
+        if rep_op.body_has_field {
+            gen_op_storable_optional(w, rep, rep_op, g_op, g_elem, ctx, name_counts);
+        } else {
+            gen_op_transparent_optional(w, rep, rep_op, g_op, g_elem, ctx, name_counts);
         }
+        return;
+    }
+    if op_is_leaf(&rep_op.body) {
+        gen_op_repeat_optional_leaf(w, rep, rep_op, ctx, name_counts);
+        return;
+    }
+    panic("gen_op_repeat_optional_greedy: op-driven dispatch did not cover this body shape — extend the op-driven arms instead of relying on the surface fallback");
+}
 
-        if let Plus = rep.kind {
-            w.line(`let mut {list_field}: Array<{inner_type}> = [];`);
-            if rep_op.body_scannable {
-                let plus_flag = dedup_name(&"_plus_first", name_counts);
-                w.line(`let mut {plus_flag} = true;`);
-                w.begin("loop");
-                w.begin(`if !{plus_flag}`);
-                let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-                w.line(`if {scan_pos} < 0 \{ break; \}`);
-                w.end();
-                w.line(`{plus_flag} = false;`);
-                let mut nc: Array<[String, i32]> = [];
-                gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
-                w.line(`{list_field}.push({inner_field});`);
-                w.end();
-            } else {
-                let plus_flag = dedup_name(&"_plus_first", name_counts);
-                w.line(`let mut {plus_flag} = true;`);
-                w.begin(`while {plus_flag} || {ctx.first_check_str(&inner_first)}`);
-                w.line(`{plus_flag} = false;`);
-                let mut nc: Array<[String, i32]> = [];
-                gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
-                w.line(`{list_field}.push({inner_field});`);
-                w.end();
-            }
+/// Greedy Optional whose body is a `RuleCall`. The caller-side follow
+/// is subtracted from the inner's first so a Repeat at e.g.
+/// `selector : simpleSelectorSequence ws (combinator ws)*` doesn't
+/// greedily eat the `Space` that belongs to the next iteration's
+/// `combinator`. Inline replacement of the retired `gen_repeat_with_follow`;
+/// emit reads the field name / inner type from `rep_op`.
+fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
+    let inner = &rep.element;
+    let mut visiting: Array<String> = [];
+    let raw_first = ctx.first_of_element(inner, &mut visiting);
+    let combined_follow = if ctx.current_follow_mask.is_empty() {
+        *follow;
+    } else {
+        union_sets(follow, &ctx.current_follow_mask);
+    };
+    let first = subtract_sets(&raw_first, &combined_follow);
+    let inner_type = op_field_type(&rep_op.body);
+    let opt_field = rep_op.field;
+    let _ = dedup_name(&opt_field, name_counts);
+
+    if first.is_empty() {
+        if rep_op.body_has_field {
+            w.line(`let {opt_field}: Option<{inner_type}> = null;`);
+        }
+        return;
+    }
+
+    if !rep_op.body_has_field {
+        // RuleCall always has a field; this branch is unreachable.
+        panic("gen_op_repeat_optional_rulecall: RuleCall Optional with no field");
+    }
+
+    let inner_field = op_field(&rep_op.body);
+    w.begin(`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&first)}`);
+    let mut nc: Array<[String, i32]> = [];
+    gen_op_leaf(w, &rep_op.body, inner, ctx, &mut nc);
+    w.line(`Option::<{inner_type}>::Some({inner_field})`);
+    w.else_begin("else");
+    w.line("null");
+    w.end_with(";");
+}
+
+/// Greedy Optional whose body is a non-RuleCall leaf (Token / Literal /
+/// Wildcard / Excluded). Differs from the RuleCall arm: the caller-side
+/// follow legitimately overlaps with the inner's first
+/// (e.g. `K_DATABASE` reappearing inside `expr` via `name → keyword`),
+/// so we gate only on `inner_first - mask`. Lower's `RepeatStrategy`
+/// already bakes the mask subtraction as `WithFollowSubtraction` when
+/// it applies.
+fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    let inner = &rep.element;
+    let mut visiting: Array<String> = [];
+    let inner_first = ctx.first_of_element(inner, &mut visiting);
+    let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
+        s.effective_first;
+    } else {
+        inner_first;
+    };
+    let inner_type = op_field_type(&rep_op.body);
+    let opt_field = rep_op.field;
+    let _ = dedup_name(&opt_field, name_counts);
+    let inner_field = op_field(&rep_op.body);
+
+    w.begin(`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&loop_first)}`);
+    let mut nc: Array<[String, i32]> = [];
+    gen_op_leaf(w, &rep_op.body, inner, ctx, &mut nc);
+    w.line(`Option::<{inner_type}>::Some({inner_field})`);
+    w.else_begin("else");
+    w.line("null");
+    w.end_with(";");
+}
+
+/// Greedy `*` / `+` Repeat dispatcher. Splits on body storability:
+/// non-storable Group bodies (Transparent — `body_has_field == false`)
+/// walk the loop without a list, each iteration inlining its alt;
+/// storable bodies push every iteration's inner binding into a list
+/// field.
+fn gen_op_repeat_star_plus_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
+    if let Group(g_op) = &rep_op.body {
+        if !rep_op.body_has_field {
+            gen_op_repeat_star_plus_non_storable_group(w, rep, rep_op, g_op, ctx, name_counts);
             return;
         }
     }
-    // Greedy Optional + RuleCall-shaped inner: subtract the caller-side
-    // follow from the inner's first set to gate the optional fire.
-    // Op-driven inline of the former `gen_repeat_with_follow` — field
-    // names / types come from `rep_op.field` / `op_field_type`, and
-    // inner emit goes through `gen_op_leaf`. Limited to RuleCall: for
-    // Token / Literal / Wildcard / Excluded inners the caller-side
-    // follow is part of the grammar's natural ambiguity (e.g.
-    // `attach_stmt : K_ATTACH (K_DATABASE)? expr ...` where
-    // `first(expr)` legitimately contains `K_DATABASE` via
-    // `name → keyword`). Subtracting it would suppress the optional
-    // even when the input actually begins with that token. Non-RuleCall
-    // leaves fall through to `gen_repeat` / `gen_repeat_body`, which
-    // gates on `first - current_follow_mask` only.
-    if let Optional = rep.kind {
-        if op_is_rulecall(&rep_op.body) {
-            let inner = &rep.element;
-            let mut visiting: Array<String> = [];
-            let raw_first = ctx.first_of_element(inner, &mut visiting);
-            let combined_follow = if ctx.current_follow_mask.is_empty() {
-                *follow;
-            } else {
-                union_sets(follow, &ctx.current_follow_mask);
-            };
-            let first = subtract_sets(&raw_first, &combined_follow);
-            let inner_type = op_field_type(&rep_op.body);
-            let opt_field = rep_op.field;
-            let _ = dedup_name(&opt_field, name_counts);
+    if op_body_is_storable(rep_op) {
+        gen_op_repeat_star_plus_storable(w, rep, rep_op, ctx, name_counts, follow);
+        return;
+    }
+    panic("gen_op_repeat_star_plus_greedy: op-driven dispatch did not cover this body shape — extend the op-driven arms instead of relying on the surface fallback");
+}
 
-            if first.len() == 0 {
-                if rep_op.body_has_field {
-                    w.line(`let {opt_field}: Option<{inner_type}> = null;`);
-                }
-                return;
-            }
+/// Star / Plus + non-storable `Op::Group` body (Transparent groups,
+/// `body_has_field == false`). Walks the loop without a list — each
+/// iteration's inner emit discards its binding (Transparent groups
+/// inline the single alt's elements). `rep_op.field` was deduped at
+/// lower time; bump emit's `name_counts` to stay in sync.
+fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    let inner = &rep.element;
+    let mut visiting: Array<String> = [];
+    let inner_first = ctx.first_of_element(inner, &mut visiting);
+    let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
+        s.effective_first;
+    } else {
+        inner_first;
+    };
+    let _ = dedup_name(&rep_op.field, name_counts);
 
-            if rep_op.body_has_field {
-                let inner_field = op_field(&rep_op.body);
-                w.begin(`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&first)}`);
-                let mut nc: Array<[String, i32]> = [];
-                gen_op_leaf(w, &rep_op.body, inner, ctx, &mut nc);
-                w.line(`Option::<{inner_type}>::Some({inner_field})`);
-                w.else_begin("else");
-                w.line("null");
-                w.end_with(";");
-            } else {
-                // RuleCall always has a field; this branch is unreachable.
-                panic("gen_op_repeat_with_follow_override: RuleCall Optional with no field");
-            }
-            return;
-        }
-        // Optional + Group body. Dispatches on `rep_op.strategy`
-        // (baked by lower's `pick_optional_specialised`); the inner
-        // helpers `gen_op_storable_optional` /
-        // `gen_op_transparent_optional` consume the baked strategy
-        // variants directly (no surface-IR re-analysis at emit time).
-        if let Group(g_op) = &rep_op.body {
-            let inner = &rep.element;
-            let g_elem = if let Group(g) = inner {
-                g;
-            } else {
-                panic("gen_op_repeat_with_follow_override: Optional+Group body op mapped to non-Group element");
-            };
-            if rep_op.body_has_field {
-                gen_op_storable_optional(w, rep, rep_op, g_op, g_elem, ctx, name_counts);
-            } else {
-                gen_op_transparent_optional(w, rep, rep_op, g_op, g_elem, ctx, name_counts);
-            }
-            return;
-        }
-        // Optional + non-RuleCall leaf (Token / Literal / Wildcard /
-        // Excluded). Mirror of the RuleCall arm above, but without
-        // caller-side follow subtraction — for these leaves the caller
-        // follow legitimately overlaps with the inner's first set (e.g.
-        // `K_DATABASE` in `attach_stmt`'s optional appearing again at
-        // the start of `expr` via `name → keyword`), so we gate only
-        // on `inner_first - mask`. Lower's `RepeatStrategy` already
-        // bakes the mask subtraction: `Plain` keeps the raw inner
-        // first; `WithFollowSubtraction` carries the effective first;
-        // `Suppressed` is caught by the top short-circuit. The body
-        // always has a field for these leaves (`element_has_field` is
-        // true for TokenRef / Literal / Wildcard / Not).
-        if op_is_leaf(&rep_op.body) {
-            let inner = &rep.element;
-            let mut visiting: Array<String> = [];
-            let inner_first = ctx.first_of_element(inner, &mut visiting);
-            let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
-                s.effective_first;
-            } else {
-                inner_first;
-            };
-            let inner_type = op_field_type(&rep_op.body);
-            let opt_field = rep_op.field;
-            let _ = dedup_name(&opt_field, name_counts);
-
-            let inner_field = op_field(&rep_op.body);
-            w.begin(`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&loop_first)}`);
+    if let Star = rep.kind {
+        if rep_op.body_scannable {
+            w.begin("loop");
+            let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
+            w.line(`if {scan_pos} < 0 \{ break; \}`);
             let mut nc: Array<[String, i32]> = [];
-            gen_op_leaf(w, &rep_op.body, inner, ctx, &mut nc);
-            w.line(`Option::<{inner_type}>::Some({inner_field})`);
-            w.else_begin("else");
-            w.line("null");
-            w.end_with(";");
-            return;
+            gen_op_group(w, g_op, inner, ctx, &mut nc);
+            w.end();
+        } else {
+            w.begin(`while {ctx.first_check_str(&loop_first)}`);
+            let mut nc: Array<[String, i32]> = [];
+            gen_op_group(w, g_op, inner, ctx, &mut nc);
+            w.end();
+        }
+        return;
+    }
+    if let Plus = rep.kind {
+        if rep_op.body_scannable {
+            let plus_flag = dedup_name(&"_plus_first", name_counts);
+            w.line(`let mut {plus_flag} = true;`);
+            w.begin("loop");
+            w.begin(`if !{plus_flag}`);
+            let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
+            w.line(`if {scan_pos} < 0 \{ break; \}`);
+            w.end();
+            w.line(`{plus_flag} = false;`);
+            let mut nc: Array<[String, i32]> = [];
+            gen_op_group(w, g_op, inner, ctx, &mut nc);
+            w.end();
+        } else {
+            // Plus + non-scannable + no-field: emit the first iteration
+            // explicitly (no `_plus_first` flag) and then a `while first`
+            // loop.
+            gen_op_group(w, g_op, inner, ctx, name_counts);
+            w.begin(`while {ctx.first_check_str(&inner_first)}`);
+            let mut nc: Array<[String, i32]> = [];
+            gen_op_group(w, g_op, inner, ctx, &mut nc);
+            w.end();
         }
     }
-    // Op-driven dispatch above covers every `RepeatOp.body` shape
-    // (every leaf, every `Group` shape including Transparent /
-    // `body_has_field == false`, plus non-greedy). Keep a defensive
-    // `panic` so a future regression (a body shape lower might add
-    // later) is surfaced loudly instead of silently emitting nothing.
-    panic("gen_op_repeat_with_follow_override: op-driven dispatch did not cover this RepeatOp shape — extend the op-driven arms instead of relying on the surface fallback");
+}
+
+/// Star / Plus + storable body (every leaf, every storable
+/// `Op::Group` shape). Emits a `let <field>: Array<T> = [];` then a
+/// scan-guarded `loop { … }` (when the body is scannable) or a
+/// `while peek ∈ loop_first { … }` (otherwise). The Plus first-
+/// iteration uses a `_plus_first` flag or, for the non-scannable case,
+/// folds the mandatory iteration into the while condition via
+/// `while plus_first || …`.
+fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
+    let inner = &rep.element;
+    let mut visiting: Array<String> = [];
+    let inner_first = ctx.first_of_element(inner, &mut visiting);
+    let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
+        s.effective_first;
+    } else {
+        inner_first;
+    };
+    // Per-iteration follow propagated into a nested non-greedy Repeat
+    // inside a SingleAlt body — `first(inner) ∪ outer_follow`.
+    let iter_follow = compute_iter_follow(inner, &inner_first, follow);
+    let inner_type = op_field_type(&rep_op.body);
+    let inner_field = op_field(&rep_op.body);
+    let list_field = rep_op.field;
+    let _ = dedup_name(&list_field, name_counts);
+
+    if let Star = rep.kind {
+        w.line(`let mut {list_field}: Array<{inner_type}> = [];`);
+        if rep_op.body_scannable {
+            w.begin("loop");
+            let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
+            w.line(`if {scan_pos} < 0 \{ break; \}`);
+            let mut nc: Array<[String, i32]> = [];
+            gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
+            w.line(`{list_field}.push({inner_field});`);
+            w.end();
+        } else {
+            w.begin(`while {ctx.first_check_str(&loop_first)}`);
+            let mut nc: Array<[String, i32]> = [];
+            gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
+            w.line(`{list_field}.push({inner_field});`);
+            w.end();
+        }
+        return;
+    }
+
+    if let Plus = rep.kind {
+        w.line(`let mut {list_field}: Array<{inner_type}> = [];`);
+        if rep_op.body_scannable {
+            let plus_flag = dedup_name(&"_plus_first", name_counts);
+            w.line(`let mut {plus_flag} = true;`);
+            w.begin("loop");
+            w.begin(`if !{plus_flag}`);
+            let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
+            w.line(`if {scan_pos} < 0 \{ break; \}`);
+            w.end();
+            w.line(`{plus_flag} = false;`);
+            let mut nc: Array<[String, i32]> = [];
+            gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
+            w.line(`{list_field}.push({inner_field});`);
+            w.end();
+        } else {
+            let plus_flag = dedup_name(&"_plus_first", name_counts);
+            w.line(`let mut {plus_flag} = true;`);
+            w.begin(`while {plus_flag} || {ctx.first_check_str(&inner_first)}`);
+            w.line(`{plus_flag} = false;`);
+            let mut nc: Array<[String, i32]> = [];
+            gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
+            w.line(`{list_field}.push({inner_field});`);
+            w.end();
+        }
+    }
 }
 
 
