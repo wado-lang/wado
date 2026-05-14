@@ -2105,22 +2105,21 @@ impl Parser {
         self.expect(&TokenKind::Break)?;
 
         // Check for optional label
-        let (label, label_span, value) =
-            if let TokenKind::Ident(name) = self.peek_kind().clone() {
-                let label_tok_span = self.advance().span;
-                // Check for colon followed by expression (break with value)
-                if self.check(&TokenKind::Colon) {
-                    self.advance(); // consume ':'
-                    let expr = self.parse_expr()?;
-                    (Some(name), Some(label_tok_span), Some(Box::new(expr)))
-                } else {
-                    // Just a label, no value
-                    (Some(name), Some(label_tok_span), None)
-                }
+        let (label, label_span, value) = if let TokenKind::Ident(name) = self.peek_kind().clone() {
+            let label_tok_span = self.advance().span;
+            // Check for colon followed by expression (break with value)
+            if self.check(&TokenKind::Colon) {
+                self.advance(); // consume ':'
+                let expr = self.parse_expr()?;
+                (Some(name), Some(label_tok_span), Some(Box::new(expr)))
             } else {
-                // No label, no value
-                (None, None, None)
-            };
+                // Just a label, no value
+                (Some(name), Some(label_tok_span), None)
+            }
+        } else {
+            // No label, no value
+            (None, None, None)
+        };
 
         let end_span = if self.check(&TokenKind::Semicolon) {
             self.advance().span
