@@ -34,6 +34,16 @@ fn sum_positives(arr: &Array<i32>) -> i32 {
     return total;
 }
 
+fn diverging_else_if_let(v: &V) -> i32 {
+    let x = if let A(x) = v { *x } else { return -1 };
+    return x;
+}
+
+fn diverging_else_if(n: i32) -> i32 {
+    let x = if n > 0 { n * 2 } else { return -1 };
+    return x;
+}
+
 export fn run() {
     assert early_return_no_semi(&V::A(42)) == 1;
     assert early_return_no_semi(&V::B) == 0;
@@ -44,6 +54,12 @@ export fn run() {
     let a: Array<i32> = [1, 2, 3, -1, 5];
     assert sum_until_neg(&a) == 6;
     assert sum_positives(&a) == 11;
+
+    assert diverging_else_if_let(&V::A(42)) == 42;
+    assert diverging_else_if_let(&V::B) == -1;
+
+    assert diverging_else_if(5) == 10;
+    assert diverging_else_if(-3) == -1;
 }
 
 __DATA__

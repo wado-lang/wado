@@ -1243,6 +1243,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         None
                     }
                 }
+                TirStmtKind::Return { .. } | TirStmtKind::Break { .. } | TirStmtKind::Continue => {
+                    Some(TypeTable::NEVER)
+                }
                 _ => None,
             })
             .unwrap_or(TypeTable::UNIT)
