@@ -2428,8 +2428,10 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     // Optional `?` has three specialised strategies that supersede
     // the mask-aware decision when applicable:
     //
-    // * `OptionalLookahead` — inner has a fixed-token leading prefix
-    //   (Group with leading literals, or a bare leaf token).
+    // * `OptionalLookahead` — inner is a single-alt Group whose
+    //   leading elements are fixed tokens (`TokenRef` / `Literal`).
+    //   Bare leaf Optionals (`TokenRef?` / `Literal?`) stay at
+    //   `Plain` and are handled by emit's Optional+leaf arm.
     // * `OptionalShapeLookahead` — inner is a single-alt Group with
     //   nested Optionals; emit enumerates 2^n shapes (longest-first).
     // * `OptionalScanGuard` — any other Optional shape where the
@@ -2592,8 +2594,12 @@ fn pick_optional_specialised(inner: &Element, body_has_field: bool, ctx: &mut Ge
 
 /// Try to materialise an `OptionalLookahead` strategy (k-token mode).
 /// Fires when the inner is a single-alt Group with a non-empty
-/// leading run of fixed tokens, or a bare leaf token / literal.
-/// Returns `null` otherwise.
+/// leading run of fixed tokens (`TokenRef` / `Literal`); returns
+/// `null` for non-Group inners. Bare leaf Optionals stay at
+/// `Plain` — the Optional+leaf arm of
+/// `gen_op_repeat_with_follow_override` emits the single-token
+/// guard directly from `body_first_set`, so the specialisation is
+/// unnecessary there.
 fn try_optional_k_token_lookahead(inner: &Element) -> Option<RepeatStrategy> {
     let tokens = collect_optional_leading_tokens(inner);
     if tokens.is_empty() {
