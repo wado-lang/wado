@@ -3737,7 +3737,7 @@ fn gen_op_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
     let inner = &rep.element;
     let follow_second = &rep_op.caller_follow_second;
     let is_plus = if let Plus = rep.kind { true } else { false };
-    let while_cond = compute_non_greedy_condition(inner, follow, follow_second, ctx);
+    let while_cond = compute_non_greedy_condition(inner, &rep_op.body_first_set, follow, follow_second, ctx);
     let iter_follow_unused = ([] as Array<String>);
     if rep_op.body_has_field {
         let inner_field = op_field(&rep_op.body);
@@ -4053,7 +4053,7 @@ fn wildcard_non_greedy_condition(ctx: &mut GenContext, follow_first: &Array<Stri
     return ctx.kind_negate_check_str(&excluded, &"p.peek_kind()");
 }
 
-fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, follow_second: &Array<String>, ctx: &mut GenContext) -> String {
+fn compute_non_greedy_condition(inner: &Element, raw_first: &Array<String>, follow_first: &Array<String>, follow_second: &Array<String>, ctx: &mut GenContext) -> String {
     // Wildcard (`.*?`) and Not (`~TOK*?`) inner: `first_of_element` returns
     // `[]` because their match set is open-ended. Handle them explicitly:
     // keep looping while the current token is not EOF and not in the follow
@@ -4065,17 +4065,13 @@ fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, f
         return wildcard_non_greedy_condition(ctx, follow_first);
     }
 
-    let mut visiting: Array<String> = [];
-    let raw_first = ctx.first_of_element(inner, &mut visiting);
-    let continue_first = subtract_sets(&raw_first, follow_first);
+    let continue_first = subtract_sets(raw_first, follow_first);
 
     if continue_first.len() > 0 {
         // Check if the subtracted set is still very broad (inner matches almost anything).
         // For cases like `name+?` where name matches all keywords, lookahead can't
         // distinguish names from constraint keywords. Use minimum match (don't loop).
-        let mut visiting2: Array<String> = [];
-        let inner_first_full = ctx.first_of_element(inner, &mut visiting2);
-        if continue_first.len() > 20 && inner_first_full.len() > 20 {
+        if continue_first.len() > 20 && raw_first.len() > 20 {
             // Very broad first set — match minimum (1 for +?, 0 for *?)
             return "false";
         }
@@ -4091,7 +4087,7 @@ fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, f
             let inner_second_first = ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
             let second_continue = subtract_sets(&inner_second_first, follow_second);
             if second_continue.len() > 0 {
-                let peek0_cond = ctx.first_check_str(&raw_first);
+                let peek0_cond = ctx.first_check_str(raw_first);
                 let peek1_cond = ctx.kind_check_str(&second_continue, "p.peek_at(1)");
                 return `({peek0_cond}) && ({peek1_cond})`;
             }
