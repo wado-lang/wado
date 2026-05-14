@@ -3908,9 +3908,9 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
             ),
             Transparent => {
                 // Transparent groups inline their inner alt; walk
-                // `g_op.alts[0].ops` directly so emit stops flowing
-                // through the surface `gen_consume_group` /
-                // `gen_elements_with_non_greedy_legacy` graph.
+                // `g_op.alts[0].ops` directly via the op-driven
+                // element walker rather than constructing a CST
+                // wrapper.
                 let body = &g_op.alts[0];
                 let alt = &g_elem.alternatives[0];
                 gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, &([] as Array<String>));
@@ -4109,26 +4109,20 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         return;
     }
     if let Repeat(_) = elem {
-        // `gen_repeat` and `gen_repeat_body` were retired — every
-        // op-driven Repeat dispatch flows through
+        // Every op-driven Repeat dispatch flows through
         // `gen_op_repeat_with_follow_override` against the lowered
-        // `RepeatOp` directly. The surface `gen_element` still has
-        // many callers (`gen_storable_optional` / `gen_consume_group`
-        // / shape-lookahead helpers) but lower no longer emits a
-        // Repeat element at any position those callers visit, so
-        // this arm is dead in practice. Probe with a panic so a
-        // future regression is surfaced.
+        // `RepeatOp` directly. The remaining surface `gen_element`
+        // callers (Label / scan-side fallbacks) never see a Repeat
+        // here because lower replaces them with op-driven walkers
+        // before this point. Probe with a panic so a future
+        // regression is surfaced.
         panic("gen_element: Repeat element reached the retired surface walker — route through op-driven `gen_op_repeat_with_follow_override`");
     }
     if let Group(g) = elem {
-        // `gen_element` is the surface-IR leaf walker. After the
-        // Phase 2-G op-driven migration, only token-only groups
-        // reach this arm — every other classification (SimpleCst,
-        // SingleAlt, General, fallback) is handled by op-driven
-        // walkers before the surface walker is reached. The retired
-        // arms used to call `gen_consume_group_store_optional_op`,
-        // `gen_consume_single_alt_group`, `gen_general_group_store_optional_op`,
-        // and `gen_consume_group` with surface IR.
+        // After the Phase 2-G op-driven migration, only token-only
+        // groups reach this surface walker — every other Group
+        // classification (SimpleCst, SingleAlt, General) is handled
+        // by op-driven walkers before `gen_element` is invoked.
         assert is_token_only_group(&g.alternatives),
             "gen_element: only token-only groups reach the surface walker; other classifications must be handled op-driven before gen_element is invoked";
         gen_consume_token_group(w, &g.alternatives, ctx, name_counts);
@@ -4350,11 +4344,11 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
     // Star / Plus + non-storable `Op::Group` body (Transparent, or any
     // other shape with `body_has_field == false`). The legacy emit
     // walks the loop without a list — each iteration's inner emit
-    // discards its binding (`gen_consume_group` for Transparent
-    // inlines the single alt's elements). Mirror that shape but drive
-    // the loop scaffolding off `RepeatOp`. `rep_op.field` is deduped
-    // at lower time even though no list is emitted (legacy gates the
-    // list on `has_field(inner)`, the surface predicate); bump emit's
+    // discards its binding (Transparent groups inline the single
+    // alt's elements). Mirror that shape but drive the loop
+    // scaffolding off `RepeatOp`. `rep_op.field` is deduped at lower
+    // time even though no list is emitted (legacy gates the list on
+    // `has_field(inner)`, the surface predicate); bump emit's
     // `name_counts` to stay in sync with lower's count sequence.
     if is_star_or_plus {
         if let Group(g_op) = &rep_op.body {
@@ -5745,10 +5739,10 @@ fn general_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternati
 /// First-success-wins scan dispatch for general groups (overlapping alts).
 /// `sorted_group` is already in `sort_group_by_element_count` (longest-
 /// first) order; we scan candidates in that order and commit to the first
-/// match, then parse only the winner and store into `inner_var`. Same
-/// rationale as `gen_group_scan_dispatch`: matches the longest-match
-/// tournament's pick on the longest-first sort while skipping the remaining
-/// scans, which matters when an alt's scan recurses through an LR rule.
+/// match, then parse only the winner and store into `inner_var`. The
+/// longest-first sort plus first-success commit matches what a longest-
+/// match tournament would have picked while skipping the remaining scans,
+/// which matters when an alt's scan recurses through an LR rule.
 fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
     let winner_var = dedup_name(&"gd_winner", name_counts);
     let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
