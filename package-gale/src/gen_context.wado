@@ -67,11 +67,11 @@ pub struct FollowVariantEntry {
 /// an explicit parameter, and the residual surface walker reader in
 /// `element_field_info` is unreachable post Phase 2-G (guarded by a
 /// regression panic). `alt_gc_starts` and `group_counter` were
-/// retired in (5c) — per-alt counter seeds now come from
-/// `AltBody.group_index_start` / `LrAlt.suffix.group_index_start`,
-/// and every general-group emit site reads `GeneralShape.group_index`
-/// / `GeneralShape.variant_type` / `GeneralShape.alt_struct_names`
-/// directly off the lowered IR. `current_follow_mask` and
+/// retired in (5c) — every general-group emit site reads
+/// `GeneralShape.group_index` / `GeneralShape.variant_type` /
+/// `GeneralShape.alt_struct_names` directly off the lowered IR; the
+/// dead `AltBody.group_index_start` field (no surviving readers
+/// after the walker counter retirement) is gone too. `current_follow_mask` and
 /// `current_outer_follow` were retired in (5d) — lower threads the
 /// surrounding variant's mask as `variant_mask: &Array<String>`
 /// through every lowering function and bakes `caller_follow_with_mask`

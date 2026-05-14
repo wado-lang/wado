@@ -986,7 +986,6 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
         struct_name: *struct_name,
         ops: ops,
         fields: fields,
-        group_index_start: alt_gc_starts[alt_idx],
         prefix_self_ref_min_prec: 0,
     };
 }
@@ -1744,10 +1743,11 @@ fn lower_header(rule: &ParserRule) -> RuleHeader {
 /// Cumulative `general_group` counter starts per alternative.
 /// Each alt records the running counter at its start, then
 /// `count_general_groups(&alt.elements)` advances it for the next
-/// alt. Consumed locally by `lower_lr_alt_suffix` to seed the LR
-/// suffix's per-alt counter; surface emit reads
-/// `AltBody.group_index_start` (computed via
-/// `cumulative_group_index_start`) instead.
+/// alt. Consumed locally by `lower_lr_alt_suffix` and `lower_alt_body`
+/// to seed each alt's local `group_counter` mutable; lower's
+/// `lower_general_group` then assigns `GeneralShape.group_index` from
+/// the bumped counter and emit reads `gs.group_index` directly off
+/// the lowered IR.
 fn compute_alt_gc_starts(alternatives: &Array<Alternative>) -> Array<i32> {
     let mut starts: Array<i32> = [];
     let mut running: i32 = 0;
@@ -1780,8 +1780,8 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
     // for this alt is fixed by `compute_alt_gc_starts`, so init from
     // there. Each general group encountered while lowering bumps it
     // by 1; the final value is consumed by `lower_general_group` to
-    // assign `GeneralShape.group_index` and by `AltBody`'s
-    // `group_index_start` so emit can re-seed the same counter.
+    // assign `GeneralShape.group_index`, which emit reads directly
+    // off the lowered IR.
     let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
     let mut group_counter: i32 = alt_gc_starts[idx];
 
@@ -1845,20 +1845,8 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
         struct_name,
         ops,
         fields,
-        group_index_start: cumulative_group_index_start(rule, idx),
         prefix_self_ref_min_prec: prefix_prec,
     };
-}
-
-/// Sum of `count_general_groups` for all alts before `idx`. Drives
-/// `AltBody.group_index_start`, which parser_gen consumes when
-/// initialising the per-alt general-group counter.
-fn cumulative_group_index_start(rule: &ParserRule, idx: i32) -> i32 {
-    let mut running: i32 = 0;
-    for let mut i = 0; i < idx; i += 1 {
-        running += count_general_groups(&rule.alternatives[i].elements);
-    }
-    return running;
 }
 
 /// Lower a single surface `Element` to a GIR `Op`. `rule_name` is
@@ -1958,7 +1946,6 @@ fn lower_transparent_group(inner: &Element, name_counts: &mut Array<[String, i32
         struct_name: "",
         ops: [inner_op],
         fields: [],
-        group_index_start: 0,
         prefix_self_ref_min_prec: 0,
     };
     let scan_body = ScanBody {
@@ -2062,7 +2049,6 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
         struct_name: struct_name,
         fields: enumerate_op_field_decls(&ops),
         ops: ops,
-        group_index_start: 0,
         prefix_self_ref_min_prec: 0,
     };
     let scan_body = ScanBody { elements: scan_elements };
@@ -2113,8 +2099,7 @@ fn lower_token_only_group(alts: &Array<Alternative>, name_counts: &mut Array<[St
             struct_name: "",
             ops: [op],
             fields: [],
-            group_index_start: 0,
-            prefix_self_ref_min_prec: 0,
+                prefix_self_ref_min_prec: 0,
         });
         // Token-only alts are by construction leaves with no inner
         // Repeats — outer_follow is irrelevant, pass empty.
@@ -2189,8 +2174,7 @@ fn lower_simple_cst_group(alts: &Array<Alternative>, name_counts: &mut Array<[St
             struct_name: "",
             ops: [op],
             fields: [],
-            group_index_start: 0,
-            prefix_self_ref_min_prec: 0,
+                prefix_self_ref_min_prec: 0,
         });
         // SimpleCst alts are single `RuleRef`s — outer_follow does
         // not propagate into the callee (whole-rule follow is the
@@ -2362,8 +2346,7 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
             struct_name: alt_struct,
             fields: enumerate_op_field_decls(&ops),
             ops: ops,
-            group_index_start: 0,
-            prefix_self_ref_min_prec: 0,
+                prefix_self_ref_min_prec: 0,
         });
         scan_bodies.push(ScanBody { elements: scan_elements });
     }
