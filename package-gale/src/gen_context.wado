@@ -71,10 +71,16 @@ pub struct FollowVariantEntry {
 /// `AltBody.group_index_start` / `LrAlt.suffix.group_index_start`,
 /// and every general-group emit site reads `GeneralShape.group_index`
 /// / `GeneralShape.variant_type` / `GeneralShape.alt_struct_names`
-/// directly off the lowered IR. The remaining mutable walker fields
-/// (`current_follow_mask` / `current_outer_follow`) still back the
-/// legacy surface walker family; they retire once that family is
-/// migrated to GIR in Phase 2-G.
+/// directly off the lowered IR. `current_follow_mask` and
+/// `current_outer_follow` were retired in (5d) — lower threads the
+/// surrounding variant's mask as `variant_mask: &Array<String>`
+/// through every lowering function and bakes `caller_follow_with_mask`
+/// on each `RepeatOp` for emit's `gen_op_repeat_optional_rulecall`;
+/// `compute_call_site_follow` takes the mask as an explicit parameter
+/// for the deep-nullable suffix propagation. With these fields gone,
+/// `GenContext` no longer carries any walker-mutable state — every
+/// caching / registry field is set up at construction and bookkeeping
+/// is local to its writer.
 pub struct GenContext {
     pub parser_rules: Array<ParserRule>,
     pub lit_tokens: Array<LitToken>,
@@ -101,26 +107,6 @@ pub struct GenContext {
     /// across runs. Each key directly indexes
     /// `follow_variant_registry`, giving an O(n) walk.
     follow_variant_order: Array<String>,
-    /// Mask currently in effect when emitting the body of a variant
-    /// function. Empty for the regular `scan_X` / `parse_X` paths.
-    /// Tail-position `Optional` / `Star` / `Plus` first-sets get
-    /// `mask` subtracted before deciding whether to emit; if the
-    /// subtracted set is empty, the repeat is suppressed. Element
-    /// emission outside tail position ignores it.
-    pub current_follow_mask: Array<String>,
-    /// FOLLOW set propagated from outside the alt currently being
-    /// walked. Empty during regular `parse_X` / `scan_X` emission;
-    /// set to the variant's mask while emitting a `__follow_<id>`
-    /// variant body (`emit_follow_variant`). Alt walkers consult it
-    /// when the immediate suffix at a `RuleRef` site is deep-nullable —
-    /// without this propagation, a passthrough rule whose body is
-    /// `a` alone would compute an empty FOLLOW for the inner `a`
-    /// even when the variant's caller had already promised a
-    /// non-empty follow. See `package-gale/CLAUDE.md` "Failed
-    /// Approaches" for why this propagation is restricted to
-    /// variant emit (using it in regular emit over-approximates and
-    /// breaks css3 / htmlContent).
-    pub current_outer_follow: Array<String>,
 }
 
 impl GenContext {
@@ -143,8 +129,6 @@ impl GenContext {
             tail_greedy_cache: TreeMap::<String, Array<String>>::new(),
             follow_variant_registry: TreeMap::<String, FollowVariantEntry>::new(),
             follow_variant_order: [],
-            current_follow_mask: [],
-            current_outer_follow: [],
         };
     }
 
@@ -462,10 +446,9 @@ impl GenContext {
     }
 
     /// Per-call-site caller-FOLLOW for the element at index `i` in
-    /// `elements`. Single source of truth for both the `lower` pre-pass
+    /// `elements`. Single source of truth for the `lower` pre-pass
     /// (variant interning at `lower_scan_element` / `lower_op` RuleRef
-    /// sites) and `parser_gen` emit (variant interning at
-    /// `gen_scan_element` / `gen_element` RuleRef sites).
+    /// sites).
     ///
     /// Three cases:
     ///
@@ -474,24 +457,25 @@ impl GenContext {
     /// - Suffix is deep-nullable AND first-exact (every walked element's
     ///   first uniquely predicts that element matching, see
     ///   `element_is_first_exact`): the outer follow propagates through.
-    ///   Union the suffix's first with `current_outer_follow`. This
-    ///   closes `ll_nullable_suffix`'s gap.
+    ///   Union the suffix's first with `outer_follow`. This closes
+    ///   `ll_nullable_suffix`'s gap.
     /// - Suffix is deep-nullable but NOT first-exact: drop the suffix's
-    ///   first and propagate only `current_outer_follow`. This is the
+    ///   first and propagate only `outer_follow`. This is the
     ///   "first-exact deep-nullable suffix" soundness invariant — see
     ///   `CLAUDE.md` "Failed Approaches" #3 for the rationale.
     ///
-    /// Callers must have already installed `current_outer_follow` to
-    /// the surrounding variant's mask (or `[]` for regular bodies).
-    pub fn compute_call_site_follow(&mut self, elements: &Array<Element>, i: i32) -> Array<String> {
+    /// `outer_follow` is the surrounding variant's mask (`[]` for
+    /// regular non-variant bodies). Threaded from `lower`'s call chain
+    /// rather than read from walker state.
+    pub fn compute_call_site_follow(&mut self, elements: &Array<Element>, i: i32, outer_follow: &Array<String>) -> Array<String> {
         let first = self.first_of_elements_from(elements, i + 1);
         if !self.tail_is_nullable_deep(elements, i + 1) {
             return first;
         }
         if self.deep_suffix_is_first_exact(elements, i + 1) {
-            return union_kind_arrays(&first, &self.current_outer_follow);
+            return union_kind_arrays(&first, outer_follow);
         }
-        return self.current_outer_follow;
+        return *outer_follow;
     }
 
     pub fn rule_is_single_token(&mut self, name: &String, visiting: &mut Array<String>) -> bool {

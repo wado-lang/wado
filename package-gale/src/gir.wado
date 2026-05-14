@@ -541,6 +541,13 @@ pub struct RepeatOp {
     /// non-greedy (continue/exit disambiguation). Empty when the
     /// Repeat is at the alt's tail.
     pub caller_follow_first: Array<String>,
+    /// `caller_follow_first` unioned with the surrounding variant's
+    /// mask when the alt's tail starting at this position is
+    /// deep-nullable. For non-variant bodies (variant_mask = `[]`)
+    /// this is the same as `caller_follow_first`. Consumed by
+    /// `gen_op_repeat_optional_rulecall` for its
+    /// `subtract_sets(body_first, combined_follow)` gate.
+    pub caller_follow_with_mask: Array<String>,
     /// True iff the inner element is fully scannable (has a complete
     /// `scan_<rule>` / inline scan equivalent). Drives emit's choice
     /// between `loop` + scan-guard and `while` + first-check loop
