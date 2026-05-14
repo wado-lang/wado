@@ -5766,12 +5766,16 @@ fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>
     }
     w.end();
 
+    // Each alt's parse emits `let inner_var = ::Alt_i(StructName { ... })`;
+    // delegate to `gen_general_alt_parse_and_store` so the gc bookkeeping
+    // (post-walk max propagation across the second-pass reset) stays in
+    // a single place. Track the max across alts so nested General slot
+    // allocations don't collide with subsequent code.
     let gc_entry = ctx.group_counter;
+    let mut gc_max = gc_entry;
     for let mut k = 0; k < sorted_group.len(); k += 1 {
         let alt_idx = sorted_group[k];
-        let alt = &alts[alt_idx];
         let is_last = k == last;
-        let struct_name = general_group_alt_struct_name(&ctx.current_rule_name, group_index, alt_idx);
 
         if k == 0 && !is_last {
             w.begin(`if {winner_var} == {k}`);
@@ -5782,18 +5786,13 @@ fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>
         }
 
         ctx.group_counter = gc_entry;
-        let mut nc: Array<[String, i32]> = [];
-        let gc_alt = ctx.group_counter;
-        let b = &g_op_alts[alt_idx];
-        gen_elements_with_non_greedy(w, &alt.elements, &b.ops, ctx, &mut nc, &([] as Array<String>));
-        w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
-        w.indent();
-        ctx.group_counter = gc_alt;
-        emit_field_assignments_from_fields(w, &b.fields);
-        w.dedent();
-        w.line("}));");
+        gen_general_alt_parse_and_store(w, alts, &g_op_alts[alt_idx], alt_idx, type_name, inner_var, ctx, name_counts, group_index);
+        if ctx.group_counter > gc_max {
+            gc_max = ctx.group_counter;
+        }
     }
     w.end();
+    ctx.group_counter = gc_max;
 }
 
 fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_alts: &Array<LrAlt>, ctx: &mut GenContext, fn_name: &String) {
