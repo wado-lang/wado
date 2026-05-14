@@ -591,12 +591,18 @@ pub variant RepeatStrategy {
     /// Non-greedy `*?` / `+?` / `??`. Exit conditions are computed
     /// from the surrounding alt's follow at lower time.
     NonGreedy(NonGreedyStrategy),
-    /// `?` over a `Group` whose inner alt has been linearised into a
-    /// shape lookahead signature. emit conditional-or's the
-    /// per-position kind checks.
+    /// `?` whose inner has a fixed-token leading prefix of length ≥ 1.
+    /// emit emits `if peek_at(0) ∈ sig[0] && peek_at(1) ∈ sig[1] && ...`.
+    /// Storable callers wrap the inner parse in `Option::Some(...)`;
+    /// transparent callers inline the inner alt.
     OptionalLookahead(OptionalLookaheadStrategy),
-    /// `?` over a non-storable inner where lookahead can't decide;
-    /// emit uses a save-and-scan-then-rewind guard.
+    /// `?` whose inner alt has nested Optionals — emit enumerates
+    /// 2^n shapes (longest-first), each guarded by its per-position
+    /// kind set. Lower bakes per-shape `positions` so emit knows
+    /// which inner elements to dispatch vs. mark absent.
+    OptionalShapeLookahead(OptionalShapeLookaheadStrategy),
+    /// `?` whose inner can't be decided by lookahead but IS fully
+    /// scannable — emit uses a save-scan-rewind guard.
     OptionalScanGuard,
     /// The repeat is fully suppressed by the enclosing variant's
     /// follow mask — emit replaces the whole repeat with a
@@ -622,11 +628,29 @@ pub struct NonGreedyStrategy {
 }
 
 pub struct OptionalLookaheadStrategy {
-    /// Linearised lookahead signatures for each shape of the inner
-    /// group. Each inner array is a per-position token set; the
-    /// outer array enumerates the alternatives. emit emits a
-    /// disjunction of per-shape conjunctions.
-    pub sigs: Array<Array<Array<String>>>,
+    /// Per-position kind sets that the inner's fixed-token prefix
+    /// guarantees. `sig.len()` is the lookahead depth; `sig[i]` is
+    /// the allowed kind set at `peek_at(i)`.
+    pub sig: Array<Array<String>>,
+}
+
+pub struct OptionalShapeLookaheadStrategy {
+    /// One entry per shape, longest-first (so the first matching
+    /// shape is the longest match).
+    pub shapes: Array<OptionalLookaheadShape>,
+}
+
+pub struct OptionalLookaheadShape {
+    /// Indices (within the inner alt's element list) of the elements
+    /// present in this shape. Emit walks the inner element list; for
+    /// each index in `positions` it dispatches the corresponding op,
+    /// and for absent positions it emits the absent-Optional field
+    /// declaration.
+    pub positions: Array<i32>,
+    /// Per-virtual-position kind sets — feeds the lookahead guard.
+    /// `sig[d]` is the kind set required at `peek_at(d)` for this
+    /// shape.
+    pub sig: Array<Array<String>>,
 }
 
 /// How a `(...)` group is realised in the CST and at parse time.

@@ -54,6 +54,7 @@ use {
     WildcardOp,
     ExcludedOp,
     RepeatOp,
+    OptionalShapeLookaheadStrategy,
     GroupOp,
     GroupShape,
     SimpleCstShape,
@@ -3245,43 +3246,7 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, o
         let op = &ops[i];
         if let Repeat(rep) = elem {
             let rep_op = if let Repeat(r) = op { r } else { panic("gen_elements_with_non_greedy: Repeat element / op mismatch") };
-            // Greedy Optional Repeats receive `follow = []` here.
-            // Rationale: legacy's `gen_repeat` saved / cleared /
-            // restored `ctx.ruleref_call_follow` around the inner
-            // emit, so the surface `gen_repeat_body`'s Optional +
-            // RuleRef gate used `first - current_follow_mask` only
-            // (no caller-follow subtraction). My op-driven Optional
-            // + RuleCall arm subtracts `follow` from the gate at
-            // top-level (`gen_alt_elements` → `gen_op_repeat`) to
-            // emulate the historical `gen_repeat_with_follow`
-            // contract — which prevents typeNamespacePrefix? from
-            // greedily matching Ident that belongs to the next
-            // elementName in CSS3 / SQLite alt-level shapes. The
-            // same subtraction at INNER positions (this walker)
-            // empties the gate for the common TypeScript pattern
-            // `(= typeParameters? singleExpression)?` because lower
-            // bakes `caller_follow_first = first(singleExpression)`,
-            // which overlaps the inner first by design. Match the
-            // legacy clear semantic at inner positions to preserve
-            // both behaviours.
-            //
-            // Star / Plus and non-greedy still need the caller-side
-            // follow: greedy Star / Plus reads it as the iter-follow
-            // for nested non-greedy gates, non-greedy reads it as
-            // the exit-first set.
-            let is_greedy_optional = if let Optional = rep.kind {
-                !rep.non_greedy;
-            } else {
-                false;
-            };
-            let mut follow = if is_greedy_optional {
-                ([] as Array<String>);
-            } else {
-                rep_op.caller_follow_first;
-            };
-            if !is_greedy_optional && ctx.tail_is_nullable_deep(elements, i + 1) {
-                follow = union_sets(&follow, outer_follow);
-            }
+            let follow = inner_walker_follow_for_repeat(rep, rep_op, elements, i, outer_follow, ctx);
             gen_op_repeat_with_follow_override(w, rep, rep_op, ctx, name_counts, &follow);
         } else if op_is_leaf(op) {
             gen_op_leaf(w, op, elem, ctx, name_counts);
@@ -3293,6 +3258,45 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, o
             panic("gen_elements_with_non_greedy: unreachable op shape — every Op variant is handled");
         }
     }
+}
+
+/// Compute the `follow` to pass to `gen_op_repeat_with_follow_override`
+/// when this Repeat is reached from the *inner* walker
+/// (`gen_elements_with_non_greedy`) — i.e. nested inside another body
+/// rather than at top-level alt position.
+///
+/// Greedy `?` Repeats get an empty follow here: lower's
+/// `caller_follow_first` is the alt-level next-sibling FIRST set,
+/// which the Optional + RuleCall arm of `gen_op_repeat_with_follow_override`
+/// subtracts from the gate at top-level to keep the optional from
+/// eating tokens that belong to the next sibling. The same subtraction
+/// is wrong at inner positions: lower's `caller_follow_first` typically
+/// overlaps the inner's first by design there (`(= typeParameters?
+/// singleExpression)?` patterns), and applying it would empty the gate
+/// and silently skip the optional. Clearing the follow defers to the
+/// `current_follow_mask` (variant-level expectation) instead.
+///
+/// Star / Plus and non-greedy still need the caller-side follow:
+/// greedy Star / Plus reads it as the iter-follow for nested
+/// non-greedy gates, and non-greedy uses it as the exit-first set.
+/// For those we propagate the outer walker's `outer_follow` when the
+/// remainder of the surrounding element list is nullable (so the
+/// next-iteration FIRST union picks up tokens that would otherwise
+/// exit the outer construct).
+fn inner_walker_follow_for_repeat(rep: &RepeatElement, rep_op: &RepeatOp, elements: &Array<Element>, i: i32, outer_follow: &Array<String>, ctx: &mut GenContext) -> Array<String> {
+    let is_greedy_optional = if let Optional = rep.kind {
+        !rep.non_greedy;
+    } else {
+        false;
+    };
+    if is_greedy_optional {
+        return [];
+    }
+    let mut follow = rep_op.caller_follow_first;
+    if ctx.tail_is_nullable_deep(elements, i + 1) {
+        follow = union_sets(&follow, outer_follow);
+    }
+    return follow;
 }
 
 fn is_ruleref_optional(elem: &Element) -> bool {
@@ -3596,24 +3600,17 @@ fn emit_op_opt_scan_guard_for_group(w: &mut CodeWriter, g_op: &GroupOp, g_elem: 
     return scan_pos_var;
 }
 
-/// Op-driven emit for Optional + storable Group. Re-derives the
-/// legacy dispatch criteria from the surface element so the
-/// generated code matches `gen_storable_optional` exactly:
+/// Op-driven emit for Optional + storable Group. Dispatches on
+/// `rep_op.strategy` (baked by lower's `pick_optional_specialised`).
 ///
-/// 1. `optional_lookahead_depth(inner) >= 1` → k-token lookahead
-///    (`if peek == TK_A && peek_at(1) == TK_B { ... }`).
-/// 2. `has_nested_optionals(inner)` → shape-based lookahead (one
-///    branch per combination of present optionals).
-/// 3. Otherwise → scan-guard (scan first, parse on success).
+/// * `OptionalLookahead(s)` → emit `if cond(s.sig) { parse } else null`.
+/// * `OptionalShapeLookahead(s)` → emit per-shape if/else-if chain
+///   with the inner parse inlined.
+/// * `OptionalScanGuard` → emit scan-probe guard then parse on success.
 ///
-/// In every case the inner parse is dispatched through op-driven
-/// helpers — `gen_op_inner_for_storable_repeat` for the k-token /
-/// scan-guard cases, and per-element `gen_op_dispatch_element` /
-/// `gen_op_absent_optional_field` for the shape variant. Lower's
-/// `RepeatOp.strategy` is not consulted: it's narrower than the
-/// legacy criteria (no `la_depth == 1` case, no shape-lookahead
-/// case), so dispatching from it would change emit shape for the
-/// most common Optional + leading-fixed-token construct.
+/// In every case the inner parse routes through op-driven helpers
+/// (`gen_op_inner_for_storable_repeat`,
+/// `gen_op_dispatch_element` / `gen_op_absent_optional_field`).
 fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let opt_field = rep_op.field;
     let inner_type = op_field_type(&rep_op.body);
@@ -3621,10 +3618,8 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
     let _ = dedup_name(&opt_field, name_counts);
     let inner_elem = &rep.element;
 
-    let la_depth = optional_lookahead_depth(inner_elem);
-    if la_depth >= 1 {
-        let la_tokens = optional_lookahead_tokens(inner_elem, la_depth);
-        let cond = build_kind_check_conjunction(&la_tokens);
+    if let OptionalLookahead(s) = &rep_op.strategy {
+        let cond = gen_lookahead_condition(ctx, &s.sig);
         w.begin(`let {opt_field}: Option<{inner_type}> = if {cond}`);
         let mut nc: Array<[String, i32]> = [];
         gen_op_inner_for_storable_repeat(w, &rep_op.body, inner_elem, ctx, &mut nc, &([] as Array<String>));
@@ -3634,54 +3629,40 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
         w.end_with(";");
         return;
     }
-    if has_nested_optionals(inner_elem) {
-        emit_op_optional_with_shape_lookahead_storable(w, g_op, g_elem, ctx, name_counts, &opt_field, &inner_type, &inner_field);
+    if let OptionalShapeLookahead(s) = &rep_op.strategy {
+        emit_op_optional_with_shape_lookahead_storable(w, g_op, g_elem, s, ctx, name_counts, &opt_field, &inner_type, &inner_field);
         return;
     }
-    // Scan-guard fallback: the inner must be fully scannable, just
-    // like the legacy `gen_storable_optional_with_scan_guard` asserts.
-    let mut visiting: Array<String> = [];
-    assert ctx.is_element_scannable(inner_elem, &mut visiting),
-        "gen_op_storable_optional: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
-    let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
-    w.begin(`let {opt_field}: Option<{inner_type}> = if {scan_pos_var} >= 0`);
-    let mut nc: Array<[String, i32]> = [];
-    gen_op_inner_for_storable_repeat(w, &rep_op.body, inner_elem, ctx, &mut nc, &([] as Array<String>));
-    w.line(`Option::<{inner_type}>::Some({inner_field})`);
-    w.else_begin("else");
-    w.line("null");
-    w.end_with(";");
+    if let OptionalScanGuard = &rep_op.strategy {
+        let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
+        w.begin(`let {opt_field}: Option<{inner_type}> = if {scan_pos_var} >= 0`);
+        let mut nc: Array<[String, i32]> = [];
+        gen_op_inner_for_storable_repeat(w, &rep_op.body, inner_elem, ctx, &mut nc, &([] as Array<String>));
+        w.line(`Option::<{inner_type}>::Some({inner_field})`);
+        w.else_begin("else");
+        w.line("null");
+        w.end_with(";");
+        return;
+    }
+    panic("gen_op_storable_optional: rep_op.strategy is not one of OptionalLookahead / OptionalShapeLookahead / OptionalScanGuard — lower's `pick_optional_specialised` should have produced one of these for any Optional+Group body");
 }
 
 /// Op-driven emit for Optional + non-storable (Transparent) Group.
-/// Mirrors `gen_optional_with_scan_guard`'s dispatch (note the order
-/// differs from the storable variant — shape lookahead is checked
-/// *before* k-token lookahead, matching legacy behaviour).
-///
-/// 1. `has_nested_optionals(inner)` → shape-based lookahead, inlined.
-/// 2. `optional_lookahead_depth(inner) >= 1` → k-token lookahead,
-///    inlined.
-/// 3. Otherwise → scan-guard, inlined.
-///
-/// No outer `Option<T>` wrapping — the alt body is inlined within
-/// the matching `if` branch. The struct construction step that the
-/// storable variant emits is also skipped (Transparent groups have
-/// no own struct).
+/// Dispatches on `rep_op.strategy`; the order matches the storable
+/// variant — lower's `pick_optional_specialised` has already encoded
+/// the storable vs. transparent priority. No outer `Option<T>`
+/// wrapping; each branch inlines the inner alt directly.
 fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let _ = dedup_name(&rep_op.field, name_counts);
-    let inner_elem = &rep.element;
 
-    if has_nested_optionals(inner_elem) {
-        emit_op_optional_with_shape_lookahead_transparent(w, g_op, g_elem, ctx, name_counts);
+    if let OptionalShapeLookahead(s) = &rep_op.strategy {
+        emit_op_optional_with_shape_lookahead_transparent(w, g_op, g_elem, s, ctx, name_counts);
         return;
     }
-    let la_depth = optional_lookahead_depth(inner_elem);
-    if la_depth >= 1 {
-        let la_tokens = optional_lookahead_tokens(inner_elem, la_depth);
-        let cond = build_kind_check_conjunction(&la_tokens);
+    if let OptionalLookahead(s) = &rep_op.strategy {
+        let cond = gen_lookahead_condition(ctx, &s.sig);
         w.begin(`if {cond}`);
         let mut nc: Array<[String, i32]> = [];
-        // Walk the single-alt body's ops directly (Transparent inlines).
         let body = &g_op.alts[0];
         let alt = &g_elem.alternatives[0];
         for let mut i = 0; i < alt.elements.len(); i += 1 {
@@ -3690,18 +3671,19 @@ fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
         w.end();
         return;
     }
-    let mut visiting: Array<String> = [];
-    assert ctx.is_element_scannable(inner_elem, &mut visiting),
-        "gen_op_transparent_optional: inner element is not scannable; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
-    let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
-    w.begin(`if {scan_pos_var} >= 0`);
-    let mut nc: Array<[String, i32]> = [];
-    let body = &g_op.alts[0];
-    let alt = &g_elem.alternatives[0];
-    for let mut i = 0; i < alt.elements.len(); i += 1 {
-        gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc);
+    if let OptionalScanGuard = &rep_op.strategy {
+        let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
+        w.begin(`if {scan_pos_var} >= 0`);
+        let mut nc: Array<[String, i32]> = [];
+        let body = &g_op.alts[0];
+        let alt = &g_elem.alternatives[0];
+        for let mut i = 0; i < alt.elements.len(); i += 1 {
+            gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc);
+        }
+        w.end();
+        return;
     }
-    w.end();
+    panic("gen_op_transparent_optional: rep_op.strategy is not one of OptionalLookahead / OptionalShapeLookahead / OptionalScanGuard — lower's `pick_optional_specialised` should have produced one of these for any Optional+Group body");
 }
 
 /// Op-driven shape-lookahead emit for the storable Optional + SingleAlt
@@ -3710,25 +3692,19 @@ fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
 /// (`gen_op_dispatch_element` / `gen_op_absent_optional_field`), and
 /// the struct construction reads `body.fields` (lower's canonical
 /// field list).
-fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, opt_field: &String, inner_type: &String, inner_field: &String) {
-    let sa = if let SingleAlt(s) = &g_op.shape {
-        s;
+fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, opt_field: &String, inner_type: &String, inner_field: &String) {
+    let sa = if let SingleAlt(sas) = &g_op.shape {
+        sas;
     } else {
         panic("emit_op_optional_with_shape_lookahead_storable: shape lookahead is only valid on SingleAlt Group inners");
     };
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
     let elements = &alt.elements;
-    let shapes = compute_shapes(elements);
     let gc_shapes_start = ctx.group_counter;
     let mut is_first = true;
-    for let mut si = 0; si < shapes.len(); si += 1 {
-        let shape = &shapes[si];
-        let sig = shape_lookahead_signature(shape, elements, ctx);
-        if sig.len() == 0 {
-            continue;
-        }
-        let cond = gen_lookahead_condition(ctx, &sig);
+    for let entry of &s.shapes {
+        let cond = gen_lookahead_condition(ctx, &entry.sig);
 
         if is_first {
             w.begin(`let {*opt_field}: Option<{*inner_type}> = if {cond}`);
@@ -3741,8 +3717,8 @@ fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &Gro
         let mut nc: Array<[String, i32]> = [];
         for let mut i = 0; i < elements.len(); i += 1 {
             let mut in_shape = false;
-            for let mut k = 0; k < shape.len(); k += 1 {
-                if shape[k] == i {
+            for let mut k = 0; k < entry.positions.len(); k += 1 {
+                if entry.positions[k] == i {
                     in_shape = true;
                 }
             }
@@ -3773,20 +3749,14 @@ fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &Gro
 /// `unwrap_optional` / `unwrap_optional_op` so the inner parse is
 /// dispatched directly at the unwrapped op shape (the shape already
 /// promised the optional fires). No struct construction.
-fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
     let elements = &alt.elements;
-    let shapes = compute_shapes(elements);
 
     let mut is_first = true;
-    for let mut si = 0; si < shapes.len(); si += 1 {
-        let shape = &shapes[si];
-        let sig = shape_lookahead_signature(shape, elements, ctx);
-        if sig.len() == 0 {
-            continue;
-        }
-        let cond = gen_lookahead_condition(ctx, &sig);
+    for let entry of &s.shapes {
+        let cond = gen_lookahead_condition(ctx, &entry.sig);
 
         if is_first {
             w.begin(`if {cond}`);
@@ -3796,8 +3766,8 @@ fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &
         }
 
         let mut nc: Array<[String, i32]> = [];
-        for let mut k = 0; k < shape.len(); k += 1 {
-            let idx = shape[k];
+        for let mut k = 0; k < entry.positions.len(); k += 1 {
+            let idx = entry.positions[k];
             let elem = &elements[idx];
             let body_op = &body.ops[idx];
             let actual_elem = unwrap_optional(elem);
@@ -3824,25 +3794,6 @@ fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &
     if !is_first {
         w.end();
     }
-}
-
-/// Build the per-position conjunction for k-token Optional lookahead.
-/// Matches the loop in `gen_storable_optional` / `gen_optional_with_scan_guard`:
-/// `p.peek_kind() == TK_A && p.peek_at(1) == TK_B && ...`.
-fn build_kind_check_conjunction(la_tokens: &Array<String>) -> String {
-    let mut cond_parts: Array<String> = [];
-    for let mut d = 0; d < la_tokens.len(); d += 1 {
-        let check = if d == 0 { "p.peek_kind()" } else { `p.peek_at({d})` };
-        cond_parts.push(`{check} == {la_tokens[d]}`);
-    }
-    let mut cond = String::with_capacity(128);
-    for let mut i = 0; i < cond_parts.len(); i += 1 {
-        if i > 0 {
-            cond.push_str(" && ");
-        }
-        cond.push_str(cond_parts[i]);
-    }
-    return cond;
 }
 
 /// Bump `name_counts` for `elem` exactly the way `gen_element` would.
@@ -4521,17 +4472,11 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
             }
             return;
         }
-        // Optional + Group body. Routes through op-driven helpers
-        // (`gen_op_storable_optional` / `gen_op_transparent_optional`)
-        // which re-derive the legacy strategy criteria (la_depth,
-        // has_nested_optionals) at emit time so the generated code
-        // matches `gen_storable_optional` / `gen_optional_with_scan_guard`
-        // exactly, but the inner per-element parse routes through
-        // op-driven dispatch (`gen_op_inner_for_storable_repeat`,
-        // `gen_op_dispatch_element`) instead of the surface
-        // `gen_group_store_any` → `gen_element` graph. Closes the
-        // last entry point into surface `gen_repeat` / `gen_element`
-        // from the op-driven Repeat dispatcher.
+        // Optional + Group body. Dispatches on `rep_op.strategy`
+        // (baked by lower's `pick_optional_specialised`); the inner
+        // helpers `gen_op_storable_optional` /
+        // `gen_op_transparent_optional` consume the baked strategy
+        // variants directly (no surface-IR re-analysis at emit time).
         if let Group(g_op) = &rep_op.body {
             let inner = &rep.element;
             let g_elem = if let Group(g) = inner {
@@ -4841,58 +4786,6 @@ fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
         return unwrap_optional(&lab.element);
     }
     return elem;
-}
-
-fn optional_lookahead_depth(inner: &Element) -> i32 {
-    // Returns the number of leading fixed tokens that can be checked via lookahead.
-    // 0 if the first element is not a fixed token.
-    if let Group(g) = inner {
-        if g.alternatives.len() != 1 {
-            return 0;
-        }
-        let mut depth = 0;
-        for let mut i = 0; i < g.alternatives[0].elements.len(); i += 1 {
-            let elem = &g.alternatives[0].elements[i];
-            if let TokenRef(_) | Literal(_) = elem {
-                depth += 1;
-            } else {
-                break;
-            }
-        }
-        return depth;
-    }
-    if let TokenRef(_) | Literal(_) = inner {
-        return 1;
-    }
-    return 0;
-}
-
-fn optional_lookahead_tokens(inner: &Element, max_depth: i32) -> Array<String> {
-    // Returns up to max_depth leading fixed token constants.
-    let mut tokens: Array<String> = [];
-    if let Group(g) = inner {
-        if g.alternatives.len() != 1 {
-            return [];
-        }
-        for let mut i = 0; i < g.alternatives[0].elements.len(); i += 1 {
-            if tokens.len() >= max_depth {
-                break;
-            }
-            let elem = &g.alternatives[0].elements[i];
-            if let TokenRef(t) = elem {
-                tokens.push(`TK_{t.name}`);
-            } else if let Literal(l) = elem {
-                tokens.push(literal_const_name(&l.text));
-            } else {
-                break;
-            }
-        }
-    } else if let TokenRef(t) = inner {
-        tokens.push(`TK_{t.name}`);
-    } else if let Literal(l) = inner {
-        tokens.push(literal_const_name(&l.text));
-    }
-    return tokens;
 }
 
 /// Emit an inline scan guard for an optional's inner element.
