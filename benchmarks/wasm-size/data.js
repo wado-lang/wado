@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778853310148,
+  "lastUpdate": 1778873210561,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21793,6 +21793,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f754742ff32cc5173fc9365c71f320f052cd99dd"
         },
         "date": 1778853309754,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510314,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6ce49df8ec3c660512d25914c608c9ad01d9b3ea",
+          "message": "Merge pull request #1066 from wado-lang/claude/review-closure-design-1pSAO\n\ndocs: redesign closure WEPs and split into user spec + internals",
+          "timestamp": "2026-05-16T04:20:36+09:00",
+          "tree_id": "14eb161724c77ddf9aaebd8383a504bb44d3d26e",
+          "url": "https://github.com/wado-lang/wado/commit/6ce49df8ec3c660512d25914c608c9ad01d9b3ea"
+        },
+        "date": 1778873210306,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
