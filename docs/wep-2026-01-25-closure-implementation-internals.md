@@ -89,12 +89,12 @@ These traits are compiler-internal and not exposed to user code (per [Closure Im
 ### Signatures
 
 ```wado
-trait Fn<Args, Ret, Effects = []> {
-    fn call(&self, args: Args) -> Ret with Effects;
+trait FnMut<Args, Ret, Effects = []> {
+    fn call_mut(&mut self, args: Args) -> Ret with Effects;
 }
 
-trait FnMut<Args, Ret, Effects = []>: Fn<Args, Ret, Effects> {
-    fn call_mut(&mut self, args: Args) -> Ret with Effects;
+trait Fn<Args, Ret, Effects = []>: FnMut<Args, Ret, Effects> {
+    fn call(&self, args: Args) -> Ret with Effects;
 }
 ```
 
@@ -321,12 +321,13 @@ Tasks:
 
 ### Phase 2: Internal `FnMut` trait
 
-Declare `FnMut<Args, Ret, Effects>` as a sub-trait of `Fn` in `core:prelude`. Wire bound `fn` / `fn mut` syntax to resolve to these internal trait references. (`Fn` already exists but is unused as a bound today.)
+Add `FnMut<Args, Ret, Effects>` as the base trait in `core:prelude`, and re-declare `Fn` as a sub-trait of `FnMut` so that `fn <: fn mut` holds at the trait-bound level. Wire bound `fn` / `fn mut` syntax to resolve to these internal trait references. (`Fn` already exists but is unused as a bound today, and its current declaration assumes no `FnMut`; it needs to be refactored to extend `FnMut`.)
 
 Tasks:
 
-- [ ] Add `pub trait FnMut<Args, Ret, Effects>: Fn<Args, Ret, Effects>` to `lib/core/prelude/traits.wado` with `fn call_mut(&mut self, args: Args) -> Ret with Effects`
-- [ ] Re-export via prelude
+- [ ] Add `pub trait FnMut<Args, Ret, Effects>` with `fn call_mut(&mut self, args: Args) -> Ret with Effects` as the base trait
+- [ ] Refactor `pub trait Fn<Args, Ret, Effects>` to extend `FnMut<Args, Ret, Effects>` (so every `Fn` is also a `FnMut`)
+- [ ] Re-export both via prelude
 - [ ] Resolve bound `fn(...)` → internal `Fn<...>`, bound `fn mut(...)` → internal `FnMut<...>` in resolver
 
 ### Phase 3: Type-system split
