@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778837497014,
+  "lastUpdate": 1778837607023,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21705,6 +21705,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4d498e3ac7503dc735473d443387bf4db8f3820b"
         },
         "date": 1778837496622,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510314,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fb85eba21fde955fadd52021f4101ce13b92d376",
+          "message": "Merge pull request #1063 from wado-lang/gfx/issue-1043-gencontext-walker-fields\n\nrefactor(gale): retire all GenContext walker-mutable fields (issue #1043 (5))",
+          "timestamp": "2026-05-15T18:23:57+09:00",
+          "tree_id": "55a3fdc9657b42c5c4f52ddea12055b1e67cef71",
+          "url": "https://github.com/wado-lang/wado/commit/fb85eba21fde955fadd52021f4101ce13b92d376"
+        },
+        "date": 1778837606717,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
