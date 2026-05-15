@@ -150,11 +150,11 @@ fn dup<F: fn(i32) -> i32>(f: F) -> [F, F] {
 
 ### No `FnOnce`
 
-Rust's `FnOnce` exists because consuming a closure can move captured values out, leaving the closure unusable. Under Wado value semantics:
+Rust's `FnOnce` exists because consuming a closure can move captured values out, leaving the closure unusable. Under Wado's design:
 
 - Calls never consume the closure.
-- Captured values are deep copies; "moving them out" is just another copy.
-- Reference captures (including resources) alias on copy.
+- All captures are references (`&T` / `&mut T`); copying a closure copies those references, which continue to alias the same outer bindings.
+- No captured state is "moved out" — every call reads or writes through references that remain valid for the lifetime of the closure.
 
 No state of affairs requires single-use closures, so `FnOnce` is unmotivated and omitted.
 
