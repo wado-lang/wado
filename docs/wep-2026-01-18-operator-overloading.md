@@ -484,7 +484,7 @@ let result = a && b;  // ❌ Cannot overload
 
 #### Function Call: `()`
 
-**Reason**: Not yet designed. Callable objects may be added in the future via `Fn`/`FnMut`/`FnOnce` traits (similar to Rust), but this is out of scope for this WEP.
+**Reason**: User-defined callable types (structs that can be invoked with `()`) are out of scope for this WEP. The internal `Fn` / `FnMut` traits used by closures (see [Closure Implementation](./wep-2026-01-16-closure-implementation.md)) are compiler-internal and not user-implementable in the MVP.
 
 ### 4. Operator Trait Naming Convention
 

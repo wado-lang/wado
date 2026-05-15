@@ -197,44 +197,44 @@ fn caller() {
 - No runtime checks needed
 - Transparent to programmer
 
-### 6. Closures Capture by Value
+### 6. Closures Capture by Reference
 
-To keep one rule across the entire language, closures capture each free variable by **deep copy at closure creation time** — the same value semantics that applies to assignment, parameter passing, and return. The closure body operates on its own copies; later mutations to the outer binding are not observed by the closure, and the closure body cannot mutate outer variables directly.
+Closures auto-capture each free variable by reference. The compiler infers the reference kind (`&T` for read-only, `&mut T` for mutating) from body usage; the closure type is `fn` if all captures are read-only, `fn mut` if any are mutating. See [Closure Implementation](./wep-2026-01-16-closure-implementation.md) for the full design.
 
 ```wado
-let outer = 10;
-let f = || outer;          // outer is copied into the closure
-let outer = 20;            // rebinding the outer name does not affect f
-assert f() == 10;
+let mut count = 0;
+let s = "hello";
+
+let mut inc = || count += 1;     // captures &mut count; type fn mut() -> ()
+let get = || count;               // captures &count; type fn() -> i32
+let greet = || println(s);        // captures &s; type fn() with Stdout
 ```
 
-For stateful or shared-mutable closures, capture a reference. References (`&T`, `&mut T`) are the only types in Wado that alias their referent, so a copied reference still points to the same underlying value.
+Multiple closures referring to the same outer binding automatically share state through the underlying location — no explicit `&mut foo` dance needed:
 
 ```wado
-fn make_counter() -> fn() -> i32 {
+fn make_counter() -> fn mut() -> i32 {
     let mut count = 0;
-    let cref: &mut i32 = &mut count;
     return || {
-        *cref += 1;        // mutation goes through the captured reference
-        return *cref;
+        count += 1;        // captures &mut count
+        return count;
     };
 }
 ```
 
-A closure that needs to mutate or share state captures a reference, exactly like any other piece of code that wants to alias.
+The closure value itself follows Wado value semantics: deep-copied on assignment, parameter passing, and return. Because env fields hold reference values (under auto-by-reference), copying a closure copies references that alias — all copies observe the same captured bindings.
 
 **Rationale**:
 
-- One rule for the whole language; closures are not a special case
-- Aliasing requires the same syntactic marker (`&T` / `&mut T`) everywhere
-- GC manages the lifetime of any captured reference's referent
-- Escape tracking for closures reuses the existing `stores[...]` machinery — if a returned closure captures `&local`, the local is heap-promoted by the same rules that govern any escaping reference
+- Matches Rust ergonomics for capture inference, with the borrow-checker complexity dropped.
+- Aliasing through `&mut` captures is consistent with Wado's general rule that references are the only aliasing types.
+- Escape tracking for closures reuses the existing escape-analysis machinery — if a returned closure captures `&local`, the local is heap-promoted by the same rules that govern any escaping reference.
 
-Note: Closures that capture variables use "capture" terminology; the `stores[...]` keyword is for functions that store reference _parameters_ passed to them.
+Note: Closures use "capture" terminology; the `stores[...]` keyword is for functions that store reference _parameters_ passed to them. These are separate mechanisms.
 
 ### 7. Heap Promotion of Referents Captured by Closures (Non-Normative)
 
-Because the language-level capture is always by value, the closure's environment struct itself contains plain copies and references. The compiler's job is the same one it does for escaping references in any other context: if a closure captures `&local` and the closure outlives `local`'s lexical scope (e.g. the closure is returned), `local` is heap-promoted via the rules in §2 / §5. No closure-specific lifetime tracking is required beyond the existing escape analysis.
+When a closure escapes its declaring scope (returned, stored in a struct field, etc.), the captured bindings must outlive the closure. The compiler heap-promotes them via the same machinery as any escaping reference (§2 / §5). No closure-specific lifetime tracking is required beyond the existing escape analysis.
 
 ### 8. Edge Cases
 
@@ -324,23 +324,22 @@ fn use_int(x: &i32) -> i32 {
 
 #### Multiple Closures Sharing Mutable State
 
-Closures capture by value, so two closures that name the same outer variable each receive their own copy. To share mutable state across closures, capture a reference and let aliasing do the work:
+Closures auto-capture by reference (§6), so two closures naming the same outer variable share the underlying location automatically:
 
 ```wado
 fn multi_share() {
     let mut x = 0;
-    let xref: &mut i32 = &mut x;
 
-    let inc = || { *xref += 1; };
-    let get = || { return *xref; };
+    let mut inc = || x += 1;          // captures &mut x; type fn mut() -> ()
+    let get = || x;                    // captures &x; type fn() -> i32
 
     inc();
     inc();
-    println(get());  // Prints: 2 — both closures see the same i32 via the shared reference
+    println(get());  // Prints: 2 — both closures observe the same x
 }
 ```
 
-Each closure's environment holds its own copy of the reference value `xref`, but `&mut i32` aliases the underlying `i32`, so every read and write lands on the same location. If the closures escape `multi_share`, `x` is heap-promoted by the existing escape rules.
+Each closure's environment holds a reference to `x`. Because references alias, every read and write lands on the same location. If the closures escape `multi_share`, `x` is heap-promoted by the existing escape rules.
 
 ### 9. Component Model Boundaries
 
@@ -384,7 +383,7 @@ The external component receives a **copy**, not a GC reference. Even if it "stor
 4. **Type-safe escaping**: Can't accidentally escape references without declaration
 5. **Go-like ergonomics**: Escape analysis is familiar pattern
 6. **C++-like syntax**: `stores[...]` familiar to C++ developers (lambda capture syntax)
-7. **Uniform closure capture model**: Captures use the same value semantics as everything else; share mutable state via references (`&T` / `&mut T`), no closure-specific syntax
+7. **Auto-capture by reference for closures**: captures share Wado's general reference-aliasing semantics, with `&T` / `&mut T` kind inferred per binding from body usage (see [Closure Implementation](./wep-2026-01-16-closure-implementation.md)); no separate aliasing model needed for closures
 8. **CM boundaries protect external calls**: No annotation needed for cross-component calls
 9. **Clear terminology**: "stores" for function parameters, "captures" for closures
 

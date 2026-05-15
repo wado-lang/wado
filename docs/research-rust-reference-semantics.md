@@ -479,11 +479,12 @@ println!("{}", val);  // OK after last use of c (NLL)
 
 ### Wado implications
 
-Wado's closure design is simpler due to GC:
+Wado's closure design is simpler than Rust's thanks to GC and the absence of a borrow checker. See [Closure Implementation](./wep-2026-01-16-closure-implementation.md) for the full spec; key differences:
 
-- **No `Fn`/`FnMut`/`FnOnce` distinction**: Wado has a single `fn(...)` closure type. Captures are always by deep copy at closure creation, so no Fn/FnMut split is needed to police mutable borrows.
-- **No `move` keyword**: All captures are already by value; there is no alternative mode to opt out of.
-- **No uniqueness conflicts**: Multiple closures can each capture a copy of the same `&mut T` reference value, and writes through any of them are visible to the others (references are the only aliasing types in Wado). This is a deliberate design choice (no borrow checker).
+- **`fn` / `fn mut` split but no `FnOnce`**: Wado has two closure type constructors with `fn <: fn mut` sub-typing, so the optimizer keeps mutation info on type-erased call paths. `FnOnce` is unmotivated under Wado's value semantics (calls never consume captures).
+- **No user-visible `impl` / `dyn`**: closure types use a single bare form in every position. The compiler picks specialised vs canonical dispatch via escape analysis.
+- **Auto-capture by reference**: per-binding `&T` or `&mut T` is inferred from body usage. No `move` keyword; intermediate locals snapshot values when needed.
+- **No uniqueness conflicts**: multiple closures may capture the same `&mut T` reference value and writes through any of them are visible to the others (references are the only aliasing types in Wado). This is a deliberate design choice (no borrow checker).
 
 ## Summary: What Wado Should Adopt vs Skip
 
@@ -500,15 +501,15 @@ Wado's closure design is simpler due to GC:
 
 ### Skip (Rust-specific, unnecessary with GC)
 
-| Feature                         | Reason                                                                  |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| Lifetime annotations (`'a`)     | GC manages memory; `stores[...]` handles escape analysis                |
-| Reborrowing                     | `&mut T` is Copy-like in Wado; no uniqueness invariant                  |
-| `ref` / `ref mut` in patterns   | No move semantics; pattern matching always copies values                |
-| `Fn`/`FnMut`/`FnOnce` hierarchy | Wado has a single `fn(...)` closure type; share mutation via references |
-| `into_iter()` (consuming)       | No ownership transfer; one iteration mode suffices                      |
-| Temporary lifetime extension    | GC keeps values alive                                                   |
-| `&mut T` is non-Copy            | No borrow checker; both `&T` and `&mut T` are freely copyable           |
+| Feature                       | Reason                                                            |
+| ----------------------------- | ----------------------------------------------------------------- |
+| Lifetime annotations (`'a`)   | GC manages memory; `stores[...]` handles escape analysis          |
+| Reborrowing                   | `&mut T` is Copy-like in Wado; no uniqueness invariant            |
+| `ref` / `ref mut` in patterns | No move semantics; pattern matching always copies values          |
+| `FnOnce` (consume-only)       | No move semantics; calls never consume captures (see closure WEP) |
+| `into_iter()` (consuming)     | No ownership transfer; one iteration mode suffices                |
+| Temporary lifetime extension  | GC keeps values alive                                             |
+| `&mut T` is non-Copy          | No borrow checker; both `&T` and `&mut T` are freely copyable     |
 
 ### Open Design Questions
 

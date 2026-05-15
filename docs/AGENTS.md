@@ -55,7 +55,7 @@ It may include TODOs on WIP.
 - [Compile-Time Location Literals](./wep-2026-01-23-compile-time-location-literals.md)
 - [Iterator Traits Design](./wep-2026-01-24-iterator-traits.md)
 - [Module Loader Design](./wep-2026-01-24-module-loader.md)
-- [Closure Parameter Monomorphization](./wep-2026-01-25-closure-parameter-monomorphization.md)
+- [Closure Implementation Internals](./wep-2026-01-25-closure-implementation-internals.md)
 - [128-bit Integer Types (i128/u128)](./wep-2026-01-24-i128-u128-types.md)
 - [Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md)
 - [Variant Payload Design](./wep-2026-01-25-variant-payload-design.md)
