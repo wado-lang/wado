@@ -2867,7 +2867,10 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &
         },
         Wildcard(wop) => w.line(`let {wop.field} = p.match_any()?;`),
         Excluded(eop) => w.line(`let {eop.field} = {emit_op_excluded_call(eop)}?;`),
-        _ => panic("gen_op_leaf: non-leaf op; check op_is_leaf before calling"),
+        // Non-leaf ops (Repeat / Group / ListLabel) are routed to
+        // their own dispatchers by the caller; reaching here means
+        // the caller's `op_is_leaf` gate was bypassed.
+        Repeat(_) | Group(_) | ListLabel(_) => panic("gen_op_leaf: non-leaf op; caller must guard with op_is_leaf"),
     };
 }
 
@@ -3071,16 +3074,19 @@ fn emit_op_opt_scan_guard_for_group(w: &mut CodeWriter, g_op: &GroupOp, g_elem: 
 }
 
 /// Op-driven emit for Optional + storable Group. Dispatches on
-/// `rep_op.strategy` (baked by lower's `pick_optional_specialised`).
-///
-/// * `OptionalLookahead(s)` → emit `if cond(s.sig) { parse } else null`.
-/// * `OptionalShapeLookahead(s)` → emit per-shape if/else-if chain
-///   with the inner parse inlined.
-/// * `OptionalScanGuard` → emit scan-probe guard then parse on success.
+/// `rep_op.strategy`. The Optional-specialised strategies
+/// (`OptionalLookahead`, `OptionalShapeLookahead`, `OptionalScanGuard`)
+/// are produced by lower's `pick_optional_specialised`; when none
+/// applies, lower falls back to the mask-aware `Plain` /
+/// `WithFollowSubtraction` decision (`Suppressed` is caught earlier
+/// by `gen_op_repeat_with_follow_override` and never reaches here).
+/// `NonGreedy` only fires for `*?` / `+?` and is handled by
+/// `gen_op_repeat_non_greedy`, so this `match` is exhaustive over
+/// the strategies a greedy `?` can carry.
 ///
 /// In every case the inner parse routes through op-driven helpers
-/// (`gen_op_inner_for_storable_repeat`,
-/// `gen_op_dispatch_element` / `gen_op_absent_optional_field`).
+/// (`gen_op_inner_for_storable_repeat`, `gen_op_dispatch_element` /
+/// `gen_op_absent_optional_field`).
 fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let opt_field = rep_op.field;
     let inner_type = op_field_type(&rep_op.body);
@@ -3088,72 +3094,73 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
     let _ = dedup_name(&opt_field, name_counts);
     let inner_elem = &rep.element;
 
-    if let OptionalLookahead(s) = &rep_op.strategy {
-        let cond = gen_lookahead_condition(ctx, &s.sig);
-        w.begin(`let {opt_field}: Option<{inner_type}> = if {cond}`);
-        let mut nc: Array<[String, i32]> = [];
-        gen_op_inner_for_storable_repeat(w, rep_op, inner_elem, ctx, &mut nc, &([] as Array<String>));
-        w.line(`Option::<{inner_type}>::Some({inner_field})`);
-        w.else_begin("else");
-        w.line("null");
-        w.end_with(";");
-        return;
-    }
-    if let OptionalShapeLookahead(s) = &rep_op.strategy {
-        emit_op_optional_with_shape_lookahead_storable(w, g_op, g_elem, s, ctx, name_counts, &opt_field, &inner_type, &inner_field);
-        return;
-    }
-    if let OptionalScanGuard = &rep_op.strategy {
-        let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
-        w.begin(`let {opt_field}: Option<{inner_type}> = if {scan_pos_var} >= 0`);
-        let mut nc: Array<[String, i32]> = [];
-        gen_op_inner_for_storable_repeat(w, rep_op, inner_elem, ctx, &mut nc, &([] as Array<String>));
-        w.line(`Option::<{inner_type}>::Some({inner_field})`);
-        w.else_begin("else");
-        w.line("null");
-        w.end_with(";");
-        return;
-    }
-    panic("gen_op_storable_optional: rep_op.strategy is not one of OptionalLookahead / OptionalShapeLookahead / OptionalScanGuard — lower's `pick_optional_specialised` should have produced one of these for any Optional+Group body");
+    return match &rep_op.strategy {
+        OptionalLookahead(s) => emit_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &opt_field, &inner_type, &inner_field, &gen_lookahead_condition(ctx, &s.sig)),
+        OptionalShapeLookahead(s) => emit_op_optional_with_shape_lookahead_storable(w, g_op, g_elem, s, ctx, name_counts, &opt_field, &inner_type, &inner_field),
+        OptionalScanGuard => {
+            let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
+            emit_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &opt_field, &inner_type, &inner_field, &`{scan_pos_var} >= 0`);
+        },
+        // `pick_optional_specialised` returned `null` and lower fell
+        // through to the mask-aware decision: gate on
+        // `body_first_set` (`Plain`) or the mask-subtracted variant
+        // (`WithFollowSubtraction`).
+        Plain => emit_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &opt_field, &inner_type, &inner_field, &ctx.first_check_str(&rep_op.body_first_set)),
+        WithFollowSubtraction(s) => emit_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &opt_field, &inner_type, &inner_field, &ctx.first_check_str(&s.effective_first)),
+        // Suppressed / NonGreedy / Suppressed are caught upstream;
+        // reaching here is a lower-side bug.
+        Suppressed | NonGreedy(_) => panic("gen_op_storable_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug"),
+    };
+}
+
+/// Shared body of every storable-Optional + Group arm: emit a single
+/// `let {opt_field}: Option<T> = if {cond} { parse; Some(...) } else
+/// { null };`. Caller computes the gate condition (`gen_lookahead_condition`,
+/// `body_first_set`, scan-pos check, etc.).
+fn emit_op_storable_optional_with_first(w: &mut CodeWriter, rep_op: &RepeatOp, inner_elem: &Element, ctx: &mut GenContext, opt_field: &String, inner_type: &String, inner_field: &String, cond: &String) {
+    w.begin(`let {*opt_field}: Option<{*inner_type}> = if {*cond}`);
+    let mut nc: Array<[String, i32]> = [];
+    gen_op_inner_for_storable_repeat(w, rep_op, inner_elem, ctx, &mut nc, &([] as Array<String>));
+    w.line(`Option::<{*inner_type}>::Some({*inner_field})`);
+    w.else_begin("else");
+    w.line("null");
+    w.end_with(";");
 }
 
 /// Op-driven emit for Optional + non-storable (Transparent) Group.
-/// Dispatches on `rep_op.strategy`; the order matches the storable
-/// variant — lower's `pick_optional_specialised` has already encoded
-/// the storable vs. transparent priority. No outer `Option<T>`
-/// wrapping; each branch inlines the inner alt directly.
+/// Dispatches on `rep_op.strategy`. Strategy coverage mirrors
+/// `gen_op_storable_optional` — Optional-specialised shapes from
+/// `pick_optional_specialised` plus the mask-aware fallback (`Plain`
+/// / `WithFollowSubtraction`). No outer `Option<T>` wrapping; each
+/// branch inlines the inner alt directly.
 fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let _ = dedup_name(&rep_op.field, name_counts);
 
-    if let OptionalShapeLookahead(s) = &rep_op.strategy {
-        emit_op_optional_with_shape_lookahead_transparent(w, g_op, g_elem, s, ctx, name_counts);
-        return;
+    return match &rep_op.strategy {
+        OptionalShapeLookahead(s) => emit_op_optional_with_shape_lookahead_transparent(w, g_op, g_elem, s, ctx, name_counts),
+        OptionalLookahead(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gen_lookahead_condition(ctx, &s.sig)),
+        OptionalScanGuard => {
+            let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
+            emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &`{scan_pos_var} >= 0`);
+        },
+        Plain => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &ctx.first_check_str(&rep_op.body_first_set)),
+        WithFollowSubtraction(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &ctx.first_check_str(&s.effective_first)),
+        Suppressed | NonGreedy(_) => panic("gen_op_transparent_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug"),
+    };
+}
+
+/// Shared body of every transparent-Optional + Group arm: emit
+/// `if {cond} { /* inline inner alt's elements */ }`. Caller computes
+/// the gate condition.
+fn emit_op_transparent_optional_with_cond(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, cond: &String) {
+    w.begin(`if {*cond}`);
+    let mut nc: Array<[String, i32]> = [];
+    let body = &g_op.alts[0];
+    let alt = &g_elem.alternatives[0];
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc);
     }
-    if let OptionalLookahead(s) = &rep_op.strategy {
-        let cond = gen_lookahead_condition(ctx, &s.sig);
-        w.begin(`if {cond}`);
-        let mut nc: Array<[String, i32]> = [];
-        let body = &g_op.alts[0];
-        let alt = &g_elem.alternatives[0];
-        for let mut i = 0; i < alt.elements.len(); i += 1 {
-            gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc);
-        }
-        w.end();
-        return;
-    }
-    if let OptionalScanGuard = &rep_op.strategy {
-        let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
-        w.begin(`if {scan_pos_var} >= 0`);
-        let mut nc: Array<[String, i32]> = [];
-        let body = &g_op.alts[0];
-        let alt = &g_elem.alternatives[0];
-        for let mut i = 0; i < alt.elements.len(); i += 1 {
-            gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc);
-        }
-        w.end();
-        return;
-    }
-    panic("gen_op_transparent_optional: rep_op.strategy is not one of OptionalLookahead / OptionalShapeLookahead / OptionalScanGuard — lower's `pick_optional_specialised` should have produced one of these for any Optional+Group body");
+    w.end();
 }
 
 /// Op-driven shape-lookahead emit for the storable Optional + SingleAlt
@@ -3291,7 +3298,8 @@ fn op_leaf_dedup_base(op: &Op) -> String {
         RuleCall(r) => r.dedup_base,
         Wildcard(w) => w.dedup_base,
         Excluded(e) => e.dedup_base,
-        _ => panic("op_leaf_dedup_base: caller must guard with op_is_leaf"),
+        // Non-leaf ops have no `dedup_base` to read.
+        Repeat(_) | Group(_) | ListLabel(_) => panic("op_leaf_dedup_base: caller must guard with op_is_leaf"),
     };
 }
 
@@ -3781,7 +3789,9 @@ fn gen_op_repeat_optional_group(w: &mut CodeWriter, rep: &RepeatElement, rep_op:
     return match rep_op.body_shape {
         StorableGroup => gen_op_storable_optional(w, rep, rep_op, g_op, g_elem, ctx, name_counts),
         TransparentGroup => gen_op_transparent_optional(w, rep, rep_op, g_op, g_elem, ctx, name_counts),
-        _ => panic("gen_op_repeat_optional_group: caller must dispatch only Group body_shape values"),
+        // Caller (`gen_op_repeat_optional_greedy`) routes only Group
+        // shapes here; the leaf shapes have their own arms upstream.
+        LeafRuleCall | LeafOther => panic("gen_op_repeat_optional_group: leaf body_shape reached the Group dispatcher — caller-side bug"),
     };
 }
 

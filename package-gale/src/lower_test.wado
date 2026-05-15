@@ -2220,6 +2220,61 @@ test "lower non-greedy Wildcard Repeat carries outer_follow as exit_first" {
     }
 }
 
+test "lower non-greedy single-element Group Repeat lowers body to TransparentGroup with empty body_first_set" {
+    // `r : (.)*? '=' ;` — `(.)` is a single-alt single-element Group
+    // that `lower_transparent_group` collapses to `Op::Group(Transparent)`
+    // wrapping `Op::Wildcard`. This is the regression case fixed in
+    // PR #1064: emit's `compute_non_greedy_condition` keys on
+    // `body_first_set.is_empty()` so the wildcard non-greedy condition
+    // (`while !EOF && peek not in follow`) fires for the wrapped
+    // shape just as it does for bare `.*?`. Without an empty
+    // body_first_set on the lowered Repeat, emit would fall through to
+    // a `false` while-condition and the loop would never enter.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [
+                alt_of([
+                    Element::Repeat(RepeatElement {
+                        kind: RepeatKind::Star,
+                        element: Element::Group(GroupElement::new([
+                            alt_of([Element::Wildcard(WildcardElement::new())]),
+                        ])),
+                        non_greedy: true,
+                    }),
+                    Element::Literal(LiteralElement::new("=")),
+                ]),
+            ],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let TransparentGroup = rep.body_shape {
+                assert true;
+            } else {
+                panic("expected RepeatBodyShape::TransparentGroup");
+            }
+            assert rep.body_first_set.is_empty(),
+                `expected empty body_first_set, got len={rep.body_first_set.len()}`;
+            if let NonGreedy(ng) = &rep.strategy {
+                assert ng.exit_first.len() == 1;
+                assert ng.exit_first[0] == "TK_LIT_EQ", ng.exit_first[0];
+            } else {
+                panic("expected RepeatStrategy::NonGreedy");
+            }
+        } else {
+            panic("expected Op::Repeat at index 0");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
 test "lower non-greedy TokenRef Repeat carries outer_follow as exit_first" {
     // `r : ID*? '=' ;` — non-greedy `ID*?` followed by required `=`.
     let mut g = empty_grammar(&"T");
