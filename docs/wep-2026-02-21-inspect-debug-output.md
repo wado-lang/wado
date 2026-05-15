@@ -255,7 +255,7 @@ Per-literal artifacts (synthesised at lower time):
 1. `__Closure_N` struct (existing) — holds captures.
 2. `__call` method (existing) — closure body.
 3. `__Closure_N^Inspect::inspect(&self, &mut Formatter)` — writes the signature, e.g. `|i32, i32| -> i32`.
-4. `__Closure_N^InspectAlt::inspect_alt(&self, &mut Formatter)` — writes the TIR-unparsed source, e.g. `|x: i32| (x + 1)` (or `|x: i32| captures[n] (x + n)` for capturing closures — the `captures[...]` clause makes captured-environment dependencies visible at inspect time).
+4. `__Closure_N^InspectAlt::inspect_alt(&self, &mut Formatter)` — writes the TIR-unparsed source, e.g. `|x: i32| (x + 1)` for non-capturing closures or `|x: i32| (x + n)` for capturing closures (captured bindings appear as free variables in the body; their values may be rendered alongside if a future inspect mode supports it).
 
 Per-literal canonical-path wrappers (registered in WIR build for inspectable signatures only):
 

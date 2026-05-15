@@ -1,13 +1,15 @@
 # Closure Parameter Monomorphization
 
-## Status: Proposal (Partially Implemented)
+## Status: Partially Implemented
+
+The design choices in this WEP are folded into [Closure Implementation](./wep-2026-01-16-closure-implementation.md). This document is retained for implementation-phase tracking and to record the internal `Fn` trait machinery that backs the user-visible `fn` / `fn mut` syntax.
 
 ## Context
 
 When closures are passed as function parameters, there's a type compatibility challenge:
 
 ```wado
-fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
+fn apply(f: impl fn(i32) -> i32, x: i32) -> i32 {
     return f(x);
 }
 
@@ -16,7 +18,7 @@ fn run() {
 }
 ```
 
-After closure lowering, `|x| x * 2` becomes a functor struct `__Closure_0` with a `__call` method. However, `apply` expects a `fn(i32) -> i32` type, creating a type mismatch.
+After closure lowering, `|x| x * 2` becomes a functor struct `__Closure_0` with a `__call` method. However, `apply` expects an `impl fn(i32) -> i32` parameter, creating a type mismatch that must be resolved by monomorphization.
 
 ## Options Considered
 
@@ -61,15 +63,15 @@ Cons:
 
 ### Option C: Monomorphization (Recommended)
 
-Desugar `fn(A) -> B` parameters to generic parameters with trait bounds:
+Desugar `impl fn(A) -> B` parameters to generic parameters with trait bounds:
 
 ```wado
 // User writes:
-fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
+fn apply(f: impl fn(i32) -> i32, x: i32) -> i32 {
     return f(x);
 }
 
-// Desugars to:
+// Internally desugars to (Fn trait is not user-visible):
 fn apply<F: Fn<[i32], i32, []>>(f: F, x: i32) -> i32 {
     return f.call([x]);
 }
@@ -98,21 +100,30 @@ Cons:
 
 Implement Option C (Monomorphization) as the primary mechanism.
 
-## `Fn` Trait Design
+## Internal `Fn` / `FnMut` Trait Design
 
-### Signature
+These traits are compiler-internal and not exposed to user code (per [Closure Implementation](./wep-2026-01-16-closure-implementation.md)). Users write `impl fn(...)`, `dyn fn(...)`, or `<F: fn(...)>`; the compiler desugars these to bounds on the internal traits below.
+
+### Signatures
 
 ```wado
 trait Fn<Args, Ret, Effects = []> {
     fn call(&self, args: Args) -> Ret with Effects;
 }
+
+trait FnMut<Args, Ret, Effects = []>: Fn<Args, Ret, Effects> {
+    fn call_mut(&mut self, args: Args) -> Ret with Effects;
+}
 ```
 
 The `Effects` parameter defaults to `[]` (pure), so `Fn<[i32], bool>` is shorthand for `Fn<[i32], bool, []>`.
 
-The name `Fn` mirrors the `fn` keyword, creating a natural mapping:
+Sub-typing `fn <: fn mut` is realized as `Fn` being a sub-trait of `FnMut`.
 
-- `fn(T) -> R` (function type) ↔ `Fn<[T], R>` (trait bound)
+The internal names mirror the `fn` / `fn mut` keywords, creating a natural mapping:
+
+- `fn(T) -> R` ↔ internal bound `Fn<[T], R>`
+- `fn mut(T) -> R` ↔ internal bound `FnMut<[T], R>`
 
 ### Type Parameter Semantics
 
@@ -122,53 +133,41 @@ The name `Fn` mirrors the `fn` keyword, creating a natural mapping:
 | `Ret`     | Return type                                  | `bool`                    |
 | `Effects` | Tuple of effect types using `[...]` syntax   | `[Stdout]`, `[]` for pure |
 
-### Mapping from `fn` Types
+### Mapping from `fn` / `fn mut` Types
 
-| Function Type               | Fn Bound (short) | Fn Bound (full)           |
-| --------------------------- | ---------------- | ------------------------- |
-| `fn() -> R`                 | `Fn<[], R>`      | `Fn<[], R, []>`           |
-| `fn(A) -> R`                | `Fn<[A], R>`     | `Fn<[A], R, []>`          |
-| `fn(A, B) -> R`             | `Fn<[A, B], R>`  | `Fn<[A, B], R, []>`       |
-| `fn(A) -> R with E`         | —                | `Fn<[A], R, [E]>`         |
-| `fn(A, B) -> R with E1, E2` | —                | `Fn<[A, B], R, [E1, E2]>` |
+| User-visible type                  | Internal bound (short) | Internal bound (full)     |
+| ---------------------------------- | ---------------------- | ------------------------- |
+| `impl fn() -> R`                   | `Fn<[], R>`            | `Fn<[], R, []>`           |
+| `impl fn(A) -> R`                  | `Fn<[A], R>`           | `Fn<[A], R, []>`          |
+| `impl fn(A, B) -> R`               | `Fn<[A, B], R>`        | `Fn<[A, B], R, []>`       |
+| `impl fn(A) -> R with E`           | —                      | `Fn<[A], R, [E]>`         |
+| `impl fn(A, B) -> R with (E1, E2)` | —                      | `Fn<[A, B], R, [E1, E2]>` |
+| `impl fn mut(A) -> R`              | `FnMut<[A], R>`        | `FnMut<[A], R, []>`       |
+| `impl fn mut(A) -> R with E`       | —                      | `FnMut<[A], R, [E]>`      |
 
 ### Example: Effectful Closure
 
 ```wado
 // User writes:
-fn for_each(items: Array<i32>, f: fn(i32) with Stdout) with Stdout {
+fn for_each<effect E>(items: Array<i32>, f: impl fn mut(i32) with E) with E {
     for let item of items {
         f(item);
     }
 }
 
-// Desugars to:
-fn for_each<F: Fn<[i32], (), [Stdout]>>(items: Array<i32>, f: F) with Stdout {
+// Internally desugars to:
+fn for_each<F: FnMut<[i32], (), [E]>, effect E>(items: Array<i32>, mut f: F) with E {
     for let item of items {
-        f.call([item]);
+        f.call_mut([item]);
     }
 }
 ```
 
-## Future: `stores` and Captures
+## Captures are Implicit
 
-The `stores` annotation and closure captures are special forms of "storage effects":
+Closure captures (auto-by-reference per the [Closure Implementation WEP](./wep-2026-01-16-closure-implementation.md)) are not encoded in the closure type. The previously proposed `captures[...]` clause on function types is obsolete — capture information lives in the closure's environment struct and is invisible to the type system. Escape analysis handles heap promotion when captured bindings outlive the declaring scope.
 
-```wado
-// stores indicates the function stores a reference parameter
-fn register(data: &Data) -> Handle with stores[data] { ... }
-
-// Closure captures are similar - they "store" outer references
-let x = 42;
-let closure = || x + 1;  // captures x
-```
-
-These will be modeled as internal effect types in the future:
-
-- `stores[N]` → internal `Stores<N>` effect type
-- Captures → implicit `Captures<...>` effect on closure type
-
-For now, these are not part of the `Fn` trait and handled separately.
+The `stores` annotation for non-closure reference parameters remains as a separate mechanism (see [Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)); it is not unified with the `Fn` / `FnMut` trait family.
 
 ## Implementation Status
 
@@ -178,38 +177,40 @@ For now, these are not part of the `Fn` trait and handled separately.
 - [x] Type checking with bounds (struct type parameters)
 - [x] Closure lowering to functor structs with `__call` methods
 - [x] Default type parameters (`T = DefaultType` syntax)
-- [x] Define `Fn` trait in `core:prelude`
+- [x] Define internal `Fn` trait in `core:prelude`
 
 ### In Progress
 
+- [ ] Internal `FnMut` trait with `Fn <: FnMut` sub-trait relation
+- [ ] Parser support for `impl fn(...)` / `dyn fn(...)` / `fn mut(...)` syntax
+- [ ] Reject bare `fn(T) -> U` in type positions with a clear diagnostic
 - [ ] Type checking with bounds (function type parameters)
-- [ ] Desugar `fn(...)` parameters to `Fn` bounds
+- [ ] Desugar `impl fn(...)` parameters to `Fn` / `FnMut` bounds
 - [ ] Monomorphization respects bounds
-
-### Future
-
-- [ ] Effect types as first-class values
-- [ ] `stores` as internal effect type
-- [ ] Capture effects for closures
+- [ ] Auto-capture by reference (infer `&T` vs `&mut T` from body usage)
+- [ ] Enforce `mut` binding requirement when calling `fn mut` closures
+- [ ] Canonical closure synthesis on `dyn fn` boundary
 
 ## Implementation Phases
 
-1. **Phase 1**: ~~Implement trait bounds (`T: Trait`)~~ **DONE** (struct params)
-2. **Phase 2**: ~~Define `Fn` trait with effect parameter~~ **DONE**
-3. **Phase 3**: Desugar `fn(...)` parameters to bounded generics
-4. **Phase 4**: Effect propagation through monomorphization
-5. **Phase 5**: Remove legacy closure handling from codegen
+1. ~~Implement trait bounds (`T: Trait`)~~ DONE (struct params)
+2. ~~Define internal `Fn` trait with effect parameter~~ DONE
+3. Parser: accept `impl` / `dyn` qualifiers and `fn mut`; reject bare `fn(...)` in type positions
+4. Type checker: desugar `impl fn(...)` parameters to bounded generics
+5. Capture analysis: classify each captured binding as `&T` or `&mut T`; classify closure as `fn` or `fn mut`
+6. Codegen: monomorphization respects bounds; `dyn fn` uses canonical closure shape
+7. Remove legacy closure handling from codegen
 
 ## Consequences
 
-- Functions with `fn(...)` parameters become generic, increasing monomorphization
+- Functions with `impl fn(...)` parameters become generic, increasing monomorphization
 - Closure calls inside such functions are static method calls, enabling optimization
 - Code size may increase but runtime performance improves
-- Effects are preserved through the `Fn` trait's effect parameter
-- Future `stores`/captures can be integrated as effect types
+- Effects are preserved through the internal trait's effect parameter
+- `dyn fn(...)` provides explicit type erasure when monomorphization is not desired
 
 ## See Also
 
 - [Closure Implementation](./wep-2026-01-16-closure-implementation.md)
 - [Struct and Trait System](./wep-2026-01-13-struct-and-trait.md)
-- [Effect System and Randomness](./wep-2026-01-20-effect-system-randomness.md)
+- [Effect System Design](./wep-2026-01-27-effect-system-design.md)
