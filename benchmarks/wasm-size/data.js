@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778837607023,
+  "lastUpdate": 1778853310148,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21749,6 +21749,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fb85eba21fde955fadd52021f4101ce13b92d376"
         },
         "date": 1778837606717,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510314,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f754742ff32cc5173fc9365c71f320f052cd99dd",
+          "message": "Merge pull request #1064 from wado-lang/gfx/issue-1043-bake-body-second-position-first\n\nrefactor(gale): bake body_second_position_first / dedup_base / RepeatBodyShape on RepeatOp",
+          "timestamp": "2026-05-15T22:48:15+09:00",
+          "tree_id": "6c8a7aab52e491eacd6b626af130ad55f1e5b106",
+          "url": "https://github.com/wado-lang/wado/commit/f754742ff32cc5173fc9365c71f320f052cd99dd"
+        },
+        "date": 1778853309754,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
