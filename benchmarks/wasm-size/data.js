@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778770376995,
+  "lastUpdate": 1778837497014,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21681,6 +21681,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 512226,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4d498e3ac7503dc735473d443387bf4db8f3820b",
+          "message": "Merge pull request #1062 from wado-lang/devin/1778769509-fix-block-tail-semicolon\n\nAllow omitting trailing semicolon for return/break/continue at end of block",
+          "timestamp": "2026-05-15T18:22:12+09:00",
+          "tree_id": "be5ddbee90b9d68252636ad7c0c365b8df584984",
+          "url": "https://github.com/wado-lang/wado/commit/4d498e3ac7503dc735473d443387bf4db8f3820b"
+        },
+        "date": 1778837496622,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510314,
             "unit": "bytes"
           }
         ]
