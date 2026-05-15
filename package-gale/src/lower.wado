@@ -1567,8 +1567,8 @@ fn lower_alt_scan_element(alt_elements: &Array<Element>, i: i32, ctx: &mut GenCo
 }
 
 /// True iff any element in the alt is an Optional Repeat (possibly
-/// wrapped in a `Label`). Mirrors surface `has_nested_optionals` /
-/// `is_optional_repeat` for the scan-side OptionalLookahead trigger.
+/// wrapped in a `Label`). Drives the scan-side OptionalLookahead
+/// trigger via `surface_is_optional_repeat`.
 fn has_nested_optional_in_alt(alt: &Alternative) -> bool {
     for let elem of &alt.elements {
         if surface_is_optional_repeat(elem) {
@@ -2223,13 +2223,6 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut Array<[String, i32]>) 
         });
     }
     panic("lower_simple_cst_alt_call: classifier permitted non-RuleRef leaf");
-}
-
-fn simple_cst_alt_target_name(alt: &Alternative) -> String {
-    if let RuleRef(r) = &alt.elements[0] {
-        return r.name;
-    }
-    return "<unknown>";
 }
 
 /// Multi-alt group not covered by `SimpleCst` / `TokenOnly` /

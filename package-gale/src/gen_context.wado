@@ -862,27 +862,6 @@ impl GenContext {
     }
 }
 
-/// Mirror of `is_left_recursive` from `parser_gen.wado` for use inside
-/// `GenContext` where the codegen-side helper isn't visible. An alt is
-/// left-recursive when its first non-trivial element is a self-reference
-/// to the rule. ANTLR4 only rewrites direct left recursion (see
-/// `vendor/antlr4/doc/left-recursion.md`), so a shallow first-element
-/// check is sufficient.
-fn rule_alt_is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
-    if alt.elements.is_empty() {
-        return false;
-    }
-    return rule_alt_element_is_self_ref(&alt.elements[0], rule_name);
-}
-
-fn rule_alt_element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
-    return match elem {
-        RuleRef(r) => r.name == *rule_name,
-        Label(lab) => rule_alt_element_is_self_ref(&lab.element, rule_name),
-        _ => false,
-    };
-}
-
 /// Sort tokens lexicographically and remove duplicates, producing the
 /// canonical representative of the set. Two `matches { ... }` checks
 /// over equal sets (regardless of order or repeated elements) collapse

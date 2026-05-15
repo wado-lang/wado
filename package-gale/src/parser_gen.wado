@@ -3288,15 +3288,14 @@ fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &
 /// `gen_op_leaf` so siblings that still route through the surface
 /// walker see lower-consistent dedup state.
 ///
-/// `dedup_base` mirrors what `sync_name_counts_for_leaf(elem, ...)`
-/// used to extract from the surface element: for non-rebound leaves
-/// it equals the surface `field_name` / `literal_field_name(text)` /
-/// `"wildcard"` / `not_element_field_name(...)`; for the
-/// scalar-label rebind (`name = elem`) the inner op carries the
-/// inner element's original base name (the rebind in `lower_label_op`
-/// preserves it) so emit's bump still targets the inner's base, not
-/// the label's name. Matches the legacy
-/// `sync_name_counts_for_leaf(&lab.element, ...)` recursion.
+/// `dedup_base` is what lower passed to `dedup_name` when it computed
+/// `op.field`: the surface `field_name` / `literal_field_name(text)` /
+/// `"wildcard"` / `not_element_field_name(...)` for non-rebound
+/// leaves. For the scalar-label rebind (`name = elem`) the inner op
+/// carries the inner element's original base name (the rebind in
+/// `lower_label_op` preserves it) so emit's bump still targets the
+/// inner's base, not the label's name — matching what
+/// `gen_element`'s Label arm does for the inner recursion.
 fn sync_name_counts_for_op_leaf(op: &Op, name_counts: &mut Array<[String, i32]>) {
     let _ = dedup_name(&op_leaf_dedup_base(op), name_counts);
 }
@@ -4065,33 +4064,6 @@ fn subtract_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
         }
     }
     return result;
-}
-
-fn is_optional_repeat(elem: &Element) -> bool {
-    if let Repeat(rep) = elem {
-        if let Optional = rep.kind {
-            return true;
-        }
-    }
-    if let Label(lab) = elem {
-        return is_optional_repeat(&lab.element);
-    }
-    return false;
-}
-
-fn has_nested_optionals(inner: &Element) -> bool {
-    if let Group(g) = inner {
-        if g.alternatives.len() != 1 {
-            return false;
-        }
-        for let mut i = 0; i < g.alternatives[0].elements.len(); i += 1 {
-            let elem = &g.alternatives[0].elements[i];
-            if is_optional_repeat(elem) {
-                return true;
-            }
-        }
-    }
-    return false;
 }
 
 fn gen_lookahead_condition(ctx: &mut GenContext, sig: &Array<Array<String>>) -> String {
