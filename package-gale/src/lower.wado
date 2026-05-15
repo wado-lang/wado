@@ -960,20 +960,7 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(RepeatOp {
-                kind: rep_op.kind,
-                body: rep_op.body,
-                scan_body: rep_op.scan_body,
-                strategy: rep_op.strategy,
-                field: rep_op.field,
-                caller_follow_first: basic_follow,
-                position_mask: rep_op.position_mask,
-                caller_follow_second: basic_second,
-                body_scannable: rep_op.body_scannable,
-                body_has_field: rep_op.body_has_field,
-                body_first_set: rep_op.body_first_set,
-                body_is_single_alt_group: rep_op.body_is_single_alt_group,
-            });
+            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second));
         }
         ops.push(op);
     }
@@ -1803,27 +1790,10 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
         // the variant-interning follow (which considers deep-nullable
         // suffixes via the threaded `variant_mask`); emit's per-position
         // `gen_repeat*` decisions use the simpler `first_of_elements_from`.
-        // `position_mask` is already baked by `lower_repeat_op`'s initial
-        // RepeatOp (seeded from the threaded `outer_position_mask`); we
-        // re-state it here verbatim because the surrounding RepeatOp
-        // builder needs every field listed.
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(RepeatOp {
-                kind: rep_op.kind,
-                body: rep_op.body,
-                scan_body: rep_op.scan_body,
-                strategy: rep_op.strategy,
-                field: rep_op.field,
-                caller_follow_first: basic_follow,
-                position_mask: rep_op.position_mask,
-                caller_follow_second: basic_second,
-                body_scannable: rep_op.body_scannable,
-                body_has_field: rep_op.body_has_field,
-                body_first_set: rep_op.body_first_set,
-                body_is_single_alt_group: rep_op.body_is_single_alt_group,
-            });
+            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second));
         }
         ops.push(op);
     }
@@ -2026,25 +1996,7 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             if let Repeat(rep_op) = &op {
                 let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-                // `position_mask` was seeded from the OUTER alt's
-                // position by `lower_repeat_op` — inherited through
-                // the `outer_position_mask` parameter — so we keep
-                // the existing value rather than recomputing against
-                // this inner group's tail.
-                op = Op::Repeat(RepeatOp {
-                    kind: rep_op.kind,
-                    body: rep_op.body,
-                    scan_body: rep_op.scan_body,
-                    strategy: rep_op.strategy,
-                    field: rep_op.field,
-                    caller_follow_first: basic_follow,
-                    position_mask: rep_op.position_mask,
-                    caller_follow_second: basic_second,
-                    body_scannable: rep_op.body_scannable,
-                    body_has_field: rep_op.body_has_field,
-                    body_first_set: rep_op.body_first_set,
-                    body_is_single_alt_group: rep_op.body_is_single_alt_group,
-                });
+                op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second));
             }
             if se_is_repeat {
                 se = rebind_scan_repeat_caller_follow(se, basic_follow);
@@ -2330,24 +2282,7 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
                 let basic_follow = ctx.first_of_elements_from(&alt.elements, ei + 1);
                 if let Repeat(rep_op) = &op {
                     let basic_second = compute_caller_follow_second(&alt.elements, ei + 1, ctx);
-                    // See `lower_single_alt_group` — `position_mask`
-                    // stays as `outer_position_mask` (the OUTER alt's
-                    // mask, inherited through the threaded parameter),
-                    // matching emit's old inner-walker semantics.
-                    op = Op::Repeat(RepeatOp {
-                        kind: rep_op.kind,
-                        body: rep_op.body,
-                        scan_body: rep_op.scan_body,
-                        strategy: rep_op.strategy,
-                        field: rep_op.field,
-                        caller_follow_first: basic_follow,
-                        position_mask: rep_op.position_mask,
-                        caller_follow_second: basic_second,
-                        body_scannable: rep_op.body_scannable,
-                        body_has_field: rep_op.body_has_field,
-                        body_first_set: rep_op.body_first_set,
-                        body_is_single_alt_group: rep_op.body_is_single_alt_group,
-                    });
+                    op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second));
                 }
                 if se_is_repeat {
                     se = rebind_scan_repeat_caller_follow(se, basic_follow);
@@ -2892,6 +2827,29 @@ fn position_mask_at(elements: &Array<Element>, i: i32, ctx: &mut GenContext, var
         return [];
     }
     return *variant_mask;
+}
+
+/// Rebuild a `RepeatOp` with fresh `caller_follow_first` /
+/// `caller_follow_second` while preserving every other field
+/// (including the lower-time-baked `position_mask`). Used by every
+/// alt-walker post-pass — `lower_alt_body`, `lower_lr_alt_suffix`,
+/// `lower_single_alt_group`, `lower_general_group` — so a future
+/// `RepeatOp` field addition only needs to touch this builder.
+fn patch_repeat_op_caller_follow(rep_op: &RepeatOp, caller_follow_first: Array<String>, caller_follow_second: Array<String>) -> RepeatOp {
+    return RepeatOp {
+        kind: rep_op.kind,
+        body: rep_op.body,
+        scan_body: rep_op.scan_body,
+        strategy: rep_op.strategy,
+        field: rep_op.field,
+        caller_follow_first: caller_follow_first,
+        position_mask: rep_op.position_mask,
+        caller_follow_second: caller_follow_second,
+        body_scannable: rep_op.body_scannable,
+        body_has_field: rep_op.body_has_field,
+        body_first_set: rep_op.body_first_set,
+        body_is_single_alt_group: rep_op.body_is_single_alt_group,
+    };
 }
 
 /// True iff `elem` is a list-label (`+=`). Used by

@@ -44,47 +44,13 @@ pub struct FollowVariantEntry {
     pub parse_used: bool,
 }
 
-/// Codegen-time context shared across emit walkers. Caches first /
-/// nullable / single-token / scannable analyses, the kind-set
-/// registry, and the variant-emit walker state.
-///
-/// Note on retired fields: `prefix_self_ref_min_prec` and
-/// `scan_ruleref_min_prec` used to live here as walker mutables;
-/// they were retired in Phase 2-F slice 5 once the corresponding
-/// values landed directly on the GIR (`RuleCallOp.min_prec_arg`,
-/// `ScanRuleCallElem.min_prec_arg`) or were threaded as explicit
-/// parameters (`gen_scan_op_element`'s `min_prec_override`).
-/// `ruleref_call_follow` was retired in issue #1043 step (5a) — the
-/// op-driven walkers consume the per-call-site follow via
-/// `RuleCallOp.variant_id` (baked by lower's
-/// `compute_call_site_follow`) and the surface `gen_element` RuleRef
-/// arm now always emits the regular `parse_X` (no variant).
-/// `current_rule_name` was retired in (5b) — the General-group
-/// emitters consume `GeneralShape.variant_type` /
-/// `alt_struct_names` (baked under the canonical
-/// `single_alt_owner`-resolved name in `lower_single_alt_group`),
-/// `gen_bt_scan_op_elements` accepts the surrounding rule name as
-/// an explicit parameter, and the residual surface walker reader in
-/// `element_field_info` is unreachable post Phase 2-G (guarded by a
-/// regression panic). `alt_gc_starts` and `group_counter` were
-/// retired in (5c) — every general-group emit site reads
-/// `GeneralShape.group_index` / `GeneralShape.variant_type` /
-/// `GeneralShape.alt_struct_names` directly off the lowered IR; the
-/// dead `AltBody.group_index_start` field (no surviving readers
-/// after the walker counter retirement) is gone too. `current_follow_mask` and
-/// `current_outer_follow` were retired in (5d) — lower threads the
-/// surrounding variant's mask as `variant_mask: &Array<String>`
-/// through every lowering function and the per-outer-position mask as
-/// `outer_position_mask: &Array<String>` alongside it; the latter is
-/// baked on `RepeatOp.position_mask`, which emit's
-/// `gen_op_repeat_optional_rulecall` unions with its caller-supplied
-/// follow (which `inner_walker_follow_for_repeat` clears to `[]` for
-/// inner greedy Optionals). `compute_call_site_follow` takes the
-/// variant mask as an explicit parameter for the deep-nullable suffix
-/// propagation. With these fields gone,
-/// `GenContext` no longer carries any walker-mutable state — every
-/// caching / registry field is set up at construction and bookkeeping
-/// is local to its writer.
+/// Codegen-time context shared across emit walkers. Holds the
+/// first / nullable / single-token / scannable caches, the
+/// `single_alt_owner` and `kind_set` registries, and the
+/// follow-variant registry. No walker-mutable state — every
+/// per-walk value (variant mask, per-outer-position mask, current
+/// rule name, etc.) is threaded as an explicit parameter through
+/// the lowering and emission call chains.
 pub struct GenContext {
     pub parser_rules: Array<ParserRule>,
     pub lit_tokens: Array<LitToken>,

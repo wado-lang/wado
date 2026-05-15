@@ -3772,15 +3772,13 @@ fn gen_op_repeat_optional_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op
 /// is subtracted from the inner's first so a Repeat at e.g.
 /// `selector : simpleSelectorSequence ws (combinator ws)*` doesn't
 /// greedily eat the `Space` that belongs to the next iteration's
-/// `combinator`. Inline replacement of the retired `gen_repeat_with_follow`;
-/// emit reads the field name / inner type from `rep_op`. The
-/// variant-level mask at this Repeat's outer alt-position is baked
-/// on `rep_op.position_mask` (always `[]` for non-variant bodies);
-/// emit unions it with the caller-supplied `follow` (which
-/// `inner_walker_follow_for_repeat` can legitimately clear to `[]` for
-/// inner greedy Optionals — e.g. `accessibilityModifier?` inside
-/// `optionalParameter`, where the next sibling's first overlaps the
-/// inner's first by design).
+/// `combinator`. The variant-level mask at this Repeat's outer
+/// alt-position is baked on `rep_op.position_mask` (always `[]` for
+/// non-variant bodies); the union with the caller-supplied `follow`
+/// happens here so `inner_walker_follow_for_repeat` can legitimately
+/// clear `follow` to `[]` for inner greedy Optionals where the next
+/// sibling's first overlaps the inner's first by design (e.g.
+/// `accessibilityModifier?` inside `optionalParameter`).
 fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
     let inner = &rep.element;
     let raw_first = rep_op.body_first_set;
