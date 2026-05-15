@@ -2823,19 +2823,6 @@ fn op_is_rulecall(op: &Op) -> bool {
     return false;
 }
 
-/// True when `gen_op_inner_for_storable_repeat` can handle this op as
-/// the body of a Star / Plus / non-greedy Repeat — every leaf op plus
-/// every storable `Op::Group` shape (`SingleAlt` / `TokenOnly` /
-/// `SimpleCst` / `General`). Transparent groups are not storable
-/// here. Reads `rep_op.body_shape` (lower's exhaustive classifier);
-/// the predicate is now a single match instead of a cascade.
-fn op_body_is_storable(rep_op: &RepeatOp) -> bool {
-    return match rep_op.body_shape {
-        LeafRuleCall | LeafOther | StorableGroup => true,
-        TransparentGroup => false,
-    };
-}
-
 /// Emit a single leaf-op parse line, reading the deduped field name
 /// and resolved token / variant / min-prec values straight from
 /// `Op`. Lower's `lower_alt_body` / `lower_label_op` / etc. have
@@ -3730,11 +3717,13 @@ fn gen_op_repeat_non_greedy_storable(w: &mut CodeWriter, rep: &RepeatElement, re
 /// own CST field, so each iteration inlines the inner alt without a
 /// surrounding list. Symmetric to
 /// `gen_op_repeat_star_plus_non_storable_group` but with the non-
-/// greedy `while` guard. Lower never produces this shape today (no
-/// committed grammar pairs `*?` / `+?` with a Transparent group
-/// body), but encoding the case here makes the dispatch exhaustive
-/// on `RepeatBodyShape` and keeps emit a structural translation of
-/// the lowered classifier.
+/// greedy `while` guard. Reachable for grammars like `(.)*?` or
+/// `(~';')*?` whose inner is a single-element Group that
+/// `lower_transparent_group` collapses to `Op::Group(Transparent)`;
+/// no committed grammar exercises it today, but encoding the case
+/// here makes the dispatch exhaustive on `RepeatBodyShape` and keeps
+/// emit a structural translation of the lowered classifier rather
+/// than relying on lower never producing the shape.
 fn gen_op_repeat_non_greedy_transparent(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, while_cond: &String) {
     let g_op = if let Group(g) = &rep_op.body {
         g;
@@ -3821,9 +3810,9 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
 
     if first.is_empty() {
         // RuleCall always has a field — `body_shape == LeafRuleCall`
-        // implies `body_has_field == true`. The defensive `if
-        // body_has_field` cascade the cascade-dispatch version
-        // carried is now redundant; we always emit the null binding.
+        // implies `body_has_field == true`, so the defensive
+        // `if body_has_field` guard the cascade-dispatch version
+        // carried is now redundant; always emit the null binding.
         w.line(`let {opt_field}: Option<{inner_type}> = null;`);
         return;
     }
@@ -4039,16 +4028,19 @@ fn wildcard_non_greedy_condition(ctx: &mut GenContext, follow_first: &Array<Stri
 }
 
 fn compute_non_greedy_condition(rep_op: &RepeatOp, follow_first: &Array<String>, follow_second: &Array<String>, ctx: &mut GenContext) -> String {
-    // Wildcard (`.*?`) and Not (`~TOK*?`) inner: surface `Wildcard` lowers
-    // to `Op::Wildcard` and surface `Not` lowers to `Op::Excluded`.
-    // `body_first_set` is `[]` for both because their match set is
-    // open-ended; keep looping while the current token is not EOF and
-    // not in the follow set (i.e. the continuation can't yet fire).
-    if let Wildcard(_) | Excluded(_) = &rep_op.body {
+    let raw_first = &rep_op.body_first_set;
+
+    // Wildcard (`.*?`) and Not (`~TOK*?`) inner: their match set is
+    // open-ended, so `body_first_set` lowers to `[]`. The same is true
+    // for `(.)*?` / `(~TOK)*?` whose body op is `Op::Group(Transparent)`
+    // wrapping the open-ended leaf. Detecting the open-ended case via
+    // the empty first set covers both shapes uniformly: keep looping
+    // while the current token is not EOF and not in the follow set
+    // (i.e. the continuation can't yet fire).
+    if raw_first.is_empty() {
         return wildcard_non_greedy_condition(ctx, follow_first);
     }
 
-    let raw_first = &rep_op.body_first_set;
     let continue_first = subtract_sets(raw_first, follow_first);
 
     if continue_first.len() > 0 {

@@ -462,8 +462,14 @@ pub struct TokenOp {
     /// sync so siblings that still walk surface IR (e.g.
     /// `gen_lr_suffix_helpers`'s inline RuleRef paths and
     /// `gen_element` fallbacks) observe the same count `gen_element`
-    /// would have produced. Equal to `field` when the leaf was the
-    /// first occurrence in its alt.
+    /// would have produced. For non-rebound leaves it matches the
+    /// surface element's base name (so `dedup_base == field` when the
+    /// leaf was the first occurrence in its alt). For label-rebound
+    /// leaves (`name = ID` lowered to `Op::Token { field: "name",
+    /// dedup_base: "name" }`) it carries the rebound label's base —
+    /// the inner element's original base is intentionally dropped
+    /// because the rebind elides the inner binding from emit. See
+    /// `lower::rebind_op_field` for the rebind contract.
     pub dedup_base: String,
 }
 
@@ -529,7 +535,7 @@ pub struct ListLabelOp {
     /// Outer CST struct field name (the label's name, deduped).
     pub field: String,
     /// Pre-dedup base name (`lab.field_name`). Drives the outer-label
-    /// half of `sync_name_counts_for_list_label`'s sibling-dedup
+    /// half of `sync_name_counts_for_op_list_label`'s sibling-dedup
     /// sync; the inner half delegates to the wrapped op's own
     /// `dedup_base`.
     pub dedup_base: String,
