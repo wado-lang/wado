@@ -2301,6 +2301,13 @@ test "lower non-greedy Group Repeat fills exit_second from inner suffix" {
             } else {
                 panic("expected RepeatStrategy::NonGreedy");
             }
+            // body_second_position_first = first of inner-Group's
+            // elements from index 1 = { TK_INT }. Consumed by emit's
+            // `compute_non_greedy_condition` 2-token disambiguation arm.
+            assert rep.body_second_position_first.len() == 1,
+                `expected 1, got {rep.body_second_position_first.len()}`;
+            assert rep.body_second_position_first[0] == "TK_INT",
+                rep.body_second_position_first[0];
         } else {
             panic("expected Op::Repeat at index 0");
         }

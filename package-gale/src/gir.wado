@@ -577,6 +577,14 @@ pub struct RepeatOp {
     /// over a single-alt Group of ≥ 2 elements. Empty when 1-token
     /// follow suffices. Consumed by `gen_repeat_non_greedy`.
     pub caller_follow_second: Array<String>,
+    /// Inner second-position first set for non-greedy 2-token
+    /// disambiguation. When the inner element is a single-alt `Group`
+    /// of ≥ 2 elements (the `(',' x)*?` body shape), this is
+    /// `first_of_elements_from(&inner.alternatives[0].elements, 1)`.
+    /// Empty otherwise. Consumed by `gen_repeat_non_greedy`'s
+    /// `peek_at(1)` disambiguation arm so emit doesn't re-walk the
+    /// surface inner.
+    pub body_second_position_first: Array<String>,
 }
 
 pub struct GroupOp {

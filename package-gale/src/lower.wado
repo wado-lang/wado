@@ -2449,6 +2449,7 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     } else {
         false;
     };
+    let body_second_position_first = compute_body_second_position_first(&rep.element, ctx);
     return Op::Repeat(RepeatOp {
         kind: rep.kind,
         body,
@@ -2472,7 +2473,21 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
         body_has_field,
         body_first_set: inner_first,
         body_is_single_alt_group,
+        body_second_position_first,
     });
+}
+
+/// Inner second-position first set for non-greedy 2-token disambiguation.
+/// Mirrors the surface check `compute_non_greedy_condition` used to perform
+/// at emit time: when the inner is a single-alt `Group` of ≥ 2 elements,
+/// returns `first_of_elements_from(&elements, 1)`; otherwise `[]`.
+fn compute_body_second_position_first(elem: &Element, ctx: &mut GenContext) -> Array<String> {
+    if let Group(g) = elem {
+        if g.alternatives.len() == 1 && g.alternatives[0].elements.len() >= 2 {
+            return ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
+        }
+    }
+    return [];
 }
 
 /// Caller-side second-token set for a non-greedy Repeat at position
@@ -2802,6 +2817,7 @@ fn patch_repeat_op_caller_follow(rep_op: &RepeatOp, caller_follow_first: Array<S
         body_has_field: rep_op.body_has_field,
         body_first_set: rep_op.body_first_set,
         body_is_single_alt_group: rep_op.body_is_single_alt_group,
+        body_second_position_first: rep_op.body_second_position_first,
     };
 }
 
@@ -3150,6 +3166,7 @@ fn rebind_op_field(op: Op, new_field: &String) -> Op {
             body_has_field: rep.body_has_field,
             body_first_set: rep.body_first_set,
             body_is_single_alt_group: rep.body_is_single_alt_group,
+            body_second_position_first: rep.body_second_position_first,
         }),
         Group(g) => Op::Group(GroupOp {
             shape: rebind_group_shape(g.shape, new_field),
