@@ -17,7 +17,7 @@ The original 2026-01-16 design captured by value, exposed a single `fn` type, an
 
 1. Rust-like ergonomics: automatic capture-by-reference, surface syntax close to Rust.
 2. Type-level mutation info: split `fn` (read-only) from `fn mut` (mutating) so the optimizer can exploit purity on type-erased call paths.
-3. Explicit dispatch: users choose static (`impl`) vs dynamic (`dyn`) at every type position.
+3. Compiler-managed dispatch: the compiler decides static vs dynamic dispatch by context (escape analysis); users do not annotate this choice. The LSP surfaces the decision as inline hints / hover information for those who care.
 4. Compatibility with value semantics: no `Clone`, no `move`, no `FnOnce` — closures are values like everything else.
 
 ## Closure Types
@@ -33,24 +33,24 @@ Sub-typing: `fn(T) -> U <: fn mut(T) -> U`. A read-only closure is usable wherev
 
 There is no `FnOnce` analog (see "No `FnOnce`" below).
 
-### Required Qualifiers: `impl` or `dyn`
+### Type Positions
 
-Closure types must always appear with a dispatch qualifier:
+Closure types use a single bare form — `fn(T) -> U` or `fn mut(T) -> U` — in every position:
 
-| Position                                      | Allowed forms                       |
-| --------------------------------------------- | ----------------------------------- |
-| Function parameter                            | `impl fn(...)` / `impl fn mut(...)` |
-| Function return                               | `impl fn(...)` / `impl fn mut(...)` |
-| Storage (struct field, local type annotation) | `dyn fn(...)` / `dyn fn mut(...)`   |
-| Generic bound                                 | `<F: fn(...)>` / `<F: fn mut(...)>` |
+| Position                                                    | Form                                | Dispatch                                                                                                 |
+| ----------------------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Function parameter                                          | `fn(...)` / `fn mut(...)`           | Monomorphized per call site                                                                              |
+| Function return                                             | `fn(...)` / `fn mut(...)`           | Anonymous monomorphic when the concrete type unifies across branches; type-erased to canonical otherwise |
+| Storage (struct field, local annotation, container element) | `fn(...)` / `fn mut(...)`           | Type-erased (canonical struct)                                                                           |
+| Generic bound                                               | `<F: fn(...)>` / `<F: fn mut(...)>` | Generic parameter, monomorphized                                                                         |
 
-Bare `fn(T) -> U` (without `impl`/`dyn`) is a parse error in type positions.
+The compiler chooses static (specialised `__Closure_N`) vs dynamic (canonical `(env, funcref)`) dispatch via escape analysis: a closure that appears only as the callee of a direct/indirect call keeps the specialised form; any other appearance forces canonicalisation. From the user's perspective, both forms behave identically — only the runtime representation differs.
 
-`impl fn(...)` introduces an anonymous generic parameter, monomorphized at each call site (no indirection, inlinable). `dyn fn(...)` is type-erased, dispatched indirectly through a canonical struct (env + funcref).
+There is no user-visible `impl` / `dyn` distinction. The LSP surfaces the compiler's dispatch decision as an inline hint or hover annotation when the user cares about it; the same information does not need to live in the type syntax.
 
 ### Generic Bound Syntax
 
-`fn(...)` and `fn mut(...)` may appear as trait bounds. This is the only way to name a closure type and reuse it across multiple positions:
+`fn(...)` and `fn mut(...)` may appear as trait bounds. This is the way to name a closure type and reuse it across multiple positions in a generic function:
 
 ```wado
 fn apply<F: fn(i32) -> i32>(f: F, x: i32) -> i32 { f(x) }
@@ -74,7 +74,7 @@ c();
 For function parameters:
 
 ```wado
-fn run(mut f: impl fn mut(i32)) { f(1); f(2); }
+fn run(mut f: fn mut(i32)) { f(1); f(2); }
 //      ^^^ required
 ```
 
@@ -159,7 +159,7 @@ No state of affairs requires single-use closures, so `FnOnce` is unmotivated and
 Closure types carry effects with the same `with` syntax as functions:
 
 ```wado
-let f: impl fn(i32) -> i32 with Stdout = |x| { println(`{x}`); x };
+let f: fn(i32) -> i32 with Stdout = |x| { println(`{x}`); x };
 ```
 
 ### Effect Generics
@@ -169,7 +169,7 @@ Functions that accept effectful closures use the `<effect E>` parameter form (pe
 ```wado
 fn map<B, effect E>(
     arr: Array<T>,
-    f: impl fn mut(T) -> B with E,
+    f: fn mut(T) -> B with E,
 ) -> Array<B> with E { ... }
 ```
 
@@ -189,40 +189,40 @@ The `+` separates `fn` from other bounds; `with` is greedy up to (but not includ
 
 ## Iterator API Example
 
-Iterator methods use `impl fn mut(...) with E` for closure parameters and `impl Iterator<Item = ...> with E` for adapter returns:
+Iterator methods use `fn mut(...) with E` for closure parameters and `Iterator<Item = ...> with E` for adapter returns:
 
 ```wado
 trait Iterator {
     type Item;
 
-    fn map<B, effect E>(self, f: impl fn mut(Self::Item) -> B with E)
-        -> impl Iterator<Item = B> with E;
+    fn map<B, effect E>(self, f: fn mut(Self::Item) -> B with E)
+        -> Iterator<Item = B> with E;
 
-    fn filter<effect E>(self, p: impl fn mut(&Self::Item) -> bool with E)
-        -> impl Iterator<Item = Self::Item> with E;
+    fn filter<effect E>(self, p: fn mut(&Self::Item) -> bool with E)
+        -> Iterator<Item = Self::Item> with E;
 
-    fn fold<B, effect E>(self, init: B, f: impl fn mut(B, Self::Item) -> B with E)
+    fn fold<B, effect E>(self, init: B, f: fn mut(B, Self::Item) -> B with E)
         -> B with E;
 
-    fn for_each<effect E>(self, f: impl fn mut(Self::Item) with E) with E;
+    fn for_each<effect E>(self, f: fn mut(Self::Item) with E) with E;
 
-    fn find<effect E>(self, p: impl fn mut(&Self::Item) -> bool with E)
+    fn find<effect E>(self, p: fn mut(&Self::Item) -> bool with E)
         -> Option<Self::Item> with E;
 
-    fn any<effect E>(self, p: impl fn mut(Self::Item) -> bool with E)
+    fn any<effect E>(self, p: fn mut(Self::Item) -> bool with E)
         -> bool with E;
 
-    fn all<effect E>(self, p: impl fn mut(Self::Item) -> bool with E)
+    fn all<effect E>(self, p: fn mut(Self::Item) -> bool with E)
         -> bool with E;
 
-    fn inspect<effect E>(self, f: impl fn mut(&Self::Item) with E)
-        -> impl Iterator<Item = Self::Item> with E;
+    fn inspect<effect E>(self, f: fn mut(&Self::Item) with E)
+        -> Iterator<Item = Self::Item> with E;
 }
 ```
 
 Choosing `fn mut` mirrors Rust's `FnMut`: by sub-typing it accepts both pure and mutating closures, maximizing caller flexibility.
 
-Adapter struct types (the internal `Map<I, F>`, `Filter<I, F>`, etc.) are not user-namable; iterator chains see only `impl Iterator<...>`.
+Adapter struct types (the internal `Map<I, F>`, `Filter<I, F>`, etc.) are not user-namable; iterator chains see only the trait surface `Iterator<...>` in their return type.
 
 ## Wasm GC Representation
 
@@ -233,7 +233,7 @@ Closures use Option 1: an environment struct paired with a funcref. Among altern
 - Option 3: defunctionalization. Rejected: interpreter dispatch overhead, scales poorly.
 - Option 4: CM resource handles. Rejected: explicit drop required, handle-table indirection, awkward for internal closures.
 
-### `impl fn` (Static Dispatch)
+### Static Dispatch (Specialised Path)
 
 Each closure literal generates an anonymous struct type `__Closure_N`:
 
@@ -253,11 +253,15 @@ Each closure literal generates an anonymous struct type `__Closure_N`:
   (field $func (ref $__ClosureFn_N))))
 ```
 
-When passed to a function with an `impl fn(...)` parameter, the function is monomorphized for the specific `__Closure_N`. Calls compile to `call_ref` with a known signature, enabling inlining.
+When the compiler determines that a closure use is type-known (parameter position, return position with unifiable branches, generic-bound parameter), the function is monomorphized for the specific `__Closure_N`. Calls compile to `call_ref` with a known signature, enabling inlining.
 
-### `dyn fn` (Dynamic Dispatch)
+### Dynamic Dispatch (Canonical Path)
 
-`dyn fn(...)` uses a canonical, signature-keyed struct (env + funcref). One shape per `(arity, return type)` pair. Per-literal wrappers cast the canonical `env` back to the literal's `__ClosureEnv_N` and call `__call`. See "Canonical Closure as Vtable" below for the full layout.
+When the compiler determines that a closure use must be type-erased (struct field, mixed-branch return, container element, etc.), the value is wrapped in a canonical, signature-keyed struct `(env, funcref)`. One shape per `(arity, return type)` pair. Per-literal wrappers cast the canonical `env` back to the literal's `__ClosureEnv_N` and call `__call`. See "Canonical Closure as Vtable" below for the full layout.
+
+### Dispatch Choice
+
+The choice between specialised and canonical paths is made by escape analysis in the lower phase: a closure local that only appears as the callee of a direct/indirect call keeps the specialised `__Closure_N` form; every other position (storage, mixed-branch return, container insertion, escape across a `dyn`-shaped trait) forces canonicalisation. This decision is invisible at the source level — both paths satisfy the same `fn(T) -> U` type.
 
 ### Closure Creation
 
@@ -297,7 +301,7 @@ Mutability lives at the referenced cell, not in the env field type itself. The `
 
 ### Heap Promotion for Escaping Captures
 
-When a closure escapes (returned, stored in a `dyn fn` field, etc.), its captured bindings must outlive the declaring function. The compiler heap-promotes them: the bindings live in a heap-allocated struct that the closure env references.
+When a closure escapes (returned, stored in a struct field, etc.), its captured bindings must outlive the declaring function. The compiler heap-promotes them: the bindings live in a heap-allocated struct that the closure env references.
 
 For non-escaping closures, the compiler MAY skip heap promotion and reuse locals (with the env referencing those locals' stack slots). This is an optimization, not part of the language semantics.
 
@@ -310,7 +314,7 @@ Wasm has no notion of shared vs exclusive references. The `fn` / `fn mut` distin
 
 ## Canonical Closure as Vtable
 
-A `dyn fn` value is wrapped in a canonical, signature-keyed struct so any holder of an `Fn<N, Ret>` value can dispatch through a uniform shape. The lower-phase escape analysis decides per local: a closure local that only appears as the callee of `IndirectCall` / receiver of `MethodCall` keeps the specialised `&__Closure_N` form; every other position forces canonicalisation.
+A closure value that needs to be type-erased is wrapped in a canonical, signature-keyed struct so any holder of an `Fn<N, Ret>` value can dispatch through a uniform shape. The lower-phase escape analysis decides per local: a closure local that only appears as the callee of `IndirectCall` / receiver of `MethodCall` keeps the specialised `&__Closure_N` form; every other position forces canonicalisation.
 
 The canonical struct comes in two shapes, selected per-`(N, Ret)` by a pre-WIR scan of `Fn<N, Ret>^Inspect[Alt]` call sites:
 
@@ -371,51 +375,49 @@ Future: resource adapter — wrap closures as CM resources with a `call` method 
 
 ## Comparison with Rust
 
-| Aspect                     | Rust                             | Wado                                |
-| -------------------------- | -------------------------------- | ----------------------------------- |
-| Closure literal            | `\|x\| ...`                      | `\|x\| ...`                         |
-| `move` keyword             | yes                              | no (use intermediate local)         |
-| Auto-capture               | `&` / `&mut` / move              | `&` / `&mut` only                   |
-| Read/write split           | `Fn` / `FnMut` traits            | `fn` / `fn mut` keywords            |
-| Consume-only variant       | `FnOnce`                         | none                                |
-| Bound syntax               | `F: Fn(T) -> U`                  | `F: fn(T) -> U`                     |
-| Static dispatch param      | `impl Fn(T) -> U`                | `impl fn(T) -> U`                   |
-| Type-erased                | `dyn Fn(T) -> U`                 | `dyn fn(T) -> U`                    |
-| Bare type position         | `fn(T) -> U` is function pointer | parse error                         |
-| `mut` binding for mutating | required                         | required                            |
-| User-implementable trait   | unstable (`fn_traits`)           | not allowed                         |
-| `Clone`                    | required trait                   | none (auto-copy)                    |
-| Function pointer           | separate type                    | collapsed (closures with empty env) |
-| Lifetimes                  | tied to captured borrows         | none (GC)                           |
+| Aspect                     | Rust                            | Wado                                                    |
+| -------------------------- | ------------------------------- | ------------------------------------------------------- |
+| Closure literal            | `\|x\| ...`                     | `\|x\| ...`                                             |
+| `move` keyword             | yes                             | no (use intermediate local)                             |
+| Auto-capture               | `&` / `&mut` / move             | `&` / `&mut` only                                       |
+| Read/write split           | `Fn` / `FnMut` traits           | `fn` / `fn mut` keywords                                |
+| Consume-only variant       | `FnOnce`                        | none                                                    |
+| Bound syntax               | `F: Fn(T) -> U`                 | `F: fn(T) -> U`                                         |
+| Type in non-bound position | `impl Fn` / `dyn Fn` / `fn` ptr | `fn(T) -> U` (compiler picks dispatch; LSP surfaces it) |
+| `mut` binding for mutating | required                        | required                                                |
+| User-implementable trait   | unstable (`fn_traits`)          | not allowed                                             |
+| `Clone`                    | required trait                  | none (auto-copy)                                        |
+| Function pointer           | separate type                   | collapsed (closures with empty env)                     |
+| Lifetimes                  | tied to captured borrows        | none (GC)                                               |
 
 ## Implementation Plan
 
 1. Capture analysis: per-binding, decide `&T` vs `&mut T` from body usage; classify closure type as `fn` or `fn mut`.
 2. Type system:
    - `fn` and `fn mut` as distinct type constructors with `fn <: fn mut` sub-typing.
-   - Enforce `impl` / `dyn` qualifier requirement in type positions.
    - Enforce `mut` binding rule for `fn mut` callees.
    - Allow `fn` / `fn mut` in bound positions (parser + resolver).
    - Integrate `<effect E>` effect generics in closure parameters.
 3. Codegen:
    - Generate `__Closure_N` struct + funcref.
-   - Monomorphize `impl fn(...)` parameters per call site.
-   - For `dyn fn`, generate canonical shape + per-literal wrappers.
+   - Monomorphize parameters per call site (specialised path) when escape analysis permits.
+   - Generate canonical shape + per-literal wrappers for the type-erased path.
    - Heap promotion for escaping captures.
 4. Parser:
    - Accept `fn mut` as a two-token type/bound form.
-   - Accept `impl` / `dyn` qualifiers.
    - Parse `with` in bounds, with parens required for multi-effect lists.
+5. LSP:
+   - Surface the compiler's specialised vs canonical dispatch decision as an inline hint / hover annotation.
 
 ## Migration Plan
 
-The current implementation reflects an earlier design: bare `fn(T) -> U` everywhere, capture-by-value with explicit `&mut || ...` syntax for mutating closures, a single `Function` type constructor with no `fn` / `fn mut` split, and escape analysis (not user qualifiers) driving static vs dynamic dispatch. The Wasm codegen layer (`__Closure_N` struct + funcref, canonical closure with optional inspectable supertype, `FnCanonicalDispatch` stub) is already aligned with this design and continues to apply unchanged below the dispatch-choice point.
+The current implementation reflects an earlier design: capture-by-value with explicit `&mut || ...` syntax for mutating closures, a single `Function` type constructor with no `fn` / `fn mut` split. The Wasm codegen layer (`__Closure_N` struct + funcref, canonical closure with optional inspectable supertype, `FnCanonicalDispatch` stub, escape-analysis-driven specialised vs canonical dispatch) is already aligned with this design and continues to apply unchanged.
 
 The transition proceeds in phases, each leaving the compiler in a green state. Granular task tracking with current file / line references lives in [Closure Parameter Monomorphization](./wep-2026-01-25-closure-parameter-monomorphization.md).
 
-### Phase 1: Parser surface (permissive)
+### Phase 1: Parser surface
 
-Accept `impl fn(...)`, `dyn fn(...)`, `fn mut(...)`, and bound-position `<F: fn(...)>` / `<F: fn mut(...)>`, while still allowing bare `fn(...)` in type positions. Add `dyn` to the lexer keyword table; remove the unused `move` reservation.
+Accept `fn mut(...)` as a two-token type form. Accept `fn(...)` / `fn mut(...)` in bound position (`<F: fn(...)>` / `<F: fn mut(...)>`). Parse `with (E1, E2)` parens-grouped multi-effect in bound contexts. Remove the unused `move` keyword reservation.
 
 ### Phase 2: Internal `FnMut` trait
 
@@ -439,19 +441,15 @@ Closure bodies are checked against the closure's own declared effect set, not th
 
 ### Phase 7: Stdlib `Iterator` migration
 
-Convert iterator methods to `impl fn mut(...) with E` with `<effect E>` parameters. Add `for_each`. Adopt `impl Iterator<Item = ...>` returns where adapter-struct naming is not needed externally.
+Convert iterator methods to `fn mut(...) with E` with `<effect E>` parameters. Add `for_each`. Update return types to `Iterator<Item = ...>` where adapter-struct naming is not needed externally.
 
-### Phase 8: Codegen qualifier honoring
-
-Thread user-written `impl` vs `dyn` qualifier into the lower-phase `specializable` decision so the user's intent (not just escape analysis) drives static vs dynamic dispatch. The mature codegen below this layer (`__Closure_N`, `ClosureToCanonical`, `FnCanonicalDispatch`) requires no changes.
-
-### Phase 9: Strict bare-`fn(...)` rejection
-
-Flip the parser / resolver from permissive to strict — bare `fn(T) -> U` in type positions becomes a compile error. Migrate remaining fixtures and stdlib references (`String::find_char`, `Array::sort_by` / `sorted_by`, `Benchmark::run`, serde / json / router `lookup` parameters).
-
-### Phase 10: CM boundary error
+### Phase 8: CM boundary error
 
 Compile-error fixture for exporting or importing a function with a closure-typed parameter across the Component Model boundary.
+
+### Phase 9 (Optional): LSP dispatch hints
+
+Surface the compiler's specialised vs canonical dispatch decision as an inline hint / hover annotation in `wado-lsp/`. This is purely additive UX; the language design does not depend on it.
 
 ### Phase Ordering Rationale
 
@@ -459,39 +457,42 @@ Compile-error fixture for exporting or importing a function with a closure-typed
 - Phases 3-5 form the semantic core; they must be done together because the `mut`-binding rule requires the type-system split, which requires the capture classification.
 - Phase 6 is independent of 3-5 and can be parallelised; it has its own TODO fixture as a regression gate.
 - Phase 7 (stdlib migration) is large but mechanical, gated by 3-5 being in place.
-- Phase 8 is the hand-off to the existing codegen; small and localised.
-- Phase 9 is the breaking change; deferring it last allows incremental migration of fixtures and external callers.
-- Phase 10 is purely additive.
+- Phase 8 is purely additive.
+- Phase 9 ships any time after Phase 3 lands.
+
+Codegen needs no changes: dispatch choice is already done by escape analysis, and the new `fn` / `fn mut` distinction lives entirely in the type system, not in calling convention or wire format.
 
 ## Consequences
 
 ### Positive
 
-1. Familiar to Rust users with minimal mental gap.
+1. Familiar to Rust users with minimal mental gap, while less verbose than Rust thanks to compiler-managed dispatch.
 2. Optimizer has mutation/purity information at type-erased call sites.
-3. Explicit `impl` / `dyn` — no implicit dispatch surprises.
-4. Sub-typing `fn <: fn mut` — pure closures fit everywhere a mutating one does.
-5. Effect transparency via `<effect E>` keeps iterator API readable.
-6. Fewer concepts than Rust (no `Clone`, no `move`, no `FnOnce`, no separate `fn` pointer type).
+3. Sub-typing `fn <: fn mut` — pure closures fit everywhere a mutating one does.
+4. Effect transparency via `<effect E>` keeps iterator API readable.
+5. Fewer concepts than Rust (no `Clone`, no `move`, no `FnOnce`, no separate `fn` pointer type, no user-facing `impl` / `dyn` distinction).
+6. Single bare form `fn(T) -> U` in every type position — minimal syntactic surface.
 
 ### Negative
 
-1. Verbose `impl` / `dyn` annotations in API signatures.
-   - Mitigation: sugar covers common cases; named `<F: fn(...)>` bound only when needed.
-2. Adapter struct types are not user-namable.
-   - Mitigation: `impl Iterator<...>` returns avoid the need to name them.
-3. `mut` binding rule is "ceremonial" without a borrow checker.
+1. Dispatch choice (specialised vs canonical) is invisible in the source text.
+   - Mitigation: LSP surfaces the compiler's decision as inline hint / hover so users who care can see it.
+2. Cannot force type erasure for codesize control without explicit `dyn`-like syntax.
+   - Mitigation: deemed unnecessary for the MVP; can be added later if a real use case emerges.
+3. Adapter struct types are not user-namable.
+   - Mitigation: `Iterator<Item = ...>` returns avoid the need to name them.
+4. `mut` binding rule is "ceremonial" without a borrow checker.
    - Mitigation: kept for conceptual consistency with `&mut self` calling convention.
-4. Closures cannot cross Component Model boundary (MVP).
+5. Closures cannot cross Component Model boundary (MVP).
    - Mitigation: documented; resource adapter as future work.
 
 ## Future Work
 
-- User-defined callables (`impl fn(...) for SomeStruct`): low priority.
+- User-defined callable types (some syntax for implementing the closure trait on user structs): low priority.
 - Resource adapter for closures at the Component Model boundary.
 - `with ..` effect-polymorphism shorthand if `<effect E>` verbosity proves painful.
-- Inlining heuristics for `impl fn(...)` parameters with small bodies.
-- Auto-switch between type-erased (`dyn fn`) and monomorphized (`impl fn`) forms based on whether the closure escapes (iterator-chain fusion).
+- Inlining heuristics for closure parameters with small bodies.
+- Explicit `dyn`-like syntax for forced type erasure (codesize control), should a real use case emerge.
 
 ## References
 
