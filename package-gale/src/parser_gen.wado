@@ -2627,7 +2627,7 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
             let rep_op = if let Repeat(r) = op { r } else { panic("gen_alt_body_skip: Repeat element / op mismatch") };
             gen_op_repeat(w, rep, rep_op, ctx, &mut name_counts);
         } else if op_is_leaf(op) {
-            gen_op_leaf(w, op, elem, ctx, &mut name_counts);
+            gen_op_leaf(w, op, ctx, &mut name_counts);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else if let Group(g_op) = op {
@@ -2714,7 +2714,7 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<O
             let rep_op = if let Repeat(r) = op { r } else { panic("gen_alt_elements: Repeat element / op mismatch") };
             gen_op_repeat(w, rep, rep_op, ctx, &mut name_counts);
         } else if op_is_leaf(op) {
-            gen_op_leaf(w, op, elem, ctx, &mut name_counts);
+            gen_op_leaf(w, op, ctx, &mut name_counts);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else if let Group(g_op) = op {
@@ -2744,7 +2744,7 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, o
             let follow = inner_walker_follow_for_repeat(rep, rep_op, elements, i, outer_follow, ctx);
             gen_op_repeat_with_follow_override(w, rep, rep_op, ctx, name_counts, &follow);
         } else if op_is_leaf(op) {
-            gen_op_leaf(w, op, elem, ctx, name_counts);
+            gen_op_leaf(w, op, ctx, name_counts);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, name_counts);
         } else if let Group(g_op) = op {
@@ -2823,27 +2823,6 @@ fn op_is_rulecall(op: &Op) -> bool {
     return false;
 }
 
-/// True when `gen_op_inner_for_storable_repeat` can handle this op as
-/// the body of a Star / Plus / non-greedy Repeat — every leaf op plus
-/// every storable `Op::Group` shape (`SingleAlt` / `TokenOnly` /
-/// `SimpleCst` / `General`). Transparent groups and any other shape
-/// with `body_has_field == false` are not storable here.
-fn op_body_is_storable(rep_op: &RepeatOp) -> bool {
-    if op_is_leaf(&rep_op.body) {
-        return true;
-    }
-    if let Group(g_op) = &rep_op.body {
-        if !rep_op.body_has_field {
-            return false;
-        }
-        return match &g_op.shape {
-            SingleAlt(_) | TokenOnly(_) | SimpleCst(_) | General(_) => true,
-            _ => false,
-        };
-    }
-    return false;
-}
-
 /// Emit a single leaf-op parse line, reading the deduped field name
 /// and resolved token / variant / min-prec values straight from
 /// `Op`. Lower's `lower_alt_body` / `lower_label_op` / etc. have
@@ -2855,14 +2834,16 @@ fn op_body_is_storable(rep_op: &RepeatOp) -> bool {
 /// (`gen_alt_elements`, the body loop of `gen_alt_body_skip`)
 /// dispatch leaves here instead.
 ///
-/// `elem` is the matching surface element. We only consult it to
-/// run `dedup_name` for its side effect — keeping `name_counts` in
-/// sync with lower's dedup state so any sibling that still flows
-/// through `gen_element` sees the correct count. The emitted field
-/// name comes from `op` exclusively. The side effect goes away once
-/// every emit path consumes `Op` (later (2) slices).
-fn gen_op_leaf(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    sync_name_counts_for_leaf(elem, name_counts);
+/// The mirror `dedup_name(&op.dedup_base, name_counts)` keeps
+/// `name_counts` in sync with what `gen_element`'s leaf arms would
+/// have produced, so siblings that still walk surface IR (e.g.
+/// `gen_lr_suffix_helpers`'s inline `dedup_name(&rr.field_name, ...)`
+/// paths and `gen_element` fallbacks) read a consistent count. The
+/// emitted field name comes from `op.field` exclusively — `dedup_base`
+/// is consulted only for the sync. The sync goes away entirely once
+/// every emit path consumes `Op`.
+fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    sync_name_counts_for_op_leaf(op, name_counts);
     return match *op {
         Token(t) => w.line(`let {t.field} = p.expect({t.kind})?;`),
         Literal(l) => w.line(`let {l.field} = p.expect({l.kind})?;`),
@@ -2886,7 +2867,10 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext
         },
         Wildcard(wop) => w.line(`let {wop.field} = p.match_any()?;`),
         Excluded(eop) => w.line(`let {eop.field} = {emit_op_excluded_call(eop)}?;`),
-        _ => panic("gen_op_leaf: non-leaf op; check op_is_leaf before calling"),
+        // Non-leaf ops (Repeat / Group / ListLabel) are routed to
+        // their own dispatchers by the caller; reaching here means
+        // the caller's `op_is_leaf` gate was bypassed.
+        Repeat(_) | Group(_) | ListLabel(_) => panic("gen_op_leaf: non-leaf op; caller must guard with op_is_leaf"),
     };
 }
 
@@ -2901,74 +2885,77 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext
 /// without duplicating the surrounding list / scan-guard / loop
 /// scaffolding.
 ///
-/// `elem` is the surface `Element` matching `op`; leaves consult it
-/// for `sync_name_counts_for_leaf`, the Group arms thread it through
-/// the per-shape `gen_consume_*_group_op` helpers. `outer_follow`
-/// carries the surrounding Repeat's iter-follow (`first(inner) ∪
-/// outer_follow`) so nested non-greedy Repeats inside a `SingleAlt`
-/// body can union it onto their own `caller_follow_first`.
-/// `outer_follow` is unused for the other group shapes today (their
-/// inner walkers consume the baked `caller_follow_first` from lower).
+/// Dispatch is on `rep_op.body_shape`; lower asserts at construction
+/// time that only the four reachable shapes appear, so emit's match
+/// is exhaustive without a fall-through panic. `elem` is the surface
+/// `Element` matching `op` — the Group arms thread it through the
+/// per-shape `gen_consume_*_group_op` helpers for their
+/// `&g_elem.alternatives` access. The leaf arm reads nothing from it
+/// (sync now drives off `op.dedup_base`). `outer_follow` carries the
+/// surrounding Repeat's iter-follow (`first(inner) ∪ outer_follow`)
+/// so nested non-greedy Repeats inside a `SingleAlt` body can union
+/// it onto their own `caller_follow_first`. `outer_follow` is unused
+/// for the other group shapes today (their inner walkers consume the
+/// baked `caller_follow_first` from lower).
 ///
-/// The caller must have already verified storability — Transparent
-/// groups and other shapes with `body_has_field == false` are
-/// handled by `gen_op_repeat_with_follow_override`'s non-storable
-/// Group arm.
-fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
-    if op_is_leaf(op) {
-        gen_op_leaf(w, op, elem, ctx, name_counts);
-        return;
-    }
-    if let Group(g_op) = op {
-        if let Group(g_elem) = elem {
-            match &g_op.shape {
-                TokenOnly(to) => {
-                    gen_consume_token_group_op(w, to, &g_elem.alternatives, name_counts);
-                    return;
-                },
-                SingleAlt(sa) => {
-                    gen_consume_single_alt_group_op(
-                        w,
-                        sa,
-                        &g_op.alts[0],
-                        &g_elem.alternatives[0],
-                        ctx,
-                        name_counts,
-                        outer_follow,
-                    );
-                    return;
-                },
-                SimpleCst(scst) => {
-                    gen_consume_group_store_op(
-                        w,
-                        scst,
-                        &g_op.alts,
-                        &g_op.scan_alts,
-                        &g_elem.alternatives,
-                        ctx,
-                        name_counts,
-                    );
-                    return;
-                },
-                General(gs) => {
-                    gen_general_group_store_op(
-                        w,
-                        gs,
-                        &g_op.alts,
-                        &g_op.scan_alts,
-                        &g_elem.alternatives,
-                        ctx,
-                        name_counts,
-                    );
-                    return;
-                },
-                _ => panic("gen_op_inner_for_storable_repeat: Transparent Group is not storable here"),
-            };
-        } else {
-            panic("gen_op_inner_for_storable_repeat: Group op mapped to non-Group element");
-        }
-    }
-    panic("gen_op_inner_for_storable_repeat: caller must guard with op_is_leaf || Group(SingleAlt | TokenOnly | SimpleCst | General)");
+/// The caller must have already verified storability —
+/// `TransparentGroup` bodies are handled by
+/// `gen_op_repeat_with_follow_override`'s non-storable Group arm.
+fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, rep_op: &RepeatOp, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
+    let op = &rep_op.body;
+    return match rep_op.body_shape {
+        LeafRuleCall | LeafOther => gen_op_leaf(w, op, ctx, name_counts),
+        StorableGroup => gen_op_storable_group_inner(w, op, elem, ctx, name_counts, outer_follow),
+        TransparentGroup => panic("gen_op_inner_for_storable_repeat: TransparentGroup body is not storable here — caller must dispatch via the non-storable arm"),
+    };
+}
+
+/// Inner dispatch for the `StorableGroup` arm of
+/// `gen_op_inner_for_storable_repeat`. Splits on `GroupShape`; lower
+/// guarantees the body op is `Op::Group(_)` with a non-Transparent
+/// shape, so the match below is exhaustive over the storable shapes.
+fn gen_op_storable_group_inner(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
+    let g_op = if let Group(g) = op {
+        g;
+    } else {
+        panic("gen_op_storable_group_inner: lower marked StorableGroup but body is not Op::Group");
+    };
+    let g_elem = if let Group(g) = elem {
+        g;
+    } else {
+        panic("gen_op_storable_group_inner: surface element is not Group");
+    };
+    return match &g_op.shape {
+        TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, name_counts),
+        SingleAlt(sa) => gen_consume_single_alt_group_op(
+            w,
+            sa,
+            &g_op.alts[0],
+            &g_elem.alternatives[0],
+            ctx,
+            name_counts,
+            outer_follow,
+        ),
+        SimpleCst(scst) => gen_consume_group_store_op(
+            w,
+            scst,
+            &g_op.alts,
+            &g_op.scan_alts,
+            &g_elem.alternatives,
+            ctx,
+            name_counts,
+        ),
+        General(gs) => gen_general_group_store_op(
+            w,
+            gs,
+            &g_op.alts,
+            &g_op.scan_alts,
+            &g_elem.alternatives,
+            ctx,
+            name_counts,
+        ),
+        Transparent => panic("gen_op_storable_group_inner: lower marked StorableGroup but shape is Transparent"),
+    };
 }
 
 /// Op-driven single-element dispatch. Routes a single `Op` + matching
@@ -2978,7 +2965,7 @@ fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, op: &Op, elem: &Element,
 /// surface `gen_element` graph.
 fn gen_op_dispatch_element(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     if op_is_leaf(op) {
-        gen_op_leaf(w, op, elem, ctx, name_counts);
+        gen_op_leaf(w, op, ctx, name_counts);
         return;
     }
     if let Repeat(rep_op) = op {
@@ -3087,16 +3074,19 @@ fn emit_op_opt_scan_guard_for_group(w: &mut CodeWriter, g_op: &GroupOp, g_elem: 
 }
 
 /// Op-driven emit for Optional + storable Group. Dispatches on
-/// `rep_op.strategy` (baked by lower's `pick_optional_specialised`).
-///
-/// * `OptionalLookahead(s)` → emit `if cond(s.sig) { parse } else null`.
-/// * `OptionalShapeLookahead(s)` → emit per-shape if/else-if chain
-///   with the inner parse inlined.
-/// * `OptionalScanGuard` → emit scan-probe guard then parse on success.
+/// `rep_op.strategy`. The Optional-specialised strategies
+/// (`OptionalLookahead`, `OptionalShapeLookahead`, `OptionalScanGuard`)
+/// are produced by lower's `pick_optional_specialised`; when none
+/// applies, lower falls back to the mask-aware `Plain` /
+/// `WithFollowSubtraction` decision (`Suppressed` is caught earlier
+/// by `gen_op_repeat_with_follow_override` and never reaches here).
+/// `NonGreedy` only fires for `*?` / `+?` and is handled by
+/// `gen_op_repeat_non_greedy`, so this `match` is exhaustive over
+/// the strategies a greedy `?` can carry.
 ///
 /// In every case the inner parse routes through op-driven helpers
-/// (`gen_op_inner_for_storable_repeat`,
-/// `gen_op_dispatch_element` / `gen_op_absent_optional_field`).
+/// (`gen_op_inner_for_storable_repeat`, `gen_op_dispatch_element` /
+/// `gen_op_absent_optional_field`).
 fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let opt_field = rep_op.field;
     let inner_type = op_field_type(&rep_op.body);
@@ -3104,72 +3094,73 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
     let _ = dedup_name(&opt_field, name_counts);
     let inner_elem = &rep.element;
 
-    if let OptionalLookahead(s) = &rep_op.strategy {
-        let cond = gen_lookahead_condition(ctx, &s.sig);
-        w.begin(`let {opt_field}: Option<{inner_type}> = if {cond}`);
-        let mut nc: Array<[String, i32]> = [];
-        gen_op_inner_for_storable_repeat(w, &rep_op.body, inner_elem, ctx, &mut nc, &([] as Array<String>));
-        w.line(`Option::<{inner_type}>::Some({inner_field})`);
-        w.else_begin("else");
-        w.line("null");
-        w.end_with(";");
-        return;
-    }
-    if let OptionalShapeLookahead(s) = &rep_op.strategy {
-        emit_op_optional_with_shape_lookahead_storable(w, g_op, g_elem, s, ctx, name_counts, &opt_field, &inner_type, &inner_field);
-        return;
-    }
-    if let OptionalScanGuard = &rep_op.strategy {
-        let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
-        w.begin(`let {opt_field}: Option<{inner_type}> = if {scan_pos_var} >= 0`);
-        let mut nc: Array<[String, i32]> = [];
-        gen_op_inner_for_storable_repeat(w, &rep_op.body, inner_elem, ctx, &mut nc, &([] as Array<String>));
-        w.line(`Option::<{inner_type}>::Some({inner_field})`);
-        w.else_begin("else");
-        w.line("null");
-        w.end_with(";");
-        return;
-    }
-    panic("gen_op_storable_optional: rep_op.strategy is not one of OptionalLookahead / OptionalShapeLookahead / OptionalScanGuard — lower's `pick_optional_specialised` should have produced one of these for any Optional+Group body");
+    return match &rep_op.strategy {
+        OptionalLookahead(s) => emit_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &opt_field, &inner_type, &inner_field, &gen_lookahead_condition(ctx, &s.sig)),
+        OptionalShapeLookahead(s) => emit_op_optional_with_shape_lookahead_storable(w, g_op, g_elem, s, ctx, name_counts, &opt_field, &inner_type, &inner_field),
+        OptionalScanGuard => {
+            let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
+            emit_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &opt_field, &inner_type, &inner_field, &`{scan_pos_var} >= 0`);
+        },
+        // `pick_optional_specialised` returned `null` and lower fell
+        // through to the mask-aware decision: gate on
+        // `body_first_set` (`Plain`) or the mask-subtracted variant
+        // (`WithFollowSubtraction`).
+        Plain => emit_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &opt_field, &inner_type, &inner_field, &ctx.first_check_str(&rep_op.body_first_set)),
+        WithFollowSubtraction(s) => emit_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &opt_field, &inner_type, &inner_field, &ctx.first_check_str(&s.effective_first)),
+        // Suppressed / NonGreedy / Suppressed are caught upstream;
+        // reaching here is a lower-side bug.
+        Suppressed | NonGreedy(_) => panic("gen_op_storable_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug"),
+    };
+}
+
+/// Shared body of every storable-Optional + Group arm: emit a single
+/// `let {opt_field}: Option<T> = if {cond} { parse; Some(...) } else
+/// { null };`. Caller computes the gate condition (`gen_lookahead_condition`,
+/// `body_first_set`, scan-pos check, etc.).
+fn emit_op_storable_optional_with_first(w: &mut CodeWriter, rep_op: &RepeatOp, inner_elem: &Element, ctx: &mut GenContext, opt_field: &String, inner_type: &String, inner_field: &String, cond: &String) {
+    w.begin(`let {*opt_field}: Option<{*inner_type}> = if {*cond}`);
+    let mut nc: Array<[String, i32]> = [];
+    gen_op_inner_for_storable_repeat(w, rep_op, inner_elem, ctx, &mut nc, &([] as Array<String>));
+    w.line(`Option::<{*inner_type}>::Some({*inner_field})`);
+    w.else_begin("else");
+    w.line("null");
+    w.end_with(";");
 }
 
 /// Op-driven emit for Optional + non-storable (Transparent) Group.
-/// Dispatches on `rep_op.strategy`; the order matches the storable
-/// variant — lower's `pick_optional_specialised` has already encoded
-/// the storable vs. transparent priority. No outer `Option<T>`
-/// wrapping; each branch inlines the inner alt directly.
+/// Dispatches on `rep_op.strategy`. Strategy coverage mirrors
+/// `gen_op_storable_optional` — Optional-specialised shapes from
+/// `pick_optional_specialised` plus the mask-aware fallback (`Plain`
+/// / `WithFollowSubtraction`). No outer `Option<T>` wrapping; each
+/// branch inlines the inner alt directly.
 fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let _ = dedup_name(&rep_op.field, name_counts);
 
-    if let OptionalShapeLookahead(s) = &rep_op.strategy {
-        emit_op_optional_with_shape_lookahead_transparent(w, g_op, g_elem, s, ctx, name_counts);
-        return;
+    return match &rep_op.strategy {
+        OptionalShapeLookahead(s) => emit_op_optional_with_shape_lookahead_transparent(w, g_op, g_elem, s, ctx, name_counts),
+        OptionalLookahead(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gen_lookahead_condition(ctx, &s.sig)),
+        OptionalScanGuard => {
+            let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
+            emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &`{scan_pos_var} >= 0`);
+        },
+        Plain => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &ctx.first_check_str(&rep_op.body_first_set)),
+        WithFollowSubtraction(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &ctx.first_check_str(&s.effective_first)),
+        Suppressed | NonGreedy(_) => panic("gen_op_transparent_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug"),
+    };
+}
+
+/// Shared body of every transparent-Optional + Group arm: emit
+/// `if {cond} { /* inline inner alt's elements */ }`. Caller computes
+/// the gate condition.
+fn emit_op_transparent_optional_with_cond(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, cond: &String) {
+    w.begin(`if {*cond}`);
+    let mut nc: Array<[String, i32]> = [];
+    let body = &g_op.alts[0];
+    let alt = &g_elem.alternatives[0];
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc);
     }
-    if let OptionalLookahead(s) = &rep_op.strategy {
-        let cond = gen_lookahead_condition(ctx, &s.sig);
-        w.begin(`if {cond}`);
-        let mut nc: Array<[String, i32]> = [];
-        let body = &g_op.alts[0];
-        let alt = &g_elem.alternatives[0];
-        for let mut i = 0; i < alt.elements.len(); i += 1 {
-            gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc);
-        }
-        w.end();
-        return;
-    }
-    if let OptionalScanGuard = &rep_op.strategy {
-        let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
-        w.begin(`if {scan_pos_var} >= 0`);
-        let mut nc: Array<[String, i32]> = [];
-        let body = &g_op.alts[0];
-        let alt = &g_elem.alternatives[0];
-        for let mut i = 0; i < alt.elements.len(); i += 1 {
-            gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc);
-        }
-        w.end();
-        return;
-    }
-    panic("gen_op_transparent_optional: rep_op.strategy is not one of OptionalLookahead / OptionalShapeLookahead / OptionalScanGuard — lower's `pick_optional_specialised` should have produced one of these for any Optional+Group body");
+    w.end();
 }
 
 /// Op-driven shape-lookahead emit for the storable Optional + SingleAlt
@@ -3280,40 +3271,38 @@ fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &
     }
 }
 
-/// Bump `name_counts` for `elem` exactly the way `gen_element` would.
-/// Used by `gen_op_leaf` so siblings that still route through the
-/// surface walker see lower-consistent dedup state. Mirrors the
-/// `dedup_name(&base, name_counts)` calls in the leaf arms of
-/// `gen_element` and the surface-IR `Label` / `Not` recursions.
-fn sync_name_counts_for_leaf(elem: &Element, name_counts: &mut Array<[String, i32]>) {
-    if let TokenRef(t) = elem {
-        let _ = dedup_name(&t.field_name, name_counts);
-        return;
-    }
-    if let Literal(l) = elem {
-        let _ = dedup_name(&literal_field_name(&l.text), name_counts);
-        return;
-    }
-    if let RuleRef(r) = elem {
-        let _ = dedup_name(&r.field_name, name_counts);
-        return;
-    }
-    if let Wildcard(_) = elem {
-        let _ = dedup_name(&"wildcard", name_counts);
-        return;
-    }
-    if let Not(ne) = elem {
-        let _ = dedup_name(&not_element_field_name(&ne.element), name_counts);
-        return;
-    }
-    if let Label(lab) = elem {
-        // Scalar label `name = elem` (list labels lower to
-        // `Op::ListLabel` which is not a leaf and never reaches here).
-        // Both the label's own binding and the inner emission update
-        // the count, so mirror that here.
-        let _ = dedup_name(&lab.field_name, name_counts);
-        sync_name_counts_for_leaf(&lab.element, name_counts);
-    }
+/// Bump `name_counts` for a leaf `Op` exactly the way `gen_element`
+/// would have, by reading the lower-baked `dedup_base`. Used by
+/// `gen_op_leaf` so siblings that still route through the surface
+/// walker see lower-consistent dedup state.
+///
+/// `dedup_base` is the base name lower bumped in the alt's outer
+/// `name_counts` when it computed `op.field`: the surface
+/// `field_name` / `literal_field_name(text)` / `"wildcard"` /
+/// `not_element_field_name(...)` for non-rebound leaves. For the
+/// scalar-label rebind (`name = elem`) the inner op's `dedup_base`
+/// is replaced with `lab.field_name` (the rebound label's base) by
+/// `lower_label_op`'s `rebind_op_field` call: the rebind elides the
+/// inner element's binding from emit, so the only name that surfaces
+/// is the label's, and bumping the inner base would drift from
+/// what's actually in scope.
+fn sync_name_counts_for_op_leaf(op: &Op, name_counts: &mut Array<[String, i32]>) {
+    let _ = dedup_name(&op_leaf_dedup_base(op), name_counts);
+}
+
+/// Read the `dedup_base` slot from any leaf op variant. Panics on
+/// non-leaf ops because callers (`gen_op_leaf`, the list-label sync)
+/// already gate with `op_is_leaf`.
+fn op_leaf_dedup_base(op: &Op) -> String {
+    return match op {
+        Token(t) => t.dedup_base,
+        Literal(l) => l.dedup_base,
+        RuleCall(r) => r.dedup_base,
+        Wildcard(w) => w.dedup_base,
+        Excluded(e) => e.dedup_base,
+        // Non-leaf ops have no `dedup_base` to read.
+        Repeat(_) | Group(_) | ListLabel(_) => panic("op_leaf_dedup_base: caller must guard with op_is_leaf"),
+    };
 }
 
 /// Top-level dispatch for `Op::Group(g_op)`. Reads `g_op.shape` to
@@ -3428,7 +3417,7 @@ fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: 
         // (which emits `let <shape.field> = ...;`), then push.
         // Mirrors the leaf path's structure but routes inner emit
         // through GIR rather than surface `gen_element`.
-        sync_name_counts_for_list_label(lab, name_counts);
+        sync_name_counts_for_op_list_label(ll, name_counts);
         let inner_type = op_field_type(&ll.inner);
         w.line(`let mut {ll.field}: Array<{inner_type}> = [];`);
         let inner_field = op_field(&ll.inner);
@@ -3443,21 +3432,23 @@ fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: 
         gen_element(w, elem, ctx, name_counts);
         return;
     }
-    sync_name_counts_for_list_label(lab, name_counts);
+    sync_name_counts_for_op_list_label(ll, name_counts);
     let inner_type = op_field_type(&ll.inner);
     w.line(`let mut {ll.field}: Array<{inner_type}> = [];`);
     let inner_field = op_field(&ll.inner);
-    gen_op_leaf(w, &ll.inner, &lab.element, ctx, name_counts);
+    gen_op_leaf(w, &ll.inner, ctx, name_counts);
     w.line(`{ll.field}.push({inner_field});`);
 }
 
 /// Mirror `gen_element`'s Label arm side-effects on `name_counts`:
-/// bump for the label's own name and recurse into the inner leaf so
-/// any sibling that still routes through the surface walker observes
-/// lower-consistent dedup state.
-fn sync_name_counts_for_list_label(lab: &LabelElement, name_counts: &mut Array<[String, i32]>) {
-    let _ = dedup_name(&lab.field_name, name_counts);
-    sync_name_counts_for_leaf(&lab.element, name_counts);
+/// bump for the label's own name (`ll.dedup_base`) and recurse into
+/// the inner leaf so any sibling that still routes through the
+/// surface walker observes lower-consistent dedup state.
+fn sync_name_counts_for_op_list_label(ll: &ListLabelOp, name_counts: &mut Array<[String, i32]>) {
+    let _ = dedup_name(&ll.dedup_base, name_counts);
+    if op_is_leaf(&ll.inner) {
+        sync_name_counts_for_op_leaf(&ll.inner, name_counts);
+    }
 }
 
 /// Read the deduped field name from any `Op`. Mirrors the
@@ -3681,91 +3672,129 @@ fn gen_op_repeat_suppressed(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
     }
 }
 
-/// Non-greedy `*?` / `+?`. Body must be op-storable today (every leaf,
-/// plus every `Group` shape lower marks `body_has_field`); other shapes
-/// are not exercised and `op_body_is_storable` rejects them with a panic
-/// via the caller. `compute_non_greedy_condition` still walks the
-/// surface inner: its analysis (Wildcard / Not, sub-position second-
-/// token disambiguation) isn't yet captured on `RepeatStrategy::NonGreedy`.
+/// Non-greedy `*?` / `+?`. Dispatches on `rep_op.body_shape`:
+/// leaf and `StorableGroup` bodies push every iteration's binding
+/// into a list; `TransparentGroup` walks the loop without a list
+/// (each iteration inlines the inner alt), since the group itself
+/// contributes no CST field. `compute_non_greedy_condition` is op-
+/// driven now: Wildcard / Not detection reads the body op shape, and
+/// the inner second-position first set is baked on
+/// `rep_op.body_second_position_first`.
 fn gen_op_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
-    if !op_body_is_storable(rep_op) {
-        panic("gen_op_repeat_non_greedy: non-greedy Repeat over non-storable body — extend the op-driven non-greedy arm");
-    }
-    let inner = &rep.element;
     let follow_second = &rep_op.caller_follow_second;
+    let while_cond = compute_non_greedy_condition(rep_op, follow, follow_second, ctx);
+    return match rep_op.body_shape {
+        LeafRuleCall | LeafOther | StorableGroup => gen_op_repeat_non_greedy_storable(w, rep, rep_op, ctx, name_counts, &while_cond),
+        TransparentGroup => gen_op_repeat_non_greedy_transparent(w, rep, rep_op, ctx, name_counts, &while_cond),
+    };
+}
+
+/// Storable-body arm of `gen_op_repeat_non_greedy`. The body
+/// produces a per-iteration value bound to `op.field`; we collect
+/// those into a list field of the surrounding alt's CST struct.
+fn gen_op_repeat_non_greedy_storable(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, while_cond: &String) {
+    let inner = &rep.element;
     let is_plus = if let Plus = rep.kind { true } else { false };
-    let while_cond = compute_non_greedy_condition(inner, &rep_op.body_first_set, follow, follow_second, ctx);
     let iter_follow_unused = ([] as Array<String>);
-    if rep_op.body_has_field {
-        let inner_field = op_field(&rep_op.body);
-        let inner_type = op_field_type(&rep_op.body);
-        let list_field = rep_op.field;
-        let _ = dedup_name(&list_field, name_counts);
-        if is_plus {
-            let mut nc: Array<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow_unused);
-            w.line(`let mut {list_field}: Array<{inner_type}> = [{inner_field}];`);
-            if while_cond != "false" {
-                w.begin(`while {while_cond}`);
-                let mut nc2: Array<[String, i32]> = [];
-                gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc2, &iter_follow_unused);
-                w.line(`{list_field}.push({inner_field});`);
-                w.end();
-            }
-        } else {
-            w.line(`let mut {list_field}: Array<{inner_type}> = [];`);
-            if while_cond != "false" {
-                w.begin(`while {while_cond}`);
-                let mut nc: Array<[String, i32]> = [];
-                gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow_unused);
-                w.line(`{list_field}.push({inner_field});`);
-                w.end();
-            }
-        }
-        return;
-    }
+    let inner_field = op_field(&rep_op.body);
+    let inner_type = op_field_type(&rep_op.body);
+    let list_field = rep_op.field;
+    let _ = dedup_name(&list_field, name_counts);
     if is_plus {
-        gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, name_counts, &iter_follow_unused);
-    }
-    if while_cond != "false" {
-        w.begin(`while {while_cond}`);
         let mut nc: Array<[String, i32]> = [];
-        gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow_unused);
+        gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow_unused);
+        w.line(`let mut {list_field}: Array<{inner_type}> = [{inner_field}];`);
+        if *while_cond != "false" {
+            w.begin(`while {*while_cond}`);
+            let mut nc2: Array<[String, i32]> = [];
+            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc2, &iter_follow_unused);
+            w.line(`{list_field}.push({inner_field});`);
+            w.end();
+        }
+    } else {
+        w.line(`let mut {list_field}: Array<{inner_type}> = [];`);
+        if *while_cond != "false" {
+            w.begin(`while {*while_cond}`);
+            let mut nc: Array<[String, i32]> = [];
+            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow_unused);
+            w.line(`{list_field}.push({inner_field});`);
+            w.end();
+        }
+    }
+}
+
+/// Non-greedy arm for a `TransparentGroup` body — the group has no
+/// own CST field, so each iteration inlines the inner alt without a
+/// surrounding list. Symmetric to
+/// `gen_op_repeat_star_plus_non_storable_group` but with the non-
+/// greedy `while` guard. Reachable for grammars like `(.)*?` or
+/// `(~';')*?` whose inner is a single-element Group that
+/// `lower_transparent_group` collapses to `Op::Group(Transparent)`;
+/// no committed grammar exercises it today, but encoding the case
+/// here makes the dispatch exhaustive on `RepeatBodyShape` and keeps
+/// emit a structural translation of the lowered classifier rather
+/// than relying on lower never producing the shape.
+fn gen_op_repeat_non_greedy_transparent(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, while_cond: &String) {
+    let g_op = if let Group(g) = &rep_op.body {
+        g;
+    } else {
+        panic("gen_op_repeat_non_greedy_transparent: lower marked TransparentGroup but body op is not Op::Group");
+    };
+    let inner = &rep.element;
+    let is_plus = if let Plus = rep.kind { true } else { false };
+    let _ = dedup_name(&rep_op.field, name_counts);
+    if is_plus {
+        let mut nc: Array<[String, i32]> = [];
+        gen_op_group(w, g_op, inner, ctx, &mut nc);
+    }
+    if *while_cond != "false" {
+        w.begin(`while {*while_cond}`);
+        let mut nc: Array<[String, i32]> = [];
+        gen_op_group(w, g_op, inner, ctx, &mut nc);
         w.end();
     }
 }
 
-/// Greedy `?` Repeat. Dispatches on the body op shape: RuleCall uses
-/// caller-follow subtraction (the "next-sibling first" disambiguation);
-/// Group delegates to `gen_op_storable_optional` /
+/// Greedy `?` Repeat. Dispatches on `rep_op.body_shape`: RuleCall
+/// uses caller-follow subtraction (the "next-sibling first"
+/// disambiguation); Group delegates to `gen_op_storable_optional` /
 /// `gen_op_transparent_optional` which consume the baked strategy
 /// variants; other leaves (Token / Literal / Wildcard / Excluded) use
 /// `inner_first` with the mask subtraction baked into
-/// `WithFollowSubtraction`.
+/// `WithFollowSubtraction`. The `match` is exhaustive — lower asserts
+/// at construction time that no other body shape reaches here.
 fn gen_op_repeat_optional_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
-    if op_is_rulecall(&rep_op.body) {
-        gen_op_repeat_optional_rulecall(w, rep, rep_op, ctx, name_counts, follow);
-        return;
-    }
-    if let Group(g_op) = &rep_op.body {
-        let inner = &rep.element;
-        let g_elem = if let Group(g) = inner {
-            g;
-        } else {
-            panic("gen_op_repeat_optional_greedy: Optional+Group body op mapped to non-Group element");
-        };
-        if rep_op.body_has_field {
-            gen_op_storable_optional(w, rep, rep_op, g_op, g_elem, ctx, name_counts);
-        } else {
-            gen_op_transparent_optional(w, rep, rep_op, g_op, g_elem, ctx, name_counts);
-        }
-        return;
-    }
-    if op_is_leaf(&rep_op.body) {
-        gen_op_repeat_optional_leaf(w, rep, rep_op, ctx, name_counts);
-        return;
-    }
-    panic("gen_op_repeat_optional_greedy: op-driven dispatch did not cover this body shape — extend the op-driven arms instead of relying on the surface fallback");
+    return match rep_op.body_shape {
+        LeafRuleCall => gen_op_repeat_optional_rulecall(w, rep, rep_op, ctx, name_counts, follow),
+        LeafOther => gen_op_repeat_optional_leaf(w, rep, rep_op, ctx, name_counts),
+        StorableGroup | TransparentGroup => gen_op_repeat_optional_group(w, rep, rep_op, ctx, name_counts),
+    };
+}
+
+/// Greedy `?` Repeat with a `Group`-shaped body. Splits on
+/// `body_shape` (Storable vs Transparent) to pick the storable /
+/// transparent emitter. The body op is `Op::Group(_)` and the
+/// surface element is `Element::Group(_)` by lower's invariant; the
+/// match destructures both with explicit error markers in case a
+/// future lower regression desynchronises them.
+fn gen_op_repeat_optional_group(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    let g_op = if let Group(g) = &rep_op.body {
+        g;
+    } else {
+        panic("gen_op_repeat_optional_group: lower marked a Group body_shape but body op is not Op::Group");
+    };
+    let g_elem = if let Group(g) = &rep.element {
+        g;
+    } else {
+        panic("gen_op_repeat_optional_group: surface element is not Element::Group");
+    };
+    return match rep_op.body_shape {
+        StorableGroup => gen_op_storable_optional(w, rep, rep_op, g_op, g_elem, ctx, name_counts),
+        TransparentGroup => gen_op_transparent_optional(w, rep, rep_op, g_op, g_elem, ctx, name_counts),
+        // Caller (`gen_op_repeat_optional_greedy`) routes only Group
+        // shapes here; the leaf shapes have their own arms upstream.
+        LeafRuleCall | LeafOther => panic("gen_op_repeat_optional_group: leaf body_shape reached the Group dispatcher — caller-side bug"),
+    };
 }
 
 /// Greedy Optional whose body is a `RuleCall`. The caller-side follow
@@ -3780,7 +3809,6 @@ fn gen_op_repeat_optional_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op
 /// sibling's first overlaps the inner's first by design (e.g.
 /// `accessibilityModifier?` inside `optionalParameter`).
 fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
-    let inner = &rep.element;
     let raw_first = rep_op.body_first_set;
     let combined_follow = if rep_op.position_mask.is_empty() {
         *follow;
@@ -3793,21 +3821,18 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
     let _ = dedup_name(&opt_field, name_counts);
 
     if first.is_empty() {
-        if rep_op.body_has_field {
-            w.line(`let {opt_field}: Option<{inner_type}> = null;`);
-        }
+        // RuleCall always has a field — `body_shape == LeafRuleCall`
+        // implies `body_has_field == true`, so the defensive
+        // `if body_has_field` guard the cascade-dispatch version
+        // carried is now redundant; always emit the null binding.
+        w.line(`let {opt_field}: Option<{inner_type}> = null;`);
         return;
-    }
-
-    if !rep_op.body_has_field {
-        // RuleCall always has a field; this branch is unreachable.
-        panic("gen_op_repeat_optional_rulecall: RuleCall Optional with no field");
     }
 
     let inner_field = op_field(&rep_op.body);
     w.begin(`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&first)}`);
     let mut nc: Array<[String, i32]> = [];
-    gen_op_leaf(w, &rep_op.body, inner, ctx, &mut nc);
+    gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
     w.line(`Option::<{inner_type}>::Some({inner_field})`);
     w.else_begin("else");
     w.line("null");
@@ -3822,7 +3847,6 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
 /// already bakes the mask subtraction as `WithFollowSubtraction` when
 /// it applies.
 fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    let inner = &rep.element;
     let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
         s.effective_first;
     } else {
@@ -3835,30 +3859,30 @@ fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
 
     w.begin(`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&loop_first)}`);
     let mut nc: Array<[String, i32]> = [];
-    gen_op_leaf(w, &rep_op.body, inner, ctx, &mut nc);
+    gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
     w.line(`Option::<{inner_type}>::Some({inner_field})`);
     w.else_begin("else");
     w.line("null");
     w.end_with(";");
 }
 
-/// Greedy `*` / `+` Repeat dispatcher. Splits on body storability:
-/// non-storable Group bodies (Transparent — `body_has_field == false`)
-/// walk the loop without a list, each iteration inlining its alt;
-/// storable bodies push every iteration's inner binding into a list
-/// field.
+/// Greedy `*` / `+` Repeat dispatcher. Splits on `body_shape`:
+/// `TransparentGroup` walks the loop without a list (each iteration
+/// inlines the inner alt); the storable shapes (`LeafRuleCall`,
+/// `LeafOther`, `StorableGroup`) push every iteration's inner
+/// binding into a list field. Match is exhaustive.
 fn gen_op_repeat_star_plus_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
-    if let Group(g_op) = &rep_op.body {
-        if !rep_op.body_has_field {
+    return match rep_op.body_shape {
+        TransparentGroup => {
+            let g_op = if let Group(g) = &rep_op.body {
+                g;
+            } else {
+                panic("gen_op_repeat_star_plus_greedy: lower marked TransparentGroup but body op is not Op::Group");
+            };
             gen_op_repeat_star_plus_non_storable_group(w, rep, rep_op, g_op, ctx, name_counts);
-            return;
-        }
-    }
-    if op_body_is_storable(rep_op) {
-        gen_op_repeat_star_plus_storable(w, rep, rep_op, ctx, name_counts, follow);
-        return;
-    }
-    panic("gen_op_repeat_star_plus_greedy: op-driven dispatch did not cover this body shape — extend the op-driven arms instead of relying on the surface fallback");
+        },
+        LeafRuleCall | LeafOther | StorableGroup => gen_op_repeat_star_plus_storable(w, rep, rep_op, ctx, name_counts, follow),
+    };
 }
 
 /// Star / Plus + non-storable `Op::Group` body (Transparent groups,
@@ -3952,13 +3976,13 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(`if {scan_pos} < 0 \{ break; \}`);
             let mut nc: Array<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
+            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.line(`{list_field}.push({inner_field});`);
             w.end();
         } else {
             w.begin(`while {ctx.first_check_str(&loop_first)}`);
             let mut nc: Array<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
+            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.line(`{list_field}.push({inner_field});`);
             w.end();
         }
@@ -3977,7 +4001,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             w.end();
             w.line(`{plus_flag} = false;`);
             let mut nc: Array<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
+            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.line(`{list_field}.push({inner_field});`);
             w.end();
         } else {
@@ -3986,7 +4010,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             w.begin(`while {plus_flag} || {ctx.first_check_str(&inner_first)}`);
             w.line(`{plus_flag} = false;`);
             let mut nc: Array<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, &rep_op.body, inner, ctx, &mut nc, &iter_follow);
+            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.line(`{list_field}.push({inner_field});`);
             w.end();
         }
@@ -4015,15 +4039,17 @@ fn wildcard_non_greedy_condition(ctx: &mut GenContext, follow_first: &Array<Stri
     return ctx.kind_negate_check_str(&excluded, &"p.peek_kind()");
 }
 
-fn compute_non_greedy_condition(inner: &Element, raw_first: &Array<String>, follow_first: &Array<String>, follow_second: &Array<String>, ctx: &mut GenContext) -> String {
-    // Wildcard (`.*?`) and Not (`~TOK*?`) inner: `first_of_element` returns
-    // `[]` because their match set is open-ended. Handle them explicitly:
-    // keep looping while the current token is not EOF and not in the follow
-    // set (i.e. the continuation can't yet fire).
-    if let Wildcard(_) = inner {
-        return wildcard_non_greedy_condition(ctx, follow_first);
-    }
-    if let Not(_) = inner {
+fn compute_non_greedy_condition(rep_op: &RepeatOp, follow_first: &Array<String>, follow_second: &Array<String>, ctx: &mut GenContext) -> String {
+    let raw_first = &rep_op.body_first_set;
+
+    // Wildcard (`.*?`) and Not (`~TOK*?`) inner: their match set is
+    // open-ended, so `body_first_set` lowers to `[]`. The same is true
+    // for `(.)*?` / `(~TOK)*?` whose body op is `Op::Group(Transparent)`
+    // wrapping the open-ended leaf. Detecting the open-ended case via
+    // the empty first set covers both shapes uniformly: keep looping
+    // while the current token is not EOF and not in the follow set
+    // (i.e. the continuation can't yet fire).
+    if raw_first.is_empty() {
         return wildcard_non_greedy_condition(ctx, follow_first);
     }
 
@@ -4044,15 +4070,13 @@ fn compute_non_greedy_condition(inner: &Element, raw_first: &Array<String>, foll
     // Use 2-token lookahead with follow_second to disambiguate.
     // For (',' column_def)*? followed by (',' table_constraint)*:
     //   peek(0) == ',' for both, peek(1) distinguishes column_def from table_constraint.
-    if let Group(g) = inner {
-        if g.alternatives.len() == 1 && g.alternatives[0].elements.len() >= 2 && follow_second.len() > 0 {
-            let inner_second_first = ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
-            let second_continue = subtract_sets(&inner_second_first, follow_second);
-            if second_continue.len() > 0 {
-                let peek0_cond = ctx.first_check_str(raw_first);
-                let peek1_cond = ctx.kind_check_str(&second_continue, "p.peek_at(1)");
-                return `({peek0_cond}) && ({peek1_cond})`;
-            }
+    let inner_second_first = &rep_op.body_second_position_first;
+    if inner_second_first.len() > 0 && follow_second.len() > 0 {
+        let second_continue = subtract_sets(inner_second_first, follow_second);
+        if second_continue.len() > 0 {
+            let peek0_cond = ctx.first_check_str(raw_first);
+            let peek1_cond = ctx.kind_check_str(&second_continue, "p.peek_at(1)");
+            return `({peek0_cond}) && ({peek1_cond})`;
         }
     }
 
@@ -4069,33 +4093,6 @@ fn subtract_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
         }
     }
     return result;
-}
-
-fn is_optional_repeat(elem: &Element) -> bool {
-    if let Repeat(rep) = elem {
-        if let Optional = rep.kind {
-            return true;
-        }
-    }
-    if let Label(lab) = elem {
-        return is_optional_repeat(&lab.element);
-    }
-    return false;
-}
-
-fn has_nested_optionals(inner: &Element) -> bool {
-    if let Group(g) = inner {
-        if g.alternatives.len() != 1 {
-            return false;
-        }
-        for let mut i = 0; i < g.alternatives[0].elements.len(); i += 1 {
-            let elem = &g.alternatives[0].elements[i];
-            if is_optional_repeat(elem) {
-                return true;
-            }
-        }
-    }
-    return false;
 }
 
 fn gen_lookahead_condition(ctx: &mut GenContext, sig: &Array<Array<String>>) -> String {
@@ -4971,7 +4968,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                 // Wildcard / Excluded / non-self-ref RuleCall already
                 // handled above). Route through `gen_op_leaf` so the
                 // suffix walker stops reaching surface `gen_element`.
-                gen_op_leaf(w, suffix_op, elem, ctx, &mut name_counts);
+                gen_op_leaf(w, suffix_op, ctx, &mut name_counts);
             } else {
                 gen_element(w, elem, ctx, &mut name_counts);
             }

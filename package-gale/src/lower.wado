@@ -100,6 +100,7 @@ use {
     WildcardOp,
     ExcludedOp,
     RepeatOp,
+    RepeatBodyShape,
     RepeatStrategy,
     NonGreedyStrategy,
     WithFollowSubtractionStrategy,
@@ -802,10 +803,12 @@ fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
             variant_id: rc.variant_id,
             min_prec_arg: Option::<i32>::Some(prec),
             field: rc.field,
+            dedup_base: rc.dedup_base,
         }),
         ListLabel(ll) => Op::ListLabel(ListLabelOp {
             field: ll.field,
             inner: rebind_self_ref_min_prec(ll.inner, prec),
+            dedup_base: ll.dedup_base,
         }),
         other => other,
     };
@@ -1565,8 +1568,8 @@ fn lower_alt_scan_element(alt_elements: &Array<Element>, i: i32, ctx: &mut GenCo
 }
 
 /// True iff any element in the alt is an Optional Repeat (possibly
-/// wrapped in a `Label`). Mirrors surface `has_nested_optionals` /
-/// `is_optional_repeat` for the scan-side OptionalLookahead trigger.
+/// wrapped in a `Label`). Drives the scan-side OptionalLookahead
+/// trigger via `surface_is_optional_repeat`.
 fn has_nested_optional_in_alt(alt: &Alternative) -> bool {
     for let elem of &alt.elements {
         if surface_is_optional_repeat(elem) {
@@ -1833,25 +1836,36 @@ fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>, rule_name: &
         TokenRef(t) => Op::Token(TokenOp {
             kind: `TK_{t.name}`,
             field: dedup_name(&t.field_name, name_counts),
+            dedup_base: t.field_name,
         }),
-        Literal(l) => Op::Literal(LiteralOp {
-            kind: literal_const_name(&l.text),
-            field: dedup_name(&literal_field_name(&l.text), name_counts),
-        }),
+        Literal(l) => {
+            let base = literal_field_name(&l.text);
+            Op::Literal(LiteralOp {
+                kind: literal_const_name(&l.text),
+                field: dedup_name(&base, name_counts),
+                dedup_base: base,
+            });
+        },
         RuleRef(r) => Op::RuleCall(RuleCallOp {
             target_name: r.name,
             target_snake: r.snake_name,
             variant_id: ctx.intern_follow_variant(&r.name, outer_follow, false),
             min_prec_arg: null,
             field: dedup_name(&r.field_name, name_counts),
+            dedup_base: r.field_name,
         }),
         Wildcard(_) => Op::Wildcard(WildcardOp {
             field: dedup_name(&"wildcard", name_counts),
+            dedup_base: "wildcard",
         }),
-        Not(ne) => Op::Excluded(ExcludedOp {
-            kinds: collect_excluded_kinds(&ne.element),
-            field: dedup_name(&not_element_field_name(&ne.element), name_counts),
-        }),
+        Not(ne) => {
+            let base = not_element_field_name(&ne.element);
+            Op::Excluded(ExcludedOp {
+                kinds: collect_excluded_kinds(&ne.element),
+                field: dedup_name(&base, name_counts),
+                dedup_base: base,
+            });
+        },
         Repeat(rep) => lower_repeat_op(rep, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask, outer_position_mask),
         Group(g) => lower_group_op(g, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask, outer_position_mask),
         Label(lab) => lower_label_op(lab, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask, outer_position_mask),
@@ -2083,11 +2097,16 @@ fn lower_token_only_leaf(elem: &Element, counts: &mut Array<[String, i32]>) -> O
         TokenRef(t) => Op::Token(TokenOp {
             kind: `TK_{t.name}`,
             field: dedup_name(&t.field_name, counts),
+            dedup_base: t.field_name,
         }),
-        Literal(l) => Op::Literal(LiteralOp {
-            kind: literal_const_name(&l.text),
-            field: dedup_name(&literal_field_name(&l.text), counts),
-        }),
+        Literal(l) => {
+            let base = literal_field_name(&l.text);
+            Op::Literal(LiteralOp {
+                kind: literal_const_name(&l.text),
+                field: dedup_name(&base, counts),
+                dedup_base: base,
+            });
+        },
         _ => panic("lower_token_only_leaf: classifier permitted non-token leaf"),
     };
 }
@@ -2201,16 +2220,10 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut Array<[String, i32]>) 
             variant_id: null,
             min_prec_arg: null,
             field: dedup_name(&r.field_name, counts),
+            dedup_base: r.field_name,
         });
     }
     panic("lower_simple_cst_alt_call: classifier permitted non-RuleRef leaf");
-}
-
-fn simple_cst_alt_target_name(alt: &Alternative) -> String {
-    if let RuleRef(r) = &alt.elements[0] {
-        return r.name;
-    }
-    return "<unknown>";
 }
 
 /// Multi-alt group not covered by `SimpleCst` / `TokenOnly` /
@@ -2427,7 +2440,11 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     let body = if repeat_inner_is_list_label(&rep.element) {
         if let Label(lab) = &rep.element {
             let inner_op = lower_op(&lab.element, &mut inner_counts, rule_name, ctx, group_counter, &iter_follow, variant_mask, outer_position_mask);
-            rebind_op_field(inner_op, &outer_field);
+            // The Repeat's outer field carries `lab.field_name` as
+            // its base (deduped earlier in `outer_field`); the rebind
+            // adopts that base on the inner op so emit's leaf sync
+            // bumps the actually-emitted name, not the elided inner.
+            rebind_op_field(inner_op, &outer_field, &lab.field_name);
         } else {
             panic("repeat_inner_is_list_label returned true for non-Label");
         }
@@ -2449,6 +2466,8 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     } else {
         false;
     };
+    let body_second_position_first = compute_body_second_position_first(&rep.element, ctx);
+    let body_shape = classify_repeat_body_shape(&body);
     return Op::Repeat(RepeatOp {
         kind: rep.kind,
         body,
@@ -2472,7 +2491,46 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
         body_has_field,
         body_first_set: inner_first,
         body_is_single_alt_group,
+        body_second_position_first,
+        body_shape,
     });
+}
+
+/// Inner second-position first set for non-greedy 2-token disambiguation.
+/// Mirrors the surface check `compute_non_greedy_condition` used to perform
+/// at emit time: when the inner is a single-alt `Group` of ≥ 2 elements,
+/// returns `first_of_elements_from(&elements, 1)`; otherwise `[]`.
+fn compute_body_second_position_first(elem: &Element, ctx: &mut GenContext) -> Array<String> {
+    if let Group(g) = elem {
+        if g.alternatives.len() == 1 && g.alternatives[0].elements.len() >= 2 {
+            return ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
+        }
+    }
+    return [];
+}
+
+/// Classify the body op into its `RepeatBodyShape`. The four cases
+/// cover every shape `lower_op` produces for a Repeat's inner; lower
+/// asserts on anything else so emit's exhaustive dispatch can drop
+/// the "did not cover this body shape" panics.
+///
+/// Mirrors emit's pre-shape probes (`op_is_rulecall`, `op_is_leaf`,
+/// `let Group(g_op) = body && body_has_field`).
+fn classify_repeat_body_shape(body: &Op) -> RepeatBodyShape {
+    return match body {
+        RuleCall(_) => RepeatBodyShape::LeafRuleCall,
+        Token(_) | Literal(_) | Wildcard(_) | Excluded(_) => RepeatBodyShape::LeafOther,
+        Group(g_op) => match &g_op.shape {
+            Transparent => RepeatBodyShape::TransparentGroup,
+            SingleAlt(_) | TokenOnly(_) | SimpleCst(_) | General(_) => RepeatBodyShape::StorableGroup,
+        },
+        // Lower never produces these as a Repeat body: ListLabel is
+        // unwrapped by `lower_repeat_op`'s `repeat_inner_is_list_label`
+        // arm before `lower_op` builds the Op, and a directly nested
+        // Repeat body has no surface-grammar equivalent (`(a*)*`
+        // collapses through the surface Group).
+        ListLabel(_) | Repeat(_) => panic("classify_repeat_body_shape: ListLabel / Repeat reached as a Repeat body — lower-side bug"),
+    };
 }
 
 /// Caller-side second-token set for a non-greedy Repeat at position
@@ -2802,6 +2860,8 @@ fn patch_repeat_op_caller_follow(rep_op: &RepeatOp, caller_follow_first: Array<S
         body_has_field: rep_op.body_has_field,
         body_first_set: rep_op.body_first_set,
         body_is_single_alt_group: rep_op.body_is_single_alt_group,
+        body_second_position_first: rep_op.body_second_position_first,
+        body_shape: rep_op.body_shape,
     };
 }
 
@@ -2907,9 +2967,17 @@ fn lower_label_op(lab: &LabelElement, name_counts: &mut Array<[String, i32]>, ru
         // Inside a Repeat, `lower_repeat_op` adopts the label name
         // directly (the Repeat itself implies `Array<>`); that path
         // skips this wrapper.
-        return Op::ListLabel(ListLabelOp { field: label_field, inner: inner_op });
+        return Op::ListLabel(ListLabelOp {
+            field: label_field,
+            inner: inner_op,
+            dedup_base: lab.field_name,
+        });
     }
-    return rebind_op_field(inner_op, &label_field);
+    // Scalar `name = elem` rebind. Pass `lab.field_name` as the new
+    // dedup_base so emit's leaf sync bumps the rebound name (the only
+    // binding that actually surfaces in the generated source) rather
+    // than the inner element's elided base.
+    return rebind_op_field(inner_op, &label_field, &lab.field_name);
 }
 
 /// Enumerate the CST struct fields for an alt's `ops` list. The
@@ -3112,31 +3180,45 @@ fn transparent_group_inner_decl(_g: &GroupOp) -> Option<FieldDecl> {
     return null;
 }
 
-/// Replace the `field` slot of an op with `new_field`. Covers
-/// every Op variant — labels can wrap any inner shape, and the
-/// rebind only rewrites the outermost field slot:
+/// Replace the `field` slot of an op with `new_field` and the
+/// `dedup_base` slot of leaf ops with `new_dedup_base`. Covers every
+/// Op variant — labels can wrap any inner shape, and the rebind only
+/// rewrites the outermost field slot:
 ///
-/// * Leaf ops carry their field directly — just replace.
+/// * Leaf ops carry their field and `dedup_base` directly — replace
+///   both. `new_dedup_base` is the surface base name lower would have
+///   passed to `dedup_name` for the *rebound* binding (e.g.
+///   `lab.field_name` for `name = ID`, `lab.field_name` for the
+///   `(name+=elem)*` outer Repeat). The inner element's original
+///   `dedup_base` is intentionally dropped: the rebind elides the
+///   inner binding from emit, so its base name is no longer in scope
+///   and emit's `name_counts` should not pretend it is.
 /// * `Repeat` carries the outer struct field on `RepeatOp.field`
-///   (the per-iteration `body.field` lives in its own scope and
-///   is unaffected).
-/// * `Group` shapes carry their outer field inside the shape
-///   payload (`TokenOnly.field`, `SimpleCst.field`, etc.); the
-///   `Transparent` shape has no field of its own and the label
-///   passes through to the inner op.
-fn rebind_op_field(op: Op, new_field: &String) -> Op {
+///   (the per-iteration `body.field` lives in its own scope and is
+///   unaffected). Repeat ops have no `dedup_base` of their own —
+///   `new_dedup_base` is unused for this arm.
+/// * `Group` shapes carry their outer field inside the shape payload
+///   (`TokenOnly.field`, `SimpleCst.field`, etc.); the `Transparent`
+///   shape has no field of its own and the label passes through to
+///   the inner op. Group payloads have no `dedup_base` —
+///   `new_dedup_base` is unused for this arm.
+/// * `ListLabel` carries `dedup_base` itself; rebinding the outer
+///   field here updates `dedup_base` to `new_dedup_base` for the same
+///   reason as the leaf arms.
+fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> Op {
     return match op {
-        Token(t) => Op::Token(TokenOp { kind: t.kind, field: *new_field }),
-        Literal(l) => Op::Literal(LiteralOp { kind: l.kind, field: *new_field }),
+        Token(t) => Op::Token(TokenOp { kind: t.kind, field: *new_field, dedup_base: *new_dedup_base }),
+        Literal(l) => Op::Literal(LiteralOp { kind: l.kind, field: *new_field, dedup_base: *new_dedup_base }),
         RuleCall(r) => Op::RuleCall(RuleCallOp {
             target_name: r.target_name,
             target_snake: r.target_snake,
             variant_id: r.variant_id,
             min_prec_arg: r.min_prec_arg,
             field: *new_field,
+            dedup_base: *new_dedup_base,
         }),
-        Wildcard(_) => Op::Wildcard(WildcardOp { field: *new_field }),
-        Excluded(e) => Op::Excluded(ExcludedOp { kinds: e.kinds, field: *new_field }),
+        Wildcard(_) => Op::Wildcard(WildcardOp { field: *new_field, dedup_base: *new_dedup_base }),
+        Excluded(e) => Op::Excluded(ExcludedOp { kinds: e.kinds, field: *new_field, dedup_base: *new_dedup_base }),
         Repeat(rep) => Op::Repeat(RepeatOp {
             kind: rep.kind,
             body: rep.body,
@@ -3150,6 +3232,8 @@ fn rebind_op_field(op: Op, new_field: &String) -> Op {
             body_has_field: rep.body_has_field,
             body_first_set: rep.body_first_set,
             body_is_single_alt_group: rep.body_is_single_alt_group,
+            body_second_position_first: rep.body_second_position_first,
+            body_shape: rep.body_shape,
         }),
         Group(g) => Op::Group(GroupOp {
             shape: rebind_group_shape(g.shape, new_field),
@@ -3158,12 +3242,16 @@ fn rebind_op_field(op: Op, new_field: &String) -> Op {
             dispatch: g.dispatch,
             scan_dispatch: g.scan_dispatch,
         }),
-        ListLabel(ll) => rebind_list_label_op(ll, new_field),
+        ListLabel(ll) => rebind_list_label_op(ll, new_field, new_dedup_base),
     };
 }
 
-fn rebind_list_label_op(ll: ListLabelOp, new_field: &String) -> Op {
-    return Op::ListLabel(ListLabelOp { inner: ll.inner, field: *new_field });
+fn rebind_list_label_op(ll: ListLabelOp, new_field: &String, new_dedup_base: &String) -> Op {
+    return Op::ListLabel(ListLabelOp {
+        inner: ll.inner,
+        field: *new_field,
+        dedup_base: *new_dedup_base,
+    });
 }
 
 fn rebind_group_shape(shape: GroupShape, new_field: &String) -> GroupShape {

@@ -457,6 +457,20 @@ pub struct TokenOp {
     /// Dedupped field name in the enclosing alt's CST struct.
     /// Already includes the `_2` / `_3` suffix where needed.
     pub field: String,
+    /// Pre-dedup base name (the surface element's `field_name`).
+    /// Drives emit's per-leaf `dedup_name(&dedup_base, name_counts)`
+    /// sync so siblings that still walk surface IR (e.g.
+    /// `gen_lr_suffix_helpers`'s inline RuleRef paths and
+    /// `gen_element` fallbacks) observe the same count `gen_element`
+    /// would have produced. For non-rebound leaves it matches the
+    /// surface element's base name (so `dedup_base == field` when the
+    /// leaf was the first occurrence in its alt). For label-rebound
+    /// leaves (`name = ID` lowered to `Op::Token { field: "name",
+    /// dedup_base: "name" }`) it carries the rebound label's base —
+    /// the inner element's original base is intentionally dropped
+    /// because the rebind elides the inner binding from emit. See
+    /// `lower::rebind_op_field` for the rebind contract.
+    pub dedup_base: String,
 }
 
 pub struct LiteralOp {
@@ -465,6 +479,9 @@ pub struct LiteralOp {
     /// Dedupped field name. `lower` derives the base name from
     /// `literal_field_name` and applies dedup.
     pub field: String,
+    /// Pre-dedup base name (`literal_field_name(&l.text)`). See
+    /// `TokenOp.dedup_base` for the role.
+    pub dedup_base: String,
 }
 
 pub struct RuleCallOp {
@@ -485,10 +502,16 @@ pub struct RuleCallOp {
     pub min_prec_arg: Option<i32>,
     /// Dedupped field name in the enclosing alt's struct.
     pub field: String,
+    /// Pre-dedup base name (the surface RuleRef's `field_name`).
+    /// See `TokenOp.dedup_base` for the role.
+    pub dedup_base: String,
 }
 
 pub struct WildcardOp {
     pub field: String,
+    /// Pre-dedup base name (`"wildcard"`). See `TokenOp.dedup_base`
+    /// for the role.
+    pub dedup_base: String,
 }
 
 pub struct ExcludedOp {
@@ -496,6 +519,9 @@ pub struct ExcludedOp {
     /// passed to `p.match_not([...])`.
     pub kinds: Array<String>,
     pub field: String,
+    /// Pre-dedup base name (`not_element_field_name(&ne.element)`).
+    /// See `TokenOp.dedup_base` for the role.
+    pub dedup_base: String,
 }
 
 /// `name+=elem` outside of a Repeat. The outer CST struct lays out
@@ -508,6 +534,11 @@ pub struct ListLabelOp {
     pub inner: Op,
     /// Outer CST struct field name (the label's name, deduped).
     pub field: String,
+    /// Pre-dedup base name (`lab.field_name`). Drives the outer-label
+    /// half of `sync_name_counts_for_op_list_label`'s sibling-dedup
+    /// sync; the inner half delegates to the wrapped op's own
+    /// `dedup_base`.
+    pub dedup_base: String,
 }
 
 pub struct RepeatOp {
@@ -568,8 +599,20 @@ pub struct RepeatOp {
     /// True iff the inner element contributes a CST field — i.e.
     /// emit's Repeat surfaces a storable `Option<T>` (`Optional`) or
     /// `Array<T>` (`Star` / `Plus`) field. False for `Transparent`
-    /// groups and other non-storable shapes.
+    /// groups and other non-storable shapes. Equal to
+    /// `body_shape != TransparentGroup`; kept as a denormalised flag
+    /// to avoid threading the enum through every call site that just
+    /// asks "does this body produce storage?".
     pub body_has_field: bool,
+    /// Lowered emit-shape classifier for the body op. Drives emit's
+    /// dispatch in `gen_op_repeat_*` so the `op_is_leaf` /
+    /// `op_is_rulecall` / `is Group(_)` × `body_has_field` predicates
+    /// don't have to be re-checked at every dispatch site, and so the
+    /// fall-through panics ("op-driven dispatch did not cover this
+    /// body shape") become unreachable: every reachable body op has a
+    /// named variant here, and lower asserts at construction time
+    /// that no other shape leaks through.
+    pub body_shape: RepeatBodyShape,
     /// Caller-side second-token set for non-greedy 2-token
     /// disambiguation. For a non-greedy Repeat at position `i` of a
     /// surface alt, this is the first set of the next element's
@@ -577,6 +620,14 @@ pub struct RepeatOp {
     /// over a single-alt Group of ≥ 2 elements. Empty when 1-token
     /// follow suffices. Consumed by `gen_repeat_non_greedy`.
     pub caller_follow_second: Array<String>,
+    /// Inner second-position first set for non-greedy 2-token
+    /// disambiguation. When the inner element is a single-alt `Group`
+    /// of ≥ 2 elements (the `(',' x)*?` body shape), this is
+    /// `first_of_elements_from(&inner.alternatives[0].elements, 1)`.
+    /// Empty otherwise. Consumed by `gen_repeat_non_greedy`'s
+    /// `peek_at(1)` disambiguation arm so emit doesn't re-walk the
+    /// surface inner.
+    pub body_second_position_first: Array<String>,
 }
 
 pub struct GroupOp {
@@ -592,6 +643,37 @@ pub struct GroupOp {
     /// branch.
     pub dispatch: MultiAltDispatch,
     pub scan_dispatch: MultiAltDispatch,
+}
+
+/// Lower-side classification of a Repeat's body op shape. Drives
+/// emit's `gen_op_repeat_*` dispatch — every reachable shape lower
+/// produces has a named variant, so emit's per-Repeat dispatcher is
+/// an exhaustive `match rep_op.body_shape { ... }` rather than a
+/// cascade of `op_is_leaf` / `op_is_rulecall` / `let Group(_) = ...`
+/// probes guarded by an "unhandled body shape" panic. Lower asserts
+/// at construction time that the body op falls into one of the four
+/// variants; ListLabel / Repeat / Suppressed shapes never reach
+/// `lower_repeat_op`.
+pub variant RepeatBodyShape {
+    /// `Op::RuleCall` body. Optional dispatch routes here for the
+    /// caller-follow subtraction (`gen_op_repeat_optional_rulecall`),
+    /// avoiding the next-sibling token greedy-eat issue.
+    LeafRuleCall,
+    /// `Op::Token` / `Op::Literal` / `Op::Wildcard` / `Op::Excluded`
+    /// — leaf ops that do not need the RuleCall caller-follow
+    /// subtraction. Optional dispatch routes here to
+    /// `gen_op_repeat_optional_leaf`.
+    LeafOther,
+    /// `Op::Group` with shape `SingleAlt` / `TokenOnly` / `SimpleCst`
+    /// / `General`. The group itself contributes a CST field; emit
+    /// pushes the inner binding into the surrounding `Option<T>` /
+    /// `Array<T>` slot.
+    StorableGroup,
+    /// `Op::Group` with shape `Transparent`. The group has no own
+    /// field; the inner alt's elements inline into the surrounding
+    /// sequence (or the loop walks without a list, for Star / Plus /
+    /// non-greedy).
+    TransparentGroup,
 }
 
 /// How an `e?` / `e*` / `e+` repeat is emitted at parse time. The
