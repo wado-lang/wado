@@ -171,35 +171,83 @@ The `stores` annotation for non-closure reference parameters remains as a separa
 
 ## Implementation Status
 
-### Completed
+Phase headings map one-to-one to those in [Closure Implementation](./wep-2026-01-16-closure-implementation.md#migration-plan). File references below point at the current state of `claude/review-closure-design-1pSAO`; line numbers are approximate.
+
+### Already in place
 
 - [x] Parser support for trait bounds (`T: Trait`)
 - [x] Type checking with bounds (struct type parameters)
-- [x] Closure lowering to functor structs with `__call` methods
+- [x] Closure lowering to functor structs with `__call` methods (`lower/plan/closure.rs`)
 - [x] Default type parameters (`T = DefaultType` syntax)
-- [x] Define internal `Fn` trait in `core:prelude`
+- [x] Internal `Fn<Args, Ret, Effects>` trait declared in `lib/core/prelude/traits.wado:289-305` (currently unused as a bound)
+- [x] `__Closure_N` struct + funcref codegen, stable `functor_id`, specialised path (`MethodCall` on `__Closure_N`)
+- [x] Canonical closure path: `NirExprKind::ClosureToCanonical`, per-`(N, Ret)` `CanonicalClosure_K`, inspectable supertype `$canonical_inspectable_base`, per-functor wrapper triple
+- [x] `FnCanonicalDispatch` synthesised dispatch stubs (`synthesis/traits.rs:1565-1599`)
+- [x] Heap promotion via boxing pass over `address_taken_locals` (`lower/plan/boxing.rs:476-499`)
+- [x] Effect generic parameter `<effect E>` on free / impl functions (`parser.rs:3972-3978`)
 
-### In Progress
+### Phase 1: Parser surface (permissive)
 
-- [ ] Internal `FnMut` trait with `Fn <: FnMut` sub-trait relation
-- [ ] Parser support for `impl fn(...)` / `dyn fn(...)` / `fn mut(...)` syntax
-- [ ] Reject bare `fn(T) -> U` in type positions with a clear diagnostic
-- [ ] Type checking with bounds (function type parameters)
-- [ ] Desugar `impl fn(...)` parameters to `Fn` / `FnMut` bounds
-- [ ] Monomorphization respects bounds
-- [ ] Auto-capture by reference (infer `&T` vs `&mut T` from body usage)
-- [ ] Enforce `mut` binding requirement when calling `fn mut` closures
-- [ ] Canonical closure synthesis on `dyn fn` boundary
+- [ ] Add `Dyn` keyword to lexer/token (`lexer.rs:675-700`, `token.rs:20-43,160-183`)
+- [ ] Remove the unused `move` keyword reservation (`lexer.rs:691`, `token.rs:36`)
+- [ ] Parse `impl fn(...)` and `dyn fn(...)` in type positions (`parser.rs:3736-3783`); add `qualifier: ImplDynQualifier` to `FunctionType` (`ast.rs:2422-2554`)
+- [ ] Parse `fn mut(...)` as a two-token form; add `is_mut: bool` to `FunctionType`
+- [ ] Parse `fn(...)` / `fn mut(...)` in trait bound position (`parser.rs:4043-4078`)
+- [ ] Parse `with (E1, E2)` parens-grouped multi-effect in bound contexts
 
-## Implementation Phases
+### Phase 2: Internal `FnMut` trait
 
-1. ~~Implement trait bounds (`T: Trait`)~~ DONE (struct params)
-2. ~~Define internal `Fn` trait with effect parameter~~ DONE
-3. Parser: accept `impl` / `dyn` qualifiers and `fn mut`; reject bare `fn(...)` in type positions
-4. Type checker: desugar `impl fn(...)` parameters to bounded generics
-5. Capture analysis: classify each captured binding as `&T` or `&mut T`; classify closure as `fn` or `fn mut`
-6. Codegen: monomorphization respects bounds; `dyn fn` uses canonical closure shape
-7. Remove legacy closure handling from codegen
+- [ ] Add `pub trait FnMut<Args, Ret, Effects>: Fn<Args, Ret, Effects>` to `lib/core/prelude/traits.wado` with `fn call_mut(&mut self, args: Args) -> Ret with Effects`
+- [ ] Re-export via prelude
+- [ ] Resolve bound `fn(...)` → internal `Fn<...>`, bound `fn mut(...)` → internal `FnMut<...>` in resolver
+
+### Phase 3: Type-system split
+
+- [ ] Add `is_mut: bool` to `ResolvedType::Function` (`tir.rs:377-383`)
+- [ ] Sub-typing rule in `check_assignable` (`resolver/typecheck.rs:139-171`): `actual.is_mut == false && expected.is_mut == true` → Compatible; reverse → Incompatible
+- [ ] Update `make_function` / TIR creation sites; type stringification
+
+### Phase 4: Auto-capture by reference
+
+- [ ] Walk closure body in `resolve_closure` to classify each outer-name use as read vs read/write (`resolver/closure.rs:74-344`, `resolver/types.rs:1124-1201`)
+- [ ] Set `TirCapture.is_mut` per body usage, not per outer-local declaration
+- [ ] Tag closure type `is_mut = any(capture.is_mut)`
+- [ ] Retire `MutRef::Closure` and the `&mut ||` desugar (`resolver/operators.rs:711-718`, `resolve_mutable_closure` in `resolver/closure.rs:84-133`)
+- [ ] Migrate fixtures `closure_2.wado`, `closure_3.wado`, `closure_iflet_template_collision.wado` away from `&mut ||`
+
+### Phase 5: `mut` binding enforcement
+
+- [ ] In `IndirectCall` / `MethodCall` construction (`resolver/call.rs:90-167`, `resolver/expr.rs`), check whether the local holding the callee was bound `let mut`; emit a diagnostic if not and the callee is `fn mut`
+- [ ] Same check for function parameters: `fn run(f: impl fn mut(i32))` must have `mut f`
+- [ ] Add compile-error fixtures (`closure_mut_binding_required_error.wado`, `closure_mut_param_required_error.wado`)
+
+### Phase 6: Effect-check fix
+
+- [ ] In `effect_check.rs:689-692,1201`, walk closure body under the closure's _own_ declared effect set, not the enclosing function's `current_effects`
+- [ ] Lift TODO marker from `closure_escapes_effect_todo.wado`
+
+### Phase 7: Stdlib `Iterator` migration
+
+- [ ] Convert `lib/core/prelude/traits.wado:308-449` iterator methods to `impl fn mut(...) with E` with `<effect E>` parameters: `map`, `filter`, `fold`, `find`, `any`, `all`, `position`, `reduce`
+- [ ] Add `for_each` method
+- [ ] Consider `impl Iterator<Item = ...>` returns vs named adapter structs
+- [ ] Migrate other bare-`fn(...)` stdlib references: `String::find_char` (`string.wado:742`), `Array::sort_by` / `sorted_by` (`array.wado:547,589`), `Benchmark::run` (`benchmark.wado:57`), serde `lookup` (`serde.wado:244`, `json*.wado`, `router.wado`)
+
+### Phase 8: Codegen qualifier honoring
+
+- [ ] Thread the parser-attached `impl` vs `dyn` qualifier through to `lower/plan/closure.rs::specializable` (`closure.rs:228-231`)
+- [ ] `dyn fn(...)` always routes through `ClosureToCanonical`; `impl fn(...)` always specialises (subject to escape)
+
+### Phase 9: Strict bare-`fn(...)` rejection
+
+- [ ] Flip parser/resolver from permissive to strict: bare `fn(T) -> U` in type positions becomes a parse/resolve error
+- [ ] Sweep `tests/fixtures/*closure*.wado` and other fixtures using bare `fn(...)` (closure_1/2/3, fn_ref_parameter, default_arg_fn_type_erases, global_closure_field, inspect_closure_indirect, newtype_closure_coercion, etc.)
+- [ ] Add compile-error fixtures: bare `fn(...)` in parameter / return / let-annotation / struct field
+
+### Phase 10: CM boundary error
+
+- [ ] Compile-error fixture for exporting a function with a closure-typed parameter
+- [ ] Compile-error fixture for importing a function with a closure-typed parameter
 
 ## Consequences
 

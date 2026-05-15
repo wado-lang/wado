@@ -407,6 +407,62 @@ Future: resource adapter — wrap closures as CM resources with a `call` method 
    - Accept `impl` / `dyn` qualifiers.
    - Parse `with` in bounds, with parens required for multi-effect lists.
 
+## Migration Plan
+
+The current implementation reflects an earlier design: bare `fn(T) -> U` everywhere, capture-by-value with explicit `&mut || ...` syntax for mutating closures, a single `Function` type constructor with no `fn` / `fn mut` split, and escape analysis (not user qualifiers) driving static vs dynamic dispatch. The Wasm codegen layer (`__Closure_N` struct + funcref, canonical closure with optional inspectable supertype, `FnCanonicalDispatch` stub) is already aligned with this design and continues to apply unchanged below the dispatch-choice point.
+
+The transition proceeds in phases, each leaving the compiler in a green state. Granular task tracking with current file / line references lives in [Closure Parameter Monomorphization](./wep-2026-01-25-closure-parameter-monomorphization.md).
+
+### Phase 1: Parser surface (permissive)
+
+Accept `impl fn(...)`, `dyn fn(...)`, `fn mut(...)`, and bound-position `<F: fn(...)>` / `<F: fn mut(...)>`, while still allowing bare `fn(...)` in type positions. Add `dyn` to the lexer keyword table; remove the unused `move` reservation.
+
+### Phase 2: Internal `FnMut` trait
+
+Declare `FnMut<Args, Ret, Effects>` as a sub-trait of `Fn` in `core:prelude`. Wire bound `fn` / `fn mut` syntax to resolve to these internal trait references. (`Fn` already exists but is unused as a bound today.)
+
+### Phase 3: Type-system split
+
+Add an `is_mut` flag to `ResolvedType::Function`. Implement `fn <: fn mut` sub-typing in `check_assignable`.
+
+### Phase 4: Auto-capture by reference
+
+In the resolver, walk the closure body and classify each captured binding as `&T` (read-only) or `&mut T` (mutating). Tag the closure type as `fn` or `fn mut` based on whether any capture is mutating. Retire the existing `&mut || ...` desugar.
+
+### Phase 5: `mut` binding enforcement
+
+In `IndirectCall` / `MethodCall` resolution, require the callee binding to be `let mut` (or `mut f:` parameter) when the closure type is `fn mut`.
+
+### Phase 6: Effect-check fix
+
+Closure bodies are checked against the closure's own declared effect set, not the enclosing function's. Resolves the leak documented in `closure_escapes_effect_todo.wado`.
+
+### Phase 7: Stdlib `Iterator` migration
+
+Convert iterator methods to `impl fn mut(...) with E` with `<effect E>` parameters. Add `for_each`. Adopt `impl Iterator<Item = ...>` returns where adapter-struct naming is not needed externally.
+
+### Phase 8: Codegen qualifier honoring
+
+Thread user-written `impl` vs `dyn` qualifier into the lower-phase `specializable` decision so the user's intent (not just escape analysis) drives static vs dynamic dispatch. The mature codegen below this layer (`__Closure_N`, `ClosureToCanonical`, `FnCanonicalDispatch`) requires no changes.
+
+### Phase 9: Strict bare-`fn(...)` rejection
+
+Flip the parser / resolver from permissive to strict — bare `fn(T) -> U` in type positions becomes a compile error. Migrate remaining fixtures and stdlib references (`String::find_char`, `Array::sort_by` / `sorted_by`, `Benchmark::run`, serde / json / router `lookup` parameters).
+
+### Phase 10: CM boundary error
+
+Compile-error fixture for exporting or importing a function with a closure-typed parameter across the Component Model boundary.
+
+### Phase Ordering Rationale
+
+- Phases 1-2 are infrastructure that unblock everything else and ship without behaviour changes.
+- Phases 3-5 form the semantic core; they must be done together because the `mut`-binding rule requires the type-system split, which requires the capture classification.
+- Phase 6 is independent of 3-5 and can be parallelised; it has its own TODO fixture as a regression gate.
+- Phase 7 (stdlib migration) is large but mechanical, gated by 3-5 being in place.
+- Phase 8 is the hand-off to the existing codegen; small and localised.
+- Phase 9 is the breaking change; deferring it last allows incremental migration of fixtures and external callers.
+- Phase 10 is purely additive.
+
 ## Consequences
 
 ### Positive
