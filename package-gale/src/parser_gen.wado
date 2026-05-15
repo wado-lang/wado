@@ -3276,14 +3276,16 @@ fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &
 /// `gen_op_leaf` so siblings that still route through the surface
 /// walker see lower-consistent dedup state.
 ///
-/// `dedup_base` is what lower passed to `dedup_name` when it computed
-/// `op.field`: the surface `field_name` / `literal_field_name(text)` /
-/// `"wildcard"` / `not_element_field_name(...)` for non-rebound
-/// leaves. For the scalar-label rebind (`name = elem`) the inner op
-/// carries the inner element's original base name (the rebind in
-/// `lower_label_op` preserves it) so emit's bump still targets the
-/// inner's base, not the label's name — matching what
-/// `gen_element`'s Label arm does for the inner recursion.
+/// `dedup_base` is the base name lower bumped in the alt's outer
+/// `name_counts` when it computed `op.field`: the surface
+/// `field_name` / `literal_field_name(text)` / `"wildcard"` /
+/// `not_element_field_name(...)` for non-rebound leaves. For the
+/// scalar-label rebind (`name = elem`) the inner op's `dedup_base`
+/// is replaced with `lab.field_name` (the rebound label's base) by
+/// `lower_label_op`'s `rebind_op_field` call: the rebind elides the
+/// inner element's binding from emit, so the only name that surfaces
+/// is the label's, and bumping the inner base would drift from
+/// what's actually in scope.
 fn sync_name_counts_for_op_leaf(op: &Op, name_counts: &mut Array<[String, i32]>) {
     let _ = dedup_name(&op_leaf_dedup_base(op), name_counts);
 }
