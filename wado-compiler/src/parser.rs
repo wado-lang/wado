@@ -1692,18 +1692,27 @@ impl Parser {
         let id = self.alloc_ast_id();
         self.expect(&TokenKind::Return)?;
 
-        let value = if self.check(&TokenKind::Semicolon) {
+        let value = if self.check(&TokenKind::Semicolon) || self.check(&TokenKind::RBrace) {
             None
         } else {
             Some(self.parse_expr()?)
         };
 
-        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
+        let end_span = if self.check(&TokenKind::Semicolon) {
+            self.advance().span
+        } else if self.check(&TokenKind::RBrace) {
+            value.as_ref().map(Expr::span).unwrap_or(start_span)
+        } else {
+            return Err(self.error_at_span(
+                self.peek().span,
+                &format!("expected Semicolon, found {:?}", self.peek_kind()),
+            ));
+        };
 
         Ok(Stmt::Return(ReturnStmt {
             id,
             value,
-            span: start_span.merge(&semi_span),
+            span: start_span.merge(&end_span),
         }))
     }
 
@@ -1717,12 +1726,22 @@ impl Parser {
         self.expect(&TokenKind::Return)?;
 
         let value = self.parse_expr()?;
-        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
+
+        let end_span = if self.check(&TokenKind::Semicolon) {
+            self.advance().span
+        } else if self.check(&TokenKind::RBrace) {
+            value.span()
+        } else {
+            return Err(self.error_at_span(
+                self.peek().span,
+                &format!("expected Semicolon, found {:?}", self.peek_kind()),
+            ));
+        };
 
         Ok(Stmt::TaskReturn(TaskReturnStmt {
             id,
             value,
-            span: start_span.merge(&semi_span),
+            span: start_span.merge(&end_span),
         }))
     }
 
@@ -2086,29 +2105,42 @@ impl Parser {
         self.expect(&TokenKind::Break)?;
 
         // Check for optional label
-        let (label, value) = if let TokenKind::Ident(name) = self.peek_kind().clone() {
-            self.advance();
+        let (label, label_span, value) = if let TokenKind::Ident(name) = self.peek_kind().clone() {
+            let label_tok_span = self.advance().span;
             // Check for colon followed by expression (break with value)
             if self.check(&TokenKind::Colon) {
                 self.advance(); // consume ':'
                 let expr = self.parse_expr()?;
-                (Some(name), Some(Box::new(expr)))
+                (Some(name), Some(label_tok_span), Some(Box::new(expr)))
             } else {
                 // Just a label, no value
-                (Some(name), None)
+                (Some(name), Some(label_tok_span), None)
             }
         } else {
             // No label, no value
-            (None, None)
+            (None, None, None)
         };
 
-        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
+        let end_span = if self.check(&TokenKind::Semicolon) {
+            self.advance().span
+        } else if self.check(&TokenKind::RBrace) {
+            value
+                .as_ref()
+                .map(|v| v.span())
+                .or(label_span)
+                .unwrap_or(start_span)
+        } else {
+            return Err(self.error_at_span(
+                self.peek().span,
+                &format!("expected Semicolon, found {:?}", self.peek_kind()),
+            ));
+        };
 
         Ok(Stmt::Break(BreakStmt {
             id,
             label,
             value,
-            span: start_span.merge(&semi_span),
+            span: start_span.merge(&end_span),
         }))
     }
 
@@ -2117,7 +2149,15 @@ impl Parser {
         let span = self.peek().span;
         let id = self.alloc_ast_id();
         self.expect(&TokenKind::Continue)?;
-        self.expect(&TokenKind::Semicolon)?;
+
+        if self.check(&TokenKind::Semicolon) {
+            self.advance();
+        } else if !self.check(&TokenKind::RBrace) {
+            return Err(self.error_at_span(
+                self.peek().span,
+                &format!("expected Semicolon, found {:?}", self.peek_kind()),
+            ));
+        }
 
         Ok(Stmt::Continue(ContinueStmt { id, span }))
     }
@@ -6348,5 +6388,131 @@ line 2
         assert_eq!(func.span.line, 1);
         assert_eq!(func.span.end_line, 3);
         assert_eq!(func.span.end_column, 2); // column after `}` on line 3
+    }
+
+    #[test]
+    fn return_with_value_no_semicolon_at_block_end() {
+        let module = parse("fn f() -> i32 { return 1 }").unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected function");
+        };
+        let body = func.body.as_ref().unwrap();
+        assert_eq!(body.stmts.len(), 1);
+        assert!(matches!(&body.stmts[0], Stmt::Return(r) if r.value.is_some()));
+    }
+
+    #[test]
+    fn bare_return_no_semicolon_at_block_end() {
+        let module = parse("fn f() { return }").unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected function");
+        };
+        let body = func.body.as_ref().unwrap();
+        assert_eq!(body.stmts.len(), 1);
+        assert!(matches!(&body.stmts[0], Stmt::Return(r) if r.value.is_none()));
+    }
+
+    #[test]
+    fn break_no_semicolon_at_block_end() {
+        let module = parse("fn f() { loop { break } }").unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected function");
+        };
+        let body = func.body.as_ref().unwrap();
+        let Stmt::Loop(loop_stmt) = &body.stmts[0] else {
+            panic!("expected loop");
+        };
+        assert_eq!(loop_stmt.body.stmts.len(), 1);
+        let Stmt::Break(brk) = &loop_stmt.body.stmts[0] else {
+            panic!("expected break");
+        };
+        assert!(brk.label.is_none());
+        assert!(brk.value.is_none());
+    }
+
+    #[test]
+    fn break_label_no_semicolon_at_block_end() {
+        let module = parse("fn f() { loop { break done } }").unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected function");
+        };
+        let body = func.body.as_ref().unwrap();
+        let Stmt::Loop(loop_stmt) = &body.stmts[0] else {
+            panic!("expected loop");
+        };
+        let Stmt::Break(brk) = &loop_stmt.body.stmts[0] else {
+            panic!("expected break");
+        };
+        assert_eq!(brk.label.as_deref(), Some("done"));
+        assert!(brk.value.is_none());
+        // Span must NOT extend past the label into the `}`
+        assert!(brk.span.end_column <= loop_stmt.body.span.end_column);
+    }
+
+    #[test]
+    fn break_label_with_value_no_semicolon_at_block_end() {
+        let module = parse("fn f() { loop { break done: 42 } }").unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected function");
+        };
+        let body = func.body.as_ref().unwrap();
+        let Stmt::Loop(loop_stmt) = &body.stmts[0] else {
+            panic!("expected loop");
+        };
+        let Stmt::Break(brk) = &loop_stmt.body.stmts[0] else {
+            panic!("expected break");
+        };
+        assert_eq!(brk.label.as_deref(), Some("done"));
+        assert!(brk.value.is_some());
+    }
+
+    #[test]
+    fn continue_no_semicolon_at_block_end() {
+        let module = parse("fn f() { loop { continue } }").unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected function");
+        };
+        let body = func.body.as_ref().unwrap();
+        let Stmt::Loop(loop_stmt) = &body.stmts[0] else {
+            panic!("expected loop");
+        };
+        assert_eq!(loop_stmt.body.stmts.len(), 1);
+        assert!(matches!(&loop_stmt.body.stmts[0], Stmt::Continue(_)));
+    }
+
+    #[test]
+    fn task_return_no_semicolon_at_block_end() {
+        let module = parse("fn f() { task return 42 }").unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected function");
+        };
+        let body = func.body.as_ref().unwrap();
+        assert_eq!(body.stmts.len(), 1);
+        assert!(matches!(&body.stmts[0], Stmt::TaskReturn(_)));
+    }
+
+    #[test]
+    fn break_label_span_does_not_include_rbrace() {
+        // Regression: `break label }` used to include `}` in the span
+        // because the label token's span wasn't saved.
+        let source = "fn f() { loop { break done } }";
+        let module = parse(source).unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected function");
+        };
+        let body = func.body.as_ref().unwrap();
+        let Stmt::Loop(loop_stmt) = &body.stmts[0] else {
+            panic!("expected loop");
+        };
+        let Stmt::Break(brk) = &loop_stmt.body.stmts[0] else {
+            panic!("expected break");
+        };
+        // "break done" occupies columns 17..26 (1-indexed). The span
+        // must end at the label, not at the `}` which is at column 28.
+        assert!(
+            brk.span.end_column < 28,
+            "break span should not include `}}`: end_column={}",
+            brk.span.end_column
+        );
     }
 }
