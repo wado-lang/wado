@@ -1503,7 +1503,7 @@ impl FunctionTranslator<'_, '_> {
     /// operands, struct fields, array elements, function arguments, …).
     pub(super) fn translate_expr(&mut self, expr: &NirExpr) -> WirInstr {
         let instr = self.translate_expr_inner(expr);
-        if expr.type_id == TypeTable::NEVER {
+        if expr.type_id == TypeTable::NEVER && !instr.ends_with_terminator() {
             WirInstr::Seq(vec![instr, WirInstr::Unreachable])
         } else {
             instr
@@ -1893,7 +1893,7 @@ impl FunctionTranslator<'_, '_> {
             }
 
             NirExprKind::Block(block) => {
-                let body = if expr.type_id == TypeTable::UNIT {
+                let body = if expr.type_id == TypeTable::UNIT || expr.type_id == TypeTable::NEVER {
                     self.translate_stmts(&block.stmts)
                 } else {
                     self.translate_stmts_as_value(&block.stmts)

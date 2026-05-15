@@ -1766,6 +1766,20 @@ impl WirInstr {
         instrs.iter().any(Self::always_diverges)
     }
 
+    /// Returns true if this instruction ends with an unconditional branch or
+    /// `unreachable` at the tail position. Unlike `always_diverges`, this does
+    /// NOT consider `If` blocks where both branches diverge — those still need
+    /// an explicit `Unreachable` after them for Wasm stack validation.
+    pub fn ends_with_terminator(&self) -> bool {
+        match self {
+            Self::Return { .. } | Self::Unreachable | Self::Br { .. } | Self::BrTable { .. } => {
+                true
+            }
+            Self::Seq(body) => body.last().is_some_and(Self::ends_with_terminator),
+            _ => false,
+        }
+    }
+
     /// Returns true if this instruction leaves a value on the Wasm stack.
     /// Used to guard `Drop` emission — a `Block{result: None}` produces no value.
     pub fn produces_stack_value(&self) -> bool {
