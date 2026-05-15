@@ -1,7 +1,14 @@
+use shapes from "./sub/ns_enum_helper.wado";
+
 variant Op {
     Wildcard,
     Excluded,
     Token(i32),
+}
+
+variant Maybe<T> {
+    Some(T),
+    None,
 }
 
 fn check(op: &Op) -> bool {
@@ -16,12 +23,32 @@ fn token_value(op: Op) -> i32 {
     return -1;
 }
 
+fn maybe_unwrap(v: Maybe<i32>) -> i32 {
+    if let Maybe<i32>::Some(x) = v { return x; }
+    if let Maybe<i32>::None = v { return -1; }
+    return -2;
+}
+
 export fn run() {
     assert check(&Op::Wildcard);
     assert check(&Op::Excluded);
     assert !check(&Op::Token(1));
     assert token_value(Op::Token(42)) == 42;
     assert token_value(Op::Excluded) == -1;
+    let circle = shapes::Shape::Circle(3.5);
+    if let shapes::Shape::Circle(r) = circle {
+        assert r == 3.5;
+    } else {
+        assert false;
+    }
+    let square = shapes::Shape::Square(2.0);
+    if let shapes::Shape::Circle(_) = square {
+        assert false;
+    } else {
+        assert true;
+    }
+    assert maybe_unwrap(Maybe::Some(8)) == 8;
+    assert maybe_unwrap(Maybe::None) == -1;
 }
 
 __DATA__

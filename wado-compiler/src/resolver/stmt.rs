@@ -3,7 +3,7 @@
 use crate::ast::{
     self, AstId, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr, ExprStmt,
     ForOfStmt, IdentExpr, IfStmt, LetStmt, Literal, LoopStmt, MethodCallExpr, Pattern, ReturnStmt,
-    Stmt, TaskReturnStmt, UnaryExpr, UnaryOp,
+    Stmt, TaskReturnStmt, Type, UnaryExpr, UnaryOp,
 };
 use crate::compiler_host::CompilerHost;
 use crate::tir::{
@@ -570,10 +570,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    fn is_known_case_of_type(&self, type_id: TypeId, case_name: &str) -> bool {
-        let Some(case_name) = self.normalize_pattern_case_name(type_id, case_name) else {
+    fn is_known_case_of_type(
+        &mut self,
+        type_id: TypeId,
+        case_name: &str,
+        qualifier: Option<&Type>,
+    ) -> bool {
+        if !self.pattern_qualifier_matches_scrutinee(type_id, qualifier) {
             return false;
-        };
+        }
         let resolved = self.type_table.borrow().get(type_id).clone();
         match &resolved {
             ResolvedType::Enum { name, .. } => self
@@ -589,30 +594,59 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    fn normalize_pattern_case_name<'a>(
-        &self,
-        type_id: TypeId,
-        case_name: &'a str,
-    ) -> Option<&'a str> {
-        let Some((type_name, case_name)) = case_name.split_once("::") else {
-            return Some(case_name);
+    fn pattern_qualifier_matches_scrutinee(
+        &mut self,
+        scrutinee_type: TypeId,
+        qualifier: Option<&Type>,
+    ) -> bool {
+        let Some(qualifier) = qualifier else {
+            return true;
         };
-        let resolved = self.type_table.borrow().get(type_id).clone();
-        match &resolved {
+        let scrutinee_resolved = self.type_table.borrow().get(scrutinee_type).clone();
+        let (scrutinee_name, scrutinee_module, scrutinee_arg_len) = match &scrutinee_resolved {
             ResolvedType::Enum {
-                name: expected_name,
-                ..
+                name,
+                module_source,
             }
             | ResolvedType::Variant {
-                name: expected_name,
-                ..
+                name,
+                module_source,
+            } => (name.as_str(), module_source, None),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => (name.as_str(), module_source, Some(type_args.len())),
+            _ => {
+                return false;
             }
-            | ResolvedType::GenericInstance {
-                name: expected_name,
-                ..
-            } if expected_name == type_name => Some(case_name),
-            _ => None,
+        };
+        match qualifier {
+            Type::Named(t) => t.name == scrutinee_name,
+            Type::Generic(g) => {
+                g.name == scrutinee_name && scrutinee_arg_len.is_none_or(|n| n == g.args.len())
+            }
+            Type::NamespacedGeneric(ns) => {
+                ns.name == scrutinee_name
+                    && scrutinee_arg_len.is_none_or(|n| n == ns.args.len())
+                    && self
+                        .namespace_imports
+                        .get(&ns.namespace)
+                        .is_some_and(|m| m == scrutinee_module)
+            }
+            Type::Function(_)
+            | Type::Tuple(_)
+            | Type::Reference(_)
+            | Type::MutReference(_)
+            | Type::TypePackSpread(_, _) => false,
         }
+    }
+
+    fn format_pattern_case_name(&self, case_name: &str, qualifier: Option<&Type>) -> String {
+        let Some(qualifier) = qualifier else {
+            return case_name.to_string();
+        };
+        format!("{}::{case_name}", format_pattern_qualifier_type(qualifier))
     }
 
     /// Resolve a let pattern (for tuple/struct destructuring).
@@ -1142,7 +1176,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // The parser does not use case to disambiguate; instead, we check
                 // whether the name is a known case of the scrutinee type.
                 if !matches!(pattern, Pattern::MutIdent { .. })
-                    && self.is_known_case_of_type(scrutinee_type, name)
+                    && self.is_known_case_of_type(scrutinee_type, name, None)
                 {
                     // Delegate to the Variant branch with empty bindings.
                     // Preserve the identifier's AstId/span as name_id/name_span so
@@ -1150,6 +1184,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return self.resolve_if_pattern_inner(
                         &Pattern::Variant {
                             variant_name: name.clone(),
+                            variant_qualifier: None,
                             name_id: Some(*id),
                             name_span: *name_span,
                             bindings: vec![],
@@ -1299,23 +1334,31 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Pattern::Variant {
                 variant_name,
+                variant_qualifier,
                 name_id,
                 name_span,
                 bindings,
                 span,
             } => {
-                let normalized_variant_name = self
-                    .normalize_pattern_case_name(scrutinee_type, variant_name)
-                    .unwrap_or(variant_name.as_str());
+                let normalized_variant_name = variant_name.as_str();
+                let qualified_variant_name =
+                    self.format_pattern_case_name(variant_name, variant_qualifier.as_ref());
                 // Bare uppercase identifier that is not a known case of the scrutinee type.
                 // Check if it's an associated constant (e.g., `i32::MAX`) before falling back
                 // to a variable binding.
-                if bindings.is_empty() && !self.is_known_case_of_type(scrutinee_type, variant_name)
+                if bindings.is_empty()
+                    && !self.is_known_case_of_type(
+                        scrutinee_type,
+                        normalized_variant_name,
+                        variant_qualifier.as_ref(),
+                    )
                 {
                     // Check for associated constants (e.g., `i32::MAX`, `f64::PI`)
                     // Resolve to literal patterns when possible for switch optimization.
-                    if let Some((const_ty, const_expr)) =
-                        self.associated_constants.get(variant_name).cloned()
+                    if let Some((const_ty, const_expr)) = self
+                        .associated_constants
+                        .get(&qualified_variant_name)
+                        .cloned()
                     {
                         let type_id = self.resolve_type(&const_ty);
                         let resolved = self.resolve_expr(&const_expr, ctx, Some(type_id));
@@ -1370,15 +1413,34 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .intern(ResolvedType::MutRef(scrutinee_type)),
                         RefBinding::None => scrutinee_type,
                     };
-                    let index = ctx.add_local(variant_name.clone(), binding_type, false, None);
+                    let index =
+                        ctx.add_local(qualified_variant_name.clone(), binding_type, false, None);
                     return TirPattern::Binding {
-                        name: variant_name.clone(),
+                        name: qualified_variant_name,
                         local_index: index,
                         type_id: binding_type,
                     };
                 }
 
                 let resolved_type = self.type_table.borrow().get(scrutinee_type).clone();
+                if !self
+                    .pattern_qualifier_matches_scrutinee(scrutinee_type, variant_qualifier.as_ref())
+                {
+                    let expected = match &resolved_type {
+                        ResolvedType::Enum { name, .. } => format!("valid case of enum {name}"),
+                        ResolvedType::Variant { name, .. }
+                        | ResolvedType::GenericInstance { name, .. } => {
+                            format!("valid case of variant {name}")
+                        }
+                        _ => "variant or enum case".to_string(),
+                    };
+                    let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                        expected,
+                        found: qualified_variant_name,
+                        span: *span,
+                    });
+                    return TirPattern::Wildcard;
+                }
 
                 // Handle enum types (no payload, just discriminant matching)
                 if let ResolvedType::Enum { name, .. } = &resolved_type {
@@ -1418,7 +1480,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     .collect::<Vec<_>>()
                                     .join(", ")
                             ),
-                            found: variant_name.clone(),
+                            found: self
+                                .format_pattern_case_name(variant_name, variant_qualifier.as_ref()),
                             span: *span,
                         });
                         return TirPattern::Wildcard;
@@ -2431,6 +2494,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let (some_pattern, then_block) = if ref_mode == RefBinding::None {
             let pattern = Pattern::Variant {
                 variant_name: "Some".to_string(),
+                variant_qualifier: None,
                 name_id: None,
                 name_span: span,
                 bindings: vec![for_of.binding.clone()],
@@ -2455,6 +2519,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             };
             let pattern = Pattern::Variant {
                 variant_name: "Some".to_string(),
+                variant_qualifier: None,
                 name_id: None,
                 name_span: span,
                 bindings: vec![elem_pattern],
@@ -2617,6 +2682,46 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Resolve a continue statement
     pub(super) fn resolve_continue(&mut self, continue_stmt: &ContinueStmt) -> TirStmt {
         TirStmt::new(TirStmtKind::Continue, continue_stmt.span)
+    }
+}
+
+fn format_pattern_qualifier_type(ty: &Type) -> String {
+    match ty {
+        Type::Named(t) => t.name.clone(),
+        Type::Generic(t) => {
+            let args = t
+                .args
+                .iter()
+                .map(format_pattern_qualifier_type)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{}<{args}>", t.name)
+        }
+        Type::NamespacedGeneric(t) => {
+            if t.args.is_empty() {
+                format!("{}::{}", t.namespace, t.name)
+            } else {
+                let args = t
+                    .args
+                    .iter()
+                    .map(format_pattern_qualifier_type)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{}::{}<{args}>", t.namespace, t.name)
+            }
+        }
+        Type::Function(_) => "fn".to_string(),
+        Type::Tuple(types) => {
+            let elems = types
+                .iter()
+                .map(format_pattern_qualifier_type)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("[{elems}]")
+        }
+        Type::Reference(inner) => format!("&{}", format_pattern_qualifier_type(inner)),
+        Type::MutReference(inner) => format!("&mut {}", format_pattern_qualifier_type(inner)),
+        Type::TypePackSpread(name, _) => format!("..{name}"),
     }
 }
 
