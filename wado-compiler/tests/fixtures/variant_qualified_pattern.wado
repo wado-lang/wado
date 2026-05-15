@@ -1,0 +1,28 @@
+variant Op {
+    Wildcard,
+    Excluded,
+    Token(i32),
+}
+
+fn check(op: &Op) -> bool {
+    let any = Op::Wildcard;
+    if let Op::Wildcard | Op::Excluded = op { return true; }
+    if let Op::Token(_) = op { return false; }
+    return any == Op::Wildcard;
+}
+
+fn token_value(op: Op) -> i32 {
+    if let Op::Token(v) = op { return v; }
+    return -1;
+}
+
+export fn run() {
+    assert check(&Op::Wildcard);
+    assert check(&Op::Excluded);
+    assert !check(&Op::Token(1));
+    assert token_value(Op::Token(42)) == 42;
+    assert token_value(Op::Excluded) == -1;
+}
+
+__DATA__
+{"stdout": ""}

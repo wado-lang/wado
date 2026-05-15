@@ -571,6 +571,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     fn is_known_case_of_type(&self, type_id: TypeId, case_name: &str) -> bool {
+        let Some(case_name) = self.normalize_pattern_case_name(type_id, case_name) else {
+            return false;
+        };
         let resolved = self.type_table.borrow().get(type_id).clone();
         match &resolved {
             ResolvedType::Enum { name, .. } => self
@@ -583,6 +586,32 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .lookup_variant_case(name)
                 .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
             _ => false,
+        }
+    }
+
+    fn normalize_pattern_case_name<'a>(
+        &self,
+        type_id: TypeId,
+        case_name: &'a str,
+    ) -> Option<&'a str> {
+        let Some((type_name, case_name)) = case_name.split_once("::") else {
+            return Some(case_name);
+        };
+        let resolved = self.type_table.borrow().get(type_id).clone();
+        match &resolved {
+            ResolvedType::Enum {
+                name: expected_name,
+                ..
+            }
+            | ResolvedType::Variant {
+                name: expected_name,
+                ..
+            }
+            | ResolvedType::GenericInstance {
+                name: expected_name,
+                ..
+            } if expected_name == type_name => Some(case_name),
+            _ => None,
         }
     }
 
@@ -1275,6 +1304,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 bindings,
                 span,
             } => {
+                let normalized_variant_name = self
+                    .normalize_pattern_case_name(scrutinee_type, variant_name)
+                    .unwrap_or(variant_name.as_str());
                 // Bare uppercase identifier that is not a known case of the scrutinee type.
                 // Check if it's an associated constant (e.g., `i32::MAX`) before falling back
                 // to a variable binding.
@@ -1358,7 +1390,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                     // Look up the enum case index
                     if let Some(enum_info) = self.lookup_enum_case(name).cloned() {
-                        if let Some(case_data) = enum_info.find_case(variant_name).cloned() {
+                        if let Some(case_data) =
+                            enum_info.find_case(normalized_variant_name).cloned()
+                        {
                             // Record pattern's case-name identifier -> enum case decl
                             if let Some(id) = name_id {
                                 self.record_reference_to_decl(
@@ -1370,7 +1404,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             let _ = name_span;
                             return TirPattern::Enum {
                                 enum_type: scrutinee_type,
-                                case_name: variant_name.clone(),
+                                case_name: normalized_variant_name.to_string(),
                                 case_index: case_data.index,
                             };
                         }
@@ -1413,7 +1447,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     && let Some(case_data) = variant_info
                         .cases
                         .iter()
-                        .find(|c| c.name == *variant_name)
+                        .find(|c| c.name == normalized_variant_name)
                         .cloned()
                 {
                     self.record_reference_to_decl(
@@ -1428,16 +1462,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Determine the payload type for the variant case.
                 let payload_type: TypeId = match &resolved_type {
                     // Non-generic variant
-                    ResolvedType::Variant { name, .. } => {
-                        self.get_variant_case_payload_type(name, variant_name, &[], *span)
-                    }
+                    ResolvedType::Variant { name, .. } => self.get_variant_case_payload_type(
+                        name,
+                        normalized_variant_name,
+                        &[],
+                        *span,
+                    ),
                     // Generic variant instantiation
                     ResolvedType::GenericInstance {
                         name, type_args, ..
                     } => {
                         // Check if this is a variant (not a struct)
                         if self.contains_variant(name) {
-                            self.get_variant_case_payload_type(name, variant_name, type_args, *span)
+                            self.get_variant_case_payload_type(
+                                name,
+                                normalized_variant_name,
+                                type_args,
+                                *span,
+                            )
                         } else {
                             let _ = self.logger.error(TypeError::PatternTypeMismatch {
                                 expected: "variant type".to_string(),
@@ -1489,7 +1531,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 TirPattern::Variant {
                     enum_type: scrutinee_type,
-                    variant_name: variant_name.clone(),
+                    variant_name: normalized_variant_name.to_string(),
                     bindings: resolved_bindings,
                     payload_type,
                 }
