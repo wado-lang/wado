@@ -2308,6 +2308,14 @@ test "lower non-greedy Group Repeat fills exit_second from inner suffix" {
                 `expected 1, got {rep.body_second_position_first.len()}`;
             assert rep.body_second_position_first[0] == "TK_INT",
                 rep.body_second_position_first[0];
+            // body_shape classifies the body op for emit's exhaustive
+            // dispatch. The inner is a single-alt Group of two leaves
+            // → SingleAlt shape → StorableGroup.
+            if let StorableGroup = rep.body_shape {
+                assert true;
+            } else {
+                panic("expected RepeatBodyShape::StorableGroup");
+            }
         } else {
             panic("expected Op::Repeat at index 0");
         }

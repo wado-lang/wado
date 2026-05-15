@@ -593,8 +593,20 @@ pub struct RepeatOp {
     /// True iff the inner element contributes a CST field — i.e.
     /// emit's Repeat surfaces a storable `Option<T>` (`Optional`) or
     /// `Array<T>` (`Star` / `Plus`) field. False for `Transparent`
-    /// groups and other non-storable shapes.
+    /// groups and other non-storable shapes. Equal to
+    /// `body_shape != TransparentGroup`; kept as a denormalised flag
+    /// to avoid threading the enum through every call site that just
+    /// asks "does this body produce storage?".
     pub body_has_field: bool,
+    /// Lowered emit-shape classifier for the body op. Drives emit's
+    /// dispatch in `gen_op_repeat_*` so the `op_is_leaf` /
+    /// `op_is_rulecall` / `is Group(_)` × `body_has_field` predicates
+    /// don't have to be re-checked at every dispatch site, and so the
+    /// fall-through panics ("op-driven dispatch did not cover this
+    /// body shape") become unreachable: every reachable body op has a
+    /// named variant here, and lower asserts at construction time
+    /// that no other shape leaks through.
+    pub body_shape: RepeatBodyShape,
     /// Caller-side second-token set for non-greedy 2-token
     /// disambiguation. For a non-greedy Repeat at position `i` of a
     /// surface alt, this is the first set of the next element's
@@ -625,6 +637,37 @@ pub struct GroupOp {
     /// branch.
     pub dispatch: MultiAltDispatch,
     pub scan_dispatch: MultiAltDispatch,
+}
+
+/// Lower-side classification of a Repeat's body op shape. Drives
+/// emit's `gen_op_repeat_*` dispatch — every reachable shape lower
+/// produces has a named variant, so emit's per-Repeat dispatcher is
+/// an exhaustive `match rep_op.body_shape { ... }` rather than a
+/// cascade of `op_is_leaf` / `op_is_rulecall` / `let Group(_) = ...`
+/// probes guarded by an "unhandled body shape" panic. Lower asserts
+/// at construction time that the body op falls into one of the four
+/// variants; ListLabel / Repeat / Suppressed shapes never reach
+/// `lower_repeat_op`.
+pub variant RepeatBodyShape {
+    /// `Op::RuleCall` body. Optional dispatch routes here for the
+    /// caller-follow subtraction (`gen_op_repeat_optional_rulecall`),
+    /// avoiding the next-sibling token greedy-eat issue.
+    LeafRuleCall,
+    /// `Op::Token` / `Op::Literal` / `Op::Wildcard` / `Op::Excluded`
+    /// — leaf ops that do not need the RuleCall caller-follow
+    /// subtraction. Optional dispatch routes here to
+    /// `gen_op_repeat_optional_leaf`.
+    LeafOther,
+    /// `Op::Group` with shape `SingleAlt` / `TokenOnly` / `SimpleCst`
+    /// / `General`. The group itself contributes a CST field; emit
+    /// pushes the inner binding into the surrounding `Option<T>` /
+    /// `Array<T>` slot.
+    StorableGroup,
+    /// `Op::Group` with shape `Transparent`. The group has no own
+    /// field; the inner alt's elements inline into the surrounding
+    /// sequence (or the loop walks without a list, for Star / Plus /
+    /// non-greedy).
+    TransparentGroup,
 }
 
 /// How an `e?` / `e*` / `e+` repeat is emitted at parse time. The

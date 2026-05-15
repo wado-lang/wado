@@ -100,6 +100,7 @@ use {
     WildcardOp,
     ExcludedOp,
     RepeatOp,
+    RepeatBodyShape,
     RepeatStrategy,
     NonGreedyStrategy,
     WithFollowSubtractionStrategy,
@@ -2462,6 +2463,7 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
         false;
     };
     let body_second_position_first = compute_body_second_position_first(&rep.element, ctx);
+    let body_shape = classify_repeat_body_shape(&body);
     return Op::Repeat(RepeatOp {
         kind: rep.kind,
         body,
@@ -2486,6 +2488,7 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
         body_first_set: inner_first,
         body_is_single_alt_group,
         body_second_position_first,
+        body_shape,
     });
 }
 
@@ -2500,6 +2503,30 @@ fn compute_body_second_position_first(elem: &Element, ctx: &mut GenContext) -> A
         }
     }
     return [];
+}
+
+/// Classify the body op into its `RepeatBodyShape`. The four cases
+/// cover every shape `lower_op` produces for a Repeat's inner; lower
+/// asserts on anything else so emit's exhaustive dispatch can drop
+/// the "did not cover this body shape" panics.
+///
+/// Mirrors emit's pre-shape probes (`op_is_rulecall`, `op_is_leaf`,
+/// `let Group(g_op) = body && body_has_field`).
+fn classify_repeat_body_shape(body: &Op) -> RepeatBodyShape {
+    return match body {
+        RuleCall(_) => RepeatBodyShape::LeafRuleCall,
+        Token(_) | Literal(_) | Wildcard(_) | Excluded(_) => RepeatBodyShape::LeafOther,
+        Group(g_op) => match &g_op.shape {
+            Transparent => RepeatBodyShape::TransparentGroup,
+            SingleAlt(_) | TokenOnly(_) | SimpleCst(_) | General(_) => RepeatBodyShape::StorableGroup,
+        },
+        // Lower never produces these as a Repeat body: ListLabel is
+        // unwrapped by `lower_repeat_op`'s `repeat_inner_is_list_label`
+        // arm before `lower_op` builds the Op, and a directly nested
+        // Repeat body has no surface-grammar equivalent (`(a*)*`
+        // collapses through the surface Group).
+        ListLabel(_) | Repeat(_) => panic("classify_repeat_body_shape: ListLabel / Repeat reached as a Repeat body — lower-side bug"),
+    };
 }
 
 /// Caller-side second-token set for a non-greedy Repeat at position
@@ -2830,6 +2857,7 @@ fn patch_repeat_op_caller_follow(rep_op: &RepeatOp, caller_follow_first: Array<S
         body_first_set: rep_op.body_first_set,
         body_is_single_alt_group: rep_op.body_is_single_alt_group,
         body_second_position_first: rep_op.body_second_position_first,
+        body_shape: rep_op.body_shape,
     };
 }
 
@@ -3184,6 +3212,7 @@ fn rebind_op_field(op: Op, new_field: &String) -> Op {
             body_first_set: rep.body_first_set,
             body_is_single_alt_group: rep.body_is_single_alt_group,
             body_second_position_first: rep.body_second_position_first,
+            body_shape: rep.body_shape,
         }),
         Group(g) => Op::Group(GroupOp {
             shape: rebind_group_shape(g.shape, new_field),
