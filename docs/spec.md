@@ -1837,25 +1837,26 @@ let result = compute(4);  // 20
 // Pure closure (no captures)
 let pure = |x: i32| x * 2;
 
-// Capturing outer variables: deep copy at closure creation
+// Capturing outer variables: auto-by-reference
 let outer = 10;
-let capture = |x: i32| x + outer;  // outer is copied into the closure
+let capture = |x: i32| x + outer;  // captures &outer
 capture(5);  // Returns 15
 ```
 
-Closures capture each free variable by deep copy at closure creation time — the same value semantics that applies to assignment, parameter passing, and return (see [Value Semantics](#value-semantics)). The closure body operates on its own copies and cannot write to outer bindings.
+Closures auto-capture each free variable by reference; the reference kind is inferred from body usage (`&T` for read-only, `&mut T` for mutating). Pure read-only captures keep the closure type at `fn`; any `&mut` capture promotes it to `fn mut`. Calling a `fn mut` closure requires its binding to be `mut` (mirrors Rust's `FnMut` rule).
 
-For shared mutable state across closures, capture a reference. References (`&T`, `&mut T`) are the only types in Wado that alias their referent, so the copied reference value still points to the same underlying location:
+Shared mutable state across closures is automatic — multiple closures referring to the same outer binding share the underlying location, with no explicit reference dance needed:
 
 ```wado
 let mut count = 0;
-let cref: &mut i32 = &mut count;
-let inc = || { *cref += 1; };
-let get = || *cref;
+let mut inc = || count += 1;   // captures &mut count; type fn mut() -> ()
+let get = || count;             // captures &count; type fn() -> i32
 inc();
 inc();
-assert get() == 2;   // both closures observe mutation through the shared reference
+assert get() == 2;
 ```
+
+See [`docs/wep-2026-01-16-closure-implementation.md`](./wep-2026-01-16-closure-implementation.md) for the full design (`fn` vs `fn mut`, sub-typing, effect generics, iterator API integration).
 
 Note: `stores[...]` is a separate concept for declaring that a _function_ stores reference _parameters_ beyond the call. It is not yet implemented. See [Reference Storage](#reference-storage-stores) and [`docs/wep-2026-01-12-value-semantics-and-stores.md`](./wep-2026-01-12-value-semantics-and-stores.md).
 

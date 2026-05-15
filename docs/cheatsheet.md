@@ -669,15 +669,14 @@ let compute = |x: i32| {
 // Struct literal return
 let make_point = |x: i32, y: i32| Point { x, y };
 
-// Capturing outer variables: deep copy at closure creation
+// Capturing outer variables: auto-by-reference
 let multiplier = 10;
-let scale = |x: i32| x * multiplier;
+let scale = |x: i32| x * multiplier;        // captures &multiplier; type fn(i32) -> i32
 
-// Shared mutable state: capture a reference (the only types that alias)
+// Mutating capture: closure type is fn mut, binding must be mut
 let mut count = 0;
-let cref: &mut i32 = &mut count;
-let inc = || { *cref += 1; };
-let get = || *cref;
+let mut inc = || count += 1;                // captures &mut count; type fn mut() -> ()
+let get = || count;                          // captures &count; type fn() -> i32
 inc();
 inc();
 assert get() == 2;

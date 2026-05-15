@@ -122,8 +122,8 @@ Closures follow Wado value semantics: deep-copied on assignment, parameter passi
 
 ```wado
 let mut count = 0;
-let c1 = || count += 1;     // env: { &mut count }
-let c2 = c1;                 // env copied; both still hold &mut count
+let mut c1 = || count += 1;  // env: { &mut count }
+let mut c2 = c1;              // env copied; both still hold &mut count
 c1();
 c2();
 assert(count == 2);
