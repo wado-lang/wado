@@ -66,7 +66,7 @@ use {
     is_storable_group,
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
-use { GenContext, is_nullable } from "./gen_context.wado";
+use { GenContext, is_nullable, union_kind_arrays } from "./gen_context.wado";
 use { strip_suffix } from "./gen_util.wado";
 use { compute_prefix_self_ref_min_prec } from "./lr_util.wado";
 use { TreeMap } from "core:collections";
@@ -954,8 +954,7 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
     // self-ref).
     let outer_follow: Array<String> = [];
     for let mut i = 1; i < alt.elements.len(); i += 1 {
-        let elem_follow = inner_follow_at(&alt.elements, i, ctx, variant_mask);
-        let position_mask = position_mask_at(&alt.elements, i, ctx, variant_mask);
+        let [elem_follow, position_mask] = ctx.compute_call_site_follow_and_mask(&alt.elements, i, variant_mask);
         let mut op = lower_op(&alt.elements[i], &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow, variant_mask, &position_mask);
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
@@ -1505,7 +1504,7 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &A
     // `exit_second`) is the natural foundation to restore here.
     let strategy = choose_greedy_scan_repeat_strategy(&inner_first, variant_mask);
 
-    let iter_follow = union_arrays(&inner_first, outer_follow);
+    let iter_follow = union_kind_arrays(&inner_first, outer_follow);
 
     let body = lower_scan_element(&rep.element, ctx, &iter_follow, variant_mask);
     return ScanElement::Repeat(ScanRepeatElem {
@@ -1556,7 +1555,7 @@ fn rebind_scan_repeat_caller_follow(se: ScanElement, caller_follow_first: Array<
 /// `lower_general_group`) inline the post-pass so they can share
 /// `basic_follow` with the parse-side rebind.
 fn lower_alt_scan_element(alt_elements: &Array<Element>, i: i32, ctx: &mut GenContext, variant_mask: &Array<String>) -> ScanElement {
-    let elem_follow = inner_follow_at(alt_elements, i, ctx, variant_mask);
+    let elem_follow = ctx.compute_call_site_follow(alt_elements, i, variant_mask);
     let mut se = lower_scan_element(&alt_elements[i], ctx, &elem_follow, variant_mask);
     if let Repeat(_) = &se {
         let basic_follow = ctx.first_of_elements_from(alt_elements, i + 1);
@@ -1782,12 +1781,11 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
     let outer_follow: Array<String> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
-        let elem_follow = inner_follow_at(&alt.elements, i, ctx, variant_mask);
-        let position_mask = position_mask_at(&alt.elements, i, ctx, variant_mask);
+        let [elem_follow, position_mask] = ctx.compute_call_site_follow_and_mask(&alt.elements, i, variant_mask);
         let mut op = lower_op(elem, &mut name_counts, &rule.name, ctx, &mut group_counter, &elem_follow, variant_mask, &position_mask);
         // For Repeat ops, replace `caller_follow_first` with the basic
-        // first set of the surrounding suffix. `inner_follow_at` returns
-        // the variant-interning follow (which considers deep-nullable
+        // first set of the surrounding suffix. `compute_call_site_follow_and_mask`
+        // returns the variant-interning follow (which considers deep-nullable
         // suffixes via the threaded `variant_mask`); emit's per-position
         // `gen_repeat*` decisions use the simpler `first_of_elements_from`.
         if let Repeat(rep_op) = &op {
@@ -1977,7 +1975,7 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
         // positions, that's the first-set of the suffix in the
         // group's alt. The last position inherits the surrounding
         // alt's `outer_follow`.
-        let elem_follow = inner_follow_at(&alt.elements, i, ctx, variant_mask);
+        let elem_follow = ctx.compute_call_site_follow(&alt.elements, i, variant_mask);
         // Inner elements inherit the outer position's mask — `(a? b)?`
         // inside `outer ... (a? b)? rest` reads the same mask emit used
         // to install on `ctx.current_follow_mask` at the OUTER position.
@@ -2270,7 +2268,7 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
         let mut scan_elements: Array<ScanElement> = [];
         for let mut ei = 0; ei < alt.elements.len(); ei += 1 {
             let elem = &alt.elements[ei];
-            let elem_follow = inner_follow_at(&alt.elements, ei, ctx, variant_mask);
+            let elem_follow = ctx.compute_call_site_follow(&alt.elements, ei, variant_mask);
             // See `lower_single_alt_group` — inner elements inherit
             // the outer position's mask, mirroring emit's inner-walker
             // semantics on the retired `ctx.current_follow_mask`.
@@ -2416,7 +2414,7 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     // (consuming a `first(inner)` token) or exits (the surrounding
     // `outer_follow`). Today this propagation is only consumed by
     // nested non-greedy Repeats.
-    let iter_follow = union_arrays(&inner_first, outer_follow);
+    let iter_follow = union_kind_arrays(&inner_first, outer_follow);
 
     let mut inner_counts: Array<[String, i32]> = [];
     // `(name+=elem)*` / `name+=elem+` / `name+=elem?` — the Repeat
@@ -2782,51 +2780,6 @@ fn compute_non_greedy_strategy(inner: &Element, outer_follow: &Array<String>, ct
         exit_first: *outer_follow,
         exit_second: exit_second,
     });
-}
-
-/// Append-and-dedup union of two token-kind arrays. Preserves the
-/// order of `a`, then appends new entries from `b`.
-fn union_arrays(a: &Array<String>, b: &Array<String>) -> Array<String> {
-    let mut result: Array<String> = [];
-    for let tk of a {
-        result.push(*tk);
-    }
-    for let tk of b {
-        if !first_set_contains(&result, tk) {
-            result.push(*tk);
-        }
-    }
-    return result;
-}
-
-/// Follow set for the element at index `i` in `elements`. Delegates
-/// to `ctx.compute_call_site_follow`, the single source of truth for
-/// per-position follow computation.
-///
-/// `variant_mask` is the surrounding variant's mask (`[]` for regular
-/// non-variant bodies), threaded by the lower call chain. For
-/// non-variant bodies a deep-nullable suffix yields `[]`; for variant
-/// bodies the mask propagates through deep-nullable suffixes.
-fn inner_follow_at(elements: &Array<Element>, i: i32, ctx: &mut GenContext, variant_mask: &Array<String>) -> Array<String> {
-    return ctx.compute_call_site_follow(elements, i, variant_mask);
-}
-
-/// `variant_mask` if the alt's tail starting at `i + 1` is
-/// deep-nullable; `[]` otherwise (and always `[]` when
-/// `variant_mask` itself is empty). Mirrors emit's old per-iteration
-/// `ctx.current_follow_mask = if tail_is_nullable_deep then saved
-/// else []` adjustment in `gen_alt_elements` / `gen_alt_body_skip`.
-/// Consumed by `RepeatOp.position_mask`, which emit's
-/// `gen_op_repeat_optional_rulecall` unions with the caller-supplied
-/// follow before subtracting from the body's first set.
-fn position_mask_at(elements: &Array<Element>, i: i32, ctx: &mut GenContext, variant_mask: &Array<String>) -> Array<String> {
-    if variant_mask.is_empty() {
-        return [];
-    }
-    if !ctx.tail_is_nullable_deep(elements, i + 1) {
-        return [];
-    }
-    return *variant_mask;
 }
 
 /// Rebuild a `RepeatOp` with fresh `caller_follow_first` /

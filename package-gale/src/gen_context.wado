@@ -438,14 +438,27 @@ impl GenContext {
     /// regular non-variant bodies). Threaded from `lower`'s call chain
     /// rather than read from walker state.
     pub fn compute_call_site_follow(&mut self, elements: &Array<Element>, i: i32, outer_follow: &Array<String>) -> Array<String> {
+        return self.compute_call_site_follow_and_mask(elements, i, outer_follow).0;
+    }
+
+    /// Fused `(elem_follow, position_mask)` for the element at index
+    /// `i`. `elem_follow` follows the same three-case logic as
+    /// `compute_call_site_follow`; `position_mask` is `outer_follow`
+    /// when the suffix at `i + 1` is deep-nullable and `[]` otherwise.
+    /// Sharing the `tail_is_nullable_deep` call avoids walking the
+    /// suffix twice in `lower`'s per-position loop (which would
+    /// otherwise call `inner_follow_at` + `position_mask_at`
+    /// back-to-back).
+    pub fn compute_call_site_follow_and_mask(&mut self, elements: &Array<Element>, i: i32, outer_follow: &Array<String>) -> [Array<String>, Array<String>] {
+        let empty: Array<String> = [];
         let first = self.first_of_elements_from(elements, i + 1);
         if !self.tail_is_nullable_deep(elements, i + 1) {
-            return first;
+            return [first, empty];
         }
         if self.deep_suffix_is_first_exact(elements, i + 1) {
-            return union_kind_arrays(&first, outer_follow);
+            return [union_kind_arrays(&first, outer_follow), *outer_follow];
         }
-        return *outer_follow;
+        return [*outer_follow, *outer_follow];
     }
 
     pub fn rule_is_single_token(&mut self, name: &String, visiting: &mut Array<String>) -> bool {
@@ -999,10 +1012,11 @@ fn extend_dedup(target: &mut Array<String>, source: &Array<String>) {
 }
 
 /// Append-and-dedup union of two token-kind arrays, preserving the
-/// order of `a` then appending new entries from `b`. Shared helper
-/// for `compute_call_site_follow`; `union_sets` / `union_arrays` in
-/// parser_gen and lower compute the same thing — keep this as the
-/// canonical implementation.
+/// order of `a` then appending new entries from `b`. Canonical
+/// implementation for every union-of-FIRST/FOLLOW sets in lower and
+/// emit; the grammar sets that pass through here are bounded by the
+/// rule's first/follow size (small in practice), so the linear
+/// `arr_contains` is fine.
 pub fn union_kind_arrays(a: &Array<String>, b: &Array<String>) -> Array<String> {
     let mut result: Array<String> = [];
     for let tk of a {

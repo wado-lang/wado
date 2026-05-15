@@ -32,7 +32,7 @@ use {
     gen_visibility_comment,
     to_snake_case,
 } from "./gen_util.wado";
-use { GenContext, is_nullable, sets_overlap, is_simple_token_group } from "./gen_context.wado";
+use { GenContext, is_nullable, sets_overlap, is_simple_token_group, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
 use { TreeSet } from "core:collections";
 use {
@@ -2792,7 +2792,7 @@ fn inner_walker_follow_for_repeat(rep: &RepeatElement, rep_op: &RepeatOp, elemen
     }
     let mut follow = rep_op.caller_follow_first;
     if ctx.tail_is_nullable_deep(elements, i + 1) {
-        follow = union_sets(&follow, outer_follow);
+        follow = union_kind_arrays(&follow, outer_follow);
     }
     return follow;
 }
@@ -3785,7 +3785,7 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
     let combined_follow = if rep_op.position_mask.is_empty() {
         *follow;
     } else {
-        union_sets(follow, &rep_op.position_mask);
+        union_kind_arrays(follow, &rep_op.position_mask);
     };
     let first = subtract_sets(&raw_first, &combined_follow);
     let inner_type = op_field_type(&rep_op.body);
@@ -3936,7 +3936,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
     // Per-iteration follow propagated into a nested non-greedy Repeat
     // inside a SingleAlt body — `first(inner) ∪ outer_follow`.
     let iter_follow = if rep_op.body_is_single_alt_group {
-        union_sets(&inner_first, follow);
+        union_kind_arrays(&inner_first, follow);
     } else {
         *follow;
     };
@@ -4058,22 +4058,6 @@ fn compute_non_greedy_condition(inner: &Element, raw_first: &Array<String>, foll
 
     // Fallback: can't disambiguate, don't loop (match minimum)
     return "false";
-}
-
-fn union_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
-    let mut result: Array<String> = [];
-    let mut seen = TreeSet::<String>::new();
-    for let mut i = 0; i < a.len(); i += 1 {
-        seen.insert(a[i]);
-        result.push(a[i]);
-    }
-    for let mut i = 0; i < b.len(); i += 1 {
-        if !seen.contains(b[i]) {
-            seen.insert(b[i]);
-            result.push(b[i]);
-        }
-    }
-    return result;
 }
 
 fn subtract_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
