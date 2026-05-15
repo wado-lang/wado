@@ -64,11 +64,15 @@ between the codegen walk and the analysis layer.
       Pre-computing every `(rule, mask)` pair as part of `FollowEnv`
       would let codegen do a pure lookup. Architecturally cleaner;
       no behaviour change.
-- [ ] **Retire `current_follow_mask` and `current_outer_follow` from
-      `GenContext`.** The save/restore threading is correct today;
-      lifting them to explicit function arguments removes the
-      global-ish flavour and makes the variant-emit context flow
-      type-checked.
+- [x] **Retire `current_follow_mask` and `current_outer_follow` from
+      `GenContext`.** Done in issue #1043 step (5d) —
+      `lower_variant_rules` threads the surrounding variant's mask as
+      `variant_mask: &Array<String>` through every lowering function;
+      `compute_call_site_follow` takes it as an explicit `outer_follow`
+      parameter for the deep-nullable suffix propagation; emit's
+      `gen_op_repeat_optional_rulecall` consumes the baked
+      `RepeatOp.caller_follow_with_mask` rather than re-combining the
+      mask at emit time.
 
 ## Stage B follow-on — composite descriptors (Stage C dependency)
 

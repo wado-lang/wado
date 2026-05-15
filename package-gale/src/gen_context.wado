@@ -44,22 +44,13 @@ pub struct FollowVariantEntry {
     pub parse_used: bool,
 }
 
-/// Codegen-time context shared across emit walkers. Caches first /
-/// nullable / single-token / scannable analyses, the kind-set
-/// registry, and the variant-emit walker state.
-///
-/// Note on retired fields: `prefix_self_ref_min_prec` and
-/// `scan_ruleref_min_prec` used to live here as walker mutables;
-/// they were retired in Phase 2-F slice 5 once the corresponding
-/// values landed directly on the GIR (`RuleCallOp.min_prec_arg`,
-/// `ScanRuleCallElem.min_prec_arg`) or were threaded as explicit
-/// parameters (`gen_scan_op_element`'s `min_prec_override`). The
-/// remaining mutable walker fields (`group_counter` /
-/// `alt_gc_starts` / `current_follow_mask` / `ruleref_call_follow` /
-/// `current_outer_follow` / `current_rule_name`) are still
-/// consulted by the legacy `gen_element` / `gen_repeat` surface
-/// walker family; they retire once that family is migrated to GIR
-/// in Phase 2-G.
+/// Codegen-time context shared across emit walkers. Holds the
+/// first / nullable / single-token / scannable caches, the
+/// `single_alt_owner` and `kind_set` registries, and the
+/// follow-variant registry. No walker-mutable state — every
+/// per-walk value (variant mask, per-outer-position mask, current
+/// rule name, etc.) is threaded as an explicit parameter through
+/// the lowering and emission call chains.
 pub struct GenContext {
     pub parser_rules: Array<ParserRule>,
     pub lit_tokens: Array<LitToken>,
@@ -68,9 +59,6 @@ pub struct GenContext {
     single_token_cache: TreeMap<String, bool>,
     nullable_cache: TreeMap<String, bool>,
     scannable_cache: TreeMap<String, bool>,
-    pub current_rule_name: String,
-    pub group_counter: i32,
-    pub alt_gc_starts: Array<i32>,
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: TreeMap<String, String>,
@@ -89,38 +77,6 @@ pub struct GenContext {
     /// across runs. Each key directly indexes
     /// `follow_variant_registry`, giving an O(n) walk.
     follow_variant_order: Array<String>,
-    /// Mask currently in effect when emitting the body of a variant
-    /// function. Empty for the regular `scan_X` / `parse_X` paths.
-    /// Tail-position `Optional` / `Star` / `Plus` first-sets get
-    /// `mask` subtracted before deciding whether to emit; if the
-    /// subtracted set is empty, the repeat is suppressed. Element
-    /// emission outside tail position ignores it.
-    pub current_follow_mask: Array<String>,
-    /// Caller-local FOLLOW set at the current `RuleRef` emission site.
-    /// Set by alt-element walkers (`gen_scan_elements`, `gen_alt_elements`,
-    /// `gen_scan_elements_in_block`) right before delegating to
-    /// `gen_scan_element` / `gen_element`, then cleared after the
-    /// delegation returns. Nested element emitters (`gen_scan_repeat`,
-    /// `gen_repeat`, `gen_scan_group`, `gen_group_*`) save and clear
-    /// this field for the duration of their inner emission so that an
-    /// inner `RuleRef` inside a `Repeat` / `Group` does not pick up
-    /// the outer site's follow. RuleRef branches consult it via
-    /// `intern_follow_variant` to choose between the regular function
-    /// and a `__follow_<id>` variant.
-    pub ruleref_call_follow: Array<String>,
-    /// FOLLOW set propagated from outside the alt currently being
-    /// walked. Empty during regular `parse_X` / `scan_X` emission;
-    /// set to the variant's mask while emitting a `__follow_<id>`
-    /// variant body (`emit_follow_variant`). Alt walkers consult it
-    /// when the immediate suffix at a `RuleRef` site is deep-nullable —
-    /// without this propagation, a passthrough rule whose body is
-    /// `a` alone would compute an empty FOLLOW for the inner `a`
-    /// even when the variant's caller had already promised a
-    /// non-empty follow. See `package-gale/CLAUDE.md` "Failed
-    /// Approaches" for why this propagation is restricted to
-    /// variant emit (using it in regular emit over-approximates and
-    /// breaks css3 / htmlContent).
-    pub current_outer_follow: Array<String>,
 }
 
 impl GenContext {
@@ -138,17 +94,11 @@ impl GenContext {
             single_token_cache: TreeMap::<String, bool>::new(),
             nullable_cache: TreeMap::<String, bool>::new(),
             scannable_cache: TreeMap::<String, bool>::new(),
-            current_rule_name: "",
-            group_counter: 0,
-            alt_gc_starts: [],
             single_alt_owner,
             kind_set_registry: TreeMap::<String, KindSetEntry>::new(),
             tail_greedy_cache: TreeMap::<String, Array<String>>::new(),
             follow_variant_registry: TreeMap::<String, FollowVariantEntry>::new(),
             follow_variant_order: [],
-            current_follow_mask: [],
-            ruleref_call_follow: [],
-            current_outer_follow: [],
         };
     }
 
@@ -466,10 +416,9 @@ impl GenContext {
     }
 
     /// Per-call-site caller-FOLLOW for the element at index `i` in
-    /// `elements`. Single source of truth for both the `lower` pre-pass
+    /// `elements`. Single source of truth for the `lower` pre-pass
     /// (variant interning at `lower_scan_element` / `lower_op` RuleRef
-    /// sites) and `parser_gen` emit (variant interning at
-    /// `gen_scan_element` / `gen_element` RuleRef sites).
+    /// sites).
     ///
     /// Three cases:
     ///
@@ -478,26 +427,38 @@ impl GenContext {
     /// - Suffix is deep-nullable AND first-exact (every walked element's
     ///   first uniquely predicts that element matching, see
     ///   `element_is_first_exact`): the outer follow propagates through.
-    ///   Union the suffix's first with `current_outer_follow`. This
-    ///   closes `ll_nullable_suffix`'s gap.
+    ///   Union the suffix's first with `outer_follow`. This closes
+    ///   `ll_nullable_suffix`'s gap.
     /// - Suffix is deep-nullable but NOT first-exact: drop the suffix's
-    ///   first and propagate only `current_outer_follow`. This is the
+    ///   first and propagate only `outer_follow`. This is the
     ///   "first-exact deep-nullable suffix" soundness invariant — see
-    ///   `compute_ruleref_call_follow`'s historical doc in
-    ///   `parser_gen.wado` and `CLAUDE.md` "Failed Approaches" #3 for
-    ///   the rationale.
+    ///   `CLAUDE.md` "Failed Approaches" #3 for the rationale.
     ///
-    /// Callers must have already installed `current_outer_follow` to
-    /// the surrounding variant's mask (or `[]` for regular bodies).
-    pub fn compute_call_site_follow(&mut self, elements: &Array<Element>, i: i32) -> Array<String> {
+    /// `outer_follow` is the surrounding variant's mask (`[]` for
+    /// regular non-variant bodies). Threaded from `lower`'s call chain
+    /// rather than read from walker state.
+    pub fn compute_call_site_follow(&mut self, elements: &Array<Element>, i: i32, outer_follow: &Array<String>) -> Array<String> {
+        return self.compute_call_site_follow_and_mask(elements, i, outer_follow).0;
+    }
+
+    /// Fused `(elem_follow, position_mask)` for the element at index
+    /// `i`. `elem_follow` follows the same three-case logic as
+    /// `compute_call_site_follow`; `position_mask` is `outer_follow`
+    /// when the suffix at `i + 1` is deep-nullable and `[]` otherwise.
+    /// Sharing the `tail_is_nullable_deep` call avoids walking the
+    /// suffix twice in `lower`'s per-position loop (which would
+    /// otherwise call `inner_follow_at` + `position_mask_at`
+    /// back-to-back).
+    pub fn compute_call_site_follow_and_mask(&mut self, elements: &Array<Element>, i: i32, outer_follow: &Array<String>) -> [Array<String>, Array<String>] {
+        let empty: Array<String> = [];
         let first = self.first_of_elements_from(elements, i + 1);
         if !self.tail_is_nullable_deep(elements, i + 1) {
-            return first;
+            return [first, empty];
         }
         if self.deep_suffix_is_first_exact(elements, i + 1) {
-            return union_kind_arrays(&first, &self.current_outer_follow);
+            return [union_kind_arrays(&first, outer_follow), *outer_follow];
         }
-        return self.current_outer_follow;
+        return [*outer_follow, *outer_follow];
     }
 
     pub fn rule_is_single_token(&mut self, name: &String, visiting: &mut Array<String>) -> bool {
@@ -646,12 +607,15 @@ impl GenContext {
     }
 
     /// Get the rule name that owns the general group types inside a given
-    /// single-alt group. Returns the current_rule_name if no shared group found.
-    pub fn general_group_rule_name(&self, single_alt_type_name: &String) -> String {
+    /// single-alt group. Returns `fallback` if the type name is not a
+    /// shared single-alt group (in practice every reached single-alt
+    /// group is in the map; callers pass the surrounding rule's name as
+    /// a defensive fallback).
+    pub fn general_group_rule_name(&self, single_alt_type_name: &String, fallback: &String) -> String {
         if let Some(owner) = self.single_alt_owner.get(*single_alt_type_name) {
             return owner;
         }
-        return self.current_rule_name;
+        return *fallback;
     }
 
     /// Intern a token-kind set. The same set (regardless of input order
@@ -1048,10 +1012,11 @@ fn extend_dedup(target: &mut Array<String>, source: &Array<String>) {
 }
 
 /// Append-and-dedup union of two token-kind arrays, preserving the
-/// order of `a` then appending new entries from `b`. Shared helper
-/// for `compute_call_site_follow`; `union_sets` / `union_arrays` in
-/// parser_gen and lower compute the same thing — keep this as the
-/// canonical implementation.
+/// order of `a` then appending new entries from `b`. Canonical
+/// implementation for every union-of-FIRST/FOLLOW sets in lower and
+/// emit; the grammar sets that pass through here are bounded by the
+/// rule's first/follow size (small in practice), so the linear
+/// `arr_contains` is fine.
 pub fn union_kind_arrays(a: &Array<String>, b: &Array<String>) -> Array<String> {
     let mut result: Array<String> = [];
     for let tk of a {
