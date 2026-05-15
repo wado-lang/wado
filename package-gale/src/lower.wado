@@ -802,10 +802,12 @@ fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
             variant_id: rc.variant_id,
             min_prec_arg: Option::<i32>::Some(prec),
             field: rc.field,
+            dedup_base: rc.dedup_base,
         }),
         ListLabel(ll) => Op::ListLabel(ListLabelOp {
             field: ll.field,
             inner: rebind_self_ref_min_prec(ll.inner, prec),
+            dedup_base: ll.dedup_base,
         }),
         other => other,
     };
@@ -1833,25 +1835,36 @@ fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>, rule_name: &
         TokenRef(t) => Op::Token(TokenOp {
             kind: `TK_{t.name}`,
             field: dedup_name(&t.field_name, name_counts),
+            dedup_base: t.field_name,
         }),
-        Literal(l) => Op::Literal(LiteralOp {
-            kind: literal_const_name(&l.text),
-            field: dedup_name(&literal_field_name(&l.text), name_counts),
-        }),
+        Literal(l) => {
+            let base = literal_field_name(&l.text);
+            Op::Literal(LiteralOp {
+                kind: literal_const_name(&l.text),
+                field: dedup_name(&base, name_counts),
+                dedup_base: base,
+            });
+        },
         RuleRef(r) => Op::RuleCall(RuleCallOp {
             target_name: r.name,
             target_snake: r.snake_name,
             variant_id: ctx.intern_follow_variant(&r.name, outer_follow, false),
             min_prec_arg: null,
             field: dedup_name(&r.field_name, name_counts),
+            dedup_base: r.field_name,
         }),
         Wildcard(_) => Op::Wildcard(WildcardOp {
             field: dedup_name(&"wildcard", name_counts),
+            dedup_base: "wildcard",
         }),
-        Not(ne) => Op::Excluded(ExcludedOp {
-            kinds: collect_excluded_kinds(&ne.element),
-            field: dedup_name(&not_element_field_name(&ne.element), name_counts),
-        }),
+        Not(ne) => {
+            let base = not_element_field_name(&ne.element);
+            Op::Excluded(ExcludedOp {
+                kinds: collect_excluded_kinds(&ne.element),
+                field: dedup_name(&base, name_counts),
+                dedup_base: base,
+            });
+        },
         Repeat(rep) => lower_repeat_op(rep, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask, outer_position_mask),
         Group(g) => lower_group_op(g, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask, outer_position_mask),
         Label(lab) => lower_label_op(lab, name_counts, rule_name, ctx, group_counter, outer_follow, variant_mask, outer_position_mask),
@@ -2083,11 +2096,16 @@ fn lower_token_only_leaf(elem: &Element, counts: &mut Array<[String, i32]>) -> O
         TokenRef(t) => Op::Token(TokenOp {
             kind: `TK_{t.name}`,
             field: dedup_name(&t.field_name, counts),
+            dedup_base: t.field_name,
         }),
-        Literal(l) => Op::Literal(LiteralOp {
-            kind: literal_const_name(&l.text),
-            field: dedup_name(&literal_field_name(&l.text), counts),
-        }),
+        Literal(l) => {
+            let base = literal_field_name(&l.text);
+            Op::Literal(LiteralOp {
+                kind: literal_const_name(&l.text),
+                field: dedup_name(&base, counts),
+                dedup_base: base,
+            });
+        },
         _ => panic("lower_token_only_leaf: classifier permitted non-token leaf"),
     };
 }
@@ -2201,6 +2219,7 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut Array<[String, i32]>) 
             variant_id: null,
             min_prec_arg: null,
             field: dedup_name(&r.field_name, counts),
+            dedup_base: r.field_name,
         });
     }
     panic("lower_simple_cst_alt_call: classifier permitted non-RuleRef leaf");
@@ -2923,7 +2942,11 @@ fn lower_label_op(lab: &LabelElement, name_counts: &mut Array<[String, i32]>, ru
         // Inside a Repeat, `lower_repeat_op` adopts the label name
         // directly (the Repeat itself implies `Array<>`); that path
         // skips this wrapper.
-        return Op::ListLabel(ListLabelOp { field: label_field, inner: inner_op });
+        return Op::ListLabel(ListLabelOp {
+            field: label_field,
+            inner: inner_op,
+            dedup_base: lab.field_name,
+        });
     }
     return rebind_op_field(inner_op, &label_field);
 }
@@ -3142,17 +3165,18 @@ fn transparent_group_inner_decl(_g: &GroupOp) -> Option<FieldDecl> {
 ///   passes through to the inner op.
 fn rebind_op_field(op: Op, new_field: &String) -> Op {
     return match op {
-        Token(t) => Op::Token(TokenOp { kind: t.kind, field: *new_field }),
-        Literal(l) => Op::Literal(LiteralOp { kind: l.kind, field: *new_field }),
+        Token(t) => Op::Token(TokenOp { kind: t.kind, field: *new_field, dedup_base: t.dedup_base }),
+        Literal(l) => Op::Literal(LiteralOp { kind: l.kind, field: *new_field, dedup_base: l.dedup_base }),
         RuleCall(r) => Op::RuleCall(RuleCallOp {
             target_name: r.target_name,
             target_snake: r.target_snake,
             variant_id: r.variant_id,
             min_prec_arg: r.min_prec_arg,
             field: *new_field,
+            dedup_base: r.dedup_base,
         }),
-        Wildcard(_) => Op::Wildcard(WildcardOp { field: *new_field }),
-        Excluded(e) => Op::Excluded(ExcludedOp { kinds: e.kinds, field: *new_field }),
+        Wildcard(w) => Op::Wildcard(WildcardOp { field: *new_field, dedup_base: w.dedup_base }),
+        Excluded(e) => Op::Excluded(ExcludedOp { kinds: e.kinds, field: *new_field, dedup_base: e.dedup_base }),
         Repeat(rep) => Op::Repeat(RepeatOp {
             kind: rep.kind,
             body: rep.body,
@@ -3180,7 +3204,11 @@ fn rebind_op_field(op: Op, new_field: &String) -> Op {
 }
 
 fn rebind_list_label_op(ll: ListLabelOp, new_field: &String) -> Op {
-    return Op::ListLabel(ListLabelOp { inner: ll.inner, field: *new_field });
+    return Op::ListLabel(ListLabelOp {
+        inner: ll.inner,
+        field: *new_field,
+        dedup_base: ll.dedup_base,
+    });
 }
 
 fn rebind_group_shape(shape: GroupShape, new_field: &String) -> GroupShape {

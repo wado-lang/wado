@@ -457,6 +457,14 @@ pub struct TokenOp {
     /// Dedupped field name in the enclosing alt's CST struct.
     /// Already includes the `_2` / `_3` suffix where needed.
     pub field: String,
+    /// Pre-dedup base name (the surface element's `field_name`).
+    /// Drives emit's per-leaf `dedup_name(&dedup_base, name_counts)`
+    /// sync so siblings that still walk surface IR (e.g.
+    /// `gen_lr_suffix_helpers`'s inline RuleRef paths and
+    /// `gen_element` fallbacks) observe the same count `gen_element`
+    /// would have produced. Equal to `field` when the leaf was the
+    /// first occurrence in its alt.
+    pub dedup_base: String,
 }
 
 pub struct LiteralOp {
@@ -465,6 +473,9 @@ pub struct LiteralOp {
     /// Dedupped field name. `lower` derives the base name from
     /// `literal_field_name` and applies dedup.
     pub field: String,
+    /// Pre-dedup base name (`literal_field_name(&l.text)`). See
+    /// `TokenOp.dedup_base` for the role.
+    pub dedup_base: String,
 }
 
 pub struct RuleCallOp {
@@ -485,10 +496,16 @@ pub struct RuleCallOp {
     pub min_prec_arg: Option<i32>,
     /// Dedupped field name in the enclosing alt's struct.
     pub field: String,
+    /// Pre-dedup base name (the surface RuleRef's `field_name`).
+    /// See `TokenOp.dedup_base` for the role.
+    pub dedup_base: String,
 }
 
 pub struct WildcardOp {
     pub field: String,
+    /// Pre-dedup base name (`"wildcard"`). See `TokenOp.dedup_base`
+    /// for the role.
+    pub dedup_base: String,
 }
 
 pub struct ExcludedOp {
@@ -496,6 +513,9 @@ pub struct ExcludedOp {
     /// passed to `p.match_not([...])`.
     pub kinds: Array<String>,
     pub field: String,
+    /// Pre-dedup base name (`not_element_field_name(&ne.element)`).
+    /// See `TokenOp.dedup_base` for the role.
+    pub dedup_base: String,
 }
 
 /// `name+=elem` outside of a Repeat. The outer CST struct lays out
@@ -508,6 +528,11 @@ pub struct ListLabelOp {
     pub inner: Op,
     /// Outer CST struct field name (the label's name, deduped).
     pub field: String,
+    /// Pre-dedup base name (`lab.field_name`). Drives the outer-label
+    /// half of `sync_name_counts_for_list_label`'s sibling-dedup
+    /// sync; the inner half delegates to the wrapped op's own
+    /// `dedup_base`.
+    pub dedup_base: String,
 }
 
 pub struct RepeatOp {

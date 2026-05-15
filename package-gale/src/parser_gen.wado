@@ -2627,7 +2627,7 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
             let rep_op = if let Repeat(r) = op { r } else { panic("gen_alt_body_skip: Repeat element / op mismatch") };
             gen_op_repeat(w, rep, rep_op, ctx, &mut name_counts);
         } else if op_is_leaf(op) {
-            gen_op_leaf(w, op, elem, ctx, &mut name_counts);
+            gen_op_leaf(w, op, ctx, &mut name_counts);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else if let Group(g_op) = op {
@@ -2714,7 +2714,7 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<O
             let rep_op = if let Repeat(r) = op { r } else { panic("gen_alt_elements: Repeat element / op mismatch") };
             gen_op_repeat(w, rep, rep_op, ctx, &mut name_counts);
         } else if op_is_leaf(op) {
-            gen_op_leaf(w, op, elem, ctx, &mut name_counts);
+            gen_op_leaf(w, op, ctx, &mut name_counts);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else if let Group(g_op) = op {
@@ -2744,7 +2744,7 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, o
             let follow = inner_walker_follow_for_repeat(rep, rep_op, elements, i, outer_follow, ctx);
             gen_op_repeat_with_follow_override(w, rep, rep_op, ctx, name_counts, &follow);
         } else if op_is_leaf(op) {
-            gen_op_leaf(w, op, elem, ctx, name_counts);
+            gen_op_leaf(w, op, ctx, name_counts);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, name_counts);
         } else if let Group(g_op) = op {
@@ -2855,17 +2855,16 @@ fn op_body_is_storable(rep_op: &RepeatOp) -> bool {
 /// (`gen_alt_elements`, the body loop of `gen_alt_body_skip`)
 /// dispatch leaves here instead.
 ///
-/// `elem` is the matching surface element. We only consult it to
-/// run `dedup_name` for its side effect — keeping `name_counts` in
-/// sync with lower's dedup state so any sibling that still flows
-/// through `gen_element` sees the correct count. The emitted field
-/// name comes from `op` exclusively. The side effect goes away once
-/// every emit path consumes `Op` — `gen_lr_suffix_helpers` still has
-/// inline `dedup_name(&rr.field_name, ...)` and surface `gen_element`
-/// fallbacks that share `name_counts` with the leaf path, so the sync
-/// must stay until those mixed paths migrate fully op-driven.
-fn gen_op_leaf(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    sync_name_counts_for_leaf(elem, name_counts);
+/// The mirror `dedup_name(&op.dedup_base, name_counts)` keeps
+/// `name_counts` in sync with what `gen_element`'s leaf arms would
+/// have produced, so siblings that still walk surface IR (e.g.
+/// `gen_lr_suffix_helpers`'s inline `dedup_name(&rr.field_name, ...)`
+/// paths and `gen_element` fallbacks) read a consistent count. The
+/// emitted field name comes from `op.field` exclusively — `dedup_base`
+/// is consulted only for the sync. The sync goes away entirely once
+/// every emit path consumes `Op`.
+fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    sync_name_counts_for_op_leaf(op, name_counts);
     return match *op {
         Token(t) => w.line(`let {t.field} = p.expect({t.kind})?;`),
         Literal(l) => w.line(`let {l.field} = p.expect({l.kind})?;`),
@@ -2904,10 +2903,10 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext
 /// without duplicating the surrounding list / scan-guard / loop
 /// scaffolding.
 ///
-/// `elem` is the surface `Element` matching `op`; leaves consult it
-/// for `sync_name_counts_for_leaf` (kept until `gen_lr_suffix_helpers`'s
-/// inline `dedup_name` paths migrate fully op-driven), the Group arms
-/// thread it through the per-shape `gen_consume_*_group_op` helpers.
+/// `elem` is the surface `Element` matching `op`; the Group arms
+/// thread it through the per-shape `gen_consume_*_group_op` helpers
+/// for their `&g_elem.alternatives` access. The leaf arm reads
+/// nothing from it (sync now drives off `op.dedup_base`).
 /// `outer_follow` carries the surrounding Repeat's iter-follow
 /// (`first(inner) ∪ outer_follow`) so nested non-greedy Repeats inside
 /// a `SingleAlt` body can union it onto their own `caller_follow_first`.
@@ -2920,7 +2919,7 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext
 /// Group arm.
 fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
     if op_is_leaf(op) {
-        gen_op_leaf(w, op, elem, ctx, name_counts);
+        gen_op_leaf(w, op, ctx, name_counts);
         return;
     }
     if let Group(g_op) = op {
@@ -2982,7 +2981,7 @@ fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, op: &Op, elem: &Element,
 /// surface `gen_element` graph.
 fn gen_op_dispatch_element(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     if op_is_leaf(op) {
-        gen_op_leaf(w, op, elem, ctx, name_counts);
+        gen_op_leaf(w, op, ctx, name_counts);
         return;
     }
     if let Repeat(rep_op) = op {
@@ -3284,40 +3283,36 @@ fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &
     }
 }
 
-/// Bump `name_counts` for `elem` exactly the way `gen_element` would.
-/// Used by `gen_op_leaf` so siblings that still route through the
-/// surface walker see lower-consistent dedup state. Mirrors the
-/// `dedup_name(&base, name_counts)` calls in the leaf arms of
-/// `gen_element` and the surface-IR `Label` / `Not` recursions.
-fn sync_name_counts_for_leaf(elem: &Element, name_counts: &mut Array<[String, i32]>) {
-    if let TokenRef(t) = elem {
-        let _ = dedup_name(&t.field_name, name_counts);
-        return;
-    }
-    if let Literal(l) = elem {
-        let _ = dedup_name(&literal_field_name(&l.text), name_counts);
-        return;
-    }
-    if let RuleRef(r) = elem {
-        let _ = dedup_name(&r.field_name, name_counts);
-        return;
-    }
-    if let Wildcard(_) = elem {
-        let _ = dedup_name(&"wildcard", name_counts);
-        return;
-    }
-    if let Not(ne) = elem {
-        let _ = dedup_name(&not_element_field_name(&ne.element), name_counts);
-        return;
-    }
-    if let Label(lab) = elem {
-        // Scalar label `name = elem` (list labels lower to
-        // `Op::ListLabel` which is not a leaf and never reaches here).
-        // Both the label's own binding and the inner emission update
-        // the count, so mirror that here.
-        let _ = dedup_name(&lab.field_name, name_counts);
-        sync_name_counts_for_leaf(&lab.element, name_counts);
-    }
+/// Bump `name_counts` for a leaf `Op` exactly the way `gen_element`
+/// would have, by reading the lower-baked `dedup_base`. Used by
+/// `gen_op_leaf` so siblings that still route through the surface
+/// walker see lower-consistent dedup state.
+///
+/// `dedup_base` mirrors what `sync_name_counts_for_leaf(elem, ...)`
+/// used to extract from the surface element: for non-rebound leaves
+/// it equals the surface `field_name` / `literal_field_name(text)` /
+/// `"wildcard"` / `not_element_field_name(...)`; for the
+/// scalar-label rebind (`name = elem`) the inner op carries the
+/// inner element's original base name (the rebind in `lower_label_op`
+/// preserves it) so emit's bump still targets the inner's base, not
+/// the label's name. Matches the legacy
+/// `sync_name_counts_for_leaf(&lab.element, ...)` recursion.
+fn sync_name_counts_for_op_leaf(op: &Op, name_counts: &mut Array<[String, i32]>) {
+    let _ = dedup_name(&op_leaf_dedup_base(op), name_counts);
+}
+
+/// Read the `dedup_base` slot from any leaf op variant. Panics on
+/// non-leaf ops because callers (`gen_op_leaf`, the list-label sync)
+/// already gate with `op_is_leaf`.
+fn op_leaf_dedup_base(op: &Op) -> String {
+    return match op {
+        Token(t) => t.dedup_base,
+        Literal(l) => l.dedup_base,
+        RuleCall(r) => r.dedup_base,
+        Wildcard(w) => w.dedup_base,
+        Excluded(e) => e.dedup_base,
+        _ => panic("op_leaf_dedup_base: caller must guard with op_is_leaf"),
+    };
 }
 
 /// Top-level dispatch for `Op::Group(g_op)`. Reads `g_op.shape` to
@@ -3432,7 +3427,7 @@ fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: 
         // (which emits `let <shape.field> = ...;`), then push.
         // Mirrors the leaf path's structure but routes inner emit
         // through GIR rather than surface `gen_element`.
-        sync_name_counts_for_list_label(lab, name_counts);
+        sync_name_counts_for_op_list_label(ll, name_counts);
         let inner_type = op_field_type(&ll.inner);
         w.line(`let mut {ll.field}: Array<{inner_type}> = [];`);
         let inner_field = op_field(&ll.inner);
@@ -3447,21 +3442,23 @@ fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: 
         gen_element(w, elem, ctx, name_counts);
         return;
     }
-    sync_name_counts_for_list_label(lab, name_counts);
+    sync_name_counts_for_op_list_label(ll, name_counts);
     let inner_type = op_field_type(&ll.inner);
     w.line(`let mut {ll.field}: Array<{inner_type}> = [];`);
     let inner_field = op_field(&ll.inner);
-    gen_op_leaf(w, &ll.inner, &lab.element, ctx, name_counts);
+    gen_op_leaf(w, &ll.inner, ctx, name_counts);
     w.line(`{ll.field}.push({inner_field});`);
 }
 
 /// Mirror `gen_element`'s Label arm side-effects on `name_counts`:
-/// bump for the label's own name and recurse into the inner leaf so
-/// any sibling that still routes through the surface walker observes
-/// lower-consistent dedup state.
-fn sync_name_counts_for_list_label(lab: &LabelElement, name_counts: &mut Array<[String, i32]>) {
-    let _ = dedup_name(&lab.field_name, name_counts);
-    sync_name_counts_for_leaf(&lab.element, name_counts);
+/// bump for the label's own name (`ll.dedup_base`) and recurse into
+/// the inner leaf so any sibling that still routes through the
+/// surface walker observes lower-consistent dedup state.
+fn sync_name_counts_for_op_list_label(ll: &ListLabelOp, name_counts: &mut Array<[String, i32]>) {
+    let _ = dedup_name(&ll.dedup_base, name_counts);
+    if op_is_leaf(&ll.inner) {
+        sync_name_counts_for_op_leaf(&ll.inner, name_counts);
+    }
 }
 
 /// Read the deduped field name from any `Op`. Mirrors the
@@ -3807,11 +3804,10 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
         panic("gen_op_repeat_optional_rulecall: RuleCall Optional with no field");
     }
 
-    let inner = &rep.element;
     let inner_field = op_field(&rep_op.body);
     w.begin(`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&first)}`);
     let mut nc: Array<[String, i32]> = [];
-    gen_op_leaf(w, &rep_op.body, inner, ctx, &mut nc);
+    gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
     w.line(`Option::<{inner_type}>::Some({inner_field})`);
     w.else_begin("else");
     w.line("null");
@@ -3826,7 +3822,6 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
 /// already bakes the mask subtraction as `WithFollowSubtraction` when
 /// it applies.
 fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    let inner = &rep.element;
     let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
         s.effective_first;
     } else {
@@ -3839,7 +3834,7 @@ fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
 
     w.begin(`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&loop_first)}`);
     let mut nc: Array<[String, i32]> = [];
-    gen_op_leaf(w, &rep_op.body, inner, ctx, &mut nc);
+    gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
     w.line(`Option::<{inner_type}>::Some({inner_field})`);
     w.else_begin("else");
     w.line("null");
@@ -4972,7 +4967,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                 // Wildcard / Excluded / non-self-ref RuleCall already
                 // handled above). Route through `gen_op_leaf` so the
                 // suffix walker stops reaching surface `gen_element`.
-                gen_op_leaf(w, suffix_op, elem, ctx, &mut name_counts);
+                gen_op_leaf(w, suffix_op, ctx, &mut name_counts);
             } else {
                 gen_element(w, elem, ctx, &mut name_counts);
             }

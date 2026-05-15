@@ -123,7 +123,7 @@ test "Rule::Simple round-trip" {
 }
 
 test "Op::Token round-trip" {
-    let token = Op::Token(TokenOp { kind: "TK_ID", field: "id" });
+    let token = Op::Token(TokenOp { kind: "TK_ID", field: "id", dedup_base: "id" });
     if let Token(t) = &token {
         assert t.kind == "TK_ID";
     } else {
@@ -132,7 +132,7 @@ test "Op::Token round-trip" {
 }
 
 test "Op::Literal round-trip" {
-    let lit = Op::Literal(LiteralOp { kind: "LIT_PLUS", field: "plus" });
+    let lit = Op::Literal(LiteralOp { kind: "LIT_PLUS", field: "plus", dedup_base: "plus" });
     if let Literal(l) = &lit {
         assert l.kind == "LIT_PLUS";
     } else {
@@ -147,6 +147,7 @@ test "Op::RuleCall preserves variant_id and min_prec" {
         variant_id: null,
         min_prec_arg: null,
         field: "expr",
+        dedup_base: "expr",
     });
     if let RuleCall(r) = &call {
         assert r.target_snake == "expr";
@@ -158,10 +159,11 @@ test "Op::RuleCall preserves variant_id and min_prec" {
 }
 
 test "Op::Wildcard / Excluded round-trip" {
-    let any = Op::Wildcard(WildcardOp { field: "wildcard" });
+    let any = Op::Wildcard(WildcardOp { field: "wildcard", dedup_base: "wildcard" });
     let excl = Op::Excluded(ExcludedOp {
         kinds: ["TK_FOO", "TK_BAR"],
         field: "not_foo",
+        dedup_base: "not_foo",
     });
 
     if let Wildcard(w) = &any {
@@ -177,7 +179,7 @@ test "Op::Wildcard / Excluded round-trip" {
 }
 
 test "Op::Repeat carries inner element and strategy" {
-    let inner = Op::Token(TokenOp { kind: "TK_X", field: "x" });
+    let inner = Op::Token(TokenOp { kind: "TK_X", field: "x", dedup_base: "x" });
     let scan_inner = ScanElement::Token(ScanTokenElem { kind: "TK_X" });
     let rep = Op::Repeat(RepeatOp {
         kind: RepeatKind::Star,
