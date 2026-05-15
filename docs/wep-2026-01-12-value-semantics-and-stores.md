@@ -213,7 +213,7 @@ let greet = || println(s);        // captures &s; type fn() with Stdout
 Multiple closures referring to the same outer binding automatically share state through the underlying location — no explicit `&mut foo` dance needed:
 
 ```wado
-fn make_counter() -> fn() -> i32 {
+fn make_counter() -> fn mut() -> i32 {
     let mut count = 0;
     return || {
         count += 1;        // captures &mut count
@@ -383,7 +383,7 @@ The external component receives a **copy**, not a GC reference. Even if it "stor
 4. **Type-safe escaping**: Can't accidentally escape references without declaration
 5. **Go-like ergonomics**: Escape analysis is familiar pattern
 6. **C++-like syntax**: `stores[...]` familiar to C++ developers (lambda capture syntax)
-7. **Uniform closure capture model**: Captures use the same value semantics as everything else; share mutable state via references (`&T` / `&mut T`), no closure-specific syntax
+7. **Auto-capture by reference for closures**: captures share Wado's general reference-aliasing semantics, with `&T` / `&mut T` kind inferred per binding from body usage (see [Closure Implementation](./wep-2026-01-16-closure-implementation.md)); no separate aliasing model needed for closures
 8. **CM boundaries protect external calls**: No annotation needed for cross-component calls
 9. **Clear terminology**: "stores" for function parameters, "captures" for closures
 

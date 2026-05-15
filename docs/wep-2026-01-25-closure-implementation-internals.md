@@ -126,7 +126,7 @@ Sub-typing `fn <: fn mut` is realized as `Fn` being a sub-trait of `FnMut`.
 
 ```wado
 // User writes:
-fn for_each<effect E>(items: Array<i32>, f: fn mut(i32) with E) with E {
+fn for_each<effect E>(items: Array<i32>, mut f: fn mut(i32) with E) with E {
     for let item of items {
         f(item);
     }
@@ -174,7 +174,7 @@ When the compiler determines that a closure use is type-known (parameter positio
 
 ### Dynamic Dispatch (Canonical Path)
 
-When the compiler determines that a closure use must be type-erased (struct field, mixed-branch return, container element, etc.), the value is wrapped in a canonical, signature-keyed struct `(env, funcref)`. One shape per `(arity, return type)` pair. Per-literal wrappers cast the canonical `env` back to the literal's `__ClosureEnv_N` and call `__call`. See "Canonical Closure as Vtable" below for the full layout.
+When the compiler determines that a closure use must be type-erased (struct field, mixed-branch return, container element, etc.), the value is wrapped in a canonical, signature-keyed struct `(env, funcref)`. One canonical struct per full Wasm function signature (parameter types + return type). Per-literal wrappers cast the canonical `env` slot back to the literal's `__Closure_N` functor struct and forward to `__call`. See "Canonical Closure as Vtable" below for the full layout.
 
 ### Dispatch Choice
 
@@ -220,7 +220,7 @@ Mutability lives at the referenced cell, not in the env field type itself. The `
 
 When a closure escapes (returned, stored in a struct field, etc.), its captured bindings must outlive the declaring function. The compiler heap-promotes them: the bindings live in a heap-allocated struct that the closure env references.
 
-For non-escaping closures, the compiler MAY skip heap promotion and reuse locals (with the env referencing those locals' stack slots). This is an optimization, not part of the language semantics.
+For non-escaping closures, the compiler MAY skip the heap-allocated environment entirely by inlining the call into the surrounding function and accessing the captured bindings directly as locals (no env struct allocated). Wasm GC has no notion of stack-slot references, so the optimization must be expressed as direct-call rewriting (or equivalent inlining), not as an env field pointing to a local. This is an optimization, not part of the language semantics.
 
 ### Calling Convention vs Wasm
 
@@ -233,12 +233,13 @@ Wasm has no notion of shared vs exclusive references. The `fn` / `fn mut` distin
 
 A closure value that needs to be type-erased is wrapped in a canonical, signature-keyed struct so any holder of a canonical closure of a given signature can dispatch through a uniform shape. The lower-phase escape analysis decides per local: a closure local that only appears as the callee of `IndirectCall` / receiver of `MethodCall` keeps the specialised `&__Closure_N` form; every other position forces canonicalisation.
 
-Two indices are used in this section:
+Three indices appear in this section:
 
 - `N` — per-literal closure index, naming the specialised functor (`__Closure_N`) and its per-literal wrappers.
-- `K` — signature shape key, a function of `(arity, return type)`, naming the canonical struct (`CanonicalClosure_K`) and its dispatch stub. Closures of different `N` may share the same `K`.
+- `K` — full Wasm signature key (parameter WIR types + result WIR types), naming the canonical struct (`CanonicalClosure_K`) and its typed function reference (`canonical_fn_K`). Closures of different `N` with identical Wasm signatures share the same `K`.
+- `(arity, return type)` — the inspectable-shape gate. The decision to use the slim shape or the inspectable shape is made per `(arity, ret)`, not per `K`. All `CanonicalClosure_K` whose signatures share the same `(arity, ret)` use the same gate decision and the same `$canonical_inspectable_base` supertype.
 
-The canonical struct comes in two shapes, selected per-`K` by a pre-WIR scan of `Inspect` / `InspectAlt` call sites on canonical closures at that signature:
+The canonical struct comes in two shapes, selected per `(arity, return type)` by a pre-WIR scan of `Inspect` / `InspectAlt` call sites:
 
 Slim shape (default — call-only):
 
@@ -248,7 +249,7 @@ Slim shape (default — call-only):
   (field $func (ref $canonical_fn_K))))
 ```
 
-Inspectable shape (when `Inspect` / `InspectAlt` is referenced at signature `K`):
+Inspectable shape (when `Inspect` / `InspectAlt` is referenced for any closure of this `(arity, ret)`):
 
 ```wat
 (type $canonical_inspectable_base (struct
@@ -263,7 +264,7 @@ Inspectable shape (when `Inspect` / `InspectAlt` is referenced at signature `K`)
   (field $func        (ref $canonical_fn_K)))))
 ```
 
-The subtype keeps the shared prefix — `env`, `inspect`, `inspect_alt` — and adds `func` last. `$canonical_callback_fn` has signature `(param $env (ref null struct)) (param $f (ref null struct))` (uniform across all signatures); `$canonical_fn_K` has signature `(param $env (ref null struct)) (param $p_0 ...) ... (result ...)` (per-`K`, typed). The shared base means a single dispatch stub serves every parameter shape with the same `K`: distinct function types like `fn(i32) -> i32` and `fn(String) -> i32` (both `(arity=1, ret=i32)` so the same `K`) cast to one common type, eliminating any need for per-signature dispatch tables.
+The subtype keeps the shared prefix — `env`, `inspect`, `inspect_alt` — and adds `func` last. `$canonical_callback_fn` has signature `(param $env (ref null struct)) (param $f (ref null struct))` (uniform across all signatures); `$canonical_fn_K` has signature `(param $env (ref null struct)) (param $p_0 ...) ... (result ...)` (per-`K`, typed). Because the inspectable supertype `$canonical_inspectable_base` is shared across all `K` of the same `(arity, ret)`, the inspect dispatch stub for those signatures is also shared: distinct function types like `fn(i32) -> i32` and `fn(String) -> i32` (different `K`, both `(arity=1, ret=i32)`) `ref.cast` to the same `$canonical_inspectable_base` for inspect calls, even though their `func` fields and `call` dispatch remain per-`K`.
 
 Per-literal wrappers (registered in WIR build for every closure literal `N` whose signature is inspectable):
 
@@ -271,10 +272,10 @@ Per-literal wrappers (registered in WIR build for every closure literal `N` whos
 2. `__closure_inspect_wrapper_N` — casts `env`, calls `__Closure_N^Inspect::inspect`.
 3. `__closure_inspect_alt_wrapper_N` — casts `env`, calls `__Closure_N^InspectAlt::inspect_alt`.
 
-Trait dispatch from the canonical `InspectAlt::inspect_alt` impl (one per `K`):
+Trait dispatch from the canonical `InspectAlt::inspect_alt` impl (one per `(arity, ret)`, shared across all `K` with that signature shape):
 
 ```wat
-;; CanonicalClosure_K^InspectAlt::inspect_alt(self, f)
+;; CanonicalInspectable^InspectAlt::inspect_alt(self, f)
 (local $b (ref $canonical_inspectable_base))
 (local.set $b (ref.cast (ref $canonical_inspectable_base) (local.get $self)))
 (call_ref $canonical_callback_fn
@@ -285,7 +286,7 @@ Trait dispatch from the canonical `InspectAlt::inspect_alt` impl (one per `K`):
 
 The dispatch stub is auto-derived as a `FunctionKind::FnCanonicalDispatch` TIR placeholder with no body — WIR build supplies the instructions above. A bodyless TIR function is naturally skipped by the inliner, monomorphisation, and other body walkers, so the placeholder costs nothing during optimisation.
 
-Programs that never inspect closures emit the slim shape and incur no extra fields, wrappers, or source-string constants. Programs that inspect closures at some `K` pay two refs per canonical value of that signature plus per-literal wrappers and source-string constants for the affected literals only. The `__Closure_N^Inspect[Alt]` impls are TIR-rooted from `ClosureToCanonical` only when the corresponding `K` is inspected.
+Programs that never inspect closures emit the slim shape and incur no extra fields, wrappers, or source-string constants. Programs that inspect closures of some `(arity, ret)` pay two refs per canonical value of any signature in that shape, plus per-literal wrappers and source-string constants for the affected literals only. The `__Closure_N^Inspect[Alt]` impls are TIR-rooted from `ClosureToCanonical` only when the corresponding `(arity, ret)` is inspected.
 
 The specialised path (closure local stays as `&__Closure_N`) does not use the vtable: a redirect at the lowering stage rewrites canonical `Inspect[Alt]` calls on known-local receivers to direct calls on `__Closure_N^Inspect[Alt]`, and standard DCE removes those impls when unused.
 
@@ -293,7 +294,7 @@ The specialised path (closure local stays as `&__Closure_N`) does not use the vt
 
 The current implementation reflects an earlier design: capture-by-value with explicit `&mut || ...` syntax for mutating closures, a single `Function` type constructor with no `fn` / `fn mut` split. The Wasm codegen layer (`__Closure_N` struct + funcref, canonical closure with optional inspectable supertype, `FnCanonicalDispatch` stub, escape-analysis-driven specialised vs canonical dispatch) is already aligned with the new design and continues to apply unchanged.
 
-The transition proceeds in phases, each leaving the compiler in a green state. File references below point at the current state of `claude/review-closure-design-1pSAO`; line numbers are approximate.
+The transition proceeds in phases, each leaving the compiler in a green state. File references below point at the current main tree; line numbers are approximate and may drift as unrelated changes land.
 
 ### Already in place
 
@@ -321,12 +322,15 @@ Tasks:
 
 ### Phase 2: Internal `FnMut` trait
 
-Add `FnMut<Args, Ret, Effects>` as the base trait in `core:prelude`, and re-declare `Fn` as a sub-trait of `FnMut` so that `fn <: fn mut` holds at the trait-bound level. Wire bound `fn` / `fn mut` syntax to resolve to these internal trait references. (`Fn` already exists but is unused as a bound today, and its current declaration assumes no `FnMut`; it needs to be refactored to extend `FnMut`.)
+Add `FnMut<Args, Ret, Effects>` as the base trait in `core:prelude`, and re-declare `Fn` as a sub-trait of `FnMut` so that `fn <: fn mut` holds at the trait-bound level. Wire bound `fn` / `fn mut` syntax to resolve to these internal trait references. The current prelude `Fn` declaration is `pub trait Fn<Args, Ret, Effects>` (no `Effects` default, no supertrait); both are added by this phase.
+
+Wado's parser does not yet support a supertrait clause on trait declarations (no existing stdlib trait uses `trait X<...>: Y<...>` form). Adding parser support is part of this phase. If supertrait syntax proves invasive, an alternative is to keep `Fn` and `FnMut` as two independent traits and emit the `Fn ⇒ FnMut` blanket impl from the compiler (per closure-literal lowering), with `check_assignable` enforcing the `fn <: fn mut` rule directly without going through trait-bound inheritance. Either path satisfies the design.
 
 Tasks:
 
-- [ ] Add `pub trait FnMut<Args, Ret, Effects>` with `fn call_mut(&mut self, args: Args) -> Ret with Effects` as the base trait
-- [ ] Refactor `pub trait Fn<Args, Ret, Effects>` to extend `FnMut<Args, Ret, Effects>` (so every `Fn` is also a `FnMut`)
+- [ ] Parser/resolver: accept a supertrait clause on trait declarations (`trait T<G>: U<G> { ... }`), or design the alternative blanket-impl mechanism above
+- [ ] Add `pub trait FnMut<Args, Ret, Effects = []>` with `fn call_mut(&mut self, args: Args) -> Ret with Effects` as the base trait
+- [ ] Refactor `pub trait Fn<Args, Ret, Effects = []>` to extend `FnMut<Args, Ret, Effects>` (so every `Fn` is also a `FnMut`); add `Effects = []` default while editing
 - [ ] Re-export both via prelude
 - [ ] Resolve bound `fn(...)` → internal `Fn<...>`, bound `fn mut(...)` → internal `FnMut<...>` in resolver
 
@@ -384,12 +388,16 @@ Tasks:
 
 ### Phase 8: CM boundary error
 
-Compile-error fixture for exporting or importing a function with a closure-typed parameter across the Component Model boundary.
+Compile-error fixtures for any closure-typed component crossing the Component Model boundary — parameter, return type, or buried inside container types (`Option<fn(...)>`, struct fields in CM-exported records, etc.).
 
 Tasks:
 
-- [ ] Compile-error fixture for exporting a function with a closure-typed parameter
-- [ ] Compile-error fixture for importing a function with a closure-typed parameter
+- [ ] Reject exporting a function with a closure-typed parameter
+- [ ] Reject exporting a function with a closure-typed return type
+- [ ] Reject importing a function with a closure-typed parameter
+- [ ] Reject importing a function with a closure-typed return type
+- [ ] Reject closure-typed fields in CM-exported record / variant types
+- [ ] Add fixtures for each rejection case above
 
 ### Phase 9 (Optional): LSP dispatch hints
 

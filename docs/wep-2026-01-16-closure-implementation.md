@@ -51,9 +51,18 @@ The compiler chooses static (specialised) vs dynamic (canonical) dispatch via es
 `fn(...)` and `fn mut(...)` may appear as trait bounds. This is the way to name a closure type and reuse it across multiple positions in a generic function:
 
 ```wado
-fn apply<F: fn(i32) -> i32>(f: F, x: i32) -> i32 { f(x) }
-fn run<F: fn mut(i32)>(mut f: F) { f(1); f(2); }
-fn dup<F: fn(i32) -> i32>(f: F) -> (F, F) { (f, f) }
+fn apply<F: fn(i32) -> i32>(f: F, x: i32) -> i32 {
+    return f(x);
+}
+
+fn run<F: fn mut(i32)>(mut f: F) {
+    f(1);
+    f(2);
+}
+
+fn dup<F: fn(i32) -> i32>(f: F) -> [F, F] {
+    return [f, f];
+}
 ```
 
 The underlying trait names are not user-visible. The `fn` keyword itself serves as the bound name. User-defined types cannot implement these traits — only closure literals produce callables. (May be revisited later; not in scope for the MVP.)
@@ -131,10 +140,12 @@ assert(count == 2);
 
 ### No `Clone` Trait
 
-Wado has no `Clone` trait or `.clone()` method. Constructions like `(f, f)` auto-copy `f`:
+Wado has no `Clone` trait or `.clone()` method. Constructions like `[f, f]` auto-copy `f`:
 
 ```wado
-fn dup<F: fn(i32) -> i32>(f: F) -> (F, F) { (f, f) }
+fn dup<F: fn(i32) -> i32>(f: F) -> [F, F] {
+    return [f, f];
+}
 ```
 
 ### No `FnOnce`
@@ -162,7 +173,7 @@ let f: fn(i32) -> i32 with Stdout = |x| { println(`{x}`); x };
 Functions that accept effectful closures use the `<effect E>` parameter form (per [Effect System Design WEP](./wep-2026-01-27-effect-system-design.md)):
 
 ```wado
-fn map<B, effect E>(
+fn map<T, B, effect E>(
     arr: Array<T>,
     f: fn mut(T) -> B with E,
 ) -> Array<B> with E { ... }
@@ -232,7 +243,7 @@ Escape analysis drives the choice. From the user's perspective both paths satisf
 
 ## Component Model Boundary
 
-Closures cannot cross the Component Model boundary (CM has no closure type). Compile error when attempting to export or import a function with a closure-typed parameter.
+Closures cannot cross the Component Model boundary (CM has no closure type). Compile error when attempting to export or import a function with a closure-typed parameter or return type, or with a closure-typed component carried through container types in the signature.
 
 Future: resource adapter — wrap closures as CM resources with a `call` method backed by a runtime handle table.
 
