@@ -14,19 +14,19 @@ but no pass turns those into user-facing diagnostics.
 
 The reachability roots for "unused" in Wado are not what rustc uses:
 
-- `pub` in Wado is "same-package public", not package-external. A
-  private `pub fn helper()` that no caller invokes is **dead code**, not
-  a public API surface.
-- `export` is what crosses the Wasm Component Model boundary. The world
-  declaration determines which exports a binary must produce.
+- `export` is the only modifier that crosses the package boundary. It
+  applies uniformly across `command`, `service`, and `lib` entry
+  points: a `lib` package exposes `export` items as its public API
+  (see [Package Manifest](./wep-2026-02-14-package-manifest.md)).
+- `pub` is package-internal visibility. A `pub fn` that no caller
+  invokes inside the package is dead code, even in a `lib` package —
+  it is not part of the package's public API surface.
 - The standard library is a separate package whose `pub` items are
   visible from user code under special rules. Stdlib must never receive
   user-facing unused warnings.
 - Synthesised functions (CM bindings, effect-dispatch wrappers,
   monomorphisation clones, auto-derived impls) are not source-authored
   and must not be reported regardless of reachability.
-- A package that is itself published as a library (manifest's `lib`
-  field) needs every `pub` item to be treated as a reachability root.
 
 Without explicit lints, three problems persist: silent dead code
 accumulates across refactors, unused imports pollute namespace
@@ -49,9 +49,9 @@ HIR-level `unused_*` lints and `dead_code` reachability:
    removed. Emits `DeadFunction`.
 
 Both passes are guarded by `CompilerOptions::unused_diagnostics` (on by
-default). Library packages set
-`CompilerOptions::package_is_library`, which adds every `is_pub`
-function in user-authored modules to the reachability root set.
+default). No package-kind toggle is needed: `export` already names the
+complete set of package-external roots for every entry-point kind
+(`command`, `service`, `lib`).
 
 ### What is in scope (MVP)
 
@@ -75,15 +75,16 @@ function in user-authored modules to the reachability root set.
 
 The DCE layer treats these as always-reachable:
 
-| Root                                                        | Source                                                                                 |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `is_cm_export`                                              | World export wrappers from synthesis                                                   |
-| `is_export` in `wasm_module_sources`                        | Raw Wasm exports                                                                       |
-| `is_pub` in user-authored modules when `package_is_library` | Library API surface                                                                    |
-| `defining_ast_id.is_none()`                                 | Synthesised functions (CM bindings, dispatch wrappers, monomorph clones, auto-derives) |
+| Root                                 | Source                                                                                 |
+| ------------------------------------ | -------------------------------------------------------------------------------------- |
+| `is_cm_export`                       | World export wrappers from synthesis (covers `command` / `service` / `lib` exports)    |
+| `is_export` in `wasm_module_sources` | Raw Wasm exports                                                                       |
+| `defining_ast_id.is_none()`          | Synthesised functions (CM bindings, dispatch wrappers, monomorph clones, auto-derives) |
 
-`is_pub` alone is never a root: in Wado it is same-package visibility,
-not external API. The library flag is what promotes it.
+`is_pub` is never a root. In Wado it denotes package-internal
+visibility, never package-external API — that is `export`'s job, and
+`export` covers `lib` packages as well as `command` / `service`. An
+unreferenced `pub fn` is dead code regardless of the entry-point kind.
 
 ### Stdlib exclusion
 
@@ -120,18 +121,18 @@ This is the only structural change required outside the new
 
 ### Source files
 
-| File                                  | Description                                                                                                                                                                           |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `wado-compiler/src/analyze/unused.rs` | New module hosting `check_unused` (Annotated layer) and `check_dead_functions` (DCE hook).                                                                                            |
-| `wado-compiler/src/compiler_host.rs`  | Adds `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction` and their `Display` mappings.                                                                          |
-| `wado-compiler/src/logger.rs`         | Adds `Logger::warn_at(code, message, span, file)` for span-bearing warnings.                                                                                                          |
-| `wado-compiler/src/lib.rs`            | Adds `CompilerOptions::unused_diagnostics`, `CompilerOptions::package_is_library`. Calls `check_unused` after `annotate_loaded` and `check_dead_functions` after DCE reachability.    |
-| `wado-compiler/src/tir.rs`            | `TirFunction::defining_ast_id: Option<AstId>`.                                                                                                                                        |
-| `wado-compiler/src/nir.rs`            | `NirFunction::defining_ast_id: Option<AstId>`.                                                                                                                                        |
-| `wado-compiler/src/optimize/dce.rs`   | Splits `analyze_project` into reachability computation and removal so the diagnostic hook fits between them. Extends `compute_reachable_from_entries` to honour `package_is_library`. |
-| `wado-compiler/src/ast_index.rs`      | Adds `is_param(id)` predicate (1-bit table) so the locals pass can distinguish `UnusedVariable` from `UnusedParameter`.                                                               |
-| `wado-cli`                            | Adds `--no-unused` flag; sets `package_is_library` from `wado.toml`'s `[package].lib`.                                                                                                |
-| `wado-lsp`                            | Calls `analyze::unused::check_unused` from `Engine::diagnostics`.                                                                                                                     |
+| File                                  | Description                                                                                                                                 |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `wado-compiler/src/analyze/unused.rs` | New module hosting `check_unused` (Annotated layer) and `check_dead_functions` (DCE hook).                                                  |
+| `wado-compiler/src/compiler_host.rs`  | Adds `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction` and their `Display` mappings.                                |
+| `wado-compiler/src/logger.rs`         | Adds `Logger::warn_at(code, message, span, file)` for span-bearing warnings.                                                                |
+| `wado-compiler/src/lib.rs`            | Adds `CompilerOptions::unused_diagnostics`. Calls `check_unused` after `annotate_loaded` and `check_dead_functions` after DCE reachability. |
+| `wado-compiler/src/tir.rs`            | `TirFunction::defining_ast_id: Option<AstId>`.                                                                                              |
+| `wado-compiler/src/nir.rs`            | `NirFunction::defining_ast_id: Option<AstId>`.                                                                                              |
+| `wado-compiler/src/optimize/dce.rs`   | Splits `analyze_project` into reachability computation and removal so the diagnostic hook fits between them.                                |
+| `wado-compiler/src/ast_index.rs`      | Adds `is_param(id)` predicate (1-bit table) so the locals pass can distinguish `UnusedVariable` from `UnusedParameter`.                     |
+| `wado-cli`                            | Adds `--no-unused` flag.                                                                                                                    |
+| `wado-lsp`                            | Calls `analyze::unused::check_unused` from `Engine::diagnostics`.                                                                           |
 
 ### Algorithms
 
@@ -185,9 +186,7 @@ group when:
 - `defining_ast_id` is `Some` (skip synthesised),
 - the module is not a stdlib module,
 - the function is not `is_export` / `is_cm_export`,
-- no monomorphisation is reachable,
-- and, when `package_is_library`, the function is not `is_pub` in a
-  user-authored module.
+- no monomorphisation is reachable.
 
 The diagnostic's span is `Annotated::name_span_of(SymbolKey)`,
 falling back to `NirFunction::span`.
@@ -228,7 +227,7 @@ calls `check_unused` after `annotate_loaded` without any extra cost.
 
 - [ ] Add `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction` and their `Display` strings.
 - [ ] Add `Logger::warn_at(code, message, span, file)`.
-- [ ] Add `CompilerOptions::unused_diagnostics` (default `true`) and `CompilerOptions::package_is_library` (default `false`).
+- [ ] Add `CompilerOptions::unused_diagnostics` (default `true`).
 - [ ] Add `AstIndex::is_param(id)` and tests.
 
 #### Phase 2 — `defining_ast_id` propagation
@@ -250,14 +249,12 @@ calls `check_unused` after `annotate_loaded` without any extra cost.
 
 - [ ] Split `optimize/dce.rs::analyze_project` into a reachability function and a removal function.
 - [ ] Implement `check_dead_functions`.
-- [ ] Extend `compute_reachable_from_entries` to honour `package_is_library`.
 - [ ] Wire `defining_ast_id.is_none()` as an additional DCE root so synthesised functions stay alive without being reported.
 - [ ] Add fixtures under `tests/fixtures/dead_*.wado`.
 
-#### Phase 5 — CLI and manifest wiring
+#### Phase 5 — CLI wiring
 
 - [ ] `wado-cli`: add `--no-unused` flag for `compile` / `run` / `serve` / `dump`.
-- [ ] `wado-cli`: read `[package].lib` from `wado.toml` and set `package_is_library`.
 
 ### Test plan
 
@@ -274,7 +271,7 @@ E2E fixtures (under `tests/fixtures/`):
 - `dead_function_export_root.wado`
 - `dead_function_generic.wado`
 - `dead_function_test_world.wado`
-- `dead_function_library_pub_root.wado`
+- `dead_function_lib_pub_is_dead.wado`
 - `unused_stdlib_no_report.wado`
 
 Each carries the appropriate `stderr_contains` entries in its `__DATA__`
@@ -321,7 +318,8 @@ through the diagnostics path.
   effect dispatch) could leave one monomorph reachable from an
   unreported path. Mitigation: rely on the existing DCE call-graph,
   which already handles these edges for removal.
-- Risk: `pub`-vs-`export` confusion in the wider ecosystem. Mitigation:
-  documentation in the lint message explicitly names the package
-  boundary, and the `package_is_library` toggle gives library authors
-  a way to opt out of `pub`-as-dead reports.
+- Risk: users coming from Rust expect `pub fn` in a `lib` package to
+  be a public API root and may be surprised that it is reported as
+  dead. Mitigation: the lint message names the rule
+  ("`pub` is package-internal; use `export` to expose at the package
+  boundary") and points at [Package Manifest](./wep-2026-02-14-package-manifest.md).
