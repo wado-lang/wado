@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778908674516,
+  "lastUpdate": 1778909023354,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22189,6 +22189,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b92aca732decae77348c1fc7fdb244990962cd76"
         },
         "date": 1778908674275,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510314,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c667867291b2c9462c20327eeb9d78e0372075f4",
+          "message": "Merge pull request #1076 from wado-lang/claude/fix-kiln-json-diffs-matzj\n\nMark *.kiln.json as linguist-generated to collapse PR diffs",
+          "timestamp": "2026-05-16T14:10:01+09:00",
+          "tree_id": "436b6196ed7568036e542a7afae562f693f3885f",
+          "url": "https://github.com/wado-lang/wado/commit/c667867291b2c9462c20327eeb9d78e0372075f4"
+        },
+        "date": 1778909023206,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
