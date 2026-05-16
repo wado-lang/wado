@@ -336,7 +336,6 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     w.blank();
 }
 
-// --- Alternative Scan Helpers ---
 // For each alternative in an Ambiguous group that has a scannable prefix,
 // generate a scan_<rule>_bt_<N> function. This function scans only the
 // scannable prefix of the alternative, which is enough to distinguish it
@@ -404,7 +403,6 @@ fn alt_scan_is_full(elements: &Array<Element>, ctx: &mut GenContext) -> bool {
     return scannable_prefix_len(elements, ctx) == elements.len();
 }
 
-// --- Scan Function Generation ---
 // Scan functions recognize parser rules by walking token kinds without building
 // CST nodes or constructing error messages. They return the token position after
 // successful recognition, or -1 on failure. Used to disambiguate Ambiguous
@@ -4669,16 +4667,14 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
             let mut sorted_group = group.sorted();
             sort_group_by_specificity(&mut sorted_group, first_sets);
             let mut pred_indices: Array<i32> = [];
-            let mut pred_firsts: Array<Array<String>> = [];
             let mut pred_elements: Array<Array<Element>> = [];
             for let mut k = 0; k < sorted_group.len(); k += 1 {
                 let idx = sorted_group[k];
                 let real_idx = non_lr_indices[idx];
                 pred_indices.push(real_idx);
-                pred_firsts.push(first_sets[idx]);
                 pred_elements.push(rule.alternatives[real_idx].elements);
             }
-            let tree = build_prediction(&pred_indices, &pred_firsts, &pred_elements, 0, 5, ctx);
+            let tree = build_prediction(&pred_indices, &pred_elements, 0, 5, ctx);
             gen_prediction_code(w, &tree, &fn_name, &rule.alternatives, lowered_rule, type_name, ctx);
         }
 
