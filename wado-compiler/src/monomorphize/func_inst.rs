@@ -890,7 +890,7 @@ impl Monomorphizer {
             is_cm_export: false,
             is_ambient: false,
             inline_hint: generic.inline_hint,
-            comp_features: generic.comp_features,
+            compiler_item: generic.compiler_item,
             export_name: generic.export_name.clone(),
             allocator_tag: generic.allocator_tag.clone(),
             kind: FunctionKind::Regular,

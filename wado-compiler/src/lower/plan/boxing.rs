@@ -19,8 +19,9 @@ pub fn plan(flat: &mut FlatPackage) {
     let box_module_source = flat
         .type_table
         .borrow()
-        .box_module_source
-        .clone()
+        .compiler_items()
+        .struct_module(crate::compiler_item::CompilerItem::Box)
+        .cloned()
         .unwrap_or_else(ModuleSource::prelude);
     let mut box_lowerer = BoxLowerer::new(box_module_source);
 
@@ -52,8 +53,8 @@ struct BoxLowerer {
     /// Generated Box<T> struct definitions to add to the module.
     generated_structs: Vec<TirStruct>,
     /// Module source for registering Box types in the type table.
-    /// Set from `TypeTable::box_module_source` (registered via `#[comp_feature("box")]`
-    /// on `struct Box<T>` in the prelude).
+    /// Resolved via `TypeTable::compiler_items().struct_module(CompilerItem::Box)`
+    /// (registered from `#[compiler_item("box")]` on `struct Box<T>` in the prelude).
     box_module_source: ModuleSource,
     /// Struct fields indexed by (name, `module_source`) for deref assign expansion.
     struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>>,
@@ -88,7 +89,7 @@ impl BoxLowerer {
         let inner_name = type_table.mangle_type_name(inner_type_id);
         let struct_name = mangle_generic_name("Box", &[inner_name]);
 
-        // Register under the Box definition's module source (from #[comp_feature("box")]).
+        // Register under the Box definition's module source (from #[compiler_item("box")]).
         let struct_type_id = type_table.make_monomorphized_struct(
             struct_name.clone(),
             self.box_module_source.clone(),

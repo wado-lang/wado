@@ -924,8 +924,9 @@ impl<'a> WirContext<'a> {
                             .package
                             .type_table
                             .borrow()
-                            .box_module_source
-                            .clone()
+                            .compiler_items()
+                            .struct_module(crate::compiler_item::CompilerItem::Box)
+                            .cloned()
                             .unwrap_or_else(ModuleSource::prelude);
                         let box_sn = StructName::new(box_module, box_name);
                         if let Some(tid) = self.struct_type_map.get(&box_sn) {

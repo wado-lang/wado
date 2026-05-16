@@ -8,6 +8,7 @@ pub mod cm_abi;
 pub mod codegen;
 pub mod comment;
 pub mod compiler_host;
+pub mod compiler_item;
 pub mod component_model;
 pub mod desugar;
 pub mod doc;

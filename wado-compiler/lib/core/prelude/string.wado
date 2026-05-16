@@ -47,6 +47,7 @@ impl String {
     ///
     /// For safe byte access, use `bytes()` iterator instead. This method is
     /// reserved for performance-critical code where bounds have been proven.
+    #[compiler_item("string_get_byte_unchecked")]
     pub fn get_byte_unchecked(&self, index: i32) -> u8 {
         return builtin::array_get_u8(self.repr, index);
     }
@@ -143,7 +144,7 @@ impl String {
 
     /// Appends another string to this string.
     /// Grows the string if necessary (O(1) amortized).
-    #[comp_feature("string_push_str")]
+    #[compiler_item("string_push_str")]
     pub fn push_str(&mut self, other: String) {
         let other_len = other.len();
         if other_len == 0 {
@@ -412,7 +413,7 @@ impl String {
     }
 
     /// Appends a Unicode scalar value (char) to this string.
-    #[comp_feature("string_push_char")]
+    #[compiler_item("string_push_char")]
     pub fn push(&mut self, c: char) {
         let code = c as u32;
 

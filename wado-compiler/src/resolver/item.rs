@@ -1,7 +1,10 @@
 //! Item-level resolution (structs, functions, methods, globals, variants, tests).
 
+use std::cell::RefCell;
+
 use crate::ast::{self, Function, GlobalDecl, SelfKind, Type};
 use crate::compiler_host::CompilerHost;
+use crate::compiler_item::{CompilerItem, CompilerItemKind, Resolved, parse_compiler_item_attrs};
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
@@ -13,39 +16,114 @@ use crate::tir::{
 use super::Resolver;
 use super::types::{FunctionContext, TypeError};
 
-/// Extract compiler feature bitflags from `#[comp_feature("...")]` attributes.
-pub(super) fn extract_comp_features(attrs: &[crate::ast::Attribute]) -> u32 {
-    let mut features = 0u32;
-    for attr in attrs {
-        if attr.name == "comp_feature" {
-            for arg in &attr.args {
-                match arg.as_str() {
-                    "array_push" => features |= crate::wir::COMP_FEATURE_ARRAY_PUSH,
-                    "string_push_str" => features |= crate::wir::COMP_FEATURE_STRING_PUSH_STR,
-                    "string_push_char" => {
-                        features |= crate::wir::COMP_FEATURE_STRING_PUSH_CHAR;
-                    }
-                    "option" => features |= crate::wir::COMP_FEATURE_OPTION,
-                    "result" => features |= crate::wir::COMP_FEATURE_RESULT,
-                    "default" => features |= crate::wir::COMP_FEATURE_DEFAULT,
-                    "from" => features |= crate::wir::COMP_FEATURE_FROM,
-                    "tuple" => features |= crate::wir::COMP_FEATURE_TUPLE,
-                    "box" => features |= crate::wir::COMP_FEATURE_BOX,
-                    "range_exclusive" => {
-                        features |= crate::wir::COMP_FEATURE_RANGE_EXCLUSIVE;
-                    }
-                    "range_inclusive" => {
-                        features |= crate::wir::COMP_FEATURE_RANGE_INCLUSIVE;
-                    }
-                    "kiln_request" => features |= crate::wir::COMP_FEATURE_KILN_REQUEST,
-                    "serialize" => features |= crate::wir::COMP_FEATURE_SERIALIZE,
-                    "deserialize" => features |= crate::wir::COMP_FEATURE_DESERIALIZE,
-                    _ => {}
-                }
-            }
-        }
+/// Extract the [`CompilerItem`] marker — if any — from a declaration's
+/// `#[compiler_item("...")]` attributes.
+///
+/// Each declaration carries at most one marker. The parser handles
+/// repeated arguments and multiple attributes; this helper folds them
+/// to the first match and silently drops the rest. (A future
+/// diagnostic pass should reject extras at the attribute site.)
+/// Unknown names are dropped here too — they're caught by the
+/// dedicated diagnostic in [`super::orchestration`].
+pub(super) fn extract_compiler_item(attrs: &[crate::ast::Attribute]) -> Option<CompilerItem> {
+    parse_compiler_item_attrs(attrs).0.into_iter().next()
+}
+
+/// Register a struct declaration's `#[compiler_item(...)]` annotation, if any.
+///
+/// Silently ignores items whose [`CompilerItem::expected_kind`] is not
+/// [`CompilerItemKind::Struct`] — the resolver emits a dedicated
+/// diagnostic for kind mismatches in [`super::orchestration`]. The
+/// registry itself ICEs on duplicate registrations; per the design
+/// contract, every `CompilerItem` variant is owned by exactly one
+/// stdlib declaration.
+pub(super) fn register_struct_compiler_item(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    name: &str,
+    module_source: &ModuleSource,
+) {
+    let Some(item) = extract_compiler_item(attrs) else {
+        return;
+    };
+    if item.expected_kind() != CompilerItemKind::Struct {
+        return;
     }
-    features
+    let resolved = Resolved::Struct {
+        module_source: module_source.clone(),
+        name: name.to_string(),
+    };
+    let _ = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved);
+}
+
+/// Register a variant declaration's `#[compiler_item(...)]` annotation, if any.
+pub(super) fn register_variant_compiler_item(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    name: &str,
+    module_source: &ModuleSource,
+) {
+    let Some(item) = extract_compiler_item(attrs) else {
+        return;
+    };
+    if item.expected_kind() != CompilerItemKind::Variant {
+        return;
+    }
+    let resolved = Resolved::Variant {
+        module_source: module_source.clone(),
+        name: name.to_string(),
+    };
+    let _ = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved);
+}
+
+/// Register a trait declaration's `#[compiler_item(...)]` annotation, if any.
+pub(super) fn register_trait_compiler_item(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    name: &str,
+    module_source: &ModuleSource,
+) {
+    let Some(item) = extract_compiler_item(attrs) else {
+        return;
+    };
+    if item.expected_kind() != CompilerItemKind::Trait {
+        return;
+    }
+    let resolved = Resolved::Trait {
+        module_source: module_source.clone(),
+        name: name.to_string(),
+    };
+    let _ = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved);
+}
+
+/// Register a `pub type [..T];` declaration's `#[compiler_item("tuple")]` annotation.
+pub(super) fn register_tuple_compiler_item(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    module_source: &ModuleSource,
+) {
+    let Some(item) = extract_compiler_item(attrs) else {
+        return;
+    };
+    if item.expected_kind() != CompilerItemKind::TupleFamily {
+        return;
+    }
+    let resolved = Resolved::TupleFamily {
+        module_source: module_source.clone(),
+    };
+    let _ = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved);
 }
 
 impl<H: CompilerHost> Resolver<'_, H> {
@@ -382,12 +460,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         drop(scope);
 
-        let comp_features = extract_comp_features(&variant_decl.attrs);
-        if comp_features != 0 {
-            self.type_table
-                .borrow_mut()
-                .register_comp_feature_variant(comp_features, self.current_module_source.clone());
-        }
+        register_variant_compiler_item(
+            &self.type_table,
+            &variant_decl.attrs,
+            &variant_decl.name,
+            &self.current_module_source,
+        );
 
         TirVariantDecl {
             name: variant_decl.name.clone(),
@@ -395,7 +473,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             is_pub: variant_decl.is_pub,
             type_params,
             cases,
-            comp_features,
             span: variant_decl.span,
         }
     }
@@ -708,7 +785,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             is_cm_export: false,
             is_ambient: Self::extract_is_ambient(&func.attrs),
             inline_hint: Self::extract_inline_hint(&func.attrs),
-            comp_features: extract_comp_features(&func.attrs),
+            compiler_item: extract_compiler_item(&func.attrs),
             export_name: Self::extract_export_name(&func.attrs),
             allocator_tag: Self::extract_allocator_tag(&func.attrs),
             kind: FunctionKind::Regular,
@@ -794,7 +871,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             is_cm_export: false,
             is_ambient: false,
             inline_hint: crate::tir::InlineHint::Auto,
-            comp_features: 0,
+            compiler_item: None,
             export_name: None,
             allocator_tag: None,
             kind: FunctionKind::Regular,
@@ -1225,7 +1302,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             is_cm_export: false,
             is_ambient: Self::extract_is_ambient(&func.attrs),
             inline_hint: Self::extract_inline_hint(&func.attrs),
-            comp_features: extract_comp_features(&func.attrs),
+            compiler_item: extract_compiler_item(&func.attrs),
             export_name: None,
             allocator_tag: None,
             kind: FunctionKind::Regular,

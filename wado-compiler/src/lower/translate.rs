@@ -293,7 +293,7 @@ impl Translator<'_> {
             is_cm_export: func.is_cm_export,
             is_ambient: func.is_ambient,
             inline_hint: convert_inline_hint(func.inline_hint),
-            comp_features: func.comp_features,
+            compiler_item: func.compiler_item,
             export_name: func.export_name.clone(),
             allocator_tag: func.allocator_tag.clone(),
             kind: convert_function_kind(&func.kind),
@@ -1101,7 +1101,6 @@ fn convert_variant_decl(v: &TirVariantDecl) -> NirVariantDecl {
         is_pub: v.is_pub,
         type_params: v.type_params.iter().map(convert_type_param).collect(),
         cases: v.cases.iter().map(convert_variant_case).collect(),
-        comp_features: v.comp_features,
         span: v.span,
     }
 }
