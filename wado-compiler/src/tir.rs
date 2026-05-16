@@ -878,6 +878,18 @@ impl TypeTable {
         self.make_struct(name, module_source)
     }
 
+    /// Make the enum type for a registered [`CompilerItem`] variant
+    /// of kind [`CompilerItemKind::Enum`] (currently `Ordering`).
+    /// Same shape as [`Self::make_compiler_struct`]: routes both name
+    /// and module through the registry.
+    pub fn make_compiler_enum(&mut self, item: crate::compiler_item::CompilerItem) -> TypeId {
+        let (module_source, name) = {
+            let (m, n) = self.compiler_items.require_enum(item);
+            (m.clone(), n.to_string())
+        };
+        self.make_enum(name, module_source)
+    }
+
     /// Create an `Option<T>` type using the module source registered
     /// via `#[compiler_item("option")]`.
     pub fn make_option(&mut self, inner: TypeId) -> TypeId {

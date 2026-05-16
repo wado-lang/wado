@@ -4,6 +4,7 @@
 #![stdlib("core:prelude/traits.wado")]
 
 /// Result of a comparison between two values.
+#[compiler_item("ordering")]
 pub enum Ordering {
     /// The first value is less than the second.
     Less,
@@ -35,6 +36,7 @@ impl<T> Eq for &mut T {
 
 /// Trait for ordering comparisons.
 /// Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
+#[compiler_item("ord")]
 pub trait Ord {
     /// Compares self with other and returns an Ordering.
     fn cmp(&self, other: &Self) -> Ordering;

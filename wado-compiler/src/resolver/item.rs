@@ -149,6 +149,34 @@ pub(super) fn register_variant_compiler_item<H: CompilerHost>(
     }
 }
 
+/// Register an enum declaration's `#[compiler_item(...)]` annotation, if any.
+pub(super) fn register_enum_compiler_item<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    name: &str,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) {
+    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+        return;
+    };
+    if !check_compiler_item_placement(item, CompilerItemKind::Enum, module_source, span, logger) {
+        return;
+    }
+    let resolved = Resolved::Enum {
+        module_source: module_source.clone(),
+        name: name.to_string(),
+    };
+    if let Err(err) = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved)
+    {
+        report_register_error(err, span, logger);
+    }
+}
+
 /// Register a trait declaration's `#[compiler_item(...)]` annotation, if any.
 pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,

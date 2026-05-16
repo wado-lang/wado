@@ -3,7 +3,6 @@
 use crate::ast::{self, BinaryOp, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
-use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
     CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind,
@@ -236,10 +235,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     binary.op,
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
                 ) {
+                    let ord_trait_name = self
+                        .type_table
+                        .borrow()
+                        .compiler_items()
+                        .trait_name(CompilerItem::Ord)
+                        .to_string();
                     let Some(resolved) = self.resolve_trait_method_for_op(
                         &struct_name,
                         lookup_type_id,
-                        "Ord",
+                        &ord_trait_name,
                         "cmp",
                         false,
                     ) else {
@@ -328,8 +333,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ) && let Some((_trait_name, info)) =
                     self.find_method_in_trait_bounds(&bound_names, "cmp", left.type_id)
                 {
+                    let ord_trait_name = self
+                        .type_table
+                        .borrow()
+                        .compiler_items()
+                        .trait_name(CompilerItem::Ord)
+                        .to_string();
                     let resolved = ResolvedTraitMethod {
-                        trait_name: "Ord".to_string(),
+                        trait_name: ord_trait_name,
                         method_name: "cmp".to_string(),
                         impl_name: name.clone(),
                         self_kind: info.self_kind,
@@ -637,10 +648,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     BinaryOp::GtEq => ">=",
                     _ => "?",
                 };
-                let eq_trait_name = type_table
-                    .compiler_items()
-                    .trait_name(CompilerItem::Eq)
-                    .to_string();
+                let (eq_trait_name, ord_trait_name) = {
+                    let items = type_table.compiler_items();
+                    (
+                        items.trait_name(CompilerItem::Eq).to_string(),
+                        items.trait_name(CompilerItem::Ord).to_string(),
+                    )
+                };
                 let trait_name: String = match binary.op {
                     BinaryOp::Add => "Add".to_string(),
                     BinaryOp::Sub => "Sub".to_string(),
@@ -653,9 +667,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     BinaryOp::Shl => "Shl".to_string(),
                     BinaryOp::Shr => "Shr".to_string(),
                     BinaryOp::Eq | BinaryOp::NotEq => eq_trait_name,
-                    BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => {
-                        "Ord".to_string()
-                    }
+                    BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => ord_trait_name,
                     _ => "?".to_string(),
                 };
                 drop(type_table);
@@ -1302,10 +1314,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// `<`   → `cmp == Less`, `>` → `cmp == Greater`,
     /// `<=`  → `cmp != Greater`, `>=` → `cmp != Less`.
     fn ord_bool_from_cmp(&mut self, cmp_call: TirExpr, op: BinaryOp, span: Span) -> TirExpr {
-        let ordering_type_id = self.type_table.borrow_mut().intern(ResolvedType::Enum {
-            name: "Ordering".to_string(),
-            module_source: ModuleSource::prelude(),
-        });
+        let ordering_type_id = self
+            .type_table
+            .borrow_mut()
+            .make_compiler_enum(CompilerItem::Ordering);
         let (compare_op, case_name, case_index): (TirBinaryOp, &str, u32) = match op {
             BinaryOp::Lt => (TirBinaryOp::Eq, "Less", 0),
             BinaryOp::Gt => (TirBinaryOp::Eq, "Greater", 2),

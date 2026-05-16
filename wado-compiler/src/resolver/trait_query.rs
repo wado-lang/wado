@@ -98,17 +98,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Resolve the canonical stdlib trait names through the
         // compiler-item registry so the auto-derive predicates below
         // stay aligned with the actual stdlib decls (and a rename of
-        // `Eq` / `Default` does not silently disable auto-impl).
-        let (eq_name, default_name) = {
+        // `Eq` / `Ord` / `Default` does not silently disable auto-impl).
+        let (eq_name, ord_name, default_name) = {
             let tt = self.type_table.borrow();
             let items = tt.compiler_items();
             (
                 items.trait_name(CompilerItem::Eq).to_string(),
+                items.trait_name(CompilerItem::Ord).to_string(),
                 items.trait_name(CompilerItem::Default).to_string(),
             )
         };
         let is_eq = |n: &str| n == eq_name;
-        let is_eq_or_ord = |n: &str| n == eq_name || n == "Ord";
+        let is_eq_or_ord = |n: &str| n == eq_name || n == ord_name;
 
         // Primitives have built-in implementations for certain traits
         if let ResolvedType::Primitive(prim) = &resolved {
@@ -1101,24 +1102,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // those here. `find_arithmetic_trait_impl` would otherwise default
         // `output_type` to the receiver type when no `type Output` is
         // declared.
-        let eq_name = self
-            .type_table
-            .borrow()
-            .compiler_items()
-            .trait_name(CompilerItem::Eq)
-            .to_string();
+        let (eq_name, ord_name) = {
+            let tt = self.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items.trait_name(CompilerItem::Eq).to_string(),
+                items.trait_name(CompilerItem::Ord).to_string(),
+            )
+        };
         let is_eq = trait_name == eq_name;
-        let is_ord = trait_name == "Ord";
+        let is_ord = trait_name == ord_name;
         let (info_trait_name, self_kind, param_types, return_type) = if let Some(info) =
             self.find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_name, method_name)
         {
             let return_type = if is_eq {
                 TypeTable::BOOL
             } else if is_ord {
-                self.type_table.borrow_mut().intern(ResolvedType::Enum {
-                    name: "Ordering".to_string(),
-                    module_source: ModuleSource::prelude(),
-                })
+                self.type_table
+                    .borrow_mut()
+                    .make_compiler_enum(CompilerItem::Ordering)
             } else {
                 info.output_type
             };
@@ -1132,10 +1134,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let return_type = if is_eq {
                 TypeTable::BOOL
             } else {
-                self.type_table.borrow_mut().intern(ResolvedType::Enum {
-                    name: "Ordering".to_string(),
-                    module_source: ModuleSource::prelude(),
-                })
+                self.type_table
+                    .borrow_mut()
+                    .make_compiler_enum(CompilerItem::Ordering)
             };
             (
                 trait_name.to_string(),
@@ -1200,15 +1201,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
         method_name: &str,
         receiver_type_id: TypeId,
     ) -> Option<TraitMethodMatch> {
-        let eq_name = self
-            .type_table
-            .borrow()
-            .compiler_items()
-            .trait_name(CompilerItem::Eq)
-            .to_string();
+        let (eq_name, ord_name) = {
+            let tt = self.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items.trait_name(CompilerItem::Eq).to_string(),
+                items.trait_name(CompilerItem::Ord).to_string(),
+            )
+        };
         let trait_name: String = match method_name {
             "eq" => eq_name.clone(),
-            "cmp" => "Ord".to_string(),
+            "cmp" => ord_name.clone(),
             _ => return None,
         };
         let base_type_id = self.get_base_type(receiver_type_id);
@@ -1226,10 +1229,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let return_type = if is_eq_match {
             TypeTable::BOOL
         } else {
-            self.type_table.borrow_mut().intern(ResolvedType::Enum {
-                name: "Ordering".to_string(),
-                module_source: ModuleSource::prelude(),
-            })
+            self.type_table
+                .borrow_mut()
+                .make_compiler_enum(CompilerItem::Ordering)
         };
         let method_info = MethodInfo {
             return_type,

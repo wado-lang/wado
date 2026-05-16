@@ -3329,11 +3329,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let element_type = start.type_id;
 
         // Check that the element type implements Ord
-        if element_type != TypeTable::ERROR && !self.type_implements_trait(element_type, "Ord") {
+        let ord_trait_name = self
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_name(crate::compiler_item::CompilerItem::Ord)
+            .to_string();
+        if element_type != TypeTable::ERROR
+            && !self.type_implements_trait(element_type, &ord_trait_name)
+        {
             let type_name = self.type_id_to_string(element_type);
             let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                 type_name,
-                trait_name: "Ord".to_string(),
+                trait_name: ord_trait_name,
                 param_name: "T".to_string(),
                 span: range.span,
             });

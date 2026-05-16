@@ -2243,11 +2243,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Auto-derived `Default::default()` — no user impl block exists, but
         // the synthesis pass emits one in the struct's own module.
         if method_name == "default" && self.auto_derive_default_struct_type(struct_name).is_some() {
+            let default_trait_name = self
+                .type_table
+                .borrow()
+                .compiler_items()
+                .trait_name(crate::compiler_item::CompilerItem::Default)
+                .to_string();
             return Some(StaticMethodRef::new(
                 self.find_struct_module_source(struct_name),
                 struct_name,
                 method_name,
-                Some("Default".to_string()),
+                Some(default_trait_name),
             ));
         }
 

@@ -189,9 +189,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .to_string(),
                 "eq",
             )),
-            BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => {
-                Some(("Ord".to_string(), "cmp"))
-            }
+            BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => Some((
+                self.type_table
+                    .borrow()
+                    .compiler_items()
+                    .trait_name(CompilerItem::Ord)
+                    .to_string(),
+                "cmp",
+            )),
             _ => None,
         }
     }

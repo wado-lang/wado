@@ -451,11 +451,12 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
         } => (name.clone(), module_source.clone(), vec![]),
         _ => return null_expr(type_id),
     };
-    let mut method_info = LocalMethodName::new(
-        base_name,
-        Some("Default".to_string()),
-        "default".to_string(),
-    );
+    let default_trait_name = type_table
+        .compiler_items()
+        .trait_name(crate::compiler_item::CompilerItem::Default)
+        .to_string();
+    let mut method_info =
+        LocalMethodName::new(base_name, Some(default_trait_name), "default".to_string());
     if !type_args.is_empty() {
         let arg_names: Vec<String> = type_args.iter().map(|t| type_table.type_name(*t)).collect();
         method_info = method_info.with_type_args(&arg_names, &[]);

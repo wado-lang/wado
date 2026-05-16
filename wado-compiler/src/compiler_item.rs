@@ -74,6 +74,12 @@ pub enum CompilerItem {
     /// `Result<T, E>` — `Ok(_)` / `Err(_)`.
     Result,
 
+    // ── Enums (sum types without payload) ─────────────────────────────
+    /// `Ordering` — return type of `Ord::cmp`. Recognised by operator
+    /// dispatch and by the trait-synthesis pass that emits
+    /// `T^Ord::cmp` bodies.
+    Ordering,
+
     // ── Traits ────────────────────────────────────────────────────────
     /// `Default` — `Default::default()` synthesis anchor.
     Default,
@@ -81,6 +87,9 @@ pub enum CompilerItem {
     /// auto-derive checks that decide whether a compound type
     /// (struct, variant, generic instance) implements `Eq`.
     Eq,
+    /// `Ord` — anchor for synthesised `<` / `>` / `<=` / `>=`
+    /// lowering and for auto-derived `T^Ord::cmp` bodies.
+    Ord,
     /// `From<T>` — synthesised by the `From` synthesiser.
     From,
     /// `core:serde::Serialize` — anchor for `Serialize` impl synthesis.
@@ -139,8 +148,10 @@ impl CompilerItem {
         Self::String,
         Self::Option,
         Self::Result,
+        Self::Ordering,
         Self::Default,
         Self::Eq,
+        Self::Ord,
         Self::From,
         Self::Serialize,
         Self::Deserialize,
@@ -176,8 +187,10 @@ impl CompilerItem {
             Self::String => "string",
             Self::Option => "option",
             Self::Result => "result",
+            Self::Ordering => "ordering",
             Self::Default => "default",
             Self::Eq => "eq",
+            Self::Ord => "ord",
             Self::From => "from",
             Self::Serialize => "serialize",
             Self::Deserialize => "deserialize",
@@ -230,8 +243,10 @@ impl CompilerItem {
             | Self::String
             | Self::Option
             | Self::Result
+            | Self::Ordering
             | Self::Default
             | Self::Eq
+            | Self::Ord
             | Self::From
             | Self::ArrayPush
             | Self::StringPushStr
@@ -267,9 +282,13 @@ impl CompilerItem {
             | Self::KilnRequest
             | Self::String => CompilerItemKind::Struct,
             Self::Option | Self::Result => CompilerItemKind::Variant,
-            Self::Default | Self::Eq | Self::From | Self::Serialize | Self::Deserialize => {
-                CompilerItemKind::Trait
-            }
+            Self::Ordering => CompilerItemKind::Enum,
+            Self::Default
+            | Self::Eq
+            | Self::Ord
+            | Self::From
+            | Self::Serialize
+            | Self::Deserialize => CompilerItemKind::Trait,
             Self::ArrayPush
             | Self::StringPushStr
             | Self::StringPushChar
@@ -301,6 +320,8 @@ pub enum CompilerItemKind {
     Struct,
     /// A `variant` declaration (`Option`, `Result`).
     Variant,
+    /// An `enum` declaration (`Ordering`).
+    Enum,
     /// A `trait` declaration.
     Trait,
     /// A method inside an `impl` block.
@@ -314,6 +335,7 @@ impl fmt::Display for CompilerItemKind {
         f.write_str(match self {
             Self::Struct => "struct",
             Self::Variant => "variant",
+            Self::Enum => "enum",
             Self::Trait => "trait",
             Self::Method => "method",
             Self::TupleFamily => "tuple type family",
@@ -341,6 +363,10 @@ pub enum Resolved {
         module_source: ModuleSource,
         name: String,
     },
+    Enum {
+        module_source: ModuleSource,
+        name: String,
+    },
     Trait {
         module_source: ModuleSource,
         name: String,
@@ -364,6 +390,7 @@ impl Resolved {
         match self {
             Self::Struct { .. } => CompilerItemKind::Struct,
             Self::Variant { .. } => CompilerItemKind::Variant,
+            Self::Enum { .. } => CompilerItemKind::Enum,
             Self::Trait { .. } => CompilerItemKind::Trait,
             Self::Method { .. } => CompilerItemKind::Method,
             Self::TupleFamily { .. } => CompilerItemKind::TupleFamily,
@@ -376,6 +403,7 @@ impl Resolved {
         match self {
             Self::Struct { module_source, .. }
             | Self::Variant { module_source, .. }
+            | Self::Enum { module_source, .. }
             | Self::Trait { module_source, .. }
             | Self::Method { module_source, .. }
             | Self::TupleFamily { module_source } => module_source,
@@ -520,6 +548,18 @@ impl CompilerItems {
         }
     }
 
+    /// Module + enum name of a [`CompilerItemKind::Enum`] item
+    /// (`Ordering`).
+    pub fn require_enum(&self, item: CompilerItem) -> (&ModuleSource, &str) {
+        match self.require(item) {
+            Resolved::Enum {
+                module_source,
+                name,
+            } => (module_source, name.as_str()),
+            other => kind_mismatch_ice(item, "Enum", other),
+        }
+    }
+
     /// Module + trait name of a [`CompilerItemKind::Trait`] item.
     pub fn require_trait(&self, item: CompilerItem) -> (&ModuleSource, &str) {
         match self.require(item) {
@@ -547,6 +587,11 @@ impl CompilerItems {
     /// Name-only convenience for a [`CompilerItemKind::Variant`] item.
     pub fn variant_name(&self, item: CompilerItem) -> &str {
         self.require_variant(item).1
+    }
+
+    /// Name-only convenience for a [`CompilerItemKind::Enum`] item.
+    pub fn enum_name(&self, item: CompilerItem) -> &str {
+        self.require_enum(item).1
     }
 
     /// Name-only convenience for a [`CompilerItemKind::Method`] item.

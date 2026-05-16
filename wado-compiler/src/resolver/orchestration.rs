@@ -235,6 +235,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     Vec::new(),
                                 ),
                             );
+                        super::item::register_enum_compiler_item(
+                            &type_table,
+                            &enum_decl.attrs,
+                            &enum_decl.name,
+                            module_source,
+                            enum_decl.span,
+                            logger,
+                        );
                     }
                     Item::Resource(resource_decl) => {
                         all_resource_types
