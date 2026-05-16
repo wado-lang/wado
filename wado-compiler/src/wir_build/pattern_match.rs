@@ -175,8 +175,8 @@ impl FunctionTranslator<'_, '_> {
 
     /// Translate a `LetDestructure` statement.
     ///
-    /// By the time WIR build runs, the pattern planner
-    /// ([`lower::plan::pattern::plan`]) has rewritten every
+    /// By the time WIR build runs, pattern lowering
+    /// ([`crate::lower::translate::pattern::lower`]) has rewritten every
     /// `LetDestructure` form *except* the multivalue-builtin tuple
     /// shape (a tuple whose RHS is a builtin call producing multiple
     /// scalar return values) into plain `Let` / `Expr` statements.
@@ -1110,13 +1110,12 @@ impl FunctionTranslator<'_, '_> {
                         };
                         match sub_pattern {
                             NirPattern::Binding { local_index, .. } => {
-                                let local_type_id = if (*local_index as usize)
-                                    < self.tir_func.locals.len()
-                                {
-                                    self.tir_func.locals[*local_index as usize].type_id
-                                } else {
-                                    element_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN)
-                                };
+                                let local_type_id =
+                                    if (*local_index as usize) < self.tir_func.locals.len() {
+                                        self.tir_func.locals[*local_index as usize].type_id
+                                    } else {
+                                        element_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN)
+                                    };
                                 let binding_wir =
                                     self.ctx.type_id_to_wir_type(self.type_table, local_type_id);
                                 self.emit_pattern_binding_set(
@@ -1271,18 +1270,16 @@ impl FunctionTranslator<'_, '_> {
         instrs: &mut Vec<WirInstr>,
     ) {
         let needs_boxing = match (binding_wir, source_wir) {
-            (
-                WirType::Ref {
-                    type_id: bt, ..
-                },
-                Some(WirType::Ref { type_id: st, .. }),
-            ) => bt != st,
+            (WirType::Ref { type_id: bt, .. }, Some(WirType::Ref { type_id: st, .. })) => bt != st,
             (WirType::Ref { .. }, Some(WirType::AbstractRef { .. })) => false,
             (WirType::Ref { .. }, Some(_)) => true,
             _ => false,
         };
         let value = if needs_boxing {
-            if let WirType::Ref { type_id: box_tid, .. } = binding_wir {
+            if let WirType::Ref {
+                type_id: box_tid, ..
+            } = binding_wir
+            {
                 WirInstr::StructNew {
                     type_id: box_tid.clone(),
                     fields: vec![source],
@@ -1292,11 +1289,12 @@ impl FunctionTranslator<'_, '_> {
             }
         } else if matches!(
             binding_wir,
-            WirType::Ref { nullable: false, .. }
-        ) && matches!(
-            source_wir,
-            Some(WirType::Ref { nullable: true, .. })
-        ) {
+            WirType::Ref {
+                nullable: false,
+                ..
+            }
+        ) && matches!(source_wir, Some(WirType::Ref { nullable: true, .. }))
+        {
             WirInstr::RefAsNonNull(Box::new(source))
         } else {
             source

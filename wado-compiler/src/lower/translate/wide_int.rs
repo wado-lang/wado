@@ -103,7 +103,7 @@ pub(super) fn build_if_chain(
                 // The bound local must hold the scrutinee value before
                 // the guard / body run. Emit `{ let <name> = <scrut>;
                 // <guarded_or_body> }` as a Block expression — same
-                // shape `lower::plan::pattern` synthesizes for normal
+                // shape `lower::translate::pattern` synthesizes for normal
                 // `Binding` lowering.
                 let payload = if let Some(guard) = &arm.guard {
                     build_if(guard.clone(), &arm.body, else_expr, result_type_id, span)

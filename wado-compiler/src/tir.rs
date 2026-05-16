@@ -2893,21 +2893,15 @@ pub fn block_result_type(block: &TirBlock) -> TypeId {
                 then_block,
                 else_block: Some(else_block),
                 ..
-            } => agree_branch_types(
-                block_result_type(then_block),
-                block_result_type(else_block),
-            ),
+            } => agree_branch_types(block_result_type(then_block), block_result_type(else_block)),
             TirStmtKind::IfLet {
                 then_block,
                 else_block: Some(else_block),
                 ..
-            } => agree_branch_types(
-                block_result_type(then_block),
-                block_result_type(else_block),
-            ),
-            TirStmtKind::Return { .. }
-            | TirStmtKind::Break { .. }
-            | TirStmtKind::Continue => Some(TypeTable::NEVER),
+            } => agree_branch_types(block_result_type(then_block), block_result_type(else_block)),
+            TirStmtKind::Return { .. } | TirStmtKind::Break { .. } | TirStmtKind::Continue => {
+                Some(TypeTable::NEVER)
+            }
             _ => None,
         })
         .unwrap_or(TypeTable::UNIT)

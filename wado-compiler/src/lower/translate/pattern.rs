@@ -5,9 +5,9 @@ use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::tir::FunctionRef;
 use crate::tir::{
-    block_result_type, CallArg, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
-    TirField, TirLiteralPattern, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    CallArg, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirField,
+    TirLiteralPattern, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    TypeTable, block_result_type,
 };
 use crate::token::Span;
 
@@ -161,12 +161,8 @@ impl<'a> PatternLowerer<'a> {
     /// `lower::plan::value_copy::insert`, so the mutable binding gets a
     /// fresh copy of the scrutinee payload instead of aliasing it. This
     /// preserves the value semantics the previous `lower_if_pattern_*`
-    /// helpers provided for IfLet's mutable bindings.
-    fn hoist_mut_bindings(
-        &mut self,
-        pattern: &mut TirPattern,
-        span: Span,
-    ) -> Vec<TirStmt> {
+    /// helpers provided for `IfLet`'s mutable bindings.
+    fn hoist_mut_bindings(&mut self, pattern: &mut TirPattern, span: Span) -> Vec<TirStmt> {
         let mut prepend = Vec::new();
         self.hoist_mut_bindings_in_pattern(pattern, span, &mut prepend);
         prepend
@@ -1412,12 +1408,9 @@ impl<'a> PatternLowerer<'a> {
                 let then_type = block_result_type(&then_block);
                 let else_type = else_block.as_ref().map(block_result_type);
 
-                let then_body =
-                    TirExpr::new(TirExprKind::Block(then_block), then_type, span);
+                let then_body = TirExpr::new(TirExprKind::Block(then_block), then_type, span);
                 let else_body = match else_block {
-                    Some(b) => {
-                        TirExpr::new(TirExprKind::Block(b), else_type.unwrap(), span)
-                    }
+                    Some(b) => TirExpr::new(TirExprKind::Block(b), else_type.unwrap(), span),
                     None => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
                 };
 
