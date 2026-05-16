@@ -582,7 +582,7 @@ impl std::fmt::Display for TypeError {
             } => {
                 write!(
                     f,
-                    "{}:{}: closure type in {} of export function `{}` is not allowed: closures cannot cross the Component Model boundary",
+                    "{}:{}: closure type in {} of `{}` is not allowed: closures cannot cross the Component Model boundary",
                     span.line, span.column, position, function
                 )
             }
@@ -862,7 +862,7 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             } => (
                 Code::TypeMismatch,
                 format!(
-                    "closure type in {position} of export function `{function}` is not allowed: closures cannot cross the Component Model boundary"
+                    "closure type in {position} of `{function}` is not allowed: closures cannot cross the Component Model boundary"
                 ),
                 *span,
             ),

@@ -52,20 +52,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Recursively check whether `type_id` mentions a `fn(...)` / `fn mut(...)`
     /// closure type. Used to reject closures crossing the Component Model
     /// boundary (export/import function signatures, CM-exposed record fields,
-    /// variant payloads, etc.).
-    pub(super) fn type_contains_closure(
-        type_table: &crate::tir::TypeTable,
-        type_id: TypeId,
-    ) -> bool {
-        use crate::hashmap::IndexSet;
+    /// variant payloads, etc.). Descends through refs, arrays, generic-arg
+    /// containers, newtype unwrap, and (when the struct's field registry is
+    /// in scope) named-struct field types.
+    pub(super) fn type_contains_closure(&self, type_id: TypeId) -> bool {
+        let type_table = self.type_table.borrow();
         let mut visited: IndexSet<TypeId> = IndexSet::default();
-        Self::type_contains_closure_inner(type_table, type_id, &mut visited)
+        self.type_contains_closure_inner(&type_table, type_id, &mut visited)
     }
 
     fn type_contains_closure_inner(
+        &self,
         type_table: &crate::tir::TypeTable,
         type_id: TypeId,
-        visited: &mut crate::hashmap::IndexSet<TypeId>,
+        visited: &mut IndexSet<TypeId>,
     ) -> bool {
         if !visited.insert(type_id) {
             return false;
@@ -76,14 +76,26 @@ impl<H: CompilerHost> Resolver<'_, H> {
             | crate::tir::ResolvedType::MutRef(t)
             | crate::tir::ResolvedType::Reactive(t)
             | crate::tir::ResolvedType::BuiltinArray(t) => {
-                Self::type_contains_closure_inner(type_table, *t, visited)
+                self.type_contains_closure_inner(type_table, *t, visited)
             }
             crate::tir::ResolvedType::GenericInstance { type_args, .. }
             | crate::tir::ResolvedType::GenericResource { type_args, .. } => type_args
                 .iter()
-                .any(|t| Self::type_contains_closure_inner(type_table, *t, visited)),
+                .any(|t| self.type_contains_closure_inner(type_table, *t, visited)),
             crate::tir::ResolvedType::Newtype { base_type, .. } => {
-                Self::type_contains_closure_inner(type_table, *base_type, visited)
+                self.type_contains_closure_inner(type_table, *base_type, visited)
+            }
+            crate::tir::ResolvedType::Struct { name, .. } => {
+                // Recurse into the struct's field types via the resolver's
+                // pre-built field registry. Self-recursive structs are
+                // protected by `visited`.
+                let field_types: Vec<TypeId> = self
+                    .lookup_struct_fields(name)
+                    .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect())
+                    .unwrap_or_default();
+                field_types
+                    .into_iter()
+                    .any(|t| self.type_contains_closure_inner(type_table, t, visited))
             }
             _ => false,
         }
@@ -646,11 +658,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // `export fn` is rejected: the Component Model ABI requires every
         // parameter at the boundary, so defaults cannot divergently exist
         // only on the Wado side.
+        // A function crosses the Component Model boundary when it is either
+        // exported (`export fn ...`) or imported (declaration with no body,
+        // typically carrying `#[canonical(...)]` or `#[cm(...)]`). Closures
+        // may not appear in either side's signature.
+        let is_cm_import = func.body.is_none()
+            && (func.attrs.iter().any(|a| a.cm_import.is_some())
+                || func
+                    .attrs
+                    .iter()
+                    .any(|a| a.name == "canonical" || a.name == "cm"));
+        let crosses_cm_boundary = func.is_export || is_cm_import;
+
         let mut params = Vec::new();
         for param in &func.params {
             let type_id = scope.resolve_type(&param.ty);
             // Closures cannot cross the Component Model boundary.
-            if func.is_export && Self::type_contains_closure(&scope.type_table.borrow(), type_id) {
+            if crosses_cm_boundary && scope.type_contains_closure(type_id) {
                 let _ = scope.logger.error(TypeError::ClosureAtCmBoundary {
                     function: func.name.clone(),
                     position: format!("parameter '{}'", param.name),
@@ -682,7 +706,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Closures cannot cross the CM boundary in return position either.
-        if func.is_export && Self::type_contains_closure(&scope.type_table.borrow(), return_type) {
+        if crosses_cm_boundary && scope.type_contains_closure(return_type) {
             let _ = scope.logger.error(TypeError::ClosureAtCmBoundary {
                 function: func.name.clone(),
                 position: "return type".to_string(),

@@ -1,0 +1,9 @@
+// Closures are equally forbidden on the import side of the Component
+// Model boundary. A `#[canonical(...)]` import with a closure-typed
+// parameter or return type is rejected.
+
+#[canonical("test", "bad-import")]
+fn bad_import(f: fn(i32) -> i32);
+
+__DATA__
+{"compile_error": "closure"}
