@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778902421799,
+  "lastUpdate": 1778903894158,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22013,6 +22013,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e375eff1f596f35dccdb036a28b0fc0778fe76aa"
         },
         "date": 1778902421431,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510314,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "553872b4748f45383bb03e8f9bdd5fa195df3a34",
+          "message": "Merge pull request #1070 from wado-lang/claude/wado-unused-diagnostics-lwJpf\n\ndocs: WEP for unused diagnostics",
+          "timestamp": "2026-05-16T12:51:58+09:00",
+          "tree_id": "680b60d34177f1890e056b381425072660628b0b",
+          "url": "https://github.com/wado-lang/wado/commit/553872b4748f45383bb03e8f9bdd5fa195df3a34"
+        },
+        "date": 1778903893765,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
