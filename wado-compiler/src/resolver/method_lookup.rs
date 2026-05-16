@@ -1103,11 +1103,34 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .insert(tp.name.clone(), (idx, type_id));
                 }
 
+                // Method-level effect params (e.g. `fn run_with<effect E>(...)
+                // with E`) live on a separate channel from type params. Without
+                // seeding `current_effect_param_decls` here, names like `E`
+                // re-resolve to `EffectRef::Concrete { name: "E" }` and leak
+                // out of the method's signature as a phantom local effect.
+                let old_effect_params = std::mem::take(&mut scope.current_effect_params);
+                let old_effect_param_decls =
+                    std::mem::take(&mut scope.current_effect_param_decls);
+                let method_effect_params: Vec<&ast::GenericParam> = method_type_params
+                    .iter()
+                    .filter(|p| p.is_effect)
+                    .collect();
+                scope.current_effect_params = method_effect_params
+                    .iter()
+                    .map(|p| p.name.clone())
+                    .collect();
+                scope.current_effect_param_decls = method_effect_params
+                    .iter()
+                    .map(|p| (p.name.clone(), p.id))
+                    .collect();
+
                 let param_types: Vec<TypeId> = param_types_ast
                     .iter()
                     .map(|ty| scope.resolve_type(ty))
                     .collect();
 
+                scope.current_effect_params = old_effect_params;
+                scope.current_effect_param_decls = old_effect_param_decls;
                 drop(scope);
 
                 (

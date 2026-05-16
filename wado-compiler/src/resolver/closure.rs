@@ -27,24 +27,13 @@ struct ExpectedFn {
     params: Vec<TypeId>,
     return_type: TypeId,
     /// Concrete effect set declared at the use site, when one is available.
-    /// `None` when the expected type either is unavailable, has no effects, or
-    /// has any `EffectRef::Param` (generic-effect bound contexts) — in those
-    /// cases the closure body keeps inheriting outer effects.
+    /// `None` when the expected type is unavailable or has any
+    /// `EffectRef::Param` (generic-effect bound contexts) — in those cases
+    /// the closure body keeps inheriting outer effects.
     declared_effects: Option<Vec<EffectRef>>,
 }
 
 impl<H: CompilerHost> Resolver<'_, H> {
-    /// Whether `effect` names an effect symbol that exists in the resolver's
-    /// current scope. `EffectRef::Param` is always non-concrete; `Concrete`
-    /// entries qualify only when the name is in `effect_sources` (the same
-    /// map `resolve_effects` consults).
-    fn is_real_effect_symbol(&self, effect: &EffectRef) -> bool {
-        match effect {
-            EffectRef::Param { .. } => false,
-            EffectRef::Concrete { name, .. } => self.effect_sources.contains_key(name),
-        }
-    }
-
     fn extract_expected_fn(&self, expected_type: Option<TypeId>) -> Option<ExpectedFn> {
         let tid = expected_type?;
         let tt = self.type_table.borrow();
@@ -59,19 +48,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 effects,
                 ..
             } => {
-                // Adopt the declared effect set only when every entry is a
-                // real, in-scope effect symbol. `EffectRef::Param` sets
-                // (generic `<effect E>` bounds) and `Concrete` entries that
-                // re-resolved through the caller's context without binding to
-                // a real effect declaration (e.g. `fn each<effect E>(..., f:
-                // fn() with E)` looked up from a non-generic caller) are
-                // opaque to the effect checker — swapping to them would
-                // produce spurious errors. Leave those closures inheriting
-                // outer effects.
-                let declared_effects = if effects.iter().all(|e| self.is_real_effect_symbol(e)) {
-                    Some(effects.clone())
-                } else {
+                // Adopt the declared effect set only when it is fully concrete.
+                // `EffectRef::Param` sets (generic `<effect E>` bounds) are
+                // opaque to the effect checker — swapping the body's effect
+                // context to them would produce spurious errors. Leave those
+                // closures inheriting outer effects.
+                let declared_effects = if effects.iter().any(EffectRef::is_param) {
                     None
+                } else {
+                    Some(effects.clone())
                 };
                 Some(ExpectedFn {
                     params: params.clone(),

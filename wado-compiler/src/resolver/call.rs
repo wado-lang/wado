@@ -1473,13 +1473,33 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .map(|func| (func.params.clone(), func.type_params.clone()));
 
                     if let Some((params, type_params)) = func_info {
-                        // Set up type params so resolve_type can find pack params
-                        // (inherited scope; only `type_params` is replaced, matching
-                        // the original `mem::take` semantics).
+                        // Set up the callee's generic-param scope before resolving
+                        // its parameter types. Type params go through
+                        // `register_generic_params`; effect params have their own
+                        // channel (`current_effect_param_decls`) and must be
+                        // installed here too — otherwise effect names like the
+                        // `E` in `fn each<effect E>(... fn() with E)` re-resolve
+                        // to `EffectRef::Concrete { name: "E" }` instead of
+                        // `EffectRef::Param`, leaking the callee's bound out of
+                        // its own signature.
                         let mut scope = self.enter_inherited_type_param_scope();
                         scope.trait_ctx.type_params.clear();
                         scope.register_generic_params(&type_params, 0);
+                        let old_effect_params =
+                            std::mem::take(&mut scope.current_effect_params);
+                        let old_effect_param_decls =
+                            std::mem::take(&mut scope.current_effect_param_decls);
+                        let effect_params: Vec<&ast::GenericParam> =
+                            type_params.iter().filter(|p| p.is_effect).collect();
+                        scope.current_effect_params =
+                            effect_params.iter().map(|p| p.name.clone()).collect();
+                        scope.current_effect_param_decls = effect_params
+                            .iter()
+                            .map(|p| (p.name.clone(), p.id))
+                            .collect();
                         let result = params.iter().map(|p| scope.resolve_type(&p.ty)).collect();
+                        scope.current_effect_params = old_effect_params;
+                        scope.current_effect_param_decls = old_effect_param_decls;
                         drop(scope);
                         return result;
                     }
@@ -2105,16 +2125,31 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return Vec::new();
         };
 
-        // Temporarily register type params so resolve_type can find them
-        // (inherited scope; only `type_params` is replaced, matching the
-        // original `mem::take` semantics).
+        // Temporarily set up the callee's generic-param scope so its parameter
+        // types resolve under the same effect / type-param bindings as the
+        // callee itself would. Effect params have their own channel
+        // (`current_effect_param_decls`); without seeding it, names like the
+        // `E` in `fn each<effect E>(... fn() with E)` would re-resolve to
+        // `EffectRef::Concrete { name: "E" }` and leak out as a phantom
+        // local effect.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.trait_ctx.type_params.clear();
         scope.register_generic_params(&fn_type_params, 0);
+        let old_effect_params = std::mem::take(&mut scope.current_effect_params);
+        let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
+        let effect_params: Vec<&ast::GenericParam> =
+            fn_type_params.iter().filter(|p| p.is_effect).collect();
+        scope.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
+        scope.current_effect_param_decls = effect_params
+            .iter()
+            .map(|p| (p.name.clone(), p.id))
+            .collect();
         let param_types: Vec<TypeId> = fn_params
             .iter()
             .map(|p| scope.resolve_type(&p.ty))
             .collect();
+        scope.current_effect_params = old_effect_params;
+        scope.current_effect_param_decls = old_effect_param_decls;
         drop(scope);
 
         // Substitute type params with explicit type args
