@@ -70,7 +70,7 @@ pub fn analyze_project(project: &mut NirPackage) -> IndexSet<usize> {
         mut call_graph,
         effect_usage,
         pending_inspects,
-        func_pos,
+        func_positions,
     } = build_analysis_graph(project);
 
     // Phase 2a: compute the provisional reachable set from the raw graph
@@ -106,24 +106,27 @@ pub fn analyze_project(project: &mut NirPackage) -> IndexSet<usize> {
     // `project.functions`. This avoids reallocating `FunctionId`s per
     // function inside `remove_unreachable_functions` (the previous
     // implementation cloned 3-4 strings per function during retain).
-    compute_reachable_positions(&reachable, &func_pos)
+    compute_reachable_positions(&reachable, &func_positions)
 }
 
 /// Map the reachable-`FunctionId` set back to positions in `project.functions`.
 ///
-/// Each function in `project.functions` is registered in the call graph under
-/// the `FunctionId` returned by `function_id_for`. Call sites in `analyze_expr`
-/// use the same canonical id when recording callees, so a direct projection
-/// from `reachable` through `func_pos` is exhaustive: a function survives DCE
-/// iff its `function_id_for(func)` is in `reachable`.
+/// `function_id_for` is not strictly injective (`FreeFunctionName`'s `Hash`/`Eq`
+/// ignore monomorphization metadata, so a template and an instantiation can
+/// collide), and the OLD per-function `retain` kept every duplicate whose id
+/// was reachable. Mirror that semantics by unioning every position registered
+/// for each reachable id.
 fn compute_reachable_positions(
     reachable: &IndexSet<FunctionId>,
-    func_pos: &IndexMap<FunctionId, usize>,
+    func_positions: &FuncPositions,
 ) -> IndexSet<usize> {
-    reachable
-        .iter()
-        .filter_map(|id| func_pos.get(id).copied())
-        .collect()
+    let mut positions: IndexSet<usize> = IndexSet::default();
+    for id in reachable {
+        if let Some(poses) = func_positions.get(id) {
+            positions.extend(poses.iter().copied());
+        }
+    }
+    positions
 }
 
 /// Add functions that the TIR optimizer's rewrites may *synthesize* calls
@@ -617,6 +620,16 @@ pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
 /// map and adds the matching `inspect/inspect_alt` edges to the call graph.
 type PendingInspectsByCaller = IndexMap<FunctionId, Vec<PendingInspectEdge>>;
 
+/// `FunctionId` → positions in `project.functions`. Stored as a `Vec` per
+/// id because `function_id_for` is not strictly injective: a generic
+/// function and its same-name template can both map to a `FreeFunctionName`
+/// whose `Hash`/`Eq` impl ignores monomorphization metadata
+/// (`name.rs::FreeFunctionName`), so distinct entries in `project.functions`
+/// can share the same id. The OLD per-function `retain` kept every duplicate
+/// whose id was reachable; this map preserves that semantics by tracking
+/// every position per id and unioning them in `compute_reachable_positions`.
+type FuncPositions = IndexMap<FunctionId, Vec<usize>>;
+
 /// Result of the single call-graph build. The call graph is the raw
 /// reachability graph *without* `__Closure_N^Inspect[Alt]` edges; those
 /// edges are gated by the inspectable-signature set and added after the
@@ -630,7 +643,7 @@ struct AnalysisGraph {
     call_graph: CallGraph,
     effect_usage: EffectUsageMap,
     pending_inspects: PendingInspectsByCaller,
-    func_pos: IndexMap<FunctionId, usize>,
+    func_positions: FuncPositions,
 }
 
 /// Build the call graph in a single pass over all TIR function bodies.
@@ -638,7 +651,7 @@ fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
     let mut call_graph: CallGraph = IndexMap::default();
     let mut effect_usage: EffectUsageMap = IndexMap::default();
     let mut pending_inspects: PendingInspectsByCaller = IndexMap::default();
-    let mut func_pos: IndexMap<FunctionId, usize> = IndexMap::default();
+    let mut func_positions: FuncPositions = IndexMap::default();
 
     let type_table = &*project.type_table.borrow();
 
@@ -647,7 +660,7 @@ fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
         let module_source = &func.module_source;
         let func_id = function_id_for(&func);
         let analysis = analyze_function(&func, module_source, type_table);
-        func_pos.insert(func_id.clone(), pos);
+        func_positions.entry(func_id.clone()).or_default().push(pos);
         call_graph.insert(func_id.clone(), analysis.callees);
         if !analysis.effect_calls.is_empty() {
             effect_usage.insert(func_id.clone(), analysis.effect_calls);
@@ -661,7 +674,7 @@ fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
         call_graph,
         effect_usage,
         pending_inspects,
-        func_pos,
+        func_positions,
     }
 }
 
