@@ -163,6 +163,7 @@ impl String {
     ///
     /// # Safety (caller-side preconditions)
     /// - The resulting byte sequence (existing bytes + new bytes) must be valid UTF-8.
+    #[inline]
     pub fn push_bytes_unchecked(&mut self, bytes: Array<u8>) {
         let n = bytes.len();
         if n == 0 {
@@ -183,6 +184,7 @@ impl String {
     /// - `0 <= start <= end <= s.len()`.
     /// - `start` and `end` must lie on UTF-8 character boundaries of `s`.
     /// - The resulting byte sequence must remain valid UTF-8.
+    #[inline]
     pub fn push_str_range_unchecked(&mut self, s: String, start: i32, end: i32) {
         let n = end - start;
         if n <= 0 {
