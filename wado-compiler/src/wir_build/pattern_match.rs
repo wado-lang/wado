@@ -1218,7 +1218,14 @@ impl FunctionTranslator<'_, '_> {
                                     // primitive lands in the Box's payload
                                     // field instead of being stored straight
                                     // into the ref slot.
-                                    (WirType::Ref { .. }, _) => true,
+                                    (
+                                        WirType::Ref { .. },
+                                        WirType::I32
+                                        | WirType::I64
+                                        | WirType::F32
+                                        | WirType::F64
+                                        | WirType::V128,
+                                    ) => true,
                                     _ => false,
                                 };
                                 let value = if needs_boxing {
