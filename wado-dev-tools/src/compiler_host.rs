@@ -25,6 +25,15 @@ impl FilesystemCompilerHost {
         }
     }
 
+    /// Snapshot the diagnostics emitted since this host was created.
+    ///
+    /// `silent()` hosts buffer diagnostics without printing them; callers
+    /// need this accessor to surface why a compile produced no output.
+    #[must_use]
+    pub fn diagnostics(&self) -> Vec<Diagnostic> {
+        self.diagnostics.lock().unwrap().clone()
+    }
+
     fn should_log(&self, severity: Severity) -> bool {
         match self.log_level {
             LogLevel::Off => false,
