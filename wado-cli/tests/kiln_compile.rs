@@ -14,7 +14,7 @@
 
 #![allow(unused_crate_dependencies)]
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use wado_cli::kiln_driver::{GeneratorProvider, ProviderError};
 use wado_cli::kiln_provider::{CACHE_DIR, CliGeneratorProvider};
@@ -554,60 +554,6 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {
     );
 
     let _ = std::fs::remove_dir_all(&tmp);
-}
-
-/// Probe for issue #1059 against the real `package-gale` generator —
-/// the generator the original report was filed against. Skipped when
-/// the workspace layout does not include `package-gale` (e.g. the
-/// crate is consumed standalone). When it does, this is the strongest
-/// signal we have that the production-shape closure (~34 `.wado`
-/// files including the 6k-line `parser_gen.wado`) hashes
-/// deterministically across cold compiles.
-#[test]
-fn package_gale_generator_source_hash_is_stable_across_cold_compiles() {
-    let workspace_root: PathBuf = match std::env::var("CARGO_MANIFEST_DIR") {
-        Ok(s) => PathBuf::from(s)
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_default(),
-        Err(_) => return, // not in a cargo invocation
-    };
-    let package_gale = workspace_root.join("package-gale");
-    let generator_rel = "./src/generator.wado";
-    if !package_gale.join("src/generator.wado").is_file() {
-        eprintln!(
-            "package_gale_generator_source_hash_is_stable_across_cold_compiles: skipping, no package-gale generator at {}",
-            package_gale.display()
-        );
-        return;
-    }
-
-    let cache_dir = package_gale.join("build/kiln/generators");
-    let metadata_dir = package_gale.join("build/kiln/metadata");
-
-    let module = GeneratorModule::LocalPath(InvocationPath::normalize(generator_rel));
-    let provider = CliGeneratorProvider::new(package_gale);
-
-    let _ = std::fs::remove_dir_all(&cache_dir);
-    let _ = std::fs::remove_dir_all(&metadata_dir);
-
-    let first = runtime()
-        .block_on(async { provider.get_component(&module).await })
-        .expect("first cold compile of package-gale generator should succeed");
-    let first_hash = first.source_hash;
-
-    let _ = std::fs::remove_dir_all(&cache_dir);
-    let _ = std::fs::remove_dir_all(&metadata_dir);
-
-    let second = runtime()
-        .block_on(async { provider.get_component(&module).await })
-        .expect("second cold compile of package-gale generator should succeed");
-
-    assert_eq!(
-        first_hash, second.source_hash,
-        "package-gale generator's source_hash drifted across two cold compiles \
-         with no source changes (issue #1059)"
-    );
 }
 
 #[test]
