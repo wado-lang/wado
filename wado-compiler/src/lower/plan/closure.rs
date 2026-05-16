@@ -713,7 +713,8 @@ impl ClosureLowerer {
         let formatter_type =
             type_table.make_struct("Formatter".to_string(), ModuleSource::format());
         let formatter_mut_ref = type_table.make_mut_ref(formatter_type);
-        let string_type = type_table.make_compiler_struct(crate::compiler_item::CompilerItem::String);
+        let string_type =
+            type_table.make_compiler_struct(crate::compiler_item::CompilerItem::String);
 
         for (trait_name, method_name, payload) in [
             ("Inspect", "inspect", signature),

@@ -45,11 +45,7 @@ pub(super) fn extract_compiler_item<H: CompilerHost>(
 /// stdlib bug (two declarations claiming the same anchor); kind
 /// mismatches are reported by [`check_kind`] before reaching this
 /// path, so the error surface here is small.
-fn report_register_error<H: CompilerHost>(
-    err: RegisterError,
-    span: Span,
-    logger: &Logger<'_, H>,
-) {
+fn report_register_error<H: CompilerHost>(err: RegisterError, span: Span, logger: &Logger<'_, H>) {
     let _ = logger.error(TypeError::CompilerItemAttr {
         message: err.to_string(),
         span,
@@ -194,8 +190,7 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
     let Some(item) = extract_compiler_item(attrs, span, logger) else {
         return;
     };
-    if !check_compiler_item_placement(item, CompilerItemKind::Method, module_source, span, logger)
-    {
+    if !check_compiler_item_placement(item, CompilerItemKind::Method, module_source, span, logger) {
         return;
     }
     let resolved = Resolved::Method {

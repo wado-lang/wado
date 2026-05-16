@@ -139,22 +139,25 @@ pub fn wasi_type_to_type_id(
             }
             match g.name.as_str() {
                 "Stream" if g.args.len() == 1 => {
-                    let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                    let inner =
+                        wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                     type_table.make_stream(inner)
                 }
                 "Future" if g.args.len() == 1 => {
-                    let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                    let inner =
+                        wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                     type_table.make_future(inner)
                 }
                 "AsyncCall" if g.args.len() == 1 => {
-                    let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                    let inner =
+                        wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                     type_table.make_async_call(inner)
                 }
                 // Own/Borrow are handle types represented as i32
                 "Own" | "Borrow" => TypeTable::I32,
                 _ => TypeTable::UNIT,
             }
-        },
+        }
         Type::Tuple(types) if types.is_empty() => TypeTable::UNIT,
         Type::Tuple(types) => {
             let resolved: Vec<TypeId> = types

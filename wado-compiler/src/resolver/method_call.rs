@@ -2144,9 +2144,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .compiler_items()
             .trait_name(crate::compiler_item::CompilerItem::From)
             .to_string();
-        let is_from_or_try_from = |base: &str| -> bool {
-            base == from_trait_name || base == "TryFrom"
-        };
+        let is_from_or_try_from =
+            |base: &str| -> bool { base == from_trait_name || base == "TryFrom" };
         let resolve_trait_name = |trait_type: &ast::Type| -> String {
             let base = Self::get_type_name_static(trait_type);
             if is_from_or_try_from(&base) {

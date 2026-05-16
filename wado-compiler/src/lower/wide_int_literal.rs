@@ -100,8 +100,7 @@ fn build_i128_from_i64_call(
         TypeTable::I64,
         span,
     );
-    let method_info =
-        LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
+    let method_info = LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
     let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::Call {
@@ -134,8 +133,7 @@ fn build_u128_from_u64_call(
         TypeTable::U64,
         span,
     );
-    let method_info =
-        LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
+    let method_info = LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
     let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::Call {
@@ -176,8 +174,7 @@ fn build_i128_from_pair_call(
         TypeTable::I64,
         span,
     );
-    let method_info =
-        LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
+    let method_info = LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
     TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
@@ -220,8 +217,7 @@ fn build_u128_from_pair_call(
         TypeTable::U64,
         span,
     );
-    let method_info =
-        LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
+    let method_info = LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
     TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {

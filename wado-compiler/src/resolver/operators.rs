@@ -653,7 +653,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     BinaryOp::Shl => "Shl".to_string(),
                     BinaryOp::Shr => "Shr".to_string(),
                     BinaryOp::Eq | BinaryOp::NotEq => eq_trait_name,
-                    BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => "Ord".to_string(),
+                    BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => {
+                        "Ord".to_string()
+                    }
                     _ => "?".to_string(),
                 };
                 drop(type_table);

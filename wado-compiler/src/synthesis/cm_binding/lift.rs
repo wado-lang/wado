@@ -136,83 +136,83 @@ fn synthesize_lift_inner(
                 return internal_call("memory_to_gc_string", vec![ptr, len], string_type_id);
             }
             match named_name {
-            "i32" | "u32" => builtin_call("i32_load", vec![addr], TypeTable::I32),
-            "i64" | "u64" => builtin_call("i64_load", vec![addr], TypeTable::I64),
-            "f32" => builtin_call("f32_load", vec![addr], TypeTable::F32),
-            "f64" => builtin_call("f64_load", vec![addr], TypeTable::F64),
-            "i8" | "u8" => builtin_call("i32_load8_u", vec![addr], TypeTable::U8),
-            "i16" | "u16" => builtin_call("i32_load16_u", vec![addr], TypeTable::U16),
-            "bool" => {
-                let raw = builtin_call("i32_load8_u", vec![addr], TypeTable::U8);
-                binary(TirBinaryOp::NotEq, raw, i32_const(0), TypeTable::BOOL)
-            }
-            "char" => builtin_call("i32_load", vec![addr], TypeTable::CHAR),
-            _ => {
-                // CM named types arrive with `source_interface` populated
-                // either by stdlib bootstrap or by `resolve_cm_source_for`
-                // (fallback to the unique `wasi:*` registrant, biased by the
-                // current binding's WASI package, then to `core:kiln/*` for
-                // generator-world bindings). Non-CM references fall through
-                // to the i32-handle default.
-                if let Some(source) = ctx
-                    .wasi_registry
-                    .resolve_cm_source_for(named, Some(ctx.cm_package))
-                    .map(str::to_string)
-                {
-                    let source = source.as_str();
-                    if let Some(lifted) = try_lift_wasi_variant_or_enum(
-                        named,
-                        source,
-                        addr.clone(),
-                        next_local,
-                        stmts,
-                        locals,
-                        ctx,
-                    ) {
-                        return lifted;
-                    }
-                    if let Some(lifted) = try_lift_wasi_struct(
-                        named,
-                        source,
-                        addr.clone(),
-                        next_local,
-                        stmts,
-                        locals,
-                        ctx,
-                    ) {
-                        return lifted;
-                    }
-                    if let Some(members) = ctx
-                        .wasi_registry
-                        .get_flags_members_by_source(source, &named.name)
-                    {
-                        let load_name = match cm_flags_byte_size(members.len()) {
-                            0 => return i32_const(0),
-                            1 => "i32_load8_u",
-                            2 => "i32_load16_u",
-                            _ => "i32_load",
-                        };
-                        return builtin_call(load_name, vec![addr], TypeTable::I32);
-                    }
-                    if let Some(variants) = ctx
-                        .wasi_registry
-                        .get_enum_variants_by_source(source, &named.name)
-                    {
-                        let load_name = if variants.len() <= 256 {
-                            "i32_load8_u"
-                        } else if variants.len() <= 65536 {
-                            "i32_load16_u"
-                        } else {
-                            "i32_load"
-                        };
-                        return builtin_call(load_name, vec![addr], TypeTable::I32);
-                    }
+                "i32" | "u32" => builtin_call("i32_load", vec![addr], TypeTable::I32),
+                "i64" | "u64" => builtin_call("i64_load", vec![addr], TypeTable::I64),
+                "f32" => builtin_call("f32_load", vec![addr], TypeTable::F32),
+                "f64" => builtin_call("f64_load", vec![addr], TypeTable::F64),
+                "i8" | "u8" => builtin_call("i32_load8_u", vec![addr], TypeTable::U8),
+                "i16" | "u16" => builtin_call("i32_load16_u", vec![addr], TypeTable::U16),
+                "bool" => {
+                    let raw = builtin_call("i32_load8_u", vec![addr], TypeTable::U8);
+                    binary(TirBinaryOp::NotEq, raw, i32_const(0), TypeTable::BOOL)
                 }
-                // Default: treat as i32 handles (resources, unknown types)
-                builtin_call("i32_load", vec![addr], TypeTable::I32)
+                "char" => builtin_call("i32_load", vec![addr], TypeTable::CHAR),
+                _ => {
+                    // CM named types arrive with `source_interface` populated
+                    // either by stdlib bootstrap or by `resolve_cm_source_for`
+                    // (fallback to the unique `wasi:*` registrant, biased by the
+                    // current binding's WASI package, then to `core:kiln/*` for
+                    // generator-world bindings). Non-CM references fall through
+                    // to the i32-handle default.
+                    if let Some(source) = ctx
+                        .wasi_registry
+                        .resolve_cm_source_for(named, Some(ctx.cm_package))
+                        .map(str::to_string)
+                    {
+                        let source = source.as_str();
+                        if let Some(lifted) = try_lift_wasi_variant_or_enum(
+                            named,
+                            source,
+                            addr.clone(),
+                            next_local,
+                            stmts,
+                            locals,
+                            ctx,
+                        ) {
+                            return lifted;
+                        }
+                        if let Some(lifted) = try_lift_wasi_struct(
+                            named,
+                            source,
+                            addr.clone(),
+                            next_local,
+                            stmts,
+                            locals,
+                            ctx,
+                        ) {
+                            return lifted;
+                        }
+                        if let Some(members) = ctx
+                            .wasi_registry
+                            .get_flags_members_by_source(source, &named.name)
+                        {
+                            let load_name = match cm_flags_byte_size(members.len()) {
+                                0 => return i32_const(0),
+                                1 => "i32_load8_u",
+                                2 => "i32_load16_u",
+                                _ => "i32_load",
+                            };
+                            return builtin_call(load_name, vec![addr], TypeTable::I32);
+                        }
+                        if let Some(variants) = ctx
+                            .wasi_registry
+                            .get_enum_variants_by_source(source, &named.name)
+                        {
+                            let load_name = if variants.len() <= 256 {
+                                "i32_load8_u"
+                            } else if variants.len() <= 65536 {
+                                "i32_load16_u"
+                            } else {
+                                "i32_load"
+                            };
+                            return builtin_call(load_name, vec![addr], TypeTable::I32);
+                        }
+                    }
+                    // Default: treat as i32 handles (resources, unknown types)
+                    builtin_call("i32_load", vec![addr], TypeTable::I32)
+                }
             }
-            }
-        },
+        }
         Type::Generic(g) => {
             let gname = g.name.as_str();
             if gname == array_name && g.args.len() == 1 {

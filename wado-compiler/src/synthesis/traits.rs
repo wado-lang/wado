@@ -440,7 +440,8 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
         let ref_enum_type = type_table.make_ref(enum_type);
 
         if !ctx.has_impl(enum_name, &eq_trait_name) {
-            let func = generate_enum_eq_fn(enum_name, enum_type, ref_enum_type, &eq_trait_name, *span);
+            let func =
+                generate_enum_eq_fn(enum_name, enum_type, ref_enum_type, &eq_trait_name, *span);
             generated_functions.push(Rc::new(RefCell::new(func)));
             ctx.record_impl(enum_name, &eq_trait_name);
         }
@@ -787,7 +788,12 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
     let struct_infos = collect_struct_visible_fields(module);
 
     for (name, fields, has_hidden, sspan) in &struct_infos {
-        if name == tt.compiler_items().struct_name(crate::compiler_item::CompilerItem::String) || name == "Formatter" {
+        if name
+            == tt
+                .compiler_items()
+                .struct_name(crate::compiler_item::CompilerItem::String)
+            || name == "Formatter"
+        {
             continue;
         }
         if ctx.has_impl(name, "Inspect") {
@@ -1716,7 +1722,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     let struct_infos = collect_struct_visible_fields(module);
 
     for (name, fields, has_hidden, sspan) in &struct_infos {
-        if name == tt.compiler_items().struct_name(crate::compiler_item::CompilerItem::String) || name == "Formatter" {
+        if name
+            == tt
+                .compiler_items()
+                .struct_name(crate::compiler_item::CompilerItem::String)
+            || name == "Formatter"
+        {
             continue;
         }
         if ctx.has_impl(name, "InspectAlt") {

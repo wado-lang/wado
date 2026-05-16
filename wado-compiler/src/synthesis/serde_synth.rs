@@ -115,12 +115,10 @@ pub fn synthesize_serde(project: &mut Package) {
                     Some(&deserialize_trait_name),
                     "deserialize",
                 );
-                    if existing.contains(&key) {
-                        continue;
-                    }
-                if let Some((lookup_func, deser_func)) =
-                    generate_struct_deserialize(module, req)
-                {
+                if existing.contains(&key) {
+                    continue;
+                }
+                if let Some((lookup_func, deser_func)) = generate_struct_deserialize(module, req) {
                     generated.push(Rc::new(RefCell::new(lookup_func)));
                     generated.push(Rc::new(RefCell::new(deser_func)));
                 } else {

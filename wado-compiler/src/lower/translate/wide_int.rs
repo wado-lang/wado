@@ -60,12 +60,8 @@ pub(super) fn build_if_chain(
     for arm in arms.iter().rev() {
         match &arm.pattern {
             TirPattern::Literal(TirLiteralPattern::I128(value)) => {
-                let literal_expr = create_i128_literal(
-                    *value,
-                    scrutinee.type_id,
-                    &type_table.borrow(),
-                    span,
-                );
+                let literal_expr =
+                    create_i128_literal(*value, scrutinee.type_id, &type_table.borrow(), span);
                 let eq_call =
                     create_i128_eq_call(scrutinee.clone(), literal_expr, type_table, span);
                 let condition = with_guard(eq_call, arm.guard.as_ref(), span);
@@ -78,12 +74,8 @@ pub(super) fn build_if_chain(
                 ));
             }
             TirPattern::Literal(TirLiteralPattern::U128(value)) => {
-                let literal_expr = create_u128_literal(
-                    *value,
-                    scrutinee.type_id,
-                    &type_table.borrow(),
-                    span,
-                );
+                let literal_expr =
+                    create_u128_literal(*value, scrutinee.type_id, &type_table.borrow(), span);
                 let eq_call =
                     create_u128_eq_call(scrutinee.clone(), literal_expr, type_table, span);
                 let condition = with_guard(eq_call, arm.guard.as_ref(), span);
@@ -231,11 +223,8 @@ fn create_i128_eq_call(
         .compiler_items()
         .trait_name(crate::compiler_item::CompilerItem::Eq)
         .to_string();
-    let method_info = LocalMethodName::new(
-        "i128".to_string(),
-        Some(eq_trait_name),
-        "eq".to_string(),
-    );
+    let method_info =
+        LocalMethodName::new("i128".to_string(), Some(eq_trait_name), "eq".to_string());
     let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::method_call(
@@ -287,11 +276,8 @@ fn create_u128_eq_call(
         .compiler_items()
         .trait_name(crate::compiler_item::CompilerItem::Eq)
         .to_string();
-    let method_info = LocalMethodName::new(
-        "u128".to_string(),
-        Some(eq_trait_name),
-        "eq".to_string(),
-    );
+    let method_info =
+        LocalMethodName::new("u128".to_string(), Some(eq_trait_name), "eq".to_string());
     let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::method_call(

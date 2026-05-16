@@ -846,7 +846,7 @@ mod tests {
 
     /// Validator covers every required item in `ALL`. With an empty
     /// registry, every prelude-required item should appear in
-    /// `missing_required`; world-specific items (KilnRequest,
+    /// `missing_required`; world-specific items (`KilnRequest`,
     /// Serialize, Deserialize) should appear only for their world.
     #[test]
     fn missing_required_scopes_by_world() {
@@ -872,8 +872,14 @@ mod tests {
             CompilerItem::I128,
             CompilerItem::U128,
         ] {
-            assert!(cli_missing.contains(&core), "{core} should be required in CLI world");
-            assert!(kiln_missing.contains(&core), "{core} should be required in kiln world");
+            assert!(
+                cli_missing.contains(&core),
+                "{core} should be required in CLI world"
+            );
+            assert!(
+                kiln_missing.contains(&core),
+                "{core} should be required in kiln world"
+            );
         }
     }
 }
