@@ -1211,7 +1211,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
         let trait_name: String = match method_name {
             "eq" => eq_name.clone(),
-            "cmp" => ord_name.clone(),
+            "cmp" => ord_name,
             _ => return None,
         };
         let base_type_id = self.get_base_type(receiver_type_id);

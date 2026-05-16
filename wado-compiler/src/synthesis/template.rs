@@ -343,7 +343,7 @@ fn build_template_block(
         TirExprKind::Call {
             func: FunctionRef {
                 module_source: ModuleSource::string(),
-                name: with_capacity_qualified.clone(),
+                name: with_capacity_qualified,
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
                     string_struct_name.clone(),

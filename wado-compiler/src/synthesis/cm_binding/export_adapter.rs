@@ -275,7 +275,7 @@ fn lower_to_flat_inner(
             // __elem = (__arr[__i]) via the IndexValue<i32> trait method.
             let elem_local = alloc_local(next_local, locals, elem_type_id);
             let iv_info = LocalMethodName::new(
-                names.array.clone(),
+                names.array,
                 Some("IndexValue<i32>".to_string()),
                 "index_value".to_string(),
             );

@@ -233,9 +233,8 @@ fn synthesize_stream_read_func(
     type_table: &RefCell<TypeTable>,
     interner: &RefCell<ModuleSourceInterner>,
 ) -> TirFunction {
-    let array_struct_name = super::types::CmStdlibNames::from_type_table(&type_table.borrow())
-        .array
-        .clone();
+    let array_struct_name =
+        super::types::CmStdlibNames::from_type_table(&type_table.borrow()).array;
     let func_name = format!("__cm_stream_read_{elem_name}");
     let _tuple_type_id = type_table
         .borrow_mut()
@@ -473,7 +472,7 @@ fn synthesize_stream_read_func(
                 }),
                 method_info: Some(LocalMethodName {
                     struct_name: format!("{array_struct_name}<{elem_name}>"),
-                    base_struct_name: array_struct_name.clone(),
+                    base_struct_name: array_struct_name,
                     trait_name: None,
                     base_trait_name: None,
                     trait_type_args: vec![],
