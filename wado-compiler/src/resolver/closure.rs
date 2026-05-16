@@ -48,12 +48,34 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 effects,
                 ..
             } => {
-                // Adopt the declared effect set only when it is fully concrete.
-                // `EffectRef::Param` sets (generic `<effect E>` bounds) are
-                // opaque to the effect checker — swapping the body's effect
-                // context to them would produce spurious errors. Leave those
-                // closures inheriting outer effects.
-                let declared_effects = if effects.iter().any(EffectRef::is_param) {
+                // Adopt the declared effect set only when the expected fn
+                // type explicitly declares at least one concrete effect.
+                //
+                // Two cases we deliberately skip:
+                //
+                // * Empty effect set (`fn(...)` / `fn mut(...)` without a
+                //   `with` clause). Stdlib parameter types (e.g.
+                //   `Iterator::for_each`, `Array::sort_by`) declare empty
+                //   effects today — the `<effect E>` polymorphism Phase 7
+                //   defers is what would mark them as effect-transparent.
+                //   Until that lands, treating empty as a binding constraint
+                //   would reject every effectful closure passed to those
+                //   methods, even though the call site is patently capable
+                //   of supplying the closure's effects.
+                //
+                // * Any `EffectRef::Param` entry (generic `<effect E>`
+                //   bounds). Param ids are opaque to the effect checker, so
+                //   swapping to them would produce spurious errors.
+                //
+                // In both cases, the closure body inherits the enclosing
+                // function's effects — matching the documented Phase 7
+                // contract that "closure literals already inherit caller
+                // effects". The leak from `let inner: fn() = ||{println}` is
+                // a separate, deferred concern (proper fix needs body-effect
+                // inference, WEP 2026-01-25 option (a)).
+                let declared_effects = if effects.is_empty()
+                    || effects.iter().any(EffectRef::is_param)
+                {
                     None
                 } else {
                     Some(effects.clone())

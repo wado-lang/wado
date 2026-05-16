@@ -1,12 +1,25 @@
-// Closure escape must not leak effects out of the type system.
+#![TODO]
+// TODO: closure escape leaks effects out of the type system.
 //
 // `inner` has the declared type `fn()` (no effects), but its body invokes
-// `println`, which requires `Stdout`. The compiler must reject this:
-// the closure body's inferred effects (Stdout) cannot widen to the
+// `println`, which requires `Stdout`. The compiler should reject this —
+// the closure body's actual effects (Stdout) cannot widen to the
 // closure type's declared effect set (empty).
 //
-// See wep-2026-01-25-closure-implementation-internals.md, Phase 6
-// (Effect-check fix).
+// The earlier Phase 6 fix swapped the effect checker's current set to
+// the closure's declared effects, which caught this case but also
+// rejected effectful closures passed to non-effect-polymorphic stdlib
+// methods like `Iterator::for_each` (whose parameter type also has an
+// empty effect set, but is *implicitly* effect-transparent until the
+// `<effect E>` migration lands). Without a way to distinguish "explicit
+// empty annotation" from "implicit empty parameter slot," we conserve
+// the inheritance behaviour and leave this leak unguarded.
+//
+// Proper fix: body-effect inference at resolve time (WEP 2026-01-25
+// option (a)) — walk the closure body, attach the inferred effect set
+// to its synthesised fn type, and have the let / argument coercion
+// paths reject narrowing from a non-empty inferred set to an empty
+// declared set.
 
 use { println, Stdout } from "core:cli";
 
