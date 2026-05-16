@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778932434826,
+  "lastUpdate": 1778937189403,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22365,6 +22365,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a59fc20fc41cb38b7b4500ea52485d4bd710d99a"
         },
         "date": 1778932434439,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510826,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2408baec7096664e57241bc65b70fb6a9624cd17",
+          "message": "Merge pull request #1088 from wado-lang/claude/investigate-golden-fixtures-flakiness-PmlHB\n\nfix(dev-tools): surface buffered diagnostics on empty golden output",
+          "timestamp": "2026-05-16T22:07:12+09:00",
+          "tree_id": "a7167c80e6e7d15d80af44052ea0b79613672871",
+          "url": "https://github.com/wado-lang/wado/commit/2408baec7096664e57241bc65b70fb6a9624cd17"
+        },
+        "date": 1778937189015,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
