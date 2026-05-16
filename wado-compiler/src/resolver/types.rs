@@ -284,6 +284,11 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// The obsolete `&mut || ...` desugar has been retired. Closures now
+    /// auto-detect mutating captures and tag themselves `fn mut`; users
+    /// write `let mut f = || ...` instead.
+    AmpMutClosureSyntaxRetired { span: Span },
+
     /// `export fn` cannot declare default parameter values. The Component
     /// Model ABI requires every parameter at the CM boundary, so defaults
     /// would diverge from the WIT signature.
@@ -581,6 +586,13 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, position, function
                 )
             }
+            TypeError::AmpMutClosureSyntaxRetired { span } => {
+                write!(
+                    f,
+                    "{}:{}: `&mut || ...` syntax has been retired; closures auto-detect mutating captures — write `let mut f = || ...` instead",
+                    span.line, span.column
+                )
+            }
             TypeError::DefaultInExportFn {
                 function,
                 param,
@@ -852,6 +864,11 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 format!(
                     "closure type in {position} of export function `{function}` is not allowed: closures cannot cross the Component Model boundary"
                 ),
+                *span,
+            ),
+            TypeError::AmpMutClosureSyntaxRetired { span } => (
+                Code::TypeMismatch,
+                "`&mut || ...` syntax has been retired; closures auto-detect mutating captures — write `let mut f = || ...` instead".to_string(),
                 *span,
             ),
             TypeError::DefaultInExportFn {

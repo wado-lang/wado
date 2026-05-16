@@ -54,7 +54,7 @@ impl Benchmark {
     /// timed iteration's value.
     ///
     /// `label` may be empty for an unlabeled single-phase benchmark.
-    pub fn run<T>(&mut self, label: String, f: fn() -> T) -> T
+    pub fn run<T>(&mut self, label: String, mut f: fn mut() -> T) -> T
         with Stdout, MonotonicClock
     {
         self.ensure_header();

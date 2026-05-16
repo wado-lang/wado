@@ -1917,13 +1917,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    /// Resolve `&mut || { body }` - desugars mutable captures.
-    ///
-    /// For each outer mutable variable `v` assigned inside the body:
-    /// - Creates `let __ref_v = &mut v;` in the outer scope
-    /// - Inside the closure, `v` is accessed as `*__ref_v` (deref of the captured reference)
-    ///
-    /// This allows the closure to mutate the outer variable via the shared reference.
     pub(super) fn resolve_cast(
         &mut self,
         cast: &ast::CastExpr,

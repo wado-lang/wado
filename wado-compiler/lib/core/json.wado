@@ -1591,7 +1591,7 @@ struct JsonMapAccess {
 
 struct JsonStructAccess {
     de: &mut JsonDeserializer,
-    lookup: fn(&String, i32, i32) -> Option<i32>,
+    lookup: fn mut(&String, i32, i32) -> Option<i32>,
     first: bool,
 }
 
@@ -1996,7 +1996,7 @@ impl Deserializer for JsonDeserializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn(&String, i32, i32) -> Option<i32>) -> Result<JsonStructAccess, DeserializeError> with stores[self] {
+    fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn mut(&String, i32, i32) -> Option<i32>) -> Result<JsonStructAccess, DeserializeError> with stores[self] {
         self.expect_char('{' as i32)?;
         return Result::Ok(JsonStructAccess {
             de: self,

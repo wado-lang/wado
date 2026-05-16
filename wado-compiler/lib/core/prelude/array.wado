@@ -544,7 +544,7 @@ impl Array<T> {
     }
 
     /// In-place sort with comparator. Stable, O(n log n) worst case.
-    pub fn sort_by(&mut self, cmp: fn(&T, &T) -> Ordering) {
+    pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering) {
         let n = self.used;
         if n <= 1 {
             return;
@@ -586,7 +586,7 @@ impl Array<T> {
         }
     }
 
-    pub fn sorted_by(&self, cmp: fn(&T, &T) -> Ordering) -> Array<T> {
+    pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering) -> Array<T> {
         let n = self.used;
         let new_repr: builtin::array<T> = builtin::array_new(n);
         builtin::array_copy(new_repr, 0, self.repr, 0, n);

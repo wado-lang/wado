@@ -8,7 +8,6 @@ use crate::tir::{
     EffectRef, ResolvedType, TirBlock, TirCapture, TirExpr, TirExprKind, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
 };
-use crate::token::Span;
 
 use super::Resolver;
 use super::types::{FunctionContext, TypeError};
@@ -105,19 +104,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
 }
 
 impl<H: CompilerHost> Resolver<'_, H> {
-    /// Compatibility shim for the obsolete `&mut || ...` desugar. Mutation
-    /// inference now lives in `resolve_closure`; both paths produce the same
-    /// `fn mut(...)` TIR.
-    pub(super) fn resolve_mutable_closure(
-        &mut self,
-        closure: &ast::ClosureExpr,
-        ctx: &mut FunctionContext,
-        _span: Span,
-        expected_type: Option<TypeId>,
-    ) -> TirExpr {
-        self.resolve_closure(closure, ctx, expected_type)
-    }
-
     /// Reject default parameter values on closures. Parser accepts the syntax
     /// for uniform recovery, but defaults cannot survive the fn-type erasure
     /// closures undergo, so they're rejected here.

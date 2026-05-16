@@ -706,17 +706,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
         &mut self,
         unary: &ast::UnaryExpr,
         ctx: &mut FunctionContext,
-        expected_type: Option<TypeId>,
+        _expected_type: Option<TypeId>,
     ) -> TirExpr {
-        // Special case: `&mut || { body }` - mutable closure desugaring.
-        // The `&mut` here is purely syntactic — the resulting value is still a
-        // function value, so the expected fn type flows directly to the closure.
+        // Retired: `&mut || { ... }` used to mark a mutable-capture closure.
+        // Auto-capture by reference (WEP 2026-01-16) handles this implicitly
+        // now — closures whose body writes to outer bindings get type
+        // `fn mut(...)` and need a `let mut` binding. Reject the obsolete
+        // form with a migration hint.
         if unary.op == UnaryOp::MutRef
-            && let ast::Expr::Closure(closure_expr) = &unary.expr
+            && let ast::Expr::Closure(_) = &unary.expr
         {
-            return self.resolve_mutable_closure(closure_expr, ctx, unary.span, expected_type);
+            let _ = self.logger.error(TypeError::AmpMutClosureSyntaxRetired {
+                span: unary.span,
+            });
+            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, unary.span);
         }
-
         let expr = self.resolve_expr(&unary.expr, ctx, None);
         let op = util::convert_unary_op(unary.op);
 
