@@ -97,6 +97,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .into_iter()
                     .any(|t| self.type_contains_closure_inner(type_table, t, visited))
             }
+            crate::tir::ResolvedType::Variant { name, .. } => {
+                // `ResolvedType::Variant` carries only the name; the per-case
+                // payload types live in `all_variant_cases`. Look them up so
+                // a variant case payload containing a closure type fails the
+                // CM boundary check too.
+                let payloads: Vec<TypeId> = self
+                    .lookup_variant_case(name)
+                    .map(|info| info.cases.iter().map(|c| c.payload).collect())
+                    .unwrap_or_default();
+                payloads
+                    .into_iter()
+                    .any(|t| self.type_contains_closure_inner(type_table, t, visited))
+            }
             _ => false,
         }
     }
@@ -533,15 +546,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// each time; subsequent overwrites inside `resolve_function` keep
     /// the cache consistent with the body's own `TypeId`s.
     pub(super) fn precompute_generic_function_cache(&mut self, func: &Function) {
-        if !func.type_params.iter().any(|p| !p.is_effect) {
+        // Mirror `resolve_function`'s `has_real_type_params` guard exactly:
+        // fn-bound params are realised eagerly and do not need
+        // monomorphisation, so a function whose only non-effect params are
+        // fn-bound has nothing to cache.
+        let has_real_type_params = func
+            .type_params
+            .iter()
+            .any(|p| !p.is_effect && !p.bounds.iter().any(|b| b.fn_signature.is_some()));
+        if !has_real_type_params {
             return;
         }
         let mut scope = self.enter_inherited_type_param_scope();
         scope.trait_ctx.type_params.clear();
         scope.trait_ctx.type_param_bounds.clear();
-        // Mirror `resolve_function`: install effect params before
-        // `register_generic_params` so eager `<F: fn() with E>` bounds see
-        // `E` as `EffectRef::Param`.
+        // Install effect params before `register_generic_params` so eager
+        // `<F: fn() with E>` bound resolution sees `E` as `EffectRef::Param`.
         let old_effect_params = std::mem::take(&mut scope.current_effect_params);
         let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
         let effect_params: Vec<&ast::GenericParam> =
