@@ -1,0 +1,237 @@
+//! Alt overlap-grouping and sorting heuristics for multi-alternative
+//! dispatch.
+//!
+//! Given the FIRST sets of a set of alternatives, this module decides:
+//!  * which alts overlap (`compute_overlap_groups`), so they must be
+//!    dispatched against each other rather than in isolation; and
+//!  * within each overlap group, in what order to try them
+//!    (`sort_group_by_specificity`, `sort_group_by_mandatory_count_desc`,
+//!    `sort_group_by_element_count`).
+//!
+//! The priority tier constants (`ALT_PRIORITY_*`) and the per-alt
+//! priority key (`alt_sort_priority`) are the contract that the parse-
+//! side dispatch and the scan-side dispatch share. See
+//! `lower.wado`'s mirror copies for the lowered-IR equivalents and the
+//! CLAUDE.md "Failed Approaches" section for why the bands are split
+//! the way they are.
+
+use { Alternative } from "./ir.wado";
+use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
+
+pub fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<i32>> {
+    let n = first_sets.len();
+    let mut group_ids: Array<i32> = [];
+    for let mut i = 0; i < n; i += 1 {
+        group_ids.push(i);
+    }
+    for let mut i = 0; i < n; i += 1 {
+        for let mut j = i + 1; j < n; j += 1 {
+            if sets_overlap(&first_sets[i], &first_sets[j]) {
+                let gi = group_ids[i];
+                let gj = group_ids[j];
+                if gi != gj {
+                    for let mut k = 0; k < n; k += 1 {
+                        if group_ids[k] == gj {
+                            group_ids[k] = gi;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut seen_ids: Array<i32> = [];
+    let mut groups: Array<Array<i32>> = [];
+    for let mut i = 0; i < n; i += 1 {
+        let gid = group_ids[i];
+        let mut found = -1;
+        for let mut s = 0; s < seen_ids.len(); s += 1 {
+            if seen_ids[s] == gid {
+                found = s;
+                break;
+            }
+        }
+        if found >= 0 {
+            groups[found].push(i);
+        } else {
+            seen_ids.push(gid);
+            groups.push([i]);
+        }
+    }
+    return groups;
+}
+
+pub fn has_multi_alt_groups(groups: &Array<Array<i32>>) -> bool {
+    for let group of groups {
+        if group.len() > 1 {
+            return true;
+        }
+    }
+    return false;
+}
+
+pub fn sort_group_by_specificity(group: &mut Array<i32>, first_sets: &Array<Array<String>>) {
+    // Sort by first set size ascending: smaller first set = more specific = try first.
+    // Ties broken by original order (stable-ish bubble sort).
+    for let mut i = 0; i < group.len(); i += 1 {
+        for let mut j = i + 1; j < group.len(); j += 1 {
+            if first_sets[group[j]].len() < first_sets[group[i]].len() {
+                let tmp = group[i];
+                group[i] = group[j];
+                group[j] = tmp;
+            }
+        }
+    }
+}
+
+// Priority bands consumed by `alt_sort_priority` and friends. Higher
+// = try first.
+//
+// `MultiTokenLed` (4) is most specific: a multi-element alt whose
+// first non-nullable element is a fixed token (e.g. `K_CAST '(' expr
+// K_AS type_name ')'`). The leading token uniquely identifies the
+// alt, so committing on first match is safe.
+//
+// `BareRuleRef` (3) is the catch-all rank: a single-RuleRef alt
+// whose body can match complex internal patterns (`join_clause`,
+// `expr`). Tried before `MultiRuleRefLed` so single-RuleRef
+// catch-alls win against multi-element-RuleRef siblings — this is
+// what SQLite-style `(table_or_subquery (',' tor)* | join_clause)`
+// dispatch relies on.
+//
+// `MultiRuleRefLed` (2) is a multi-element alt whose first non-
+// nullable element is itself a RuleRef. Less specific than
+// `BareRuleRef` because the RuleRef prefix is shared with the
+// catch-all sibling.
+//
+// `BareToken` (1) is a single Token/Literal alt — the cheapest
+// fallback (e.g. `K_INSERT` alone).
+pub global ALT_PRIORITY_MULTI_TOKEN_LED: i32 = 4;
+pub global ALT_PRIORITY_BARE_RULE_REF: i32 = 3;
+pub global ALT_PRIORITY_MULTI_RULE_REF_LED: i32 = 2;
+pub global ALT_PRIORITY_BARE_TOKEN: i32 = 1;
+
+pub fn alt_sort_priority(alt: &Alternative) -> i32 {
+    if alt.elements.len() == 1 {
+        let elem = &alt.elements[0];
+        if let RuleRef(_) = elem {
+            return ALT_PRIORITY_BARE_RULE_REF;
+        }
+        return ALT_PRIORITY_BARE_TOKEN;
+    }
+    // Multi-element: check first non-nullable element.
+    for let elem of alt.elements {
+        if is_nullable(&elem) {
+            continue;
+        }
+        if let TokenRef(_) | Literal(_) = elem {
+            return ALT_PRIORITY_MULTI_TOKEN_LED;
+        }
+        break;
+    }
+    return ALT_PRIORITY_MULTI_RULE_REF_LED;
+}
+
+/// Sort `group` so the alt with the most MANDATORY (non-deeply-
+/// nullable) elements comes first, breaking ties by `alt_sort_priority`
+/// (single-RuleRef catch-alls win against multi-element-RuleRef
+/// siblings) and finally source order. Used by the prediction tree's
+/// `Ambiguous` case (and the matching parse-side group dispatches) to
+/// pick the longer MANDATORY match between alts that share a prefix.
+///
+/// Counting mandatory elements only is the LL distinguisher:
+/// `( a b | a )` (where `b` is mandatory) sorts the 2-elem alt first,
+/// while `( a b? | a )` (where `b?` is optional) ties on mandatory
+/// length and falls through to priority — which prefers the single-
+/// RuleRef catch-all the way ANTLR4's full-context fallback does for
+/// SQLite-style `( tor (',' tor)* | join_clause )` groupings.
+pub fn sort_group_by_mandatory_count_desc(group: &mut Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext) {
+    for let mut i = 0; i < group.len(); i += 1 {
+        for let mut j = i + 1; j < group.len(); j += 1 {
+            let li = ll_match_length(&alts[group[i]], ctx);
+            let lj = ll_match_length(&alts[group[j]], ctx);
+            let mut swap = false;
+            if lj > li {
+                swap = true;
+            } else if lj == li {
+                let pi = alt_sort_priority(&alts[group[i]]);
+                let pj = alt_sort_priority(&alts[group[j]]);
+                if pj > pi {
+                    swap = true;
+                } else if pj == pi {
+                    if group[j] < group[i] {
+                        swap = true;
+                    }
+                }
+            }
+            if swap {
+                let tmp = group[i];
+                group[i] = group[j];
+                group[j] = tmp;
+            }
+        }
+    }
+}
+
+/// LL-aware "match length" for `alt`, used to sort group alternatives so
+/// the more specific LL alt wins on overlap-prefix ties. Counts every
+/// mandatory top-level element plus every *trailing* deep-nullable
+/// element that is first-exact (single-token-derived; see
+/// `GenContext::element_is_first_exact`).
+///
+/// Why this is the right key: a first-exact nullable trailing element
+/// like `b?` (where `b : Y`) is "1 token whose presence is decisive" —
+/// when `Y` is in the input, alt 0 of `(a b? | a)` is the LL-correct
+/// pick because `b?` will fire and consume `Y`. Counting it as a
+/// pseudo-mandatory token sorts alt 0 ahead of the bare-RuleRef
+/// catch-all alt 1, mirroring ANTLR4's full-context LL preference for
+/// the longer meaningful match. Multi-element nullable structures
+/// (SQLite's `(',' tor)*` Star) stay at the original count because
+/// their first set is not first-exact, preserving the join-clause
+/// catch-all behaviour their grammars depend on.
+///
+/// The `seen_mandatory` gate restricts the trailing-nullable bonus to
+/// nullables that follow a committed token. A *leading* nullable like
+/// `b?` in `( b? a c | a c )` cannot disambiguate length: the runtime
+/// has not yet committed to either alt at that position, so claiming
+/// "alt 0 has 3 tokens" is no better signal than "alt 1 has 2" —
+/// either alt's `a c` will match. Counting only post-mandatory
+/// nullables means the bonus fires exactly when it can shorten the
+/// LL decision: after a shared prefix has committed, a tail-position
+/// `b?` whose presence is decisive elects the longer alt.
+pub fn ll_match_length(alt: &Alternative, ctx: &mut GenContext) -> i32 {
+    let mut count: i32 = 0;
+    let mut seen_mandatory: bool = false;
+    for let elem of &alt.elements {
+        let mut visiting: Array<String> = [];
+        if !ctx.element_is_nullable_deep(elem, &mut visiting) {
+            count += 1;
+            seen_mandatory = true;
+        } else if seen_mandatory && ctx.element_is_first_exact(elem) {
+            count += 1;
+        }
+    }
+    return count;
+}
+
+pub fn sort_group_by_element_count(group: &mut Array<i32>, alts: &Array<Alternative>) {
+    for let mut i = 0; i < group.len(); i += 1 {
+        for let mut j = i + 1; j < group.len(); j += 1 {
+            let pi = alt_sort_priority(&alts[group[i]]);
+            let pj = alt_sort_priority(&alts[group[j]]);
+            let mut swap = false;
+            if pj > pi {
+                swap = true;
+            } else if pj == pi {
+                // Within same-priority tier: more elements = more specific = first
+                if alts[group[j]].elements.len() > alts[group[i]].elements.len() {
+                    swap = true;
+                }
+            }
+            if swap {
+                let tmp = group[i];
+                group[i] = group[j];
+                group[j] = tmp;
+            }
+        }
+    }
+}

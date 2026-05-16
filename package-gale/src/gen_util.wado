@@ -1,4 +1,4 @@
-use { Alternative, Element, Visibility } from "./ir.wado";
+use { Alternative, Element, RepeatKind, Visibility } from "./ir.wado";
 use { CodeWriter } from "./wadopoet.wado";
 use { TreeSet } from "core:collections";
 pub use { escape_ident, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
@@ -548,4 +548,227 @@ fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {
 pub fn case_names_for_rule(alts: &Array<Alternative>) -> Array<String> {
     let all_labeled = all_alternatives_labeled(alts);
     return build_case_names(alts, all_labeled);
+}
+
+// --- String/array set utilities ---
+
+/// Return `true` when `first` contains `token` (linear scan).
+pub fn first_contains(first: &Array<String>, token: &String) -> bool {
+    for let item of first {
+        if *item == *token {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Append every token in `source` to `arr`, skipping duplicates already in `arr`.
+pub fn dedup_append_arr(arr: &mut Array<String>, source: &Array<String>) {
+    for let tk of source {
+        if !first_contains(arr, tk) {
+            arr.push(*tk);
+        }
+    }
+}
+
+// --- Field / name dedup helpers ---
+//
+// Parser codegen names every consumed element so the surrounding struct
+// field can be populated. When the same base name appears more than
+// once in an alt (e.g. two `ID` tokens) the second occurrence gets a
+// `_2` suffix, the third `_3`, and so on. `Array<[String, i32]>` is
+// the running counter: `[base, count_emitted_so_far]`.
+
+fn get_count(counts: &Array<[String, i32]>, name: &String) -> i32 {
+    for let entry of counts {
+        if entry.0 == *name {
+            return entry.1;
+        }
+    }
+    return 0;
+}
+
+fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
+    for let mut i = 0; i < counts.len(); i += 1 {
+        if counts[i].0 == *name {
+            let prev = counts[i].1;
+            counts[i] = [*name, prev + 1];
+            return;
+        }
+    }
+    counts.push([*name, 1]);
+}
+
+/// Emit-and-record: returns the deduplicated name and bumps the counter.
+/// First occurrence returns `base`, second returns `{base}_2`, etc.
+pub fn dedup_name(base: &String, counts: &mut Array<[String, i32]>) -> String {
+    let count = get_count(counts, base);
+    increment_count(counts, base);
+    if count > 0 {
+        return `{base}_{count + 1}`;
+    }
+    return *base;
+}
+
+/// Predict what `dedup_name(base, counts)` would return without
+/// advancing the counter. Used at scan-guard / lookahead sites where
+/// the inner emission performs the actual `dedup_name` (which both
+/// returns the name and advances the counter).
+pub fn peek_dedup_name(base: &String, counts: &Array<[String, i32]>) -> String {
+    let count = get_count(counts, base);
+    if count > 0 {
+        return `{base}_{count + 1}`;
+    }
+    return *base;
+}
+
+// --- Element field shape helpers ---
+
+pub fn has_field(elem: &Element) -> bool {
+    if let TokenRef(_) | Literal(_) | RuleRef(_) = elem {
+        return true;
+    }
+    if let Wildcard(_) = elem {
+        return true;
+    }
+    if let Not(_) = elem {
+        return true;
+    }
+    if let Label(lab) = elem {
+        return has_field(&lab.element);
+    }
+    if let Group(g) = elem {
+        return is_storable_group(&g.alternatives);
+    }
+    return false;
+}
+
+/// Returns true if `elem` is a list-label (`items+=X`). List labels store
+/// matches in an `Array<InnerType>` named by `lab.name`.
+pub fn is_list_label(elem: &Element) -> bool {
+    if let Label(lab) = elem {
+        return lab.list;
+    }
+    return false;
+}
+
+pub fn element_field_info(elem: &Element) -> [String, String] {
+    if let TokenRef(t) = elem {
+        return [t.field_name, "Token"];
+    }
+    if let Literal(l) = elem {
+        return [literal_field_name(&l.text), "Token"];
+    }
+    if let RuleRef(r) = elem {
+        return [r.field_name, rule_type_name(&r.name)];
+    }
+    if let Wildcard(_) = elem {
+        return ["wildcard", "Token"];
+    }
+    if let Not(ne) = elem {
+        return [not_element_field_name(&ne.element), "Token"];
+    }
+    if let Label(lab) = elem {
+        if lab.list {
+            let inner = element_field_info(&lab.element);
+            return [lab.field_name, `Array<{inner.1}>`];
+        }
+        return element_field_info(&lab.element);
+    }
+    if let Group(g) = elem {
+        if is_simple_cst_group(&g.alternatives) {
+            return [group_field_base_name(&g.alternatives), group_variant_type_name(&g.alternatives)];
+        }
+        if is_token_only_group(&g.alternatives) {
+            return [token_group_field_name(&g.alternatives), "Token"];
+        }
+        if is_single_alt_group(&g.alternatives) {
+            return [single_alt_group_field_name(&g.alternatives[0]), single_alt_group_type_name(&g.alternatives[0])];
+        }
+        if is_general_group(&g.alternatives) {
+            // Post Phase 2-G every general-group reference flows through
+            // the GIR `gen_op_group` / `gen_general_group_store*` chain
+            // which consumes lower-baked `GeneralShape.variant_type` /
+            // `alt_struct_names`. The surface-IR `element_field_info`
+            // helper is reached only by legacy walker fallbacks; if a
+            // future regression routes a general Group here we want
+            // emit to fail loudly rather than silently re-derive the
+            // type name from a stale walker field.
+            panic(
+                "element_field_info: general Group reached the surface helper — route through `gen_op_group`/`gen_general_group_store*` instead",
+            );
+        }
+        // Non-storable group falls through with the placeholder return.
+    }
+    return ["_", "Token"];
+}
+
+/// Replay name counting for an element without emitting code.
+/// This advances the dedup counter so subsequent elements get correct suffixes.
+pub fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>) {
+    if let TokenRef(t) = elem {
+        dedup_name(&t.field_name, name_counts);
+        return;
+    }
+    if let Literal(l) = elem {
+        dedup_name(&literal_field_name(&l.text), name_counts);
+        return;
+    }
+    if let RuleRef(r) = elem {
+        dedup_name(&r.field_name, name_counts);
+        return;
+    }
+    if let Wildcard(_) = elem {
+        dedup_name(&"wildcard", name_counts);
+        return;
+    }
+    if let Not(ne) = elem {
+        dedup_name(&not_element_field_name(&ne.element), name_counts);
+        return;
+    }
+    if let Repeat(rep) = elem {
+        if has_field(&rep.element) {
+            if is_list_label(&rep.element) {
+                let info = element_field_info(&rep.element);
+                dedup_name(&info.0, name_counts);
+                return;
+            }
+            let info = element_field_info(&rep.element);
+            if let Star | Plus = rep.kind {
+                dedup_name(&`{info.0}_list`, name_counts);
+            }
+            if let Optional = rep.kind {
+                dedup_name(&info.0, name_counts);
+            }
+        }
+        return;
+    }
+    if let Label(lab) = elem {
+        if has_field(&lab.element) {
+            dedup_name(&lab.field_name, name_counts);
+        }
+        return;
+    }
+    if let Group(g) = elem {
+        if is_simple_cst_group(&g.alternatives) {
+            dedup_name(&group_field_base_name(&g.alternatives), name_counts);
+        } else if is_token_only_group(&g.alternatives) {
+            dedup_name(&token_group_field_name(&g.alternatives), name_counts);
+        } else if is_single_alt_group(&g.alternatives) {
+            dedup_name(&single_alt_group_field_name(&g.alternatives[0]), name_counts);
+        } else if is_general_group(&g.alternatives) {
+            // Replay only runs over the skipped prefix of an alt
+            // (`gen_alt_body_skip` callers), which by construction
+            // consists of token-shaped leaves (TokenRef / Literal).
+            // A general Group in that prefix would mean the prediction
+            // tree consumed beyond the scannable leading prefix — not
+            // a path any committed grammar produces.
+            panic(
+                "replay_element_names: general Group reached the skip-replay walker — only token-shaped prefix elements should be replayed",
+            );
+        }
+        // Non-storable group: nothing to seed in `name_counts`. The
+        // inner ops are emitted normally afterwards via `body.ops`.
+        return;
+    }
 }
