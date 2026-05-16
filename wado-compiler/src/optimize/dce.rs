@@ -26,7 +26,7 @@ type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;
 /// Effect usage: function ID -> set of (`interface_name`, `operation_name`) pairs
 type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
 
-/// A pending `__Closure_N` inspect/inspect_alt edge collected during the call-graph
+/// A pending `__Closure_N` `inspect/inspect_alt` edge collected during the call-graph
 /// walk. The edge is only added to the graph once the inspectable signature set
 /// (computed from the reachable-without-inspect-roots set) is known. Storing them
 /// out-of-band lets us build the call graph in a single AST walk instead of twice.
@@ -665,7 +665,7 @@ pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
 /// Each entry collects every `__Closure_N` observed in that caller's body
 /// alongside its `(arity, return_type)` signature. After the
 /// inspectable-signature set is computed, `apply_inspect_edges` walks this
-/// map and adds the matching inspect/inspect_alt edges to the call graph.
+/// map and adds the matching `inspect/inspect_alt` edges to the call graph.
 type PendingInspectsByCaller = IndexMap<FunctionId, Vec<PendingInspectEdge>>;
 
 /// Result of the single call-graph build. The call graph is the raw
@@ -903,29 +903,14 @@ fn analyze_block(
     for stmt in &block.stmts {
         match &stmt.kind {
             NirStmtKind::Let { value, .. } => {
-                analyze_expr(
-                    value,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
+                analyze_expr(value, current_module, type_table, analysis);
             }
             NirStmtKind::Expr(expr) => {
-                analyze_expr(
-                    expr,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
+                analyze_expr(expr, current_module, type_table, analysis);
             }
             NirStmtKind::Return { value } => {
                 if let Some(expr) = value {
-                    analyze_expr(
-                        expr,
-                        current_module,
-                        type_table,
-                        analysis,
-                    );
+                    analyze_expr(expr, current_module, type_table, analysis);
                 }
             }
             NirStmtKind::If {
@@ -933,61 +918,26 @@ fn analyze_block(
                 then_block,
                 else_block,
             } => {
-                analyze_expr(
-                    condition,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
-                analyze_block(
-                    then_block,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
+                analyze_expr(condition, current_module, type_table, analysis);
+                analyze_block(then_block, current_module, type_table, analysis);
                 if let Some(else_blk) = else_block {
-                    analyze_block(
-                        else_blk,
-                        current_module,
-                        type_table,
-                        analysis,
-                    );
+                    analyze_block(else_blk, current_module, type_table, analysis);
                 }
             }
             NirStmtKind::Loop { body } => {
-                analyze_block(
-                    body,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
+                analyze_block(body, current_module, type_table, analysis);
             }
             NirStmtKind::LabeledBlock { block, .. } => {
-                analyze_block(
-                    block,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
+                analyze_block(block, current_module, type_table, analysis);
             }
             NirStmtKind::Break { value, .. } => {
                 if let Some(v) = value {
-                    analyze_expr(
-                        v,
-                        current_module,
-                        type_table,
-                        analysis,
-                    );
+                    analyze_expr(v, current_module, type_table, analysis);
                 }
             }
             NirStmtKind::Continue => {}
             NirStmtKind::LetDestructure { value, .. } => {
-                analyze_expr(
-                    value,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
+                analyze_expr(value, current_module, type_table, analysis);
             }
         }
     }
@@ -1080,12 +1030,7 @@ fn analyze_expr(
             }
 
             for arg in args {
-                analyze_expr(
-                    &arg.expr,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
+                analyze_expr(&arg.expr, current_module, type_table, analysis);
             }
         }
         NirExprKind::MethodCall {
@@ -1387,64 +1332,24 @@ fn analyze_expr(
                 }
             }
 
-            analyze_expr(
-                receiver,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_expr(receiver, current_module, type_table, analysis);
             for arg in args {
-                analyze_expr(
-                    &arg.expr,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
+                analyze_expr(&arg.expr, current_module, type_table, analysis);
             }
         }
         NirExprKind::Binary { left, right, .. } => {
-            analyze_expr(
-                left,
-                current_module,
-                type_table,
-                analysis,
-            );
-            analyze_expr(
-                right,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_expr(left, current_module, type_table, analysis);
+            analyze_expr(right, current_module, type_table, analysis);
         }
         NirExprKind::Unary { expr, .. } => {
-            analyze_expr(
-                expr,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_expr(expr, current_module, type_table, analysis);
         }
         NirExprKind::Assign { target, value } => {
-            analyze_expr(
-                target,
-                current_module,
-                type_table,
-                analysis,
-            );
-            analyze_expr(
-                value,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_expr(target, current_module, type_table, analysis);
+            analyze_expr(value, current_module, type_table, analysis);
         }
         NirExprKind::Cast { expr, .. } => {
-            analyze_expr(
-                expr,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_expr(expr, current_module, type_table, analysis);
         }
         NirExprKind::CmRawCall { local_name, args } => {
             // CmRawCall references a lowered WASI import function.
@@ -1460,128 +1365,53 @@ fn analyze_expr(
                 analysis.effect_calls.insert((interface_name, op_name));
             }
             for arg in args {
-                analyze_expr(
-                    arg,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
+                analyze_expr(arg, current_module, type_table, analysis);
             }
         }
         NirExprKind::FieldAccess { expr, .. } => {
-            analyze_expr(
-                expr,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_expr(expr, current_module, type_table, analysis);
         }
         NirExprKind::Index { expr, index } => {
-            analyze_expr(
-                expr,
-                current_module,
-                type_table,
-                analysis,
-            );
-            analyze_expr(
-                index,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_expr(expr, current_module, type_table, analysis);
+            analyze_expr(index, current_module, type_table, analysis);
         }
         NirExprKind::Block(block) => {
-            analyze_block(
-                block,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_block(block, current_module, type_table, analysis);
         }
         NirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            analyze_expr(
-                condition,
-                current_module,
-                type_table,
-                analysis,
-            );
-            analyze_block(
-                then_branch,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_expr(condition, current_module, type_table, analysis);
+            analyze_block(then_branch, current_module, type_table, analysis);
             if let Some(else_blk) = else_branch {
-                analyze_block(
-                    else_blk,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
+                analyze_block(else_blk, current_module, type_table, analysis);
             }
         }
         NirExprKind::Match { expr, arms } => {
-            analyze_expr(
-                expr,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_expr(expr, current_module, type_table, analysis);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
-                    analyze_expr(
-                        guard,
-                        current_module,
-                        type_table,
-                        analysis,
-                    );
+                    analyze_expr(guard, current_module, type_table, analysis);
                 }
-                analyze_expr(
-                    &arm.body,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
+                analyze_expr(&arm.body, current_module, type_table, analysis);
             }
         }
         NirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                analyze_expr(
-                    &field.value,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
+                analyze_expr(&field.value, current_module, type_table, analysis);
             }
         }
         NirExprKind::TupleLiteral { elements } => {
             for elem in elements {
-                analyze_expr(
-                    elem,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
+                analyze_expr(elem, current_module, type_table, analysis);
             }
         }
         NirExprKind::IndirectCall { callee, args } => {
-            analyze_expr(
-                callee,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_expr(callee, current_module, type_table, analysis);
             for arg in args {
-                analyze_expr(
-                    arg,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
+                analyze_expr(arg, current_module, type_table, analysis);
             }
         }
         NirExprKind::ClosureToCanonical {
@@ -1590,12 +1420,7 @@ fn analyze_expr(
             target_fn_type,
             closure_module,
         } => {
-            analyze_expr(
-                functor,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_expr(functor, current_module, type_table, analysis);
             // The `__call` method is always reached via `ref.func` baked
             // into the canonical closure struct's `func` slot.
             let struct_name = format!("__Closure_{functor_id}");
@@ -1633,45 +1458,20 @@ fn analyze_expr(
         }
         NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
-                analyze_expr(
-                    payload_expr,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
+                analyze_expr(payload_expr, current_module, type_table, analysis);
             }
         }
         NirExprKind::LabeledBlock { block, .. } => {
-            analyze_block(
-                block,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_block(block, current_module, type_table, analysis);
         }
         NirExprKind::GlobalVarSet { value, .. } => {
-            analyze_expr(
-                value,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_expr(value, current_module, type_table, analysis);
         }
         NirExprKind::VariantTag { expr } | NirExprKind::VariantTest { expr, .. } => {
-            analyze_expr(
-                expr,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_expr(expr, current_module, type_table, analysis);
         }
         NirExprKind::VariantPayload { expr, .. } => {
-            analyze_expr(
-                expr,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_expr(expr, current_module, type_table, analysis);
         }
         NirExprKind::Switch {
             scrutinee,
@@ -1679,26 +1479,11 @@ fn analyze_expr(
             default,
             ..
         } => {
-            analyze_expr(
-                scrutinee,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_expr(scrutinee, current_module, type_table, analysis);
             for arm in arms {
-                analyze_block(
-                    arm,
-                    current_module,
-                    type_table,
-                    analysis,
-                );
+                analyze_block(arm, current_module, type_table, analysis);
             }
-            analyze_block(
-                default,
-                current_module,
-                type_table,
-                analysis,
-            );
+            analyze_block(default, current_module, type_table, analysis);
         }
         // Leaf nodes - no calls
         NirExprKind::IntLiteral { .. }
