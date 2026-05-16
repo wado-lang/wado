@@ -42,11 +42,12 @@ mise run report-wasm-size  # hello_world, pi_approx, zlib, and so on
 
 ## General Rules
 
-- Documents and comments must be written in English.
+- Documentation and comments must be written in English.
 - Avoid ad-hoc workarounds. Write proper code based on a sound design.
 - Do not use comment sections to separate or organize code.
 - Perform red/green TDD.
-- If you find a compiler bug, always write a minimal reproducible e2e fixture as a P0 task. If the bug blocks the current task, fix it immediately before continuing.
+- A compiler bug is always P0 — no exceptions. Stop, write a minimal reproducible e2e fixture, and fix it before continuing if it blocks the current task.
+- A pre-existing issue — whether you find it or a reviewer points it out — must be fixed, with TDD when practical.
 - Use the `rust` skill when writing Rust.
 - Use the `wado` skill when writing Wado code or designing Wado language features.
 
