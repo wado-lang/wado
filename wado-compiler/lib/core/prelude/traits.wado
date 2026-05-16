@@ -286,23 +286,6 @@ pub trait LowerHexAlt {
 pub trait UpperHexAlt {
     fn fmt_alt(&self, f: &mut Formatter);
 }
-/// Trait for callable types (closures and function references).
-/// This trait enables closure monomorphization - functions with `fn(A) -> R` parameters
-/// are desugared to generic functions with `Fn<[A], R>` bounds.
-///
-/// Type parameters:
-/// - `Args`: Tuple of argument types using `[...]` syntax, e.g., `[i32, String]`
-/// - `Ret`: Return type
-/// - `Effects`: Tuple of effect types, defaults to `[]` (pure)
-///
-/// Examples:
-/// - `Fn<[i32], bool>` - takes i32, returns bool, pure
-/// - `Fn<[i32, String], ()>` - takes i32 and String, returns unit, pure
-/// - `Fn<[i32], (), [Stdout]>` - takes i32, returns unit, has Stdout effect
-pub trait Fn<Args, Ret, Effects> {
-    /// Call the function with the given arguments.
-    fn call(&self, args: Args) -> Ret with Effects;
-}
 /// The core iterator trait for sequences of values.
 /// Types implementing this trait can be iterated over using `for-of` loops.
 pub trait Iterator {
