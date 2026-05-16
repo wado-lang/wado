@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778909023354,
+  "lastUpdate": 1778912331758,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22253,6 +22253,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 510314,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cd3bcafb1ad0affcde8c5b3dc0755ec98f45a98a",
+          "message": "Merge pull request #1072 from wado-lang/claude/string-methods-checked-unchecked-a0Elw\n\nfeat!: String API checked/unchecked/internal discipline (WEP-2026-05-16)",
+          "timestamp": "2026-05-16T15:12:50+09:00",
+          "tree_id": "cab85b4d1bdae147a3f9478d09ec71fa06bf3d25",
+          "url": "https://github.com/wado-lang/wado/commit/cd3bcafb1ad0affcde8c5b3dc0755ec98f45a98a"
+        },
+        "date": 1778912331400,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510826,
             "unit": "bytes"
           }
         ]
