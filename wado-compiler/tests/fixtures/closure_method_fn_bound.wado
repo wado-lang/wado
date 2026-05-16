@@ -1,0 +1,22 @@
+// Audit: methods with `<F: fn(...)>` bound on the method itself. The
+// `register_generic_params` change in trait_env.rs eagerly binds F to
+// the bound's function type without consuming a TypeParam index slot,
+// but `method_lookup::lookup_method_info_uncached` registers method-
+// level type params manually — verify it agrees.
+
+struct Doubler {}
+
+impl Doubler {
+    fn apply<F: fn(i32) -> i32>(&self, f: F, x: i32) -> i32 {
+        return f(x);
+    }
+}
+
+test "method-level fn-bound" {
+    let d = Doubler {};
+    let r = d.apply(|x: i32| x * 2, 7);
+    assert r == 14;
+}
+
+__DATA__
+{"test": {}}

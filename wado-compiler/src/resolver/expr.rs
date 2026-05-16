@@ -1862,7 +1862,88 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     Self::collect_mutated_vars(arg, result);
                 }
             }
-            _ => {}
+            ast::Expr::StaticMethodCall(sc) => {
+                for arg in &sc.args {
+                    Self::collect_mutated_vars(arg, result);
+                }
+            }
+            ast::Expr::Match(m) => {
+                Self::collect_mutated_vars(&m.expr, result);
+                for arm in &m.arms {
+                    if let Some(guard) = &arm.guard {
+                        Self::collect_mutated_vars(guard, result);
+                    }
+                    Self::collect_mutated_vars(&arm.body, result);
+                }
+            }
+            ast::Expr::Matches(m) => {
+                Self::collect_mutated_vars(&m.expr, result);
+                if let Some(guard) = &m.guard {
+                    Self::collect_mutated_vars(guard, result);
+                }
+            }
+            ast::Expr::Index(idx) => {
+                Self::collect_mutated_vars(&idx.expr, result);
+                Self::collect_mutated_vars(&idx.index, result);
+            }
+            ast::Expr::FieldAccess(fa) => {
+                Self::collect_mutated_vars(&fa.expr, result);
+            }
+            ast::Expr::Cast(c) => {
+                Self::collect_mutated_vars(&c.expr, result);
+            }
+            ast::Expr::TupleLiteral(t) => {
+                for e in &t.elements {
+                    Self::collect_mutated_vars(e, result);
+                }
+            }
+            ast::Expr::StructLiteral(sl) => {
+                for field in &sl.fields {
+                    Self::collect_mutated_vars(&field.value, result);
+                }
+            }
+            ast::Expr::TemplateString(ts) => {
+                for part in &ts.parts {
+                    if let ast::TemplatePart::Interpolation { expr, .. } = part {
+                        Self::collect_mutated_vars(expr, result);
+                    }
+                }
+            }
+            ast::Expr::Range(r) => {
+                Self::collect_mutated_vars(&r.start, result);
+                Self::collect_mutated_vars(&r.end, result);
+            }
+            ast::Expr::LabeledBlock(lb) => {
+                for stmt in &lb.block.stmts {
+                    Self::collect_mutated_vars_stmt(stmt, result);
+                }
+            }
+            ast::Expr::WithHandler(wh) => {
+                for binding in &wh.handlers {
+                    Self::collect_mutated_vars(&binding.handler, result);
+                }
+                for stmt in &wh.body.stmts {
+                    Self::collect_mutated_vars_stmt(stmt, result);
+                }
+            }
+            ast::Expr::ComparisonChain(c) => {
+                Self::collect_mutated_vars(&c.first, result);
+                for cmp in &c.comparisons {
+                    Self::collect_mutated_vars(&cmp.right, result);
+                }
+            }
+            ast::Expr::TryOp(t) => {
+                Self::collect_mutated_vars(&t.expr, result);
+            }
+            ast::Expr::Spread(inner, _) => {
+                Self::collect_mutated_vars(inner, result);
+            }
+            ast::Expr::Resume(r) => {
+                Self::collect_mutated_vars(&r.value, result);
+            }
+            // Ident / literals carry no sub-expressions that could mutate
+            // outer captures.
+            ast::Expr::Ident(_) | ast::Expr::Literal(_) => {}
         }
     }
 
@@ -1988,9 +2069,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     Self::collect_mutated_vars(&arm.body, result);
                 }
             }
-            // Continue, Use, TaskReturn, etc. carry no expressions that could
-            // mutate outer captures — safe to ignore.
-            _ => {}
+            ast::Stmt::TaskReturn(tr) => {
+                Self::collect_mutated_vars(&tr.value, result);
+            }
+            // `Continue` carries no expressions.
+            ast::Stmt::Continue(_) => {}
         }
     }
 

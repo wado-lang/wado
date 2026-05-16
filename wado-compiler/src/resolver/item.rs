@@ -1148,24 +1148,72 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .map(|p| (p.name.clone(), p.id))
             .collect();
 
-        // Then, collect method-level type params
+        // Then, collect method-level type params. Mirrors
+        // `register_generic_params` in `trait_env.rs`: `<F: fn(...)>` /
+        // `<F: fn mut(...)>` bounds are realised eagerly to the bound's
+        // function type and do NOT consume a `TypeParam` index slot, so the
+        // index space stays dense for real type params. Effect params have
+        // their own channel (`current_effect_param_decls`, installed above).
         let offset = scope.trait_ctx.type_params.len();
-        for (index, param) in func.type_params.iter().enumerate() {
-            let idx = (offset + index) as u32;
-            let type_id = scope
-                .type_table
-                .borrow_mut()
-                .make_type_param(param.name.clone(), idx);
+        let mut next_idx = offset as u32;
+        for param in &func.type_params {
+            if param.is_effect {
+                continue;
+            }
+            let idx = next_idx;
+            let fn_bound_sig = if param.is_pack {
+                None
+            } else {
+                param.bounds.iter().find_map(|b| b.fn_signature.as_ref())
+            };
+            let (type_id, consumed_index) = if param.is_pack {
+                (
+                    scope
+                        .type_table
+                        .borrow_mut()
+                        .make_type_pack(param.name.clone(), idx),
+                    true,
+                )
+            } else if let Some(sig) = fn_bound_sig {
+                (
+                    scope.resolve_type(&ast::Type::Function(sig.clone())),
+                    false,
+                )
+            } else {
+                (
+                    scope
+                        .type_table
+                        .borrow_mut()
+                        .make_type_param(param.name.clone(), idx),
+                    true,
+                )
+            };
             scope
                 .trait_ctx
                 .type_params
                 .insert(param.name.clone(), (idx, type_id));
-            type_param_list.push((param.name.clone(), type_id));
-            if !param.bounds.is_empty() {
+            // Only push *real* type params (TypeParam-ids) into the
+            // inference cache list. Eagerly-resolved fn-bound params have a
+            // concrete Function type and aren't generics anymore.
+            if fn_bound_sig.is_none() {
+                type_param_list.push((param.name.clone(), type_id));
+            }
+            // Record only "real" trait bounds — `fn`/`fn mut` bounds are
+            // already realised in the parameter's type itself.
+            let real_bounds: Vec<ast::TraitBound> = param
+                .bounds
+                .iter()
+                .filter(|b| b.fn_signature.is_none())
+                .cloned()
+                .collect();
+            if !real_bounds.is_empty() {
                 scope
                     .trait_ctx
                     .type_param_bounds
-                    .insert(param.name.clone(), param.bounds.clone());
+                    .insert(param.name.clone(), real_bounds);
+            }
+            if consumed_index {
+                next_idx += 1;
             }
         }
 
@@ -1293,18 +1341,32 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
         }
 
-        // Convert AST type params to TIR type params (while type params still in scope)
+        // Convert AST type params to TIR type params (while type params still
+        // in scope). Mirror the free-function path in `resolve_function`:
+        // `<F: fn(...)>` bounds are realised eagerly and dropped from the
+        // generic list; the remaining real type params use dense indices so
+        // the substitution map in `substitute_type_params` lines up.
+        let mut non_effect_non_fn_idx: u32 = 0;
         let type_params: Vec<crate::tir::TirTypeParam> = func
             .type_params
             .iter()
-            .enumerate()
-            .map(|(i, p)| crate::tir::TirTypeParam {
-                name: p.name.clone(),
-                is_effect: p.is_effect,
-                is_pack: p.is_pack,
-                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
-                index: i as u32,
+            .filter_map(|p| {
+                if p.is_effect {
+                    return None;
+                }
+                if p.bounds.iter().any(|b| b.fn_signature.is_some()) {
+                    return None;
+                }
+                let idx = non_effect_non_fn_idx;
+                non_effect_non_fn_idx += 1;
+                Some(crate::tir::TirTypeParam {
+                    name: p.name.clone(),
+                    is_effect: p.is_effect,
+                    is_pack: p.is_pack,
+                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                    default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
+                    index: idx,
+                })
             })
             .collect();
 

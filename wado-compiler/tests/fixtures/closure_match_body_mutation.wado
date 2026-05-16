@@ -1,0 +1,54 @@
+// Regression: a closure whose *expression body* is a `match` (or any of
+// the other expression forms that previously fell through to the
+// `_ => {}` catch-all in `collect_mutated_vars`) must still detect
+// mutations of captured outer bindings. Without recursion into these
+// arms, `any_mutating_capture` stayed `false`, the closure was typed
+// `fn` instead of `fn mut`, and the mutation silently operated on a
+// by-value copy.
+
+test "mutation inside match arm bodies (expression body)" {
+    let mut count = 0;
+    let mut on_label = |label: i32| match label {
+        1 => count += 10,
+        2 => count += 20,
+        _ => count += 1,
+    };
+    on_label(1);
+    on_label(2);
+    on_label(99);
+    assert count == 31;
+}
+
+test "mutation inside match arm in block body" {
+    let mut hits = 0;
+    let mut probe = |x: i32| {
+        match x {
+            0 => hits += 100,
+            _ => hits += 1,
+        }
+    };
+    probe(0);
+    probe(5);
+    probe(9);
+    assert hits == 102;
+}
+
+test "mutation inside field-access receiver" {
+    // The `(point.x = ...).clone()` shape would exercise FieldAccess,
+    // but assignment-to-field is handled by `Assign(FieldAccess(...))`
+    // separately. Here we use a method call on an indexed value to
+    // exercise both Index and MethodCall paths surrounding a captured
+    // mut.
+    let mut counter = 0;
+    let nums: Array<i32> = [1, 2, 3];
+    let mut bump_with = |i: i32| {
+        let _ = nums[i];
+        counter += 1;
+    };
+    bump_with(0);
+    bump_with(1);
+    assert counter == 2;
+}
+
+__DATA__
+{"test": {}}
