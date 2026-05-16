@@ -23,7 +23,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
     let headers = Fields::new();
     let _ = headers.append(
         "content-type" as FieldName,
-        "text/plain".as_bytes() as FieldValue,
+        "text/plain".bytes().collect() as FieldValue,
     );
 
     let [out_req, _req_future] = Request::new(
@@ -44,7 +44,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
     // Write the body concurrently with the host subtask's read. These
     // writes rendezvous with the host reader without deadlock because
     // the subtask is already in flight by the time we reach here.
-    body_tx.write("request body".as_bytes());
+    body_tx.write("request body".bytes().collect());
     body_tx.drop();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 

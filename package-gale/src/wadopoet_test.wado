@@ -12,9 +12,6 @@ use {
     ImplSpec,
 } from "./wadopoet.wado";
 
-// ---------------------------------------------------------------------------
-// CodeWriter tests
-// ---------------------------------------------------------------------------
 
 test "empty writer" {
     let w = CodeWriter::new();
@@ -126,9 +123,6 @@ test "manual indent/dedent" {
     assert w.to_string() == "outer\n    inner\nouter again\n";
 }
 
-// ---------------------------------------------------------------------------
-// StructSpec tests
-// ---------------------------------------------------------------------------
 
 test "StructSpec basic" {
     let mut s = StructSpec::new("Point");
@@ -174,9 +168,6 @@ test "StructSpec with FieldSpec" {
     assert w.to_string() == "struct Foo {\n    pub x: f64,\n}\n";
 }
 
-// ---------------------------------------------------------------------------
-// FlagsSpec tests
-// ---------------------------------------------------------------------------
 
 test "FlagsSpec basic" {
     let mut f = FlagsSpec::new("Perms");
@@ -202,9 +193,6 @@ test "FlagsSpec private" {
     assert w.to_string() == expected, `got: {w.to_string()}`;
 }
 
-// ---------------------------------------------------------------------------
-// VariantSpec tests
-// ---------------------------------------------------------------------------
 
 test "VariantSpec unit cases" {
     let mut v = VariantSpec::new("TokenKind");
@@ -231,9 +219,6 @@ test "VariantSpec with payloads" {
     assert w.to_string() == expected, `got: {w.to_string()}`;
 }
 
-// ---------------------------------------------------------------------------
-// EnumSpec tests
-// ---------------------------------------------------------------------------
 
 test "EnumSpec basic" {
     let mut e = EnumSpec::new("Color");
@@ -248,9 +233,6 @@ test "EnumSpec basic" {
     assert w.to_string() == expected, `got: {w.to_string()}`;
 }
 
-// ---------------------------------------------------------------------------
-// FnSpec tests
-// ---------------------------------------------------------------------------
 
 test "FnSpec simple" {
     let mut f = FnSpec::new("add");
@@ -319,9 +301,6 @@ test "FnSpec signature string" {
     assert sig == "pub fn transform(&self, input: &String, scale: f64) -> String", `got: {sig}`;
 }
 
-// ---------------------------------------------------------------------------
-// GlobalSpec tests
-// ---------------------------------------------------------------------------
 
 test "GlobalSpec basic" {
     let g = GlobalSpec::new("TK_EOF", "i32", "0");
@@ -341,9 +320,7 @@ test "GlobalSpec pub mut" {
     assert w.to_string() == "pub global mut COUNTER: i32 = 0;\n";
 }
 
-// ---------------------------------------------------------------------------
 // Integration: composing specs with CodeWriter
-// ---------------------------------------------------------------------------
 
 test "struct + impl + fn composition" {
     let mut w = CodeWriter::new();
@@ -408,9 +385,6 @@ test "chaining builder methods" {
     assert w.to_string() == expected, `got: {w.to_string()}`;
 }
 
-// ---------------------------------------------------------------------------
-// TraitSpec tests
-// ---------------------------------------------------------------------------
 
 test "TraitSpec simple" {
     let mut t = TraitSpec::new("Greet");
@@ -468,9 +442,6 @@ test "TraitSpec with multiple associated types" {
     assert w.to_string() == expected, `got: {w.to_string()}`;
 }
 
-// ---------------------------------------------------------------------------
-// ImplSpec tests
-// ---------------------------------------------------------------------------
 
 test "ImplSpec basic" {
     let mut w = CodeWriter::new();

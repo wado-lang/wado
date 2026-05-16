@@ -51,7 +51,6 @@ fn mk_ctx_with(rules: Array<ParserRule>) -> GenContext {
     return GenContext::new(&rules, &toks);
 }
 
-// --- kind_check_str ---
 
 test "kind_check_str: empty set returns 'true'" {
     let mut ctx = mk_ctx();
@@ -77,7 +76,6 @@ test "kind_check_str: multi-token uses helper call" {
     assert ctx.kind_sets().len() == 1;
 }
 
-// --- intern_kind_set determinism ---
 
 test "intern_kind_set: same set returns same id (insertion order)" {
     let mut ctx = mk_ctx();
@@ -146,7 +144,6 @@ test "kind_sets: returns entries in insertion order" {
     assert entries[2].tokens[0] == "TK_M";
 }
 
-// --- kind_negate_check_str ---
 
 test "kind_negate_check_str: empty set returns 'false'" {
     let mut ctx = mk_ctx();
@@ -181,7 +178,6 @@ test "kind_negate_check_str: shares ids with kind_check_str" {
     assert ctx.kind_sets().len() == 1, "positive and negative must share";
 }
 
-// --- tail_greedy_first_of_rule ---
 
 test "tail_greedy_first: rule with tail-position Optional token" {
     // a : X Y? ;
@@ -236,7 +232,6 @@ test "tail_greedy_first: transitive via tail RuleRef" {
     assert tg[0] == "TK_Y", `expected TK_Y, got {tg[0]}`;
 }
 
-// --- intern_follow_variant ---
 
 test "intern_follow_variant: empty intersection returns null" {
     // a : X Y? ; tail_greedy = {Y}. caller_follow = {Z}. intersection = {}.
@@ -296,7 +291,6 @@ test "intern_follow_variant: different rules get distinct ids" {
     assert ctx.follow_variants().len() == 2;
 }
 
-// --- intern_follow_variant rejection paths ---
 
 test "intern_follow_variant: unknown rule returns null" {
     // No rules in ctx; lookup fails up front.
@@ -368,7 +362,6 @@ test "intern_follow_variant: empty caller_follow returns null" {
     assert ctx.follow_variants().is_empty();
 }
 
-// --- tail_greedy_first single-token-only restriction ---
 
 test "tail_greedy_first: tail Optional with multi-token inner is excluded" {
     // `(A B)?` is tail-position but the inner consumes 2 tokens per

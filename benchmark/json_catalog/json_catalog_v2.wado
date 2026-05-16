@@ -120,10 +120,10 @@ impl P {
         self.skip_ws();
         if self.pos + 4 <= self.len {
             let p = self.pos;
-            if self.input.get_byte(p) as i32 == 'n' as i32
-                && self.input.get_byte(p + 1) as i32 == 'u' as i32
-                && self.input.get_byte(p + 2) as i32 == 'l' as i32
-                && self.input.get_byte(p + 3) as i32 == 'l' as i32 {
+            if self.input.get_byte_unchecked(p) as i32 == 'n' as i32
+                && self.input.get_byte_unchecked(p + 1) as i32 == 'u' as i32
+                && self.input.get_byte_unchecked(p + 2) as i32 == 'l' as i32
+                && self.input.get_byte_unchecked(p + 3) as i32 == 'l' as i32 {
                 self.pos = p + 4;
                 return true;
             }
@@ -184,7 +184,7 @@ impl P {
         let mut result = self.input.substr_bytes(prefix_start, self.pos);
         let len = self.len;
         loop {
-            let b = self.input.get_byte(self.pos) as i32;
+            let b = self.input.get_byte_unchecked(self.pos) as i32;
             if b == '"' as i32 {
                 self.pos += 1;
                 return result;
@@ -194,7 +194,7 @@ impl P {
             if self.pos >= len {
                 panic("EOF after \\");
             }
-            let esc = self.input.get_byte(self.pos) as u8 as char;
+            let esc = self.input.get_byte_unchecked(self.pos) as u8 as char;
             self.pos += 1;
             match esc {
                 '"' => result.push('"'),
@@ -211,7 +211,7 @@ impl P {
                     }
                     let mut code: u32 = 0;
                     for let mut i = 0; i < 4; i += 1 {
-                        let ch = self.input.get_byte(self.pos + i) as u8 as char;
+                        let ch = self.input.get_byte_unchecked(self.pos + i) as u8 as char;
                         code = code * 16 + ch.hex_digit_value() as u32;
                     }
                     self.pos += 4;
@@ -226,7 +226,7 @@ impl P {
             // gather next unescaped chunk
             let cs = self.pos;
             while self.pos < len {
-                let b2 = self.input.get_byte(self.pos) as i32;
+                let b2 = self.input.get_byte_unchecked(self.pos) as i32;
                 if b2 == '"' as i32 || b2 == '\\' as i32 {
                     break;
                 }
@@ -245,7 +245,7 @@ impl P {
         self.pos += 1;
         let len = self.len;
         while self.pos < len {
-            let b = self.input.get_byte(self.pos) as i32;
+            let b = self.input.get_byte_unchecked(self.pos) as i32;
             if b == '"' as i32 {
                 self.pos += 1;
                 return;
@@ -311,11 +311,11 @@ impl P {
 
     fn skip_number(&mut self) {
         let len = self.len;
-        if self.pos < len && self.input.get_byte(self.pos) as i32 == '-' as i32 {
+        if self.pos < len && self.input.get_byte_unchecked(self.pos) as i32 == '-' as i32 {
             self.pos += 1;
         }
         while self.pos < len {
-            let b = self.input.get_byte(self.pos) as i32;
+            let b = self.input.get_byte_unchecked(self.pos) as i32;
             if ('0' as i32 <= b <= '9' as i32) || b == '.' as i32 || b == 'e' as i32 || b == 'E' as i32 || b == '+' as i32 || b == '-' as i32 {
                 self.pos += 1;
             } else {
@@ -467,11 +467,11 @@ impl P {
         loop {
             let [ks, ke] = self.key_range();
             let klen = ke - ks;
-            let g0 = self.input.get_byte(ks) as i32;
+            let g0 = self.input.get_byte_unchecked(ks) as i32;
             let mut handled = false;
             if klen == 2 {
                 // "id"
-                if g0 == 'i' as i32 && self.input.get_byte(ks + 1) as i32 == 'd' as i32 {
+                if g0 == 'i' as i32 && self.input.get_byte_unchecked(ks + 1) as i32 == 'd' as i32 {
                     id = self.parse_i64();
                     handled = true;
                 }
@@ -499,7 +499,7 @@ impl P {
                     description = self.parse_optional_string();
                     handled = true;
                 } else if g0 == 's' as i32 {
-                    let g3 = self.input.get_byte(ks + 3) as i32;
+                    let g3 = self.input.get_byte_unchecked(ks + 3) as i32;
                     if g3 == 'T' as i32 {
                         sub_topic_ids = self.parse_array_i64();
                         handled = true;
@@ -540,7 +540,7 @@ impl P {
         loop {
             let [ks, ke] = self.key_range();
             let klen = ke - ks;
-            let g0 = self.input.get_byte(ks) as i32;
+            let g0 = self.input.get_byte_unchecked(ks) as i32;
             let mut handled = false;
             if klen == 6 {
                 // "amount"
@@ -737,7 +737,7 @@ impl P {
         loop {
             let [ks, ke] = self.key_range();
             let klen = ke - ks;
-            let g0 = self.input.get_byte(ks) as i32;
+            let g0 = self.input.get_byte_unchecked(ks) as i32;
             let mut handled = false;
             if klen == 5 {
                 // "areas"
@@ -814,10 +814,10 @@ impl P {
         loop {
             let [ks, ke] = self.key_range();
             let klen = ke - ks;
-            let g0 = self.input.get_byte(ks) as i32;
+            let g0 = self.input.get_byte_unchecked(ks) as i32;
             let mut handled = false;
             if klen == 2 {
-                if g0 == 'i' as i32 && self.input.get_byte(ks + 1) as i32 == 'd' as i32 {
+                if g0 == 'i' as i32 && self.input.get_byte_unchecked(ks + 1) as i32 == 'd' as i32 {
                     id = self.parse_i64();
                     handled = true;
                 }
@@ -1020,7 +1020,7 @@ impl P {
         loop {
             let [ks, ke] = self.key_range();
             let klen = ke - ks;
-            let g0 = self.input.get_byte(ks) as i32;
+            let g0 = self.input.get_byte_unchecked(ks) as i32;
             let mut handled = false;
             if klen == 6 {
                 // "events"
@@ -1121,10 +1121,7 @@ fn read_file(path: String) -> String with Preopens {
         if chunk.len() == 0 {
             break;
         }
-        let start = buf.internal_reserve_uninit(chunk.len());
-        for let mut i = 0; i < chunk.len(); i += 1 {
-            buf.set_byte(start + i, chunk[i]);
-        }
+        buf.push_bytes_unchecked(chunk);
     }
     stream.drop();
     return buf;

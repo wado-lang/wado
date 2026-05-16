@@ -17,7 +17,7 @@ fn scheme_of(url: Url) -> Scheme {
 
 fn send_get(url: Url) -> Response with Client {
     let headers = Fields::new();
-    headers.append("user-agent", #file.as_bytes() as FieldValue);
+    headers.append("user-agent", #file.bytes().collect() as FieldValue);
 
     let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [req, _req_future] = Request::new(headers, null, trailers_rx, null);

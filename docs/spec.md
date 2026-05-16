@@ -1186,8 +1186,8 @@ builder.push_str(", ");
 builder.push_str("World!");
 // builder is now "Hello, World!"
 
-// Static method for two-string concatenation
-let combined = String::concat("Hello, ", "World!");  // "Hello, World!"
+// `+` operator for two-string concatenation
+let combined = "Hello, " + "World!";  // "Hello, World!"
 ```
 
 #### Concatenation

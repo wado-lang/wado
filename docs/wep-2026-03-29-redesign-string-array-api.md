@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft
+Draft (partially superseded by [WEP-2026-05-16: String API checked/unchecked discipline](./wep-2026-05-16-string-checked-unchecked-discipline.md), which overrides the rows for `as_bytes`, `String::concat`, `get_byte`/`set_byte`, and `truncate_bytes`, and introduces `_unchecked` siblings for `truncate`/`insert`/`insert_str`/`remove`.)
 
 ## Context
 
@@ -123,63 +123,63 @@ impl<T: Display> Array<T> {
 
 #### Mapping Table
 
-| Rust `String` / `&str`               | Wado `String`                         | Status                                  |
-| ------------------------------------ | ------------------------------------- | --------------------------------------- |
-| `String::new()`                      | `""` (literal) or `String::default()` | OK                                      |
-| `String::with_capacity(n)`           | `String::with_capacity(n)`            | OK                                      |
-| `len()`                              | `len()` (byte length)                 | OK                                      |
-| `is_empty()`                         | `is_empty()`                          | OK                                      |
-| `push(ch)`                           | `push(ch)`                            | RENAME from `append_char`               |
-| `push_str(s)`                        | `push_str(s)`                         | RENAME from `append`                    |
-| `pop()`                              | `pop()`                               | NEW                                     |
-| `insert(i, ch)`                      | `insert(i, ch)`                       | NEW (byte index)                        |
-| `insert_str(i, s)`                   | `insert_str(i, s)`                    | NEW (byte index)                        |
-| `remove(i)`                          | `remove(i)`                           | NEW (byte index, returns char)          |
-| `truncate(n)`                        | `truncate(n)`                         | RENAME from `truncate_bytes`            |
-| `clear()`                            | `clear()`                             | NEW                                     |
-| `chars()`                            | `chars()`                             | OK                                      |
-| `bytes()`                            | `bytes()`                             | OK                                      |
-| `char_indices()`                     | `char_indices()`                      | NEW                                     |
-| `contains(pat)`                      | `contains(pat)`                       | NEW                                     |
-| `starts_with(pat)`                   | `starts_with(pat)`                    | NEW                                     |
-| `ends_with(pat)`                     | `ends_with(pat)`                      | NEW                                     |
-| `find(pat)`                          | `find(pat)`                           | NEW                                     |
-| `rfind(pat)`                         | `rfind(pat)`                          | NEW                                     |
-| `split(pat)`                         | `split(sep)`                          | NEW (returns iterator)                  |
-| `splitn(n, pat)`                     | `splitn(n, sep)`                      | NEW (returns iterator)                  |
-| `rsplit(pat)`                        | —                                     | niche                                   |
-| `rsplitn(n, pat)`                    | —                                     | niche                                   |
-| `split_whitespace()`                 | `split_whitespace()`                  | NEW (returns iterator)                  |
-| `lines()`                            | `lines()`                             | NEW (returns iterator)                  |
-| `trim()`                             | `trim()`                              | OK                                      |
-| `trim_start()`                       | `trim_start()`                        | OK                                      |
-| `trim_end()`                         | `trim_end()`                          | OK                                      |
-| `trim_ascii()`                       | `trim_ascii()`                        | OK                                      |
-| `trim_ascii_start()`                 | `trim_ascii_start()`                  | OK                                      |
-| `trim_ascii_end()`                   | `trim_ascii_end()`                    | OK                                      |
-| `replace(from, to)`                  | `replace(from, to)`                   | NEW                                     |
-| `replacen(from, to, n)`              | `replacen(from, to, n)`               | NEW                                     |
-| `to_lowercase()`                     | `to_lowercase()`                      | NEW (Unicode)                           |
-| `to_uppercase()`                     | `to_uppercase()`                      | NEW (Unicode)                           |
-| `to_ascii_lowercase()`               | `to_ascii_lowercase()`                | OK                                      |
-| `to_ascii_uppercase()`               | `to_ascii_uppercase()`                | OK                                      |
-| `repeat(n)`                          | `repeat(n)`                           | NEW                                     |
-| `starts_with(ch)` / `starts_with(s)` | overloaded or separate                | see below                               |
-| `s + &t`                             | `s + t`                               | OK                                      |
-| `s += &t`                            | `s += t`                              | OK                                      |
-| `String::from_utf8(bytes)`           | `String::from_utf8(bytes)`            | OK                                      |
-| `String::from_utf8_lossy(bytes)`     | `String::from_utf8_lossy(bytes)`      | OK                                      |
-| `String::from_utf8_unchecked(bytes)` | `String::from_utf8_unchecked(bytes)`  | OK                                      |
-| `as_bytes()`                         | `as_bytes()`                          | NEW (returns `Array<u8>`)               |
-| `as_str()`                           | —                                     | no borrowing distinction                |
-| `into_bytes()`                       | —                                     | no ownership transfer, use `as_bytes()` |
-| `capacity()`                         | `capacity()`                          | NEW                                     |
-| `reserve(n)`                         | `reserve(n)`                          | NEW                                     |
-| `shrink_to_fit()`                    | `shrink_to_fit()`                     | NEW                                     |
-| `drain(..)`                          | —                                     | complex                                 |
-| `retain(pred)`                       | —                                     | use `.chars().filter().collect()`       |
-| `split_off(i)`                       | —                                     | niche                                   |
-| `encode_utf16()`                     | —                                     | not needed for Wasm/WASI                |
+| Rust `String` / `&str`               | Wado `String`                               | Status                                                                                                            |
+| ------------------------------------ | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `String::new()`                      | `""` (literal) or `String::default()`       | OK                                                                                                                |
+| `String::with_capacity(n)`           | `String::with_capacity(n)`                  | OK                                                                                                                |
+| `len()`                              | `len()` (byte length)                       | OK                                                                                                                |
+| `is_empty()`                         | `is_empty()`                                | OK                                                                                                                |
+| `push(ch)`                           | `push(ch)`                                  | RENAME from `append_char`                                                                                         |
+| `push_str(s)`                        | `push_str(s)`                               | RENAME from `append`                                                                                              |
+| `pop()`                              | `pop()`                                     | NEW                                                                                                               |
+| `insert(i, ch)`                      | `insert(i, ch)` + `insert_unchecked`        | SUPERSEDED by WEP-2026-05-16 (checked/unchecked pair, byte index)                                                 |
+| `insert_str(i, s)`                   | `insert_str(i, s)` + `insert_str_unchecked` | SUPERSEDED by WEP-2026-05-16                                                                                      |
+| `remove(i)`                          | `remove(i)` + `remove_unchecked`            | SUPERSEDED by WEP-2026-05-16 (checked/unchecked pair, returns char)                                               |
+| `truncate(n)`                        | `truncate(n)` + `truncate_unchecked(n)`     | SUPERSEDED by WEP-2026-05-16 (`truncate_bytes` removed outright; checked/unchecked pair)                          |
+| `clear()`                            | `clear()`                                   | NEW                                                                                                               |
+| `chars()`                            | `chars()`                                   | OK                                                                                                                |
+| `bytes()`                            | `bytes()`                                   | OK                                                                                                                |
+| `char_indices()`                     | `char_indices()`                            | NEW                                                                                                               |
+| `contains(pat)`                      | `contains(pat)`                             | NEW                                                                                                               |
+| `starts_with(pat)`                   | `starts_with(pat)`                          | NEW                                                                                                               |
+| `ends_with(pat)`                     | `ends_with(pat)`                            | NEW                                                                                                               |
+| `find(pat)`                          | `find(pat)`                                 | NEW                                                                                                               |
+| `rfind(pat)`                         | `rfind(pat)`                                | NEW                                                                                                               |
+| `split(pat)`                         | `split(sep)`                                | NEW (returns iterator)                                                                                            |
+| `splitn(n, pat)`                     | `splitn(n, sep)`                            | NEW (returns iterator)                                                                                            |
+| `rsplit(pat)`                        | —                                           | niche                                                                                                             |
+| `rsplitn(n, pat)`                    | —                                           | niche                                                                                                             |
+| `split_whitespace()`                 | `split_whitespace()`                        | NEW (returns iterator)                                                                                            |
+| `lines()`                            | `lines()`                                   | NEW (returns iterator)                                                                                            |
+| `trim()`                             | `trim()`                                    | OK                                                                                                                |
+| `trim_start()`                       | `trim_start()`                              | OK                                                                                                                |
+| `trim_end()`                         | `trim_end()`                                | OK                                                                                                                |
+| `trim_ascii()`                       | `trim_ascii()`                              | OK                                                                                                                |
+| `trim_ascii_start()`                 | `trim_ascii_start()`                        | OK                                                                                                                |
+| `trim_ascii_end()`                   | `trim_ascii_end()`                          | OK                                                                                                                |
+| `replace(from, to)`                  | `replace(from, to)`                         | NEW                                                                                                               |
+| `replacen(from, to, n)`              | `replacen(from, to, n)`                     | NEW                                                                                                               |
+| `to_lowercase()`                     | `to_lowercase()`                            | NEW (Unicode)                                                                                                     |
+| `to_uppercase()`                     | `to_uppercase()`                            | NEW (Unicode)                                                                                                     |
+| `to_ascii_lowercase()`               | `to_ascii_lowercase()`                      | OK                                                                                                                |
+| `to_ascii_uppercase()`               | `to_ascii_uppercase()`                      | OK                                                                                                                |
+| `repeat(n)`                          | `repeat(n)`                                 | NEW                                                                                                               |
+| `starts_with(ch)` / `starts_with(s)` | overloaded or separate                      | see below                                                                                                         |
+| `s + &t`                             | `s + t`                                     | OK                                                                                                                |
+| `s += &t`                            | `s += t`                                    | OK                                                                                                                |
+| `String::from_utf8(bytes)`           | `String::from_utf8(bytes)`                  | OK                                                                                                                |
+| `String::from_utf8_lossy(bytes)`     | `String::from_utf8_lossy(bytes)`            | OK                                                                                                                |
+| `String::from_utf8_unchecked(bytes)` | `String::from_utf8_unchecked(bytes)`        | OK                                                                                                                |
+| `as_bytes()`                         | —                                           | SUPERSEDED by WEP-2026-05-16 (removed; semantics differ from Rust under value semantics). Use `bytes().collect()` |
+| `as_str()`                           | —                                           | no borrowing distinction                                                                                          |
+| `into_bytes()`                       | —                                           | no ownership transfer, use `as_bytes()`                                                                           |
+| `capacity()`                         | `capacity()`                                | NEW                                                                                                               |
+| `reserve(n)`                         | `reserve(n)`                                | NEW                                                                                                               |
+| `shrink_to_fit()`                    | `shrink_to_fit()`                           | NEW                                                                                                               |
+| `drain(..)`                          | —                                           | complex                                                                                                           |
+| `retain(pred)`                       | —                                           | use `.chars().filter().collect()`                                                                                 |
+| `split_off(i)`                       | —                                           | niche                                                                                                             |
+| `encode_utf16()`                     | —                                           | not needed for Wasm/WASI                                                                                          |
 
 Also available via existing Wado features:
 
@@ -255,7 +255,7 @@ impl String {
 | `String` | `append(s)`         | `push_str(s)` | Match Rust `String::push_str` |
 | `String` | `truncate_bytes(n)` | `truncate(n)` | Match Rust `String::truncate` |
 
-Old names remain as deprecated aliases with compiler warnings during transition.
+Per WEP-2026-05-16, old names are removed outright (no deprecation period) since Wado has no external users yet.
 
 `String::truncate_chars(n)` is kept as-is — it has no Rust equivalent (Rust has no char-count truncation) and the `_chars` suffix makes the distinction clear.
 
@@ -263,17 +263,16 @@ Old names remain as deprecated aliases with compiler warnings during transition.
 
 These have no direct Rust counterpart but are useful in Wado:
 
-| Method                                   | Purpose                                  |
-| ---------------------------------------- | ---------------------------------------- |
-| `Array::filled(n, x)`                    | Like `vec![x; n]` but as a static method |
-| `Array::sorted()` / `sorted_by()`        | Non-mutating sort (returns new Array)    |
-| `Array::slice(start, end)`               | Explicit slice creation                  |
-| `Array::copy_within_append()`            | Low-level, used by zlib                  |
-| `String::concat(a, b)`                   | Static two-string concatenation          |
-| `String::from_iter(iter)`                | Construct from char iterator             |
-| `String::get_byte(i)` / `set_byte(i, v)` | Low-level byte access                    |
-| `String::append_byte_filled(byte, n)`    | Low-level byte fill                      |
-| `String::trim_ascii*()`                  | ASCII-only trim variants                 |
+| Method                                                       | Purpose                                                   |
+| ------------------------------------------------------------ | --------------------------------------------------------- |
+| `Array::filled(n, x)`                                        | Like `vec![x; n]` but as a static method                  |
+| `Array::sorted()` / `sorted_by()`                            | Non-mutating sort (returns new Array)                     |
+| `Array::slice(start, end)`                                   | Explicit slice creation                                   |
+| `Array::copy_within_append()`                                | Low-level, used by zlib                                   |
+| `String::from_iter(iter)`                                    | Construct from char iterator                              |
+| `String::get_byte_unchecked(i)` / `set_byte_unchecked(i, v)` | Low-level byte access (unchecked-only per WEP-2026-05-16) |
+| `String::append_byte_filled(byte, n)`                        | Low-level byte fill                                       |
+| `String::trim_ascii*()`                                      | ASCII-only trim variants                                  |
 
 ## Consequences
 

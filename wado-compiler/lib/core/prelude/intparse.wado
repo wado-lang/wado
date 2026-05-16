@@ -79,7 +79,7 @@ fn digit_value(b: u8) -> i32 {
 
 /// Returns true when `[start, end)` is a valid (possibly empty) byte
 /// range within `s`. Used by the range-based parse entry points to keep
-/// out-of-bounds indices from triggering a trap on `s.get_byte(...)`.
+/// out-of-bounds indices from triggering a trap on `s.get_byte_unchecked(...)`.
 fn range_in_bounds(s: &String, start: i32, end: i32) -> bool {
     return start >= 0 && end <= s.len() && start <= end;
 }
@@ -151,7 +151,7 @@ pub fn parse_signed_prefix_range(s: &String, start: i32, end: i32) -> Result<[bo
     if !range_in_bounds(s, start, end) || start == end {
         return Result::Err(IntErrorKind::Empty);
     }
-    let first = s.get_byte(start);
+    let first = s.get_byte_unchecked(start);
     let is_negative = first == '-' as u8;
     let has_sign = is_negative || first == '+' as u8;
     if has_sign && start + 1 >= end {
@@ -171,7 +171,7 @@ pub fn parse_unsigned_prefix_range(s: &String, start: i32, end: i32) -> Result<i
     if !range_in_bounds(s, start, end) || start == end {
         return Result::Err(IntErrorKind::Empty);
     }
-    let first = s.get_byte(start);
+    let first = s.get_byte_unchecked(start);
     if first == '+' as u8 {
         if start + 1 >= end {
             return Result::Err(IntErrorKind::InvalidDigit);

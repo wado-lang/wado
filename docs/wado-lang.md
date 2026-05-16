@@ -164,7 +164,7 @@ match path {
 ```wado
 trailers.append(
     "server-timing",
-    `app;dur={elapsed_ms:0.3f}`.as_bytes() as FieldValue,
+    `app;dur={elapsed_ms:0.3f}`.bytes().collect() as FieldValue,
 );
 ```
 
@@ -188,7 +188,7 @@ Tuple literal syntax (`[a, b, c]`) is the same in types, expressions, and patter
 ```wado
 task return Result::Ok(response);
 
-body_tx.write(body_str.as_bytes());
+body_tx.write(body_str.bytes().collect());
 body_tx.drop();
 ```
 

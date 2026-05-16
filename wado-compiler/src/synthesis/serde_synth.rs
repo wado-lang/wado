@@ -1242,9 +1242,10 @@ fn generate_struct_deserialize(
     Some((lookup_func, deser_func))
 }
 
-/// Build a `string.get_byte(index_expr) as i32` expression with a computed index.
+/// Build a `string.get_byte_unchecked(index_expr) as i32` expression with a computed index.
 fn key_get_byte_as_i32_expr(string_ref: TirExpr, index_expr: TirExpr, span: Span) -> TirExpr {
-    let get_byte_method = LocalMethodName::new("String".to_string(), None, "get_byte".to_string());
+    let get_byte_method =
+        LocalMethodName::new("String".to_string(), None, "get_byte_unchecked".to_string());
     let get_byte_call = TirExpr::new(
         TirExprKind::method_call(
             Box::new(string_ref),

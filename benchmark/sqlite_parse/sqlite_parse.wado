@@ -28,10 +28,7 @@ fn read_file(path: String) -> String with Preopens {
         if chunk.len() == 0 {
             break;
         }
-        let start = buf.internal_reserve_uninit(chunk.len());
-        for let mut i = 0; i < chunk.len(); i += 1 {
-            buf.set_byte(start + i, chunk[i]);
-        }
+        buf.push_bytes_unchecked(chunk);
     }
     stream.drop();
     return buf;

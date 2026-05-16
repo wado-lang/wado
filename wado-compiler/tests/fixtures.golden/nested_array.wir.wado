@@ -144,7 +144,7 @@ type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(r
 
 type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(47)
 
-type "functype//core:prelude/string.wado/String::concat" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(48)
+type "functype//core:prelude/string.wado/String^Add::add" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(48)
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(49)
 
@@ -508,7 +508,7 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_iterate_test"() 
                         multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_8);
                         if __sroa___pattern_temp_1_discriminant == 0 {
                             val = __sroa___pattern_temp_1_payload_0;
-                            buf_5 = "core:prelude/string.wado/String::concat"(buf_5, __tmpl: block -> ref "core:prelude/string.wado//String" {
+                            buf_5 = "core:prelude/string.wado/String^Add::add"(buf_5, __tmpl: block -> ref "core:prelude/string.wado//String" {
                                 __local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
                                 __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                                 "core:prelude/primitive.wado/i32::fmt_decimal"(val, __local_13);
@@ -522,7 +522,7 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_iterate_test"() 
                         continue l21;
                     };
                 };
-                buf_5 = "core:prelude/string.wado/String::concat"(buf_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+                buf_5 = "core:prelude/string.wado/String^Add::add"(buf_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 "), used: 1 });
             } else {
                 break b17;
@@ -1154,18 +1154,17 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     self.used = new_used;
 }
 
-fn "core:prelude/string.wado/String::concat"(a, b) {
-    let len_a: i32;
-    let len_b: i32;
-    let total: i32;
-    let repr: ref builtin::array<u8>;
-    len_a = a.used;
-    len_b = b.used;
-    total = len_a + len_b;
-    repr = builtin::array_new<u8>(total);
-    builtin::array_copy<u8>(repr, 0, a.repr, 0, len_a);
-    builtin::array_copy<u8>(repr, len_a, b.repr, 0, len_b);
-    return struct.new "core:prelude/string.wado//String" { repr: repr, used: total };
+fn "core:prelude/string.wado/String^Add::add"(self, other) {
+    let result: ref "core:prelude/string.wado//String";
+    let capacity: i32;
+    result = __inline_String__with_capacity_0: block -> ref "core:prelude/string.wado//String" {
+        capacity = self.used + other.used;
+        break __inline_String__with_capacity_0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity), used: 0 };
+        unreachable;
+    };
+    "core:prelude/string.wado/String::push_str"(result, self);
+    "core:prelude/string.wado/String::push_str"(result, other);
+    return result;
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {

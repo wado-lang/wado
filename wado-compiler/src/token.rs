@@ -275,3 +275,211 @@ impl Span {
         }
     }
 }
+
+/// Append a stable byte encoding of `kind` to `out`.
+///
+/// Concatenating these encodings for every non-comment token in a source
+/// file yields a hash input that ignores comments, whitespace, and span
+/// positions — used by the Kiln source-hash so a docstring or
+/// reformatting edit on a generator's `.wado` files does not churn the
+/// `generator_source_hash` field of every consumer's `<primary>.kiln.json`.
+///
+/// **Stability constraint:** any change to `TokenKind` (rename a variant,
+/// add a keyword, tweak a payload) alters this encoding and therefore
+/// invalidates every cached `<stable_id>.sources.json` sidecar and the
+/// `generator_source_hash` field of every committed `*.kiln.json`. Bump
+/// the magic in `wado-cli/src/kiln_provider.rs::combined_sources_hash`
+/// (and `SIDECAR_VERSION`) in lockstep, and expect a single noisy diff
+/// against committed kiln json after the bump lands.
+pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
+    use TokenKind::{
+        AmpEq, Ampersand, And, Arrow, As, Assert, Async, Break, Caret, CaretEq, CharLit, Colon,
+        ColonColon, Comma, Const, Continue, Dot, DotDot, DotDotDot, DotDotEq, DotDotLt, Effect,
+        Else, Enum, Eof, Eq, EqEq, Export, False, FatArrow, Flags, Fn, For, From, Global, Gt, GtEq,
+        GtGt, Hash, Ident, If, Impl, Import, In, Interface, LBrace, LBracket, LParen, Let, Loop,
+        Lt, LtEq, LtLt, Match, Matches, Minus, MinusEq, Move, Mut, Not, NotEq, Null, NumberLit, Of,
+        Or, Percent, PercentEq, Pipe, PipeEq, Plus, PlusEq, Pub, Question, RBrace, RBracket,
+        RParen, Reactive, Resource, Return, Semicolon, ShlEq, ShrEq, Slash, SlashEq, Star, StarEq,
+        Stores, StringLit, Struct, TemplateStringLit, Tilde, Trait, True, Type, Unique, Use,
+        Variant, While, With, World,
+    };
+
+    fn write_str(out: &mut Vec<u8>, tag: u8, name: &str) {
+        out.push(tag);
+        out.extend_from_slice(name.as_bytes());
+        out.push(0);
+    }
+
+    fn write_payload(out: &mut Vec<u8>, tag: u8, name: &str, payload: &[u8]) {
+        out.push(tag);
+        out.extend_from_slice(name.as_bytes());
+        out.push(0);
+        out.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+        out.extend_from_slice(payload);
+    }
+
+    // `b'V'` = unit variant; `b'P'` = variant with string payload;
+    // `b'T'` = template-string container.
+    match kind {
+        // Keywords
+        Use => write_str(out, b'V', "Use"),
+        From => write_str(out, b'V', "From"),
+        As => write_str(out, b'V', "As"),
+        Fn => write_str(out, b'V', "Fn"),
+        With => write_str(out, b'V', "With"),
+        Let => write_str(out, b'V', "Let"),
+        Mut => write_str(out, b'V', "Mut"),
+        Return => write_str(out, b'V', "Return"),
+        If => write_str(out, b'V', "If"),
+        Else => write_str(out, b'V', "Else"),
+        Match => write_str(out, b'V', "Match"),
+        For => write_str(out, b'V', "For"),
+        While => write_str(out, b'V', "While"),
+        Loop => write_str(out, b'V', "Loop"),
+        Break => write_str(out, b'V', "Break"),
+        Continue => write_str(out, b'V', "Continue"),
+        In => write_str(out, b'V', "In"),
+        Of => write_str(out, b'V', "Of"),
+        Pub => write_str(out, b'V', "Pub"),
+        Effect => write_str(out, b'V', "Effect"),
+        Interface => write_str(out, b'V', "Interface"),
+        Reactive => write_str(out, b'V', "Reactive"),
+        Move => write_str(out, b'V', "Move"),
+        Unique => write_str(out, b'V', "Unique"),
+        Struct => write_str(out, b'V', "Struct"),
+        Enum => write_str(out, b'V', "Enum"),
+        Variant => write_str(out, b'V', "Variant"),
+        Flags => write_str(out, b'V', "Flags"),
+        Type => write_str(out, b'V', "Type"),
+        Impl => write_str(out, b'V', "Impl"),
+        Trait => write_str(out, b'V', "Trait"),
+        Resource => write_str(out, b'V', "Resource"),
+        World => write_str(out, b'V', "World"),
+        Async => write_str(out, b'V', "Async"),
+        Import => write_str(out, b'V', "Import"),
+        Export => write_str(out, b'V', "Export"),
+        Assert => write_str(out, b'V', "Assert"),
+        Global => write_str(out, b'V', "Global"),
+        Const => write_str(out, b'V', "Const"),
+        Matches => write_str(out, b'V', "Matches"),
+        Stores => write_str(out, b'V', "Stores"),
+
+        // Literals with payload
+        Ident(s) => write_payload(out, b'P', "Ident", s.as_bytes()),
+        StringLit(s) => write_payload(out, b'P', "StringLit", s.as_bytes()),
+        CharLit(s) => write_payload(out, b'P', "CharLit", s.as_bytes()),
+        NumberLit(s) => write_payload(out, b'P', "NumberLit", s.as_bytes()),
+        TemplateStringLit(parts) => {
+            out.push(b'T');
+            out.extend_from_slice(&(parts.len() as u32).to_be_bytes());
+            for p in parts {
+                match p {
+                    TemplateTokenPart::Literal(s) => {
+                        write_payload(out, b'P', "Literal", s.as_bytes());
+                    }
+                    TemplateTokenPart::Interpolation(s) => {
+                        write_payload(out, b'P', "Interpolation", s.as_bytes());
+                    }
+                }
+            }
+        }
+        True => write_str(out, b'V', "True"),
+        False => write_str(out, b'V', "False"),
+        Null => write_str(out, b'V', "Null"),
+
+        // Punctuation
+        LParen => write_str(out, b'V', "LParen"),
+        RParen => write_str(out, b'V', "RParen"),
+        LBrace => write_str(out, b'V', "LBrace"),
+        RBrace => write_str(out, b'V', "RBrace"),
+        LBracket => write_str(out, b'V', "LBracket"),
+        RBracket => write_str(out, b'V', "RBracket"),
+        Comma => write_str(out, b'V', "Comma"),
+        Colon => write_str(out, b'V', "Colon"),
+        Semicolon => write_str(out, b'V', "Semicolon"),
+        ColonColon => write_str(out, b'V', "ColonColon"),
+        Dot => write_str(out, b'V', "Dot"),
+        DotDot => write_str(out, b'V', "DotDot"),
+        DotDotLt => write_str(out, b'V', "DotDotLt"),
+        DotDotEq => write_str(out, b'V', "DotDotEq"),
+        DotDotDot => write_str(out, b'V', "DotDotDot"),
+        Arrow => write_str(out, b'V', "Arrow"),
+        FatArrow => write_str(out, b'V', "FatArrow"),
+        Pipe => write_str(out, b'V', "Pipe"),
+        Ampersand => write_str(out, b'V', "Ampersand"),
+        Hash => write_str(out, b'V', "Hash"),
+
+        // Operators
+        Eq => write_str(out, b'V', "Eq"),
+        EqEq => write_str(out, b'V', "EqEq"),
+        NotEq => write_str(out, b'V', "NotEq"),
+        Lt => write_str(out, b'V', "Lt"),
+        LtEq => write_str(out, b'V', "LtEq"),
+        Gt => write_str(out, b'V', "Gt"),
+        GtEq => write_str(out, b'V', "GtEq"),
+        LtLt => write_str(out, b'V', "LtLt"),
+        GtGt => write_str(out, b'V', "GtGt"),
+        Plus => write_str(out, b'V', "Plus"),
+        Minus => write_str(out, b'V', "Minus"),
+        Star => write_str(out, b'V', "Star"),
+        Slash => write_str(out, b'V', "Slash"),
+        Percent => write_str(out, b'V', "Percent"),
+        Not => write_str(out, b'V', "Not"),
+        And => write_str(out, b'V', "And"),
+        Or => write_str(out, b'V', "Or"),
+        Caret => write_str(out, b'V', "Caret"),
+        Tilde => write_str(out, b'V', "Tilde"),
+        PlusEq => write_str(out, b'V', "PlusEq"),
+        MinusEq => write_str(out, b'V', "MinusEq"),
+        StarEq => write_str(out, b'V', "StarEq"),
+        SlashEq => write_str(out, b'V', "SlashEq"),
+        PercentEq => write_str(out, b'V', "PercentEq"),
+        AmpEq => write_str(out, b'V', "AmpEq"),
+        PipeEq => write_str(out, b'V', "PipeEq"),
+        CaretEq => write_str(out, b'V', "CaretEq"),
+        ShlEq => write_str(out, b'V', "ShlEq"),
+        ShrEq => write_str(out, b'V', "ShrEq"),
+        Question => write_str(out, b'V', "Question"),
+
+        // Special
+        Eof => write_str(out, b'V', "Eof"),
+    }
+}
+
+#[cfg(test)]
+mod canonical_token_bytes_tests {
+    use super::{TemplateTokenPart, TokenKind, canonical_token_bytes};
+
+    fn enc(kind: &TokenKind) -> Vec<u8> {
+        let mut out = Vec::new();
+        canonical_token_bytes(&mut out, kind);
+        out
+    }
+
+    #[test]
+    fn distinct_unit_variants_distinct_encodings() {
+        assert_ne!(enc(&TokenKind::Use), enc(&TokenKind::From));
+        assert_ne!(enc(&TokenKind::LParen), enc(&TokenKind::RParen));
+        assert_ne!(enc(&TokenKind::Eq), enc(&TokenKind::EqEq));
+    }
+
+    #[test]
+    fn payload_changes_change_encoding() {
+        assert_ne!(
+            enc(&TokenKind::Ident("foo".into())),
+            enc(&TokenKind::Ident("bar".into()))
+        );
+        assert_ne!(
+            enc(&TokenKind::StringLit("x".into())),
+            enc(&TokenKind::Ident("x".into())),
+        );
+    }
+
+    #[test]
+    fn template_string_part_kinds_distinguished() {
+        let lit = TokenKind::TemplateStringLit(vec![TemplateTokenPart::Literal("hi".into())]);
+        let interp =
+            TokenKind::TemplateStringLit(vec![TemplateTokenPart::Interpolation("hi".into())]);
+        assert_ne!(enc(&lit), enc(&interp));
+    }
+}

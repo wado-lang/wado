@@ -414,7 +414,7 @@ resource File {
 
 fn write_log(message: String) with FileSystem {
     let file = File::open("log.txt")?;
-    file.write(message.as_bytes());
+    file.write(message.bytes().collect());
     // file.[destructor]() called here - file is closed
 }
 ```
@@ -492,7 +492,7 @@ fn test() with Stdout {
 fn safe_write(path: String, data: String) -> Result<(), Error> with FileSystem {
     let file = File::open(path)?;  // Early return on error
 
-    file.write(data.as_bytes())?;  // file closed on error
+    file.write(data.bytes().collect())?;  // file closed on error
 
     return Ok(());
     // file closed on success too

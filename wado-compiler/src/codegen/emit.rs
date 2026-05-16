@@ -911,18 +911,74 @@ impl<'a> WirEmitter<'a> {
                 self.collect_declared_locals_instr(len, locals);
             }
             WirInstr::ArrayCopy {
+                dest_type_id,
+                src_type_id,
                 dest,
                 dest_offset,
                 src,
                 src_offset,
                 len,
-                ..
             } => {
                 self.collect_declared_locals_instr(dest, locals);
                 self.collect_declared_locals_instr(dest_offset, locals);
                 self.collect_declared_locals_instr(src, locals);
                 self.collect_declared_locals_instr(src_offset, locals);
                 self.collect_declared_locals_instr(len, locals);
+                // Pre-declare scratch locals for the inlined copy loop.
+                // We lower `array.copy` to a Wasm loop because wasmtime's
+                // `array.copy` implementation has a known performance bug
+                // for short copies. Naming is keyed on the (dst, src)
+                // type-id pair so multiple ArrayCopy sites within the same
+                // function that share both types reuse the same slots.
+                let dst_wasm_idx = self.resolve_type_index(dest_type_id.index());
+                let src_wasm_idx = self.resolve_type_index(src_type_id.index());
+                // Match `ArrayClone`'s convention: declare scratch ref locals
+                // as non-null. Init-tracking validates them because we always
+                // `local.set` before `local.get` within the emitted loop.
+                let dst_ref = RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(dst_wasm_idx),
+                };
+                let src_ref = RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(src_wasm_idx),
+                };
+                let dst_name = format!(
+                    "__array_copy_dst_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let src_name = format!(
+                    "__array_copy_src_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let dst_off_name = format!(
+                    "__array_copy_dst_off_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let src_off_name = format!(
+                    "__array_copy_src_off_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let len_name = format!(
+                    "__array_copy_len_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let i_name = format!(
+                    "__array_copy_i_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                locals.push((dst_name, ValType::Ref(dst_ref)));
+                locals.push((src_name, ValType::Ref(src_ref)));
+                locals.push((dst_off_name, ValType::I32));
+                locals.push((src_off_name, ValType::I32));
+                locals.push((len_name, ValType::I32));
+                locals.push((i_name, ValType::I32));
             }
             WirInstr::ArrayClone {
                 type_id,
@@ -2119,17 +2175,161 @@ impl<'a> WirEmitter<'a> {
                 src_offset,
                 len,
             } => {
+                // Lower `array.copy` to an inline Wasm loop. wasmtime's
+                // `array.copy` runtime path has a known performance bug
+                // that makes it much slower than an open-coded loop for
+                // short copies (≲ a few hundred elements). Open-coding
+                // also lets Cranelift inline the bounds checks and the
+                // per-element get/set.
+                let dst_wasm_idx = self.resolve_type_index(dest_type_id.index());
+                let src_wasm_idx = self.resolve_type_index(src_type_id.index());
+                let dst_name = format!(
+                    "__array_copy_dst_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let src_name = format!(
+                    "__array_copy_src_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let dst_off_name = format!(
+                    "__array_copy_dst_off_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let src_off_name = format!(
+                    "__array_copy_src_off_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let len_name = format!(
+                    "__array_copy_len_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let i_name = format!(
+                    "__array_copy_i_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let dst_local = self.resolve_local(&dst_name);
+                let src_local = self.resolve_local(&src_name);
+                let dst_off_local = self.resolve_local(&dst_off_name);
+                let src_off_local = self.resolve_local(&src_off_name);
+                let len_local = self.resolve_local(&len_name);
+                let i_local = self.resolve_local(&i_name);
+
+                // Stash the five argument expressions into locals. The dst/src
+                // ref slots are declared non-null (init-tracking), so coerce
+                // the producing expression to non-null before storing — the
+                // upstream `array.copy` accepts nullable refs and the WIR
+                // doesn't always narrow them at the call site.
                 self.emit_instr(f, dest);
+                f.instruction(&Instruction::RefAsNonNull);
+                f.instruction(&Instruction::LocalSet(dst_local));
                 self.emit_instr(f, dest_offset);
+                f.instruction(&Instruction::LocalSet(dst_off_local));
                 self.emit_instr(f, src);
+                f.instruction(&Instruction::RefAsNonNull);
+                f.instruction(&Instruction::LocalSet(src_local));
                 self.emit_instr(f, src_offset);
+                f.instruction(&Instruction::LocalSet(src_off_local));
                 self.emit_instr(f, len);
-                let dst_idx = self.resolve_type_index(dest_type_id.index());
-                let src_idx = self.resolve_type_index(src_type_id.index());
-                f.instruction(&Instruction::ArrayCopy {
-                    array_type_index_dst: dst_idx,
-                    array_type_index_src: src_idx,
-                });
+                f.instruction(&Instruction::LocalSet(len_local));
+
+                // Match `array.copy` semantics for overlapping copies: when the
+                // destination offset is greater than the source offset, copy
+                // from high index to low so we don't overwrite still-unread
+                // source bytes. (Same-array shifts in fpfmt rely on this.)
+                f.instruction(&Instruction::LocalGet(dst_off_local));
+                f.instruction(&Instruction::LocalGet(src_off_local));
+                f.instruction(&Instruction::I32GtS);
+                f.instruction(&Instruction::If(BlockType::Empty));
+
+                // Backward branch: i = len; while (i > 0) { i -= 1; dst[..+i] = src[..+i]; }
+                f.instruction(&Instruction::LocalGet(len_local));
+                f.instruction(&Instruction::LocalSet(i_local));
+                f.instruction(&Instruction::Block(BlockType::Empty));
+                f.instruction(&Instruction::Loop(BlockType::Empty));
+                f.instruction(&Instruction::LocalGet(i_local));
+                f.instruction(&Instruction::I32Const(0));
+                f.instruction(&Instruction::I32LeS);
+                f.instruction(&Instruction::BrIf(1));
+                // i -= 1
+                f.instruction(&Instruction::LocalGet(i_local));
+                f.instruction(&Instruction::I32Const(1));
+                f.instruction(&Instruction::I32Sub);
+                f.instruction(&Instruction::LocalSet(i_local));
+                // dst, dst_off + i
+                f.instruction(&Instruction::LocalGet(dst_local));
+                f.instruction(&Instruction::LocalGet(dst_off_local));
+                f.instruction(&Instruction::LocalGet(i_local));
+                f.instruction(&Instruction::I32Add);
+                // src.get at src_off + i
+                f.instruction(&Instruction::LocalGet(src_local));
+                f.instruction(&Instruction::LocalGet(src_off_local));
+                f.instruction(&Instruction::LocalGet(i_local));
+                f.instruction(&Instruction::I32Add);
+                match self.is_array_packed(src_type_id.index()) {
+                    Some(true) => {
+                        f.instruction(&Instruction::ArrayGetS(src_wasm_idx));
+                    }
+                    Some(false) => {
+                        f.instruction(&Instruction::ArrayGetU(src_wasm_idx));
+                    }
+                    None => {
+                        f.instruction(&Instruction::ArrayGet(src_wasm_idx));
+                    }
+                }
+                f.instruction(&Instruction::ArraySet(dst_wasm_idx));
+                f.instruction(&Instruction::Br(0));
+                f.instruction(&Instruction::End);
+                f.instruction(&Instruction::End);
+
+                f.instruction(&Instruction::Else);
+
+                // Forward branch: i = 0; while (i < len) { dst[..+i] = src[..+i]; i += 1; }
+                f.instruction(&Instruction::I32Const(0));
+                f.instruction(&Instruction::LocalSet(i_local));
+                f.instruction(&Instruction::Block(BlockType::Empty));
+                f.instruction(&Instruction::Loop(BlockType::Empty));
+                f.instruction(&Instruction::LocalGet(i_local));
+                f.instruction(&Instruction::LocalGet(len_local));
+                f.instruction(&Instruction::I32GeS);
+                f.instruction(&Instruction::BrIf(1));
+                // dst, dst_off + i
+                f.instruction(&Instruction::LocalGet(dst_local));
+                f.instruction(&Instruction::LocalGet(dst_off_local));
+                f.instruction(&Instruction::LocalGet(i_local));
+                f.instruction(&Instruction::I32Add);
+                // src.get at src_off + i
+                f.instruction(&Instruction::LocalGet(src_local));
+                f.instruction(&Instruction::LocalGet(src_off_local));
+                f.instruction(&Instruction::LocalGet(i_local));
+                f.instruction(&Instruction::I32Add);
+                match self.is_array_packed(src_type_id.index()) {
+                    Some(true) => {
+                        f.instruction(&Instruction::ArrayGetS(src_wasm_idx));
+                    }
+                    Some(false) => {
+                        f.instruction(&Instruction::ArrayGetU(src_wasm_idx));
+                    }
+                    None => {
+                        f.instruction(&Instruction::ArrayGet(src_wasm_idx));
+                    }
+                }
+                f.instruction(&Instruction::ArraySet(dst_wasm_idx));
+                // i += 1
+                f.instruction(&Instruction::LocalGet(i_local));
+                f.instruction(&Instruction::I32Const(1));
+                f.instruction(&Instruction::I32Add);
+                f.instruction(&Instruction::LocalSet(i_local));
+                f.instruction(&Instruction::Br(0));
+                f.instruction(&Instruction::End);
+                f.instruction(&Instruction::End);
+
+                f.instruction(&Instruction::End);
             }
             WirInstr::ArrayFill {
                 type_id,

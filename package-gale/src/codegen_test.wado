@@ -45,7 +45,7 @@ test "generate header" {
     // to `{name}.g4`.
     let header = `#![generated(by = "gale", sources = ["Test.g4"])]`;
     for let mut i = 0; i < header.len(); i += 1 {
-        assert output.get_byte(i) == header.get_byte(i);
+        assert output.get_byte_unchecked(i) == header.get_byte_unchecked(i);
     }
 }
 
@@ -65,7 +65,7 @@ test "generate header with multiple source files" {
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     let header = `#![generated(by = "gale", sources = ["HtmlLexer.g4", "HtmlParser.g4"])]`;
     for let mut i = 0; i < header.len(); i += 1 {
-        assert output.get_byte(i) == header.get_byte(i);
+        assert output.get_byte_unchecked(i) == header.get_byte_unchecked(i);
     }
 }
 
@@ -818,7 +818,7 @@ fn find_substr_from(haystack: &String, needle: &String, from: i32) -> i32 {
     for let mut i = from; i <= limit; i += 1 {
         let mut ok = true;
         for let mut j = 0; j < n_len; j += 1 {
-            if haystack.get_byte(i + j) != needle.get_byte(j) {
+            if haystack.get_byte_unchecked(i + j) != needle.get_byte_unchecked(j) {
                 ok = false;
                 break;
             }
@@ -1112,7 +1112,7 @@ fn str_contains(haystack: &String, needle: &String) -> bool {
     for let mut i = 0; i <= h_len - n_len; i += 1 {
         let mut found = true;
         for let mut j = 0; j < n_len; j += 1 {
-            if haystack.get_byte(i + j) != needle.get_byte(j) {
+            if haystack.get_byte_unchecked(i + j) != needle.get_byte_unchecked(j) {
                 found = false;
                 break;
             }
