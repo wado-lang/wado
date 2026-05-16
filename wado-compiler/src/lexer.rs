@@ -688,7 +688,6 @@ impl<'a> Lexer<'a> {
             "effect" => TokenKind::Effect,
             "interface" => TokenKind::Interface,
             "reactive" => TokenKind::Reactive,
-            "move" => TokenKind::Move,
             "unique" => TokenKind::Unique,
             "struct" => TokenKind::Struct,
             "enum" => TokenKind::Enum,
