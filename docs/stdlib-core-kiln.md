@@ -69,7 +69,7 @@ the canonical-JSON `options` payload into its typed `Options` struct.
 
 The long-term plan is for the compiler to synthesize the decode step
 so authors write `fn generate(req: Request<Options>)` directly; the
-`#[comp_feature("kiln_request")]` attribute is the lookup anchor for
+`#[compiler_item("kiln_request")]` attribute is the lookup anchor for
 that future adapter. See the M6.5-stage-2 notes in the WEP.
 
 #### `primary: InputFile`

@@ -4,10 +4,9 @@
 //! - **Large array literal splitting**: `array.new_fixed` (>= threshold) → `array.new_default` + sets.
 //! - **Array push collapse**: inlined `Array::push` sequences → `ArrayNewFixed`.
 
+use crate::compiler_item::CompilerItem;
 use crate::hashmap::IndexSet;
-use crate::wir::{
-    COMP_FEATURE_ARRAY_PUSH, WirData, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId,
-};
+use crate::wir::{WirData, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
 use crate::wir_visitor::WirMutVisitor;
 
 /// Minimum element count to trigger `array.new_data` promotion. Arrays with
@@ -273,12 +272,12 @@ fn rewrite_large_array_new_fixed(instr: &mut WirInstr, counter: &mut u32) {
 /// (replacing `ArrayNewDefault` and removing the push calls), which is then
 /// eligible for `promote_constant_arrays_to_data` and `split_large_array_literals`.
 pub(super) fn collapse_array_push_sequences(module: &mut WirPackage) {
-    // Build set of function indices that have COMP_FEATURE_ARRAY_PUSH.
+    // Build set of function indices that implement `Array::push`.
     let push_func_indices: IndexSet<u32> = module
         .functions
         .iter()
         .enumerate()
-        .filter(|(_, f)| f.comp_features & COMP_FEATURE_ARRAY_PUSH != 0)
+        .filter(|(_, f)| f.compiler_item == Some(CompilerItem::ArrayPush))
         .map(|(i, _)| crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap())
         .collect();
 

@@ -184,22 +184,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     type_param_type_ids: Vec::new(), // filled in second pass
                                 },
                             );
-                        let comp_features = super::item::extract_comp_features(&struct_decl.attrs);
-                        if comp_features & crate::wir::COMP_FEATURE_BOX != 0 {
-                            type_table.borrow_mut().box_module_source = Some(module_source.clone());
-                        }
-                        if comp_features & crate::wir::COMP_FEATURE_RANGE_EXCLUSIVE != 0 {
-                            type_table.borrow_mut().range_exclusive_module_source =
-                                Some(module_source.clone());
-                        }
-                        if comp_features & crate::wir::COMP_FEATURE_RANGE_INCLUSIVE != 0 {
-                            type_table.borrow_mut().range_inclusive_module_source =
-                                Some(module_source.clone());
-                        }
-                        if comp_features & crate::wir::COMP_FEATURE_KILN_REQUEST != 0 {
-                            type_table.borrow_mut().kiln_request_module_source =
-                                Some(module_source.clone());
-                        }
+                        super::item::register_struct_compiler_item(
+                            &type_table,
+                            &struct_decl.attrs,
+                            &struct_decl.name,
+                            module_source,
+                        );
                     }
                     Item::Variant(variant_decl) => {
                         // Insert with empty cases first - will be populated in second sub-pass
@@ -221,13 +211,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     type_param_type_ids: Vec::new(),
                                 },
                             );
-                        let comp_features = super::item::extract_comp_features(&variant_decl.attrs);
-                        if comp_features != 0 {
-                            type_table.borrow_mut().register_comp_feature_variant(
-                                comp_features,
-                                module_source.clone(),
-                            );
-                        }
+                        super::item::register_variant_compiler_item(
+                            &type_table,
+                            &variant_decl.attrs,
+                            &variant_decl.name,
+                            module_source,
+                        );
                     }
                     Item::Enum(enum_decl) => {
                         // Insert with empty cases first - will be populated in second sub-pass
@@ -261,20 +250,19 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             );
                     }
                     Item::Trait(trait_decl) => {
-                        let comp_features = super::item::extract_comp_features(&trait_decl.attrs);
-                        if comp_features != 0 {
-                            type_table
-                                .borrow_mut()
-                                .register_comp_feature_trait(comp_features, module_source.clone());
-                        }
+                        super::item::register_trait_compiler_item(
+                            &type_table,
+                            &trait_decl.attrs,
+                            &trait_decl.name,
+                            module_source,
+                        );
                     }
                     Item::TupleTypeDecl(decl) => {
-                        let comp_features = super::item::extract_comp_features(&decl.attrs);
-                        if comp_features & crate::wir::COMP_FEATURE_TUPLE != 0 {
-                            type_table
-                                .borrow_mut()
-                                .register_tuple_module_source(module_source.clone());
-                        }
+                        super::item::register_tuple_compiler_item(
+                            &type_table,
+                            &decl.attrs,
+                            module_source,
+                        );
                     }
                     _ => {}
                 }

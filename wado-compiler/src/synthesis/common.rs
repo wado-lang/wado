@@ -448,7 +448,7 @@ pub fn make_synthetic_method(
         is_cm_export: false,
         is_ambient: false,
         inline_hint: InlineHint::Auto,
-        comp_features: 0,
+        compiler_item: None,
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,

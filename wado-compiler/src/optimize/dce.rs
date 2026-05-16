@@ -69,7 +69,7 @@ pub fn analyze_project(project: &mut NirPackage) -> IndexSet<FunctionId> {
     // during the optimization loop. Functions those passes call must
     // survive the early DCE that runs before the loop, otherwise the
     // synthesis target is gone and the rewrite cannot fire. The virtual
-    // edges are gated by comp_feature flags so each rule names its
+    // edges are gated by compiler-item markers so each rule names its
     // canonical pair (`string_push_str` → `string_push_char`, etc.).
     extend_reachable_for_optimizer_passes(project, &call_graph, &mut reachable);
 
@@ -93,17 +93,20 @@ fn extend_reachable_for_optimizer_passes(
     call_graph: &CallGraph,
     reachable: &mut IndexSet<FunctionId>,
 ) {
-    use crate::wir::{COMP_FEATURE_STRING_PUSH_CHAR, COMP_FEATURE_STRING_PUSH_STR};
+    use crate::compiler_item::CompilerItem;
 
     let mut push_str_id: Option<FunctionId> = None;
     let mut push_char_id: Option<FunctionId> = None;
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if func.comp_features & COMP_FEATURE_STRING_PUSH_STR != 0 {
-            push_str_id = Some(function_id_for(&func));
-        }
-        if func.comp_features & COMP_FEATURE_STRING_PUSH_CHAR != 0 {
-            push_char_id = Some(function_id_for(&func));
+        match func.compiler_item {
+            Some(CompilerItem::StringPushStr) => {
+                push_str_id = Some(function_id_for(&func));
+            }
+            Some(CompilerItem::StringPushChar) => {
+                push_char_id = Some(function_id_for(&func));
+            }
+            _ => {}
         }
     }
     if let (Some(str_id), Some(char_id)) = (push_str_id, push_char_id)

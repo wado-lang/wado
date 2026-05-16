@@ -3472,8 +3472,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let ms = self
                     .type_table
                     .borrow()
-                    .range_exclusive_module_source
-                    .clone()
+                    .compiler_items()
+                    .struct_module(crate::compiler_item::CompilerItem::RangeExclusive)
+                    .cloned()
                     .unwrap_or_else(ModuleSource::range);
                 let fields = vec![
                     TirStructField {
@@ -3493,8 +3494,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let ms = self
                     .type_table
                     .borrow()
-                    .range_inclusive_module_source
-                    .clone()
+                    .compiler_items()
+                    .struct_module(crate::compiler_item::CompilerItem::RangeInclusive)
+                    .cloned()
                     .unwrap_or_else(ModuleSource::range);
                 let fields = vec![
                     TirStructField {

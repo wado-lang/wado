@@ -769,8 +769,10 @@ pub struct NirFunction {
     /// Inline hint from `#[inline]`, `#[inline(always)]`, or `#[inline(never)]` attributes.
     pub inline_hint: InlineHint,
 
-    /// Compiler feature bitflags from `#[comp_feature("...")]` attributes.
-    pub comp_features: u32,
+    /// The compiler-recognized stdlib role this function fills, if any.
+    /// Set from `#[compiler_item("...")]` on the source declaration; see
+    /// [`crate::compiler_item::CompilerItem`].
+    pub compiler_item: Option<crate::compiler_item::CompilerItem>,
 
     /// Custom wasm export name from `#[export_name("...")]` attribute.
     pub export_name: Option<String>,
@@ -1081,8 +1083,6 @@ pub struct NirVariantDecl {
     pub type_params: Vec<NirTypeParam>,
     /// Cases of the variant (e.g., Some, None for Option)
     pub cases: Vec<NirVariantCase>,
-    /// Compiler feature bitflags from `#[comp_feature("...")]` attributes.
-    pub comp_features: u32,
     pub span: Span,
 }
 

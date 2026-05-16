@@ -397,7 +397,7 @@ fn register_call_wrapper(
         generic_origin: None,
         effects: Vec::new(),
         stores: Vec::new(),
-        comp_features: 0,
+        compiler_item: None,
         export_name: None,
     };
 
@@ -557,7 +557,7 @@ fn register_inspect_wrapper(
         generic_origin: None,
         effects: Vec::new(),
         stores: Vec::new(),
-        comp_features: 0,
+        compiler_item: None,
         export_name: None,
     };
 

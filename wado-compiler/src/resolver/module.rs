@@ -209,13 +209,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         },
                     );
 
-                    let comp_features = super::item::extract_comp_features(&variant_decl.attrs);
-                    if comp_features != 0 {
-                        scope
-                            .type_table
-                            .borrow_mut()
-                            .register_comp_feature_variant(comp_features, module_source);
-                    }
+                    super::item::register_variant_compiler_item(
+                        &scope.type_table,
+                        &variant_decl.attrs,
+                        &variant_decl.name,
+                        &module_source,
+                    );
 
                     drop(scope);
                 }
@@ -270,13 +269,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     );
                 }
                 Item::Trait(trait_decl) => {
-                    let comp_features = super::item::extract_comp_features(&trait_decl.attrs);
-                    if comp_features != 0 {
-                        self.type_table.borrow_mut().register_comp_feature_trait(
-                            comp_features,
-                            self.current_module_source.clone(),
-                        );
-                    }
+                    super::item::register_trait_compiler_item(
+                        &self.type_table,
+                        &trait_decl.attrs,
+                        &trait_decl.name,
+                        &self.current_module_source,
+                    );
                 }
                 _ => {}
             }
@@ -414,6 +412,33 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .trait_type
                         .as_ref()
                         .map(|t| scope.get_type_name(t));
+
+                    // Register methods that carry `#[compiler_item("...")]`
+                    // against the impl's owning type. This is the only place
+                    // where the method declaration AND its owner type are
+                    // simultaneously in scope.
+                    {
+                        use crate::compiler_item::{CompilerItemKind, Resolved};
+                        for method in &impl_block.methods {
+                            let Some(item) = super::item::extract_compiler_item(&method.attrs)
+                            else {
+                                continue;
+                            };
+                            if item.expected_kind() != CompilerItemKind::Method {
+                                continue;
+                            }
+                            let resolved = Resolved::Method {
+                                module_source: scope.current_module_source.clone(),
+                                owner_type: scope.get_type_name(&impl_block.ty),
+                                name: method.name.clone(),
+                            };
+                            let _ = scope
+                                .type_table
+                                .borrow_mut()
+                                .compiler_items_mut()
+                                .register(item, resolved);
+                        }
+                    }
 
                     for method in &impl_block.methods {
                         // Set up method-level type parameters so that `V::Output`-style

@@ -518,6 +518,28 @@ mod tests {
         })
     }
 
+    /// Register the `Option` and `Result` compiler items against
+    /// `ModuleSource::prelude()` so `make_option` / `make_result` work
+    /// in unit tests. Production resolution wires these up when the
+    /// stdlib resolver visits `core:prelude`.
+    fn register_option_result_for_tests(tt: &mut TypeTable) {
+        use crate::compiler_item::{CompilerItem, Resolved};
+        let _ = tt.compiler_items_mut().register(
+            CompilerItem::Option,
+            Resolved::Variant {
+                module_source: ModuleSource::prelude(),
+                name: "Option".to_string(),
+            },
+        );
+        let _ = tt.compiler_items_mut().register(
+            CompilerItem::Result,
+            Resolved::Variant {
+                module_source: ModuleSource::prelude(),
+                name: "Result".to_string(),
+            },
+        );
+    }
+
     /// Test fixture: empty registry + fresh type table + empty interner.
     /// Mirrors the production `LiftContext` shape so the lift code paths
     /// run end-to-end in unit tests.
@@ -529,15 +551,12 @@ mod tests {
 
     impl LiftCtxFixture {
         fn new() -> Self {
-            // Register the Option/Result comp-features so `make_option` /
+            // Register the Option/Result compiler-items so `make_option` /
             // `make_result` succeed during unit-test lifts. Production
             // gets these registered when the stdlib resolver visits
             // `core:prelude`.
             let mut tt = TypeTable::new();
-            tt.register_comp_feature_variant(
-                crate::wir::COMP_FEATURE_OPTION | crate::wir::COMP_FEATURE_RESULT,
-                ModuleSource::prelude(),
-            );
+            register_option_result_for_tests(&mut tt);
             Self {
                 registry: WasiRegistry::new(),
                 type_table: std::cell::RefCell::new(tt),
@@ -833,10 +852,7 @@ mod tests {
         assert!(expected_size > 4, "registry size should exceed handle size");
 
         let mut tt = TypeTable::new();
-        tt.register_comp_feature_variant(
-            crate::wir::COMP_FEATURE_OPTION | crate::wir::COMP_FEATURE_RESULT,
-            ModuleSource::prelude(),
-        );
+        register_option_result_for_tests(&mut tt);
         let type_table = std::cell::RefCell::new(tt);
         let interner = std::cell::RefCell::new(ModuleSourceInterner::new());
         let ctx = LiftContext {

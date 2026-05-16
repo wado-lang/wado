@@ -6,10 +6,9 @@
 //! the `MethodCall` node is replaced by a labeled block, after which the
 //! literal-recognising rewrite no longer fires.
 //!
-//! Identifies the two methods by their `comp_features` flags
-//! (`COMP_FEATURE_STRING_PUSH_STR` / `COMP_FEATURE_STRING_PUSH_CHAR`)
-//! so the pass does not depend on the canonical paths of `String::push_str`
-//! / `String::push`.
+//! Identifies the two methods via their [`crate::compiler_item::CompilerItem`]
+//! markers (`StringPushStr` / `StringPushChar`) so the pass does not depend
+//! on the canonical paths of `String::push_str` / `String::push`.
 //!
 //! The receiver is duplicated once per output `push` call. We only rewrite
 //! when the receiver is one of the syntactically pure forms accepted by
@@ -24,12 +23,12 @@
 //!
 //! Empty literals are also skipped: `push_str("")` is a no-op already.
 
+use crate::compiler_item::CompilerItem;
 use crate::nir::{
     CallArg, FunctionRef, NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind, NirUnaryOp,
 };
 use crate::nir_package::NirPackage;
 use crate::tir::TypeTable;
-use crate::wir::{COMP_FEATURE_STRING_PUSH_CHAR, COMP_FEATURE_STRING_PUSH_STR};
 
 /// Maximum byte length of the literal that triggers the rewrite.
 /// Matches the threshold of the former WIR pass; the per-byte
@@ -62,11 +61,14 @@ impl Ctx {
         let mut push_char: Option<FunctionRef> = None;
         for func_rc in &project.functions {
             let f = func_rc.borrow();
-            if f.comp_features & COMP_FEATURE_STRING_PUSH_STR != 0 {
-                push_str = Some(FunctionRef::from_resolved(&f, f.module_source.clone()));
-            }
-            if f.comp_features & COMP_FEATURE_STRING_PUSH_CHAR != 0 {
-                push_char = Some(FunctionRef::from_resolved(&f, f.module_source.clone()));
+            match f.compiler_item {
+                Some(CompilerItem::StringPushStr) => {
+                    push_str = Some(FunctionRef::from_resolved(&f, f.module_source.clone()));
+                }
+                Some(CompilerItem::StringPushChar) => {
+                    push_char = Some(FunctionRef::from_resolved(&f, f.module_source.clone()));
+                }
+                _ => {}
             }
         }
         Some(Self {

@@ -463,34 +463,11 @@ pub struct TypeTable {
     types: IndexMap<TypeId, ResolvedType>,
     intern_map: IndexMap<ResolvedType, TypeId>,
     next_id: u32,
-    /// Module source of the canonical `Option<T>` variant, set via `#[comp_feature("option")]`.
-    option_module_source: Option<ModuleSource>,
-    /// Module source of the canonical `Result<T, E>` variant, set via `#[comp_feature("result")]`.
-    result_module_source: Option<ModuleSource>,
-    /// Module source of the canonical `Default` trait, set via `#[comp_feature("default")]`.
-    default_trait_module_source: Option<ModuleSource>,
-    /// Module source of the canonical `From<T>` trait, set via `#[comp_feature("from")]`.
-    from_trait_module_source: Option<ModuleSource>,
-    /// Module source of the canonical `core:serde::Serialize` trait, set
-    /// via `#[comp_feature("serialize")]`.
-    pub serialize_trait_module_source: Option<ModuleSource>,
-    /// Module source of the canonical `core:serde::Deserialize` trait, set
-    /// via `#[comp_feature("deserialize")]`. The Kiln CM adapter uses this
-    /// to request `Deserialize` synthesis for the generator's `Options`
-    /// struct.
-    pub deserialize_trait_module_source: Option<ModuleSource>,
-    /// Module source of the canonical `Box<T>` struct, set via `#[comp_feature("box")]`.
-    pub box_module_source: Option<ModuleSource>,
-    /// Module source of `RangeExclusive<T>`, set via `#[comp_feature("range_exclusive")]`.
-    pub range_exclusive_module_source: Option<ModuleSource>,
-    /// Module source of `RangeInclusive<T>`, set via `#[comp_feature("range_inclusive")]`.
-    pub range_inclusive_module_source: Option<ModuleSource>,
-    /// Module source of the Kiln `Request<T>` wrapper, set via
-    /// `#[comp_feature("kiln_request")]`. Used by the CM adapter that
-    /// materializes `Request<Options>` from WIT `raw-request`.
-    pub kiln_request_module_source: Option<ModuleSource>,
-    /// Module source that owns the tuple type family, set via `#[comp_feature("tuple")]`.
-    tuple_module_source: Option<ModuleSource>,
+    /// Registry of stdlib items the compiler is allowed to reference
+    /// (Box, Option, Default, `push_str`, …). Populated during the
+    /// annotate pass from `#[compiler_item("...")]` attributes; see
+    /// [`crate::compiler_item`].
+    compiler_items: crate::compiler_item::CompilerItems,
     /// Associated type resolutions: `(concrete_type_id, assoc_name)` → `resolved_type_id`.
     /// Populated when impl blocks with associated type bindings are processed.
     assoc_type_resolutions: IndexMap<(TypeId, String), TypeId>,
@@ -576,17 +553,7 @@ impl TypeTable {
             types: IndexMap::default(),
             intern_map: IndexMap::default(),
             next_id: 0,
-            option_module_source: None,
-            result_module_source: None,
-            default_trait_module_source: None,
-            from_trait_module_source: None,
-            serialize_trait_module_source: None,
-            deserialize_trait_module_source: None,
-            box_module_source: None,
-            range_exclusive_module_source: None,
-            range_inclusive_module_source: None,
-            kiln_request_module_source: None,
-            tuple_module_source: None,
+            compiler_items: crate::compiler_item::CompilerItems::new(),
             assoc_type_resolutions: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
             redirects: IndexMap::default(),
@@ -874,74 +841,51 @@ impl TypeTable {
         self.intern(ResolvedType::BuiltinArray(element))
     }
 
-    /// Register the defining module source for a variant marked with `#[comp_feature]`.
-    ///
-    /// Called by the resolver when it encounters a variant with `COMP_FEATURE_OPTION` or
-    /// `COMP_FEATURE_RESULT` so that `make_option`/`make_result` can use the real path.
-    pub fn register_comp_feature_variant(
-        &mut self,
-        comp_features: u32,
-        module_source: ModuleSource,
-    ) {
-        if comp_features & crate::wir::COMP_FEATURE_OPTION != 0 {
-            self.option_module_source = Some(module_source.clone());
-        }
-        if comp_features & crate::wir::COMP_FEATURE_RESULT != 0 {
-            self.result_module_source = Some(module_source);
-        }
+    /// Access the registry of compiler-recognised stdlib items.
+    pub fn compiler_items(&self) -> &crate::compiler_item::CompilerItems {
+        &self.compiler_items
     }
 
-    /// Register the defining module source for a trait marked with `#[comp_feature("default")]`.
-    pub fn register_comp_feature_trait(&mut self, comp_features: u32, module_source: ModuleSource) {
-        if comp_features & crate::wir::COMP_FEATURE_DEFAULT != 0 {
-            self.default_trait_module_source = Some(module_source.clone());
-        }
-        if comp_features & crate::wir::COMP_FEATURE_FROM != 0 {
-            self.from_trait_module_source = Some(module_source.clone());
-        }
-        if comp_features & crate::wir::COMP_FEATURE_SERIALIZE != 0 {
-            self.serialize_trait_module_source = Some(module_source.clone());
-        }
-        if comp_features & crate::wir::COMP_FEATURE_DESERIALIZE != 0 {
-            self.deserialize_trait_module_source = Some(module_source);
-        }
+    /// Mutable handle on the registry. Used by the resolver during the
+    /// annotate pass to register each `#[compiler_item("...")]`
+    /// declaration.
+    pub fn compiler_items_mut(&mut self) -> &mut crate::compiler_item::CompilerItems {
+        &mut self.compiler_items
     }
 
-    /// Register the module source for the tuple type family (`pub type [..T];`).
-    pub fn register_tuple_module_source(&mut self, module_source: ModuleSource) {
-        self.tuple_module_source = Some(module_source);
-    }
-
-    /// Get the module source that owns the tuple type family.
-    pub fn tuple_module_source(&self) -> Option<&ModuleSource> {
-        self.tuple_module_source.as_ref()
-    }
-
-    /// Get the module source where the `Default` trait is defined.
+    /// Get the module source where the `Default` trait is defined, if
+    /// the stdlib has registered it. Thin wrapper around
+    /// [`CompilerItems::trait_module`].
     pub fn default_trait_module_source(&self) -> Option<&ModuleSource> {
-        self.default_trait_module_source.as_ref()
+        self.compiler_items
+            .trait_module(crate::compiler_item::CompilerItem::Default)
     }
 
-    /// Get the module source where the `From<T>` trait is defined.
-    pub fn from_trait_module_source(&self) -> Option<&ModuleSource> {
-        self.from_trait_module_source.as_ref()
-    }
-
-    /// Create an `Option<T>` type using the module source registered via `#[comp_feature("option")]`.
+    /// Create an `Option<T>` type using the module source registered
+    /// via `#[compiler_item("option")]`.
     pub fn make_option(&mut self, inner: TypeId) -> TypeId {
         let module_source = self
-            .option_module_source
-            .clone()
-            .expect("Option module source not registered; missing #[comp_feature(\"option\")] on Option variant");
+            .compiler_items
+            .variant_module(crate::compiler_item::CompilerItem::Option)
+            .cloned()
+            .expect(
+                "Option module source not registered; missing \
+                 #[compiler_item(\"option\")] on the Option variant",
+            );
         self.make_generic_instance("Option".to_string(), module_source, vec![inner])
     }
 
-    /// Create a `Result<T, E>` type using the module source registered via `#[comp_feature("result")]`.
+    /// Create a `Result<T, E>` type using the module source registered
+    /// via `#[compiler_item("result")]`.
     pub fn make_result(&mut self, ok: TypeId, err: TypeId) -> TypeId {
         let module_source = self
-            .result_module_source
-            .clone()
-            .expect("Result module source not registered; missing #[comp_feature(\"result\")] on Result variant");
+            .compiler_items
+            .variant_module(crate::compiler_item::CompilerItem::Result)
+            .cloned()
+            .expect(
+                "Result module source not registered; missing \
+                 #[compiler_item(\"result\")] on the Result variant",
+            );
         self.make_generic_instance("Result".to_string(), module_source, vec![ok, err])
     }
 
@@ -1033,8 +977,9 @@ impl TypeTable {
 
     pub fn make_tuple(&mut self, elements: Vec<TypeId>) -> TypeId {
         let module_source = self
-            .tuple_module_source
-            .clone()
+            .compiler_items
+            .tuple_module()
+            .cloned()
             .unwrap_or_else(ModuleSource::prelude);
         self.intern(ResolvedType::GenericInstance {
             name: Self::TUPLE_TYPE_NAME.to_string(),
@@ -3131,8 +3076,10 @@ pub struct TirFunction {
     /// Inline hint from `#[inline]`, `#[inline(always)]`, or `#[inline(never)]` attributes.
     pub inline_hint: InlineHint,
 
-    /// Compiler feature bitflags from `#[comp_feature("...")]` attributes.
-    pub comp_features: u32,
+    /// The compiler-recognized stdlib role this function fills, if any.
+    /// Set from `#[compiler_item("...")]` on the source declaration; see
+    /// [`crate::compiler_item::CompilerItem`].
+    pub compiler_item: Option<crate::compiler_item::CompilerItem>,
 
     /// Custom wasm export name from `#[export_name("...")]` attribute.
     pub export_name: Option<String>,
@@ -3443,8 +3390,6 @@ pub struct TirVariantDecl {
     pub type_params: Vec<TirTypeParam>,
     /// Cases of the variant (e.g., Some, None for Option)
     pub cases: Vec<TirVariantCase>,
-    /// Compiler feature bitflags from `#[comp_feature("...")]` attributes.
-    pub comp_features: u32,
     pub span: Span,
 }
 

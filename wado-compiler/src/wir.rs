@@ -160,7 +160,7 @@ impl WasmModuleInfo {
                 generic_origin: None,
                 effects: Vec::new(),
                 stores: Vec::new(),
-                comp_features: 0,
+                compiler_item: None,
                 export_name: None,
             });
 
@@ -958,41 +958,6 @@ pub enum WirAbstractHeapType {
     Extern,
 }
 
-/// Compiler feature flag: function implements `Array<T>::push`.
-pub const COMP_FEATURE_ARRAY_PUSH: u32 = 1 << 0;
-/// Compiler feature flag: function implements `String::push_str`.
-pub const COMP_FEATURE_STRING_PUSH_STR: u32 = 1 << 1;
-/// Compiler feature flag: function implements `String::push_char`.
-pub const COMP_FEATURE_STRING_PUSH_CHAR: u32 = 1 << 2;
-/// Compiler feature flag: variant is the canonical `Option<T>` type.
-pub const COMP_FEATURE_OPTION: u32 = 1 << 3;
-/// Compiler feature flag: variant is the canonical `Result<T, E>` type.
-pub const COMP_FEATURE_RESULT: u32 = 1 << 4;
-/// Compiler feature flag: trait is the canonical `Default` trait.
-pub const COMP_FEATURE_DEFAULT: u32 = 1 << 5;
-/// Compiler feature flag: trait is the canonical `From<T>` trait.
-pub const COMP_FEATURE_FROM: u32 = 1 << 6;
-/// Compiler feature flag: declares ownership of the tuple type family (`pub type [..T];`).
-pub const COMP_FEATURE_TUPLE: u32 = 1 << 7;
-/// Compiler feature flag: struct is the canonical `Box<T>` type for primitive boxing.
-pub const COMP_FEATURE_BOX: u32 = 1 << 8;
-pub const COMP_FEATURE_RANGE_EXCLUSIVE: u32 = 1 << 9;
-pub const COMP_FEATURE_RANGE_INCLUSIVE: u32 = 1 << 10;
-/// Compiler feature flag: struct is the canonical Kiln `Request<T>` wrapper.
-/// The CM adapter for `core:kiln/generator` constructs instances of this
-/// type by decoding the WIT `raw-request`'s canonical JSON `options` into a
-/// typed `Options`. See WEP 2026-04-12 §"The `kiln` world".
-pub const COMP_FEATURE_KILN_REQUEST: u32 = 1 << 11;
-/// Compiler feature flag: trait is the canonical `core:serde::Serialize`.
-/// Lets the CM adapter request `Serialize` synthesis for Wado types
-/// without hard-coding the trait's module path.
-pub const COMP_FEATURE_SERIALIZE: u32 = 1 << 12;
-/// Compiler feature flag: trait is the canonical `core:serde::Deserialize`.
-/// Lets the Kiln CM adapter request `Deserialize` synthesis for the
-/// generator's `Options` struct without hard-coding the trait's module
-/// path.
-pub const COMP_FEATURE_DESERIALIZE: u32 = 1 << 13;
-
 /// A function declaration with optional body.
 #[derive(Debug)]
 pub struct WirFunction {
@@ -1013,9 +978,10 @@ pub struct WirFunction {
     /// Parameter names declared in `stores[...]` — the function may store these references.
     /// Used by WIR optimizations for stores-aware alias analysis.
     pub stores: Vec<String>,
-    /// Compiler feature bitflags (e.g., `COMP_FEATURE_ARRAY_PUSH`).
-    /// Set via `#[comp_feature("array_push")]` attribute in Wado source.
-    pub comp_features: u32,
+    /// The compiler-recognized stdlib role this function fills, if any.
+    /// Set from `#[compiler_item("...")]` on the source declaration; see
+    /// [`crate::compiler_item::CompilerItem`].
+    pub compiler_item: Option<crate::compiler_item::CompilerItem>,
     /// Custom wasm export name from `#[export_name("...")]` attribute.
     pub export_name: Option<String>,
 }

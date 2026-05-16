@@ -402,10 +402,10 @@ fn deserialize_error_literal(
 }
 
 /// Generate a `T::default()` static call for the field's initial value.
-/// Only emits the call when the `Default` trait is registered via `#[comp_feature("default")]`.
+/// Only emits the call when the `Default` trait is registered via `#[compiler_item("default")]`.
 /// The module source for resolution comes from the type itself (where `impl Default for T` lives).
 fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
-    // Gate: only generate Default calls if the trait is registered via comp_feature.
+    // Gate: only generate Default calls if the trait is registered via compiler_item.
     if type_table.default_trait_module_source().is_none() {
         return null_expr(type_id);
     }
@@ -693,7 +693,7 @@ fn generate_struct_serialize(
         is_cm_binding: false,
         is_dispatch_wrapper: false,
         inline_hint: InlineHint::Auto,
-        comp_features: 0,
+        compiler_item: None,
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
@@ -765,6 +765,7 @@ fn generate_struct_deserialize(
         .map(|(_, _, type_id, _)| tt.type_name(*type_id))
         .collect();
 
+    let compiler_items = tt.compiler_items().clone();
     drop(tt);
 
     let lookup_func = generate_lookup_function(
@@ -774,6 +775,7 @@ fn generate_struct_deserialize(
         ref_string_type,
         option_i32,
         span,
+        &compiler_items,
     );
 
     let lookup_fn_name = format!("_{}_field_lookup", req.target_type_name.to_lowercase());
@@ -1230,7 +1232,7 @@ fn generate_struct_deserialize(
         is_cm_binding: false,
         is_dispatch_wrapper: false,
         inline_hint: InlineHint::Auto,
-        comp_features: 0,
+        compiler_item: None,
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
@@ -1242,14 +1244,25 @@ fn generate_struct_deserialize(
 }
 
 /// Build a `string.get_byte_unchecked(index_expr) as i32` expression with a computed index.
-fn key_get_byte_as_i32_expr(string_ref: TirExpr, index_expr: TirExpr, span: Span) -> TirExpr {
-    let get_byte_method =
-        LocalMethodName::new("String".to_string(), None, "get_byte_unchecked".to_string());
+///
+/// The method is looked up via [`CompilerItem::StringGetByteUnchecked`] —
+/// renaming the underlying Wado declaration cannot break this site as
+/// long as its `#[compiler_item("string_get_byte_unchecked")]` annotation
+/// stays put. See issue #1077 for the rationale.
+fn key_get_byte_as_i32_expr(
+    string_ref: TirExpr,
+    index_expr: TirExpr,
+    span: Span,
+    compiler_items: &crate::compiler_item::CompilerItems,
+) -> TirExpr {
+    let (module_source, owner, name) =
+        compiler_items.require_method(crate::compiler_item::CompilerItem::StringGetByteUnchecked);
+    let get_byte_method = LocalMethodName::new(owner.to_string(), None, name.to_string());
     let get_byte_call = TirExpr::new(
         TirExprKind::method_call(
             Box::new(string_ref),
             FunctionRef {
-                module_source: ModuleSource::string(),
+                module_source: module_source.clone(),
                 name: get_byte_method.to_mangled_name(),
                 monomorph_info: None,
                 method_info: Some(get_byte_method),
@@ -1303,6 +1316,7 @@ fn generate_lookup_function(
     ref_string_type: TypeId,
     option_i32: TypeId,
     span: Span,
+    compiler_items: &crate::compiler_item::CompilerItems,
 ) -> TirFunction {
     let fn_name = format!("_{}_field_lookup", type_name.to_lowercase());
     // Parameters: input: &String (0), start: i32 (1), end: i32 (2)
@@ -1358,6 +1372,7 @@ fn generate_lookup_function(
                     local_ref(0, "__input", ref_string_type),
                     index_expr,
                     span,
+                    compiler_items,
                 ),
                 i32_const(i32::from(byte_val)),
                 span,
@@ -1427,7 +1442,7 @@ fn generate_lookup_function(
         is_cm_binding: false,
         is_dispatch_wrapper: false,
         inline_hint: InlineHint::Auto,
-        comp_features: 0,
+        compiler_item: None,
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
@@ -1586,7 +1601,7 @@ fn generate_enum_serialize(
         is_cm_binding: false,
         is_dispatch_wrapper: false,
         inline_hint: InlineHint::Auto,
-        comp_features: 0,
+        compiler_item: None,
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
@@ -1964,7 +1979,7 @@ fn generate_enum_deserialize(
         is_cm_binding: false,
         is_dispatch_wrapper: false,
         inline_hint: InlineHint::Auto,
-        comp_features: 0,
+        compiler_item: None,
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
@@ -2251,7 +2266,7 @@ fn generate_variant_serialize(
         is_cm_binding: false,
         is_dispatch_wrapper: false,
         inline_hint: InlineHint::Auto,
-        comp_features: 0,
+        compiler_item: None,
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
@@ -2787,7 +2802,7 @@ fn generate_variant_deserialize(
         is_cm_binding: false,
         is_dispatch_wrapper: false,
         inline_hint: InlineHint::Auto,
-        comp_features: 0,
+        compiler_item: None,
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
@@ -3064,7 +3079,7 @@ fn generate_flags_serialize(
         is_cm_binding: false,
         is_dispatch_wrapper: false,
         inline_hint: InlineHint::Auto,
-        comp_features: 0,
+        compiler_item: None,
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
@@ -3412,7 +3427,7 @@ fn generate_flags_deserialize(
         is_cm_binding: false,
         is_dispatch_wrapper: false,
         inline_hint: InlineHint::Auto,
-        comp_features: 0,
+        compiler_item: None,
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
