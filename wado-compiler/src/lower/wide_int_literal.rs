@@ -18,31 +18,80 @@
 //! `u128::from_pair(lo, hi)` so the full 128 bits round-trip — same
 //! split the resolver uses for source-level literals (see
 //! `resolver::util::unpack_i128`, `resolver::call::build_from_pair_call`).
+//!
+//! The struct, module source, and method names are all resolved
+//! through the `CompilerItem` registry so a stdlib rename of `i128`,
+//! `u128`, or any of their `from_*` constructors stays transparent.
 
+use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::tir::{CallArg, FunctionRef, TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::token::Span;
 
+/// Snapshot of a wide-int constructor's registry coordinates, taken
+/// before we lock the type table for builders that mutate it.
+struct CtorRef {
+    module_source: ModuleSource,
+    type_name: String,
+    method_name: String,
+}
+
+fn ctor_ref(type_table: &TypeTable, owner: CompilerItem, ctor: CompilerItem) -> CtorRef {
+    let items = type_table.compiler_items();
+    let (owner_module, type_name) = items.require_struct(owner);
+    let (method_module, _, method_name) = items.require_method(ctor);
+    // Production stdlib places i128 / u128 and their constructors in
+    // the same module; assert that invariant so a future split is
+    // diagnosed rather than silently producing mismatched `Call.module_source`
+    // versus `method_info.struct_name` pairs.
+    debug_assert_eq!(owner_module, method_module);
+    CtorRef {
+        module_source: owner_module.clone(),
+        type_name: type_name.to_string(),
+        method_name: method_name.to_string(),
+    }
+}
+
 /// Create an i128 literal TIR expression that evaluates to `value`.
-pub(super) fn create_i128_literal(value: i128, type_id: TypeId, span: Span) -> TirExpr {
+pub(super) fn create_i128_literal(
+    value: i128,
+    type_id: TypeId,
+    type_table: &TypeTable,
+    span: Span,
+) -> TirExpr {
     if let Ok(fits) = i64::try_from(value) {
-        return build_i128_from_i64_call(fits, value, type_id, span);
+        let ctor = ctor_ref(type_table, CompilerItem::I128, CompilerItem::I128FromI64);
+        return build_i128_from_i64_call(fits, value, type_id, &ctor, span);
     }
     let (low, high) = (value as u64, (value >> 64) as i64);
-    build_i128_from_pair_call(low, high, type_id, span)
+    let ctor = ctor_ref(type_table, CompilerItem::I128, CompilerItem::I128FromPair);
+    build_i128_from_pair_call(low, high, type_id, &ctor, span)
 }
 
 /// Create a u128 literal TIR expression that evaluates to `value`.
-pub(super) fn create_u128_literal(value: u128, type_id: TypeId, span: Span) -> TirExpr {
+pub(super) fn create_u128_literal(
+    value: u128,
+    type_id: TypeId,
+    type_table: &TypeTable,
+    span: Span,
+) -> TirExpr {
     if let Ok(fits) = u64::try_from(value) {
-        return build_u128_from_u64_call(fits, value, type_id, span);
+        let ctor = ctor_ref(type_table, CompilerItem::U128, CompilerItem::U128FromU64);
+        return build_u128_from_u64_call(fits, value, type_id, &ctor, span);
     }
     let (low, high) = (value as u64, (value >> 64) as u64);
-    build_u128_from_pair_call(low, high, type_id, span)
+    let ctor = ctor_ref(type_table, CompilerItem::U128, CompilerItem::U128FromPair);
+    build_u128_from_pair_call(low, high, type_id, &ctor, span)
 }
 
-fn build_i128_from_i64_call(value: i64, original: i128, type_id: TypeId, span: Span) -> TirExpr {
+fn build_i128_from_i64_call(
+    value: i64,
+    original: i128,
+    type_id: TypeId,
+    ctor: &CtorRef,
+    span: Span,
+) -> TirExpr {
     let inner_literal = TirExpr::new(
         TirExprKind::IntLiteral {
             value: value.cast_unsigned(),
@@ -51,12 +100,14 @@ fn build_i128_from_i64_call(value: i64, original: i128, type_id: TypeId, span: S
         TypeTable::I64,
         span,
     );
-    let method_info = LocalMethodName::new("i128".to_string(), None, "from_i64".to_string());
+    let method_info =
+        LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
+    let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
-                module_source: ModuleSource::int128(),
-                name: "i128::from_i64".to_string(),
+                module_source: ctor.module_source.clone(),
+                name: mangled_name,
                 monomorph_info: None,
                 method_info: Some(method_info),
             },
@@ -68,7 +119,13 @@ fn build_i128_from_i64_call(value: i64, original: i128, type_id: TypeId, span: S
     )
 }
 
-fn build_u128_from_u64_call(value: u64, original: u128, type_id: TypeId, span: Span) -> TirExpr {
+fn build_u128_from_u64_call(
+    value: u64,
+    original: u128,
+    type_id: TypeId,
+    ctor: &CtorRef,
+    span: Span,
+) -> TirExpr {
     let inner_literal = TirExpr::new(
         TirExprKind::IntLiteral {
             value,
@@ -77,12 +134,14 @@ fn build_u128_from_u64_call(value: u64, original: u128, type_id: TypeId, span: S
         TypeTable::U64,
         span,
     );
-    let method_info = LocalMethodName::new("u128".to_string(), None, "from_u64".to_string());
+    let method_info =
+        LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
+    let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
-                module_source: ModuleSource::int128(),
-                name: "u128::from_u64".to_string(),
+                module_source: ctor.module_source.clone(),
+                name: mangled_name,
                 monomorph_info: None,
                 method_info: Some(method_info),
             },
@@ -94,7 +153,13 @@ fn build_u128_from_u64_call(value: u64, original: u128, type_id: TypeId, span: S
     )
 }
 
-fn build_i128_from_pair_call(low: u64, high: i64, type_id: TypeId, span: Span) -> TirExpr {
+fn build_i128_from_pair_call(
+    low: u64,
+    high: i64,
+    type_id: TypeId,
+    ctor: &CtorRef,
+    span: Span,
+) -> TirExpr {
     let low_literal = TirExpr::new(
         TirExprKind::IntLiteral {
             value: low,
@@ -111,11 +176,12 @@ fn build_i128_from_pair_call(low: u64, high: i64, type_id: TypeId, span: Span) -
         TypeTable::I64,
         span,
     );
-    let method_info = LocalMethodName::new("i128".to_string(), None, "from_pair".to_string());
+    let method_info =
+        LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
     TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
-                module_source: ModuleSource::int128(),
+                module_source: ctor.module_source.clone(),
                 name: method_info.to_mangled_name(),
                 monomorph_info: None,
                 method_info: Some(method_info),
@@ -131,7 +197,13 @@ fn build_i128_from_pair_call(low: u64, high: i64, type_id: TypeId, span: Span) -
     )
 }
 
-fn build_u128_from_pair_call(low: u64, high: u64, type_id: TypeId, span: Span) -> TirExpr {
+fn build_u128_from_pair_call(
+    low: u64,
+    high: u64,
+    type_id: TypeId,
+    ctor: &CtorRef,
+    span: Span,
+) -> TirExpr {
     let low_literal = TirExpr::new(
         TirExprKind::IntLiteral {
             value: low,
@@ -148,11 +220,12 @@ fn build_u128_from_pair_call(low: u64, high: u64, type_id: TypeId, span: Span) -
         TypeTable::U64,
         span,
     );
-    let method_info = LocalMethodName::new("u128".to_string(), None, "from_pair".to_string());
+    let method_info =
+        LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
     TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
-                module_source: ModuleSource::int128(),
+                module_source: ctor.module_source.clone(),
                 name: method_info.to_mangled_name(),
                 monomorph_info: None,
                 method_info: Some(method_info),

@@ -81,9 +81,9 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
             crate::tir::PrimitiveType::I128 | crate::tir::PrimitiveType::U128 => {
                 // i128/u128 need special handling - call from_i64(0) / from_u64(0)
                 if matches!(prim, crate::tir::PrimitiveType::I128) {
-                    create_i128_literal(0, type_id, span)
+                    create_i128_literal(0, type_id, type_table, span)
                 } else {
-                    create_u128_literal(0, type_id, span)
+                    create_u128_literal(0, type_id, type_table, span)
                 }
             }
             crate::tir::PrimitiveType::F32 => TirExpr::new(

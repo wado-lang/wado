@@ -105,6 +105,18 @@ pub enum CompilerItem {
     /// through this item so renames in the stdlib do not silently
     /// break code generation. See issue #1077.
     StringGetByteUnchecked,
+    /// `i128::from_i64` — sign-extending constructor used by the
+    /// wide-int literal lowering pass.
+    I128FromI64,
+    /// `i128::from_pair` — low/high pair constructor used by the
+    /// wide-int literal lowering pass.
+    I128FromPair,
+    /// `u128::from_u64` — zero-extending constructor used by the
+    /// wide-int literal lowering pass.
+    U128FromU64,
+    /// `u128::from_pair` — low/high pair constructor used by the
+    /// wide-int literal lowering pass.
+    U128FromPair,
 
     // ── Type families ─────────────────────────────────────────────────
     /// The tuple type family (`pub type [..T];`). The owning module is
@@ -136,6 +148,10 @@ impl CompilerItem {
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringGetByteUnchecked,
+        Self::I128FromI64,
+        Self::I128FromPair,
+        Self::U128FromU64,
+        Self::U128FromPair,
         Self::Tuple,
     ];
 
@@ -169,6 +185,10 @@ impl CompilerItem {
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringGetByteUnchecked => "string_get_byte_unchecked",
+            Self::I128FromI64 => "i128_from_i64",
+            Self::I128FromPair => "i128_from_pair",
+            Self::U128FromU64 => "u128_from_u64",
+            Self::U128FromPair => "u128_from_pair",
             Self::Tuple => "tuple",
         }
     }
@@ -200,7 +220,11 @@ impl CompilerItem {
             Self::ArrayPush
             | Self::StringPushStr
             | Self::StringPushChar
-            | Self::StringGetByteUnchecked => CompilerItemKind::Method,
+            | Self::StringGetByteUnchecked
+            | Self::I128FromI64
+            | Self::I128FromPair
+            | Self::U128FromU64
+            | Self::U128FromPair => CompilerItemKind::Method,
             Self::Tuple => CompilerItemKind::TupleFamily,
         }
     }

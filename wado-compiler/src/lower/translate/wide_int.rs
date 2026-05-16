@@ -60,7 +60,12 @@ pub(super) fn build_if_chain(
     for arm in arms.iter().rev() {
         match &arm.pattern {
             TirPattern::Literal(TirLiteralPattern::I128(value)) => {
-                let literal_expr = create_i128_literal(*value, scrutinee.type_id, span);
+                let literal_expr = create_i128_literal(
+                    *value,
+                    scrutinee.type_id,
+                    &type_table.borrow(),
+                    span,
+                );
                 let eq_call =
                     create_i128_eq_call(scrutinee.clone(), literal_expr, type_table, span);
                 let condition = with_guard(eq_call, arm.guard.as_ref(), span);
@@ -73,7 +78,12 @@ pub(super) fn build_if_chain(
                 ));
             }
             TirPattern::Literal(TirLiteralPattern::U128(value)) => {
-                let literal_expr = create_u128_literal(*value, scrutinee.type_id, span);
+                let literal_expr = create_u128_literal(
+                    *value,
+                    scrutinee.type_id,
+                    &type_table.borrow(),
+                    span,
+                );
                 let eq_call =
                     create_u128_eq_call(scrutinee.clone(), literal_expr, type_table, span);
                 let condition = with_guard(eq_call, arm.guard.as_ref(), span);

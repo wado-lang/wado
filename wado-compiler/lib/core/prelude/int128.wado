@@ -22,12 +22,14 @@ pub struct u128 {
 
 impl u128 {
     /// Create a u128 from a u64 value (zero-extended)
+    #[compiler_item("u128_from_u64")]
     pub fn from_u64(value: u64) -> u128 {
         return u128 { low: value, high: 0 };
     }
 
     /// Create a u128 from low and high 64-bit parts
     /// Used by the compiler for efficient large literal construction
+    #[compiler_item("u128_from_pair")]
     pub fn from_pair(low: u64, high: u64) -> u128 {
         return u128 { low, high };
     }
@@ -616,6 +618,7 @@ pub struct i128 {
 
 impl i128 {
     /// Create an i128 from an i64 value (sign-extended)
+    #[compiler_item("i128_from_i64")]
     pub fn from_i64(value: i64) -> i128 {
         // Sign extend: if value is negative, high bits are all 1s (-1)
         let high: i64 = if value < 0 { -1 } else { 0 };
@@ -624,6 +627,7 @@ impl i128 {
 
     /// Create an i128 from low and high 64-bit parts
     /// Used by the compiler for efficient large literal construction
+    #[compiler_item("i128_from_pair")]
     pub fn from_pair(low: u64, high: i64) -> i128 {
         return i128 { low, high };
     }
