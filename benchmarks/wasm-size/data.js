@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778903894158,
+  "lastUpdate": 1778905475447,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22057,6 +22057,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/553872b4748f45383bb03e8f9bdd5fa195df3a34"
         },
         "date": 1778903893765,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510314,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ca3536d31ff81683bc200c210f75e2295a8f5f6e",
+          "message": "Merge pull request #1073 from wado-lang/claude/add-funding-yml-31Uhm\n\nchore: add .github/FUNDING.yml",
+          "timestamp": "2026-05-16T13:17:39+09:00",
+          "tree_id": "d8aac6d806b7c6db766a3b8d31f156af03efe77e",
+          "url": "https://github.com/wado-lang/wado/commit/ca3536d31ff81683bc200c210f75e2295a8f5f6e"
+        },
+        "date": 1778905475063,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
