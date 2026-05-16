@@ -1175,10 +1175,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     true,
                 )
             } else if let Some(sig) = fn_bound_sig {
-                (
-                    scope.resolve_type(&ast::Type::Function(sig.clone())),
-                    false,
-                )
+                (scope.resolve_type(&ast::Type::Function(sig.clone())), false)
             } else {
                 (
                     scope
