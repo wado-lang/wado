@@ -3,7 +3,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, AstId, Condition, Expr, IfExpr, Item, Literal, MatchArm};
+use crate::ast::{self, AstId, AstVisitor, Condition, Expr, IfExpr, Item, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
@@ -1795,286 +1795,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    /// Collect variable names that are directly assigned inside an expression,
-    /// but NOT inside nested closures.
+    /// Collect outer-binding names that are mutated inside an expression.
+    /// Mutation = direct or compound assignment whose target's root
+    /// identifier is the binding (e.g. `count`, `point.x`, `arr[i]`,
+    /// `pair.p.children[i].name` all resolve to their root ident).
+    ///
+    /// Nested closures are skipped: they have their own capture context
+    /// and run their own collector.
     pub(super) fn collect_mutated_vars(expr: &ast::Expr, result: &mut IndexSet<String>) {
-        match expr {
-            ast::Expr::Assign(a) => {
-                if let ast::Expr::Ident(id) = &a.target {
-                    result.insert(id.name.clone());
-                }
-                Self::collect_mutated_vars(&a.value, result);
-            }
-            ast::Expr::CompoundAssign(ca) => {
-                if let ast::Expr::Ident(id) = &ca.target {
-                    result.insert(id.name.clone());
-                }
-                Self::collect_mutated_vars(&ca.value, result);
-            }
-            ast::Expr::Closure(_) => {
-                // Do NOT recurse into nested closures
-            }
-            ast::Expr::Block(block) => {
-                for stmt in &block.stmts {
-                    Self::collect_mutated_vars_stmt(stmt, result);
-                }
-            }
-            ast::Expr::If(if_expr) => {
-                match &if_expr.condition {
-                    ast::Condition::Expr(cond) => Self::collect_mutated_vars(cond, result),
-                    ast::Condition::LetChain { elements, .. } => {
-                        for elem in elements {
-                            match elem {
-                                ast::ConditionElement::Let { expr, .. } => {
-                                    Self::collect_mutated_vars(expr, result);
-                                }
-                                ast::ConditionElement::Expr(e) => {
-                                    Self::collect_mutated_vars(e, result);
-                                }
-                            }
-                        }
-                    }
-                }
-                for stmt in &if_expr.then_block.stmts {
-                    Self::collect_mutated_vars_stmt(stmt, result);
-                }
-                if let Some(else_block) = &if_expr.else_block {
-                    for stmt in &else_block.stmts {
-                        Self::collect_mutated_vars_stmt(stmt, result);
-                    }
-                }
-            }
-            ast::Expr::Binary(b) => {
-                Self::collect_mutated_vars(&b.left, result);
-                Self::collect_mutated_vars(&b.right, result);
-            }
-            ast::Expr::Unary(u) => {
-                Self::collect_mutated_vars(&u.expr, result);
-            }
-            ast::Expr::Call(c) => {
-                for arg in &c.args {
-                    Self::collect_mutated_vars(arg, result);
-                }
-            }
-            ast::Expr::MethodCall(mc) => {
-                Self::collect_mutated_vars(&mc.receiver, result);
-                for arg in &mc.args {
-                    Self::collect_mutated_vars(arg, result);
-                }
-            }
-            ast::Expr::StaticMethodCall(sc) => {
-                for arg in &sc.args {
-                    Self::collect_mutated_vars(arg, result);
-                }
-            }
-            ast::Expr::Match(m) => {
-                Self::collect_mutated_vars(&m.expr, result);
-                for arm in &m.arms {
-                    if let Some(guard) = &arm.guard {
-                        Self::collect_mutated_vars(guard, result);
-                    }
-                    Self::collect_mutated_vars(&arm.body, result);
-                }
-            }
-            ast::Expr::Matches(m) => {
-                Self::collect_mutated_vars(&m.expr, result);
-                if let Some(guard) = &m.guard {
-                    Self::collect_mutated_vars(guard, result);
-                }
-            }
-            ast::Expr::Index(idx) => {
-                Self::collect_mutated_vars(&idx.expr, result);
-                Self::collect_mutated_vars(&idx.index, result);
-            }
-            ast::Expr::FieldAccess(fa) => {
-                Self::collect_mutated_vars(&fa.expr, result);
-            }
-            ast::Expr::Cast(c) => {
-                Self::collect_mutated_vars(&c.expr, result);
-            }
-            ast::Expr::TupleLiteral(t) => {
-                for e in &t.elements {
-                    Self::collect_mutated_vars(e, result);
-                }
-            }
-            ast::Expr::StructLiteral(sl) => {
-                for field in &sl.fields {
-                    Self::collect_mutated_vars(&field.value, result);
-                }
-            }
-            ast::Expr::TemplateString(ts) => {
-                for part in &ts.parts {
-                    if let ast::TemplatePart::Interpolation { expr, .. } = part {
-                        Self::collect_mutated_vars(expr, result);
-                    }
-                }
-            }
-            ast::Expr::Range(r) => {
-                Self::collect_mutated_vars(&r.start, result);
-                Self::collect_mutated_vars(&r.end, result);
-            }
-            ast::Expr::LabeledBlock(lb) => {
-                for stmt in &lb.block.stmts {
-                    Self::collect_mutated_vars_stmt(stmt, result);
-                }
-            }
-            ast::Expr::WithHandler(wh) => {
-                for binding in &wh.handlers {
-                    Self::collect_mutated_vars(&binding.handler, result);
-                }
-                for stmt in &wh.body.stmts {
-                    Self::collect_mutated_vars_stmt(stmt, result);
-                }
-            }
-            ast::Expr::ComparisonChain(c) => {
-                Self::collect_mutated_vars(&c.first, result);
-                for cmp in &c.comparisons {
-                    Self::collect_mutated_vars(&cmp.right, result);
-                }
-            }
-            ast::Expr::TryOp(t) => {
-                Self::collect_mutated_vars(&t.expr, result);
-            }
-            ast::Expr::Spread(inner, _) => {
-                Self::collect_mutated_vars(inner, result);
-            }
-            ast::Expr::Resume(r) => {
-                Self::collect_mutated_vars(&r.value, result);
-            }
-            // Ident / literals carry no sub-expressions that could mutate
-            // outer captures.
-            ast::Expr::Ident(_) | ast::Expr::Literal(_) => {}
-        }
-    }
-
-    pub(super) fn collect_mutated_vars_stmt(stmt: &ast::Stmt, result: &mut IndexSet<String>) {
-        match stmt {
-            ast::Stmt::Expr(es) => Self::collect_mutated_vars(&es.expr, result),
-            ast::Stmt::Let(ls) => {
-                if let Some(ref v) = ls.value {
-                    Self::collect_mutated_vars(v, result);
-                }
-            }
-            ast::Stmt::If(is) => {
-                match &is.condition {
-                    ast::Condition::Expr(cond) => Self::collect_mutated_vars(cond, result),
-                    ast::Condition::LetChain { elements, .. } => {
-                        for elem in elements {
-                            match elem {
-                                ast::ConditionElement::Let { expr, .. } => {
-                                    Self::collect_mutated_vars(expr, result);
-                                }
-                                ast::ConditionElement::Expr(e) => {
-                                    Self::collect_mutated_vars(e, result);
-                                }
-                            }
-                        }
-                    }
-                }
-                for stmt in &is.then_block.stmts {
-                    Self::collect_mutated_vars_stmt(stmt, result);
-                }
-                if let Some(else_block) = &is.else_block {
-                    for stmt in &else_block.stmts {
-                        Self::collect_mutated_vars_stmt(stmt, result);
-                    }
-                }
-            }
-            ast::Stmt::Loop(ls) => {
-                for stmt in &ls.body.stmts {
-                    Self::collect_mutated_vars_stmt(stmt, result);
-                }
-            }
-            ast::Stmt::While(ws) => {
-                match &ws.condition {
-                    ast::Condition::Expr(cond) => Self::collect_mutated_vars(cond, result),
-                    ast::Condition::LetChain { elements, .. } => {
-                        for elem in elements {
-                            match elem {
-                                ast::ConditionElement::Let { expr, .. } => {
-                                    Self::collect_mutated_vars(expr, result);
-                                }
-                                ast::ConditionElement::Expr(e) => {
-                                    Self::collect_mutated_vars(e, result);
-                                }
-                            }
-                        }
-                    }
-                }
-                for stmt in &ws.body.stmts {
-                    Self::collect_mutated_vars_stmt(stmt, result);
-                }
-            }
-            ast::Stmt::For(fs) => {
-                if let Some(init) = &fs.init {
-                    Self::collect_mutated_vars_stmt(init, result);
-                }
-                if let Some(cond) = &fs.condition {
-                    match cond {
-                        ast::Condition::Expr(c) => Self::collect_mutated_vars(c, result),
-                        ast::Condition::LetChain { elements, .. } => {
-                            for elem in elements {
-                                match elem {
-                                    ast::ConditionElement::Let { expr, .. } => {
-                                        Self::collect_mutated_vars(expr, result);
-                                    }
-                                    ast::ConditionElement::Expr(e) => {
-                                        Self::collect_mutated_vars(e, result);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                if let Some(update) = &fs.update {
-                    Self::collect_mutated_vars(update, result);
-                }
-                for stmt in &fs.body.stmts {
-                    Self::collect_mutated_vars_stmt(stmt, result);
-                }
-            }
-            ast::Stmt::ForOf(fo) => {
-                Self::collect_mutated_vars(&fo.iterable, result);
-                for stmt in &fo.body.stmts {
-                    Self::collect_mutated_vars_stmt(stmt, result);
-                }
-            }
-            ast::Stmt::Return(rs) => {
-                if let Some(v) = &rs.value {
-                    Self::collect_mutated_vars(v, result);
-                }
-            }
-            ast::Stmt::Break(bs) => {
-                if let Some(v) = &bs.value {
-                    Self::collect_mutated_vars(v, result);
-                }
-            }
-            ast::Stmt::Assert(a) => {
-                Self::collect_mutated_vars(&a.condition, result);
-                if let Some(msg) = &a.message {
-                    Self::collect_mutated_vars(msg, result);
-                }
-            }
-            ast::Stmt::LabeledBlock(lb) => {
-                for stmt in &lb.block.stmts {
-                    Self::collect_mutated_vars_stmt(stmt, result);
-                }
-            }
-            ast::Stmt::Match(m) => {
-                Self::collect_mutated_vars(&m.expr, result);
-                for arm in &m.arms {
-                    if let Some(guard) = &arm.guard {
-                        Self::collect_mutated_vars(guard, result);
-                    }
-                    Self::collect_mutated_vars(&arm.body, result);
-                }
-            }
-            ast::Stmt::TaskReturn(tr) => {
-                Self::collect_mutated_vars(&tr.value, result);
-            }
-            // `Continue` carries no expressions.
-            ast::Stmt::Continue(_) => {}
-        }
+        let mut collector = MutatedVarsCollector { result };
+        collector.visit_expr(expr);
     }
 
     pub(super) fn resolve_cast(
@@ -3764,5 +3494,64 @@ fn patch_unresolved_null_in_block(
             patch_unresolved_null_in_block(eb, target_type, type_table);
         }
         _ => {}
+    }
+}
+
+/// Walks a closure body and records outer-binding names that the body
+/// mutates. Built on `AstVisitor`'s `walk_*` defaults, so every AST
+/// node is descended into automatically — including future syntax that
+/// adds new `Expr` / `Stmt` variants. Only three observations are
+/// recorded:
+///
+/// * `Assign { target, .. }` / `CompoundAssign { target, .. }` —
+///   extract the target's *root identifier* (a name that survives
+///   `.field` and `[index]` accessors) and record it.
+/// * Nested closures (`Expr::Closure(_)`) are NOT descended; they have
+///   their own capture context and run their own collector.
+///
+/// Everything else falls through to `walk_*`, which recurses without
+/// any per-variant code on this side. That's the property we want: no
+/// `_ => {}` catch-all to silently miss new syntax.
+struct MutatedVarsCollector<'a> {
+    result: &'a mut IndexSet<String>,
+}
+
+impl MutatedVarsCollector<'_> {
+    /// Walk an l-value down to its root identifier so `point.x = ...`
+    /// and `arr[i] = ...` count as mutations of `point` / `arr`.
+    fn root_ident_of_lvalue(expr: &ast::Expr) -> Option<&str> {
+        match expr {
+            ast::Expr::Ident(id) => Some(&id.name),
+            ast::Expr::FieldAccess(fa) => Self::root_ident_of_lvalue(&fa.expr),
+            ast::Expr::Index(idx) => Self::root_ident_of_lvalue(&idx.expr),
+            _ => None,
+        }
+    }
+}
+
+impl AstVisitor for MutatedVarsCollector<'_> {
+    fn visit_expr(&mut self, expr: &ast::Expr) {
+        match expr {
+            ast::Expr::Assign(a) => {
+                if let Some(name) = Self::root_ident_of_lvalue(&a.target) {
+                    self.result.insert(name.to_string());
+                }
+                // Still descend into the target (it may contain
+                // sub-expressions like `arr[bump()] = ...`) and the value.
+                ast::walk_expr(self, expr);
+            }
+            ast::Expr::CompoundAssign(ca) => {
+                if let Some(name) = Self::root_ident_of_lvalue(&ca.target) {
+                    self.result.insert(name.to_string());
+                }
+                ast::walk_expr(self, expr);
+            }
+            // Nested closures get their own capture context — skip.
+            ast::Expr::Closure(_) => {}
+            // Everything else: let the generic walker recurse into every
+            // sub-expression. Adding new `Expr` variants therefore does
+            // not require touching this collector.
+            _ => ast::walk_expr(self, expr),
+        }
     }
 }
