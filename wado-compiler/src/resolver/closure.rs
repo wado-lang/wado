@@ -73,13 +73,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // effects". The leak from `let inner: fn() = ||{println}` is
                 // a separate, deferred concern (proper fix needs body-effect
                 // inference, WEP 2026-01-25 option (a)).
-                let declared_effects = if effects.is_empty()
-                    || effects.iter().any(EffectRef::is_param)
-                {
-                    None
-                } else {
-                    Some(effects.clone())
-                };
+                let declared_effects =
+                    if effects.is_empty() || effects.iter().any(EffectRef::is_param) {
+                        None
+                    } else {
+                        Some(effects.clone())
+                    };
                 Some(ExpectedFn {
                     params: params.clone(),
                     return_type: *return_type,
