@@ -40,7 +40,7 @@
 //! empty, so the resulting closure is exactly the stdlib subset every
 //! real compile transitively loads.
 
-use std::cell::OnceCell;
+use std::cell::{Cell, OnceCell, RefCell};
 use std::future::Future;
 use std::pin::pin;
 use std::rc::Rc;
@@ -51,16 +51,31 @@ use crate::compiler_host::{
     CompilerHost, Diagnostic, GeneratorRequest, GeneratorResponse, GeneratorRunnerError, LogLevel,
     SourceError,
 };
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::ModuleLoader;
 use crate::logger::Logger;
+use crate::module_source::ModuleSource;
+use crate::tir::{TirFunction, TirModule, TypeTable};
 
 thread_local! {
     static SNAPSHOT: OnceCell<Rc<Annotated>> = const { OnceCell::new() };
+    /// Re-entry guard for [`get_or_init_snapshot`].  Set to `true`
+    /// while [`build_snapshot`] is running.  The synthetic snapshot
+    /// build calls through `annotate_loaded` (which itself looks up
+    /// the snapshot) so we must report "no snapshot yet" to the inner
+    /// invocation rather than try to enter the `OnceCell` initialiser
+    /// recursively — `OnceCell::get_or_init` panics on re-entry.
+    static BUILDING: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Return the current thread's stdlib [`Annotated`] snapshot, building
-/// it on first call.  Subsequent calls on the same thread are O(1)
-/// (an `Rc::clone` of the cached pointer).
+/// Return the current thread's stdlib [`Annotated`] snapshot.
+///
+/// On first call the snapshot is built by driving the full loader +
+/// [`annotate_loaded`] pipeline over an empty entry source. Returns
+/// [`None`] if the current call is itself running underneath
+/// [`build_snapshot`] — that is the call path the snapshot builder
+/// takes through `annotate_loaded`, and trying to satisfy it from the
+/// (still-being-built) cache would re-enter the `OnceCell` initialiser.
 ///
 /// # Panics
 ///
@@ -68,9 +83,19 @@ thread_local! {
 /// is shipped with the compiler and must always compile cleanly; a
 /// failure here indicates a build-time inconsistency in the stdlib
 /// itself, which is a non-recoverable bug.
-#[allow(dead_code)] // Wired up by the resolver in a follow-up change.
-pub(crate) fn get_or_init_snapshot() -> Rc<Annotated> {
-    SNAPSHOT.with(|cell| cell.get_or_init(|| Rc::new(build_snapshot())).clone())
+pub(crate) fn get_or_init_snapshot() -> Option<Rc<Annotated>> {
+    if BUILDING.with(Cell::get) {
+        return None;
+    }
+    Some(SNAPSHOT.with(|cell| {
+        cell.get_or_init(|| {
+            BUILDING.with(|c| c.set(true));
+            let result = Rc::new(build_snapshot());
+            BUILDING.with(|c| c.set(false));
+            result
+        })
+        .clone()
+    }))
 }
 
 /// Drive the full loader + `annotate_loaded` pipeline on an empty
@@ -121,6 +146,77 @@ fn poll_to_completion<F: Future>(fut: F) -> F::Output {
     }
 }
 
+/// `ModuleSource` variants whose state is captured by a snapshot.
+///
+/// Only modules with names that are stable across compiles in the same
+/// process can be served from the cache — that is exactly the set of
+/// stdlib modules served from `cached_stdlib()` plus the `core:libm.wat`
+/// Wasm asset module. Returns the subset of `snap.tir_modules` whose
+/// keys match.
+pub(crate) fn stdlib_sources(snap: &Annotated) -> IndexSet<ModuleSource> {
+    snap.tir_modules
+        .keys()
+        .filter(|ms| {
+            matches!(
+                ms,
+                ModuleSource::Core { .. }
+                    | ModuleSource::Wasi { .. }
+                    | ModuleSource::Wasm { .. }
+            )
+        })
+        .cloned()
+        .collect()
+}
+
+/// Deep-clone a cached [`TirModule`] for use in a per-compile pipeline.
+///
+/// The snapshot holds [`TirModule`]s whose `Rc<RefCell<TirFunction>>`
+/// values are shared across all stdlib modules in the snapshot, and
+/// whose `type_table` `Rc<RefCell<TypeTable>>` points at the snapshot's
+/// frozen table.  A naïve `Clone` would only bump those `Rc` refcounts,
+/// so a per-compile optimiser pass mutating a function body would
+/// corrupt the cached snapshot.
+///
+/// This helper rebuilds the function `Rc`s into fresh allocations,
+/// memoising by the source `Rc`'s pointer identity so aliasing within
+/// the module (e.g. between `functions` and `generic_functions`) is
+/// preserved.  The `type_table` field is repointed to the per-compile
+/// shared table; `TypeIds` embedded in function bodies remain valid
+/// because the per-compile table is seeded from a clone of the
+/// snapshot's table and stdlib entries occupy the same indices.
+pub(crate) fn rehydrate_tir_module(
+    snap_module: &TirModule,
+    fresh_type_table: &Rc<RefCell<TypeTable>>,
+    fn_remap: &mut IndexMap<*const RefCell<TirFunction>, Rc<RefCell<TirFunction>>>,
+) -> TirModule {
+    let mut new_module = snap_module.clone();
+    new_module.type_table = Rc::clone(fresh_type_table);
+    new_module.functions = snap_module
+        .functions
+        .iter()
+        .map(|rc| clone_fn_rc(rc, fn_remap))
+        .collect();
+    new_module.generic_functions = snap_module
+        .generic_functions
+        .iter()
+        .map(|(k, v)| (k.clone(), clone_fn_rc(v, fn_remap)))
+        .collect();
+    new_module
+}
+
+fn clone_fn_rc(
+    rc: &Rc<RefCell<TirFunction>>,
+    remap: &mut IndexMap<*const RefCell<TirFunction>, Rc<RefCell<TirFunction>>>,
+) -> Rc<RefCell<TirFunction>> {
+    let key: *const RefCell<TirFunction> = Rc::as_ptr(rc);
+    if let Some(existing) = remap.get(&key) {
+        return existing.clone();
+    }
+    let fresh = Rc::new(RefCell::new(rc.borrow().clone()));
+    remap.insert(key, fresh.clone());
+    fresh
+}
+
 /// In-memory [`CompilerHost`] used solely for building the stdlib
 /// snapshot.  The entry source is empty and every transitively-loaded
 /// module is a stdlib module served from `cached_stdlib()`, so
@@ -162,7 +258,7 @@ mod tests {
 
     #[test]
     fn snapshot_builds_and_contains_stdlib_closure() {
-        let snap = get_or_init_snapshot();
+        let snap = get_or_init_snapshot().expect("not re-entering the builder");
 
         // The implicit-modules pass always pulls in `core:prelude` and
         // its closure.  Verify the snapshot covers them so downstream
@@ -203,8 +299,8 @@ mod tests {
 
     #[test]
     fn snapshot_is_cached_per_thread() {
-        let a = get_or_init_snapshot();
-        let b = get_or_init_snapshot();
+        let a = get_or_init_snapshot().expect("not building");
+        let b = get_or_init_snapshot().expect("not building");
         assert!(
             Rc::ptr_eq(&a, &b),
             "second call on same thread must return the cached Rc"
