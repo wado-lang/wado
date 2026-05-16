@@ -5,7 +5,7 @@ fn apply<F: fn(i32) -> i32>(f: F, x: i32) -> i32 {
     return f(x);
 }
 
-fn run<F: fn mut(i32)>(mut f: F) {
+fn invoke_mut<F: fn mut(i32)>(mut f: F) {
     f(1);
     f(2);
 }
@@ -21,7 +21,7 @@ test "generic bound fn" {
 
 test "generic bound fn mut" {
     let mut total = 0;
-    run(|x: i32| {
+    invoke_mut(|x: i32| {
         total += x;
     });
     assert total == 3;
@@ -31,8 +31,10 @@ test "dup via generic bound" {
     let n = 10;
     let add_n = |x: i32| x + n;
     let pair = dup(add_n);
-    assert pair[0](1) == 11;
-    assert pair[1](2) == 12;
+    let f0 = pair[0];
+    let f1 = pair[1];
+    assert f0(1) == 11;
+    assert f1(2) == 12;
 }
 
 __DATA__

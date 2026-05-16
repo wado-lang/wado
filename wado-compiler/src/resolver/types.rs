@@ -271,6 +271,19 @@ pub enum TypeError {
     /// be misleading — the default only ever applies to direct calls.
     DefaultInClosure { param: String, span: Span },
 
+    /// Calling a `fn mut` closure requires its binding to be `let mut` (for
+    /// locals) or `mut name:` (for parameters). Mirrors Rust's FnMut rule.
+    ClosureMutBindingRequired { name: String, span: Span },
+
+    /// Closures cannot cross the Component Model boundary. Triggered when an
+    /// `export` (or imported) function has a closure-typed parameter, return
+    /// type, or buried closure inside a container type.
+    ClosureAtCmBoundary {
+        function: String,
+        position: String,
+        span: Span,
+    },
+
     /// `export fn` cannot declare default parameter values. The Component
     /// Model ABI requires every parameter at the CM boundary, so defaults
     /// would diverge from the WIT signature.
@@ -550,6 +563,24 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, param
                 )
             }
+            TypeError::ClosureMutBindingRequired { name, span } => {
+                write!(
+                    f,
+                    "{}:{}: cannot call `fn mut` closure '{}' through a non-`mut` binding; use `let mut {}`",
+                    span.line, span.column, name, name
+                )
+            }
+            TypeError::ClosureAtCmBoundary {
+                function,
+                position,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: closure type in {} of export function `{}` is not allowed: closures cannot cross the Component Model boundary",
+                    span.line, span.column, position, function
+                )
+            }
             TypeError::DefaultInExportFn {
                 function,
                 param,
@@ -802,6 +833,24 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 Code::TypeMismatch,
                 format!(
                     "default value for parameter '{param}' is not allowed in closure; closures erase defaults when assigned to a function type"
+                ),
+                *span,
+            ),
+            TypeError::ClosureMutBindingRequired { name, span } => (
+                Code::TypeMismatch,
+                format!(
+                    "cannot call `fn mut` closure '{name}' through a non-`mut` binding; use `let mut {name}`"
+                ),
+                *span,
+            ),
+            TypeError::ClosureAtCmBoundary {
+                function,
+                position,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "closure type in {position} of export function `{function}` is not allowed: closures cannot cross the Component Model boundary"
                 ),
                 *span,
             ),

@@ -821,6 +821,7 @@ fn generate_struct_deserialize(
             // Synthetic deserialiser-lookup stub; the body is a single
             // `Call` expression with no let-bindings of its own.
             body_locals: Vec::new(),
+            declared_effects: None,
         },
         lookup_fn_type,
         span,

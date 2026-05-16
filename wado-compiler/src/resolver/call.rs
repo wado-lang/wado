@@ -35,6 +35,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let peeled_type_id = self.type_table.borrow().get_ultimate_base_type(peeled_ref);
                 let peeled_type = self.type_table.borrow().get(peeled_type_id).clone();
                 if let ResolvedType::Function {
+                    is_mut: fn_is_mut,
                     params: fn_params,
                     return_type,
                     ..
@@ -42,7 +43,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 {
                     let local_index = local.index;
                     let local_type_id = local.type_id;
+                    let local_is_mut = local.is_mut;
                     let fn_return_type = return_type;
+
+                    // `fn mut` closures need a `mut` callee binding — mirrors
+                    // Rust's FnMut rule.
+                    if fn_is_mut && !local_is_mut {
+                        let _ = self.logger.error(TypeError::ClosureMutBindingRequired {
+                            name: ident.name.clone(),
+                            span: ident.span,
+                        });
+                    }
 
                     // Resolve arguments with coercion awareness based on closure param types
                     let mut args: Vec<TirExpr> = call

@@ -198,6 +198,7 @@ impl SubstitutionContext {
                 type_table.make_generic_instance(name, module_source, new_args)
             }
             ResolvedType::Function {
+                is_mut,
                 params,
                 return_type,
                 effects,
@@ -208,7 +209,13 @@ impl SubstitutionContext {
                     .map(|&p| self.substitute(p, type_table))
                     .collect();
                 let new_return = self.substitute(return_type, type_table);
-                type_table.make_function(new_params, new_return, effects, stores)
+                type_table.make_function_with_mut(
+                    is_mut,
+                    new_params,
+                    new_return,
+                    effects,
+                    stores,
+                )
             }
             ResolvedType::GenericResource {
                 name,
@@ -375,6 +382,9 @@ pub enum ResolvedType {
     Ref(TypeId),
     MutRef(TypeId),
     Function {
+        /// `true` for `fn mut(...)` (closure type that may mutate its captures).
+        /// `false` for `fn(...)` (read-only).
+        is_mut: bool,
         params: Vec<TypeId>,
         return_type: TypeId,
         effects: Vec<EffectRef>,
@@ -1074,7 +1084,19 @@ impl TypeTable {
         effects: Vec<EffectRef>,
         stores: Vec<u32>,
     ) -> TypeId {
+        self.make_function_with_mut(false, params, return_type, effects, stores)
+    }
+
+    pub fn make_function_with_mut(
+        &mut self,
+        is_mut: bool,
+        params: Vec<TypeId>,
+        return_type: TypeId,
+        effects: Vec<EffectRef>,
+        stores: Vec<u32>,
+    ) -> TypeId {
         self.intern(ResolvedType::Function {
+            is_mut,
             params,
             return_type,
             effects,
@@ -1478,6 +1500,7 @@ impl TypeTable {
                 }
             }
             ResolvedType::Function {
+                is_mut,
                 params,
                 return_type,
                 effects,
@@ -1491,7 +1514,13 @@ impl TypeTable {
                 if new_params == params && new_return_type == return_type {
                     type_id
                 } else {
-                    self.make_function(new_params, new_return_type, effects, stores)
+                    self.make_function_with_mut(
+                        is_mut,
+                        new_params,
+                        new_return_type,
+                        effects,
+                        stores,
+                    )
                 }
             }
             ResolvedType::GenericResource {
@@ -1769,13 +1798,16 @@ impl TypeTable {
             ResolvedType::Enum { name, .. } => name.clone(),
             ResolvedType::Resource { name, .. } => name.clone(),
             ResolvedType::Function {
+                is_mut,
                 params,
                 return_type,
                 ..
             } => {
                 let param_names: Vec<String> = params.iter().map(|p| self.type_name(*p)).collect();
+                let keyword = if *is_mut { "fn mut" } else { "fn" };
                 format!(
-                    "fn({}) -> {}",
+                    "{}({}) -> {}",
+                    keyword,
                     param_names.join(", "),
                     self.type_name(*return_type)
                 )
@@ -2559,6 +2591,13 @@ pub enum TirExprKind {
         /// without re-walking the body. Synthetic closures created by
         /// `synthesis/` have an empty `body_locals`.
         body_locals: Vec<TirLocal>,
+        /// Effects the closure type was annotated with at the use site (let
+        /// annotation, function-typed parameter, etc.). `Some` only when the
+        /// annotation provides a concrete effect set; the effect checker swaps
+        /// to these when entering the body so e.g. `let f: fn() = ||{println}`
+        /// rejects the Stdout leak. `None` means "unannotated, inherit outer
+        /// effects" (preserves the original behaviour for free closures).
+        declared_effects: Option<Vec<EffectRef>>,
     },
 
     /// Indirect call through a callable value (closure or funcref)

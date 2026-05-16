@@ -136,18 +136,26 @@ pub(super) fn check_assignable(
         (None, None) => {}
     }
 
-    // Rule 7: Function types -- structural comparison of params + return type
+    // Rule 7: Function types -- structural comparison of params + return type.
+    // Sub-typing: `fn <: fn mut` -- a read-only closure is assignable to a
+    // `fn mut`-typed slot, but not the reverse.
     if let ResolvedType::Function {
+        is_mut: actual_is_mut,
         params: actual_params,
         return_type: actual_ret,
         ..
     } = type_table.get(actual_inner)
         && let ResolvedType::Function {
+            is_mut: expected_is_mut,
             params: expected_params,
             return_type: expected_ret,
             ..
         } = type_table.get(expected_inner)
     {
+        if *actual_is_mut && !*expected_is_mut {
+            // `fn mut` cannot widen to `fn`.
+            return TypeCheckResult::Incompatible;
+        }
         if actual_params.len() != expected_params.len() {
             return TypeCheckResult::Incompatible;
         }

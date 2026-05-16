@@ -558,13 +558,18 @@ impl<'a> Unparser<'a> {
             if !param.bounds.is_empty() {
                 s.output.push_str(": ");
                 s.comma_sep_with(" + ", &param.bounds, |s, bound| {
-                    s.output.push_str(&bound.name);
-                    if !bound.assoc_types.is_empty() {
-                        s.delimited("<", ">", &bound.assoc_types, |s, assoc| {
-                            s.output.push_str(&assoc.name);
-                            s.output.push_str(" = ");
-                            s.unparse_type(&assoc.ty);
-                        });
+                    if let Some(sig) = &bound.fn_signature {
+                        // `<F: fn(...)>` / `<F: fn mut(...)>` round-trip.
+                        s.unparse_type(&Type::Function(sig.clone()));
+                    } else {
+                        s.output.push_str(&bound.name);
+                        if !bound.assoc_types.is_empty() {
+                            s.delimited("<", ">", &bound.assoc_types, |s, assoc| {
+                                s.output.push_str(&assoc.name);
+                                s.output.push_str(" = ");
+                                s.unparse_type(&assoc.ty);
+                            });
+                        }
                     }
                 });
             }
@@ -3087,7 +3092,7 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
             delimited_into("<", ">", &g.args, output, unparse_type_into);
         }
         Type::Function(f) => {
-            output.push_str("fn");
+            output.push_str(if f.is_mut { "fn mut" } else { "fn" });
             delimited_into("(", ")", &f.params, output, unparse_type_into);
             output.push_str(" -> ");
             unparse_type_into(&f.return_type, output);
@@ -3258,13 +3263,17 @@ pub fn unparse_generic_params_into(params: &[GenericParam], output: &mut String)
                 if j > 0 {
                     o.push_str(" + ");
                 }
-                o.push_str(&bound.name);
-                if !bound.assoc_types.is_empty() {
-                    delimited_into("<", ">", &bound.assoc_types, o, |assoc, o| {
-                        o.push_str(&assoc.name);
-                        o.push_str(" = ");
-                        unparse_type_into(&assoc.ty, o);
-                    });
+                if let Some(sig) = &bound.fn_signature {
+                    unparse_type_into(&Type::Function(sig.clone()), o);
+                } else {
+                    o.push_str(&bound.name);
+                    if !bound.assoc_types.is_empty() {
+                        delimited_into("<", ">", &bound.assoc_types, o, |assoc, o| {
+                            o.push_str(&assoc.name);
+                            o.push_str(" = ");
+                            unparse_type_into(&assoc.ty, o);
+                        });
+                    }
                 }
             }
         }

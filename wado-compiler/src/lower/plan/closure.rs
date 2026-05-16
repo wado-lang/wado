@@ -1177,6 +1177,7 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
                 functor_id: None,
                 address_taken_locals: IndexSet::default(),
                 body_locals: Vec::new(),
+                declared_effects: None,
             };
             expr.type_id = func_type;
             return;

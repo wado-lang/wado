@@ -49,6 +49,46 @@ pub(super) fn extract_comp_features(attrs: &[crate::ast::Attribute]) -> u32 {
 }
 
 impl<H: CompilerHost> Resolver<'_, H> {
+    /// Recursively check whether `type_id` mentions a `fn(...)` / `fn mut(...)`
+    /// closure type. Used to reject closures crossing the Component Model
+    /// boundary (export/import function signatures, CM-exposed record fields,
+    /// variant payloads, etc.).
+    pub(super) fn type_contains_closure(
+        type_table: &crate::tir::TypeTable,
+        type_id: TypeId,
+    ) -> bool {
+        use crate::hashmap::IndexSet;
+        let mut visited: IndexSet<TypeId> = IndexSet::default();
+        Self::type_contains_closure_inner(type_table, type_id, &mut visited)
+    }
+
+    fn type_contains_closure_inner(
+        type_table: &crate::tir::TypeTable,
+        type_id: TypeId,
+        visited: &mut crate::hashmap::IndexSet<TypeId>,
+    ) -> bool {
+        if !visited.insert(type_id) {
+            return false;
+        }
+        match type_table.get(type_id) {
+            crate::tir::ResolvedType::Function { .. } => true,
+            crate::tir::ResolvedType::Ref(t)
+            | crate::tir::ResolvedType::MutRef(t)
+            | crate::tir::ResolvedType::Reactive(t)
+            | crate::tir::ResolvedType::BuiltinArray(t) => {
+                Self::type_contains_closure_inner(type_table, *t, visited)
+            }
+            crate::tir::ResolvedType::GenericInstance { type_args, .. }
+            | crate::tir::ResolvedType::GenericResource { type_args, .. } => type_args
+                .iter()
+                .any(|t| Self::type_contains_closure_inner(type_table, *t, visited)),
+            crate::tir::ResolvedType::Newtype { base_type, .. } => {
+                Self::type_contains_closure_inner(type_table, *base_type, visited)
+            }
+            _ => false,
+        }
+    }
+
     pub(super) fn resolve_struct(&mut self, struct_decl: &ast::StructDecl) -> TirStruct {
         // Set up type parameters in scope before resolving fields. Use an
         // inherited scope so that any caller-provided `assoc_type_bindings` or
@@ -609,6 +649,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let mut params = Vec::new();
         for param in &func.params {
             let type_id = scope.resolve_type(&param.ty);
+            // Closures cannot cross the Component Model boundary.
+            if func.is_export
+                && Self::type_contains_closure(&scope.type_table.borrow(), type_id)
+            {
+                let _ = scope.logger.error(TypeError::ClosureAtCmBoundary {
+                    function: func.name.clone(),
+                    position: format!("parameter '{}'", param.name),
+                    span: param.span,
+                });
+            }
             let default_expr = param.default.as_ref().map(|default_ast| {
                 if func.is_export {
                     let _ = scope.logger.error(TypeError::DefaultInExportFn {
@@ -633,6 +683,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
         }
 
+        // Closures cannot cross the CM boundary in return position either.
+        if func.is_export
+            && Self::type_contains_closure(&scope.type_table.borrow(), return_type)
+        {
+            let _ = scope.logger.error(TypeError::ClosureAtCmBoundary {
+                function: func.name.clone(),
+                position: "return type".to_string(),
+                span: func.span,
+            });
+        }
+
         // Validate stores declarations
         scope.validate_stores(&func.stores, &params, func.span);
 
@@ -654,10 +715,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
         }
 
-        // Convert AST type params to TIR type params (while type params still in scope)
+        // Convert AST type params to TIR type params (while type params still in scope).
+        // `<F: fn(...)>` / `<F: fn mut(...)>` bounds are eagerly realised to the
+        // bound's function type by `register_generic_params`, so the parameter
+        // is no longer a real generic — drop it from `type_params` to avoid
+        // spurious monomorphisation attempts at call sites.
         let type_params: Vec<crate::tir::TirTypeParam> = func
             .type_params
             .iter()
+            .filter(|p| !p.bounds.iter().any(|b| b.fn_signature.is_some()))
             .enumerate()
             .map(|(i, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),

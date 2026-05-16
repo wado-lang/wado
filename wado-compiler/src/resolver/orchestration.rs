@@ -2443,6 +2443,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     type_params,
                 );
                 type_table.intern(crate::tir::ResolvedType::Function {
+                    is_mut: func_type.is_mut,
                     params,
                     return_type,
                     effects: vec![],

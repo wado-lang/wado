@@ -3788,9 +3788,15 @@ impl Parser {
             }));
         }
 
-        // Function type: fn(T1, T2) -> R
+        // Function type: fn(T1, T2) -> R   or   fn mut(T1, T2) -> R
         if self.check(&TokenKind::Fn) {
             self.advance();
+            let is_mut = if self.check(&TokenKind::Mut) {
+                self.advance();
+                true
+            } else {
+                false
+            };
             self.expect(&TokenKind::LParen)?;
 
             // Parse parameter types
@@ -3814,6 +3820,7 @@ impl Parser {
             let (effects, effect_ids, stores) = self.parse_with_clause_for_fn_type()?;
 
             return Ok(Type::Function(Box::new(FunctionType {
+                is_mut,
                 params,
                 return_type,
                 effects,
@@ -4079,9 +4086,29 @@ impl Parser {
         Ok(params)
     }
 
-    /// Parse a single trait bound: `Ord` or `Builder<Output = T, Error = E>`.
+    /// Parse a single trait bound:
+    /// - `Ord` — simple
+    /// - `Builder<Output = T, Error = E>` — with associated-type bindings
+    /// - `fn(...) -> R` / `fn mut(...) -> R [with E]` — closure-type bound
     fn parse_trait_bound(&mut self) -> ParseResult<crate::ast::TraitBound> {
         let span = self.peek().span;
+
+        // Closure-type bound: `fn(...)` or `fn mut(...)`.
+        if self.check(&TokenKind::Fn) {
+            let fn_type_node = self.parse_type()?;
+            let fn_signature = match fn_type_node {
+                crate::ast::Type::Function(boxed) => boxed,
+                _ => unreachable!("parse_type starting at `fn` must return Type::Function"),
+            };
+            let bound_name = if fn_signature.is_mut { "FnMut" } else { "Fn" };
+            return Ok(crate::ast::TraitBound {
+                name: bound_name.to_string(),
+                assoc_types: Vec::new(),
+                span,
+                fn_signature: Some(fn_signature),
+            });
+        }
+
         let name = self.consume_ident()?;
         let assoc_types = if self.check(&TokenKind::Lt) {
             self.advance();
@@ -4114,6 +4141,7 @@ impl Parser {
             name,
             assoc_types,
             span,
+            fn_signature: None,
         })
     }
 
