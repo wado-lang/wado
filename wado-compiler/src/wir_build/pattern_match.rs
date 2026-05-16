@@ -1171,14 +1171,71 @@ impl FunctionTranslator<'_, '_> {
                                 name: scrut_local.to_string(),
                                 result_ty: wir_type.clone(),
                             }),
-                            result_ty: field_result_ty,
+                            result_ty: field_result_ty.clone(),
                         };
                         match sub_pattern {
                             NirPattern::Binding { local_index, .. } => {
-                                instrs.push(WirInstr::LocalSet {
-                                    name: self.local_name(*local_index),
-                                    value: Box::new(field_get),
-                                });
+                                // Mirror the variant-payload binding emitter:
+                                // when the destination local's WIR type differs
+                                // from the tuple-field WIR type (Box<T> vs T,
+                                // or `Ref { nullable: false }` vs
+                                // `Ref { nullable: true }`), wrap/narrow so the
+                                // `local.set` is well-typed. Without this, a
+                                // tuple-destructuring `match` arm whose binding
+                                // expects `Box<Inner>` but whose tuple field is
+                                // `ref Inner` (the synthesized iterator-next
+                                // case for `Option<Tuple<_, Box<_>>>`) fails
+                                // wasm validation.
+                                let local_type_id = if (*local_index as usize)
+                                    < self.tir_func.locals.len()
+                                {
+                                    self.tir_func.locals[*local_index as usize].type_id
+                                } else {
+                                    element_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN)
+                                };
+                                let binding_wir =
+                                    self.ctx.type_id_to_wir_type(self.type_table, local_type_id);
+                                let needs_boxing = match (&binding_wir, &field_result_ty) {
+                                    (
+                                        WirType::Ref {
+                                            type_id: binding_tid,
+                                            ..
+                                        },
+                                        WirType::Ref {
+                                            type_id: field_tid, ..
+                                        },
+                                    ) => binding_tid != field_tid,
+                                    _ => false,
+                                };
+                                let value = if needs_boxing {
+                                    if let WirType::Ref {
+                                        type_id: box_tid, ..
+                                    } = &binding_wir
+                                    {
+                                        WirInstr::StructNew {
+                                            type_id: box_tid.clone(),
+                                            fields: vec![field_get],
+                                        }
+                                    } else {
+                                        field_get
+                                    }
+                                } else if matches!(
+                                    &binding_wir,
+                                    WirType::Ref { nullable: false, .. }
+                                ) && matches!(
+                                    &field_result_ty,
+                                    WirType::Ref { nullable: true, .. }
+                                ) {
+                                    WirInstr::RefAsNonNull(Box::new(field_get))
+                                } else {
+                                    field_get
+                                };
+                                if !matches!(binding_wir, WirType::Unit) {
+                                    instrs.push(WirInstr::LocalSet {
+                                        name: self.local_name(*local_index),
+                                        value: Box::new(value),
+                                    });
+                                }
                             }
                             NirPattern::Wildcard => {}
                             _ => {
