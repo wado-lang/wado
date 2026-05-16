@@ -5,9 +5,9 @@ use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::tir::FunctionRef;
 use crate::tir::{
-    CallArg, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirField,
-    TirLiteralPattern, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
-    TypeTable,
+    block_result_type, CallArg, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
+    TirField, TirLiteralPattern, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -2357,53 +2357,6 @@ impl<'a> PatternLowerer<'a> {
                 )
             }
         }
-    }
-}
-
-/// Compute the value-yielding type of a `TirBlock`, mirroring the
-/// resolver's [`block_result_type`] rule. Used by the `IfLet` →
-/// two-arm `Match` rewrite to copy the branch result type onto the
-/// synthesized `Match` so codegen sees a consistent expression type.
-///
-/// [`block_result_type`]: crate::resolver::expr::Resolver::block_result_type
-fn block_result_type(block: &TirBlock) -> TypeId {
-    block
-        .stmts
-        .last()
-        .and_then(|s| match &s.kind {
-            TirStmtKind::Expr(e) => Some(e.type_id),
-            TirStmtKind::If {
-                then_block,
-                else_block: Some(else_block),
-                ..
-            } => agree(block_result_type(then_block), block_result_type(else_block)),
-            TirStmtKind::IfLet {
-                then_block,
-                else_block: Some(else_block),
-                ..
-            } => agree(block_result_type(then_block), block_result_type(else_block)),
-            TirStmtKind::Return { .. } | TirStmtKind::Break { .. } | TirStmtKind::Continue => {
-                Some(TypeTable::NEVER)
-            }
-            _ => None,
-        })
-        .unwrap_or(TypeTable::UNIT)
-}
-
-/// Combine two branch result types under the resolver's rule: equal
-/// types yield themselves; a `NEVER` branch defers to the other; an
-/// outright mismatch is reported as `None` so the caller falls back
-/// to `Unit` (matching the resolver's behaviour for ill-typed IfLet
-/// branches that diagnostics will report separately).
-fn agree(t: TypeId, e: TypeId) -> Option<TypeId> {
-    if t == e {
-        Some(t)
-    } else if t == TypeTable::NEVER {
-        Some(e)
-    } else if e == TypeTable::NEVER {
-        Some(t)
-    } else {
-        None
     }
 }
 

@@ -1026,78 +1026,13 @@ impl FunctionTranslator<'_, '_> {
                                 self.ctx.type_id_to_wir_type(self.type_table, local_type_id);
                             let payload_field_wir =
                                 self.get_case_payload_wir_type(&case_type_id, i);
-                            let needs_boxing = if let WirType::Ref {
-                                type_id: binding_tid,
-                                ..
-                            } = &binding_wir
-                            {
-                                match payload_field_wir.as_ref() {
-                                    Some(WirType::Ref {
-                                        type_id: payload_tid,
-                                        ..
-                                    }) => {
-                                        // Boxing needed if binding type differs from
-                                        // payload type (e.g., binding expects Box<Inner>
-                                        // but payload is ref Inner for variant payloads)
-                                        binding_tid != payload_tid
-                                    }
-                                    Some(WirType::AbstractRef { .. }) => false,
-                                    Some(_) => true,
-                                    None => false,
-                                }
-                            } else {
-                                false
-                            };
-                            let value = if needs_boxing {
-                                if let WirType::Ref {
-                                    type_id: box_tid, ..
-                                } = &binding_wir
-                                {
-                                    WirInstr::StructNew {
-                                        type_id: box_tid.clone(),
-                                        fields: vec![payload_get],
-                                    }
-                                } else {
-                                    payload_get
-                                }
-                            } else {
-                                payload_get
-                            };
-                            // Variant case `payload_0` fields are declared
-                            // nullable for the `Option<&T> = &T | null`
-                            // boxing optimisation, but every construction
-                            // site wraps its value with `RefAsNonNull`, so
-                            // the extracted value is invariantly non-null
-                            // at runtime. When the binding's WIR type is
-                            // a non-null ref but the payload field is
-                            // nullable, narrow with `ref.as_non_null` so
-                            // the `LocalSet` is well-typed. The
-                            // `VariantPayload` expression path applies
-                            // the same narrowing further down in this
-                            // file; without this we would crash
-                            // validation only for `match`-arm bindings
-                            // on nullable payload fields.
-                            let value = if !needs_boxing
-                                && matches!(
-                                    &binding_wir,
-                                    WirType::Ref { nullable: false, .. }
-                                )
-                                && matches!(
-                                    payload_field_wir.as_ref(),
-                                    Some(WirType::Ref { nullable: true, .. })
-                                )
-                            {
-                                WirInstr::RefAsNonNull(Box::new(value))
-                            } else {
-                                value
-                            };
-                            // Skip local.set for unit-typed bindings (no Wasm local exists)
-                            if !matches!(binding_wir, WirType::Unit) {
-                                instrs.push(WirInstr::LocalSet {
-                                    name: self.local_name(*local_index),
-                                    value: Box::new(value),
-                                });
-                            }
+                            self.emit_pattern_binding_set(
+                                *local_index,
+                                &binding_wir,
+                                payload_field_wir.as_ref(),
+                                payload_get,
+                                instrs,
+                            );
                         } else if !matches!(
                             binding,
                             NirPattern::Wildcard
@@ -1175,17 +1110,6 @@ impl FunctionTranslator<'_, '_> {
                         };
                         match sub_pattern {
                             NirPattern::Binding { local_index, .. } => {
-                                // Mirror the variant-payload binding emitter:
-                                // when the destination local's WIR type differs
-                                // from the tuple-field WIR type (Box<T> vs T,
-                                // or `Ref { nullable: false }` vs
-                                // `Ref { nullable: true }`), wrap/narrow so the
-                                // `local.set` is well-typed. Without this, a
-                                // tuple-destructuring `match` arm whose binding
-                                // expects `Box<Inner>` but whose tuple field is
-                                // `ref Inner` (the synthesized iterator-next
-                                // case for `Option<Tuple<_, Box<_>>>`) fails
-                                // wasm validation.
                                 let local_type_id = if (*local_index as usize)
                                     < self.tir_func.locals.len()
                                 {
@@ -1195,68 +1119,13 @@ impl FunctionTranslator<'_, '_> {
                                 };
                                 let binding_wir =
                                     self.ctx.type_id_to_wir_type(self.type_table, local_type_id);
-                                let needs_boxing = match (&binding_wir, &field_result_ty) {
-                                    (
-                                        WirType::Ref {
-                                            type_id: binding_tid,
-                                            ..
-                                        },
-                                        WirType::Ref {
-                                            type_id: field_tid, ..
-                                        },
-                                    ) => binding_tid != field_tid,
-                                    // Primitive tuple-field stored into a
-                                    // `Box<primitive>` slot: the tuple field's
-                                    // WIR type is `i32` / `i64` / etc., but the
-                                    // binding's local was promoted to a Box
-                                    // wrapper by the address-taken boxing pass
-                                    // (or the resolver inferred `Box<T>` for
-                                    // the variant-generic site, as the
-                                    // synthesized
-                                    // `TreeMap<String, bool>^Serialize` body
-                                    // does). Wrap in `StructNew` so the
-                                    // primitive lands in the Box's payload
-                                    // field instead of being stored straight
-                                    // into the ref slot.
-                                    (
-                                        WirType::Ref { .. },
-                                        WirType::I32
-                                        | WirType::I64
-                                        | WirType::F32
-                                        | WirType::F64
-                                        | WirType::V128,
-                                    ) => true,
-                                    _ => false,
-                                };
-                                let value = if needs_boxing {
-                                    if let WirType::Ref {
-                                        type_id: box_tid, ..
-                                    } = &binding_wir
-                                    {
-                                        WirInstr::StructNew {
-                                            type_id: box_tid.clone(),
-                                            fields: vec![field_get],
-                                        }
-                                    } else {
-                                        field_get
-                                    }
-                                } else if matches!(
+                                self.emit_pattern_binding_set(
+                                    *local_index,
                                     &binding_wir,
-                                    WirType::Ref { nullable: false, .. }
-                                ) && matches!(
-                                    &field_result_ty,
-                                    WirType::Ref { nullable: true, .. }
-                                ) {
-                                    WirInstr::RefAsNonNull(Box::new(field_get))
-                                } else {
-                                    field_get
-                                };
-                                if !matches!(binding_wir, WirType::Unit) {
-                                    instrs.push(WirInstr::LocalSet {
-                                        name: self.local_name(*local_index),
-                                        value: Box::new(value),
-                                    });
-                                }
+                                    Some(&field_result_ty),
+                                    field_get,
+                                    instrs,
+                                );
                             }
                             NirPattern::Wildcard => {}
                             _ => {
@@ -1364,6 +1233,79 @@ impl FunctionTranslator<'_, '_> {
                     instrs.push(if_instr);
                 }
             }
+        }
+    }
+
+    /// Store the result of `source` into the local for a pattern
+    /// `Binding`, wrapping or narrowing as needed so the `LocalSet` is
+    /// well-typed under wasm GC's exact-type rules.
+    ///
+    /// Three coercions land here, applied in priority order:
+    ///
+    /// 1. **Box wrap.** When the binding's local is a `Ref` to a
+    ///    different struct than the source produces (the
+    ///    address-taken boxing pass promoted a `T` local to `Box<T>`,
+    ///    or the resolver typed a variant-generic site as
+    ///    `Box<primitive>`), wrap the source in `StructNew { box_tid,
+    ///    fields: [source] }` so the source value lands in the Box's
+    ///    payload field. Also covers the primitive-into-Box case
+    ///    (`i32` / `i64` / `f32` / `f64` / `v128`).
+    /// 2. **Nullability narrow.** When the binding is `Ref { nullable:
+    ///    false }` but the source produces `Ref { nullable: true }`
+    ///    (e.g. variant `payload_0` declared nullable for the
+    ///    `Option<&T> = &T | null` boxing optimisation), wrap with
+    ///    `RefAsNonNull`.
+    /// 3. **Unit binding.** Pattern bindings of unit type don't have a
+    ///    Wasm local; skip the `LocalSet` entirely.
+    ///
+    /// `source_wir = None` means the source's WIR type isn't known
+    /// (only `get_case_payload_wir_type`'s missing-struct fallback
+    /// produces this today); in that case fall through to the raw
+    /// `LocalSet`.
+    fn emit_pattern_binding_set(
+        &self,
+        local_index: u32,
+        binding_wir: &WirType,
+        source_wir: Option<&WirType>,
+        source: WirInstr,
+        instrs: &mut Vec<WirInstr>,
+    ) {
+        let needs_boxing = match (binding_wir, source_wir) {
+            (
+                WirType::Ref {
+                    type_id: bt, ..
+                },
+                Some(WirType::Ref { type_id: st, .. }),
+            ) => bt != st,
+            (WirType::Ref { .. }, Some(WirType::AbstractRef { .. })) => false,
+            (WirType::Ref { .. }, Some(_)) => true,
+            _ => false,
+        };
+        let value = if needs_boxing {
+            if let WirType::Ref { type_id: box_tid, .. } = binding_wir {
+                WirInstr::StructNew {
+                    type_id: box_tid.clone(),
+                    fields: vec![source],
+                }
+            } else {
+                source
+            }
+        } else if matches!(
+            binding_wir,
+            WirType::Ref { nullable: false, .. }
+        ) && matches!(
+            source_wir,
+            Some(WirType::Ref { nullable: true, .. })
+        ) {
+            WirInstr::RefAsNonNull(Box::new(source))
+        } else {
+            source
+        };
+        if !matches!(binding_wir, WirType::Unit) {
+            instrs.push(WirInstr::LocalSet {
+                name: self.local_name(local_index),
+                value: Box::new(value),
+            });
         }
     }
 

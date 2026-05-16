@@ -2863,6 +2863,72 @@ impl TirBlock {
     }
 }
 
+/// Value-yielding type of a block, mirroring how `let x = { ... }`
+/// resolves: the last statement determines the type, with two
+/// special cases:
+///
+/// - `If` / `IfLet` with both branches: both branches must agree
+///   (or one must be `Never`); otherwise the block has no
+///   meaningful value and is `Unit`. The resolver enforces the
+///   "both agree" rule when typing the surrounding expression, so
+///   the `None` fallback at a stale mismatch is benign — the
+///   surrounding diagnostic already reports the error.
+/// - `Return` / `Break` / `Continue`: diverging statements yield
+///   `Never`.
+///
+/// Used by:
+///
+/// - the resolver, to type `let x = { /* block */ }` (the call lives
+///   on `Resolver` for historical reasons but delegates here).
+/// - `lower::translate::pattern`, to assign the synthesized
+///   `Match` the right `type_id` when rewriting an `IfLet` that
+///   appears in expression position.
+pub fn block_result_type(block: &TirBlock) -> TypeId {
+    block
+        .stmts
+        .last()
+        .and_then(|s| match &s.kind {
+            TirStmtKind::Expr(e) => Some(e.type_id),
+            TirStmtKind::If {
+                then_block,
+                else_block: Some(else_block),
+                ..
+            } => agree_branch_types(
+                block_result_type(then_block),
+                block_result_type(else_block),
+            ),
+            TirStmtKind::IfLet {
+                then_block,
+                else_block: Some(else_block),
+                ..
+            } => agree_branch_types(
+                block_result_type(then_block),
+                block_result_type(else_block),
+            ),
+            TirStmtKind::Return { .. }
+            | TirStmtKind::Break { .. }
+            | TirStmtKind::Continue => Some(TypeTable::NEVER),
+            _ => None,
+        })
+        .unwrap_or(TypeTable::UNIT)
+}
+
+/// Combine two branch result types under the resolver's rule:
+/// equal types agree; a `Never` branch defers to the other; an
+/// outright mismatch yields `None` so the caller falls back to
+/// `Unit`.
+fn agree_branch_types(t: TypeId, e: TypeId) -> Option<TypeId> {
+    if t == e {
+        Some(t)
+    } else if t == TypeTable::NEVER {
+        Some(e)
+    } else if e == TypeTable::NEVER {
+        Some(t)
+    } else {
+        None
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TirStmt {
     pub kind: TirStmtKind,
