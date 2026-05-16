@@ -106,75 +106,24 @@ pub fn analyze_project(project: &mut NirPackage) -> IndexSet<usize> {
     // `project.functions`. This avoids reallocating `FunctionId`s per
     // function inside `remove_unreachable_functions` (the previous
     // implementation cloned 3-4 strings per function during retain).
-    compute_reachable_positions(project, &reachable, &func_pos)
+    compute_reachable_positions(&reachable, &func_pos)
 }
 
 /// Map the reachable-`FunctionId` set back to positions in `project.functions`.
 ///
-/// Three rules cover every surviving function:
-///
-/// 1. Direct hit: `func_pos[function_id_for(func)]` is in `reachable`.
-/// 2. Method-with-Free fallback: the function has `method_info` but the call
-///    graph also lists `FunctionId::Free(module, func.name)` as reachable
-///    (used by static-method dispatch).
-/// 3. Generic template fallback: the function is a non-monomorphized template
-///    whose `(module, name)` matches the `base_name` of some reachable
-///    monomorphization. The template stays alive so codegen can register it.
+/// Each function in `project.functions` is registered in the call graph under
+/// the `FunctionId` returned by `function_id_for`. Call sites in `analyze_expr`
+/// use the same canonical id when recording callees, so a direct projection
+/// from `reachable` through `func_pos` is exhaustive: a function survives DCE
+/// iff its `function_id_for(func)` is in `reachable`.
 fn compute_reachable_positions(
-    project: &NirPackage,
     reachable: &IndexSet<FunctionId>,
     func_pos: &IndexMap<FunctionId, usize>,
 ) -> IndexSet<usize> {
-    let mut positions: IndexSet<usize> = IndexSet::default();
-
-    // Rule 1: direct projection.
-    for id in reachable {
-        if let Some(&pos) = func_pos.get(id) {
-            positions.insert(pos);
-        }
-    }
-
-    // Pre-compute the set of (module, base_name) pairs that a generic
-    // template would match. One scan over `reachable` instead of one per
-    // template.
-    let monomorph_bases: IndexSet<(ModuleSource, String)> = reachable
+    reachable
         .iter()
-        .filter_map(|id| match id {
-            FunctionId::Free(name) if name.is_monomorphized => name
-                .base_name
-                .as_ref()
-                .map(|base| (name.module_source.clone(), base.clone())),
-            _ => None,
-        })
-        .collect();
-
-    for (pos, func_rc) in project.functions.iter().enumerate() {
-        if positions.contains(&pos) {
-            continue;
-        }
-        let func = func_rc.borrow();
-
-        // Rule 2: method tracked as Free with mangled name.
-        if func.method_info.is_some() {
-            let free_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                &func.module_source,
-                &func.name,
-            ));
-            if reachable.contains(&free_id) {
-                positions.insert(pos);
-                continue;
-            }
-        }
-
-        // Rule 3: generic template kept alive by a reachable monomorph.
-        if func.monomorph_info.is_none()
-            && monomorph_bases.contains(&(func.module_source.clone(), func.name.clone()))
-        {
-            positions.insert(pos);
-        }
-    }
-
-    positions
+        .filter_map(|id| func_pos.get(id).copied())
+        .collect()
 }
 
 /// Add functions that the TIR optimizer's rewrites may *synthesize* calls
