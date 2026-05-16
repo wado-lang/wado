@@ -1285,6 +1285,10 @@ fn sort_alts_by_element_count(indices: &mut Array<i32>, alts: &Array<Alternative
 /// only element is a `RuleRef` get a higher tier than multi-element
 /// `RuleRef`-led alts so SQLite-style `tor (',' tor)* | join_clause`
 /// groupings still pick the rule-ref catch-all on tie.
+///
+/// Skips leading nullable elements so the classification matches on the
+/// first element that actually contributes to FIRST — `b? K_TOKEN_X` gets
+/// `MULTI_TOKEN_LED` (4) rather than `MULTI_RULE_REF_LED` (2).
 fn alt_sort_priority(alt: &Alternative) -> i32 {
     if alt.elements.len() == 1 {
         if let RuleRef(_) = alt.elements[0] {
@@ -1293,6 +1297,9 @@ fn alt_sort_priority(alt: &Alternative) -> i32 {
         return 1;
     }
     for let elem of &alt.elements {
+        if is_nullable(elem) {
+            continue;
+        }
         match *elem {
             TokenRef(_) | Literal(_) => {
                 return 4;
