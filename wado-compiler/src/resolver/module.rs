@@ -240,6 +240,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             cases,
                         ),
                     );
+                    // Mirror the variant / trait paths: register the enum's
+                    // `#[compiler_item("...")]` annotation here so a future
+                    // enum compiler item declared in a lazily-loaded module
+                    // (i.e. one reached only through `module.rs` and not the
+                    // first-pass walk in `orchestration.rs`) still lands in
+                    // the registry.
+                    super::item::register_enum_compiler_item(
+                        &self.type_table,
+                        &enum_decl.attrs,
+                        &enum_decl.name,
+                        &self.current_module_source,
+                        enum_decl.span,
+                        self.logger,
+                    );
                 }
                 Item::Flags(flags_decl) => {
                     // Create a distinct Flags type (not a newtype over u32)

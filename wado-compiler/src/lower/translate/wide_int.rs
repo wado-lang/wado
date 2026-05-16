@@ -218,13 +218,19 @@ fn create_i128_eq_call(
         right_ref_type,
         span,
     );
-    let eq_trait_name = type_table
-        .borrow()
-        .compiler_items()
-        .trait_name(crate::compiler_item::CompilerItem::Eq)
-        .to_string();
-    let method_info =
-        LocalMethodName::new("i128".to_string(), Some(eq_trait_name), "eq".to_string());
+    let (eq_trait_name, i128_struct_name) = {
+        let tt = type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items
+                .trait_name(crate::compiler_item::CompilerItem::Eq)
+                .to_string(),
+            items
+                .struct_name(crate::compiler_item::CompilerItem::I128)
+                .to_string(),
+        )
+    };
+    let method_info = LocalMethodName::new(i128_struct_name, Some(eq_trait_name), "eq".to_string());
     let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::method_call(
@@ -271,13 +277,19 @@ fn create_u128_eq_call(
         right_ref_type,
         span,
     );
-    let eq_trait_name = type_table
-        .borrow()
-        .compiler_items()
-        .trait_name(crate::compiler_item::CompilerItem::Eq)
-        .to_string();
-    let method_info =
-        LocalMethodName::new("u128".to_string(), Some(eq_trait_name), "eq".to_string());
+    let (eq_trait_name, u128_struct_name) = {
+        let tt = type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items
+                .trait_name(crate::compiler_item::CompilerItem::Eq)
+                .to_string(),
+            items
+                .struct_name(crate::compiler_item::CompilerItem::U128)
+                .to_string(),
+        )
+    };
+    let method_info = LocalMethodName::new(u128_struct_name, Some(eq_trait_name), "eq".to_string());
     let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::method_call(

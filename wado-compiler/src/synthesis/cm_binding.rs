@@ -554,7 +554,7 @@ mod tests {
         let _ = tt.compiler_items_mut().register(
             CompilerItem::Array,
             Resolved::Struct {
-                module_source: ModuleSource::prelude(),
+                module_source: ModuleSource::array(),
                 name: "Array".to_string(),
             },
         );
