@@ -837,43 +837,13 @@ fn cached_stdlib() -> &'static IndexMap<String, Module> {
 
     static CACHE: OnceLock<IndexMap<String, Module>> = OnceLock::new();
     CACHE.get_or_init(|| {
-        let core_modules: &[(&str, &str)] = &[
-            ("allocator", stdlib::CORE_ALLOCATOR),
-            ("builtin", stdlib::CORE_BUILTIN),
-            ("cli", stdlib::CORE_CLI),
-            ("collections", stdlib::CORE_COLLECTIONS),
-            ("internal", stdlib::CORE_INTERNAL),
-            ("prelude", stdlib::CORE_PRELUDE),
-            ("prelude/array.wado", stdlib::CORE_PRELUDE_ARRAY),
-            ("prelude/format.wado", stdlib::CORE_PRELUDE_FORMAT),
-            ("prelude/fpfmt.wado", stdlib::CORE_PRELUDE_FPFMT),
-            ("prelude/int128.wado", stdlib::CORE_PRELUDE_INT128),
-            ("prelude/intparse.wado", stdlib::CORE_PRELUDE_INTPARSE),
-            ("prelude/primitive.wado", stdlib::CORE_PRELUDE_PRIMITIVE),
-            ("prelude/range.wado", stdlib::CORE_PRELUDE_RANGE),
-            ("prelude/string.wado", stdlib::CORE_PRELUDE_STRING),
-            ("prelude/traits.wado", stdlib::CORE_PRELUDE_TRAITS),
-            ("prelude/tuple.wado", stdlib::CORE_PRELUDE_TUPLE),
-            ("prelude/types.wado", stdlib::CORE_PRELUDE_TYPES),
-            ("zlib", stdlib::CORE_ZLIB),
-            ("base64", stdlib::CORE_BASE64),
-            ("serde", stdlib::CORE_SERDE),
-            ("json", stdlib::CORE_JSON),
-            ("json_nsd", stdlib::CORE_JSON_NSD),
-            ("json_value", stdlib::CORE_JSON_VALUE),
-            ("simd", stdlib::CORE_SIMD),
-        ];
-
-        let total_count = core_modules.len() + stdlib::ALL_WASI_MODULES.len();
+        let total_count = stdlib::ALL_CORE_MODULES.len() + stdlib::ALL_WASI_MODULES.len();
         let mut cache = IndexMap::with_capacity_and_hasher(total_count, FxBuildHasher);
 
-        for &(name, source) in core_modules {
-            let import_path = format!("core:{name}");
-            let module = parse_bind_desugar_stdlib(&import_path, source);
-            cache.insert(import_path, module);
-        }
-
-        for &(import_path, source) in stdlib::ALL_WASI_MODULES {
+        for &(import_path, source) in stdlib::ALL_CORE_MODULES
+            .iter()
+            .chain(stdlib::ALL_WASI_MODULES.iter())
+        {
             cache.insert(
                 import_path.to_string(),
                 parse_bind_desugar_stdlib(import_path, source),
