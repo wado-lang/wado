@@ -1063,6 +1063,34 @@ impl FunctionTranslator<'_, '_> {
                             } else {
                                 payload_get
                             };
+                            // Variant case `payload_0` fields are declared
+                            // nullable for the `Option<&T> = &T | null`
+                            // boxing optimisation, but every construction
+                            // site wraps its value with `RefAsNonNull`, so
+                            // the extracted value is invariantly non-null
+                            // at runtime. When the binding's WIR type is
+                            // a non-null ref but the payload field is
+                            // nullable, narrow with `ref.as_non_null` so
+                            // the `LocalSet` is well-typed. The
+                            // `VariantPayload` expression path applies
+                            // the same narrowing further down in this
+                            // file; without this we would crash
+                            // validation only for `match`-arm bindings
+                            // on nullable payload fields.
+                            let value = if !needs_boxing
+                                && matches!(
+                                    &binding_wir,
+                                    WirType::Ref { nullable: false, .. }
+                                )
+                                && matches!(
+                                    payload_field_wir.as_ref(),
+                                    Some(WirType::Ref { nullable: true, .. })
+                                )
+                            {
+                                WirInstr::RefAsNonNull(Box::new(value))
+                            } else {
+                                value
+                            };
                             // Skip local.set for unit-typed bindings (no Wasm local exists)
                             if !matches!(binding_wir, WirType::Unit) {
                                 instrs.push(WirInstr::LocalSet {
