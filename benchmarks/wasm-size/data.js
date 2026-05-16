@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778898759721,
+  "lastUpdate": 1778902421799,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21969,6 +21969,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/09b1d9d5fffec11de4a09458c6d027a2caa858aa"
         },
         "date": 1778898759380,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510314,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e375eff1f596f35dccdb036a28b0fc0778fe76aa",
+          "message": "Merge pull request #1069 from wado-lang/claude/refactor-parser-gen-n1MyU\n\nrefactor(package-gale): split parser_gen.wado along the analysis/emission seam",
+          "timestamp": "2026-05-16T12:26:31+09:00",
+          "tree_id": "28e2765720051e125e6654b9ad4ed64fea10bdb7",
+          "url": "https://github.com/wado-lang/wado/commit/e375eff1f596f35dccdb036a28b0fc0778fe76aa"
+        },
+        "date": 1778902421431,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
