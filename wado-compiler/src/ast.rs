@@ -1027,7 +1027,9 @@ impl Attribute {
     /// from `self.args`. Returns `None` for `#[canonical(...)]` and for
     /// non-CM attributes.
     pub fn cm_identifier(&self) -> Option<String> {
-        self.cm_boundary.as_ref().and_then(CmBoundary::cm_identifier)
+        self.cm_boundary
+            .as_ref()
+            .and_then(CmBoundary::cm_identifier)
     }
 }
 
