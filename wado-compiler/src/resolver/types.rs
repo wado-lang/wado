@@ -272,7 +272,7 @@ pub enum TypeError {
     DefaultInClosure { param: String, span: Span },
 
     /// Calling a `fn mut` closure requires its binding to be `let mut` (for
-    /// locals) or `mut name:` (for parameters). Mirrors Rust's FnMut rule.
+    /// locals) or `mut name:` (for parameters). Mirrors Rust's `FnMut` rule.
     ClosureMutBindingRequired { name: String, span: Span },
 
     /// Closures cannot cross the Component Model boundary. Triggered when an

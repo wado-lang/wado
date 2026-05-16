@@ -217,7 +217,7 @@ impl Deserialize for Config;
 
 #### `fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError>`
 
-#### `fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn(&String, i32, i32) -> Option<i32>) -> Result<Self::StructAccess, DeserializeError>`
+#### `fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn mut(&String, i32, i32) -> Option<i32>) -> Result<Self::StructAccess, DeserializeError>`
 
 #### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError>`
 

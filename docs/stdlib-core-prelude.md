@@ -242,28 +242,6 @@ Used with the `{x:E}` format specifier.
 
 Formats the value in uppercase exponential notation and writes to the given formatter.
 
-### `pub trait Fn<Args, Ret, Effects>`
-
-Trait for callable types (closures and function references).
-This trait enables closure monomorphization - functions with `fn(A) -> R` parameters
-are desugared to generic functions with `Fn<[A], R>` bounds.
-
-Type parameters:
-
-- `Args`: Tuple of argument types using `[...]` syntax, e.g., `[i32, String]`
-- `Ret`: Return type
-- `Effects`: Tuple of effect types, defaults to `[]` (pure)
-
-Examples:
-
-- `Fn<[i32], bool>` - takes i32, returns bool, pure
-- `Fn<[i32, String], ()>` - takes i32 and String, returns unit, pure
-- `Fn<[i32], (), [Stdout]>` - takes i32, returns unit, has Stdout effect
-
-#### `fn call(&self, args: Args) -> Ret with Effects`
-
-Call the function with the given arguments.
-
 ### `pub trait Iterator`
 
 The core iterator trait for sequences of values.
@@ -282,25 +260,29 @@ Collects remaining elements into an Array.
 
 Counts the number of remaining elements in the iterator.
 
-#### `fn map<U>(&self, f: fn(Self::Item) -> U) -> IterMap<Self, U>`
+#### `fn map<U>(&self, f: fn mut(Self::Item) -> U) -> IterMap<Self, U>`
 
 Transforms each element using a function.
 
-#### `fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, Self::Item) -> Acc) -> Acc`
+#### `fn fold<Acc>(&mut self, init: Acc, f: fn mut(Acc, Self::Item) -> Acc) -> Acc`
 
 Like `reduce`, but takes an explicit initial accumulator instead of using the first element.
 Always returns a value (unlike `reduce`, which returns None for empty iterators).
 
-#### `fn find(&mut self, pred: fn(Self::Item) -> bool) -> Option<Self::Item>`
+#### `fn for_each(&mut self, f: fn mut(Self::Item) -> ())`
+
+Calls `f` for every remaining element. Consumes the iterator.
+
+#### `fn find(&mut self, pred: fn mut(Self::Item) -> bool) -> Option<Self::Item>`
 
 Returns the first element for which `pred` returns true, advancing the iterator up to that point.
 
-#### `fn any(&mut self, pred: fn(Self::Item) -> bool) -> bool`
+#### `fn any(&mut self, pred: fn mut(Self::Item) -> bool) -> bool`
 
 Returns true if `pred` returns true for at least one element (∃). False for empty iterators.
 Short-circuits: stops advancing the iterator as soon as a matching element is found.
 
-#### `fn all(&mut self, pred: fn(Self::Item) -> bool) -> bool`
+#### `fn all(&mut self, pred: fn mut(Self::Item) -> bool) -> bool`
 
 Returns true if `pred` returns true for every element (∀). True for empty iterators.
 Short-circuits: stops advancing the iterator as soon as a non-matching element is found.
@@ -313,16 +295,16 @@ Advances the entire iterator and returns the last element, or None if empty.
 
 Returns the nth element (0-indexed), advancing the iterator up to and including it.
 
-#### `fn position(&mut self, pred: fn(Self::Item) -> bool) -> Option<i32>`
+#### `fn position(&mut self, pred: fn mut(Self::Item) -> bool) -> Option<i32>`
 
 Returns the 0-based index of the first element for which `pred` returns true, or None.
 
-#### `fn reduce(&mut self, f: fn(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>`
+#### `fn reduce(&mut self, f: fn mut(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>`
 
 Reduces elements to a single value without an initial accumulator.
 Returns None if the iterator is empty.
 
-#### `fn filter(&self, pred: fn(Self::Item) -> bool) -> IterFilter<Self>`
+#### `fn filter(&self, pred: fn mut(Self::Item) -> bool) -> IterFilter<Self>`
 
 Returns an adapter that skips elements for which `pred` returns false.
 
@@ -589,28 +571,6 @@ Used with the `{x:E}` format specifier.
 
 Formats the value in uppercase exponential notation and writes to the given formatter.
 
-### `pub trait Fn<Args, Ret, Effects>`
-
-Trait for callable types (closures and function references).
-This trait enables closure monomorphization - functions with `fn(A) -> R` parameters
-are desugared to generic functions with `Fn<[A], R>` bounds.
-
-Type parameters:
-
-- `Args`: Tuple of argument types using `[...]` syntax, e.g., `[i32, String]`
-- `Ret`: Return type
-- `Effects`: Tuple of effect types, defaults to `[]` (pure)
-
-Examples:
-
-- `Fn<[i32], bool>` - takes i32, returns bool, pure
-- `Fn<[i32, String], ()>` - takes i32 and String, returns unit, pure
-- `Fn<[i32], (), [Stdout]>` - takes i32, returns unit, has Stdout effect
-
-#### `fn call(&self, args: Args) -> Ret with Effects`
-
-Call the function with the given arguments.
-
 ### `pub trait Iterator`
 
 The core iterator trait for sequences of values.
@@ -629,25 +589,29 @@ Collects remaining elements into an Array.
 
 Counts the number of remaining elements in the iterator.
 
-#### `fn map<U>(&self, f: fn(Self::Item) -> U) -> IterMap<Self, U>`
+#### `fn map<U>(&self, f: fn mut(Self::Item) -> U) -> IterMap<Self, U>`
 
 Transforms each element using a function.
 
-#### `fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, Self::Item) -> Acc) -> Acc`
+#### `fn fold<Acc>(&mut self, init: Acc, f: fn mut(Acc, Self::Item) -> Acc) -> Acc`
 
 Like `reduce`, but takes an explicit initial accumulator instead of using the first element.
 Always returns a value (unlike `reduce`, which returns None for empty iterators).
 
-#### `fn find(&mut self, pred: fn(Self::Item) -> bool) -> Option<Self::Item>`
+#### `fn for_each(&mut self, f: fn mut(Self::Item) -> ())`
+
+Calls `f` for every remaining element. Consumes the iterator.
+
+#### `fn find(&mut self, pred: fn mut(Self::Item) -> bool) -> Option<Self::Item>`
 
 Returns the first element for which `pred` returns true, advancing the iterator up to that point.
 
-#### `fn any(&mut self, pred: fn(Self::Item) -> bool) -> bool`
+#### `fn any(&mut self, pred: fn mut(Self::Item) -> bool) -> bool`
 
 Returns true if `pred` returns true for at least one element (∃). False for empty iterators.
 Short-circuits: stops advancing the iterator as soon as a matching element is found.
 
-#### `fn all(&mut self, pred: fn(Self::Item) -> bool) -> bool`
+#### `fn all(&mut self, pred: fn mut(Self::Item) -> bool) -> bool`
 
 Returns true if `pred` returns true for every element (∀). True for empty iterators.
 Short-circuits: stops advancing the iterator as soon as a non-matching element is found.
@@ -660,16 +624,16 @@ Advances the entire iterator and returns the last element, or None if empty.
 
 Returns the nth element (0-indexed), advancing the iterator up to and including it.
 
-#### `fn position(&mut self, pred: fn(Self::Item) -> bool) -> Option<i32>`
+#### `fn position(&mut self, pred: fn mut(Self::Item) -> bool) -> Option<i32>`
 
 Returns the 0-based index of the first element for which `pred` returns true, or None.
 
-#### `fn reduce(&mut self, f: fn(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>`
+#### `fn reduce(&mut self, f: fn mut(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>`
 
 Reduces elements to a single value without an initial accumulator.
 Returns None if the iterator is empty.
 
-#### `fn filter(&self, pred: fn(Self::Item) -> bool) -> IterFilter<Self>`
+#### `fn filter(&self, pred: fn mut(Self::Item) -> bool) -> IterFilter<Self>`
 
 Returns an adapter that skips elements for which `pred` returns false.
 
@@ -2310,7 +2274,7 @@ Generic map iterator adapter that wraps any Iterator.
 
 #### `inner: I`
 
-#### `f: fn(I::Item) -> U`
+#### `f: fn mut(I::Item) -> U`
 
 #### `impl Iterator for IterMap<I, U>`
 
@@ -2326,7 +2290,7 @@ Generic filter iterator adapter that wraps any Iterator.
 
 #### `inner: I`
 
-#### `pred: fn(I::Item) -> bool`
+#### `pred: fn mut(I::Item) -> bool`
 
 #### `impl Iterator for IterFilter<I>`
 
@@ -3287,7 +3251,7 @@ Returns the byte index of the last occurrence of `pat`, or None.
 
 Returns true if the string contains the given character.
 
-#### `pub fn find_char(&self, pred: fn(char) -> bool) -> Option<i32>`
+#### `pub fn find_char(&self, pred: fn mut(char) -> bool) -> Option<i32>`
 
 Returns the byte index of the first character matching the predicate, or None.
 
@@ -3445,7 +3409,7 @@ Generic map iterator adapter that wraps any Iterator.
 
 #### `inner: I`
 
-#### `f: fn(I::Item) -> U`
+#### `f: fn mut(I::Item) -> U`
 
 #### `impl Iterator for IterMap<I, U>`
 
@@ -3461,7 +3425,7 @@ Generic filter iterator adapter that wraps any Iterator.
 
 #### `inner: I`
 
-#### `pred: fn(I::Item) -> bool`
+#### `pred: fn mut(I::Item) -> bool`
 
 #### `impl Iterator for IterFilter<I>`
 
@@ -3644,11 +3608,11 @@ Returns true if the array contains the given value.
 
 #### `pub fn iter(&self) -> ArrayIter<T>`
 
-#### `pub fn sort_by(&mut self, cmp: fn(&T, &T) -> Ordering)`
+#### `pub fn sort_by(&mut self, cmp: fn mut(&T, &T) -> Ordering)`
 
 In-place sort with comparator. Stable, O(n log n) worst case.
 
-#### `pub fn sorted_by(&self, cmp: fn(&T, &T) -> Ordering) -> Array<T>`
+#### `pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering) -> Array<T>`
 
 #### `pub fn windows(&self, size: i32) -> WindowsIter<T>`
 
