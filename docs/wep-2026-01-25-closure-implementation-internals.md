@@ -1,6 +1,6 @@
 # WEP: Closure Implementation Internals
 
-## Status: Implemented (Phase 7 stdlib migration deferred)
+## Status: Implemented
 
 Implementation details for the user-visible closure design specified in [Closure Implementation](./wep-2026-01-16-closure-implementation.md). This WEP covers the internal `Fn` / `FnMut` trait machinery, the Wasm GC representation (specialised functor structs and canonical-closure vtable), and the migration plan from the current capture-by-value implementation.
 
@@ -317,7 +317,7 @@ Tasks:
 
 - [x] Parse `fn mut(...)` as a two-token form; add `is_mut: bool` to `FunctionType` (`ast.rs`, `parser.rs::parse_type`)
 - [x] Parse `fn(...)` / `fn mut(...)` in trait bound position; carried via `TraitBound.fn_signature` (`parser.rs::parse_trait_bound`)
-- [ ] Parse `with (E1, E2)` parens-grouped multi-effect in bound contexts
+- [x] Parse `with (E1, E2)` parens-grouped multi-effect in bound contexts (`parser.rs::parse_fn_type_for_bound`, `parse_bound_with_clause`); `unparse` mirrors the form via `unparse_fn_signature_in_bound`
 - [x] Remove the unused `move` keyword reservation (`lexer.rs`, `token.rs`, `syntax.rs`)
 
 ### Phase 2: Internal `FnMut` trait
@@ -352,8 +352,8 @@ Tasks:
 
 - [x] Walk closure body in `resolve_closure` to classify outer-name usage; emit the `&mut __ref_*` ref desugar inline (`resolver/closure.rs`)
 - [x] Tag closure type `is_mut = any(capture.is_mut)`
-- [x] `resolve_mutable_closure` becomes a shim that delegates to `resolve_closure` (the `&mut || ...` source form keeps parsing during the transition but produces identical TIR)
-- [x] Migrate fixtures `closure_2.wado`, `closure_3.wado` away from `&mut ||`
+- [x] Retire `&mut || ...` source form. `resolver/operators.rs` now rejects it with `AmpMutClosureSyntaxRetired`; `resolve_mutable_closure` is deleted.
+- [x] Migrate fixtures `closure_2.wado`, `closure_3.wado` away from `&mut ||`; `closure_amp_mut_syntax_retired_error.wado` locks the rejection in
 
 ### Phase 5: `mut` binding enforcement
 
@@ -377,16 +377,15 @@ Tasks:
 
 ### Phase 7: Stdlib `Iterator` migration
 
-Convert iterator methods to `fn mut(...) with E` with `<effect E>` parameters. Add `for_each`. Update return types to `Iterator<Item = ...>` where adapter-struct naming is not needed externally.
-
-Status: deferred. Not strictly required for any current fixture to pass — closures that mutate captures and are passed to stdlib iterator methods would today fail (`fn mut` cannot widen to `fn`). The migration is mechanical but extensive and will be picked up in a follow-up.
+Convert iterator methods to `fn mut(...)` closure parameters. Add `for_each`. Update return types to `Iterator<Item = ...>` where adapter-struct naming is not needed externally.
 
 Tasks:
 
-- [ ] Convert `lib/core/prelude/traits.wado:308-449` iterator methods to `fn mut(...) with E` with `<effect E>` parameters: `map`, `filter`, `fold`, `find`, `any`, `all`, `position`, `reduce`
-- [ ] Add `for_each` method
-- [ ] Update return types from named adapter structs (`IterMap<Self, U>` etc.) to `Iterator<Item = ...>` where the adapter type does not need to be user-named
-- [ ] Migrate other bare-`fn(...)` stdlib references where the closure should be `fn mut`: `String::find_char` (`string.wado:742`), `Array::sort_by` / `sorted_by` (`array.wado:547,589`), `Benchmark::run` (`benchmark.wado:57`), serde `lookup` (`serde.wado:244`, `json*.wado`, `router.wado`)
+- [x] Convert `lib/core/prelude/traits.wado` iterator methods to `fn mut(...)`: `map`, `filter`, `fold`, `find`, `any`, `all`, `position`, `reduce`
+- [x] Add `for_each` method
+- [ ] Update return types from named adapter structs (`IterMap<Self, U>` etc.) to `Iterator<Item = ...>` where the adapter type does not need to be user-named (deferred — requires the resolver to elaborate the trait-object-style return type, out of scope for this PR)
+- [x] Migrate other bare-`fn(...)` stdlib references where the closure should be `fn mut`: `String::find_char`, `Array::sort_by` / `sorted_by`, `Benchmark::run`, serde `lookup` (`serde.wado`, `json.wado`, `router.wado`)
+- [ ] Add `<effect E>` effect-polymorphism to iterator methods (deferred — closure literals already inherit caller effects, so this is additive convenience rather than a correctness fix)
 
 ### Phase 8: CM boundary error
 
@@ -395,9 +394,9 @@ Compile-error fixtures for any closure-typed component crossing the Component Mo
 Tasks:
 
 - [x] Reject exporting a function with a closure-typed parameter or return type, including closures buried inside refs / arrays / generic containers (`resolver/item.rs::type_contains_closure`)
-- [ ] Reject importing a function with a closure-typed parameter or return type
-- [ ] Reject closure-typed fields in CM-exported record / variant types
-- [x] Fixtures for the export-param and export-return rejection cases
+- [x] Reject importing a function (`#[canonical(...)]` / `#[cm(...)]` declaration with no body) carrying a closure type in any signature position
+- [x] Reject closure-typed fields in CM-exported record types — `type_contains_closure` recurses through named-struct fields via `lookup_struct_fields`. Variant payloads currently route through generic-arg containers, so the same check fires for them
+- [x] Fixtures: export-param, export-return, struct-field, and import side rejection cases
 
 ### Phase 9 (Optional): LSP dispatch hints
 

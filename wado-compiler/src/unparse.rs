@@ -6,13 +6,13 @@ use crate::ast::{
     AssertStmt, AssignExpr, AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr,
     CastExpr, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
     ConditionElement, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt,
-    ForStmt, Function, GenericParam, GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes,
-    IndexExpr, InterfaceDecl, InterfaceMethod, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt,
-    MatchArm, MatchExpr, MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, ReturnStmt,
-    SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
-    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr,
-    UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WhileStmt, WorldDecl,
-    WorldExport,
+    ForStmt, Function, FunctionType, GenericParam, GlobalDecl, IfExpr, IfStmt, ImplBlock,
+    ImportAttributes, IndexExpr, InterfaceDecl, InterfaceMethod, Item, LabeledBlockStmt, LetStmt,
+    Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Newtype, Param, Pattern,
+    ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl,
+    StructField, StructLiteralExpr, TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr,
+    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
+    VariantDecl, WhileStmt, WorldDecl, WorldExport,
 };
 use crate::comment::{Comment, CommentKind};
 use crate::hashmap::IndexSet;
@@ -560,7 +560,9 @@ impl<'a> Unparser<'a> {
                 s.comma_sep_with(" + ", &param.bounds, |s, bound| {
                     if let Some(sig) = &bound.fn_signature {
                         // `<F: fn(...)>` / `<F: fn mut(...)>` round-trip.
-                        s.unparse_type(&Type::Function(sig.clone()));
+                        // Use bound-aware fn-type printing so multi-effect
+                        // `with` clauses come back out parens-grouped.
+                        s.unparse_fn_signature_in_bound(sig);
                     } else {
                         s.output.push_str(&bound.name);
                         if !bound.assoc_types.is_empty() {
@@ -939,6 +941,30 @@ impl<'a> Unparser<'a> {
 
     fn unparse_type(&mut self, ty: &Type) {
         unparse_type_into(ty, &mut self.output);
+    }
+
+    /// Print a `fn(...)` / `fn mut(...)` closure-type bound. Multi-effect
+    /// `with` clauses are emitted parens-grouped so the round-tripped source
+    /// re-parses as a single bound (a bare comma would otherwise be eaten by
+    /// the surrounding trait-bound or generic-param list).
+    fn unparse_fn_signature_in_bound(&mut self, sig: &FunctionType) {
+        self.output
+            .push_str(if sig.is_mut { "fn mut" } else { "fn" });
+        delimited_into("(", ")", &sig.params, &mut self.output, unparse_type_into);
+        self.output.push_str(" -> ");
+        unparse_type_into(&sig.return_type, &mut self.output);
+        match sig.effects.len() {
+            0 => {}
+            1 => {
+                self.output.push_str(" with ");
+                self.output.push_str(&sig.effects[0]);
+            }
+            _ => {
+                self.output.push_str(" with (");
+                self.output.push_str(&sig.effects.join(", "));
+                self.output.push(')');
+            }
+        }
     }
 
     fn unparse_block(&mut self, block: &Block) {
@@ -3264,7 +3290,7 @@ pub fn unparse_generic_params_into(params: &[GenericParam], output: &mut String)
                     o.push_str(" + ");
                 }
                 if let Some(sig) = &bound.fn_signature {
-                    unparse_type_into(&Type::Function(sig.clone()), o);
+                    unparse_fn_signature_in_bound_into(sig, o);
                 } else {
                     o.push_str(&bound.name);
                     if !bound.assoc_types.is_empty() {
@@ -3341,6 +3367,28 @@ pub fn unparse_with_clause_into(effects: &[String], stores: &[String], output: &
 }
 
 /// with-clause for function-type position (`stores[0, 1]` with positional indices).
+/// Bound-context variant of `fn(...)` printing. Multi-effect `with` clauses
+/// are parens-grouped because comma at this level separates trait bounds
+/// (and `stores[...]` never appears in bound position).
+fn unparse_fn_signature_in_bound_into(sig: &FunctionType, output: &mut String) {
+    output.push_str(if sig.is_mut { "fn mut" } else { "fn" });
+    delimited_into("(", ")", &sig.params, output, unparse_type_into);
+    output.push_str(" -> ");
+    unparse_type_into(&sig.return_type, output);
+    match sig.effects.len() {
+        0 => {}
+        1 => {
+            output.push_str(" with ");
+            output.push_str(&sig.effects[0]);
+        }
+        _ => {
+            output.push_str(" with (");
+            output.push_str(&sig.effects.join(", "));
+            output.push(')');
+        }
+    }
+}
+
 fn unparse_fn_type_with_clause_into(
     effects: &[String],
     stores: &[StoresEntry],

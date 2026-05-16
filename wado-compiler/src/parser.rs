@@ -4089,17 +4089,16 @@ impl Parser {
     /// Parse a single trait bound:
     /// - `Ord` — simple
     /// - `Builder<Output = T, Error = E>` — with associated-type bindings
-    /// - `fn(...) -> R` / `fn mut(...) -> R [with E]` — closure-type bound
+    /// - `fn(...) -> R` / `fn mut(...) -> R [with E | with (E1, E2)]` —
+    ///   closure-type bound. In bound position `with` consumes a single
+    ///   identifier by default; multiple effects require explicit
+    ///   parens because comma already separates trait bounds.
     fn parse_trait_bound(&mut self) -> ParseResult<crate::ast::TraitBound> {
         let span = self.peek().span;
 
         // Closure-type bound: `fn(...)` or `fn mut(...)`.
         if self.check(&TokenKind::Fn) {
-            let fn_type_node = self.parse_type()?;
-            let fn_signature = match fn_type_node {
-                crate::ast::Type::Function(boxed) => boxed,
-                _ => unreachable!("parse_type starting at `fn` must return Type::Function"),
-            };
+            let fn_signature = self.parse_fn_type_for_bound(span)?;
             let bound_name = if fn_signature.is_mut { "FnMut" } else { "Fn" };
             return Ok(crate::ast::TraitBound {
                 name: bound_name.to_string(),
@@ -4143,6 +4142,89 @@ impl Parser {
             span,
             fn_signature: None,
         })
+    }
+
+    /// Parse a `fn(...)` / `fn mut(...)` closure-type bound.
+    ///
+    /// Unlike free-standing function types (`parse_type`), the `with` clause
+    /// here treats comma as the next-trait-bound separator: single effect
+    /// names go bare, multiple effects must be wrapped in parens.
+    ///
+    /// - `fn(...) -> R`                  — no effects
+    /// - `fn(...) -> R with E`            — single effect
+    /// - `fn(...) -> R with (E1, E2)`     — multiple effects (parens required)
+    fn parse_fn_type_for_bound(&mut self, start_span: Span) -> ParseResult<Box<FunctionType>> {
+        self.expect(&TokenKind::Fn)?;
+        let is_mut = if self.check(&TokenKind::Mut) {
+            self.advance();
+            true
+        } else {
+            false
+        };
+        self.expect(&TokenKind::LParen)?;
+        let params = self.parse_comma_separated(&TokenKind::RParen, Self::parse_type)?;
+        self.expect(&TokenKind::RParen)?;
+
+        let return_type = if self.check(&TokenKind::Arrow) {
+            self.advance();
+            self.parse_type()?
+        } else {
+            Type::Named(NamedType {
+                id: self.alloc_ast_id(),
+                name: "()".to_string(),
+                span: start_span,
+                source_interface: None,
+            })
+        };
+
+        let (effects, effect_ids) = self.parse_bound_with_clause()?;
+
+        Ok(Box::new(FunctionType {
+            is_mut,
+            params,
+            return_type,
+            effects,
+            effect_ids,
+            // Closure-type bounds don't carry `stores` — that's a free-fn
+            // declaration concern.
+            stores: Vec::new(),
+        }))
+    }
+
+    /// Parse `with E` or `with (E1, E2, ...)` for closure-type bounds.
+    /// Returns `(effects, effect_ids)`.
+    fn parse_bound_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>)> {
+        if !self.check(&TokenKind::With) {
+            return Ok((Vec::new(), Vec::new()));
+        }
+        self.advance();
+
+        // Paren-grouped multi-effect: `with (E1, E2, ...)`.
+        if self.check(&TokenKind::LParen) {
+            self.advance();
+            let mut effects = Vec::new();
+            let mut effect_ids = Vec::new();
+            loop {
+                if self.check(&TokenKind::RParen) {
+                    break;
+                }
+                let (name, span) = self.consume_ident_with_span()?;
+                effects.push(name);
+                effect_ids.push((self.alloc_ast_id(), span));
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+            self.expect(&TokenKind::RParen)?;
+            return Ok((effects, effect_ids));
+        }
+
+        // Bare single-effect form: `with E`. Comma here belongs to the
+        // enclosing trait-bound or generic-param list, not the effect list.
+        let (name, span) = self.consume_ident_with_span()?;
+        Ok((vec![name], vec![(self.alloc_ast_id(), span)]))
     }
 
     /// Parse type arguments for turbofish syntax: `<T1, T2, ...>`

@@ -716,9 +716,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if unary.op == UnaryOp::MutRef
             && let ast::Expr::Closure(_) = &unary.expr
         {
-            let _ = self.logger.error(TypeError::AmpMutClosureSyntaxRetired {
-                span: unary.span,
-            });
+            let _ = self
+                .logger
+                .error(TypeError::AmpMutClosureSyntaxRetired { span: unary.span });
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, unary.span);
         }
         let expr = self.resolve_expr(&unary.expr, ctx, None);

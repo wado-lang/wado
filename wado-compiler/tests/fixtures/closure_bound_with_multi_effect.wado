@@ -1,0 +1,30 @@
+// `with` in bound position consumes a single identifier by default;
+// multiple effects require explicit parens. Comma at the top level of
+// a bound list separates the next bound, not the next effect.
+// See wep-2026-01-16-closure-implementation.md ("Effect List Parsing
+// in Bounds").
+
+use { println, Stdout } from "core:cli";
+
+// Single-effect bound: no parens.
+fn run_with_stdout<F: fn() with Stdout>(f: F) with Stdout {
+    f();
+}
+
+// Multi-effect bound: parens REQUIRED to separate from outer commas.
+fn run_with_stdout_and_extra<F: fn() with (Stdout, Stderr), G: fn()>(
+    f: F,
+    g: G,
+) with Stdout, Stderr {
+    f();
+    g();
+}
+
+export fn run() with Stdout {
+    run_with_stdout(|| {
+        println("hello");
+    });
+}
+
+__DATA__
+{"stdout_contains": ["hello"]}
