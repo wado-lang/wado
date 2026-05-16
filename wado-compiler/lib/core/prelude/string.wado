@@ -112,6 +112,11 @@ impl String {
     /// Returns the byte offset where the caller must write exactly `n` valid UTF-8 bytes
     /// into `internal_raw_bytes()`. The string's length is advanced immediately, so the
     /// caller MUST fill all `n` bytes before the string is observed.
+    ///
+    /// Intended for right-to-left writes (integer/float decimal formatting) that
+    /// `array_copy` cannot express. For left-to-right bulk appends, use
+    /// `push_bytes_unchecked` or `push_str_range_unchecked` instead — they compile to
+    /// a single `array_copy` and do not require the caller to maintain a write offset.
     pub fn internal_reserve_uninit(&mut self, n: i32) -> i32 {
         let new_used = self.used + n;
         if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
@@ -196,13 +201,10 @@ impl Add for String {
     type Output = String;
 
     pub fn add(&self, other: &Self) -> Self::Output {
-        let len_a = self.len();
-        let len_b = other.len();
-        let total = len_a + len_b;
-        let repr: builtin::array<u8> = builtin::array_new(total);
-        builtin::array_copy(repr, 0, self.internal_raw_bytes(), 0, len_a);
-        builtin::array_copy(repr, len_a, other.internal_raw_bytes(), 0, len_b);
-        return String { repr, used: total };
+        let mut result = String::with_capacity(self.len() + other.len());
+        result.push_str(*self);
+        result.push_str(*other);
+        return result;
     }
 }
 
@@ -365,22 +367,16 @@ impl String {
             return null;
         }
         let b0 = builtin::array_get_u8(self.repr, byte_index);
-        if b0 < 0x80 {
-            return Option::Some(char::from_u32_unchecked(b0 as u32));
-        }
-        if b0 < 0xE0 {
-            if byte_index + 2 > self.used {
-                return null;
-            }
-            return Option::Some(self.char_at_byte_unchecked(byte_index));
-        }
-        if b0 < 0xF0 {
-            if byte_index + 3 > self.used {
-                return null;
-            }
-            return Option::Some(self.char_at_byte_unchecked(byte_index));
-        }
-        if byte_index + 4 > self.used {
+        let needed = if b0 < 0x80 {
+            1;
+        } else if b0 < 0xE0 {
+            2;
+        } else if b0 < 0xF0 {
+            3;
+        } else {
+            4;
+        };
+        if byte_index + needed > self.used {
             return null;
         }
         return Option::Some(self.char_at_byte_unchecked(byte_index));
@@ -462,9 +458,6 @@ impl String {
     /// - `0 <= byte_len <= self.len()`.
     /// - `byte_len` lies on a UTF-8 character boundary.
     pub fn truncate_unchecked(&mut self, byte_len: i32) {
-        if byte_len >= self.used {
-            return;
-        }
         self.used = byte_len;
     }
 
