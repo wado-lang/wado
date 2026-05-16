@@ -659,6 +659,10 @@ mod timezone_host {
     #[cfg(unix)]
     fn local_offset_nanos(secs: i64) -> Option<i64> {
         use std::mem::MaybeUninit;
+        // `libc::time_t` is `i64` on 64-bit Linux/macOS but `i32` on some
+        // platforms; keep the conversion fallible for portability even where
+        // clippy would call it useless on the current target.
+        #[allow(clippy::useless_conversion)]
         let t: libc::time_t = secs.try_into().ok()?;
         let mut tm: MaybeUninit<libc::tm> = MaybeUninit::uninit();
         let ret = unsafe { libc::localtime_r(&raw const t, tm.as_mut_ptr()) };

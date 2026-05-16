@@ -403,9 +403,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let cm_name = method
                 .attrs
                 .iter()
-                .find(|a| a.name == "cm")
-                .and_then(|a| a.args.first())
-                .map(|a| a.as_str().to_string());
+                .find_map(crate::ast::Attribute::cm_identifier);
             ops.push(TirEffectOp {
                 name: method.name.clone(),
                 params,
@@ -788,15 +786,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // parameter at the boundary, so defaults cannot divergently exist
         // only on the Wado side.
         // A function crosses the Component Model boundary when it is either
-        // exported (`export fn ...`) or imported (declaration with no body,
-        // typically carrying `#[canonical(...)]` or `#[cm(...)]`). Closures
-        // may not appear in either side's signature.
-        let is_cm_import = func.body.is_none()
-            && (func.attrs.iter().any(|a| a.cm_import.is_some())
-                || func
-                    .attrs
-                    .iter()
-                    .any(|a| a.name == "canonical" || a.name == "cm"));
+        // exported (`export fn ...`) or imported (declaration with no body
+        // carrying `#[canonical(...)]` or `#[cm(...)]`). Closures may not
+        // appear in either side's signature.
+        let is_cm_import =
+            func.body.is_none() && func.attrs.iter().any(|a| a.cm_boundary.is_some());
         let crosses_cm_boundary = func.is_export || is_cm_import;
 
         let mut params = Vec::new();

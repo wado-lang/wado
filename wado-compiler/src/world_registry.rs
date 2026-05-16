@@ -237,17 +237,7 @@ pub struct WorldRegistry {
 fn fq_name_from_attrs(attrs: &[crate::ast::Attribute]) -> Option<String> {
     attrs
         .iter()
-        .find(|a| a.name == "cm")
-        .and_then(|a| a.args.first())
-        .map(|arg| {
-            let s = arg.as_str();
-            // Strip version suffix (e.g., "@0.3.0-rc-2026-01-06")
-            if let Some(at_pos) = s.find('@') {
-                s[..at_pos].to_string()
-            } else {
-                s.to_string()
-            }
-        })
+        .find_map(|a| a.as_cm_import().map(crate::ast::CmImport::bare_path))
 }
 
 impl WorldRegistry {
@@ -397,7 +387,9 @@ mod tests {
             attrs: vec![Attribute {
                 name: "cm".to_string(),
                 args: vec![ast::AttrArg::Str("wasi:cli/command@0.3.0".to_string())],
-                cm_import: None,
+                cm_boundary: Some(crate::ast::CmBoundary::Import(
+                    crate::ast::CmImport::parse("wasi:cli/command@0.3.0").unwrap(),
+                )),
                 span: make_span(),
             }],
             imports: vec![],
