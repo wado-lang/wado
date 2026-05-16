@@ -68,7 +68,7 @@ static ENTRY_FILENAME_UNINITIALIZED: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("<uninitialized>"));
 
 fn well_known_arcs() -> Vec<Arc<str>> {
-    vec![
+    let mut arcs: Vec<Arc<str>> = vec![
         PLACEHOLDER_NAME.clone(),
         CORE_PRELUDE.clone(),
         CORE_BUILTIN.clone(),
@@ -90,8 +90,55 @@ fn well_known_arcs() -> Vec<Arc<str>> {
         ENTRY_FILENAME_ENTRY.clone(),
         ENTRY_FILENAME_STDIN.clone(),
         ENTRY_FILENAME_UNINITIALIZED.clone(),
-    ]
+    ];
+    arcs.extend(STDLIB_NAME_ARCS.iter().cloned());
+    arcs
 }
+
+/// Canonical `Arc<str>` values for every stdlib module's `ModuleSource`
+/// payload (the `name` for `core:*` or `interface` for `wasi:*` variant).
+///
+/// Built once from [`crate::stdlib::ALL_WASI_MODULES`] and the fixed set
+/// of core module names; every [`ModuleSourceInterner`] adopts these so
+/// that interning a stdlib name returns the canonical arc and
+/// `ModuleSource` values for stdlib modules compare pointer-equal across
+/// independently constructed interners. This is the foundation that
+/// lets the stdlib TIR cache key its IndexMaps by `ModuleSource`.
+static STDLIB_NAME_ARCS: LazyLock<Vec<Arc<str>>> = LazyLock::new(|| {
+    let core_names: &[&str] = &[
+        // Core modules without a dedicated static above. The names listed
+        // in `well_known_arcs()` (prelude, builtin, …) are intentionally
+        // omitted; including them here would duplicate the arc.
+        "collections",
+        "prelude/fpfmt.wado",
+        "prelude/intparse.wado",
+        "prelude/range.wado",
+        "prelude/tuple.wado",
+        "zlib",
+        "base64",
+        "benchmark",
+        "json",
+        "json_nsd",
+        "json_value",
+        "simd",
+        "url",
+        "router",
+        "kiln",
+        "kiln/kiln_host.wado",
+        "kiln/types.wado",
+        "kiln/worlds.wado",
+        // Wasm asset bundled by the stdlib (referenced as `core:libm.wat`).
+        "libm.wat",
+    ];
+    let mut arcs: Vec<Arc<str>> = core_names.iter().map(|n| Arc::<str>::from(*n)).collect();
+    for (path, _src) in crate::stdlib::ALL_WASI_MODULES {
+        // ModuleSource::Wasi's InternedStr is the part after the
+        // `wasi:` prefix; that is what the interner sees.
+        let interface = path.strip_prefix("wasi:").unwrap_or(path);
+        arcs.push(Arc::<str>::from(interface));
+    }
+    arcs
+});
 
 /// Interner for `ModuleSource` payloads. Wraps a generic
 /// [`StringInterner`] and adopts every well-known
