@@ -943,12 +943,36 @@ impl<'a> WirEmitter<'a> {
                     nullable: false,
                     heap_type: HeapType::Concrete(src_wasm_idx),
                 };
-                let dst_name = format!("__array_copy_dst_{}_{}", dest_type_id.index(), src_type_id.index());
-                let src_name = format!("__array_copy_src_{}_{}", dest_type_id.index(), src_type_id.index());
-                let dst_off_name = format!("__array_copy_dst_off_{}_{}", dest_type_id.index(), src_type_id.index());
-                let src_off_name = format!("__array_copy_src_off_{}_{}", dest_type_id.index(), src_type_id.index());
-                let len_name = format!("__array_copy_len_{}_{}", dest_type_id.index(), src_type_id.index());
-                let i_name = format!("__array_copy_i_{}_{}", dest_type_id.index(), src_type_id.index());
+                let dst_name = format!(
+                    "__array_copy_dst_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let src_name = format!(
+                    "__array_copy_src_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let dst_off_name = format!(
+                    "__array_copy_dst_off_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let src_off_name = format!(
+                    "__array_copy_src_off_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let len_name = format!(
+                    "__array_copy_len_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let i_name = format!(
+                    "__array_copy_i_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
                 locals.push((dst_name, ValType::Ref(dst_ref)));
                 locals.push((src_name, ValType::Ref(src_ref)));
                 locals.push((dst_off_name, ValType::I32));
@@ -2159,12 +2183,36 @@ impl<'a> WirEmitter<'a> {
                 // per-element get/set.
                 let dst_wasm_idx = self.resolve_type_index(dest_type_id.index());
                 let src_wasm_idx = self.resolve_type_index(src_type_id.index());
-                let dst_name = format!("__array_copy_dst_{}_{}", dest_type_id.index(), src_type_id.index());
-                let src_name = format!("__array_copy_src_{}_{}", dest_type_id.index(), src_type_id.index());
-                let dst_off_name = format!("__array_copy_dst_off_{}_{}", dest_type_id.index(), src_type_id.index());
-                let src_off_name = format!("__array_copy_src_off_{}_{}", dest_type_id.index(), src_type_id.index());
-                let len_name = format!("__array_copy_len_{}_{}", dest_type_id.index(), src_type_id.index());
-                let i_name = format!("__array_copy_i_{}_{}", dest_type_id.index(), src_type_id.index());
+                let dst_name = format!(
+                    "__array_copy_dst_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let src_name = format!(
+                    "__array_copy_src_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let dst_off_name = format!(
+                    "__array_copy_dst_off_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let src_off_name = format!(
+                    "__array_copy_src_off_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let len_name = format!(
+                    "__array_copy_len_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
+                let i_name = format!(
+                    "__array_copy_i_{}_{}",
+                    dest_type_id.index(),
+                    src_type_id.index()
+                );
                 let dst_local = self.resolve_local(&dst_name);
                 let src_local = self.resolve_local(&src_name);
                 let dst_off_local = self.resolve_local(&dst_off_name);
