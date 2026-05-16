@@ -49,87 +49,112 @@ struct core:prelude/array.wado//ArrayIter<i32> {  // TypeId(9)
     mut index: i32,
 }
 
-struct core:prelude//Array<core:prelude/string.wado/String> {  // TypeId(10)
+variant core:prelude/types.wado//Option<i32> {  // TypeId(10)
+    Some(i32),
+    None,
+}
+
+struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(11)
+    discriminant: i32,
+    payload_0: i32,
+}
+
+variant core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError> {  // TypeId(12)
+    Ok(ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer"),
+    Err(ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError"),
+}
+
+struct core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>::Ok {  // TypeId(13)
+    discriminant: i32,
+    payload_0: ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer",
+}
+
+struct core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>::Err {  // TypeId(14)
+    discriminant: i32,
+    payload_0: ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError",
+}
+
+struct core:prelude//Array<core:prelude/string.wado/String> {  // TypeId(15)
     mut repr: ref "builtin::array<core:prelude/string.wado/String>",
     mut used: i32,
 }
 
-struct core:prelude//Array<i32> {  // TypeId(11)
+struct core:prelude//Array<i32> {  // TypeId(16)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
 
-enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(12)
+enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(17)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(13)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(14)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(19)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(15)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(16)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(21)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(17)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(22)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(18)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(23)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(19)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(24)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(25)
 
-type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/run" = fn();  // TypeId(21)
+type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/run" = fn();  // TypeId(26)
 
-type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
+type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(27)
 
-type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/__cm_export__run" = fn();  // TypeId(23)
+type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/__cm_export__run" = fn();  // TypeId(28)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(24)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(29)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(25)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(30)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(26)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(31)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(27)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(32)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(28)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(33)
 
-type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(29)
+type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(34)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(30)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(35)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(31)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(36)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(32)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(37)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(33)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(38)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(34)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(39)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(35)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(40)
 
-type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/Array<core:prelude/string.wado/String>^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer>" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSerializer") -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError";  // TypeId(36)
+type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/Array<core:prelude/string.wado/String>^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer>" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSerializer") -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError";  // TypeId(41)
 
-type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>" = fn(ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer", ref "core:prelude/string.wado//String") -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError";  // TypeId(37)
+type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>" = fn(ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer", ref "core:prelude/string.wado//String") -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError";  // TypeId(42)
 
-type "functype//core:prelude/array.wado/ArrayIter<core:prelude/string.wado/String>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<core:prelude/string.wado/String>") -> ref null "core:prelude/string.wado//String";  // TypeId(38)
+type "functype//core:prelude/array.wado/ArrayIter<core:prelude/string.wado/String>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<core:prelude/string.wado/String>") -> ref null "core:prelude/string.wado//String";  // TypeId(43)
 
-type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/Array<i32>^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer>" = fn(ref "core:prelude//Array<i32>", ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSerializer") -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError";  // TypeId(39)
+type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/Array<i32>^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer>" = fn(ref "core:prelude//Array<i32>", ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSerializer") -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError";  // TypeId(44)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
+type "functype//core:prelude/array.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(45)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(41)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(46)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(42)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(47)
 
-type "functype//core:prelude/array.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(43)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(48)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(44)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(49)
 
-type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer^Serializer::serialize_i32" = fn(ref "core:prelude/string.wado//String", i32) -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError";  // TypeId(45)
+type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer^Serializer::serialize_i32" = fn(ref "core:prelude/string.wado//String", i32) -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError";  // TypeId(50)
 
-type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer^Serializer::serialize_string" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError";  // TypeId(46)
+type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer^Serializer::serialize_string" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError";  // TypeId(51)
 
-type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^SerializeSeq::element<i32>" = fn(ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer", i32) -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError";  // TypeId(47)
+type "functype//wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^SerializeSeq::element<i32>" = fn(ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer", i32) -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError";  // TypeId(52)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -664,37 +689,50 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 }
 
 fn "wado-compiler/tests/fixtures/serde_serialize_array.wado/Array<core:prelude/string.wado/String>^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer>"(self, s) {
+    let seq_2: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>";
     let seq_3: ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer";
     let __iter_4: ref "core:prelude/array.wado//ArrayIter<core:prelude/string.wado/String>";
     let item: ref "core:prelude/string.wado//String";
-    let __pattern_temp_1: ref null "core:prelude/string.wado//String";
-    let self_12: ref "core:prelude//Array<core:prelude/string.wado/String>";
-    let __sroa___fused_payload_14_ser: ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSerializer";
-    "core:prelude/string.wado/String::push"(s.buf, 91);
-    __sroa___fused_payload_14_ser = s;
-    seq_3 = struct.new "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer" { ser: __sroa___fused_payload_14_ser, count: 0 };
-    __iter_4 = __inline_Array_core_prelude_string_wado_String__IntoIterator__into_iter_3: block -> ref "core:prelude/array.wado//ArrayIter<core:prelude/string.wado/String>" {
-        self_12 = self;
-        break __inline_Array_core_prelude_string_wado_String__IntoIterator__into_iter_3: struct.new "core:prelude/array.wado//ArrayIter<core:prelude/string.wado/String>" { repr: self_12.repr, used: self_12.used, index: 0 };
+    let __local_6: ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer";
+    let self_11: ref "core:prelude//Array<core:prelude/string.wado/String>";
+    seq_2 = __inline_JsonSerializer_Serializer__begin_seq_0: block -> ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>" {
+        drop(self.used);
+        "core:prelude/string.wado/String::push"(s.buf, 91);
+        break __inline_JsonSerializer_Serializer__begin_seq_0: struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer" { ser: s, count: 0 } };
         unreachable;
     };
-    b54: block {
-        l55: loop {
-            __pattern_temp_1 = "core:prelude/array.wado/ArrayIter<core:prelude/string.wado/String>^Iterator::next"(__iter_4);
-            if ref.is_null(__pattern_temp_1) == 0 {
-                item = ref.as_non_null(__pattern_temp_1);
-                drop("wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(seq_3, item));
-            } else {
-                break b54;
-            }
-            continue l55;
+    if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>::Ok"(seq_2) {
+        let __cast_1: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>::Ok";
+        __cast_1 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>::Ok"(seq_2);
+        __local_6 = __cast_1.payload_0;
+        seq_3 = struct.new "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer" { ser: __local_6.ser, count: __local_6.count };
+        __iter_4 = __inline_Array_core_prelude_string_wado_String__IntoIterator__into_iter_3: block -> ref "core:prelude/array.wado//ArrayIter<core:prelude/string.wado/String>" {
+            self_11 = self;
+            break __inline_Array_core_prelude_string_wado_String__IntoIterator__into_iter_3: struct.new "core:prelude/array.wado//ArrayIter<core:prelude/string.wado/String>" { repr: self_11.repr, used: self_11.used, index: 0 };
+            unreachable;
         };
-    };
-    return __inline_JsonSeqSerializer_SerializeSeq__end_4: block -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError" {
-        "core:prelude/string.wado/String::push"(seq_3.ser.buf, 93);
-        break __inline_JsonSeqSerializer_SerializeSeq__end_4: ref.null none;
-        unreachable;
-    };
+        block {
+            l56: loop {
+                let __match_scrut_1: ref null "core:prelude/string.wado//String";
+                __match_scrut_1 = "core:prelude/array.wado/ArrayIter<core:prelude/string.wado/String>^Iterator::next"(__iter_4);
+                drop((if ref.is_null(__match_scrut_1) == 0 -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError" {
+                    let __cast_2: ref null "core:prelude/string.wado//String";
+                    __cast_2 = ref.as_non_null(__match_scrut_1);
+                    item = ref.as_non_null(__cast_2);
+                    "wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(seq_3, item);
+                } else {
+                    break b55;
+                }));
+                continue l56;
+            };
+        };
+        return __inline_JsonSeqSerializer_SerializeSeq__end_4: block -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError" {
+            "core:prelude/string.wado/String::push"(seq_3.ser.buf, 93);
+            break __inline_JsonSeqSerializer_SerializeSeq__end_4: ref.null none;
+            unreachable;
+        };
+    } else {
+    }
     return struct.new "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("begin_seq failed"), used: 16 } };
 }
 
@@ -723,36 +761,48 @@ fn "core:prelude/array.wado/ArrayIter<core:prelude/string.wado/String>^Iterator:
 }
 
 fn "wado-compiler/tests/fixtures/serde_serialize_array.wado/Array<i32>^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSerializer>"(self, s) {
+    let seq_2: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>";
     let seq_3: ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer";
     let __iter_4: ref "core:prelude/array.wado//ArrayIter<i32>";
-    let self_12: ref "core:prelude//Array<i32>";
-    let __sroa___fused_payload_14_ser: ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSerializer";
-    "core:prelude/string.wado/String::push"(s.buf, 91);
-    __sroa___fused_payload_14_ser = s;
-    seq_3 = struct.new "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer" { ser: __sroa___fused_payload_14_ser, count: 0 };
-    __iter_4 = __inline_Array_i32__IntoIterator__into_iter_3: block -> ref "core:prelude/array.wado//ArrayIter<i32>" {
-        self_12 = self;
-        break __inline_Array_i32__IntoIterator__into_iter_3: struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: self_12.repr, used: self_12.used, index: 0 };
+    let __local_6: ref "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer";
+    let self_11: ref "core:prelude//Array<i32>";
+    seq_2 = __inline_JsonSerializer_Serializer__begin_seq_0: block -> ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>" {
+        drop(self.used);
+        "core:prelude/string.wado/String::push"(s.buf, 91);
+        break __inline_JsonSerializer_Serializer__begin_seq_0: struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer" { ser: s, count: 0 } };
         unreachable;
     };
-    b59: block {
-        l60: loop {
-            let __sroa___pattern_temp_1_discriminant: i32;
-            let __sroa___pattern_temp_1_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_4);
-            if __sroa___pattern_temp_1_discriminant == 0 {
-                drop("wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^SerializeSeq::element<i32>"(seq_3, __sroa___pattern_temp_1_payload_0));
-            } else {
-                break b59;
-            }
-            continue l60;
+    if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>::Ok"(seq_2) {
+        let __cast_1: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>::Ok";
+        __cast_1 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer,wado-compiler/tests/fixtures/serde_serialize_array.wado/SerializeError>::Ok"(seq_2);
+        __local_6 = __cast_1.payload_0;
+        seq_3 = struct.new "wado-compiler/tests/fixtures/serde_serialize_array.wado//JsonSeqSerializer" { ser: __local_6.ser, count: __local_6.count };
+        __iter_4 = __inline_Array_i32__IntoIterator__into_iter_3: block -> ref "core:prelude/array.wado//ArrayIter<i32>" {
+            self_11 = self;
+            break __inline_Array_i32__IntoIterator__into_iter_3: struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: self_11.repr, used: self_11.used, index: 0 };
+            unreachable;
         };
-    };
-    return __inline_JsonSeqSerializer_SerializeSeq__end_4: block -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError" {
-        "core:prelude/string.wado/String::push"(seq_3.ser.buf, 93);
-        break __inline_JsonSeqSerializer_SerializeSeq__end_4: ref.null none;
-        unreachable;
-    };
+        block {
+            l62: loop {
+                let __match_scrut_1: ref "core:prelude/types.wado//Option<i32>";
+                __match_scrut_1 = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_4);
+                drop((if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_1) -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError" {
+                    let __cast_2: ref "core:prelude/types.wado//Option<i32>::Some";
+                    __cast_2 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_1);
+                    "wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^SerializeSeq::element<i32>"(seq_3, __cast_2.payload_0);
+                } else {
+                    break b61;
+                }));
+                continue l62;
+            };
+        };
+        return __inline_JsonSeqSerializer_SerializeSeq__end_4: block -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError" {
+            "core:prelude/string.wado/String::push"(seq_3.ser.buf, 93);
+            break __inline_JsonSeqSerializer_SerializeSeq__end_4: ref.null none;
+            unreachable;
+        };
+    } else {
+    }
     return struct.new "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("begin_seq failed"), used: 16 } };
 }
 
@@ -773,11 +823,11 @@ fn "wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^Se
 fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
     let item: i32;
     if self.index >= self.used {
-        return 1, 0;
+        return struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     }
     item = builtin::array_get<i32>(self.repr, self.index);
     self.index = self.index + 1;
-    return 0, item;
+    return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: item };
 }
 
 export fn "wado-compiler/tests/fixtures/serde_serialize_array.wado/__cm_export__run" as "run"

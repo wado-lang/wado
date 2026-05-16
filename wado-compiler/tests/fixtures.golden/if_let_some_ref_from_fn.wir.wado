@@ -100,16 +100,18 @@ fn "wado-compiler/tests/fixtures/if_let_some_ref_from_fn.wado/run"() {
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
-    let __local_5: ref null "core:prelude/types.wado//Box<i32>";
     let x: ref "core:prelude/types.wado//Box<i32>";
-    let f_11: ref "core:prelude/format.wado//Formatter";
-    let f_16: ref "core:prelude/format.wado//Formatter";
-    __local_5 = __inline_make_opt_2: block -> ref null "core:prelude/types.wado//Box<i32>" {
+    let f_10: ref "core:prelude/format.wado//Formatter";
+    let f_15: ref "core:prelude/format.wado//Formatter";
+    let __match_scrut_0: ref null "core:prelude/types.wado//Box<i32>";
+    __match_scrut_0 = __inline_make_opt_2: block -> ref null "core:prelude/types.wado//Box<i32>" {
         x = struct.new "core:prelude/types.wado//Box<i32>" { value: 1 };
         break __inline_make_opt_2: x;
         unreachable;
     };
-    n = (if ref.is_null(__local_5) == 0 -> i32 {
+    n = (if ref.is_null(__match_scrut_0) == 0 -> i32 {
+        let __cast_1: ref null "core:prelude/types.wado//Box<i32>";
+        __cast_1 = ref.as_non_null(__match_scrut_0);
         1;
     } else {
         0;
@@ -129,8 +131,8 @@ fn "wado-compiler/tests/fixtures/if_let_some_ref_from_fn.wado/run"() {
             "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/if_let_some_ref_from_fn.wado"), used: 57 });
             "core:prelude/string.wado/String::push"(__local_3, 58);
             __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
-            f_11 = __local_4;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(20, f_11);
+            f_10 = __local_4;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(20, f_10);
             "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: n == 1
 "), used: 19 });
@@ -138,8 +140,8 @@ condition: n == 1
             "core:prelude/string.wado/String::push"(__local_3, 58);
             "core:prelude/string.wado/String::push"(__local_3, 32);
             __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
-            f_16 = __local_4;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(n, f_16);
+            f_15 = __local_4;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(n, f_15);
             "core:prelude/string.wado/String::push"(__local_3, 10);
             break __tmpl: __local_3;
             unreachable;

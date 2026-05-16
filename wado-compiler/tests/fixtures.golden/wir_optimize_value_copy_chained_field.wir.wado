@@ -103,47 +103,50 @@ fn "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado/run"
     let o: ref "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado//Outer";
     let v: i32;
     let n: ref "core:prelude/string.wado//String";
-    let __local_4: ref "core:prelude/string.wado//String";
+    let __local_4_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let message_8: ref "core:prelude/string.wado//String";
-    let rx_9: i32;
-    let tx_10: i32;
-    let handle_11: i32;
-    let rx_21: i32;
-    let tx_22: i32;
-    let handle_23: i32;
+    let message_7: ref "core:prelude/string.wado//String";
+    let rx_8: i32;
+    let tx_9: i32;
+    let handle_10: i32;
+    let rx_20: i32;
+    let tx_21: i32;
+    let handle_22: i32;
     c = struct.new "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado//Outer" { inner: struct.new "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado//Inner" { value: 42 }, name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
     if ref.is_null(c) == 0 {
-        o = ref.as_non_null(c);
+        let __cast_1: ref null "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado//Outer";
+        __cast_1 = ref.as_non_null(c);
+        o = ref.as_non_null(__cast_1);
         v = o.inner.value;
         n = o.name;
-        message_8 = __tmpl: block -> ref "core:prelude/string.wado//String" {
-            __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-            __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
+        message_7 = __tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+            __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4_4 };
             "core:prelude/primitive.wado/i32::fmt_decimal"(v, __local_5);
-            break __tmpl: __local_4;
+            break __tmpl: __local_4_4;
             unreachable;
         };
-        let __pair_temp_1: i64;
-        __pair_temp_1 = "wasi/stream-new"();
-        let __mv_lo_1: i32;
-        let __mv_hi_1: i32;
-        multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-        rx_9 = __mv_lo_1;
-        tx_10 = __mv_hi_1;
-        handle_11 = "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado/__cm_binding__Stdout_write_via_stream"(rx_9);
-        "core:cli/write_to_stream"(tx_10, message_8, 1);
-        "wasi/future-drop-readable:transmission-cli"(handle_11);
         let __pair_temp_2: i64;
         __pair_temp_2 = "wasi/stream-new"();
         let __mv_lo_2: i32;
         let __mv_hi_2: i32;
         multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
-        rx_21 = __mv_lo_2;
-        tx_22 = __mv_hi_2;
-        handle_23 = "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado/__cm_binding__Stdout_write_via_stream"(rx_21);
-        "core:cli/write_to_stream"(tx_22, n, 1);
-        "wasi/future-drop-readable:transmission-cli"(handle_23);
+        rx_8 = __mv_lo_2;
+        tx_9 = __mv_hi_2;
+        handle_10 = "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado/__cm_binding__Stdout_write_via_stream"(rx_8);
+        "core:cli/write_to_stream"(tx_9, message_7, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_10);
+        let __pair_temp_3: i64;
+        __pair_temp_3 = "wasi/stream-new"();
+        let __mv_lo_3: i32;
+        let __mv_hi_3: i32;
+        multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
+        rx_20 = __mv_lo_3;
+        tx_21 = __mv_hi_3;
+        handle_22 = "wado-compiler/tests/fixtures/wir_optimize_value_copy_chained_field.wado/__cm_binding__Stdout_write_via_stream"(rx_20);
+        "core:cli/write_to_stream"(tx_21, n, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_22);
+    } else {
     }
 }
 

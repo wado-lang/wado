@@ -602,22 +602,26 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/handle"(reque
     let self_191: ref "core:prelude/string.wado//StrUtf8ByteIter";
     let __b_192: ref "core:prelude//Array<u8>";
     let result_193: ref "core:prelude//Array<u8>";
-    let self_206: ref "core:prelude/string.wado//String";
-    let self_207: ref "core:prelude/string.wado//StrUtf8ByteIter";
-    let __b_208: ref "core:prelude//Array<u8>";
-    let result_209: ref "core:prelude//Array<u8>";
-    let self_231: ref "core:prelude/string.wado//String";
-    let self_232: ref "core:prelude/string.wado//StrUtf8ByteIter";
-    let __b_233: ref "core:prelude//Array<u8>";
-    let result_234: ref "core:prelude//Array<u8>";
-    let self_243: ref "core:prelude/string.wado//String";
-    let self_244: ref "core:prelude/string.wado//StrUtf8ByteIter";
-    let __b_245: ref "core:prelude//Array<u8>";
-    let result_246: ref "core:prelude//Array<u8>";
-    let byte_253: u8;
-    let byte_258: u8;
-    let byte_263: u8;
-    let byte_268: u8;
+    let item_194: u8;
+    let self_205: ref "core:prelude/string.wado//String";
+    let self_206: ref "core:prelude/string.wado//StrUtf8ByteIter";
+    let __b_207: ref "core:prelude//Array<u8>";
+    let result_208: ref "core:prelude//Array<u8>";
+    let item_209: u8;
+    let self_229: ref "core:prelude/string.wado//String";
+    let self_230: ref "core:prelude/string.wado//StrUtf8ByteIter";
+    let __b_231: ref "core:prelude//Array<u8>";
+    let result_232: ref "core:prelude//Array<u8>";
+    let item_233: u8;
+    let self_240: ref "core:prelude/string.wado//String";
+    let self_241: ref "core:prelude/string.wado//StrUtf8ByteIter";
+    let __b_242: ref "core:prelude//Array<u8>";
+    let result_243: ref "core:prelude//Array<u8>";
+    let item_244: u8;
+    let byte_249: u8;
+    let byte_254: u8;
+    let byte_259: u8;
+    let byte_264: u8;
     headers = "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Request_get_headers"(request);
     drop("wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_has"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("host"), used: 4 }));
     drop("wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_get"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("host"), used: 4 }));
@@ -634,26 +638,35 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/handle"(reque
         };
         b0: block {
             l1: loop {
-                __fused___inline_StrUtf8ByteIter_Iterator__next_2: block {
+                let __match_scrut_0: ref "core:prelude/types.wado//Option<u8>";
+                __match_scrut_0 = __inline_StrUtf8ByteIter_Iterator__next_2: block -> ref "core:prelude/types.wado//Option<u8>" {
                     if self_191.index >= self_191.used {
-                        break b0;
+                        break __inline_StrUtf8ByteIter_Iterator__next_2: struct.new "core:prelude/types.wado//Option<u8>" { 1 };
                     }
-                    byte_253 = builtin::array_get_u8(self_191.repr, self_191.index);
+                    byte_249 = builtin::array_get_u8(self_191.repr, self_191.index);
                     self_191.index = self_191.index + 1;
-                    "core:prelude/array.wado/Array<u8>::push"(result_193, byte_253);
-                    break __fused___inline_StrUtf8ByteIter_Iterator__next_2;
+                    break __inline_StrUtf8ByteIter_Iterator__next_2: struct.new "core:prelude/types.wado//Option<u8>::Some" { discriminant: 0, payload_0: byte_249 };
+                    unreachable;
                 };
+                if ref.test "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_0) {
+                    let __cast_1: ref "core:prelude/types.wado//Option<u8>::Some";
+                    __cast_1 = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_0);
+                    item_194 = __cast_1.payload_0;
+                    "core:prelude/array.wado/Array<u8>::push"(result_193, item_194);
+                } else {
+                    break b0;
+                }
                 continue l1;
             };
         };
         break __inline_StrUtf8ByteIter_Iterator__collect_3: result_193;
         unreachable;
     });
-    let __match_scrut_0: ref null "wasi:http/types.wado//HeaderError";
-    __match_scrut_0 = append_result;
-    __cond_5 = (if ref.is_null(__match_scrut_0) == 0 -> bool {
-        let __cast_1: ref null "wasi:http/types.wado//HeaderError";
-        __cast_1 = ref.as_non_null(__match_scrut_0);
+    let __match_scrut_1: ref null "wasi:http/types.wado//HeaderError";
+    __match_scrut_1 = append_result;
+    __cond_5 = (if ref.is_null(__match_scrut_1) == 0 -> bool {
+        let __cast_2: ref null "wasi:http/types.wado//HeaderError";
+        __cast_2 = ref.as_non_null(__match_scrut_1);
         1;
     } else {
         0;
@@ -686,42 +699,51 @@ condition: append_result matches { Err(_) }
     }
     values = __seq_lit: block -> ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>" {
         __b_6 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<u8>>" { repr: array.new_fixed<ref "core:prelude//Array<u8>">(__inline_StrUtf8ByteIter_Iterator__collect_12: block -> ref "core:prelude//Array<u8>" {
-            self_207 = __inline_String__bytes_11: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
-                self_206 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("val"), used: 3 };
-                break __inline_String__bytes_11: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_206.repr, used: 3, index: 0 };
+            self_206 = __inline_String__bytes_11: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
+                self_205 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("val"), used: 3 };
+                break __inline_String__bytes_11: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_205.repr, used: 3, index: 0 };
                 unreachable;
             };
-            result_209 = __inline_StrUtf8ByteIter_Iterator__collect_12____seq_lit: block -> ref "core:prelude//Array<u8>" {
-                __b_208 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-                break __inline_StrUtf8ByteIter_Iterator__collect_12____seq_lit: __b_208;
+            result_208 = __inline_StrUtf8ByteIter_Iterator__collect_12____seq_lit: block -> ref "core:prelude//Array<u8>" {
+                __b_207 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+                break __inline_StrUtf8ByteIter_Iterator__collect_12____seq_lit: __b_207;
                 unreachable;
             };
-            b5: block {
-                l6: loop {
-                    __fused___inline_StrUtf8ByteIter_Iterator__next_5: block {
-                        if self_207.index >= self_207.used {
-                            break b5;
+            b6: block {
+                l7: loop {
+                    let __match_scrut_2: ref "core:prelude/types.wado//Option<u8>";
+                    __match_scrut_2 = __inline_StrUtf8ByteIter_Iterator__next_5: block -> ref "core:prelude/types.wado//Option<u8>" {
+                        if self_206.index >= self_206.used {
+                            break __inline_StrUtf8ByteIter_Iterator__next_5: struct.new "core:prelude/types.wado//Option<u8>" { 1 };
                         }
-                        byte_258 = builtin::array_get_u8(self_207.repr, self_207.index);
-                        self_207.index = self_207.index + 1;
-                        "core:prelude/array.wado/Array<u8>::push"(result_209, byte_258);
-                        break __fused___inline_StrUtf8ByteIter_Iterator__next_5;
+                        byte_254 = builtin::array_get_u8(self_206.repr, self_206.index);
+                        self_206.index = self_206.index + 1;
+                        break __inline_StrUtf8ByteIter_Iterator__next_5: struct.new "core:prelude/types.wado//Option<u8>::Some" { discriminant: 0, payload_0: byte_254 };
+                        unreachable;
                     };
-                    continue l6;
+                    if ref.test "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_2) {
+                        let __cast_3: ref "core:prelude/types.wado//Option<u8>::Some";
+                        __cast_3 = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_2);
+                        item_209 = __cast_3.payload_0;
+                        "core:prelude/array.wado/Array<u8>::push"(result_208, item_209);
+                    } else {
+                        break b6;
+                    }
+                    continue l7;
                 };
             };
-            break __inline_StrUtf8ByteIter_Iterator__collect_12: result_209;
+            break __inline_StrUtf8ByteIter_Iterator__collect_12: result_208;
             unreachable;
         }), used: 1 };
         break __seq_lit: __b_6;
         unreachable;
     };
     set_result = "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_set"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("host"), used: 4 }, values);
-    let __match_scrut_1: ref null "wasi:http/types.wado//HeaderError";
-    __match_scrut_1 = set_result;
-    __cond_9 = (if ref.is_null(__match_scrut_1) == 0 -> bool {
-        let __cast_2: ref null "wasi:http/types.wado//HeaderError";
-        __cast_2 = ref.as_non_null(__match_scrut_1);
+    let __match_scrut_3: ref null "wasi:http/types.wado//HeaderError";
+    __match_scrut_3 = set_result;
+    __cond_9 = (if ref.is_null(__match_scrut_3) == 0 -> bool {
+        let __cast_4: ref null "wasi:http/types.wado//HeaderError";
+        __cast_4 = ref.as_non_null(__match_scrut_3);
         1;
     } else {
         0;
@@ -753,11 +775,11 @@ condition: set_result matches { Err(_) }
         unreachable;
     }
     delete_result = "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_delete"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("host"), used: 4 });
-    let __match_scrut_2: ref null "wasi:http/types.wado//HeaderError";
-    __match_scrut_2 = delete_result;
-    __cond_11 = (if ref.is_null(__match_scrut_2) == 0 -> bool {
-        let __cast_3: ref null "wasi:http/types.wado//HeaderError";
-        __cast_3 = ref.as_non_null(__match_scrut_2);
+    let __match_scrut_4: ref null "wasi:http/types.wado//HeaderError";
+    __match_scrut_4 = delete_result;
+    __cond_11 = (if ref.is_null(__match_scrut_4) == 0 -> bool {
+        let __cast_5: ref null "wasi:http/types.wado//HeaderError";
+        __cast_5 = ref.as_non_null(__match_scrut_4);
         1;
     } else {
         0;
@@ -789,11 +811,11 @@ condition: delete_result matches { Err(_) }
         unreachable;
     }
     gad_result = "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_get_and_delete"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("host"), used: 4 });
-    let __match_scrut_3: ref "core:prelude/types.wado//Result<core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>,wasi:http/types.wado/HeaderError>";
-    __match_scrut_3 = gad_result;
-    __cond_13 = (if ref.test "core:prelude/types.wado//Result<core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>,wasi:http/types.wado/HeaderError>::Err"(__match_scrut_3) -> bool {
-        let __cast_4: ref "core:prelude/types.wado//Result<core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>,wasi:http/types.wado/HeaderError>::Err";
-        __cast_4 = ref.cast "core:prelude/types.wado//Result<core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>,wasi:http/types.wado/HeaderError>::Err"(__match_scrut_3);
+    let __match_scrut_5: ref "core:prelude/types.wado//Result<core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>,wasi:http/types.wado/HeaderError>";
+    __match_scrut_5 = gad_result;
+    __cond_13 = (if ref.test "core:prelude/types.wado//Result<core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>,wasi:http/types.wado/HeaderError>::Err"(__match_scrut_5) -> bool {
+        let __cast_6: ref "core:prelude/types.wado//Result<core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>,wasi:http/types.wado/HeaderError>::Err";
+        __cast_6 = ref.cast "core:prelude/types.wado//Result<core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>,wasi:http/types.wado/HeaderError>::Err"(__match_scrut_5);
         1;
     } else {
         0;
@@ -827,36 +849,45 @@ condition: gad_result matches { Err(_) }
     drop("wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_copy_all"(headers));
     cloned = "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_clone"(headers);
     clone_append = "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_append"(cloned, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-clone"), used: 7 }, __inline_StrUtf8ByteIter_Iterator__collect_27: block -> ref "core:prelude//Array<u8>" {
-        self_232 = __inline_String__bytes_26: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
-            self_231 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
-            break __inline_String__bytes_26: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_231.repr, used: self_231.used, index: 0 };
+        self_230 = __inline_String__bytes_26: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
+            self_229 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
+            break __inline_String__bytes_26: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_229.repr, used: self_229.used, index: 0 };
             unreachable;
         };
-        result_234 = __inline_StrUtf8ByteIter_Iterator__collect_27____seq_lit: block -> ref "core:prelude//Array<u8>" {
-            __b_233 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-            break __inline_StrUtf8ByteIter_Iterator__collect_27____seq_lit: __b_233;
+        result_232 = __inline_StrUtf8ByteIter_Iterator__collect_27____seq_lit: block -> ref "core:prelude//Array<u8>" {
+            __b_231 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+            break __inline_StrUtf8ByteIter_Iterator__collect_27____seq_lit: __b_231;
             unreachable;
         };
-        b14: block {
-            l15: loop {
-                __fused___inline_StrUtf8ByteIter_Iterator__next_8: block {
-                    if self_232.index >= self_232.used {
-                        break b14;
+        b16: block {
+            l17: loop {
+                let __match_scrut_6: ref "core:prelude/types.wado//Option<u8>";
+                __match_scrut_6 = __inline_StrUtf8ByteIter_Iterator__next_8: block -> ref "core:prelude/types.wado//Option<u8>" {
+                    if self_230.index >= self_230.used {
+                        break __inline_StrUtf8ByteIter_Iterator__next_8: struct.new "core:prelude/types.wado//Option<u8>" { 1 };
                     }
-                    byte_263 = builtin::array_get_u8(self_232.repr, self_232.index);
-                    self_232.index = self_232.index + 1;
-                    "core:prelude/array.wado/Array<u8>::push"(result_234, byte_263);
-                    break __fused___inline_StrUtf8ByteIter_Iterator__next_8;
+                    byte_259 = builtin::array_get_u8(self_230.repr, self_230.index);
+                    self_230.index = self_230.index + 1;
+                    break __inline_StrUtf8ByteIter_Iterator__next_8: struct.new "core:prelude/types.wado//Option<u8>::Some" { discriminant: 0, payload_0: byte_259 };
+                    unreachable;
                 };
-                continue l15;
+                if ref.test "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_6) {
+                    let __cast_7: ref "core:prelude/types.wado//Option<u8>::Some";
+                    __cast_7 = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_6);
+                    item_233 = __cast_7.payload_0;
+                    "core:prelude/array.wado/Array<u8>::push"(result_232, item_233);
+                } else {
+                    break b16;
+                }
+                continue l17;
             };
         };
-        break __inline_StrUtf8ByteIter_Iterator__collect_27: result_234;
+        break __inline_StrUtf8ByteIter_Iterator__collect_27: result_232;
         unreachable;
     });
-    let __match_scrut_4: ref null "wasi:http/types.wado//HeaderError";
-    __match_scrut_4 = clone_append;
-    __cond_17 = (if ref.is_null(__match_scrut_4) -> bool {
+    let __match_scrut_7: ref null "wasi:http/types.wado//HeaderError";
+    __match_scrut_7 = clone_append;
+    __cond_17 = (if ref.is_null(__match_scrut_7) -> bool {
         1;
     } else {
         0;
@@ -887,20 +918,20 @@ condition: clone_append matches { Ok(_) }
         });
         unreachable;
     }
-    let __pair_temp_5: i64;
-    __pair_temp_5 = "wasi/future-new"();
-    let __mv_lo_5: i32;
-    let __mv_hi_5: i32;
-    multivalue_bind [__mv_lo_5, __mv_hi_5] = (builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64));
-    trailers_future = __mv_lo_5;
-    trailers_tx = __mv_hi_5;
-    let __pair_temp_6: i64;
-    __pair_temp_6 = "wasi/stream-new"();
-    let __mv_lo_6: i32;
-    let __mv_hi_6: i32;
-    multivalue_bind [__mv_lo_6, __mv_hi_6] = (builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64));
-    resp_rx = __mv_lo_6;
-    resp_tx = __mv_hi_6;
+    let __pair_temp_8: i64;
+    __pair_temp_8 = "wasi/future-new"();
+    let __mv_lo_8: i32;
+    let __mv_hi_8: i32;
+    multivalue_bind [__mv_lo_8, __mv_hi_8] = (builtin::i32_wrap_i64(__pair_temp_8); builtin::i32_wrap_i64(__pair_temp_8 >>u 32_i64));
+    trailers_future = __mv_lo_8;
+    trailers_tx = __mv_hi_8;
+    let __pair_temp_9: i64;
+    __pair_temp_9 = "wasi/stream-new"();
+    let __mv_lo_9: i32;
+    let __mv_hi_9: i32;
+    multivalue_bind [__mv_lo_9, __mv_hi_9] = (builtin::i32_wrap_i64(__pair_temp_9); builtin::i32_wrap_i64(__pair_temp_9 >>u 32_i64));
+    resp_rx = __mv_lo_9;
+    resp_tx = __mv_hi_9;
     resp_headers = "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_new"();
     __pattern_temp_2 = "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Response_new"(resp_headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: resp_rx }, trailers_future);
     response = __pattern_temp_2.0;
@@ -1207,54 +1238,63 @@ condition: clone_append matches { Ok(_) }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
     "core:internal/cm_stream_write_u8"(resp_tx, __inline_StrUtf8ByteIter_Iterator__collect_33: block -> ref "core:prelude//Array<u8>" {
-        self_244 = __inline_String__bytes_32: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
-            self_243 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
-            break __inline_String__bytes_32: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_243.repr, used: self_243.used, index: 0 };
+        self_241 = __inline_String__bytes_32: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
+            self_240 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
+            break __inline_String__bytes_32: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_240.repr, used: self_240.used, index: 0 };
             unreachable;
         };
-        result_246 = __inline_StrUtf8ByteIter_Iterator__collect_33____seq_lit: block -> ref "core:prelude//Array<u8>" {
-            __b_245 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-            break __inline_StrUtf8ByteIter_Iterator__collect_33____seq_lit: __b_245;
+        result_243 = __inline_StrUtf8ByteIter_Iterator__collect_33____seq_lit: block -> ref "core:prelude//Array<u8>" {
+            __b_242 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+            break __inline_StrUtf8ByteIter_Iterator__collect_33____seq_lit: __b_242;
             unreachable;
         };
-        b57: block {
-            l58: loop {
-                __fused___inline_StrUtf8ByteIter_Iterator__next_11: block {
-                    if self_244.index >= self_244.used {
-                        break b57;
+        b60: block {
+            l61: loop {
+                let __match_scrut_8: ref "core:prelude/types.wado//Option<u8>";
+                __match_scrut_8 = __inline_StrUtf8ByteIter_Iterator__next_11: block -> ref "core:prelude/types.wado//Option<u8>" {
+                    if self_241.index >= self_241.used {
+                        break __inline_StrUtf8ByteIter_Iterator__next_11: struct.new "core:prelude/types.wado//Option<u8>" { 1 };
                     }
-                    byte_268 = builtin::array_get_u8(self_244.repr, self_244.index);
-                    self_244.index = self_244.index + 1;
-                    "core:prelude/array.wado/Array<u8>::push"(result_246, byte_268);
-                    break __fused___inline_StrUtf8ByteIter_Iterator__next_11;
+                    byte_264 = builtin::array_get_u8(self_241.repr, self_241.index);
+                    self_241.index = self_241.index + 1;
+                    break __inline_StrUtf8ByteIter_Iterator__next_11: struct.new "core:prelude/types.wado//Option<u8>::Some" { discriminant: 0, payload_0: byte_264 };
+                    unreachable;
                 };
-                continue l58;
+                if ref.test "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_8) {
+                    let __cast_10: ref "core:prelude/types.wado//Option<u8>::Some";
+                    __cast_10 = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_8);
+                    item_244 = __cast_10.payload_0;
+                    "core:prelude/array.wado/Array<u8>::push"(result_243, item_244);
+                } else {
+                    break b60;
+                }
+                continue l61;
             };
         };
-        break __inline_StrUtf8ByteIter_Iterator__collect_33: result_246;
+        break __inline_StrUtf8ByteIter_Iterator__collect_33: result_243;
         unreachable;
     });
     "wasi/stream-drop-writable"(resp_tx);
-    let __fw_write_ptr_7: i32;
-    let __fw_handle_7: i32;
-    let __fw_result_7: i32;
-    __fw_handle_7 = trailers_tx;
-    __fw_write_ptr_7 = "mem/realloc"(0, 0, 8, 40);
-    builtin::store_i64(__fw_write_ptr_7, 0_i64);
-    builtin::store_i64[8](__fw_write_ptr_7, 0_i64);
-    builtin::store_i64[16](__fw_write_ptr_7, 0_i64);
-    builtin::store_i64[24](__fw_write_ptr_7, 0_i64);
-    builtin::store_i64[32](__fw_write_ptr_7, 0_i64);
-    __fw_result_7 = "wasi/future-write"(__fw_handle_7, __fw_write_ptr_7);
-    if __fw_result_7 == -1 {
-        let __fw_evt_7: i32;
-        __fw_result_7 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(__fw_handle_7, __fw_result_7);
-        __fw_evt_7 = "mem/realloc"(0, 0, 4, 8);
-        drop("wasi/waitable-set-wait"(__fw_result_7, __fw_evt_7));
-        drop("mem/realloc"(__fw_evt_7, 8, 4, 0));
+    let __fw_write_ptr_11: i32;
+    let __fw_handle_11: i32;
+    let __fw_result_11: i32;
+    __fw_handle_11 = trailers_tx;
+    __fw_write_ptr_11 = "mem/realloc"(0, 0, 8, 40);
+    builtin::store_i64(__fw_write_ptr_11, 0_i64);
+    builtin::store_i64[8](__fw_write_ptr_11, 0_i64);
+    builtin::store_i64[16](__fw_write_ptr_11, 0_i64);
+    builtin::store_i64[24](__fw_write_ptr_11, 0_i64);
+    builtin::store_i64[32](__fw_write_ptr_11, 0_i64);
+    __fw_result_11 = "wasi/future-write"(__fw_handle_11, __fw_write_ptr_11);
+    if __fw_result_11 == -1 {
+        let __fw_evt_11: i32;
+        __fw_result_11 = "wasi/waitable-set-new"();
+        "wasi/waitable-join"(__fw_handle_11, __fw_result_11);
+        __fw_evt_11 = "mem/realloc"(0, 0, 4, 8);
+        drop("wasi/waitable-set-wait"(__fw_result_11, __fw_evt_11));
+        drop("mem/realloc"(__fw_evt_11, 8, 4, 0));
     }
-    drop("mem/realloc"(__fw_write_ptr_7, 40, 8, 0));
+    drop("mem/realloc"(__fw_write_ptr_11, 40, 8, 0));
 }
 
 fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Request_get_headers"(self) with Request {
@@ -1287,25 +1327,25 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
     __count_5 = builtin::load_i32(__outptr + 4);
     __result_6 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<u8>>" { repr: builtin::array_new<ref "core:prelude//Array<u8>">(__count_5), used: 0 };
     __i_7 = 0;
-    b61: block {
-        l62: loop {
+    b65: block {
+        l66: loop {
             if __i_7 >= __count_5 {
-                break b61;
+                break b65;
             }
             __elem_addr_8 = __base_4 + (__i_7 * 8);
             __base_9 = builtin::load_i32(__elem_addr_8);
             __count_10 = builtin::load_i32(__elem_addr_8 + 4);
             __result_11 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(__count_10), used: 0 };
             __i_12 = 0;
-            b64: block {
-                l65: loop {
+            b68: block {
+                l69: loop {
                     if __i_12 >= __count_10 {
-                        break b64;
+                        break b68;
                     }
                     __elem_addr_13 = __base_9 + (__i_12 * 1);
                     "core:prelude/Array<u8>::push"(__result_11, builtin::load_u8(__elem_addr_13));
                     __i_12 = __i_12 + 1;
-                    continue l65;
+                    continue l69;
                 };
             };
             if __count_10 > 0 {
@@ -1313,7 +1353,7 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
             }
             "core:prelude/Array<core:prelude/array.wado/Array<u8>>::push"(__result_6, __result_11);
             __i_7 = __i_7 + 1;
-            continue l62;
+            continue l66;
         };
     };
     if __count_5 > 0 {
@@ -1411,10 +1451,10 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
     __value_i = 0;
     _licm_used_28 = value.used;
     _licm_repr_29 = value.repr;
-    b75: block {
-        l76: loop {
+    b79: block {
+        l80: loop {
             if __value_i >= __value_len {
-                break b75;
+                break b79;
             }
             __value_addr = __value_base + (__value_i * 8);
             __value_elem = __inline_Array_core_prelude_array_wado_Array_u8___IndexValue_i32___index_value_1: block -> ref "core:prelude//Array<u8>" {
@@ -1434,7 +1474,7 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
             builtin::store_i32(__value_addr, builtin::i32_wrap_i64(__elem_packed));
             builtin::store_i32(__value_addr + 4, builtin::i32_wrap_i64(__elem_packed >> 32_i64));
             __value_i = __value_i + 1;
-            continue l76;
+            continue l80;
         };
     };
     __outptr = "mem/realloc"(0, 0, 4, 20);
@@ -1558,25 +1598,25 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
         __count_7 = builtin::load_i32((__outptr + 4) + 4);
         __result_8 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<u8>>" { repr: builtin::array_new<ref "core:prelude//Array<u8>">(__count_7), used: 0 };
         __i_9 = 0;
-        b92: block {
-            l93: loop {
+        b96: block {
+            l97: loop {
                 if __i_9 >= __count_7 {
-                    break b92;
+                    break b96;
                 }
                 __elem_addr_10 = __base_6 + (__i_9 * 8);
                 __base_11 = builtin::load_i32(__elem_addr_10);
                 __count_12 = builtin::load_i32(__elem_addr_10 + 4);
                 __result_13 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(__count_12), used: 0 };
                 __i_14 = 0;
-                b95: block {
-                    l96: loop {
+                b99: block {
+                    l100: loop {
                         if __i_14 >= __count_12 {
-                            break b95;
+                            break b99;
                         }
                         __elem_addr_15 = __base_11 + (__i_14 * 1);
                         "core:prelude/Array<u8>::push"(__result_13, builtin::load_u8(__elem_addr_15));
                         __i_14 = __i_14 + 1;
-                        continue l96;
+                        continue l100;
                     };
                 };
                 if __count_12 > 0 {
@@ -1584,7 +1624,7 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
                 }
                 "core:prelude/Array<core:prelude/array.wado/Array<u8>>::push"(__result_8, __result_13);
                 __i_9 = __i_9 + 1;
-                continue l93;
+                continue l97;
             };
         };
         if __count_7 > 0 {
@@ -1645,10 +1685,10 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
     __count_3 = builtin::load_i32(__outptr + 4);
     __result_4 = struct.new "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/array.wado/Array<u8>>>" { repr: builtin::array_new<ref "tuple//[String, Array<u8>]">(__count_3), used: 0 };
     __i_5 = 0;
-    b105: block {
-        l106: loop {
+    b109: block {
+        l110: loop {
             if __i_5 >= __count_3 {
-                break b105;
+                break b109;
             }
             __elem_addr_6 = __base_2 + (__i_5 * 16);
             __lifted_result_7 = __inline_memory_to_gc_string_1: block -> ref "core:prelude/string.wado//String" {
@@ -1662,15 +1702,15 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
             __count_9 = builtin::load_i32((__elem_addr_6 + 8) + 4);
             __result_10 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(__count_9), used: 0 };
             __i_11 = 0;
-            b108: block {
-                l109: loop {
+            b112: block {
+                l113: loop {
                     if __i_11 >= __count_9 {
-                        break b108;
+                        break b112;
                     }
                     __elem_addr_12 = __base_8 + (__i_11 * 1);
                     "core:prelude/Array<u8>::push"(__result_10, builtin::load_u8(__elem_addr_12));
                     __i_11 = __i_11 + 1;
-                    continue l109;
+                    continue l113;
                 };
             };
             if __count_9 > 0 {
@@ -1679,7 +1719,7 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
             "core:prelude/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/array.wado/Array<u8>>>::push"(__result_4, struct.new "tuple//[String, Array<u8>]" { 0: __lifted_result_7, 1: __result_10 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr_6 + 0), builtin::load_i32((__elem_addr_6 + 0) + 4), 1, 0));
             __i_5 = __i_5 + 1;
-            continue l106;
+            continue l110;
         };
     };
     if __count_3 > 0 {
@@ -1727,13 +1767,13 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     __for_0: block {
         i = 0;
         block {
-            l115: loop {
+            l119: loop {
                 if i >= len {
                     break __for_0;
                 }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
                 i = i + 1;
-                continue l115;
+                continue l119;
             };
         };
     };
@@ -1745,13 +1785,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l118: loop {
+            l122: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l118;
+                continue l122;
             };
         };
     };
@@ -1876,13 +1916,13 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     __for_1: block {
         t = val;
         block {
-            l125: loop {
+            l129: loop {
                 if t <= 0_i64 {
                     break __for_1;
                 }
                 n = n + 1;
                 t = t / 10_i64;
-                continue l125;
+                continue l129;
             };
         };
     };
@@ -1899,14 +1939,14 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         __for_2: block {
             temp = abs_val;
             block {
-                l129: loop {
+                l133: loop {
                     if temp <= 0_i64 {
                         break __for_2;
                     }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l129;
+                    continue l133;
                 };
             };
         };
@@ -2071,13 +2111,13 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
             i_19 = 0;
             _licm_buf_36 = self.buf;
             block {
-                l150: loop {
+                l154: loop {
                     if i_19 >= padding {
                         break __inline_Formatter__write_char_n_2____for_0;
                     }
                     "core:prelude/string.wado/String::push"(_licm_buf_36, 48);
                     i_19 = i_19 + 1;
-                    continue l150;
+                    continue l154;
                 };
             };
         };
@@ -2099,13 +2139,13 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
             i_23 = 0;
             _licm_buf_37 = self.buf;
             block {
-                l156: loop {
+                l160: loop {
                     if i_23 >= padding {
                         break __inline_Formatter__write_char_n_3____for_0;
                     }
                     "core:prelude/string.wado/String::push"(_licm_buf_37, c_21);
                     i_23 = i_23 + 1;
-                    continue l156;
+                    continue l160;
                 };
             };
         };
@@ -2118,13 +2158,13 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
             i_27 = 0;
             _licm_buf_38 = self.buf;
             block {
-                l160: loop {
+                l164: loop {
                     if i_27 >= left_pad {
                         break __inline_Formatter__write_char_n_4____for_0;
                     }
                     "core:prelude/string.wado/String::push"(_licm_buf_38, c_25);
                     i_27 = i_27 + 1;
-                    continue l160;
+                    continue l164;
                 };
             };
         };
@@ -2140,13 +2180,13 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
             i_31 = 0;
             _licm_buf_39 = self.buf;
             block {
-                l165: loop {
+                l169: loop {
                     if i_31 >= right_pad {
                         break __inline_Formatter__write_char_n_5____for_0;
                     }
                     "core:prelude/string.wado/String::push"(_licm_buf_39, c_29);
                     i_31 = i_31 + 1;
-                    continue l165;
+                    continue l169;
                 };
             };
         };
@@ -2157,13 +2197,13 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
             i_35 = 0;
             _licm_buf_40 = self.buf;
             block {
-                l168: loop {
+                l172: loop {
                     if i_35 >= padding {
                         break __inline_Formatter__write_char_n_6____for_0;
                     }
                     "core:prelude/string.wado/String::push"(_licm_buf_40, c_33);
                     i_35 = i_35 + 1;
-                    continue l168;
+                    continue l172;
                 };
             };
         };
@@ -2207,13 +2247,13 @@ fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/str
     __for_0: block {
         i = 0;
         block {
-            l174: loop {
+            l178: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "tuple//[String, Array<u8>]">(new_repr, i, builtin::array_get<ref "tuple//[String, Array<u8>]">(old_repr, i));
                 i = i + 1;
-                continue l174;
+                continue l178;
             };
         };
     };
@@ -2250,13 +2290,13 @@ fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::grow"(self
     __for_0: block {
         i = 0;
         block {
-            l178: loop {
+            l182: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "core:prelude//Array<u8>">(new_repr, i, builtin::array_get<ref "core:prelude//Array<u8>">(old_repr, i));
                 i = i + 1;
-                continue l178;
+                continue l182;
             };
         };
     };
@@ -2293,13 +2333,13 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l182: loop {
+            l186: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l182;
+                continue l186;
             };
         };
     };

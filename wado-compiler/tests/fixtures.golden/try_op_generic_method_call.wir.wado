@@ -118,17 +118,17 @@ fn "wado-compiler/tests/fixtures/try_op_generic_method_call.wado/write_values"(s
     __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: values.repr, used: values.used, index: 0 };
     b0: block {
         l1: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                let __match_scrut_0: ref null "core:prelude/string.wado//String";
-                __match_scrut_0 = "wado-compiler/tests/fixtures/try_op_generic_method_call.wado/StringSink^Sink::put<i32>"(s, __sroa___pattern_temp_0_payload_0);
-                if ref.is_null(__match_scrut_0) {
+            let __sroa___match_scrut_0_discriminant: i32;
+            let __sroa___match_scrut_0_payload_0: i32;
+            multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
+            if __sroa___match_scrut_0_discriminant == 0 {
+                let __match_scrut_1: ref null "core:prelude/string.wado//String";
+                __match_scrut_1 = "wado-compiler/tests/fixtures/try_op_generic_method_call.wado/StringSink^Sink::put<i32>"(s, __sroa___match_scrut_0_payload_0);
+                if ref.is_null(__match_scrut_1) {
                 } else {
-                    let __cast_1: ref null "core:prelude/string.wado//String";
-                    __cast_1 = ref.as_non_null(__match_scrut_0);
-                    __qm_e = ref.as_non_null(__cast_1);
+                    let __cast_2: ref null "core:prelude/string.wado//String";
+                    __cast_2 = ref.as_non_null(__match_scrut_1);
+                    __qm_e = ref.as_non_null(__cast_2);
                     return __qm_e;
                 }
             } else {
@@ -166,6 +166,7 @@ fn "wado-compiler/tests/fixtures/try_op_generic_method_call.wado/run"() with Std
         handle = "wado-compiler/tests/fixtures/try_op_generic_method_call.wado/__cm_binding__Stdout_write_via_stream"(rx);
         "core:cli/write_to_stream"(tx, message, 1);
         "wasi/future-drop-readable:transmission-cli"(handle);
+    } else {
     }
 }
 

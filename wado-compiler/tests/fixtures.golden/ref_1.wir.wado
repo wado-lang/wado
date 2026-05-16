@@ -223,10 +223,12 @@ fn "wado-compiler/tests/fixtures/ref_1.wado/maybe_read"(r) {
     let v: i32;
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    let __pattern_temp_0: ref "core:prelude/types.wado//Option<i32>";
-    __pattern_temp_0 = r;
-    if ref.test "core:prelude/types.wado//Option<i32>::Some"(__pattern_temp_0) {
-        v = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__pattern_temp_0).payload_0;
+    let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
+    __match_scrut_0 = r;
+    if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) {
+        let __cast_1: ref "core:prelude/types.wado//Option<i32>::Some";
+        __cast_1 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0);
+        v = __cast_1.payload_0;
         return __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
             "core:prelude/string.wado/String::push"(__local_2, 115);
@@ -240,6 +242,7 @@ fn "wado-compiler/tests/fixtures/ref_1.wado/maybe_read"(r) {
             break __tmpl: __local_2;
             unreachable;
         };
+    } else {
     }
     return struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 };
 }

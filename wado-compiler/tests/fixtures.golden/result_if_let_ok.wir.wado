@@ -109,18 +109,20 @@ fn "wado-compiler/tests/fixtures/result_if_let_ok.wado/run"() with Stdout {
     let x: i32;
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    let message_6: ref "core:prelude/string.wado//String";
-    let rx_7: i32;
-    let tx_8: i32;
-    let handle_9: i32;
-    let message_18: ref "core:prelude/string.wado//String";
-    let rx_19: i32;
-    let tx_20: i32;
-    let handle_21: i32;
+    let message_5: ref "core:prelude/string.wado//String";
+    let rx_6: i32;
+    let tx_7: i32;
+    let handle_8: i32;
+    let message_17: ref "core:prelude/string.wado//String";
+    let rx_18: i32;
+    let tx_19: i32;
+    let handle_20: i32;
     r = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: 42 };
     if ref.test "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(r) {
-        x = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(r).payload_0;
-        message_6 = __tmpl: block -> ref "core:prelude/string.wado//String" {
+        let __cast_2: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok";
+        __cast_2 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(r);
+        x = __cast_2.payload_0;
+        message_5 = __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
             "core:prelude/string.wado/String::push"(__local_2, 79);
             "core:prelude/string.wado/String::push"(__local_2, 107);
@@ -131,28 +133,28 @@ fn "wado-compiler/tests/fixtures/result_if_let_ok.wado/run"() with Stdout {
             break __tmpl: __local_2;
             unreachable;
         };
+        let __pair_temp_3: i64;
+        __pair_temp_3 = "wasi/stream-new"();
+        let __mv_lo_3: i32;
+        let __mv_hi_3: i32;
+        multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
+        rx_6 = __mv_lo_3;
+        tx_7 = __mv_hi_3;
+        handle_8 = "wado-compiler/tests/fixtures/result_if_let_ok.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+        "core:cli/write_to_stream"(tx_7, message_5, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_8);
+    } else {
+        message_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Err"), used: 3 };
         let __pair_temp_1: i64;
         __pair_temp_1 = "wasi/stream-new"();
         let __mv_lo_1: i32;
         let __mv_hi_1: i32;
         multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-        rx_7 = __mv_lo_1;
-        tx_8 = __mv_hi_1;
-        handle_9 = "wado-compiler/tests/fixtures/result_if_let_ok.wado/__cm_binding__Stdout_write_via_stream"(rx_7);
-        "core:cli/write_to_stream"(tx_8, message_6, 1);
-        "wasi/future-drop-readable:transmission-cli"(handle_9);
-    } else {
-        message_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Err"), used: 3 };
-        let __pair_temp_2: i64;
-        __pair_temp_2 = "wasi/stream-new"();
-        let __mv_lo_2: i32;
-        let __mv_hi_2: i32;
-        multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
-        rx_19 = __mv_lo_2;
-        tx_20 = __mv_hi_2;
-        handle_21 = "wado-compiler/tests/fixtures/result_if_let_ok.wado/__cm_binding__Stdout_write_via_stream"(rx_19);
-        "core:cli/write_to_stream"(tx_20, message_18, 1);
-        "wasi/future-drop-readable:transmission-cli"(handle_21);
+        rx_18 = __mv_lo_1;
+        tx_19 = __mv_hi_1;
+        handle_20 = "wado-compiler/tests/fixtures/result_if_let_ok.wado/__cm_binding__Stdout_write_via_stream"(rx_18);
+        "core:cli/write_to_stream"(tx_19, message_17, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_20);
     }
 }
 

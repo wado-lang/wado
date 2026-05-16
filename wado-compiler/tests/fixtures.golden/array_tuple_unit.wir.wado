@@ -113,9 +113,8 @@ fn "wado-compiler/tests/fixtures/array_tuple_unit.wado/run"() with Stdout {
     let arr: ref "core:prelude//Array<core:prelude/types.wado/Tuple<i32,unit>>";
     let __iter_2: ref "core:prelude/array.wado//ArrayIter<core:prelude/types.wado/Tuple<i32,unit>>";
     let item: ref "tuple//[i32, unit]";
-    let __local_4: ref "core:prelude/string.wado//String";
+    let __local_4_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let __pattern_temp_0_6: ref null "tuple//[i32, unit]";
     let message: ref "core:prelude/string.wado//String";
     let rx: i32;
     let tx: i32;
@@ -128,23 +127,26 @@ fn "wado-compiler/tests/fixtures/array_tuple_unit.wado/run"() with Stdout {
     __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<core:prelude/types.wado/Tuple<i32,unit>>" { repr: arr.repr, used: 3, index: 0 };
     b0: block {
         l1: loop {
-            __pattern_temp_0_6 = "core:prelude/array.wado/ArrayIter<core:prelude/types.wado/Tuple<i32,unit>>^Iterator::next"(__iter_2);
-            if ref.is_null(__pattern_temp_0_6) == 0 {
-                item = ref.as_non_null(__pattern_temp_0_6);
+            let __match_scrut_0: ref null "tuple//[i32, unit]";
+            __match_scrut_0 = "core:prelude/array.wado/ArrayIter<core:prelude/types.wado/Tuple<i32,unit>>^Iterator::next"(__iter_2);
+            if ref.is_null(__match_scrut_0) == 0 {
+                let __cast_1: ref null "tuple//[i32, unit]";
+                __cast_1 = ref.as_non_null(__match_scrut_0);
+                item = ref.as_non_null(__cast_1);
                 message = __tmpl: block -> ref "core:prelude/string.wado//String" {
-                    __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-                    __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
+                    __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+                    __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4_4 };
                     "core:prelude/primitive.wado/i32::fmt_decimal"(item.0, __local_5);
-                    break __tmpl: __local_4;
+                    break __tmpl: __local_4_4;
                     unreachable;
                 };
-                let __pair_temp_1: i64;
-                __pair_temp_1 = "wasi/stream-new"();
-                let __mv_lo_1: i32;
-                let __mv_hi_1: i32;
-                multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-                rx = __mv_lo_1;
-                tx = __mv_hi_1;
+                let __pair_temp_2: i64;
+                __pair_temp_2 = "wasi/stream-new"();
+                let __mv_lo_2: i32;
+                let __mv_hi_2: i32;
+                multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
+                rx = __mv_lo_2;
+                tx = __mv_hi_2;
                 handle = "wado-compiler/tests/fixtures/array_tuple_unit.wado/__cm_binding__Stdout_write_via_stream"(rx);
                 "core:cli/write_to_stream"(tx, message, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);
