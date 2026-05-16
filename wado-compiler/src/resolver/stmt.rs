@@ -2607,7 +2607,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             id: for_of.id,
             condition: Condition::LetChain {
                 elements: vec![ConditionElement::Let {
-                    pattern: some_pattern,
+                    pattern: Box::new(some_pattern),
                     expr: next_call,
                     span,
                 }],

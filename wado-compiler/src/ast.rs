@@ -1522,9 +1522,11 @@ pub struct TaskReturnStmt {
 /// A single element in a let-chain condition
 #[derive(Debug, Clone)]
 pub enum ConditionElement {
-    /// `let PAT = EXPR` — pattern match element
+    /// `let PAT = EXPR` — pattern match element. `pattern` is boxed to keep
+    /// the variant compact (without it, the enum is dominated by the
+    /// 300+ byte `Pattern` and clippy fires `large_enum_variant`).
     Let {
-        pattern: Pattern,
+        pattern: Box<Pattern>,
         expr: Expr,
         span: Span,
     },
