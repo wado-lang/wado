@@ -6,7 +6,7 @@
 use crate::hashmap::IndexMap;
 use std::cell::RefCell;
 
-use crate::ast::{Function, Type};
+use crate::ast::{CmBoundary, Function, Type};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Information about a builtin function
@@ -91,7 +91,7 @@ impl BuiltinRegistry {
         for item in &module.items {
             if let crate::ast::Item::Function(func) = item
                 && func.body.is_none()
-                && func.attrs.iter().any(|a| a.name == "canonical")
+                && func.attrs.iter().any(is_canonical_builtin)
             {
                 self.register(func, type_table);
             }
@@ -122,28 +122,23 @@ impl BuiltinRegistry {
             (TypeTable::UNIT, false)
         };
 
-        // Extract canonical info from #[canonical("namespace", "name")] attribute
-        // args[0] = namespace, args[1] = canonical name
+        // Extract canonical info from `#[canonical("namespace", "name")]` attribute.
+        // The parser populates `cm_boundary` with `CmBoundary::Canonical` for
+        // well-formed two-argument forms; anything else is rejected here.
         let canonical_attr = func.attrs.iter().find(|a| a.name == "canonical");
-        let (namespace, canonical_name) = if let Some(attr) = canonical_attr {
-            if attr.args.len() >= 2 {
-                // New format: #[canonical("wasi", "stream-new")]
-                (
-                    attr.args[0].as_str().to_string(),
-                    Some(attr.args[1].as_str().to_string()),
-                )
-            } else if attr.args.len() == 1 {
-                // Legacy single-arg format not supported anymore
-                panic!(
-                    "Invalid #[canonical] attribute: expected 2 arguments (namespace, name), got 1"
-                );
-            } else {
-                // No arguments - this is an error
-                panic!("Invalid #[canonical] attribute: expected 2 arguments (namespace, name)");
-            }
-        } else {
-            // No canonical attribute - not an imported builtin
-            ("wasi".to_string(), None)
+        let (namespace, canonical_name) = match canonical_attr {
+            Some(attr) => match &attr.cm_boundary {
+                Some(CmBoundary::Canonical { namespace, name }) => {
+                    (namespace.clone(), Some(name.clone()))
+                }
+                Some(CmBoundary::Import(_) | CmBoundary::Rename(_)) | None => {
+                    panic!(
+                        "Invalid #[canonical] attribute on `{}`: expected 2 string arguments (namespace, name)",
+                        func.name
+                    );
+                }
+            },
+            None => ("wasi".to_string(), None),
         };
 
         let info = BuiltinFunctionInfo {
@@ -266,6 +261,12 @@ impl BuiltinRegistry {
             .values()
             .filter(|f| f.canonical_name.is_some())
     }
+}
+
+/// Returns true if the attribute is a well-formed `#[canonical(ns, name)]` that
+/// marks a CM canonical built-in.
+fn is_canonical_builtin(attr: &crate::ast::Attribute) -> bool {
+    matches!(attr.cm_boundary, Some(CmBoundary::Canonical { .. }))
 }
 
 #[cfg(test)]

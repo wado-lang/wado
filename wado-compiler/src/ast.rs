@@ -983,7 +983,11 @@ pub struct Attribute {
     /// - `#[serde(rename = "type")]`           → `[KeyValue("rename", "type")]`
     /// - `#[serde(default)]`                   → `[Ident("default")]`
     pub args: Vec<AttrArg>,
-    pub cm_import: Option<CmImport>,
+    /// Component Model boundary metadata, populated by the parser when the
+    /// attribute is `#[cm(...)]` or `#[canonical(...)]`. A `Some` value means
+    /// the carrying item (function, method, effect, resource, variant case,
+    /// world, ...) participates in the Component Model boundary in some form.
+    pub cm_boundary: Option<CmBoundary>,
     pub span: Span,
 }
 
@@ -1009,6 +1013,44 @@ impl Attribute {
             AttrArg::Str(s) | AttrArg::Ident(s) | AttrArg::Number(s) => s == name,
             AttrArg::KeyValue(k, _) | AttrArg::KeyArray(k, _) => k == name,
         })
+    }
+
+    /// Returns the parsed CM interface import (`namespace:package/interface[@v][#fn]`)
+    /// carried by this attribute, if any. Returns `None` for `#[canonical(...)]`,
+    /// for `#[cm("simple-name")]`, and for non-CM attributes.
+    pub fn as_cm_import(&self) -> Option<&CmImport> {
+        self.cm_boundary.as_ref().and_then(CmBoundary::as_import)
+    }
+}
+
+/// Component Model boundary metadata extracted from `#[cm(...)]` or
+/// `#[canonical(...)]`.
+///
+/// Functions, methods, effects, resources, variant cases, and worlds tagged
+/// with one of these attributes cross the Component Model boundary, but the
+/// kind of boundary differs:
+///
+/// - `Canonical` — `#[canonical("namespace", "name")]` lowers to a CM
+///   canonical built-in (e.g. `canon.task.return`, `canon.stream.new`), not
+///   to an interface import.
+/// - `Import` — `#[cm("namespace:package/interface[@version][#function]")]`
+///   resolves to a real import from a CM interface.
+/// - `Rename` — `#[cm("simple-name")]` is a single CM-side identifier used
+///   for renaming a field, variant case, or method (no interface attached).
+#[derive(Debug, Clone)]
+pub enum CmBoundary {
+    Canonical { namespace: String, name: String },
+    Import(CmImport),
+    Rename(String),
+}
+
+impl CmBoundary {
+    /// Returns the `CmImport` payload if this boundary is an interface import.
+    pub fn as_import(&self) -> Option<&CmImport> {
+        match self {
+            CmBoundary::Import(cm) => Some(cm),
+            CmBoundary::Canonical { .. } | CmBoundary::Rename(_) => None,
+        }
     }
 }
 

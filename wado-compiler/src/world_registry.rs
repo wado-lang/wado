@@ -397,7 +397,7 @@ mod tests {
             attrs: vec![Attribute {
                 name: "cm".to_string(),
                 args: vec![ast::AttrArg::Str("wasi:cli/command@0.3.0".to_string())],
-                cm_import: None,
+                cm_boundary: None,
                 span: make_span(),
             }],
             imports: vec![],

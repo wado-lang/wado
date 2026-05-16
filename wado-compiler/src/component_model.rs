@@ -1123,7 +1123,7 @@ impl WasiRegistry {
         for item in &module.items {
             if let Item::Interface(effect) = item {
                 for method in &effect.methods {
-                    if let Some(wasi) = method.attrs.first().and_then(|a| a.cm_import.as_ref()) {
+                    if let Some(wasi) = method.attrs.first().and_then(|a| a.as_cm_import()) {
                         // Extract CM param names from #[cm_params] attribute
                         let cm_param_names = extract_cm_params_attr(&method.attrs);
                         let params: Vec<(String, String, Type)> = method
@@ -1174,7 +1174,7 @@ impl WasiRegistry {
         for item in &module.items {
             if let Item::Resource(resource) = item {
                 for method in &resource.methods {
-                    if let Some(wasi) = method.attrs.first().and_then(|a| a.cm_import.as_ref()) {
+                    if let Some(wasi) = method.attrs.first().and_then(|a| a.as_cm_import()) {
                         // Extract CM param names from #[cm_params] attribute
                         let cm_param_names = extract_cm_params_attr(&method.attrs);
                         let params: Vec<(String, String, Type)> = method

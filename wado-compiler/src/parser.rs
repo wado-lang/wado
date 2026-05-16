@@ -4,7 +4,7 @@
 use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
     AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
-    ChainedComparison, ClosureExpr, ClosureParam, CmImport, ComparisonChainExpr,
+    ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport, ComparisonChainExpr,
     CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt, EnumCase,
     EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt,
     FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt,
@@ -875,17 +875,12 @@ impl Parser {
 
         self.expect(&TokenKind::RBracket)?;
 
-        // Parse CM import path if this is a cm attribute
-        let cm_import = if name == "cm" {
-            args.first().and_then(|s| CmImport::parse(s.as_str()))
-        } else {
-            None
-        };
+        let cm_boundary = parse_cm_boundary(&name, &args);
 
         Ok(Attribute {
             name,
             args,
-            cm_import,
+            cm_boundary,
             span: start_span,
         })
     }
@@ -5230,6 +5225,34 @@ impl Parser {
     }
 }
 
+/// Populate `Attribute::cm_boundary` based on the attribute name.
+///
+/// - `#[canonical("namespace", "name")]` becomes `CmBoundary::Canonical`.
+/// - `#[cm("ns:pkg/iface[@v][#fn]")]` becomes `CmBoundary::Import`.
+/// - `#[cm("simple-name")]` (anything that doesn't parse as a full CM path)
+///   becomes `CmBoundary::Rename`.
+/// - Any other attribute returns `None`.
+fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Option<CmBoundary> {
+    if name == "canonical" {
+        if let [namespace, function] = args {
+            return Some(CmBoundary::Canonical {
+                namespace: namespace.as_str().to_string(),
+                name: function.as_str().to_string(),
+            });
+        }
+        return None;
+    }
+    if name == "cm" {
+        let arg = args.first()?;
+        let s = arg.as_str();
+        return Some(match CmImport::parse(s) {
+            Some(cm) => CmBoundary::Import(cm),
+            None => CmBoundary::Rename(s.to_string()),
+        });
+    }
+    None
+}
+
 fn parse_attr_number(repr: &str, negate: bool, span: Span) -> ParseResult<crate::ast::AttrValue> {
     // Strip numeric underscores for parsing; keep them in the original repr for errors.
     let cleaned: String = repr.chars().filter(|c| *c != '_').collect();
@@ -5618,9 +5641,7 @@ mod tests {
 
             let attr = &method.attrs[0];
             assert_eq!(attr.name, "cm");
-            assert!(attr.cm_import.is_some());
-
-            let cm = attr.cm_import.as_ref().unwrap();
+            let cm = attr.as_cm_import().expect("cm boundary import");
             assert_eq!(cm.namespace, "wasi");
             assert_eq!(cm.package, "cli");
             assert_eq!(cm.interface, "stdout");
@@ -5628,6 +5649,49 @@ mod tests {
         } else {
             panic!("expected interface declaration");
         }
+    }
+
+    #[test]
+    fn test_canonical_attribute_populates_cm_boundary() {
+        let source = r#"
+            #[canonical("wasi", "stream-new")]
+            pub fn stream_new() -> i64;
+        "#;
+        let module = parse(source).unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected function declaration");
+        };
+        assert_eq!(func.attrs.len(), 1);
+        let attr = &func.attrs[0];
+        assert_eq!(attr.name, "canonical");
+        let Some(CmBoundary::Canonical { namespace, name }) = attr.cm_boundary.as_ref() else {
+            panic!("expected CmBoundary::Canonical, got {:?}", attr.cm_boundary);
+        };
+        assert_eq!(namespace, "wasi");
+        assert_eq!(name, "stream-new");
+        assert!(attr.as_cm_import().is_none());
+    }
+
+    #[test]
+    fn test_cm_attribute_with_simple_name_populates_rename() {
+        let source = r#"
+            pub variant Op {
+                #[cm("byte-start")]
+                ByteStart,
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let Item::Variant(variant) = &module.items[0] else {
+            panic!("expected variant declaration");
+        };
+        let case = &variant.cases[0];
+        let attr = &case.attrs[0];
+        assert_eq!(attr.name, "cm");
+        let Some(CmBoundary::Rename(s)) = attr.cm_boundary.as_ref() else {
+            panic!("expected CmBoundary::Rename, got {:?}", attr.cm_boundary);
+        };
+        assert_eq!(s, "byte-start");
+        assert!(attr.as_cm_import().is_none());
     }
 
     #[test]
