@@ -1,0 +1,38 @@
+// Basic `fn mut(...)` closure type.
+//
+// A closure whose body mutates a captured binding has type `fn mut`.
+// The binding holding the closure must be `let mut` for calls to be
+// allowed.
+
+fn run_twice(mut f: fn mut(i32) -> i32) -> i32 {
+    let a = f(10);
+    let b = f(20);
+    return a + b;
+}
+
+test "fn mut closure parameter" {
+    let mut total = 0;
+    let result = run_twice(|x: i32| {
+        total += x;
+        return total;
+    });
+    // First call: total = 10, returns 10
+    // Second call: total = 30, returns 30
+    assert result == 40;
+    assert total == 30;
+}
+
+test "fn mut local binding" {
+    let mut count = 0;
+    let mut inc: fn mut() -> i32 = || {
+        count += 1;
+        return count;
+    };
+    assert inc() == 1;
+    assert inc() == 2;
+    assert inc() == 3;
+    assert count == 3;
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,53 @@
+// Auto-capture by reference.
+//
+// The compiler infers the capture kind from body usage:
+//   - body only reads  ⇒ &T capture, closure type is `fn`
+//   - body writes      ⇒ &mut T capture, closure type is `fn mut`
+//
+// Copying a closure copies the (reference) env fields; all copies of a
+// closure observe the same captured bindings.
+//
+// See wep-2026-01-16-closure-implementation.md ("Capture Semantics").
+
+test "read-only capture is fn" {
+    let n = 5;
+    // Body only reads `n` ⇒ `get` has type `fn() -> i32`.
+    let get = || n;
+    // Non-mut binding is fine because the type is `fn`, not `fn mut`.
+    assert get() == 5;
+}
+
+test "writing capture is fn mut" {
+    let mut count = 0;
+    // Body writes `count` ⇒ inferred capture is `&mut count`,
+    // and the closure type is `fn mut() -> ()`.
+    let mut inc = || {
+        count += 1;
+    };
+    inc();
+    inc();
+    assert count == 2;
+}
+
+test "shared mutable state via env copy" {
+    let mut count = 0;
+    let mut c1 = || { count += 1; };
+    // Copying a closure copies its env (refs); both copies still
+    // observe the same captured cell.
+    let mut c2 = c1;
+    c1();
+    c2();
+    assert count == 2;
+}
+
+test "intermediate local for value-copy capture" {
+    // Wado has no `move` keyword. To snapshot a value, introduce
+    // an intermediate local — value semantics make this a deep copy.
+    let original = 100;
+    let snapshot = original;
+    let f = || snapshot * 2;
+    assert f() == 200;
+}
+
+__DATA__
+{"test": {}}

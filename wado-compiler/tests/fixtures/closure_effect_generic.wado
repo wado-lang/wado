@@ -1,0 +1,29 @@
+// Effect-polymorphic closure parameter via `<effect E>`.
+// See wep-2026-01-16-closure-implementation.md ("Effect System Integration").
+
+use { println, Stdout } from "core:cli";
+
+fn each<effect E>(items: Array<i32>, mut f: fn mut(i32) with E) with E {
+    for let item of items {
+        f(item);
+    }
+}
+
+export fn run() with Stdout {
+    let items: Array<i32> = [1, 2, 3];
+
+    // Pure closure — E unifies with the empty effect set.
+    let mut total = 0;
+    each(items, |x: i32| {
+        total += x;
+    });
+    assert total == 6;
+
+    // Effectful closure — E unifies with Stdout.
+    each(items, |x: i32| {
+        println(`{x}`);
+    });
+}
+
+__DATA__
+{"stdout_contains": ["1", "2", "3"]}
