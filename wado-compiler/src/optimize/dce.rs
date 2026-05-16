@@ -26,6 +26,19 @@ type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;
 /// Effect usage: function ID -> set of (`interface_name`, `operation_name`) pairs
 type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
 
+/// A pending `__Closure_N` inspect/inspect_alt edge collected during the call-graph
+/// walk. The edge is only added to the graph once the inspectable signature set
+/// (computed from the reachable-without-inspect-roots set) is known. Storing them
+/// out-of-band lets us build the call graph in a single AST walk instead of twice.
+#[derive(Debug, Clone)]
+struct PendingInspectEdge {
+    closure_module: ModuleSource,
+    /// `__Closure_{functor_id}` struct name.
+    struct_name: String,
+    /// `(arity, return_type)` key into `InspectableSignatures`.
+    key: (usize, TypeId),
+}
+
 /// Analysis results for a single function
 #[derive(Debug, Clone, Default)]
 struct FunctionAnalysis {
@@ -33,38 +46,51 @@ struct FunctionAnalysis {
     callees: IndexSet<FunctionId>,
     /// Effect calls: (`interface_name`, `op_name`)
     effect_calls: IndexSet<(String, String)>,
+    /// Pending `__Closure_N^Inspect[Alt]::inspect[_alt]` edges. Added to the
+    /// graph by `apply_inspect_edges` after the inspectable-signature set is
+    /// known.
+    pending_inspects: Vec<PendingInspectEdge>,
 }
 
 /// Analyze the project and populate its usage fields with DCE analysis results.
 ///
 /// This performs dead code elimination analysis starting from the entry point
 /// and populates the project's `used_wasi_functions` field and the `imports`
-/// list. Returns the set of reachable functions for use by
-/// `remove_unreachable_functions`.
-pub fn analyze_project(project: &mut NirPackage) -> IndexSet<FunctionId> {
-    // Phase 1a: build a provisional call graph that does NOT root the
-    // per-functor `__Closure_N^Inspect[Alt]` impls from
-    // `ClosureToCanonical`, then compute its reachable set. This
-    // identifies which functions can actually run.
-    let (call_graph_v1, _) = build_analysis_graph_with(project, &InspectableSignatures::default());
-    let reachable_v1 = compute_reachable_from_entries(project, &call_graph_v1);
+/// list. Returns the set of indices into `project.functions` that survive DCE,
+/// for use by `remove_unreachable_functions`.
+///
+/// The call graph is built in a single AST walk: edges that depend on the
+/// inspectable-signature set (the per-functor `__Closure_N^Inspect[Alt]`
+/// impls emitted from `ClosureToCanonical`) are collected as pending
+/// edges and added by `apply_inspect_edges` once the signature set is
+/// known. This avoids a second full walk of every function body.
+pub fn analyze_project(project: &mut NirPackage) -> IndexSet<usize> {
+    // Phase 1: build the raw call graph in a single pass.
+    let AnalysisGraph {
+        mut call_graph,
+        effect_usage,
+        pending_inspects,
+        func_pos,
+    } = build_analysis_graph(project);
 
-    // Phase 1b: derive the inspectable `(arity, ret)` set from the
-    // reachable functions only. A dead `:?`/`:#?` call site in
-    // unreachable code must NOT keep per-functor inspect impls alive
-    // for a reachable canonicalised closure of the matching signature.
+    // Phase 2a: compute the provisional reachable set from the raw graph
+    // (without per-functor `__Closure_N^Inspect[Alt]` edges). This is
+    // what determines whether a `:?`/`:#?` call site is actually live.
+    let reachable_v1 = compute_reachable_from_entries(project, &call_graph);
+
+    // Phase 2b: derive the inspectable `(arity, ret)` set from the
+    // reachable functions only, then add the gated inspect edges to the
+    // call graph. The per-functor impls themselves don't issue any
+    // `Fn^Inspect[Alt]` calls (they just write per-literal strings), so
+    // the inspectable set is stable under this expansion — no fixpoint
+    // iteration is needed.
     let inspectable = collect_inspectable_signatures_from_reachable(project, &reachable_v1);
+    apply_inspect_edges(&mut call_graph, &pending_inspects, &inspectable);
 
-    // Phase 1c: rebuild the call graph with inspect roots gated by the
-    // reachable-derived signatures, then compute the final reachable
-    // set. The per-functor impls themselves don't issue any
-    // `Fn^Inspect[Alt]` calls (they just write per-literal strings),
-    // so the inspectable set is stable under this expansion — no
-    // fixpoint iteration is needed.
-    let (call_graph, effect_usage) = build_analysis_graph_with(project, &inspectable);
+    // Phase 2c: re-compute the reachable set from the augmented graph.
     let mut reachable = compute_reachable_from_entries(project, &call_graph);
 
-    // Phase 1d: Extend reachable set with optimizer-induced virtual edges.
+    // Phase 3: extend reachable set with optimizer-induced virtual edges.
     // Optimizer passes (e.g. `tir/string_push`) may *synthesize* new calls
     // during the optimization loop. Functions those passes call must
     // survive the early DCE that runs before the loop, otherwise the
@@ -73,13 +99,82 @@ pub fn analyze_project(project: &mut NirPackage) -> IndexSet<FunctionId> {
     // canonical pair (`string_push_str` → `string_push_char`, etc.).
     extend_reachable_for_optimizer_passes(project, &call_graph, &mut reachable);
 
-    // Phase 2: Resolve imports and WASI features using reachable set
+    // Phase 4: resolve imports and WASI features using reachable set.
     resolve_imports(project, &reachable, &effect_usage);
 
-    // Phase 3: Filter literals to reachable functions
-    filter_string_literals(project, &reachable);
+    // Phase 5: project the reachable `FunctionId`s back to positions in
+    // `project.functions`. This avoids reallocating `FunctionId`s per
+    // function inside `remove_unreachable_functions` (the previous
+    // implementation cloned 3-4 strings per function during retain).
+    compute_reachable_positions(project, &reachable, &func_pos)
+}
 
-    reachable
+/// Map the reachable-`FunctionId` set back to positions in `project.functions`.
+///
+/// Three rules cover every surviving function:
+///
+/// 1. Direct hit: `func_pos[function_id_for(func)]` is in `reachable`.
+/// 2. Method-with-Free fallback: the function has `method_info` but the call
+///    graph also lists `FunctionId::Free(module, func.name)` as reachable
+///    (used by static-method dispatch).
+/// 3. Generic template fallback: the function is a non-monomorphized template
+///    whose `(module, name)` matches the `base_name` of some reachable
+///    monomorphization. The template stays alive so codegen can register it.
+fn compute_reachable_positions(
+    project: &NirPackage,
+    reachable: &IndexSet<FunctionId>,
+    func_pos: &IndexMap<FunctionId, usize>,
+) -> IndexSet<usize> {
+    let mut positions: IndexSet<usize> = IndexSet::default();
+
+    // Rule 1: direct projection.
+    for id in reachable {
+        if let Some(&pos) = func_pos.get(id) {
+            positions.insert(pos);
+        }
+    }
+
+    // Pre-compute the set of (module, base_name) pairs that a generic
+    // template would match. One scan over `reachable` instead of one per
+    // template.
+    let monomorph_bases: IndexSet<(ModuleSource, String)> = reachable
+        .iter()
+        .filter_map(|id| match id {
+            FunctionId::Free(name) if name.is_monomorphized => name
+                .base_name
+                .as_ref()
+                .map(|base| (name.module_source.clone(), base.clone())),
+            _ => None,
+        })
+        .collect();
+
+    for (pos, func_rc) in project.functions.iter().enumerate() {
+        if positions.contains(&pos) {
+            continue;
+        }
+        let func = func_rc.borrow();
+
+        // Rule 2: method tracked as Free with mangled name.
+        if func.method_info.is_some() {
+            let free_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                &func.module_source,
+                &func.name,
+            ));
+            if reachable.contains(&free_id) {
+                positions.insert(pos);
+                continue;
+            }
+        }
+
+        // Rule 3: generic template kept alive by a reachable monomorph.
+        if func.monomorph_info.is_none()
+            && monomorph_bases.contains(&(func.module_source.clone(), func.name.clone()))
+        {
+            positions.insert(pos);
+        }
+    }
+
+    positions
 }
 
 /// Add functions that the TIR optimizer's rewrites may *synthesize* calls
@@ -348,40 +443,25 @@ fn resolve_imports(
     project.used_wasi_functions = used_wasi_functions;
 }
 
-/// Filter string literals to only include strings from reachable functions.
-fn filter_string_literals(project: &mut NirPackage, reachable: &IndexSet<FunctionId>) {
-    // Keys are (module_source, function_name) — no collision possible.
+/// Filter string literals to those owned by surviving functions.
+///
+/// Called by `run_dce` once function DCE has stripped dead functions from
+/// `project.functions`. The set of surviving `(module_source, name)` keys is
+/// derived directly from `project.functions`, so this pass no longer needs
+/// the reachable-`FunctionId` set and rebuilds no `FunctionId`s itself.
+pub fn filter_string_literals(project: &mut NirPackage) {
+    let surviving: IndexSet<(ModuleSource, String)> = project
+        .functions
+        .iter()
+        .map(|f| {
+            let func = f.borrow();
+            (func.module_source.clone(), func.name.clone())
+        })
+        .collect();
+
     let mut reachable_strings: IndexSet<String> = IndexSet::default();
-
     for ((module_source, func_name), strings) in &project.function_strings {
-        let is_reachable = if let Some(Some(method_info)) = project
-            .function_method_info
-            .get(&(module_source.clone(), func_name.clone()))
-        {
-            let method_id = FunctionId::Method(MethodName::new(
-                module_source.clone(),
-                method_info.struct_name.clone(),
-                method_info.trait_name.clone(),
-                method_info.method_name.clone(),
-            ));
-            if reachable.contains(&method_id) {
-                true
-            } else {
-                let free_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                    module_source,
-                    func_name,
-                ));
-                reachable.contains(&free_id)
-            }
-        } else {
-            let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                module_source,
-                func_name,
-            ));
-            reachable.contains(&func_id)
-        };
-
-        if is_reachable {
+        if surviving.contains(&(module_source.clone(), func_name.clone())) {
             reachable_strings.extend(strings.iter().cloned());
         }
     }
@@ -581,29 +661,92 @@ pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
     });
 }
 
-/// Build call graph and effect usage from all TIR functions
-fn build_analysis_graph_with(
-    project: &NirPackage,
-    inspectable_signatures: &InspectableSignatures,
-) -> (CallGraph, EffectUsageMap) {
+/// Per-caller pending inspect edges, keyed by the caller's `FunctionId`.
+/// Each entry collects every `__Closure_N` observed in that caller's body
+/// alongside its `(arity, return_type)` signature. After the
+/// inspectable-signature set is computed, `apply_inspect_edges` walks this
+/// map and adds the matching inspect/inspect_alt edges to the call graph.
+type PendingInspectsByCaller = IndexMap<FunctionId, Vec<PendingInspectEdge>>;
+
+/// Result of the single call-graph build. The call graph is the raw
+/// reachability graph *without* `__Closure_N^Inspect[Alt]` edges; those
+/// edges are gated by the inspectable-signature set and added after the
+/// fact by `apply_inspect_edges`.
+///
+/// `func_pos` maps each TIR-function `FunctionId` back to its position in
+/// `project.functions` so that `remove_unreachable_functions` can keep
+/// surviving functions by index instead of rebuilding `FunctionId`s and
+/// hashing them again.
+struct AnalysisGraph {
+    call_graph: CallGraph,
+    effect_usage: EffectUsageMap,
+    pending_inspects: PendingInspectsByCaller,
+    func_pos: IndexMap<FunctionId, usize>,
+}
+
+/// Build the call graph in a single pass over all TIR function bodies.
+fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
     let mut call_graph: CallGraph = IndexMap::default();
     let mut effect_usage: EffectUsageMap = IndexMap::default();
+    let mut pending_inspects: PendingInspectsByCaller = IndexMap::default();
+    let mut func_pos: IndexMap<FunctionId, usize> = IndexMap::default();
 
     let type_table = &*project.type_table.borrow();
 
-    // Analyze functions (including methods stored as functions)
-    for func_rc in &project.functions {
+    for (pos, func_rc) in project.functions.iter().enumerate() {
         let func = func_rc.borrow();
         let module_source = &func.module_source;
         let func_id = function_id_for(&func);
-        let analysis = analyze_function(&func, module_source, type_table, inspectable_signatures);
+        let analysis = analyze_function(&func, module_source, type_table);
+        func_pos.insert(func_id.clone(), pos);
         call_graph.insert(func_id.clone(), analysis.callees);
         if !analysis.effect_calls.is_empty() {
             effect_usage.insert(func_id.clone(), analysis.effect_calls);
         }
+        if !analysis.pending_inspects.is_empty() {
+            pending_inspects.insert(func_id, analysis.pending_inspects);
+        }
     }
 
-    (call_graph, effect_usage)
+    AnalysisGraph {
+        call_graph,
+        effect_usage,
+        pending_inspects,
+        func_pos,
+    }
+}
+
+/// Augment `call_graph` with the gated `__Closure_N^Inspect[Alt]::inspect[_alt]`
+/// edges. Inserts exactly one edge per (caller, struct, trait) match against
+/// the inspectable-signature set computed in Phase 1b.
+fn apply_inspect_edges(
+    call_graph: &mut CallGraph,
+    pending: &PendingInspectsByCaller,
+    sigs: &InspectableSignatures,
+) {
+    for (caller, edges) in pending {
+        let Some(callees) = call_graph.get_mut(caller) else {
+            continue;
+        };
+        for edge in edges {
+            if sigs.inspect.contains(&edge.key) {
+                callees.insert(FunctionId::Method(MethodName::new(
+                    edge.closure_module.clone(),
+                    edge.struct_name.clone(),
+                    Some("Inspect".to_string()),
+                    "inspect".to_string(),
+                )));
+            }
+            if sigs.inspect_alt.contains(&edge.key) {
+                callees.insert(FunctionId::Method(MethodName::new(
+                    edge.closure_module.clone(),
+                    edge.struct_name.clone(),
+                    Some("InspectAlt".to_string()),
+                    "inspect_alt".to_string(),
+                )));
+            }
+        }
+    }
 }
 
 /// Walk all TIR function bodies and collect every `(arity, return_type)`
@@ -648,7 +791,7 @@ fn collect_inspectable_signatures_from_reachable(
 }
 
 /// Compute the `FunctionId` used by the call graph for a TIR function.
-/// Mirrors the keying logic in `build_analysis_graph_with`; centralising
+/// Mirrors the keying logic in `build_analysis_graph`; centralising
 /// it here so other passes (notably the inspectable-signatures scan)
 /// can compare against the call graph's reachable set.
 fn function_id_for(func: &NirFunction) -> FunctionId {
@@ -742,18 +885,11 @@ fn analyze_function(
     func: &NirFunction,
     current_module: &ModuleSource,
     type_table: &TypeTable,
-    inspectable_signatures: &InspectableSignatures,
 ) -> FunctionAnalysis {
     let mut analysis = FunctionAnalysis::default();
 
     if let Some(body) = &func.body {
-        analyze_block(
-            body,
-            current_module,
-            type_table,
-            inspectable_signatures,
-            &mut analysis,
-        );
+        analyze_block(body, current_module, type_table, &mut analysis);
     }
     analysis
 }
@@ -762,7 +898,6 @@ fn analyze_block(
     block: &NirBlock,
     current_module: &ModuleSource,
     type_table: &TypeTable,
-    inspectable_signatures: &InspectableSignatures,
     analysis: &mut FunctionAnalysis,
 ) {
     for stmt in &block.stmts {
@@ -772,7 +907,6 @@ fn analyze_block(
                     value,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
             }
@@ -781,7 +915,6 @@ fn analyze_block(
                     expr,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
             }
@@ -791,7 +924,6 @@ fn analyze_block(
                         expr,
                         current_module,
                         type_table,
-                        inspectable_signatures,
                         analysis,
                     );
                 }
@@ -805,14 +937,12 @@ fn analyze_block(
                     condition,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
                 analyze_block(
                     then_block,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
                 if let Some(else_blk) = else_block {
@@ -820,7 +950,6 @@ fn analyze_block(
                         else_blk,
                         current_module,
                         type_table,
-                        inspectable_signatures,
                         analysis,
                     );
                 }
@@ -830,7 +959,6 @@ fn analyze_block(
                     body,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
             }
@@ -839,7 +967,6 @@ fn analyze_block(
                     block,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
             }
@@ -849,7 +976,6 @@ fn analyze_block(
                         v,
                         current_module,
                         type_table,
-                        inspectable_signatures,
                         analysis,
                     );
                 }
@@ -860,7 +986,6 @@ fn analyze_block(
                     value,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
             }
@@ -872,7 +997,6 @@ fn analyze_expr(
     expr: &NirExpr,
     current_module: &ModuleSource,
     type_table: &TypeTable,
-    inspectable_signatures: &InspectableSignatures,
     analysis: &mut FunctionAnalysis,
 ) {
     match &expr.kind {
@@ -960,7 +1084,6 @@ fn analyze_expr(
                     &arg.expr,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
             }
@@ -1268,7 +1391,6 @@ fn analyze_expr(
                 receiver,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
             for arg in args {
@@ -1276,7 +1398,6 @@ fn analyze_expr(
                     &arg.expr,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
             }
@@ -1286,14 +1407,12 @@ fn analyze_expr(
                 left,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
             analyze_expr(
                 right,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
         }
@@ -1302,7 +1421,6 @@ fn analyze_expr(
                 expr,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
         }
@@ -1311,14 +1429,12 @@ fn analyze_expr(
                 target,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
             analyze_expr(
                 value,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
         }
@@ -1327,7 +1443,6 @@ fn analyze_expr(
                 expr,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
         }
@@ -1349,7 +1464,6 @@ fn analyze_expr(
                     arg,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
             }
@@ -1359,7 +1473,6 @@ fn analyze_expr(
                 expr,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
         }
@@ -1368,14 +1481,12 @@ fn analyze_expr(
                 expr,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
             analyze_expr(
                 index,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
         }
@@ -1384,7 +1495,6 @@ fn analyze_expr(
                 block,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
         }
@@ -1397,14 +1507,12 @@ fn analyze_expr(
                 condition,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
             analyze_block(
                 then_branch,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
             if let Some(else_blk) = else_branch {
@@ -1412,7 +1520,6 @@ fn analyze_expr(
                     else_blk,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
             }
@@ -1422,7 +1529,6 @@ fn analyze_expr(
                 expr,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
             for arm in arms {
@@ -1431,7 +1537,6 @@ fn analyze_expr(
                         guard,
                         current_module,
                         type_table,
-                        inspectable_signatures,
                         analysis,
                     );
                 }
@@ -1439,7 +1544,6 @@ fn analyze_expr(
                     &arm.body,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
             }
@@ -1450,7 +1554,6 @@ fn analyze_expr(
                     &field.value,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
             }
@@ -1461,7 +1564,6 @@ fn analyze_expr(
                     elem,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
             }
@@ -1471,7 +1573,6 @@ fn analyze_expr(
                 callee,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
             for arg in args {
@@ -1479,7 +1580,6 @@ fn analyze_expr(
                     arg,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
             }
@@ -1494,7 +1594,6 @@ fn analyze_expr(
                 functor,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
             // The `__call` method is always reached via `ref.func` baked
@@ -1514,29 +1613,22 @@ fn analyze_expr(
             // independently per trait method. A program that only ever
             // uses `:?` keeps `__Closure_N^Inspect` but drops
             // `__Closure_N^InspectAlt` and its source-string literal.
+            //
+            // The gating set is unknown during this walk (it is derived
+            // from the first reachable-set computation), so record a
+            // pending edge here and let `apply_inspect_edges` insert the
+            // real call-graph edges once the set is known.
             if let ResolvedType::Function {
                 params,
                 return_type,
                 ..
             } = type_table.get(*target_fn_type)
             {
-                let key = (params.len(), *return_type);
-                if inspectable_signatures.inspect.contains(&key) {
-                    analysis.callees.insert(FunctionId::Method(MethodName::new(
-                        closure_module.clone(),
-                        struct_name.clone(),
-                        Some("Inspect".to_string()),
-                        "inspect".to_string(),
-                    )));
-                }
-                if inspectable_signatures.inspect_alt.contains(&key) {
-                    analysis.callees.insert(FunctionId::Method(MethodName::new(
-                        closure_module.clone(),
-                        struct_name,
-                        Some("InspectAlt".to_string()),
-                        "inspect_alt".to_string(),
-                    )));
-                }
+                analysis.pending_inspects.push(PendingInspectEdge {
+                    closure_module: closure_module.clone(),
+                    struct_name,
+                    key: (params.len(), *return_type),
+                });
             }
         }
         NirExprKind::VariantConstruct { payload, .. } => {
@@ -1545,7 +1637,6 @@ fn analyze_expr(
                     payload_expr,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
             }
@@ -1555,7 +1646,6 @@ fn analyze_expr(
                 block,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
         }
@@ -1564,7 +1654,6 @@ fn analyze_expr(
                 value,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
         }
@@ -1573,7 +1662,6 @@ fn analyze_expr(
                 expr,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
         }
@@ -1582,7 +1670,6 @@ fn analyze_expr(
                 expr,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
         }
@@ -1596,7 +1683,6 @@ fn analyze_expr(
                 scrutinee,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
             for arm in arms {
@@ -1604,7 +1690,6 @@ fn analyze_expr(
                     arm,
                     current_module,
                     type_table,
-                    inspectable_signatures,
                     analysis,
                 );
             }
@@ -1612,7 +1697,6 @@ fn analyze_expr(
                 default,
                 current_module,
                 type_table,
-                inspectable_signatures,
                 analysis,
             );
         }
@@ -1694,74 +1778,30 @@ fn compute_reachable(
 
 /// Remove unreachable functions from the project's function list.
 ///
+/// `reachable_positions` is the set of indices into `project.functions` that
+/// `analyze_project` determined are reachable — pre-computed there so this
+/// pass can avoid rebuilding a `FunctionId` (3-4 string clones) per function
+/// just to look it up in a hash set.
+///
 /// After this, all remaining functions are reachable — downstream phases
 /// (`wir_build`, codegen) register every function without additional filtering.
 pub fn remove_unreachable_functions(
     project: &mut NirPackage,
-    reachable_functions: &IndexSet<FunctionId>,
+    reachable_positions: &IndexSet<usize>,
 ) {
-    // Pre-index the reachable set by monomorphization metadata so the
-    // "keep a generic template if any of its instantiations is reachable"
-    // check is O(1) per function instead of O(|reachable|).
-    //
-    // Every monomorphized `FreeFunctionName` carries `base_name` that is
-    // exactly the generic template's `func.name` (e.g. "Array::with_capacity"
-    // for "Array<i32>::with_capacity"), so we index by (module_source, base_name)
-    // and compare it to (func.module_source, func.name) directly — no string
-    // parsing required.
-    let reachable_monomorph_bases: IndexSet<(ModuleSource, String)> = reachable_functions
-        .iter()
-        .filter_map(|id| match id {
-            FunctionId::Free(name) if name.is_monomorphized => name
-                .base_name
-                .as_ref()
-                .map(|base| (name.module_source.clone(), base.clone())),
-            _ => None,
-        })
-        .collect();
-
-    project.functions.retain(|func_rc| {
-        let func = func_rc.borrow();
-        let module_source = &func.module_source;
-
-        // Use NirFunction's method_info to check if this is a method
-        if let Some(ref info) = func.method_info {
-            // Could be either:
-            // - Instance method tracked as FunctionId::Method
-            // - Static method tracked as FunctionId::Free with mangled name
-            // Use method_info to build the method ID
-            // Try as instance method (FunctionId::Method)
-            let method_id = FunctionId::Method(MethodName::new(
-                module_source.clone(),
-                info.struct_name.clone(),
-                info.trait_name.clone(),
-                info.method_name.clone(),
-            ));
-            if reachable_functions.contains(&method_id) {
-                return true;
-            }
-
-            // Try as static method (FunctionId::Free with mangled name)
-            let free_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                module_source,
-                &func.name,
-            ));
-            if reachable_functions.contains(&free_id) {
-                return true;
-            }
-
-            // Generic template: keep it if any monomorphized instance is reachable.
-            // The instance carries `base_name == func.name`, so this is a direct
-            // metadata comparison — no string search.
-            reachable_monomorph_bases.contains(&(module_source.clone(), func.name.clone()))
-        } else {
-            // Regular function
-            let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                module_source,
-                &func.name,
-            ));
-            reachable_functions.contains(&func_id)
+    // Dense `Vec<bool>` indexed by original position is faster than hashing
+    // each index against `reachable_positions` during retain.
+    let mut keep = vec![false; project.functions.len()];
+    for &pos in reachable_positions {
+        if pos < keep.len() {
+            keep[pos] = true;
         }
+    }
+    let mut idx = 0;
+    project.functions.retain(|_| {
+        let k = keep[idx];
+        idx += 1;
+        k
     });
 }
 
