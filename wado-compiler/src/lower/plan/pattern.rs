@@ -5,7 +5,7 @@ use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::tir::FunctionRef;
 use crate::tir::{
-    CallArg, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirField,
+    CallArg, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirField,
     TirLiteralPattern, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
     TypeTable,
 };
@@ -61,193 +61,6 @@ pub fn plan(flat: &mut FlatPackage) {
             func.body = Some(body);
         }
     }
-}
-
-const SWITCH_MIN_CASES: usize = 8;
-
-/// Minimum density (cases / range) for `br_table` to be worthwhile
-const SWITCH_DENSITY_THRESHOLD: f64 = 0.75;
-
-/// Maximum range size for `br_table` (to avoid huge jump tables)
-const SWITCH_MAX_RANGE: i64 = 1024;
-
-/// Analysis result for converting Match to Switch
-struct SwitchAnalysis {
-    /// Minimum value in the switch range
-    min_value: i64,
-    /// Maximum value in the switch range
-    max_value: i64,
-    /// Map from value to arm index in the original arms
-    value_to_arm: Vec<(i64, usize)>,
-    /// Index of the default arm (wildcard/binding), if any
-    default_arm: Option<usize>,
-}
-
-/// Analyze if a Match expression can be converted to a Switch (for `br_table` optimization)
-fn analyze_match_for_switch(
-    scrutinee_type: &ResolvedType,
-    arms: &[TirMatchArm],
-) -> Option<SwitchAnalysis> {
-    // Only applicable to integer types and enums (enums are i32 discriminants)
-    match scrutinee_type {
-        ResolvedType::Primitive(
-            PrimitiveType::I32
-            | PrimitiveType::U32
-            | PrimitiveType::I64
-            | PrimitiveType::U64
-            | PrimitiveType::I16
-            | PrimitiveType::U16
-            | PrimitiveType::I8
-            | PrimitiveType::U8,
-        )
-        | ResolvedType::Enum { .. } => {}
-        _ => return None,
-    }
-
-    let mut value_to_arm: Vec<(i64, usize)> = Vec::new();
-    let mut default_arm: Option<usize> = None;
-
-    for (arm_idx, arm) in arms.iter().enumerate() {
-        // Arms with guards can't use br_table optimization
-        if arm.guard.is_some() {
-            return None;
-        }
-        match &arm.pattern {
-            TirPattern::Literal(TirLiteralPattern::I128(v)) => {
-                value_to_arm.push((*v as i64, arm_idx));
-            }
-            TirPattern::Literal(TirLiteralPattern::U128(v)) => {
-                value_to_arm.push((*v as i64, arm_idx));
-            }
-            TirPattern::Enum { case_index, .. } => {
-                value_to_arm.push((i64::from(*case_index), arm_idx));
-            }
-            TirPattern::Wildcard | TirPattern::Binding { .. } => {
-                // Wildcard/binding is the default case
-                if default_arm.is_some() {
-                    // Multiple defaults - shouldn't happen, but bail out
-                    return None;
-                }
-                default_arm = Some(arm_idx);
-            }
-            _ => {
-                // Non-integer pattern, can't use br_table
-                return None;
-            }
-        }
-    }
-
-    // Need at least MIN_CASES integer literals
-    if value_to_arm.len() < SWITCH_MIN_CASES {
-        return None;
-    }
-
-    // Calculate range
-    let min_value = value_to_arm.iter().map(|(v, _)| *v).min().unwrap();
-    let max_value = value_to_arm.iter().map(|(v, _)| *v).max().unwrap();
-    let range = max_value - min_value + 1;
-
-    // Check range isn't too large
-    if range > SWITCH_MAX_RANGE {
-        return None;
-    }
-
-    // Check density threshold
-    let density = value_to_arm.len() as f64 / range as f64;
-    if density < SWITCH_DENSITY_THRESHOLD {
-        return None;
-    }
-
-    Some(SwitchAnalysis {
-        min_value,
-        max_value,
-        value_to_arm,
-        default_arm,
-    })
-}
-
-/// Convert a Match to a Switch expression using the analysis
-fn match_to_switch(
-    scrutinee: Box<TirExpr>,
-    arms: &[TirMatchArm],
-    analysis: SwitchAnalysis,
-    result_type_id: TypeId,
-    span: Span,
-) -> TirExpr {
-    let range = (analysis.max_value - analysis.min_value + 1) as usize;
-
-    // Build a map from offset to arm index (for values not in the map, use default)
-    let mut offset_to_arm: Vec<Option<usize>> = vec![None; range];
-    for (value, arm_idx) in &analysis.value_to_arm {
-        let offset = (*value - analysis.min_value) as usize;
-        offset_to_arm[offset] = Some(*arm_idx);
-    }
-
-    // Build the arms vector - one block per value in the range
-    // Each arm's body is copied from the original match arm
-    let switch_arms: Vec<TirBlock> = offset_to_arm
-        .iter()
-        .map(|maybe_arm_idx| {
-            let arm_idx = maybe_arm_idx.unwrap_or_else(|| {
-                // Use default arm if available, otherwise the first arm (unreachable case)
-                analysis.default_arm.unwrap_or(0)
-            });
-            let arm = &arms[arm_idx];
-            // Wrap the arm body in a block
-            TirBlock {
-                stmts: vec![TirStmt::new(
-                    TirStmtKind::Expr(arm.body.clone()),
-                    arm.body.span,
-                )],
-                span: arm.body.span,
-            }
-        })
-        .collect();
-
-    // Default block - used for values outside the range
-    let default_block = if let Some(default_idx) = analysis.default_arm {
-        let arm = &arms[default_idx];
-        TirBlock {
-            stmts: vec![TirStmt::new(
-                TirStmtKind::Expr(arm.body.clone()),
-                arm.body.span,
-            )],
-            span: arm.body.span,
-        }
-    } else {
-        // No default - generate unreachable (panic)
-        TirBlock {
-            stmts: vec![TirStmt::new(
-                TirStmtKind::Expr(TirExpr::new(
-                    TirExprKind::Call {
-                        func: FunctionRef {
-                            module_source: ModuleSource::internal(),
-                            name: "unreachable".to_string(),
-                            monomorph_info: None,
-                            method_info: None,
-                        },
-                        args: vec![],
-                        type_args: vec![],
-                    },
-                    TypeTable::NEVER,
-                    span,
-                )),
-                span,
-            )],
-            span,
-        }
-    };
-
-    TirExpr::new(
-        TirExprKind::Switch {
-            scrutinee,
-            min_value: analysis.min_value,
-            arms: switch_arms,
-            default: default_block,
-        },
-        result_type_id,
-        span,
-    )
 }
 
 /// Pattern lowering context - tracks local allocation for a function
@@ -2990,29 +2803,9 @@ impl<'a> PatternLowerer<'a> {
                     }
                 }
 
-                // Analyze if this Match can be converted to Switch (for br_table)
-                let scrutinee_type = type_table.get(scrutinee.type_id).clone();
-                if let Some(analysis) = analyze_match_for_switch(&scrutinee_type, arms) {
-                    // Convert to Switch
-                    let result_type_id = expr.type_id;
-                    let span = expr.span;
-
-                    // Take ownership of scrutinee and arms to build Switch
-                    let scrutinee_owned = std::mem::replace(
-                        scrutinee,
-                        Box::new(TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span)),
-                    );
-                    let arms_owned = std::mem::take(arms);
-
-                    let switch_expr = match_to_switch(
-                        scrutinee_owned,
-                        &arms_owned,
-                        analysis,
-                        result_type_id,
-                        span,
-                    );
-                    expr.kind = switch_expr.kind;
-                }
+                // Switch conversion (dense integer / enum `Match` →
+                // `br_table`) is performed in the TIR → NIR translator
+                // (`lower::translate::switch`).
             }
             TirExprKind::Binary { left, right, .. } => {
                 self.lower_expr(left, type_table);

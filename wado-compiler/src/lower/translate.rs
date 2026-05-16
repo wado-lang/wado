@@ -12,6 +12,7 @@
 //!
 //! See `docs/wep-2026-05-11-nir.md`.
 
+mod switch;
 mod wide_int;
 
 use std::cell::RefCell;
@@ -444,6 +445,28 @@ impl FunctionTranslator<'_, '_> {
     }
 
     fn convert_expr(&self, expr: &TirExpr) -> NirExpr {
+        // Dense integer / enum `Match` → `Switch` rewrite. Done before
+        // the wide-int check because the two never overlap (the
+        // `Switch` analysis rejects `i128`/`u128` scrutinees), and
+        // before `convert_expr_kind` so the recursive convert walk
+        // processes the rewritten Switch's arm blocks uniformly.
+        if let TirExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } = &expr.kind
+        {
+            let scrut_resolved = self.base.type_table.borrow().get(scrutinee.type_id).clone();
+            if let Some(analysis) = switch::analyze(&scrut_resolved, arms) {
+                let switch_expr = switch::build(
+                    Box::new((**scrutinee).clone()),
+                    arms,
+                    analysis,
+                    expr.type_id,
+                    expr.span,
+                );
+                return self.convert_expr(&switch_expr);
+            }
+        }
         // Wide-int (`i128` / `u128`) match → if-else chain. Done before
         // dispatching `convert_expr_kind` so the rewrite can use the
         // outer expression's `type_id` / `span` for the synthesized
