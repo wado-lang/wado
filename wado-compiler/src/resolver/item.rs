@@ -403,9 +403,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let cm_name = method
                 .attrs
                 .iter()
-                .find(|a| a.name == "cm")
-                .and_then(|a| a.args.first())
-                .map(|a| a.as_str().to_string());
+                .find_map(|a| a.cm_arg_str().map(str::to_string));
             ops.push(TirEffectOp {
                 name: method.name.clone(),
                 params,

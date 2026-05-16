@@ -122,24 +122,21 @@ impl BuiltinRegistry {
             (TypeTable::UNIT, false)
         };
 
-        // Extract canonical info from `#[canonical("namespace", "name")]` attribute.
-        // The parser populates `cm_boundary` with `CmBoundary::Canonical` for
-        // well-formed two-argument forms; anything else is rejected here.
-        let canonical_attr = func.attrs.iter().find(|a| a.name == "canonical");
-        let (namespace, canonical_name) = match canonical_attr {
-            Some(attr) => match &attr.cm_boundary {
+        // Extract canonical info from `#[canonical("namespace", "name")]`.
+        // The parser is the single source of truth for this attribute's shape;
+        // a malformed form (`#[canonical(...)]` without two string arguments)
+        // never reaches `CmBoundary::Canonical`, so the function falls back to
+        // the Wasm-instruction default below.
+        let (namespace, canonical_name) = func
+            .attrs
+            .iter()
+            .find_map(|a| match &a.cm_boundary {
                 Some(CmBoundary::Canonical { namespace, name }) => {
-                    (namespace.clone(), Some(name.clone()))
+                    Some((namespace.clone(), Some(name.clone())))
                 }
-                Some(CmBoundary::Import(_) | CmBoundary::Rename(_)) | None => {
-                    panic!(
-                        "Invalid #[canonical] attribute on `{}`: expected 2 string arguments (namespace, name)",
-                        func.name
-                    );
-                }
-            },
-            None => ("wasi".to_string(), None),
-        };
+                Some(CmBoundary::Import(_) | CmBoundary::Rename(_)) | None => None,
+            })
+            .unwrap_or_else(|| ("wasi".to_string(), None));
 
         let info = BuiltinFunctionInfo {
             name: func.name.clone(),

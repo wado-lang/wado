@@ -1021,6 +1021,19 @@ impl Attribute {
     pub fn as_cm_import(&self) -> Option<&CmImport> {
         self.cm_boundary.as_ref().and_then(CmBoundary::as_import)
     }
+
+    /// Returns the raw argument string of a `#[cm("...")]` attribute, regardless of
+    /// whether the argument parses as a full CM interface path or is just a
+    /// CM-side identifier (variant case / field / method rename). Returns
+    /// `None` for `#[canonical(...)]` and for non-CM attributes.
+    pub fn cm_arg_str(&self) -> Option<&str> {
+        match &self.cm_boundary {
+            Some(CmBoundary::Import(_) | CmBoundary::Rename(_)) => {
+                self.args.first().map(AttrArg::as_str)
+            }
+            Some(CmBoundary::Canonical { .. }) | None => None,
+        }
+    }
 }
 
 /// Component Model boundary metadata extracted from `#[cm(...)]` or
@@ -1114,6 +1127,12 @@ impl CmImport {
             path.push_str(ver);
         }
         path
+    }
+
+    /// Get the bare interface path without version or function
+    /// (e.g., "wasi:cli/stdout").
+    pub fn bare_path(&self) -> String {
+        format!("{}:{}/{}", self.namespace, self.package, self.interface)
     }
 }
 
