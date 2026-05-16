@@ -8,6 +8,7 @@ use std::cell::RefCell;
 
 use crate::ast::{AstId, GenericType, NamedType, Type};
 use crate::cm_abi;
+use crate::compiler_item::CompilerItem;
 use crate::component_model::WasiRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -17,6 +18,56 @@ use crate::tir::{
 };
 
 use crate::synthesis::common::{binary, i32_const, i64_const, synth_span};
+
+/// Snapshot of the stdlib type / variant names the CM binding code
+/// matches against — `String`, `Array`, `Option`, `Result` — resolved
+/// once through the `CompilerItem` registry so a stdlib rename of any
+/// of these flows through every CM lift / lower / adapter site
+/// without hard-coded literals scattered across `synthesis::cm_binding`.
+///
+/// `result` is kept for downstream callers that match against the
+/// `Result` variant name even when the current consumer set does not
+/// need it; populating it costs one registry hit + clone and keeps
+/// the snapshot's shape complete for the next CM-binding site that
+/// wants to read it.
+#[derive(Clone, Debug)]
+#[allow(dead_code)]
+pub struct CmStdlibNames {
+    pub string: String,
+    pub array: String,
+    pub option: String,
+    pub result: String,
+}
+
+impl CmStdlibNames {
+    /// Look up every name through the compiler-item registry attached
+    /// to `tt`. Cheap (four registry hits + four clones); callers
+    /// should keep the value around for the duration of a CM-binding
+    /// synthesis pass rather than rebuilding it per match arm.
+    pub fn from_type_table(tt: &TypeTable) -> Self {
+        let items = tt.compiler_items();
+        Self {
+            string: items.struct_name(CompilerItem::String).to_string(),
+            array: items.struct_name(CompilerItem::Array).to_string(),
+            option: items.variant_name(CompilerItem::Option).to_string(),
+            result: items.variant_name(CompilerItem::Result).to_string(),
+        }
+    }
+
+    /// Canonical-name snapshot for unit tests that do not bootstrap a
+    /// full `TypeTable` with the stdlib registered. The names are the
+    /// production stdlib defaults; tests that want to exercise rename
+    /// behaviour must construct a [`Self`] explicitly.
+    #[cfg(test)]
+    pub fn for_tests() -> Self {
+        Self {
+            string: "String".to_string(),
+            array: "Array".to_string(),
+            option: "Option".to_string(),
+            result: "Result".to_string(),
+        }
+    }
+}
 
 /// Context for lifting CM values to GC types, providing access to
 /// the WASI registry (for variant/enum case info) and type table (for `TypeIds`).
@@ -71,7 +122,14 @@ pub fn wasi_type_to_type_id(
     registry: &WasiRegistry,
     wasi_package: &str,
 ) -> TypeId {
+    let string_struct_name = type_table
+        .compiler_items()
+        .struct_name(crate::compiler_item::CompilerItem::String)
+        .to_string();
     match ty {
+        Type::Named(named) if named.name.as_str() == string_struct_name => {
+            type_table.make_compiler_struct(crate::compiler_item::CompilerItem::String)
+        }
         Type::Named(named) => match named.name.as_str() {
             "i8" => TypeTable::I8,
             "i16" => TypeTable::I16,
@@ -87,7 +145,6 @@ pub fn wasi_type_to_type_id(
             "char" => TypeTable::CHAR,
             // Unit type written as a named type "()"
             "()" => TypeTable::UNIT,
-            "String" => type_table.make_struct("String".to_string(), ModuleSource::string()),
             // Resource/enum/variant types - look up the already-resolved TypeId.
             // Lookups are strictly scoped by `(name, wasi_package)`. If the
             // primary scope misses, we consult the registry for the canonical
@@ -103,38 +160,55 @@ pub fn wasi_type_to_type_id(
                 })
                 .unwrap_or(TypeTable::I32),
         },
-        Type::Generic(g) => match g.name.as_str() {
-            "Array" if g.args.len() == 1 => {
+        Type::Generic(g) => {
+            let array_name = type_table
+                .compiler_items()
+                .struct_name(crate::compiler_item::CompilerItem::Array)
+                .to_string();
+            if g.name.as_str() == array_name && g.args.len() == 1 {
                 let elem_type =
                     wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                type_table.make_array(elem_type)
+                return type_table.make_array(elem_type);
             }
-            "Option" if g.args.len() == 1 => {
+            let option_name = type_table
+                .compiler_items()
+                .variant_name(crate::compiler_item::CompilerItem::Option)
+                .to_string();
+            let result_name = type_table
+                .compiler_items()
+                .variant_name(crate::compiler_item::CompilerItem::Result)
+                .to_string();
+            if g.name.as_str() == option_name && g.args.len() == 1 {
                 let inner_type =
                     wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                type_table.make_option(inner_type)
+                return type_table.make_option(inner_type);
             }
-            "Result" if g.args.len() == 2 => {
+            if g.name.as_str() == result_name && g.args.len() == 2 {
                 let ok_type = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 let err_type = wasi_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
-                type_table.make_result(ok_type, err_type)
+                return type_table.make_result(ok_type, err_type);
             }
-            "Stream" if g.args.len() == 1 => {
-                let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                type_table.make_stream(inner)
+            match g.name.as_str() {
+                "Stream" if g.args.len() == 1 => {
+                    let inner =
+                        wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                    type_table.make_stream(inner)
+                }
+                "Future" if g.args.len() == 1 => {
+                    let inner =
+                        wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                    type_table.make_future(inner)
+                }
+                "AsyncCall" if g.args.len() == 1 => {
+                    let inner =
+                        wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                    type_table.make_async_call(inner)
+                }
+                // Own/Borrow are handle types represented as i32
+                "Own" | "Borrow" => TypeTable::I32,
+                _ => TypeTable::UNIT,
             }
-            "Future" if g.args.len() == 1 => {
-                let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                type_table.make_future(inner)
-            }
-            "AsyncCall" if g.args.len() == 1 => {
-                let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                type_table.make_async_call(inner)
-            }
-            // Own/Borrow are handle types represented as i32
-            "Own" | "Borrow" => TypeTable::I32,
-            _ => TypeTable::UNIT,
-        },
+        }
         Type::Tuple(types) if types.is_empty() => TypeTable::UNIT,
         Type::Tuple(types) => {
             let resolved: Vec<TypeId> = types
@@ -255,17 +329,21 @@ pub(super) fn is_unit_type(ty: &Type) -> bool {
         || matches!(ty, Type::Named(n) if n.name == "()")
 }
 
-pub(super) fn is_gc_passthrough_param(ty: &Type, wasi_registry: &WasiRegistry) -> bool {
+pub(super) fn is_gc_passthrough_param(
+    ty: &Type,
+    wasi_registry: &WasiRegistry,
+    names: &CmStdlibNames,
+) -> bool {
     match ty {
-        Type::Named(n) if n.name == "String" => true,
+        Type::Named(n) if n.name == names.string => true,
         Type::Named(n) => n.source_interface.as_deref().is_some_and(|s| {
             s.starts_with("wasi:")
                 && wasi_registry
                     .get_variant_cases_by_source(s, &n.name)
                     .is_some()
         }),
-        Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => true,
-        Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => true,
+        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => true,
+        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => true,
         _ => false,
     }
 }
@@ -281,6 +359,7 @@ pub(super) fn is_wasm_flat_type(type_id: TypeId) -> bool {
 pub fn flatten_param_type(
     ty: &Type,
     wasi_registry: &crate::component_model::WasiRegistry,
+    names: &CmStdlibNames,
 ) -> Vec<TypeId> {
     fn cm_val_to_type_id(v: &cm_abi::CmValType) -> TypeId {
         match v {
@@ -293,62 +372,66 @@ pub fn flatten_param_type(
 
     let resolved = wasi_registry.resolve_type(ty);
     match &resolved {
-        Type::Named(named) => match named.name.as_str() {
-            "i32" | "u32" | "bool" | "char" | "i8" | "u8" | "i16" | "u16" => {
-                vec![TypeTable::I32]
+        Type::Named(named) => {
+            if named.name == names.string {
+                return vec![TypeTable::I32, TypeTable::I32];
             }
-            "i64" | "u64" => vec![TypeTable::I64],
-            "f32" => vec![TypeTable::F32],
-            "f64" => vec![TypeTable::F64],
-            "String" => vec![TypeTable::I32, TypeTable::I32],
-            name => {
-                // Without a resolved WASI source the reference is not a WASI
-                // variant/struct — flatten to a single i32 handle.
-                let Some(source) = named
-                    .source_interface
-                    .as_deref()
-                    .filter(|s| s.starts_with("wasi:"))
-                else {
-                    return vec![TypeTable::I32];
-                };
-                // WASI variant: discriminant + join of all case payload flat types.
-                if let Some(cases) = wasi_registry.get_variant_cases_by_source(source, name) {
-                    let mut result = vec![TypeTable::I32]; // discriminant
-                    let case_flats: Vec<Vec<TypeId>> = cases
-                        .iter()
-                        .map(|c| {
-                            c.payload
-                                .as_ref()
-                                .map(|t| flatten_param_type(t, wasi_registry))
-                                .unwrap_or_default()
-                        })
-                        .collect();
-                    let max_len = case_flats.iter().map(Vec::len).max().unwrap_or(0);
-                    for i in 0..max_len {
-                        // Join: if all non-empty cases at position i agree on a type,
-                        // use that type; otherwise use i32 (per CM spec join).
-                        let joined = case_flats
+            match named.name.as_str() {
+                "i32" | "u32" | "bool" | "char" | "i8" | "u8" | "i16" | "u16" => {
+                    vec![TypeTable::I32]
+                }
+                "i64" | "u64" => vec![TypeTable::I64],
+                "f32" => vec![TypeTable::F32],
+                "f64" => vec![TypeTable::F64],
+                name => {
+                    // Without a resolved WASI source the reference is not a WASI
+                    // variant/struct — flatten to a single i32 handle.
+                    let Some(source) = named
+                        .source_interface
+                        .as_deref()
+                        .filter(|s| s.starts_with("wasi:"))
+                    else {
+                        return vec![TypeTable::I32];
+                    };
+                    // WASI variant: discriminant + join of all case payload flat types.
+                    if let Some(cases) = wasi_registry.get_variant_cases_by_source(source, name) {
+                        let mut result = vec![TypeTable::I32]; // discriminant
+                        let case_flats: Vec<Vec<TypeId>> = cases
                             .iter()
-                            .filter_map(|f| f.get(i).copied())
-                            .reduce(|a, b| if a == b { a } else { TypeTable::I32 })
-                            .unwrap_or(TypeTable::I32);
-                        result.push(joined);
+                            .map(|c| {
+                                c.payload
+                                    .as_ref()
+                                    .map(|t| flatten_param_type(t, wasi_registry, names))
+                                    .unwrap_or_default()
+                            })
+                            .collect();
+                        let max_len = case_flats.iter().map(Vec::len).max().unwrap_or(0);
+                        for i in 0..max_len {
+                            // Join: if all non-empty cases at position i agree on a type,
+                            // use that type; otherwise use i32 (per CM spec join).
+                            let joined = case_flats
+                                .iter()
+                                .filter_map(|f| f.get(i).copied())
+                                .reduce(|a, b| if a == b { a } else { TypeTable::I32 })
+                                .unwrap_or(TypeTable::I32);
+                            result.push(joined);
+                        }
+                        return result;
                     }
-                    return result;
+                    // WASI struct (record): concatenation of all field flat types.
+                    if let Some(fields) =
+                        wasi_registry.get_struct_fields_with_wado_names_by_source(source, name)
+                    {
+                        return fields
+                            .iter()
+                            .flat_map(|(_, _, ft)| flatten_param_type(ft, wasi_registry, names))
+                            .collect();
+                    }
+                    // Resource handles, enums, flags, etc.: single i32
+                    vec![TypeTable::I32]
                 }
-                // WASI struct (record): concatenation of all field flat types.
-                if let Some(fields) =
-                    wasi_registry.get_struct_fields_with_wado_names_by_source(source, name)
-                {
-                    return fields
-                        .iter()
-                        .flat_map(|(_, _, ft)| flatten_param_type(ft, wasi_registry))
-                        .collect();
-                }
-                // Resource handles, enums, flags, etc.: single i32
-                vec![TypeTable::I32]
             }
-        },
+        }
         Type::Generic(g) if g.name == "Stream" => vec![TypeTable::I32],
         Type::Reference(_) | Type::MutReference(_) => vec![TypeTable::I32],
         Type::Tuple(elems) if elems.is_empty() => vec![],
@@ -415,8 +498,12 @@ pub(super) fn cm_param_align(
 pub(super) fn cm_param_store_plan(
     ty: &Type,
     wasi_registry: &crate::component_model::WasiRegistry,
+    names: &CmStdlibNames,
 ) -> Vec<(u32, &'static str)> {
     if let Type::Named(named) = ty {
+        if named.name == names.string {
+            return vec![(0, "i32_store"), (4, "i32_store")];
+        }
         let source = named
             .source_interface
             .as_deref()
@@ -451,21 +538,20 @@ pub(super) fn cm_param_store_plan(
             "i64" | "u64" => vec![(0, "i64_store")],
             "f32" => vec![(0, "f32_store")],
             "f64" => vec![(0, "f64_store")],
-            "String" => vec![(0, "i32_store"), (4, "i32_store")],
             // i32, u32, char, resource handles
             _ => vec![(0, "i32_store")],
         };
     }
     match ty {
         Type::Reference(_) | Type::MutReference(_) => vec![(0, "i32_store")],
+        Type::Generic(g) if g.name == names.array => vec![(0, "i32_store"), (4, "i32_store")],
         Type::Generic(g) => match g.name.as_str() {
-            "Array" => vec![(0, "i32_store"), (4, "i32_store")],
             "Option" if g.args.len() == 1 => {
                 // option<T>: disc (u8) at offset 0, payload at align_to(1, align(T))
                 let inner_align =
                     crate::component_model::cm_align_with_registry(&g.args[0], wasi_registry);
                 let payload_offset = crate::cm_abi::align_to(1, inner_align);
-                let inner_store = cm_param_store_plan(&g.args[0], wasi_registry);
+                let inner_store = cm_param_store_plan(&g.args[0], wasi_registry, names);
                 let mut stores = vec![(0, "i32_store8")]; // discriminant
                 for (sub_offset, store_name) in inner_store {
                     stores.push((payload_offset + sub_offset, store_name));
@@ -502,7 +588,12 @@ pub(super) fn flatten_export_type(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &TypeTable,
 ) {
+    let names = CmStdlibNames::from_type_table(type_table);
     match ty {
+        Type::Named(named) if named.name == names.string => {
+            out.push(cm_abi::CmValType::I32); // ptr
+            out.push(cm_abi::CmValType::I32); // len
+        }
         Type::Named(named) => match named.name.as_str() {
             "bool" | "u8" | "i8" | "u16" | "i16" | "i32" | "u32" | "char" => {
                 out.push(cm_abi::CmValType::I32);
@@ -510,10 +601,6 @@ pub(super) fn flatten_export_type(
             "i64" | "u64" => out.push(cm_abi::CmValType::I64),
             "f32" => out.push(cm_abi::CmValType::F32),
             "f64" => out.push(cm_abi::CmValType::F64),
-            "String" => {
-                out.push(cm_abi::CmValType::I32); // ptr
-                out.push(cm_abi::CmValType::I32); // len
-            }
             "()" => {} // unit — no values
             _ => {
                 // Check if it's a variant type defined in TIR modules
@@ -527,11 +614,11 @@ pub(super) fn flatten_export_type(
                 }
             }
         },
+        Type::Generic(generic) if generic.name == names.array => {
+            out.push(cm_abi::CmValType::I32); // ptr
+            out.push(cm_abi::CmValType::I32); // len
+        }
         Type::Generic(generic) => match generic.name.as_str() {
-            "Array" => {
-                out.push(cm_abi::CmValType::I32); // ptr
-                out.push(cm_abi::CmValType::I32); // len
-            }
             "Stream" | "Future" | "Own" | "Borrow" => out.push(cm_abi::CmValType::I32),
             "Option" if generic.args.len() == 1 => {
                 out.push(cm_abi::CmValType::I32); // discriminant
@@ -615,6 +702,7 @@ pub(super) fn flat_types_from_type_id_into(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &TypeTable,
 ) {
+    let names = CmStdlibNames::from_type_table(type_table);
     match type_table.get(type_id) {
         ResolvedType::Primitive(p) => match p {
             PrimitiveType::I8
@@ -637,7 +725,7 @@ pub(super) fn flat_types_from_type_id_into(
         },
         ResolvedType::Unit => {} // no flat values
         ResolvedType::Struct { name, .. } => {
-            if name == "String" {
+            if name == &names.string {
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len
             } else if let Some(struct_decl) = find_struct_decl(name, tir_modules) {
@@ -664,41 +752,26 @@ pub(super) fn flat_types_from_type_id_into(
                 for &elem in type_args {
                     flat_types_from_type_id_into(elem, out, tir_modules, type_table);
                 }
-            } else {
-                match name.as_str() {
-                    "Option" if type_args.len() == 1 => {
-                        out.push(cm_abi::CmValType::I32); // discriminant
-                        flat_types_from_type_id_into(type_args[0], out, tir_modules, type_table);
-                    }
-                    "Result" if type_args.len() == 2 => {
-                        out.push(cm_abi::CmValType::I32); // discriminant
-                        let mut ok_flat = Vec::new();
-                        let mut err_flat = Vec::new();
-                        flat_types_from_type_id_into(
-                            type_args[0],
-                            &mut ok_flat,
-                            tir_modules,
-                            type_table,
-                        );
-                        flat_types_from_type_id_into(
-                            type_args[1],
-                            &mut err_flat,
-                            tir_modules,
-                            type_table,
-                        );
-                        let max_len = ok_flat.len().max(err_flat.len());
-                        for i in 0..max_len {
-                            let ok_val = ok_flat.get(i).copied();
-                            let err_val = err_flat.get(i).copied();
-                            out.push(cm_abi::CmValType::join(ok_val, err_val));
-                        }
-                    }
-                    "Array" => {
-                        out.push(cm_abi::CmValType::I32); // ptr
-                        out.push(cm_abi::CmValType::I32); // len
-                    }
-                    _ => out.push(cm_abi::CmValType::I32),
+            } else if name == &names.option && type_args.len() == 1 {
+                out.push(cm_abi::CmValType::I32); // discriminant
+                flat_types_from_type_id_into(type_args[0], out, tir_modules, type_table);
+            } else if name == &names.result && type_args.len() == 2 {
+                out.push(cm_abi::CmValType::I32); // discriminant
+                let mut ok_flat = Vec::new();
+                let mut err_flat = Vec::new();
+                flat_types_from_type_id_into(type_args[0], &mut ok_flat, tir_modules, type_table);
+                flat_types_from_type_id_into(type_args[1], &mut err_flat, tir_modules, type_table);
+                let max_len = ok_flat.len().max(err_flat.len());
+                for i in 0..max_len {
+                    let ok_val = ok_flat.get(i).copied();
+                    let err_val = err_flat.get(i).copied();
+                    out.push(cm_abi::CmValType::join(ok_val, err_val));
                 }
+            } else if name == &names.array {
+                out.push(cm_abi::CmValType::I32); // ptr
+                out.push(cm_abi::CmValType::I32); // len
+            } else {
+                out.push(cm_abi::CmValType::I32);
             }
         }
         ResolvedType::Newtype { base_type, .. } => {

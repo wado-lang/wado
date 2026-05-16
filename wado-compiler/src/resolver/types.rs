@@ -336,6 +336,12 @@ pub enum TypeError {
     /// time, so it cannot generate dispatch infrastructure. See WEP
     /// 2026-01-27 § Generic Effect Parameters Are Propagation-Only.
     GenericEffectParamNotInstallable { name: String, span: Span },
+
+    /// `#[compiler_item("...")]` attribute that failed validation —
+    /// unknown name, kind mismatch (e.g. `#[compiler_item("option")]`
+    /// on a struct), or used outside a `core::*` module. The
+    /// `message` carries the specific problem.
+    CompilerItemAttr { message: String, span: Span },
 }
 
 impl std::fmt::Display for TypeError {
@@ -642,6 +648,9 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, name
                 )
             }
+            TypeError::CompilerItemAttr { message, span } => {
+                write!(f, "{}:{}: {}", span.line, span.column, message)
+            }
         }
     }
 }
@@ -913,6 +922,9 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 ),
                 *span,
             ),
+            TypeError::CompilerItemAttr { message, span } => {
+                (Code::CompilerItemAttr, message.clone(), *span)
+            }
         };
         crate::compiler_host::Diagnostic {
             severity: Severity::Error,

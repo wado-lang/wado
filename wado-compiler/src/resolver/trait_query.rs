@@ -5,6 +5,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, Item, Type};
 use crate::compiler_host::CompilerHost;
+use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -94,18 +95,32 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return false;
         }
 
+        // Resolve the canonical stdlib trait names through the
+        // compiler-item registry so the auto-derive predicates below
+        // stay aligned with the actual stdlib decls (and a rename of
+        // `Eq` / `Ord` / `Default` does not silently disable auto-impl).
+        let (eq_name, ord_name, default_name) = {
+            let tt = self.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items.trait_name(CompilerItem::Eq).to_string(),
+                items.trait_name(CompilerItem::Ord).to_string(),
+                items.trait_name(CompilerItem::Default).to_string(),
+            )
+        };
+        let is_eq = |n: &str| n == eq_name;
+        let is_eq_or_ord = |n: &str| n == eq_name || n == ord_name;
+
         // Primitives have built-in implementations for certain traits
         if let ResolvedType::Primitive(prim) = &resolved {
-            match trait_name {
-                // All primitives implement Eq and Ord
-                "Eq" | "Ord" => return true,
-                // Numeric primitives implement arithmetic traits
-                "Add" | "Sub" | "Mul" | "Div" | "Rem"
-                    if !matches!(prim, PrimitiveType::Bool | PrimitiveType::Char) =>
-                {
-                    return true;
-                }
-                _ => {}
+            if is_eq_or_ord(trait_name) {
+                return true;
+            }
+            // Numeric primitives implement arithmetic traits
+            if matches!(trait_name, "Add" | "Sub" | "Mul" | "Div" | "Rem")
+                && !matches!(prim, PrimitiveType::Bool | PrimitiveType::Char)
+            {
+                return true;
             }
             // For other traits, check the type name
             let type_name = format!("{prim:?}").to_lowercase();
@@ -113,16 +128,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // All enums automatically implement Eq and Ord
-        if let ResolvedType::Enum { .. } = &resolved {
-            match trait_name {
-                "Eq" | "Ord" => return true,
-                _ => {}
-            }
+        if let ResolvedType::Enum { .. } = &resolved
+            && is_eq_or_ord(trait_name)
+        {
+            return true;
         }
 
         // Variants auto-implement Eq when all payload types implement Eq
         if let ResolvedType::Variant { name, .. } = &resolved
-            && trait_name == "Eq"
+            && is_eq(trait_name)
             && let Some(info) = self.lookup_variant_case(name)
         {
             let all_impl = info.cases.iter().all(|c| {
@@ -135,7 +149,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Structs auto-implement Eq/Ord when all fields implement the trait
         if let ResolvedType::Struct { name, .. } = &resolved
-            && matches!(trait_name, "Eq" | "Ord")
+            && is_eq_or_ord(trait_name)
             && let Some(info) = self.lookup_struct_fields(name)
         {
             let field_types: Vec<TypeId> = info.fields.iter().map(|(_, tid, _)| *tid).collect();
@@ -152,7 +166,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Share the eligibility predicate with the method-lookup helper so
         // the bound check and `S::default()` resolution agree.
         if let ResolvedType::Struct { name, .. } = &resolved
-            && trait_name == "Default"
+            && trait_name == default_name
             && self.auto_derive_default_struct_type(name).is_some()
         {
             return true;
@@ -163,7 +177,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if let ResolvedType::GenericInstance {
             name, type_args, ..
         } = &resolved
-            && matches!(trait_name, "Eq" | "Ord")
+            && is_eq_or_ord(trait_name)
             && let Some(info) = self.lookup_struct_fields(name)
         {
             // Build type param -> concrete type arg mapping
@@ -187,7 +201,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if let ResolvedType::GenericInstance {
             name, type_args, ..
         } = &resolved
-            && trait_name == "Eq"
+            && is_eq(trait_name)
             && let Some(info) = self.lookup_variant_case(name)
         {
             let param_map: IndexMap<TypeId, TypeId> = info
@@ -236,7 +250,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             ResolvedType::Ref(inner) => {
                 // References always implement Eq via ref.eq (identity comparison)
-                if trait_name == "Eq" {
+                if is_eq(trait_name) {
                     return true;
                 }
                 // Check for a specific impl Trait for &T first (e.g., impl Inspect for &T)
@@ -248,7 +262,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             ResolvedType::MutRef(inner) => {
                 // Mutable references always implement Eq via ref.eq (identity comparison)
-                if trait_name == "Eq" {
+                if is_eq(trait_name) {
                     return true;
                 }
                 let inner_id = *inner;
@@ -768,12 +782,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let (type_name, concrete_type_args) = {
             let tt = self.type_table.borrow();
             let effective_id = tt.get_ultimate_base_type(concrete_type_id);
+            let array_name = tt
+                .compiler_items()
+                .struct_name(crate::compiler_item::CompilerItem::Array)
+                .to_string();
             match tt.get(effective_id).clone() {
                 ResolvedType::GenericInstance {
                     name, type_args, ..
                 } => (name, type_args),
                 ResolvedType::Struct { name, .. } => (name, vec![]),
-                ResolvedType::BuiltinArray(elem) => ("Array".to_string(), vec![elem]),
+                ResolvedType::BuiltinArray(elem) => (array_name, vec![elem]),
                 // Primitives (`i32`, `f64`, `bool`, ...) can implement traits
                 // with associated types just like structs. Without this arm,
                 // a generic call like `parse_range::<i32>(...)` would skip
@@ -1084,33 +1102,41 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // those here. `find_arithmetic_trait_impl` would otherwise default
         // `output_type` to the receiver type when no `type Output` is
         // declared.
+        let (eq_name, ord_name) = {
+            let tt = self.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items.trait_name(CompilerItem::Eq).to_string(),
+                items.trait_name(CompilerItem::Ord).to_string(),
+            )
+        };
+        let is_eq = trait_name == eq_name;
+        let is_ord = trait_name == ord_name;
         let (info_trait_name, self_kind, param_types, return_type) = if let Some(info) =
             self.find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_name, method_name)
         {
-            let return_type = match trait_name {
-                "Eq" => TypeTable::BOOL,
-                "Ord" => self.type_table.borrow_mut().intern(ResolvedType::Enum {
-                    name: "Ordering".to_string(),
-                    module_source: ModuleSource::prelude(),
-                }),
-                _ => info.output_type,
+            let return_type = if is_eq {
+                TypeTable::BOOL
+            } else if is_ord {
+                self.type_table
+                    .borrow_mut()
+                    .make_compiler_enum(CompilerItem::Ordering)
+            } else {
+                info.output_type
             };
             let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
             (info.trait_name, info.self_kind, param_types, return_type)
-        } else if matches!(trait_name, "Eq" | "Ord")
-            && self.type_implements_trait(lookup_type_id, trait_name)
-        {
+        } else if (is_eq || is_ord) && self.type_implements_trait(lookup_type_id, trait_name) {
             let ref_self_ty = self
                 .type_table
                 .borrow_mut()
                 .intern(ResolvedType::Ref(lookup_type_id));
-            let return_type = match trait_name {
-                "Eq" => TypeTable::BOOL,
-                "Ord" => self.type_table.borrow_mut().intern(ResolvedType::Enum {
-                    name: "Ordering".to_string(),
-                    module_source: ModuleSource::prelude(),
-                }),
-                _ => unreachable!(),
+            let return_type = if is_eq {
+                TypeTable::BOOL
+            } else {
+                self.type_table
+                    .borrow_mut()
+                    .make_compiler_enum(CompilerItem::Ordering)
             };
             (
                 trait_name.to_string(),
@@ -1175,29 +1201,37 @@ impl<H: CompilerHost> Resolver<'_, H> {
         method_name: &str,
         receiver_type_id: TypeId,
     ) -> Option<TraitMethodMatch> {
-        let trait_name = match method_name {
-            "eq" => "Eq",
-            "cmp" => "Ord",
+        let (eq_name, ord_name) = {
+            let tt = self.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items.trait_name(CompilerItem::Eq).to_string(),
+                items.trait_name(CompilerItem::Ord).to_string(),
+            )
+        };
+        let trait_name: String = match method_name {
+            "eq" => eq_name.clone(),
+            "cmp" => ord_name,
             _ => return None,
         };
         let base_type_id = self.get_base_type(receiver_type_id);
         if !self.auto_derive_eligible_kind(base_type_id) {
             return None;
         }
-        if !self.type_implements_trait(base_type_id, trait_name) {
+        if !self.type_implements_trait(base_type_id, &trait_name) {
             return None;
         }
         let ref_self_ty = self
             .type_table
             .borrow_mut()
             .intern(ResolvedType::Ref(base_type_id));
-        let return_type = match trait_name {
-            "Eq" => TypeTable::BOOL,
-            "Ord" => self.type_table.borrow_mut().intern(ResolvedType::Enum {
-                name: "Ordering".to_string(),
-                module_source: ModuleSource::prelude(),
-            }),
-            _ => unreachable!(),
+        let is_eq_match = trait_name == eq_name;
+        let return_type = if is_eq_match {
+            TypeTable::BOOL
+        } else {
+            self.type_table
+                .borrow_mut()
+                .make_compiler_enum(CompilerItem::Ordering)
         };
         let method_info = MethodInfo {
             return_type,
@@ -1213,7 +1247,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
         let impl_module_source = self.find_struct_module_source(struct_name);
         Some(TraitMethodMatch {
-            trait_name: trait_name.to_string(),
+            trait_name,
             method_info,
             impl_module_source,
             blanket_type_param: None,

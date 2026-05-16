@@ -45,9 +45,17 @@ use crate::module_source::ModuleSource;
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum CompilerItem {
     // ── Types (structs / generic structs) ────────────────────────────
+    /// `Array<T>` — the heap-backed sequence struct. Recognised by
+    /// the CM lift, value-copy synthesis, and serde codegen so the
+    /// compiler always points at the right concrete `Array` struct.
+    Array,
     /// `Box<T>` — boxes primitive values into a struct that
     /// participates in GC tracing.
     Box,
+    /// `i128` — the signed 128-bit wide-int struct.
+    I128,
+    /// `u128` — the unsigned 128-bit wide-int struct.
+    U128,
     /// `RangeExclusive<T>` — `a..b` literals.
     RangeExclusive,
     /// `RangeInclusive<T>` — `a..=b` literals.
@@ -55,6 +63,10 @@ pub enum CompilerItem {
     /// `Request<T>` — the Kiln CM adapter wraps decoded options in
     /// this struct.
     KilnRequest,
+    /// `String` — the GC-backed UTF-8 string struct. Synthesised
+    /// codegen (CM binding, serde, format) refers to it through this
+    /// item so the Rust side never hard-codes the struct name.
+    String,
 
     // ── Variants (sum types) ──────────────────────────────────────────
     /// `Option<T>` — `Some(_)` / `None`.
@@ -62,9 +74,22 @@ pub enum CompilerItem {
     /// `Result<T, E>` — `Ok(_)` / `Err(_)`.
     Result,
 
+    // ── Enums (sum types without payload) ─────────────────────────────
+    /// `Ordering` — return type of `Ord::cmp`. Recognised by operator
+    /// dispatch and by the trait-synthesis pass that emits
+    /// `T^Ord::cmp` bodies.
+    Ordering,
+
     // ── Traits ────────────────────────────────────────────────────────
     /// `Default` — `Default::default()` synthesis anchor.
     Default,
+    /// `Eq` — anchor for synthesised `==` / `!=` lowering and the
+    /// auto-derive checks that decide whether a compound type
+    /// (struct, variant, generic instance) implements `Eq`.
+    Eq,
+    /// `Ord` — anchor for synthesised `<` / `>` / `<=` / `>=`
+    /// lowering and for auto-derived `T^Ord::cmp` bodies.
+    Ord,
     /// `From<T>` — synthesised by the `From` synthesiser.
     From,
     /// `core:serde::Serialize` — anchor for `Serialize` impl synthesis.
@@ -89,6 +114,18 @@ pub enum CompilerItem {
     /// through this item so renames in the stdlib do not silently
     /// break code generation. See issue #1077.
     StringGetByteUnchecked,
+    /// `i128::from_i64` — sign-extending constructor used by the
+    /// wide-int literal lowering pass.
+    I128FromI64,
+    /// `i128::from_pair` — low/high pair constructor used by the
+    /// wide-int literal lowering pass.
+    I128FromPair,
+    /// `u128::from_u64` — zero-extending constructor used by the
+    /// wide-int literal lowering pass.
+    U128FromU64,
+    /// `u128::from_pair` — low/high pair constructor used by the
+    /// wide-int literal lowering pass.
+    U128FromPair,
 
     // ── Type families ─────────────────────────────────────────────────
     /// The tuple type family (`pub type [..T];`). The owning module is
@@ -101,13 +138,20 @@ impl CompilerItem {
     /// Every variant, in declaration order. Used by validation passes
     /// that need to check the full registry.
     pub const ALL: &'static [CompilerItem] = &[
+        Self::Array,
         Self::Box,
+        Self::I128,
+        Self::U128,
         Self::RangeExclusive,
         Self::RangeInclusive,
         Self::KilnRequest,
+        Self::String,
         Self::Option,
         Self::Result,
+        Self::Ordering,
         Self::Default,
+        Self::Eq,
+        Self::Ord,
         Self::From,
         Self::Serialize,
         Self::Deserialize,
@@ -115,6 +159,10 @@ impl CompilerItem {
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringGetByteUnchecked,
+        Self::I128FromI64,
+        Self::I128FromPair,
+        Self::U128FromU64,
+        Self::U128FromPair,
         Self::Tuple,
     ];
 
@@ -129,13 +177,20 @@ impl CompilerItem {
     /// references must agree.
     pub fn attr_name(self) -> &'static str {
         match self {
+            Self::Array => "array",
             Self::Box => "box",
+            Self::I128 => "i128",
+            Self::U128 => "u128",
             Self::RangeExclusive => "range_exclusive",
             Self::RangeInclusive => "range_inclusive",
             Self::KilnRequest => "kiln_request",
+            Self::String => "string",
             Self::Option => "option",
             Self::Result => "result",
+            Self::Ordering => "ordering",
             Self::Default => "default",
+            Self::Eq => "eq",
+            Self::Ord => "ord",
             Self::From => "from",
             Self::Serialize => "serialize",
             Self::Deserialize => "deserialize",
@@ -143,6 +198,10 @@ impl CompilerItem {
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringGetByteUnchecked => "string_get_byte_unchecked",
+            Self::I128FromI64 => "i128_from_i64",
+            Self::I128FromPair => "i128_from_pair",
+            Self::U128FromU64 => "u128_from_u64",
+            Self::U128FromPair => "u128_from_pair",
             Self::Tuple => "tuple",
         }
     }
@@ -154,22 +213,90 @@ impl CompilerItem {
         Self::ALL.iter().copied().find(|i| i.attr_name() == name)
     }
 
+    /// Whether the registry must contain this item by the end of
+    /// resolution for compilation of `world` to succeed.
+    ///
+    /// Items declared in `core::prelude::*` are always required — they
+    /// underpin the core type system and the prelude is auto-loaded
+    /// regardless of target world. Items declared in worlds the user
+    /// did not opt into (e.g. `core:kiln/generator` for
+    /// [`Self::KilnRequest`], `core:serde` for [`Self::Serialize`] /
+    /// [`Self::Deserialize`]) are only required when the matching
+    /// world / module is actually loaded; tracking that here keeps the
+    /// validator from spuriously failing in CLI / HTTP builds that
+    /// don't pull in kiln or serde.
+    ///
+    /// The validator scans this method for every [`Self::ALL`]
+    /// variant after `annotate_modules` runs; a `true` return on an
+    /// unregistered item is a hard error at compile time, surfacing
+    /// the missing stdlib annotation immediately rather than at the
+    /// first synthesis call that reaches for it.
+    pub fn is_required(self, world: &str) -> bool {
+        match self {
+            // Always loaded — `core:prelude` is auto-imported.
+            Self::Array
+            | Self::Box
+            | Self::I128
+            | Self::U128
+            | Self::RangeExclusive
+            | Self::RangeInclusive
+            | Self::String
+            | Self::Option
+            | Self::Result
+            | Self::Ordering
+            | Self::Default
+            | Self::Eq
+            | Self::Ord
+            | Self::From
+            | Self::ArrayPush
+            | Self::StringPushStr
+            | Self::StringPushChar
+            | Self::StringGetByteUnchecked
+            | Self::I128FromI64
+            | Self::I128FromPair
+            | Self::U128FromU64
+            | Self::U128FromPair
+            | Self::Tuple => true,
+            // Kiln generator world only.
+            Self::KilnRequest => world == "core:kiln/generator",
+            // Loaded only when the user imports `core:serde` (which
+            // happens implicitly for kiln-options decoding). The
+            // validator skips the check; downstream synthesis ICEs
+            // with a clear message if the items are reached for
+            // without being registered.
+            Self::Serialize | Self::Deserialize => false,
+        }
+    }
+
     /// The kind of declaration this item must be attached to. Used by
     /// the resolver to reject misuse like
     /// `#[compiler_item("option")]` on a trait.
     pub fn expected_kind(self) -> CompilerItemKind {
         match self {
-            Self::Box | Self::RangeExclusive | Self::RangeInclusive | Self::KilnRequest => {
-                CompilerItemKind::Struct
-            }
+            Self::Array
+            | Self::Box
+            | Self::I128
+            | Self::U128
+            | Self::RangeExclusive
+            | Self::RangeInclusive
+            | Self::KilnRequest
+            | Self::String => CompilerItemKind::Struct,
             Self::Option | Self::Result => CompilerItemKind::Variant,
-            Self::Default | Self::From | Self::Serialize | Self::Deserialize => {
-                CompilerItemKind::Trait
-            }
+            Self::Ordering => CompilerItemKind::Enum,
+            Self::Default
+            | Self::Eq
+            | Self::Ord
+            | Self::From
+            | Self::Serialize
+            | Self::Deserialize => CompilerItemKind::Trait,
             Self::ArrayPush
             | Self::StringPushStr
             | Self::StringPushChar
-            | Self::StringGetByteUnchecked => CompilerItemKind::Method,
+            | Self::StringGetByteUnchecked
+            | Self::I128FromI64
+            | Self::I128FromPair
+            | Self::U128FromU64
+            | Self::U128FromPair => CompilerItemKind::Method,
             Self::Tuple => CompilerItemKind::TupleFamily,
         }
     }
@@ -193,6 +320,8 @@ pub enum CompilerItemKind {
     Struct,
     /// A `variant` declaration (`Option`, `Result`).
     Variant,
+    /// An `enum` declaration (`Ordering`).
+    Enum,
     /// A `trait` declaration.
     Trait,
     /// A method inside an `impl` block.
@@ -206,6 +335,7 @@ impl fmt::Display for CompilerItemKind {
         f.write_str(match self {
             Self::Struct => "struct",
             Self::Variant => "variant",
+            Self::Enum => "enum",
             Self::Trait => "trait",
             Self::Method => "method",
             Self::TupleFamily => "tuple type family",
@@ -233,6 +363,10 @@ pub enum Resolved {
         module_source: ModuleSource,
         name: String,
     },
+    Enum {
+        module_source: ModuleSource,
+        name: String,
+    },
     Trait {
         module_source: ModuleSource,
         name: String,
@@ -256,6 +390,7 @@ impl Resolved {
         match self {
             Self::Struct { .. } => CompilerItemKind::Struct,
             Self::Variant { .. } => CompilerItemKind::Variant,
+            Self::Enum { .. } => CompilerItemKind::Enum,
             Self::Trait { .. } => CompilerItemKind::Trait,
             Self::Method { .. } => CompilerItemKind::Method,
             Self::TupleFamily { .. } => CompilerItemKind::TupleFamily,
@@ -268,6 +403,7 @@ impl Resolved {
         match self {
             Self::Struct { module_source, .. }
             | Self::Variant { module_source, .. }
+            | Self::Enum { module_source, .. }
             | Self::Trait { module_source, .. }
             | Self::Method { module_source, .. }
             | Self::TupleFamily { module_source } => module_source,
@@ -412,6 +548,18 @@ impl CompilerItems {
         }
     }
 
+    /// Module + enum name of a [`CompilerItemKind::Enum`] item
+    /// (`Ordering`).
+    pub fn require_enum(&self, item: CompilerItem) -> (&ModuleSource, &str) {
+        match self.require(item) {
+            Resolved::Enum {
+                module_source,
+                name,
+            } => (module_source, name.as_str()),
+            other => kind_mismatch_ice(item, "Enum", other),
+        }
+    }
+
     /// Module + trait name of a [`CompilerItemKind::Trait`] item.
     pub fn require_trait(&self, item: CompilerItem) -> (&ModuleSource, &str) {
         match self.require(item) {
@@ -421,6 +569,35 @@ impl CompilerItems {
             } => (module_source, name.as_str()),
             other => kind_mismatch_ice(item, "Trait", other),
         }
+    }
+
+    /// Name-only convenience for a [`CompilerItemKind::Trait`] item.
+    /// Equivalent to `require_trait(item).1`; the dedicated helper
+    /// keeps use sites readable when only the trait name is needed
+    /// (e.g. when constructing a synthesised `LocalMethodName`).
+    pub fn trait_name(&self, item: CompilerItem) -> &str {
+        self.require_trait(item).1
+    }
+
+    /// Name-only convenience for a [`CompilerItemKind::Struct`] item.
+    pub fn struct_name(&self, item: CompilerItem) -> &str {
+        self.require_struct(item).1
+    }
+
+    /// Name-only convenience for a [`CompilerItemKind::Variant`] item.
+    pub fn variant_name(&self, item: CompilerItem) -> &str {
+        self.require_variant(item).1
+    }
+
+    /// Name-only convenience for a [`CompilerItemKind::Enum`] item.
+    pub fn enum_name(&self, item: CompilerItem) -> &str {
+        self.require_enum(item).1
+    }
+
+    /// Name-only convenience for a [`CompilerItemKind::Method`] item.
+    /// Returns the unmangled method name (e.g. `"push_str"`).
+    pub fn method_name(&self, item: CompilerItem) -> &str {
+        self.require_method(item).2
     }
 
     /// Module-only accessor for a trait.
@@ -458,6 +635,19 @@ impl CompilerItems {
             Resolved::TupleFamily { module_source } => Some(module_source),
             _ => None,
         }
+    }
+
+    /// List every required-but-missing [`CompilerItem`] for the given
+    /// `world`. The resolver calls this after `annotate_modules` so an
+    /// unregistered prelude item (or world-specific item for the
+    /// active world) fails the compile with a clear diagnostic
+    /// instead of an ICE deep inside synthesis.
+    pub fn missing_required(&self, world: &str) -> Vec<CompilerItem> {
+        CompilerItem::ALL
+            .iter()
+            .copied()
+            .filter(|item| item.is_required(world) && self.get(*item).is_none())
+            .collect()
     }
 }
 
@@ -647,6 +837,94 @@ mod tests {
         let reg = CompilerItems::default();
         for &item in CompilerItem::ALL {
             assert!(reg.get(item).is_none(), "{item} should start empty");
+        }
+    }
+
+    /// Regression for issue #1077: the Rust side must not depend on
+    /// the source-level method name. Register `StringPushStr` with a
+    /// name that does *not* match the conventional `push_str` spelling
+    /// and verify the registry hands that name back through
+    /// [`CompilerItems::require_method`]. This locks in the contract:
+    /// a Wado-side rename of a stdlib method is transparent to the
+    /// Rust compiler as long as `#[compiler_item("...")]` stays put.
+    #[test]
+    fn method_name_round_trips_through_registry_even_when_renamed() {
+        let mut reg = CompilerItems::new();
+        reg.register(
+            CompilerItem::StringPushStr,
+            Resolved::Method {
+                module_source: ModuleSource::string(),
+                owner_type: "String".to_string(),
+                name: "push_str_v2".to_string(),
+            },
+        )
+        .unwrap();
+        let (module, owner, name) = reg.require_method(CompilerItem::StringPushStr);
+        assert_eq!(module, &ModuleSource::string());
+        assert_eq!(owner, "String");
+        assert_eq!(name, "push_str_v2");
+    }
+
+    /// Counterpart to the rename-rewrite test: omitting the
+    /// `#[compiler_item("...")]` annotation entirely leaves the
+    /// registry empty for that item, so `get()` returns `None`. The
+    /// documented ICE in `require_method` only fires when a downstream
+    /// pass reaches for the item — the validator detects the missing
+    /// registration before that point. This test pins both halves of
+    /// the contract.
+    #[test]
+    fn missing_registration_returns_none() {
+        let reg = CompilerItems::new();
+        assert!(reg.get(CompilerItem::StringPushStr).is_none());
+    }
+
+    /// `require_method` is documented to panic with a clear ICE
+    /// message when the item is unregistered. Lock that message
+    /// shape so the validator's failure mode and the post-validator
+    /// ICE remain consistent.
+    #[test]
+    #[should_panic(expected = "compiler item `string_push_str` is not registered")]
+    fn require_panics_on_unregistered() {
+        let reg = CompilerItems::new();
+        let _ = reg.require_method(CompilerItem::StringPushStr);
+    }
+
+    /// Validator covers every required item in `ALL`. With an empty
+    /// registry, every prelude-required item should appear in
+    /// `missing_required`; world-specific items (`KilnRequest`,
+    /// Serialize, Deserialize) should appear only for their world.
+    #[test]
+    fn missing_required_scopes_by_world() {
+        let reg = CompilerItems::new();
+        let cli_missing = reg.missing_required("core:cli/command");
+        let kiln_missing = reg.missing_required("core:kiln/generator");
+        assert!(
+            !cli_missing.contains(&CompilerItem::KilnRequest),
+            "KilnRequest is kiln-specific and must not be required in CLI builds",
+        );
+        assert!(
+            kiln_missing.contains(&CompilerItem::KilnRequest),
+            "KilnRequest must be required when targeting kiln/generator",
+        );
+        // Prelude items must show up regardless of world.
+        for &core in &[
+            CompilerItem::Option,
+            CompilerItem::Result,
+            CompilerItem::Eq,
+            CompilerItem::From,
+            CompilerItem::String,
+            CompilerItem::Array,
+            CompilerItem::I128,
+            CompilerItem::U128,
+        ] {
+            assert!(
+                cli_missing.contains(&core),
+                "{core} should be required in CLI world"
+            );
+            assert!(
+                kiln_missing.contains(&core),
+                "{core} should be required in kiln world"
+            );
         }
     }
 }

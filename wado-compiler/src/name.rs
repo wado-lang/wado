@@ -35,6 +35,23 @@ use fluent_uri::UriRef;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
+/// Canonical method name of the synthesised `__call` impl on every
+/// closure functor struct. Defined as a single constant so the
+/// compiler-internal naming convention has one source of truth — the
+/// closure planner, the translator, and DCE all reach for this
+/// constant instead of writing the literal `"__call"` at each site.
+///
+/// Unlike stdlib items wired through [`crate::compiler_item`], the
+/// `__call` symbol has no Wado-side declaration, so a `CompilerItem`
+/// anchor would have nothing to bind to. A `const` is the right shape.
+pub const CLOSURE_CALL_METHOD: &str = "__call";
+
+/// Prefix the compiler stamps onto every synthesised closure-functor
+/// struct (`__Closure_0`, `__Closure_1`, …). Like
+/// [`CLOSURE_CALL_METHOD`], this is purely a compiler-internal
+/// convention — there is no Wado-side declaration to anchor it to.
+pub const CLOSURE_STRUCT_PREFIX: &str = "__Closure_";
+
 /// A free function name (not a method on a struct).
 ///
 /// Format: `{module_source}/{name}`
@@ -540,7 +557,8 @@ impl LocalMethodName {
     /// the vtable slot they're installed into, so callers that reshape
     /// ABIs need to filter them out.
     pub fn is_closure_call(&self) -> bool {
-        self.method_name == "__call" && self.struct_name.starts_with("__Closure_")
+        self.method_name == CLOSURE_CALL_METHOD
+            && self.struct_name.starts_with(CLOSURE_STRUCT_PREFIX)
     }
 }
 

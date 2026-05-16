@@ -28,8 +28,11 @@ pub(super) fn should_rewrite(
     arms: &[TirMatchArm],
     type_table: &TypeTable,
 ) -> bool {
+    let items = type_table.compiler_items();
+    let i128_name = items.struct_name(crate::compiler_item::CompilerItem::I128);
+    let u128_name = items.struct_name(crate::compiler_item::CompilerItem::U128);
     let is_wide_int = match type_table.get(scrutinee_type) {
-        ResolvedType::Struct { name, .. } => name == "i128" || name == "u128",
+        ResolvedType::Struct { name, .. } => name == i128_name || name == u128_name,
         _ => false,
     };
     if !is_wide_int {
@@ -57,7 +60,8 @@ pub(super) fn build_if_chain(
     for arm in arms.iter().rev() {
         match &arm.pattern {
             TirPattern::Literal(TirLiteralPattern::I128(value)) => {
-                let literal_expr = create_i128_literal(*value, scrutinee.type_id, span);
+                let literal_expr =
+                    create_i128_literal(*value, scrutinee.type_id, &type_table.borrow(), span);
                 let eq_call =
                     create_i128_eq_call(scrutinee.clone(), literal_expr, type_table, span);
                 let condition = with_guard(eq_call, arm.guard.as_ref(), span);
@@ -70,7 +74,8 @@ pub(super) fn build_if_chain(
                 ));
             }
             TirPattern::Literal(TirLiteralPattern::U128(value)) => {
-                let literal_expr = create_u128_literal(*value, scrutinee.type_id, span);
+                let literal_expr =
+                    create_u128_literal(*value, scrutinee.type_id, &type_table.borrow(), span);
                 let eq_call =
                     create_u128_eq_call(scrutinee.clone(), literal_expr, type_table, span);
                 let condition = with_guard(eq_call, arm.guard.as_ref(), span);
@@ -213,18 +218,28 @@ fn create_i128_eq_call(
         right_ref_type,
         span,
     );
+    let (eq_trait_name, i128_struct_name) = {
+        let tt = type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items
+                .trait_name(crate::compiler_item::CompilerItem::Eq)
+                .to_string(),
+            items
+                .struct_name(crate::compiler_item::CompilerItem::I128)
+                .to_string(),
+        )
+    };
+    let method_info = LocalMethodName::new(i128_struct_name, Some(eq_trait_name), "eq".to_string());
+    let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::method_call(
             Box::new(receiver),
             FunctionRef {
                 module_source: ModuleSource::int128(),
-                name: "i128^Eq::eq".to_string(),
+                name: mangled_name,
                 monomorph_info: None,
-                method_info: Some(LocalMethodName::new(
-                    "i128".to_string(),
-                    Some("Eq".to_string()),
-                    "eq".to_string(),
-                )),
+                method_info: Some(method_info),
             },
             vec![],
             vec![CallArg::new(arg_ref, false)],
@@ -262,18 +277,28 @@ fn create_u128_eq_call(
         right_ref_type,
         span,
     );
+    let (eq_trait_name, u128_struct_name) = {
+        let tt = type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items
+                .trait_name(crate::compiler_item::CompilerItem::Eq)
+                .to_string(),
+            items
+                .struct_name(crate::compiler_item::CompilerItem::U128)
+                .to_string(),
+        )
+    };
+    let method_info = LocalMethodName::new(u128_struct_name, Some(eq_trait_name), "eq".to_string());
+    let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::method_call(
             Box::new(receiver),
             FunctionRef {
                 module_source: ModuleSource::int128(),
-                name: "u128^Eq::eq".to_string(),
+                name: mangled_name,
                 monomorph_info: None,
-                method_info: Some(LocalMethodName::new(
-                    "u128".to_string(),
-                    Some("Eq".to_string()),
-                    "eq".to_string(),
-                )),
+                method_info: Some(method_info),
             },
             vec![],
             vec![CallArg::new(arg_ref, false)],

@@ -46,6 +46,11 @@ pub(super) fn unify(
     actual: TypeId,
     bindings: &mut IndexMap<TypeId, TypeId>,
 ) {
+    let array_name = type_table
+        .borrow()
+        .compiler_items()
+        .struct_name(crate::compiler_item::CompilerItem::Array)
+        .to_string();
     let expected_type = type_table.borrow().get(expected).clone();
     let actual_type = type_table.borrow().get(actual).clone();
 
@@ -141,7 +146,7 @@ pub(super) fn unify(
                 module_source: actual_module_source,
                 type_args: actual_elems,
             },
-        ) if name == "Array"
+        ) if name == &array_name
             && TypeTable::is_tuple_type(actual_name, actual_module_source)
             && expected_args.len() == 1
             && !actual_elems.is_empty() =>

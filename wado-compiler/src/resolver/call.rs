@@ -607,11 +607,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             );
                             let from_type = args[0].type_id;
                             let from_type_name = self.type_table.borrow().type_name(from_type);
+                            let from_trait_name = self
+                                .type_table
+                                .borrow()
+                                .compiler_items()
+                                .trait_name(crate::compiler_item::CompilerItem::From)
+                                .to_string();
                             let matching_impl = self.current_module_items.iter().any(|item| {
                                 if let Item::Impl(impl_block) = item
                                     && impl_block.is_synthesize_request
                                     && let Some(trait_type) = &impl_block.trait_type
-                                    && Self::get_type_name_static(trait_type) == "From"
+                                    && Self::get_type_name_static(trait_type) == from_trait_name
                                     && Self::get_type_name_static(&impl_block.ty) == prefix
                                 {
                                     if let ast::Type::Generic(generic) = trait_type
@@ -1158,9 +1164,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ty: &Type,
         wasi_package: Option<&str>,
     ) -> TypeId {
+        let string_struct_name = self
+            .type_table
+            .borrow()
+            .compiler_items()
+            .struct_name(crate::compiler_item::CompilerItem::String)
+            .to_string();
+        let array_struct_name = self
+            .type_table
+            .borrow()
+            .compiler_items()
+            .struct_name(crate::compiler_item::CompilerItem::Array)
+            .to_string();
+        if let Type::Named(named) = ty
+            && named.name == string_struct_name
+        {
+            return self.get_string_struct_type();
+        }
         match ty {
             Type::Named(named) => match named.name.as_str() {
-                "String" => self.get_string_struct_type(),
                 "i8" => TypeTable::I8,
                 "i16" => TypeTable::I16,
                 "i32" => TypeTable::I32,
@@ -1310,11 +1332,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 }
             },
+            Type::Generic(generic)
+                if generic.name == array_struct_name && generic.args.len() == 1 =>
+            {
+                let elem_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
+                self.type_table.borrow_mut().make_array(elem_type)
+            }
             Type::Generic(generic) => match generic.name.as_str() {
-                "Array" if generic.args.len() == 1 => {
-                    let elem_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
-                    self.type_table.borrow_mut().make_array(elem_type)
-                }
                 "Option" if generic.args.len() == 1 => {
                     let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
                     self.type_table.borrow_mut().make_option(inner_type)
@@ -1372,7 +1396,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn get_string_struct_type(&mut self) -> TypeId {
         self.type_table
             .borrow_mut()
-            .make_struct("String".to_string(), ModuleSource::string())
+            .make_compiler_struct(crate::compiler_item::CompilerItem::String)
     }
 
     /// Build a `from_pair` call for i128/u128 large literal construction

@@ -408,9 +408,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         if is_string_or_template {
             let base_id = self.type_table.borrow().get_ultimate_base_type(target_type);
+            let string_struct_name = self
+                .type_table
+                .borrow()
+                .compiler_items()
+                .struct_name(crate::compiler_item::CompilerItem::String)
+                .to_string();
             let is_string_newtype = matches!(
                 self.type_table.borrow().get(base_id),
-                ResolvedType::Struct { name, .. } if name == "String"
+                ResolvedType::Struct { name, .. } if name == &string_struct_name
             ) && target_type != base_id;
             if is_string_newtype {
                 let mut resolved = self.resolve_expr(expr, ctx, None);
@@ -498,7 +504,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let string_type = self
             .type_table
             .borrow_mut()
-            .make_struct("String".to_string(), ModuleSource::string());
+            .make_compiler_struct(crate::compiler_item::CompilerItem::String);
         let i32_type = TypeTable::I32;
 
         // Get type args for monomorphization from builder type
