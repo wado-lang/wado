@@ -284,9 +284,19 @@ impl Resolved {
 ///
 /// Storage is a dense array indexed by [`CompilerItem`] (cast via
 /// [`CompilerItem::ALL`]'s declaration order); every lookup is O(1).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct CompilerItems {
     items: Vec<Option<Resolved>>,
+}
+
+impl Default for CompilerItems {
+    /// Must delegate to [`Self::new`]. Deriving `Default` would
+    /// produce an empty `items` vector and every accessor would
+    /// panic with an out-of-bounds index — `index_of` returns
+    /// `0..CompilerItem::COUNT`.
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CompilerItems {
@@ -626,5 +636,17 @@ mod tests {
         let (module, name) = reg.require_trait(CompilerItem::Default);
         assert_eq!(name, "Default");
         assert_eq!(module, &ModuleSource::traits());
+    }
+
+    /// Regression: a `Default`-constructed registry must be usable
+    /// like one from `new()`. A naive `#[derive(Default)]` would
+    /// leave `items` empty and every accessor would index out of
+    /// bounds.
+    #[test]
+    fn default_constructor_matches_new() {
+        let reg = CompilerItems::default();
+        for &item in CompilerItem::ALL {
+            assert!(reg.get(item).is_none(), "{item} should start empty");
+        }
     }
 }
