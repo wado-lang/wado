@@ -454,6 +454,7 @@ impl Parser {
     fn parse_variant_pattern(
         &mut self,
         name: String,
+        qualifier: Option<Type>,
         start_span: Span,
         name_id: Option<AstId>,
         name_span: Span,
@@ -464,9 +465,88 @@ impl Parser {
         self.expect(&TokenKind::RParen)?;
         Ok(Pattern::Variant {
             variant_name: name,
+            variant_qualifier: qualifier,
             name_id,
             name_span,
             bindings,
+            span: start_span.merge(&end_span),
+        })
+    }
+
+    fn parse_pattern_qualified_case_from_first_segment(
+        &mut self,
+        first_name: String,
+        start_span: Span,
+    ) -> ParseResult<Pattern> {
+        let first_type = if self.check(&TokenKind::Lt) {
+            self.advance();
+            let args = self.parse_type_args()?;
+            Type::Generic(GenericType {
+                id: self.alloc_ast_id(),
+                name: first_name,
+                args,
+                span: start_span,
+            })
+        } else {
+            Type::Named(NamedType {
+                id: self.alloc_ast_id(),
+                name: first_name,
+                span: start_span,
+                source_interface: None,
+            })
+        };
+
+        self.expect(&TokenKind::ColonColon)?;
+        let second_span = self.peek().span;
+        let second_name = self.consume_ident()?;
+        let second_args = if self.check(&TokenKind::Lt) {
+            self.advance();
+            self.parse_type_args()?
+        } else {
+            Vec::new()
+        };
+
+        let (qualifier, case_name, case_span) = if self.check(&TokenKind::ColonColon) {
+            self.advance();
+            let case_span = self.peek().span;
+            let case_name = self.consume_ident()?;
+            let qualifier = match first_type {
+                Type::Named(ref t) => Type::NamespacedGeneric(NamespacedGenericType {
+                    id: self.alloc_ast_id(),
+                    namespace: t.name.clone(),
+                    name: second_name,
+                    args: second_args,
+                    span: start_span,
+                }),
+                _ => {
+                    return Err(ParseError {
+                        message: "invalid qualified case pattern".to_string(),
+                        span: start_span,
+                    });
+                }
+            };
+            (qualifier, case_name, case_span)
+        } else {
+            (first_type, second_name, second_span)
+        };
+
+        let case_id = self.alloc_ast_id();
+        if self.check(&TokenKind::LParen) {
+            return self.parse_variant_pattern(
+                case_name,
+                Some(qualifier),
+                start_span,
+                Some(case_id),
+                case_span,
+            );
+        }
+        let end_span = self.peek().span;
+        Ok(Pattern::Variant {
+            variant_name: case_name,
+            variant_qualifier: Some(qualifier),
+            name_id: Some(case_id),
+            name_span: case_span,
+            bindings: vec![],
             span: start_span.merge(&end_span),
         })
     }
@@ -2258,31 +2338,12 @@ impl Parser {
             self.advance();
             if name == "_" {
                 Ok(Pattern::Wildcard)
-            } else if self.check(&TokenKind::ColonColon) {
-                // Qualified name: Type::Case, Type::CONST, etc.
-                self.advance();
-                let suffix_span = self.peek().span;
-                let suffix = self.consume_ident()?;
-                let suffix_id = self.alloc_ast_id();
-                let qualified = format!("{name}::{suffix}");
-                let end_span = self.peek().span;
-                if self.check(&TokenKind::LParen) {
-                    // Qualified variant with bindings: Option::Some(x)
-                    self.parse_variant_pattern(qualified, start_span, Some(suffix_id), suffix_span)
-                } else {
-                    // Qualified name without bindings: Color::Red, i32::MAX
-                    Ok(Pattern::Variant {
-                        variant_name: qualified,
-                        name_id: Some(suffix_id),
-                        name_span: suffix_span,
-                        bindings: vec![],
-                        span: start_span.merge(&end_span),
-                    })
-                }
+            } else if self.check(&TokenKind::Lt) || self.check(&TokenKind::ColonColon) {
+                self.parse_pattern_qualified_case_from_first_segment(name, start_span)
             } else if self.check(&TokenKind::LParen) {
                 // Variant with bindings: Some(x), just(n), etc.
                 let name_id = self.alloc_ast_id();
-                self.parse_variant_pattern(name, start_span, Some(name_id), start_span)
+                self.parse_variant_pattern(name, None, start_span, Some(name_id), start_span)
             } else if self.check(&TokenKind::LBrace) {
                 // Named struct pattern: Point { x, y }
                 self.parse_struct_pattern_fields(Some(name))
@@ -5921,6 +5982,49 @@ line 2
         {
             assert_eq!(variant_name, "Some");
             assert_eq!(bindings.len(), 1);
+        } else {
+            panic!("expected variant pattern");
+        }
+    }
+
+    #[test]
+    fn test_pattern_variant_namespaced_qualifier() {
+        let pat = parse_pattern_from("shapes::Shape::Circle(r)");
+        if let Pattern::Variant {
+            variant_name,
+            variant_qualifier,
+            bindings,
+            ..
+        } = &pat
+        {
+            assert_eq!(variant_name, "Circle");
+            assert_eq!(bindings.len(), 1);
+            assert!(matches!(
+                variant_qualifier,
+                Some(Type::NamespacedGeneric(ns))
+                    if ns.namespace == "shapes" && ns.name == "Shape" && ns.args.is_empty()
+            ));
+        } else {
+            panic!("expected variant pattern");
+        }
+    }
+
+    #[test]
+    fn test_pattern_variant_generic_qualifier() {
+        let pat = parse_pattern_from("Result<i32, String>::Ok(v)");
+        if let Pattern::Variant {
+            variant_name,
+            variant_qualifier,
+            bindings,
+            ..
+        } = &pat
+        {
+            assert_eq!(variant_name, "Ok");
+            assert_eq!(bindings.len(), 1);
+            assert!(matches!(
+                variant_qualifier,
+                Some(Type::Generic(g)) if g.name == "Result" && g.args.len() == 2
+            ));
         } else {
             panic!("expected variant pattern");
         }

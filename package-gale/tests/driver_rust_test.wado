@@ -14,7 +14,6 @@ use rust from "./grammars/RustLexer.g4"
     };
 use { normalize_tree } from "./grammars/RustLexer.g4";
 
-// --- Tokenize tests ---
 
 test "tokenize fn declaration" {
     let tokens = rust::tokenize(&"fn main() {}");
@@ -80,7 +79,6 @@ test "tokenize macro invocation" {
     assert tokens.len() >= 5, `expected at least 5 tokens, got {tokens.len()}`;
 }
 
-// --- Parse tests ---
 
 test "parse empty crate" {
     let result = rust::parse(&"");
@@ -96,7 +94,6 @@ test "fn keyword requires semantic predicates" {
     assert result matches { Err(_) }, "expected parse to fail due to missing semantic predicates";
 }
 
-// --- S-expression tree tests ---
 
 fn assert_tree(input: &String, expected: &String) {
     let root = rust::parse(input).unwrap();
@@ -105,8 +102,6 @@ fn assert_tree(input: &String, expected: &String) {
     let norm = normalize_tree(expected);
     assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
 }
-
-// Expression tests
 
 test "tree: operator precedence" {
     assert_tree(&"const X: i32 = 1 + 2 * 3 - 4;", &"

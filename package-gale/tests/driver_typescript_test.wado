@@ -88,7 +88,6 @@ test "tokenize enum" {
     assert first == "Enum", `expected Enum, got {first}`;
 }
 
-// --- Parser tests ---
 // The TypeScript grammar's generated entry rule is `initializer: '=' singleExpression`,
 // so only `= <expression>` inputs can be parsed. Identifiers are not tokenized
 // correctly due to missing semantic predicates, so only literal expressions work.
@@ -170,7 +169,6 @@ test "parse initializer ternary" {
     }
 }
 
-// --- Complex expression tests ---
 
 test "parse nested arithmetic" {
     let result = ts::parse(&"= (1 + 2) * 3");
@@ -361,7 +359,6 @@ test "tree: simple ternary" {
     ");
 }
 
-// --- Right-associative power operator ---
 //
 // TypeScriptParser.g4 marks the `**` alternative of `singleExpression` with
 // `<assoc=right>`. `2 ** 3 ** 4` must parse as `2 ** (3 ** 4)`, which in the
@@ -401,7 +398,6 @@ test "tree: power operator over addition binds tighter on the right" {
     ");
 }
 
-// --- Lexer command regression tests ---
 //
 // These exercise code paths that used to be silently dropped by the IR and
 // are now wired through the lexer generator: `type(X)` kind override,

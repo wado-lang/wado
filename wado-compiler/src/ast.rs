@@ -2337,6 +2337,10 @@ pub enum Pattern {
     /// Variant pattern: `Some(x)` or `None`
     Variant {
         variant_name: String,
+        /// Optional qualifier for a qualified case pattern, e.g. `Option` in
+        /// `Option::Some(x)`, `shapes::Op` in `shapes::Op::Wildcard`, or
+        /// `Result<i32, E>` in `Result<i32, E>::Ok(v)`.
+        variant_qualifier: Option<Type>,
         /// `AstId` of the variant-name identifier in the pattern. Used to
         /// record use→def references for LSP navigation (cursor on `Some`
         /// inside a match arm jumps to the case's declaration site).
