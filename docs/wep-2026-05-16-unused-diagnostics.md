@@ -44,9 +44,11 @@ HIR-level `unused_*` lints and `dead_code` reachability:
    `&Annotated`. Emits `UnusedImport`, `UnusedVariable`,
    `UnusedParameter`. LSP and batch compilation share this pass for
    free.
-2. NIR + DCE layer — runs as a hook inside `optimize/dce.rs`,
-   after reachability is computed but before unreachable functions are
-   removed. Emits `DeadFunction`.
+2. NIR + DCE layer — runs as hooks inside `optimize.rs::run_dce`, on
+   each iteration of DCE's fixed-point loop, between reachability
+   analysis and removal. Emits `DeadFunction` and `DeadGlobal`. A
+   cross-iteration dedup set keyed by `SymbolKey` ensures each item
+   is reported at most once.
 
 Both passes are guarded by `CompilerOptions::unused_diagnostics` (on by
 default). No package-kind toggle is needed: `export` already names the
@@ -61,11 +63,12 @@ complete set of package-external roots for every entry-point kind
 | `UnusedVariable`  | Annotated      | `UnusedVariable`  |
 | `UnusedParameter` | Annotated      | `UnusedParameter` |
 | `DeadFunction`    | NIR (post-DCE) | `DeadFunction`    |
+| `DeadGlobal`      | NIR (post-DCE) | `DeadGlobal`      |
 
 ### What is out of scope (deferred to follow-up WEPs / PRs)
 
 - `unused_mut`, `unused_type_param`, `unused_assignment`
-- `dead_type`, `dead_trait_impl`, `unreachable_pattern`
+- `dead_type`, `dead_trait_impl`, `unreachable_pattern`, `dead_closure_functor`
 - `#[allow(unused)]` / `#[deny(unused)]` attribute mechanism
 - Per-`UseItem::InterfaceFunctions` granularity (function-level inside
   an interface import)
@@ -75,11 +78,17 @@ complete set of package-external roots for every entry-point kind
 
 The DCE layer treats these as always-reachable:
 
-| Root                                 | Source                                                                                 |
-| ------------------------------------ | -------------------------------------------------------------------------------------- |
-| `is_cm_export`                       | World export wrappers from synthesis (covers `command` / `service` / `lib` exports)    |
-| `is_export` in `wasm_module_sources` | Raw Wasm exports                                                                       |
-| `defining_ast_id.is_none()`          | Synthesised functions (CM bindings, dispatch wrappers, monomorph clones, auto-derives) |
+| Root                                 | Source                                                                              |
+| ------------------------------------ | ----------------------------------------------------------------------------------- |
+| `is_cm_export`                       | World export wrappers from synthesis (covers `command` / `service` / `lib` exports) |
+| `is_export` in `wasm_module_sources` | Raw Wasm exports                                                                    |
+
+This matches the existing DCE root set in `optimize/dce.rs`
+(`compute_reachable_from_entries`). No new roots are introduced.
+Synthesised functions and globals stay subject to the normal call-graph
+rules: a CM binding for an unreachable export, or an auto-derived impl
+that nothing references, is still removed by DCE. The synthesis
+exclusion only suppresses the diagnostic emission, never the removal.
 
 `is_pub` is never a root. In Wado it denotes package-internal
 visibility, never package-external API — that is `export`'s job, and
@@ -105,14 +114,13 @@ user's build output.
 
 ### Defining-ast-id field
 
-`TirFunction` and `NirFunction` gain a `defining_ast_id: Option<AstId>`
-field. Together with `module_source`, this forms a `SymbolKey` back to
-the originating AST node — the canonical identity already used by
-`Annotated`, the symbol table, and the LSP query API. `None` marks
-synthesised functions, which automatically:
-
-- become DCE roots (no source location to warn at), and
-- are excluded from `DeadFunction` reporting.
+`TirFunction` / `NirFunction` and `TirGlobal` / `NirGlobal` each gain a
+`defining_ast_id: Option<AstId>` field. Together with `module_source`,
+this forms a `SymbolKey` back to the originating AST node — the
+canonical identity already used by `Annotated`, the symbol table, and
+the LSP query API. `None` marks synthesised items, which are excluded
+from `DeadFunction` / `DeadGlobal` reporting (but still subject to
+normal DCE removal).
 
 This is the only structural change required outside the new
 `analyze/unused.rs` module.
@@ -121,18 +129,19 @@ This is the only structural change required outside the new
 
 ### Source files
 
-| File                                  | Description                                                                                                                                 |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `wado-compiler/src/analyze/unused.rs` | New module hosting `check_unused` (Annotated layer) and `check_dead_functions` (DCE hook).                                                  |
-| `wado-compiler/src/compiler_host.rs`  | Adds `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction` and their `Display` mappings.                                |
-| `wado-compiler/src/logger.rs`         | Adds `Logger::warn_at(code, message, span, file)` for span-bearing warnings.                                                                |
-| `wado-compiler/src/lib.rs`            | Adds `CompilerOptions::unused_diagnostics`. Calls `check_unused` after `annotate_loaded` and `check_dead_functions` after DCE reachability. |
-| `wado-compiler/src/tir.rs`            | `TirFunction::defining_ast_id: Option<AstId>`.                                                                                              |
-| `wado-compiler/src/nir.rs`            | `NirFunction::defining_ast_id: Option<AstId>`.                                                                                              |
-| `wado-compiler/src/optimize/dce.rs`   | Splits `analyze_project` into reachability computation and removal so the diagnostic hook fits between them.                                |
-| `wado-compiler/src/ast_index.rs`      | Adds `is_param(id)` predicate (1-bit table) so the locals pass can distinguish `UnusedVariable` from `UnusedParameter`.                     |
-| `wado-cli`                            | Adds `--no-unused` flag.                                                                                                                    |
-| `wado-lsp`                            | Calls `analyze::unused::check_unused` from `Engine::diagnostics`.                                                                           |
+| File                                  | Description                                                                                                                                                                                    |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `wado-compiler/src/analyze/unused.rs` | New module hosting `check_unused` (Annotated layer), `emit_dead_function_diagnostics`, and `emit_dead_global_diagnostics` (DCE-loop hooks).                                                    |
+| `wado-compiler/src/compiler_host.rs`  | Adds `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction`, `DeadGlobal` and their `Display` mappings.                                                                     |
+| `wado-compiler/src/logger.rs`         | Adds `Logger::warn_at(code, message, span, file)` for span-bearing warnings.                                                                                                                   |
+| `wado-compiler/src/lib.rs`            | Adds `CompilerOptions::unused_diagnostics`. Calls `check_unused` after `annotate_loaded`. The DCE-layer diagnostic emitters are invoked from `optimize.rs::run_dce`.                           |
+| `wado-compiler/src/tir.rs`            | `TirFunction::defining_ast_id: Option<AstId>`, `TirGlobal::defining_ast_id: Option<AstId>`.                                                                                                    |
+| `wado-compiler/src/nir.rs`            | `NirFunction::defining_ast_id: Option<AstId>`, `NirGlobal::defining_ast_id: Option<AstId>`.                                                                                                    |
+| `wado-compiler/src/optimize/dce.rs`   | Adds `pub(crate) fn unreachable_function_source_keys(&NirPackage, &IndexSet<FunctionId>) -> Vec<SymbolKey>` and `pub(crate) fn unreachable_global_source_keys(&NirPackage) -> Vec<SymbolKey>`. |
+| `wado-compiler/src/optimize.rs`       | `run_dce` invokes the diagnostic emitters inside its fixed-point loop, with a cross-iteration dedup set keyed by `SymbolKey`.                                                                  |
+| `wado-compiler/src/ast_index.rs`      | Adds `is_param(id)` predicate (1-bit table) so the locals pass can distinguish `UnusedVariable` from `UnusedParameter`.                                                                        |
+| `wado-cli`                            | Adds `--no-unused` flag.                                                                                                                                                                       |
+| `wado-lsp`                            | Calls `analyze::unused::check_unused` from `Engine::diagnostics`.                                                                                                                              |
 
 ### Algorithms
 
@@ -176,20 +185,44 @@ Walk `Annotated::locals`. For each `(key, sym)` whose kind is
   `sym.span` (which is the `name_span` recorded by
   `record_local_symbol`).
 
-#### Dead functions
+#### Dead functions and globals
 
-Group all NIR functions by `(module_source, defining_ast_id)`. For each
-group, compute whether any monomorphisation is in the reachable set
-from `compute_reachable_from_entries`. Emit `DeadFunction` for the
-group when:
+`optimize.rs::run_dce` runs DCE in a fixed-point loop:
+`analyze_project` → `remove_unreachable_functions` →
+`remove_unreachable_globals`, repeating until the function set
+stabilises. The cascade is real (removing a dead global may rewrite
+bodies and orphan a previously-reachable callee), so a single pre-loop
+snapshot is not enough.
 
-- `defining_ast_id` is `Some` (skip synthesised),
-- the module is not a stdlib module,
-- the function is not `is_export` / `is_cm_export`,
-- no monomorphisation is reachable.
+Strategy: emit diagnostics inside the loop, on each iteration, with a
+`reported: IndexSet<SymbolKey>` carried across iterations to dedup.
 
-The diagnostic's span is `Annotated::name_span_of(SymbolKey)`,
-falling back to `NirFunction::span`.
+At the start of each iteration, after `analyze_project` returns the
+reachable set:
+
+1. `dce::unreachable_function_source_keys(project, &reachable)` walks
+   `project.functions` and returns the set of source `SymbolKey`s for
+   functions whose every monomorphisation is unreachable, skipping
+   entries with `defining_ast_id == None` (synthesised) and entries in
+   stdlib modules. Grouping by `(module_source, defining_ast_id)`
+   collapses monomorphisations to a single source-level key.
+2. `dce::unreachable_global_source_keys(project)` returns the source
+   keys for globals not referenced by any reachable function, with the
+   same exclusions.
+3. The emitter inserts each new key into `reported` and calls
+   `Logger::warn_at` with `Code::DeadFunction` or `Code::DeadGlobal`,
+   span from `Annotated::name_span_of(key)` (fallback to the item's
+   `span`).
+
+`is_export` / `is_cm_export` items are already roots, so they will not
+appear in the unreachable set. The diagnostic emitter does not need
+extra checks for them.
+
+The dedup set ensures a function or global is reported at most once
+even though it may be observed across multiple iterations
+(`analyze_project` is called each iteration; only items the previous
+iteration's `remove_unreachable_*` actually removed are gone from
+`project.functions` / `project.globals` next time round).
 
 ### Pipeline integration
 
@@ -205,19 +238,29 @@ parse → bind → desugar → load → analyze → annotate
                                   → lower → optimize
                                             │
                                             ▼
-                          compute_reachable_from_entries
-                                            │
-                                            ▼
-                                check_dead_functions
-                                            │
-                                            ▼
-                                  remove unreachable
-                                            │
-                                            ▼
-                                       codegen
+                              run_dce (fixed-point loop)
+                              ┌───────────────────────────┐
+                              │ analyze_project           │
+                              │   │                       │
+                              │   ▼                       │
+                              │ emit dead-function /      │
+                              │   dead-global diagnostics │
+                              │   (dedup across iters)    │
+                              │   │                       │
+                              │   ▼                       │
+                              │ remove_unreachable_*      │
+                              │   │                       │
+                              │   ▼                       │
+                              │ converged? ──no──┐        │
+                              │   │ yes          │        │
+                              │   ▼              │        │
+                              └───┼──────────────┘        │
+                                  ▼                       │
+                                                          ▼
+                                                       codegen
 ```
 
-`compile_with_options` gates both passes on
+`compile_with_options` gates both layers on
 `CompilerOptions::unused_diagnostics`. `Engine::diagnostics` (LSP)
 calls `check_unused` after `annotate_loaded` without any extra cost.
 
@@ -225,16 +268,16 @@ calls `check_unused` after `annotate_loaded` without any extra cost.
 
 #### Phase 1 — diagnostic plumbing
 
-- [ ] Add `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction` and their `Display` strings.
+- [ ] Add `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction`, `DeadGlobal` and their `Display` strings.
 - [ ] Add `Logger::warn_at(code, message, span, file)`.
 - [ ] Add `CompilerOptions::unused_diagnostics` (default `true`).
 - [ ] Add `AstIndex::is_param(id)` and tests.
 
 #### Phase 2 — `defining_ast_id` propagation
 
-- [ ] Add `TirFunction::defining_ast_id: Option<AstId>`; default to `None`.
-- [ ] Set `Some(function.id)` at every source-authored construction site (in `resolver`).
-- [ ] Add `NirFunction::defining_ast_id`; propagate from TIR through `link`, `monomorphize`, `erase`, `lower`. Monomorphisation clones inherit the original `defining_ast_id`.
+- [ ] Add `TirFunction::defining_ast_id: Option<AstId>` and `TirGlobal::defining_ast_id: Option<AstId>`; default to `None`.
+- [ ] Set `Some(function.id)` / `Some(global.id)` at every source-authored construction site (in `resolver`).
+- [ ] Add `NirFunction::defining_ast_id` and `NirGlobal::defining_ast_id`; propagate from TIR through `link`, `monomorphize`, `erase`, `lower`. Monomorphisation clones inherit the original `defining_ast_id`.
 - [ ] Synthesis sites (`synthesis/cm_binding.rs`, `synthesis/effect_dispatch.rs`, auto-derives, etc.) leave the field as `None`.
 - [ ] No behaviour change in this phase — codegen output is bit-identical.
 
@@ -247,12 +290,19 @@ calls `check_unused` after `annotate_loaded` without any extra cost.
 
 #### Phase 4 — DCE-layer dead-function lint
 
-- [ ] Split `optimize/dce.rs::analyze_project` into a reachability function and a removal function.
-- [ ] Implement `check_dead_functions`.
-- [ ] Wire `defining_ast_id.is_none()` as an additional DCE root so synthesised functions stay alive without being reported.
-- [ ] Add fixtures under `tests/fixtures/dead_*.wado`.
+- [ ] Add `pub(crate) fn unreachable_function_source_keys(&NirPackage, &IndexSet<FunctionId>) -> Vec<SymbolKey>` to `optimize/dce.rs`. Skip entries with `defining_ast_id == None` or stdlib module sources. Group monomorphisations by `(module_source, defining_ast_id)`.
+- [ ] Implement `analyze::unused::emit_dead_function_diagnostics` consuming the helper above.
+- [ ] Modify `optimize.rs::run_dce` to thread a `reported: IndexSet<SymbolKey>` through the fixed-point loop and invoke the emitter inside it, before the `remove_unreachable_*` calls.
+- [ ] Add fixtures under `tests/fixtures/dead_fn_*.wado`.
 
-#### Phase 5 — CLI wiring
+#### Phase 5 — DCE-layer dead-global lint
+
+- [ ] Add `pub(crate) fn unreachable_global_source_keys(&NirPackage) -> Vec<SymbolKey>` to `optimize/dce.rs`, mirroring the function variant. Use the analysis already performed inside `remove_unreachable_globals` (extract the reachability predicate if needed).
+- [ ] Implement `analyze::unused::emit_dead_global_diagnostics`.
+- [ ] Wire into `run_dce` next to the dead-function emission, sharing the `reported` dedup set.
+- [ ] Add fixtures under `tests/fixtures/dead_global_*.wado`.
+
+#### Phase 6 — CLI wiring
 
 - [ ] `wado-cli`: add `--no-unused` flag for `compile` / `run` / `serve` / `dump`.
 
@@ -267,11 +317,14 @@ E2E fixtures (under `tests/fixtures/`):
 - `unused_var_underscore_silent.wado`
 - `unused_param_basic.wado`
 - `unused_param_underscore_silent.wado`
-- `dead_function_private.wado`
-- `dead_function_export_root.wado`
-- `dead_function_generic.wado`
-- `dead_function_test_world.wado`
-- `dead_function_lib_pub_is_dead.wado`
+- `dead_fn_private.wado`
+- `dead_fn_export_root.wado`
+- `dead_fn_generic.wado`
+- `dead_fn_test_world.wado`
+- `dead_fn_lib_pub_is_dead.wado`
+- `dead_fn_cascade_via_global.wado` (function reachable until a dead global is removed)
+- `dead_global_basic.wado`
+- `dead_global_used_by_dead_fn.wado` (cascade across iterations)
 - `unused_stdlib_no_report.wado`
 
 Each carries the appropriate `stderr_contains` entries in its `__DATA__`
@@ -294,18 +347,20 @@ through the diagnostics path.
 
 ### Costs
 
-- One new optional field on `TirFunction` and `NirFunction`. Memory
-  cost is negligible (`Option<AstId>` is a `u32` + niche).
-- Every TIR construction site for a source-authored function gains one
-  line to thread the AST id through. The change is mechanical but
-  touches several files (`resolver/item.rs`, closure construction,
-  global lowering).
-- The DCE pass's public shape changes (one function becomes two). All
-  current callers live in `optimize.rs`; the refactor is local.
+- One new optional field on each of `TirFunction`, `NirFunction`,
+  `TirGlobal`, `NirGlobal`. Memory cost is negligible
+  (`Option<AstId>` is a `u32` + niche).
+- Every TIR construction site for a source-authored function or
+  global gains one line to thread the AST id through. The change is
+  mechanical but touches several files (`resolver/item.rs`, closure
+  construction, global lowering).
+- `optimize.rs::run_dce` gains a `reported: IndexSet<SymbolKey>` set
+  threaded through its fixed-point loop. No structural change to the
+  loop itself.
 - New warnings will fire on every existing Wado source file the first
   time CI runs the new compiler. The MVP defaults `unused_diagnostics`
   to `true`; a one-time cleanup pass on the in-tree examples and
-  fixtures is part of Phase 3 / Phase 4 landing.
+  fixtures is part of Phase 3 / Phase 4 / Phase 5 landing.
 
 ### Risks and mitigations
 
@@ -318,6 +373,13 @@ through the diagnostics path.
   effect dispatch) could leave one monomorph reachable from an
   unreported path. Mitigation: rely on the existing DCE call-graph,
   which already handles these edges for removal.
+- Risk: DCE's fixed-point loop interacts with the diagnostic emission
+  — a function that becomes dead only after a global is dropped on
+  iteration 2 must still be reported, while items already reported on
+  iteration 1 must not be repeated. Mitigation: the cross-iteration
+  `reported: IndexSet<SymbolKey>` dedup set; tests in
+  `dead_global_used_by_dead_fn.wado` and
+  `dead_fn_cascade_via_global.wado` exercise the cascade.
 - Risk: users coming from Rust expect `pub fn` in a `lib` package to
   be a public API root and may be surprised that it is reported as
   dead. Mitigation: the lint message names the rule
