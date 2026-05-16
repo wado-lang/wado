@@ -27,6 +27,12 @@ pub struct TestSettings {
     /// Glob patterns (relative to the package root) for paths to exclude from
     /// test discovery. See WEP 2026-05-02.
     pub exclude: Vec<String>,
+    /// Glob patterns (relative to the package root) for paths to keep in test
+    /// discovery even when they would otherwise be excluded. Patterns here win
+    /// over `exclude` — typical use is `lib/**/*_test.wado` inside a stdlib
+    /// package whose non-test sources have to be excluded (e.g. because they
+    /// re-export the prelude and can't compile as their own entry).
+    pub include: Vec<String>,
 }
 
 /// The `[package]` section of `wado.toml`.
@@ -197,6 +203,7 @@ struct RawManifest {
 #[derive(Deserialize)]
 struct RawTestSettings {
     exclude: Option<Vec<String>>,
+    include: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -253,6 +260,7 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
 fn convert_test(raw: RawTestSettings) -> TestSettings {
     TestSettings {
         exclude: raw.exclude.unwrap_or_default(),
+        include: raw.include.unwrap_or_default(),
     }
 }
 
@@ -570,6 +578,24 @@ command = "main.wado"
 "#;
         let m = toml.parse::<Manifest>().unwrap();
         assert!(m.test.exclude.is_empty());
+        assert!(m.test.include.is_empty());
+    }
+
+    #[test]
+    fn parse_test_include() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+command = "main.wado"
+
+[test]
+exclude = ["lib/core/prelude/**"]
+include = ["lib/**/*_test.wado"]
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        assert_eq!(m.test.exclude, vec!["lib/core/prelude/**"]);
+        assert_eq!(m.test.include, vec!["lib/**/*_test.wado"]);
     }
 
     #[test]

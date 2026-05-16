@@ -46,6 +46,9 @@ exclude = [
     "wado-compiler/tests/**",
     "wado-from-idl/tests/**",
 ]
+include = [
+    "lib/**/*_test.wado",
+]
 ```
 
 `exclude` is a list of shell-style glob patterns relative to the package
@@ -56,6 +59,15 @@ list at invocation time.
 `src/` only. Use `**` to cross directories. As a convenience, `dir/**` also
 excludes the bare `dir` entry (otherwise the walker would still descend into
 it, since `**` requires at least one trailing path component).
+
+`include` is a list of glob patterns that "carve out" files from excluded
+subtrees. A file matched by an include pattern is discovered even when it
+also matches an exclude pattern, and the walker descends into excluded
+directories whenever any include patterns are present (to look for matches
+deeper down). Typical use is the stdlib pattern shown above: exclude an
+entire `lib/**` source tree because the fragments inside define the prelude
+and can't compile standalone, but keep the companion `*_test.wado` files
+visible to discovery so they actually run.
 
 ### Filter
 

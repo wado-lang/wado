@@ -24,3 +24,13 @@ exclude = [
     "lib/core/prelude/**",
     "lib/core/allocator.wado",
 ]
+
+# `*_test.wado` files inside the excluded stdlib directories *are* meant to
+# be run by `wado test` — they exercise the stdlib via `test "…" { … }`
+# blocks and only *use* prelude types (`Array`, `String`, …) rather than
+# defining them, so the prelude-bundling conflict above does not apply.
+# The include override keeps them visible to discovery despite the
+# directory-level exclude.
+include = [
+    "lib/**/*_test.wado",
+]

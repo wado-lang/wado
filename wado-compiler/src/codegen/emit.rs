@@ -48,6 +48,13 @@ struct WirEmitter<'a> {
     current_locals: IndexMap<String, u32>,
     /// Locals declared with ref types (need `ref.as_non_null` on `local.get`).
     ref_locals: IndexSet<String>,
+    /// Names of scratch locals (used by `ArrayClone` / `ArrayCopy` emission)
+    /// that have already been collected for the current function. Lets the
+    /// pre-emission walker push each unique scratch name once even when the
+    /// same (dst, src) type pair appears in multiple `ArrayCopy` sites or
+    /// the same `type_id` appears in multiple `ArrayClone` sites — without
+    /// the de-dup, every visit grew the Wasm locals table.
+    scratch_local_names: IndexSet<String>,
     /// Next local index for current function.
     next_local: u32,
     /// Wasm type section counter.
@@ -74,6 +81,7 @@ impl<'a> WirEmitter<'a> {
             global_name_map: IndexMap::default(),
             current_locals: IndexMap::default(),
             ref_locals: IndexSet::default(),
+            scratch_local_names: IndexSet::default(),
             next_local: 0,
             next_type_idx: 0,
             variant_pre_assigned: IndexMap::default(),
@@ -736,6 +744,7 @@ impl<'a> WirEmitter<'a> {
         // Reset local tracking
         self.current_locals.clear();
         self.ref_locals.clear();
+        self.scratch_local_names.clear();
         self.next_local = 0;
 
         // Get function type info — check if it has a non-void return type
@@ -973,12 +982,17 @@ impl<'a> WirEmitter<'a> {
                     dest_type_id.index(),
                     src_type_id.index()
                 );
-                locals.push((dst_name, ValType::Ref(dst_ref)));
-                locals.push((src_name, ValType::Ref(src_ref)));
-                locals.push((dst_off_name, ValType::I32));
-                locals.push((src_off_name, ValType::I32));
-                locals.push((len_name, ValType::I32));
-                locals.push((i_name, ValType::I32));
+                // Dedup: multiple ArrayCopy sites with the same type pair
+                // share these slot names. Without the guard, every site
+                // would grow the locals table by 6 unused entries.
+                if self.scratch_local_names.insert(dst_name.clone()) {
+                    locals.push((dst_name, ValType::Ref(dst_ref)));
+                    locals.push((src_name, ValType::Ref(src_ref)));
+                    locals.push((dst_off_name, ValType::I32));
+                    locals.push((src_off_name, ValType::I32));
+                    locals.push((len_name, ValType::I32));
+                    locals.push((i_name, ValType::I32));
+                }
             }
             WirInstr::ArrayClone {
                 type_id,
@@ -996,15 +1010,21 @@ impl<'a> WirEmitter<'a> {
                 let dst_name = format!("__copy_arr_dst_{}", type_id.index());
                 let len_name = format!("__copy_arr_len_{}", type_id.index());
                 let loop_idx_name = format!("__copy_arr_i_{}", type_id.index());
-                locals.push((src_name, ValType::Ref(arr_ref)));
-                locals.push((dst_name, ValType::Ref(arr_ref)));
-                locals.push((len_name, ValType::I32));
-                locals.push((loop_idx_name, ValType::I32));
+                // Dedup: multiple ArrayClone sites with the same type_id
+                // share these slot names. See `ArrayCopy` above for rationale.
+                let new_clone_site = self.scratch_local_names.insert(src_name.clone());
+                if new_clone_site {
+                    locals.push((src_name, ValType::Ref(arr_ref)));
+                    locals.push((dst_name, ValType::Ref(arr_ref)));
+                    locals.push((len_name, ValType::I32));
+                    locals.push((loop_idx_name, ValType::I32));
+                }
                 // When `element_copy_func` is set, the loop also
                 // branches on per-element nullability (slots beyond
                 // `Array<T>::used` are default-null) so it needs an
                 // extra temp of element-nullable-ref type.
-                if element_copy_func.is_some()
+                if new_clone_site
+                    && element_copy_func.is_some()
                     && let Some(elem_val) = self.array_element_val_type(type_id.index())
                 {
                     let elem_name = format!("__copy_arr_elem_{}", type_id.index());

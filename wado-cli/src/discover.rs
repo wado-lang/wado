@@ -68,6 +68,50 @@ impl ExcludeSet {
     pub fn matches_str(&self, path: &str) -> bool {
         self.matches(Path::new(path))
     }
+
+    /// True when no patterns were compiled. Used by the walker to decide
+    /// whether to honour `[test].exclude` as a directory-pruning shortcut
+    /// (no includes ⇒ exclude is authoritative) or as a file-level filter
+    /// only (some includes ⇒ excluded directories may still contain
+    /// includable test files and must be descended).
+    pub fn is_empty(&self) -> bool {
+        self.patterns.is_empty()
+    }
+}
+
+/// Compiled set of `[test].include` glob patterns: positive overrides that
+/// keep files visible to `wado test` even when they match `[test].exclude`.
+/// Sharing the same compile pipeline as [`ExcludeSet`] keeps the matcher
+/// semantics identical between the two layers.
+#[derive(Debug, Default)]
+pub struct IncludeSet {
+    patterns: Vec<Pattern>,
+}
+
+impl IncludeSet {
+    pub fn compile<S: AsRef<str>>(patterns: &[S]) -> Result<Self, WalkError> {
+        let compiled = patterns
+            .iter()
+            .flat_map(|raw| augmented_patterns(raw.as_ref()))
+            .map(|(pattern, source)| {
+                Pattern::new(&pattern).map_err(|e| WalkError::InvalidInclude {
+                    pattern: source,
+                    source: e,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self { patterns: compiled })
+    }
+
+    pub fn matches(&self, path: &Path) -> bool {
+        self.patterns
+            .iter()
+            .any(|p| p.matches_path_with(path, WALK_MATCH_OPTIONS))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.patterns.is_empty()
+    }
 }
 
 /// Yield the patterns we actually compile for one user-supplied glob.
@@ -93,6 +137,10 @@ pub enum WalkError {
         pattern: String,
         source: PatternError,
     },
+    InvalidInclude {
+        pattern: String,
+        source: PatternError,
+    },
 }
 
 impl std::fmt::Display for WalkError {
@@ -103,6 +151,9 @@ impl std::fmt::Display for WalkError {
             }
             WalkError::InvalidExclude { pattern, source } => {
                 write!(f, "invalid exclude pattern {pattern:?}: {source}")
+            }
+            WalkError::InvalidInclude { pattern, source } => {
+                write!(f, "invalid include pattern {pattern:?}: {source}")
             }
         }
     }
@@ -129,6 +180,7 @@ pub struct DiscoveryResult {
 pub fn discover_test_files(
     root: &Path,
     excludes: &ExcludeSet,
+    includes: &IncludeSet,
 ) -> Result<DiscoveryResult, WalkError> {
     let submodules = read_submodule_paths(root)?
         .into_iter()
@@ -146,6 +198,7 @@ pub fn discover_test_files(
         root,
         root,
         excludes,
+        includes,
         &submodules,
         &mut rules,
         &mut visited,
@@ -162,6 +215,7 @@ fn walk_dir(
     dir: &Path,
     root: &Path,
     excludes: &ExcludeSet,
+    includes: &IncludeSet,
     submodules: &IndexSet<PathBuf>,
     rules: &mut Vec<GitignoreRule>,
     visited: &mut IndexSet<PathBuf>,
@@ -201,16 +255,39 @@ fn walk_dir(
             continue;
         }
 
+        // Apply `[test].exclude`. With no `[test].include` patterns this is
+        // straightforward: a matching path (file or directory) is pruned.
+        // When `include` patterns are present they "carve out" excluded
+        // regions, so excluded directories must still be descended (any
+        // depth, since includes use globs); only files matched by exclude
+        // *without* also matching include are dropped.
+        //
+        // `excluded_descend` records that we entered an excluded directory
+        // only because the include set might match something inside it.
+        // In that state we still walk for include-matching files, but we
+        // do **not** record the directory as a sub-package boundary: the
+        // user's `exclude` overrides cross-package recursion regardless of
+        // what include patterns this package declares.
+        let mut excluded_descend = false;
         if let Ok(rel) = path.strip_prefix(root)
             && excludes.matches(rel)
+            && !includes.matches(rel)
         {
-            continue;
+            if is_dir && !includes.is_empty() {
+                excluded_descend = true;
+            } else {
+                continue;
+            }
         }
 
         if is_dir {
             // Nested wado.toml: separate package boundary; record it for the
             // caller to recurse into and do not enter it ourselves.
-            if path.join("wado.toml").is_file() {
+            //
+            // Skip the boundary check when we're only descending under
+            // `excluded_descend`: the parent excluded this subtree, so the
+            // sub-package shouldn't be queued for its own `wado test` run.
+            if !excluded_descend && path.join("wado.toml").is_file() {
                 out.subpackages.push(path);
                 continue;
             }
@@ -221,7 +298,9 @@ fn walk_dir(
                 continue;
             }
 
-            walk_dir(&path, root, excludes, submodules, rules, visited, out)?;
+            walk_dir(
+                &path, root, excludes, includes, submodules, rules, visited, out,
+            )?;
         } else if path.extension().is_some_and(|ext| ext == "wado") {
             out.files.push(path);
         }
@@ -398,7 +477,7 @@ mod tests {
         touch(&root.join("readme.md"));
         touch(&root.join("nested/notes.txt"));
 
-        let files = discover_test_files(root, &ExcludeSet::default())
+        let files = discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default())
             .unwrap()
             .files;
         let got = names_of(root, &files);
@@ -416,7 +495,7 @@ mod tests {
         touch(&root.join("a.wado"));
         touch(&root.join(".hidden/secret.wado"));
 
-        let files = discover_test_files(root, &ExcludeSet::default())
+        let files = discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default())
             .unwrap()
             .files;
         let got = names_of(root, &files);
@@ -432,7 +511,7 @@ mod tests {
         touch(&root.join("target/build.wado"));
         fs::write(root.join(".gitignore"), "target/\n").unwrap();
 
-        let files = discover_test_files(root, &ExcludeSet::default())
+        let files = discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default())
             .unwrap()
             .files;
         let got = names_of(root, &files);
@@ -449,7 +528,7 @@ mod tests {
         touch(&root.join("pkg/skip/keep.wado"));
         fs::write(root.join("pkg/.gitignore"), "skip/\n!skip/keep.wado\n").unwrap();
 
-        let files = discover_test_files(root, &ExcludeSet::default())
+        let files = discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default())
             .unwrap()
             .files;
         let got = names_of(root, &files);
@@ -468,7 +547,7 @@ mod tests {
         touch(&root.join("nested/skipme.wado"));
         fs::write(root.join(".gitignore"), "skipme.wado\n").unwrap();
 
-        let files = discover_test_files(root, &ExcludeSet::default())
+        let files = discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default())
             .unwrap()
             .files;
         let got = names_of(root, &files);
@@ -506,7 +585,7 @@ pathology = should-not-match\n\
         )
         .unwrap();
 
-        let files = discover_test_files(root, &ExcludeSet::default())
+        let files = discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default())
             .unwrap()
             .files;
         let got = names_of(root, &files);
@@ -526,7 +605,8 @@ pathology = should-not-match\n\
         )
         .unwrap();
 
-        let result = discover_test_files(root, &ExcludeSet::default()).unwrap();
+        let result =
+            discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default()).unwrap();
         let got = names_of(root, &result.files);
         assert!(got.contains("a.wado"));
         assert!(!got.contains("subpkg/main.wado"));
@@ -544,6 +624,7 @@ pathology = should-not-match\n\
         let files = discover_test_files(
             root,
             &ExcludeSet::compile(&["compiler/tests/**".to_string()]).unwrap(),
+            &IncludeSet::default(),
         )
         .unwrap()
         .files;
@@ -567,6 +648,7 @@ pathology = should-not-match\n\
         let result = discover_test_files(
             root,
             &ExcludeSet::compile(&["skip/**".to_string()]).unwrap(),
+            &IncludeSet::default(),
         )
         .unwrap();
         let got = names_of(root, &result.files);
@@ -592,6 +674,7 @@ pathology = should-not-match\n\
         let result = discover_test_files(
             root,
             &ExcludeSet::compile(&["subpkg/**".to_string()]).unwrap(),
+            &IncludeSet::default(),
         )
         .unwrap();
         let got = names_of(root, &result.files);
@@ -618,6 +701,7 @@ pathology = should-not-match\n\
         let files = discover_test_files(
             root,
             &ExcludeSet::compile(&["src/*.wado".to_string()]).unwrap(),
+            &IncludeSet::default(),
         )
         .unwrap()
         .files;
@@ -639,6 +723,7 @@ pathology = should-not-match\n\
         let files = discover_test_files(
             root,
             &ExcludeSet::compile(&["**/foo.wado".to_string()]).unwrap(),
+            &IncludeSet::default(),
         )
         .unwrap()
         .files;
@@ -663,7 +748,7 @@ pathology = should-not-match\n\
         // Create a symlink loop: root/loop -> root
         symlink(root, root.join("loop")).unwrap();
 
-        let files = discover_test_files(root, &ExcludeSet::default())
+        let files = discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default())
             .unwrap()
             .files;
         let got = names_of(root, &files);
@@ -671,5 +756,95 @@ pathology = should-not-match\n\
         // The loop must not produce duplicate entries; each canonical path is
         // visited once.
         assert_eq!(files.len(), 1);
+    }
+
+    #[test]
+    fn include_carves_out_excluded_subtree() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        touch(&root.join("lib/core/prelude/string.wado"));
+        touch(&root.join("lib/core/prelude/string_test.wado"));
+        touch(&root.join("lib/core/prelude/nested/array.wado"));
+        touch(&root.join("lib/core/prelude/nested/array_test.wado"));
+        touch(&root.join("lib/core/cli.wado"));
+
+        let files = discover_test_files(
+            root,
+            &ExcludeSet::compile(&["lib/core/prelude/**".to_string()]).unwrap(),
+            &IncludeSet::compile(&["lib/**/*_test.wado".to_string()]).unwrap(),
+        )
+        .unwrap()
+        .files;
+        let got = names_of(root, &files);
+        // Non-test files in excluded subtree are still pruned.
+        assert!(!got.contains("lib/core/prelude/string.wado"));
+        assert!(!got.contains("lib/core/prelude/nested/array.wado"));
+        // *_test.wado in excluded subtree (at any depth) is discovered.
+        assert!(got.contains("lib/core/prelude/string_test.wado"));
+        assert!(got.contains("lib/core/prelude/nested/array_test.wado"));
+        // Files outside the excluded subtree are unaffected.
+        assert!(got.contains("lib/core/cli.wado"));
+    }
+
+    #[test]
+    fn empty_include_keeps_exclude_pruning_behaviour() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        touch(&root.join("a.wado"));
+        touch(&root.join("excluded/b.wado"));
+        touch(&root.join("excluded/b_test.wado"));
+
+        let files = discover_test_files(
+            root,
+            &ExcludeSet::compile(&["excluded/**".to_string()]).unwrap(),
+            &IncludeSet::default(),
+        )
+        .unwrap()
+        .files;
+        let got = names_of(root, &files);
+        assert!(got.contains("a.wado"));
+        // Without includes, even `*_test.wado` under an excluded dir is pruned.
+        assert!(!got.contains("excluded/b.wado"));
+        assert!(!got.contains("excluded/b_test.wado"));
+    }
+
+    #[test]
+    fn excluded_subpackage_not_recorded_even_with_includes() {
+        // Regression: when `[test].include` is non-empty, the walker
+        // descends excluded directories to look for include matches. It
+        // must not, however, treat a nested `wado.toml` inside an excluded
+        // subtree as a sub-package — the user's exclude should still
+        // suppress cross-package recursion.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        touch(&root.join("vendor/wado.toml"));
+        touch(&root.join("vendor/src/a.wado"));
+        touch(&root.join("lib/stdlib_test.wado"));
+
+        let result = discover_test_files(
+            root,
+            &ExcludeSet::compile(&["vendor/**".to_string()]).unwrap(),
+            &IncludeSet::compile(&["lib/**/*_test.wado".to_string()]).unwrap(),
+        )
+        .unwrap();
+        let got = names_of(root, &result.files);
+        // The include-matched test in `lib/` is still discovered.
+        assert!(got.contains("lib/stdlib_test.wado"));
+        // The excluded sub-package directory is not queued for recursion.
+        assert!(result.subpackages.is_empty(), "{:?}", result.subpackages);
+        // And nothing inside it was discovered.
+        assert!(!got.contains("vendor/src/a.wado"));
+    }
+
+    #[test]
+    fn invalid_include_pattern_says_include() {
+        // Regression: `IncludeSet::compile` used to report a bad glob via
+        // `WalkError::InvalidExclude`, producing a misleading "invalid
+        // exclude pattern" message for what is really an `[test].include`
+        // problem.
+        let err = IncludeSet::compile(&["[unterminated".to_string()]).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("invalid include pattern"), "{msg}");
+        assert!(!msg.contains("invalid exclude pattern"), "{msg}");
     }
 }
