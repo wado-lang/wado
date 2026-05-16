@@ -550,8 +550,6 @@ pub fn case_names_for_rule(alts: &Array<Alternative>) -> Array<String> {
     return build_case_names(alts, all_labeled);
 }
 
-// --- String/array set utilities ---
-
 /// Return `true` when `first` contains `token` (linear scan).
 pub fn first_contains(first: &Array<String>, token: &String) -> bool {
     for let item of first {
@@ -571,14 +569,11 @@ pub fn dedup_append_arr(arr: &mut Array<String>, source: &Array<String>) {
     }
 }
 
-// --- Field / name dedup helpers ---
-//
 // Parser codegen names every consumed element so the surrounding struct
 // field can be populated. When the same base name appears more than
 // once in an alt (e.g. two `ID` tokens) the second occurrence gets a
 // `_2` suffix, the third `_3`, and so on. `Array<[String, i32]>` is
 // the running counter: `[base, count_emitted_so_far]`.
-
 fn get_count(counts: &Array<[String, i32]>, name: &String) -> i32 {
     for let entry of counts {
         if entry.0 == *name {
@@ -621,8 +616,6 @@ pub fn peek_dedup_name(base: &String, counts: &Array<[String, i32]>) -> String {
     }
     return *base;
 }
-
-// --- Element field shape helpers ---
 
 pub fn has_field(elem: &Element) -> bool {
     if let TokenRef(_) | Literal(_) | RuleRef(_) = elem {
