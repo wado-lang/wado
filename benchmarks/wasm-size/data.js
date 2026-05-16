@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778937189403,
+  "lastUpdate": 1778938601260,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22409,6 +22409,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2408baec7096664e57241bc65b70fb6a9624cd17"
         },
         "date": 1778937189015,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510826,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "516bff5053bb3a26df14b02c9016528942620dd6",
+          "message": "Merge pull request #1080 from wado-lang/claude/closures-weps-implementation-hmU7g\n\nfeat!: implement closures WEP — fn / fn mut split with auto-capture",
+          "timestamp": "2026-05-16T22:30:28+09:00",
+          "tree_id": "d487045a9aeef285f443bfc37d5f6f0d811ddd00",
+          "url": "https://github.com/wado-lang/wado/commit/516bff5053bb3a26df14b02c9016528942620dd6"
+        },
+        "date": 1778938600865,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
