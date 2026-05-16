@@ -54,15 +54,17 @@ type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::arr
 
 type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(20)
 
-type "functype//core:prelude/string.wado/String::concat" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(21)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(21)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(22)
+type "functype//core:prelude/string.wado/String^Add::add" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(22)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(23)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(24)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(25)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -109,9 +111,9 @@ fn "wado-compiler/tests/fixtures/variant_import_struct_module.wado/format_with_o
         };
     };
     return let __match_scrut_0: ref "wado-compiler/tests/fixtures/variant_import_struct_module.wado//Align", __match_scrut_0 = opts.align, (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/String::concat"(s, pad);
+        "core:prelude/string.wado/String^Add::add"(s, pad);
     } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/String::concat"(pad, s);
+        "core:prelude/string.wado/String^Add::add"(pad, s);
     } else {
         left = pad_len / 2;
         right = pad_len - left;
@@ -143,7 +145,7 @@ fn "wado-compiler/tests/fixtures/variant_import_struct_module.wado/format_with_o
                 };
             };
         };
-        "core:prelude/string.wado/String::concat"("core:prelude/string.wado/String::concat"(lpad, s), rpad);
+        "core:prelude/string.wado/String^Add::add"("core:prelude/string.wado/String^Add::add"(lpad, s), rpad);
     });
 }
 
@@ -266,18 +268,32 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/string.wado/String::concat"(a, b) {
-    let len_a: i32;
-    let len_b: i32;
-    let total: i32;
-    let repr: ref builtin::array<u8>;
-    len_a = a.used;
-    len_b = b.used;
-    total = len_a + len_b;
-    repr = builtin::array_new<u8>(total);
-    builtin::array_copy<u8>(repr, 0, a.repr, 0, len_a);
-    builtin::array_copy<u8>(repr, len_a, b.repr, 0, len_b);
-    return struct.new "core:prelude/string.wado//String" { repr: repr, used: total };
+fn "core:prelude/string.wado/String::push_str"(self, other) {
+    let other_len: i32;
+    let new_used: i32;
+    other_len = other.used;
+    if other_len == 0 {
+        return;
+    }
+    new_used = self.used + other_len;
+    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        "core:prelude/string.wado/String::grow"(self, new_used);
+    }
+    builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
+    self.used = new_used;
+}
+
+fn "core:prelude/string.wado/String^Add::add"(self, other) {
+    let result: ref "core:prelude/string.wado//String";
+    let capacity: i32;
+    result = __inline_String__with_capacity_0: block -> ref "core:prelude/string.wado//String" {
+        capacity = self.used + other.used;
+        break __inline_String__with_capacity_0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity), used: 0 };
+        unreachable;
+    };
+    "core:prelude/string.wado/String::push_str"(result, self);
+    "core:prelude/string.wado/String::push_str"(result, other);
+    return result;
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {

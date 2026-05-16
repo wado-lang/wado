@@ -1,0 +1,8 @@
+// insert_str at a byte index in the middle of a UTF-8 sequence should trap.
+export fn run() {
+    let mut s = "日本語";  // 9 bytes: 3+3+3
+    s.insert_str(2, "X");  // byte 2 is a continuation byte
+}
+
+__DATA__
+{"trapped": true, "stderr_contains": ["insert_str index not on UTF-8 character boundary"]}

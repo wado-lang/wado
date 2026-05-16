@@ -1,4 +1,4 @@
-// Module with String::concat in match
+// Module with string concatenation in match
 use { println, Stdout } from "core:cli";
 
 pub variant Align {
@@ -21,9 +21,9 @@ impl Opts {
 pub fn format_str(s: String, opts: Opts) -> String {
     let pad = "  ";
     return match opts.align {
-        Left => String::concat(s, pad),
-        Right => String::concat(pad, s),
-        Center => String::concat(String::concat(pad, s), pad),
+        Left => s + pad,
+        Right => pad + s,
+        Center => pad + s + pad,
     };
 }
 

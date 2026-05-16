@@ -49,7 +49,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
 
     task return Result::<Response, ErrorCode>::Ok(response);
 
-    resp_tx.write(body.as_bytes());
+    resp_tx.write(body.bytes().collect());
     resp_tx.drop();
     resp_trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }

@@ -8,7 +8,7 @@ use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, HeaderError, 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Valid from_list → Ok
     let valid_entries: Array<[FieldName, FieldValue]> = [
-        ["x-valid" as FieldName, "value".as_bytes() as FieldValue],
+        ["x-valid" as FieldName, "value".bytes().collect() as FieldValue],
     ];
     let valid_result = Fields::from_list(valid_entries);
     assert valid_result matches { Ok(_) };
@@ -20,7 +20,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
         Err(_) => panic("failed to create string with null byte"),
     };
     let invalid_entries: Array<[FieldName, FieldValue]> = [
-        [null_name as FieldName, "value".as_bytes() as FieldValue],
+        [null_name as FieldName, "value".bytes().collect() as FieldValue],
     ];
     let invalid_result = Fields::from_list(invalid_entries);
     assert invalid_result matches { Err(_) };

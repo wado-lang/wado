@@ -150,7 +150,7 @@ type "functype//core:prelude/string.wado/String::append_byte_filled" = fn(ref "c
 
 type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(54)
 
-type "functype//core:prelude/string.wado/String::concat" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(55)
+type "functype//core:prelude/string.wado/String^Add::add" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(55)
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(56)
 
@@ -1443,18 +1443,17 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     self.used = new_used;
 }
 
-fn "core:prelude/string.wado/String::concat"(a, b) {
-    let len_a: i32;
-    let len_b: i32;
-    let total: i32;
-    let repr: ref builtin::array<u8>;
-    len_a = a.used;
-    len_b = b.used;
-    total = len_a + len_b;
-    repr = builtin::array_new<u8>(total);
-    builtin::array_copy<u8>(repr, 0, a.repr, 0, len_a);
-    builtin::array_copy<u8>(repr, len_a, b.repr, 0, len_b);
-    return struct.new "core:prelude/string.wado//String" { repr: repr, used: total };
+fn "core:prelude/string.wado/String^Add::add"(self, other) {
+    let result: ref "core:prelude/string.wado//String";
+    let capacity: i32;
+    result = __inline_String__with_capacity_0: block -> ref "core:prelude/string.wado//String" {
+        capacity = self.used + other.used;
+        break __inline_String__with_capacity_0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity), used: 0 };
+        unreachable;
+    };
+    "core:prelude/string.wado/String::push_str"(result, self);
+    "core:prelude/string.wado/String::push_str"(result, other);
+    return result;
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
@@ -1511,7 +1510,7 @@ fn "wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonSerializer^Ser
 }
 
 fn "wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant"(self, type_name, variant_name, disc) {
-    "core:prelude/string.wado/String::push_str"(self.buf, "core:prelude/string.wado/String::concat"("core:prelude/string.wado/String::concat"("core:prelude/string.wado/String::concat"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\""), used: 2 }, variant_name), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\""), used: 1 }), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(":"), used: 1 }));
+    "core:prelude/string.wado/String::push_str"(self.buf, "core:prelude/string.wado/String^Add::add"("core:prelude/string.wado/String^Add::add"("core:prelude/string.wado/String^Add::add"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\""), used: 2 }, variant_name), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\""), used: 1 }), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(":"), used: 1 }));
     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonVariantSerializer,wado-compiler/tests/fixtures/serde_serialize_variant.wado/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/serde_serialize_variant.wado//JsonVariantSerializer" { ser: self } };
 }
 
@@ -1575,9 +1574,9 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
                     break b143;
                 }
                 index_14 = (start_pos + left_pad) + i_8;
-                value_15 = __inline_String__get_byte_2: block -> u8 {
+                value_15 = __inline_String__get_byte_unchecked_2: block -> u8 {
                     index_17 = start_pos + i_8;
-                    break __inline_String__get_byte_2: builtin::array_get_u8(_licm_repr_33, index_17);
+                    break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(_licm_repr_33, index_17);
                     unreachable;
                 };
                 builtin::array_set_u8(_licm_repr_33, index_14, value_15);
@@ -1613,9 +1612,9 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
                     break b149;
                 }
                 index_22 = (start_pos + padding) + i_10;
-                value_23 = __inline_String__get_byte_5: block -> u8 {
+                value_23 = __inline_String__get_byte_unchecked_5: block -> u8 {
                     index_25 = start_pos + i_10;
-                    break __inline_String__get_byte_5: builtin::array_get_u8(_licm_repr_35, index_25);
+                    break __inline_String__get_byte_unchecked_5: builtin::array_get_u8(_licm_repr_35, index_25);
                     unreachable;
                 };
                 builtin::array_set_u8(_licm_repr_35, index_22, value_23);

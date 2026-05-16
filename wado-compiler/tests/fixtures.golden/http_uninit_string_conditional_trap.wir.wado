@@ -290,19 +290,23 @@ type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(63)
 
 type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//Array<u8>");  // TypeId(64)
 
-type "functype//core:prelude/string.wado/String::concat" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(65)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(65)
 
-type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(66)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(66)
 
-type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(67)
+type "functype//core:prelude/string.wado/String^Add::add" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(67)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(68)
+type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(68)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(69)
+type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(69)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(70)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(70)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(71)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(71)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(72)
+
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(73)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -468,16 +472,14 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle
     let __local_161: ref null "core:prelude/string.wado//String";
     let __pattern_temp_3: ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
     let self_166: ref "core:prelude/string.wado//String";
-    let other: ref "core:prelude/string.wado//String";
-    let self_168: ref "core:prelude/string.wado//String";
-    let self_169: ref "core:prelude/string.wado//StrUtf8ByteIter";
-    let __b_170: ref "core:prelude//Array<u8>";
-    let result_171: ref "core:prelude//Array<u8>";
-    let self_175: ref "core:prelude/string.wado//StrUtf8ByteIter";
-    let __b_176: ref "core:prelude//Array<u8>";
-    let result_177: ref "core:prelude//Array<u8>";
-    let byte_184: u8;
-    let byte_189: u8;
+    let self_167: ref "core:prelude/string.wado//StrUtf8ByteIter";
+    let __b_168: ref "core:prelude//Array<u8>";
+    let result_169: ref "core:prelude//Array<u8>";
+    let self_173: ref "core:prelude/string.wado//StrUtf8ByteIter";
+    let __b_174: ref "core:prelude//Array<u8>";
+    let result_175: ref "core:prelude//Array<u8>";
+    let byte_182: u8;
+    let byte_187: u8;
     __local_161 = "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Request_get_path_with_query"(request);
     take_else = (if ref.is_null(__local_161) == 0 -> bool {
         1;
@@ -487,13 +489,8 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle
     if take_else == 0 {
         body_str = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fallback"), used: 8 };
     } else {
-        body_str = __inline_String_Add__add_3: block -> ref "core:prelude/string.wado//String" {
-            self_166 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("abc"), used: 3 };
-            other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-"), used: 1 };
-            break __inline_String_Add__add_3: "core:prelude/string.wado/String::concat"(self_166, other);
-            unreachable;
-        };
+        body_str = "core:prelude/string.wado/String^Add::add"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("abc"), used: 3 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+"), used: 1 });
     }
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
@@ -510,32 +507,32 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle
     body_rx = __mv_lo_2;
     body_tx = __mv_hi_2;
     resp_headers = "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_new"();
-    drop("wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_append"(resp_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, __inline_StrUtf8ByteIter_Iterator__collect_5: block -> ref "core:prelude//Array<u8>" {
-        self_169 = __inline_String__bytes_4: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
-            self_168 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text/plain"), used: 10 };
-            break __inline_String__bytes_4: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_168.repr, used: self_168.used, index: 0 };
+    drop("wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_append"(resp_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, __inline_StrUtf8ByteIter_Iterator__collect_4: block -> ref "core:prelude//Array<u8>" {
+        self_167 = __inline_String__bytes_3: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
+            self_166 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text/plain"), used: 10 };
+            break __inline_String__bytes_3: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_166.repr, used: self_166.used, index: 0 };
             unreachable;
         };
-        result_171 = __inline_StrUtf8ByteIter_Iterator__collect_5____seq_lit: block -> ref "core:prelude//Array<u8>" {
-            __b_170 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-            break __inline_StrUtf8ByteIter_Iterator__collect_5____seq_lit: __b_170;
+        result_169 = __inline_StrUtf8ByteIter_Iterator__collect_4____seq_lit: block -> ref "core:prelude//Array<u8>" {
+            __b_168 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+            break __inline_StrUtf8ByteIter_Iterator__collect_4____seq_lit: __b_168;
             unreachable;
         };
         b2: block {
             l3: loop {
                 __fused___inline_StrUtf8ByteIter_Iterator__next_2: block {
-                    if self_169.index >= self_169.used {
+                    if self_167.index >= self_167.used {
                         break b2;
                     }
-                    byte_184 = builtin::array_get_u8(self_169.repr, self_169.index);
-                    self_169.index = self_169.index + 1;
-                    "core:prelude/array.wado/Array<u8>::push"(result_171, byte_184);
+                    byte_182 = builtin::array_get_u8(self_167.repr, self_167.index);
+                    self_167.index = self_167.index + 1;
+                    "core:prelude/array.wado/Array<u8>::push"(result_169, byte_182);
                     break __fused___inline_StrUtf8ByteIter_Iterator__next_2;
                 };
                 continue l3;
             };
         };
-        break __inline_StrUtf8ByteIter_Iterator__collect_5: result_171;
+        break __inline_StrUtf8ByteIter_Iterator__collect_4: result_169;
         unreachable;
     }));
     __pattern_temp_3 = "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Response_new"(resp_headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: body_rx }, trailers_future);
@@ -843,28 +840,28 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle
         }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    "core:internal/cm_stream_write_u8"(body_tx, __inline_StrUtf8ByteIter_Iterator__collect_7: block -> ref "core:prelude//Array<u8>" {
-        self_175 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: body_str.repr, used: body_str.used, index: 0 };
-        result_177 = __inline_StrUtf8ByteIter_Iterator__collect_7____seq_lit: block -> ref "core:prelude//Array<u8>" {
-            __b_176 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-            break __inline_StrUtf8ByteIter_Iterator__collect_7____seq_lit: __b_176;
+    "core:internal/cm_stream_write_u8"(body_tx, __inline_StrUtf8ByteIter_Iterator__collect_6: block -> ref "core:prelude//Array<u8>" {
+        self_173 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: body_str.repr, used: body_str.used, index: 0 };
+        result_175 = __inline_StrUtf8ByteIter_Iterator__collect_6____seq_lit: block -> ref "core:prelude//Array<u8>" {
+            __b_174 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+            break __inline_StrUtf8ByteIter_Iterator__collect_6____seq_lit: __b_174;
             unreachable;
         };
         b43: block {
             l44: loop {
                 __fused___inline_StrUtf8ByteIter_Iterator__next_5: block {
-                    if self_175.index >= self_175.used {
+                    if self_173.index >= self_173.used {
                         break b43;
                     }
-                    byte_189 = builtin::array_get_u8(self_175.repr, self_175.index);
-                    self_175.index = self_175.index + 1;
-                    "core:prelude/array.wado/Array<u8>::push"(result_177, byte_189);
+                    byte_187 = builtin::array_get_u8(self_173.repr, self_173.index);
+                    self_173.index = self_173.index + 1;
+                    "core:prelude/array.wado/Array<u8>::push"(result_175, byte_187);
                     break __fused___inline_StrUtf8ByteIter_Iterator__next_5;
                 };
                 continue l44;
             };
         };
-        break __inline_StrUtf8ByteIter_Iterator__collect_7: result_177;
+        break __inline_StrUtf8ByteIter_Iterator__collect_6: result_175;
         unreachable;
     });
     "wasi/stream-drop-writable"(body_tx);
@@ -1106,18 +1103,56 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {
     drop("mem/realloc"(ptr, len_4, 1, 0));
 }
 
-fn "core:prelude/string.wado/String::concat"(a, b) {
-    let len_a: i32;
-    let len_b: i32;
-    let total: i32;
-    let repr: ref builtin::array<u8>;
-    len_a = a.used;
-    len_b = b.used;
-    total = len_a + len_b;
-    repr = builtin::array_new<u8>(total);
-    builtin::array_copy<u8>(repr, 0, a.repr, 0, len_a);
-    builtin::array_copy<u8>(repr, len_a, b.repr, 0, len_b);
-    return struct.new "core:prelude/string.wado//String" { repr: repr, used: total };
+fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<u8>;
+    let a_5: i32;
+    let a_7: i32;
+    capacity = builtin::array_len(self.repr);
+    if min_capacity <= capacity {
+        return;
+    }
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        a_5 = __inline_i32_max_1: block -> i32 {
+            a_7 = capacity * 2;
+            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
+            unreachable;
+        };
+        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
+        unreachable;
+    };
+    new_repr = builtin::array_new<u8>(new_capacity);
+    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    self.repr = new_repr;
+}
+
+fn "core:prelude/string.wado/String::push_str"(self, other) {
+    let other_len: i32;
+    let new_used: i32;
+    other_len = other.used;
+    if other_len == 0 {
+        return;
+    }
+    new_used = self.used + other_len;
+    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        "core:prelude/string.wado/String::grow"(self, new_used);
+    }
+    builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
+    self.used = new_used;
+}
+
+fn "core:prelude/string.wado/String^Add::add"(self, other) {
+    let result: ref "core:prelude/string.wado//String";
+    let capacity: i32;
+    result = __inline_String__with_capacity_0: block -> ref "core:prelude/string.wado//String" {
+        capacity = self.used + other.used;
+        break __inline_String__with_capacity_0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity), used: 0 };
+        unreachable;
+    };
+    "core:prelude/string.wado/String::push_str"(result, self);
+    "core:prelude/string.wado/String::push_str"(result, other);
+    return result;
 }
 
 fn "core:prelude/array.wado/Array<u8>::push"(self, value) {
@@ -1150,13 +1185,13 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l65: loop {
+            l68: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l65;
+                continue l68;
             };
         };
     };

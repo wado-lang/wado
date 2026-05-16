@@ -46,7 +46,7 @@ impl Serializer for JsonSerializer {
     }
 
     fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<JsonVariantSerializer, SerializeError> with stores[self] {
-        self.buf.push_str(String::concat(String::concat(String::concat("{\"", *variant_name), "\""), ":"));
+        self.buf.push_str("{\"" + *variant_name + "\"" + ":");
         return Result::<JsonVariantSerializer, SerializeError>::Ok(JsonVariantSerializer {
             ser: self,
         });

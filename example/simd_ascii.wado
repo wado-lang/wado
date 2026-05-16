@@ -37,7 +37,7 @@ fn to_lowercase_simd(input: String) -> String {
 
     // Handle remaining bytes
     while i < len {
-        let b = input.get_byte(i);
+        let b = input.get_byte_unchecked(i);
         if b >= 'A' as u8 && b <= 'Z' as u8 {
             result.push(char::from_u32_unchecked((b + 0x20 as u8) as u32));
         } else {
@@ -69,7 +69,7 @@ fn count_byte_simd(input: String, target: u8) -> i32 {
 
     // Remaining bytes
     while i < len {
-        if input.get_byte(i) == target {
+        if input.get_byte_unchecked(i) == target {
             count = count + 1;
         }
         i = i + 1;
@@ -102,7 +102,7 @@ fn is_ascii_printable_simd(input: String) -> bool {
     }
 
     while i < len {
-        let b = input.get_byte(i);
+        let b = input.get_byte_unchecked(i);
         if b < 0x20 as u8 || b > 0x7E as u8 {
             return false;
         }
@@ -135,7 +135,7 @@ fn count_digits_simd(input: String) -> i32 {
     }
 
     while i < len {
-        let b = input.get_byte(i);
+        let b = input.get_byte_unchecked(i);
         if b >= '0' as u8 && b <= '9' as u8 {
             count = count + 1;
         }

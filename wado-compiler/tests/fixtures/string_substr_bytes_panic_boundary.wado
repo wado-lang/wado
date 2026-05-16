@@ -1,0 +1,8 @@
+// substr_bytes ending in the middle of a UTF-8 sequence should trap.
+export fn run() {
+    let s = "日本語";  // 9 bytes: 3+3+3
+    let _ = s.substr_bytes(0, 4);  // byte 4 is a continuation byte
+}
+
+__DATA__
+{"trapped": true, "stderr_contains": ["byte range not on UTF-8 character boundaries"]}
