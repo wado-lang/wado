@@ -1022,17 +1022,12 @@ impl Attribute {
         self.cm_boundary.as_ref().and_then(CmBoundary::as_import)
     }
 
-    /// Returns the raw argument string of a `#[cm("...")]` attribute, regardless of
-    /// whether the argument parses as a full CM interface path or is just a
-    /// CM-side identifier (variant case / field / method rename). Returns
-    /// `None` for `#[canonical(...)]` and for non-CM attributes.
-    pub fn cm_arg_str(&self) -> Option<&str> {
-        match &self.cm_boundary {
-            Some(CmBoundary::Import(_) | CmBoundary::Rename(_)) => {
-                self.args.first().map(AttrArg::as_str)
-            }
-            Some(CmBoundary::Canonical { .. }) | None => None,
-        }
+    /// Returns the CM-side identifier carried by a `#[cm("...")]` attribute,
+    /// reconstructed from the parsed `CmBoundary` payload rather than read
+    /// from `self.args`. Returns `None` for `#[canonical(...)]` and for
+    /// non-CM attributes.
+    pub fn cm_identifier(&self) -> Option<String> {
+        self.cm_boundary.as_ref().and_then(CmBoundary::cm_identifier)
     }
 }
 
@@ -1048,13 +1043,13 @@ impl Attribute {
 ///   to an interface import.
 /// - `Import` — `#[cm("namespace:package/interface[@version][#function]")]`
 ///   resolves to a real import from a CM interface.
-/// - `Rename` — `#[cm("simple-name")]` is a single CM-side identifier used
-///   for renaming a field, variant case, or method (no interface attached).
+/// - `Name` — `#[cm("simple-name")]` is a single CM-side identifier used
+///   for naming a field, variant case, or method (no interface attached).
 #[derive(Debug, Clone)]
 pub enum CmBoundary {
     Canonical { namespace: String, name: String },
     Import(CmImport),
-    Rename(String),
+    Name(String),
 }
 
 impl CmBoundary {
@@ -1062,7 +1057,23 @@ impl CmBoundary {
     pub fn as_import(&self) -> Option<&CmImport> {
         match self {
             CmBoundary::Import(cm) => Some(cm),
-            CmBoundary::Canonical { .. } | CmBoundary::Rename(_) => None,
+            CmBoundary::Canonical { .. } | CmBoundary::Name(_) => None,
+        }
+    }
+
+    /// Returns the CM-side identifier carried by this boundary.
+    ///
+    /// - `Canonical` returns `None` (canonical built-ins are addressed by a
+    ///   `(namespace, name)` pair, not by a single string identifier).
+    /// - `Import` reconstructs the full path
+    ///   `"namespace:package/interface[@version][#function]"` from the parsed
+    ///   components.
+    /// - `Name` returns the bare CM-side name.
+    pub fn cm_identifier(&self) -> Option<String> {
+        match self {
+            CmBoundary::Canonical { .. } => None,
+            CmBoundary::Import(cm) => Some(cm.full_path()),
+            CmBoundary::Name(s) => Some(s.clone()),
         }
     }
 }
@@ -1133,6 +1144,18 @@ impl CmImport {
     /// (e.g., "wasi:cli/stdout").
     pub fn bare_path(&self) -> String {
         format!("{}:{}/{}", self.namespace, self.package, self.interface)
+    }
+
+    /// Get the full path including the function fragment when present
+    /// (e.g., "wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").
+    /// Reconstructs the canonical form parsed by `CmImport::parse`.
+    pub fn full_path(&self) -> String {
+        let mut path = self.interface_path();
+        if let Some(ref f) = self.function {
+            path.push('#');
+            path.push_str(f);
+        }
+        path
     }
 }
 

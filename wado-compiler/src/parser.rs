@@ -5233,7 +5233,7 @@ impl Parser {
 /// - `#[canonical("namespace", "name")]` becomes `CmBoundary::Canonical`.
 /// - `#[cm("ns:pkg/iface[@v][#fn]")]` becomes `CmBoundary::Import`.
 /// - `#[cm("simple-name")]` (anything that doesn't parse as a full CM path)
-///   becomes `CmBoundary::Rename`.
+///   becomes `CmBoundary::Name`.
 /// - Any other attribute returns `Ok(None)`.
 ///
 /// Both `#[canonical(...)]` and `#[cm(...)]` are validated strictly: argument
@@ -5267,7 +5267,7 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
         };
         return Ok(Some(match CmImport::parse(s) {
             Some(cm) => CmBoundary::Import(cm),
-            None => CmBoundary::Rename(s.clone()),
+            None => CmBoundary::Name(s.clone()),
         }));
     }
     Ok(None)
@@ -5765,7 +5765,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cm_attribute_with_simple_name_populates_rename() {
+    fn test_cm_attribute_with_simple_name_populates_name_variant() {
         let source = r#"
             pub variant Op {
                 #[cm("byte-start")]
@@ -5779,11 +5779,12 @@ mod tests {
         let case = &variant.cases[0];
         let attr = &case.attrs[0];
         assert_eq!(attr.name, "cm");
-        let Some(CmBoundary::Rename(s)) = attr.cm_boundary.as_ref() else {
-            panic!("expected CmBoundary::Rename, got {:?}", attr.cm_boundary);
+        let Some(CmBoundary::Name(s)) = attr.cm_boundary.as_ref() else {
+            panic!("expected CmBoundary::Name, got {:?}", attr.cm_boundary);
         };
         assert_eq!(s, "byte-start");
         assert!(attr.as_cm_import().is_none());
+        assert_eq!(attr.cm_identifier().as_deref(), Some("byte-start"));
     }
 
     #[test]

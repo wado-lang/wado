@@ -944,7 +944,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let cm_name = method
                 .attrs
                 .iter()
-                .find_map(|a| a.cm_arg_str().map(str::to_string));
+                .find_map(crate::ast::Attribute::cm_identifier);
 
             return Some(MethodInfo {
                 return_type,

@@ -10,7 +10,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use wasm_encoder::ValType;
 
-use crate::ast::{CmImport, GenericType, Type};
+use crate::ast::{Attribute, CmImport, GenericType, Type};
 use crate::tir::{TypeId, TypeTable};
 
 /// A variant case with both CM and Wado names.
@@ -86,7 +86,7 @@ fn cm_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
             }
             // Case-level CM names (variant cases, fields, ...) carry just
             // the CM-side identifier.
-            Some(crate::ast::CmBoundary::Rename(s)) => Some(s.clone()),
+            Some(crate::ast::CmBoundary::Name(s)) => Some(s.clone()),
             Some(crate::ast::CmBoundary::Canonical { .. }) | None => None,
         })
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
@@ -554,11 +554,7 @@ fn collect_interface_decls(modules: &[(&'static str, crate::ast::Module)]) -> In
             // `"wasi:http/handler@0.3.0-rc-2026-03-15"`). Skip anonymous
             // interfaces without a CM attribute — they are not boundary-
             // visible and cannot back a world export.
-            let Some(cm_fq) = iface
-                .attrs
-                .iter()
-                .find_map(|a| a.cm_arg_str().map(str::to_string))
-            else {
+            let Some(cm_fq) = iface.attrs.iter().find_map(Attribute::cm_identifier) else {
                 continue;
             };
 
