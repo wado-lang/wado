@@ -200,6 +200,59 @@ impl CompilerItem {
         Self::ALL.iter().copied().find(|i| i.attr_name() == name)
     }
 
+    /// Whether the registry must contain this item by the end of
+    /// resolution for compilation of `world` to succeed.
+    ///
+    /// Items declared in `core::prelude::*` are always required — they
+    /// underpin the core type system and the prelude is auto-loaded
+    /// regardless of target world. Items declared in worlds the user
+    /// did not opt into (e.g. `core:kiln/generator` for
+    /// [`Self::KilnRequest`], `core:serde` for [`Self::Serialize`] /
+    /// [`Self::Deserialize`]) are only required when the matching
+    /// world / module is actually loaded; tracking that here keeps the
+    /// validator from spuriously failing in CLI / HTTP builds that
+    /// don't pull in kiln or serde.
+    ///
+    /// The validator scans this method for every [`Self::ALL`]
+    /// variant after `annotate_modules` runs; a `true` return on an
+    /// unregistered item is a hard error at compile time, surfacing
+    /// the missing stdlib annotation immediately rather than at the
+    /// first synthesis call that reaches for it.
+    pub fn is_required(self, world: &str) -> bool {
+        match self {
+            // Always loaded — `core:prelude` is auto-imported.
+            Self::Array
+            | Self::Box
+            | Self::I128
+            | Self::U128
+            | Self::RangeExclusive
+            | Self::RangeInclusive
+            | Self::String
+            | Self::Option
+            | Self::Result
+            | Self::Default
+            | Self::Eq
+            | Self::From
+            | Self::ArrayPush
+            | Self::StringPushStr
+            | Self::StringPushChar
+            | Self::StringGetByteUnchecked
+            | Self::I128FromI64
+            | Self::I128FromPair
+            | Self::U128FromU64
+            | Self::U128FromPair
+            | Self::Tuple => true,
+            // Kiln generator world only.
+            Self::KilnRequest => world == "core:kiln/generator",
+            // Loaded only when the user imports `core:serde` (which
+            // happens implicitly for kiln-options decoding). The
+            // validator skips the check; downstream synthesis ICEs
+            // with a clear message if the items are reached for
+            // without being registered.
+            Self::Serialize | Self::Deserialize => false,
+        }
+    }
+
     /// The kind of declaration this item must be attached to. Used by
     /// the resolver to reject misuse like
     /// `#[compiler_item("option")]` on a trait.
@@ -538,6 +591,19 @@ impl CompilerItems {
             _ => None,
         }
     }
+
+    /// List every required-but-missing [`CompilerItem`] for the given
+    /// `world`. The resolver calls this after `annotate_modules` so an
+    /// unregistered prelude item (or world-specific item for the
+    /// active world) fails the compile with a clear diagnostic
+    /// instead of an ICE deep inside synthesis.
+    pub fn missing_required(&self, world: &str) -> Vec<CompilerItem> {
+        CompilerItem::ALL
+            .iter()
+            .copied()
+            .filter(|item| item.is_required(world) && self.get(*item).is_none())
+            .collect()
+    }
 }
 
 #[cold]
@@ -726,6 +792,88 @@ mod tests {
         let reg = CompilerItems::default();
         for &item in CompilerItem::ALL {
             assert!(reg.get(item).is_none(), "{item} should start empty");
+        }
+    }
+
+    /// Regression for issue #1077: the Rust side must not depend on
+    /// the source-level method name. Register `StringPushStr` with a
+    /// name that does *not* match the conventional `push_str` spelling
+    /// and verify the registry hands that name back through
+    /// [`CompilerItems::require_method`]. This locks in the contract:
+    /// a Wado-side rename of a stdlib method is transparent to the
+    /// Rust compiler as long as `#[compiler_item("...")]` stays put.
+    #[test]
+    fn method_name_round_trips_through_registry_even_when_renamed() {
+        let mut reg = CompilerItems::new();
+        reg.register(
+            CompilerItem::StringPushStr,
+            Resolved::Method {
+                module_source: ModuleSource::string(),
+                owner_type: "String".to_string(),
+                name: "push_str_v2".to_string(),
+            },
+        )
+        .unwrap();
+        let (module, owner, name) = reg.require_method(CompilerItem::StringPushStr);
+        assert_eq!(module, &ModuleSource::string());
+        assert_eq!(owner, "String");
+        assert_eq!(name, "push_str_v2");
+    }
+
+    /// Counterpart to the rename-rewrite test: omitting the
+    /// `#[compiler_item("...")]` annotation entirely leaves the
+    /// registry empty for that item, so `get()` returns `None`. The
+    /// documented ICE in `require_method` only fires when a downstream
+    /// pass reaches for the item — the validator detects the missing
+    /// registration before that point. This test pins both halves of
+    /// the contract.
+    #[test]
+    fn missing_registration_returns_none() {
+        let reg = CompilerItems::new();
+        assert!(reg.get(CompilerItem::StringPushStr).is_none());
+    }
+
+    /// `require_method` is documented to panic with a clear ICE
+    /// message when the item is unregistered. Lock that message
+    /// shape so the validator's failure mode and the post-validator
+    /// ICE remain consistent.
+    #[test]
+    #[should_panic(expected = "compiler item `string_push_str` is not registered")]
+    fn require_panics_on_unregistered() {
+        let reg = CompilerItems::new();
+        let _ = reg.require_method(CompilerItem::StringPushStr);
+    }
+
+    /// Validator covers every required item in `ALL`. With an empty
+    /// registry, every prelude-required item should appear in
+    /// `missing_required`; world-specific items (KilnRequest,
+    /// Serialize, Deserialize) should appear only for their world.
+    #[test]
+    fn missing_required_scopes_by_world() {
+        let reg = CompilerItems::new();
+        let cli_missing = reg.missing_required("core:cli/command");
+        let kiln_missing = reg.missing_required("core:kiln/generator");
+        assert!(
+            !cli_missing.contains(&CompilerItem::KilnRequest),
+            "KilnRequest is kiln-specific and must not be required in CLI builds",
+        );
+        assert!(
+            kiln_missing.contains(&CompilerItem::KilnRequest),
+            "KilnRequest must be required when targeting kiln/generator",
+        );
+        // Prelude items must show up regardless of world.
+        for &core in &[
+            CompilerItem::Option,
+            CompilerItem::Result,
+            CompilerItem::Eq,
+            CompilerItem::From,
+            CompilerItem::String,
+            CompilerItem::Array,
+            CompilerItem::I128,
+            CompilerItem::U128,
+        ] {
+            assert!(cli_missing.contains(&core), "{core} should be required in CLI world");
+            assert!(kiln_missing.contains(&core), "{core} should be required in kiln world");
         }
     }
 }

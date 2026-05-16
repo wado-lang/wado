@@ -152,6 +152,10 @@ pub enum Code {
     /// `wado check` re-ran the generator and the output bytes differ from
     /// the on-disk (committed) file. Promoted to error in CI default.
     KilnGeneratedStaleOnDisk,
+    /// A `#[compiler_item("...")]` attribute is malformed — the name
+    /// is unknown, the attribute is attached to the wrong declaration
+    /// kind, or it appears outside a `core::*` stdlib module.
+    CompilerItemAttr,
 }
 
 impl std::fmt::Display for Code {
@@ -189,6 +193,7 @@ impl std::fmt::Display for Code {
             Code::KilnGeneratedModified => "KILN_GENERATED_MODIFIED",
             Code::KilnGeneratedRegenerated => "KILN_GENERATED_REGENERATED",
             Code::KilnGeneratedStaleOnDisk => "KILN_GENERATED_STALE_ON_DISK",
+            Code::CompilerItemAttr => "COMPILER_ITEM_ATTR",
         };
         write!(f, "{name}")
     }

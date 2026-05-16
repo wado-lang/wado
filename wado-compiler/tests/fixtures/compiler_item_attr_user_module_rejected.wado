@@ -1,0 +1,11 @@
+// Error: `#[compiler_item("...")]` may only appear inside `core::*` modules.
+// User-level code that tries to claim a compiler item must be rejected so
+// the registry's invariants stay tied to the stdlib.
+
+#[compiler_item("eq")]
+pub struct MyEq {}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "only valid inside `core::*` modules"}
