@@ -2886,7 +2886,7 @@ fn import_interfaces_with_resources(
                     instance_type.ty().defined_type().variant(cm_cases);
                     let variant_idx = local_type_idx;
                     instance_type.export(
-                        cm_name,
+                        *cm_name,
                         wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(variant_idx)),
                     );
                 }
