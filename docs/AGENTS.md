@@ -109,3 +109,4 @@ It may include TODOs on WIP.
 - [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md)
 - [HTTP Path Router (`core:router`)](./wep-2026-05-06-core-router.md)
 - [Normalized IR (NIR) Layer](./wep-2026-05-11-nir.md)
+- [Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md)
