@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778897696901,
+  "lastUpdate": 1778898759721,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21925,6 +21925,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5173c71b34a8c23ca71c6dae5f2ba2c431be03b1"
         },
         "date": 1778897696520,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510314,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "09b1d9d5fffec11de4a09458c6d027a2caa858aa",
+          "message": "Merge pull request #1067 from wado-lang/copilot/fix-variant-case-patterns\n\nFix qualified variant case patterns using metadata-driven qualifier resolution",
+          "timestamp": "2026-05-16T11:25:35+09:00",
+          "tree_id": "4d2001807ec4590f141eafa1e924d6c9210a0a77",
+          "url": "https://github.com/wado-lang/wado/commit/09b1d9d5fffec11de4a09458c6d027a2caa858aa"
+        },
+        "date": 1778898759380,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
