@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778897149901,
+  "lastUpdate": 1778897696901,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21881,6 +21881,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0e7f5ac3a5343579117fc5b500349f464dc9fd13"
         },
         "date": 1778897149503,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510314,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5173c71b34a8c23ca71c6dae5f2ba2c431be03b1",
+          "message": "Merge pull request #1071 from wado-lang/gfx/docs-general-rules-clarify\n\ndocs: clarify General Rules wording in AGENTS.md",
+          "timestamp": "2026-05-16T11:05:32+09:00",
+          "tree_id": "8b1efcd7dc4bd98c9dc05986334c7bd003a48829",
+          "url": "https://github.com/wado-lang/wado/commit/5173c71b34a8c23ca71c6dae5f2ba2c431be03b1"
+        },
+        "date": 1778897696520,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
