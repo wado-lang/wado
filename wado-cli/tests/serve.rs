@@ -168,7 +168,13 @@ fn timeout_returns_504_for_runaway_guest() {
     let (_guard, port, _stderr) = start_serve("serve_hang.wado", &["--timeout", "2"]);
 
     let start = Instant::now();
-    let (status, body) = http_get(port, "/", Duration::from_secs(15));
+    // The client read timeout must be a generous *upper bound on the worst
+    // case CI run*, not the test's actual deadline — that lives in the
+    // `elapsed <= 8s` assertion below. A tight client timeout (we used 15s
+    // here originally) panics on `read_to_string` as `WouldBlock` whenever
+    // CI is slower than the 8s assertion would have allowed, hiding the
+    // useful "elapsed was Xs" signal behind an opaque socket-level error.
+    let (status, body) = http_get(port, "/", Duration::from_secs(60));
     let elapsed = start.elapsed();
 
     assert_eq!(status, 504, "expected 504 Gateway Timeout; body: {body:?}");
