@@ -875,8 +875,10 @@ impl Parser {
 
         self.expect(&TokenKind::RBracket)?;
 
-        let cm_boundary = parse_cm_boundary(&name, &args)
-            .map_err(|message| ParseError { message, span: start_span })?;
+        let cm_boundary = parse_cm_boundary(&name, &args).map_err(|message| ParseError {
+            message,
+            span: start_span,
+        })?;
 
         Ok(Attribute {
             name,
@@ -5692,12 +5694,16 @@ mod tests {
 
     #[test]
     fn test_canonical_attribute_with_wrong_arg_count_errors() {
-        let err = parse(r#"
+        let err = parse(
+            r#"
             #[canonical("only-one-arg")]
             pub fn bad();
-        "#).unwrap_err();
+        "#,
+        )
+        .unwrap_err();
         assert!(
-            err.message.contains("#[canonical] expects exactly 2 string arguments"),
+            err.message
+                .contains("#[canonical] expects exactly 2 string arguments"),
             "unexpected error: {}",
             err.message
         );
@@ -5705,12 +5711,16 @@ mod tests {
 
     #[test]
     fn test_canonical_attribute_with_non_string_arg_errors() {
-        let err = parse(r#"
+        let err = parse(
+            r#"
             #[canonical(default, "foo")]
             pub fn bad();
-        "#).unwrap_err();
+        "#,
+        )
+        .unwrap_err();
         assert!(
-            err.message.contains("#[canonical] arguments must be string literals"),
+            err.message
+                .contains("#[canonical] arguments must be string literals"),
             "unexpected error: {}",
             err.message
         );
@@ -5728,7 +5738,8 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            err.message.contains("#[cm] expects exactly 1 string argument"),
+            err.message
+                .contains("#[cm] expects exactly 1 string argument"),
             "unexpected error: {}",
             err.message
         );
@@ -5736,14 +5747,18 @@ mod tests {
 
     #[test]
     fn test_cm_attribute_with_multiple_args_errors() {
-        let err = parse(r#"
+        let err = parse(
+            r#"
             pub interface Foo {
                 #[cm("a", "b")]
                 async fn bar();
             }
-        "#).unwrap_err();
+        "#,
+        )
+        .unwrap_err();
         assert!(
-            err.message.contains("#[cm] expects exactly 1 string argument"),
+            err.message
+                .contains("#[cm] expects exactly 1 string argument"),
             "unexpected error: {}",
             err.message
         );
