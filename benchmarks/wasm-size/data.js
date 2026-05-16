@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778907456250,
+  "lastUpdate": 1778908674516,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22145,6 +22145,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/99d8655ac307464bb89a277988fd04e4dcb5c9f7"
         },
         "date": 1778907455870,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510314,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b92aca732decae77348c1fc7fdb244990962cd76",
+          "message": "Merge pull request #1075 from wado-lang/claude/funding-org-wado-lang\n\nchore: point FUNDING.yml to wado-lang org",
+          "timestamp": "2026-05-16T14:08:11+09:00",
+          "tree_id": "252591d75394d4b1cc91b571c2b256f523a9cbaf",
+          "url": "https://github.com/wado-lang/wado/commit/b92aca732decae77348c1fc7fdb244990962cd76"
+        },
+        "date": 1778908674275,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
