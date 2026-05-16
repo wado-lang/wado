@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778873210561,
+  "lastUpdate": 1778897149901,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -21837,6 +21837,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6ce49df8ec3c660512d25914c608c9ad01d9b3ea"
         },
         "date": 1778873210306,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1782,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9255,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510314,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0e7f5ac3a5343579117fc5b500349f464dc9fd13",
+          "message": "Merge pull request #1068 from wado-lang/gfx/issue-1059-kiln-token-stream-hash\n\nfix(kiln): hash generator sources via canonical token stream",
+          "timestamp": "2026-05-16T10:58:35+09:00",
+          "tree_id": "0e9d0ff5ad59e2e046ccbe6ac957376b4fdeb693",
+          "url": "https://github.com/wado-lang/wado/commit/0e7f5ac3a5343579117fc5b500349f464dc9fd13"
+        },
+        "date": 1778897149503,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
