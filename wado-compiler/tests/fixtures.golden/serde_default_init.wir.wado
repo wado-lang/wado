@@ -65,24 +65,24 @@ struct wado-compiler/tests/fixtures/serde_default_init.wado//Config {  // TypeId
     mut debug: bool,
 }
 
-variant core:prelude/types.wado//Option<char> {  // TypeId(12)
-    Some(char),
-    None,
-}
-
-struct core:prelude/types.wado//Option<char>::Some {  // TypeId(13)
-    discriminant: i32,
-    payload_0: char,
-}
-
-variant core:prelude/types.wado//Option<i32> {  // TypeId(14)
+variant core:prelude/types.wado//Option<i32> {  // TypeId(12)
     Some(i32),
     None,
 }
 
-struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(15)
+struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(13)
     discriminant: i32,
     payload_0: i32,
+}
+
+variant core:prelude/types.wado//Option<char> {  // TypeId(14)
+    Some(char),
+    None,
+}
+
+struct core:prelude/types.wado//Option<char>::Some {  // TypeId(15)
+    discriminant: i32,
+    payload_0: char,
 }
 
 variant core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_default_init.wado/Config,core:serde/DeserializeError> {  // TypeId(16)
@@ -3599,9 +3599,9 @@ fn "wado-compiler/tests/fixtures/serde_default_init.wado/Config^Deserialize::des
         unreachable;
     };
     if ref.test "core:prelude/types.wado//Result<core:json/JsonStructAccess,core:serde/DeserializeError>::Ok"(__result) {
-        sd = __inline__value_copy_T59_1: block -> ref "core:json//JsonStructAccess" {
+        sd = __inline__value_copy_T61_1: block -> ref "core:json//JsonStructAccess" {
             v = ref.cast "core:prelude/types.wado//Result<core:json/JsonStructAccess,core:serde/DeserializeError>::Ok"(__result).payload_0;
-            break __inline__value_copy_T59_1: struct.new "core:json//JsonStructAccess" { de: v.de, lookup: v.lookup, first: v.first };
+            break __inline__value_copy_T61_1: struct.new "core:json//JsonStructAccess" { de: v.de, lookup: v.lookup, first: v.first };
             unreachable;
         };
         seen = 0;
@@ -3692,9 +3692,9 @@ fn "wado-compiler/tests/fixtures/serde_default_init.wado/Config^Serialize::seria
         unreachable;
     };
     if ref.test "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>::Ok"(__result) {
-        st = __inline__value_copy_T49_1: block -> ref "core:json//JsonStructSerializer" {
+        st = __inline__value_copy_T51_1: block -> ref "core:json//JsonStructSerializer" {
             v = ref.cast "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>::Ok"(__result).payload_0;
-            break __inline__value_copy_T49_1: struct.new "core:json//JsonStructSerializer" { buf: v.buf, count: v.count };
+            break __inline__value_copy_T51_1: struct.new "core:json//JsonStructSerializer" { buf: v.buf, count: v.count };
             unreachable;
         };
         drop("core:json/JsonStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("host"), used: 4 }, self.host));
