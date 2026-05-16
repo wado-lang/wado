@@ -174,7 +174,7 @@ fn timeout_returns_504_for_runaway_guest() {
     // here originally) panics on `read_to_string` as `WouldBlock` whenever
     // CI is slower than the 8s assertion would have allowed, hiding the
     // useful "elapsed was Xs" signal behind an opaque socket-level error.
-    let (status, body) = http_get(port, "/", Duration::from_secs(60));
+    let (status, body) = http_get(port, "/", Duration::from_mins(1));
     let elapsed = start.elapsed();
 
     assert_eq!(status, 504, "expected 504 Gateway Timeout; body: {body:?}");
