@@ -109,3 +109,4 @@ It may include TODOs on WIP.
 - [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md)
 - [HTTP Path Router (`core:router`)](./wep-2026-05-06-core-router.md)
 - [Normalized IR (NIR) Layer](./wep-2026-05-11-nir.md)
+- [String API — checked / unchecked / internal Discipline](./wep-2026-05-16-string-checked-unchecked-discipline.md)
