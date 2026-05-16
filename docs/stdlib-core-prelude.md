@@ -3102,6 +3102,11 @@ Returns the byte offset where the caller must write exactly `n` valid UTF-8 byte
 into `internal_raw_bytes()`. The string's length is advanced immediately, so the
 caller MUST fill all `n` bytes before the string is observed.
 
+Intended for right-to-left writes (integer/float decimal formatting) that
+`array_copy` cannot express. For left-to-right bulk appends, use
+`push_bytes_unchecked` or `push_str_range_unchecked` instead — they compile to
+a single `array_copy` and do not require the caller to maintain a write offset.
+
 #### `pub fn append_byte_filled(&mut self, byte: u8, n: i32)`
 
 Append `n` copies of `byte` to this string using array.fill.
