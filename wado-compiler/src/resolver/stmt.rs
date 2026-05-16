@@ -649,6 +649,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
         format!("{}::{case_name}", format_pattern_qualifier_type(qualifier))
     }
 
+    /// Build the lookup key for `associated_constants`, matching how the map was
+    /// populated via `get_type_name` (base name only, no generic type arguments).
+    ///
+    /// For example, `Maybe<i32>::CONST` must look up as `"Maybe::CONST"` because
+    /// `get_type_name` strips generic args when building the key.
+    fn format_assoc_const_key(variant_name: &str, qualifier: Option<&Type>) -> String {
+        let Some(qualifier) = qualifier else {
+            return variant_name.to_string();
+        };
+        let base = match qualifier {
+            Type::Named(t) => t.name.as_str(),
+            Type::Generic(t) => t.name.as_str(),
+            Type::NamespacedGeneric(t) => t.name.as_str(),
+            Type::Function(_)
+            | Type::Tuple(_)
+            | Type::Reference(_)
+            | Type::MutReference(_)
+            | Type::TypePackSpread(_, _) => return variant_name.to_string(),
+        };
+        format!("{base}::{variant_name}")
+    }
+
     /// Resolve a let pattern (for tuple/struct destructuring).
     /// Applies match ergonomics: if `type_id` is `&T` or `&mut T` and the pattern is
     /// a compound pattern (tuple/struct), peels the reference and wraps bindings.
@@ -1353,11 +1375,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         variant_qualifier.as_ref(),
                     )
                 {
-                    // Check for associated constants (e.g., `i32::MAX`, `f64::PI`)
+                    // Check for associated constants (e.g., `i32::MAX`, `f64::PI`).
+                    // Use the base type name (no generic args) to match how
+                    // `associated_constants` keys are built via `get_type_name`.
+                    let assoc_const_key =
+                        Self::format_assoc_const_key(variant_name, variant_qualifier.as_ref());
                     // Resolve to literal patterns when possible for switch optimization.
                     if let Some((const_ty, const_expr)) = self
                         .associated_constants
-                        .get(&qualified_variant_name)
+                        .get(&assoc_const_key)
                         .cloned()
                     {
                         let type_id = self.resolve_type(&const_ty);
