@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778912331758,
+  "lastUpdate": 1778915695904,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22287,6 +22287,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "pi_approx",
             "value": 10120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510826,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "65f0d10524b81d17f838c31b92550e7078a61cbd",
+          "message": "Merge pull request #1081 from wado-lang/claude/test-discover-include-and-array-copy-locals\n\nfeat: `[test].include` for stdlib test discovery + dedupe ArrayCopy scratch locals",
+          "timestamp": "2026-05-16T16:08:45+09:00",
+          "tree_id": "4cf60874e81430eb57ea7891ceae6b34544f0e4c",
+          "url": "https://github.com/wado-lang/wado/commit/65f0d10524b81d17f838c31b92550e7078a61cbd"
+        },
+        "date": 1778915695515,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
             "unit": "bytes"
           },
           {
