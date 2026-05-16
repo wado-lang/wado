@@ -1485,8 +1485,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         let mut scope = self.enter_inherited_type_param_scope();
                         scope.trait_ctx.type_params.clear();
                         scope.register_generic_params(&type_params, 0);
-                        let old_effect_params =
-                            std::mem::take(&mut scope.current_effect_params);
+                        let old_effect_params = std::mem::take(&mut scope.current_effect_params);
                         let old_effect_param_decls =
                             std::mem::take(&mut scope.current_effect_param_decls);
                         let effect_params: Vec<&ast::GenericParam> =

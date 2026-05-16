@@ -1109,12 +1109,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // re-resolve to `EffectRef::Concrete { name: "E" }` and leak
                 // out of the method's signature as a phantom local effect.
                 let old_effect_params = std::mem::take(&mut scope.current_effect_params);
-                let old_effect_param_decls =
-                    std::mem::take(&mut scope.current_effect_param_decls);
-                let method_effect_params: Vec<&ast::GenericParam> = method_type_params
-                    .iter()
-                    .filter(|p| p.is_effect)
-                    .collect();
+                let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
+                let method_effect_params: Vec<&ast::GenericParam> =
+                    method_type_params.iter().filter(|p| p.is_effect).collect();
                 scope.current_effect_params = method_effect_params
                     .iter()
                     .map(|p| p.name.clone())
