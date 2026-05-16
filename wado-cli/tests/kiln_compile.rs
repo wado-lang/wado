@@ -14,7 +14,7 @@
 
 #![allow(unused_crate_dependencies)]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use wado_cli::kiln_driver::{GeneratorProvider, ProviderError};
 use wado_cli::kiln_provider::{CACHE_DIR, CliGeneratorProvider};
@@ -322,6 +322,292 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {
     );
 
     let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn fresh_recompile_produces_identical_source_hash() {
+    // Regression for issue #1059. The contract is: same generator source
+    // closure (entry + transitive imports) must produce the same
+    // `source_hash`, regardless of cache state.
+    let tmp = unique_tmp("kiln-source-hash-determinism");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    let helper_path = tmp.join("helper.wado");
+    let helper_src = "pub fn answer() -> i32 { return 42; }\n";
+    std::fs::write(&helper_path, helper_src).unwrap();
+
+    let entry_src = r#"
+use { RawRequest, Response, Error, bind_request } from "core:kiln";
+use { answer } from "./helper.wado";
+
+pub struct Options {
+    pub verbose: bool,
+}
+
+export fn generate(raw: RawRequest) -> Result<Response, Error> {
+    let req = match bind_request::<Options>(raw) {
+        Ok(r) => r,
+        Err(e) => return Result::Err(e),
+    };
+    let _ = req.options.verbose;
+    let _ = answer();
+    return Result::Ok(Response { files: [] });
+}
+"#;
+    let gen_path = tmp.join("entry.wado");
+    std::fs::write(&gen_path, entry_src).unwrap();
+
+    let provider = CliGeneratorProvider::new(tmp.clone());
+    let module = GeneratorModule::LocalPath(InvocationPath::normalize("./entry.wado"));
+
+    // Run 1: cold cache.
+    let first = runtime()
+        .block_on(async { provider.get_component(&module).await })
+        .expect("first compile should succeed");
+    assert_eq!(provider.compile_count(), 1);
+    assert!(
+        !first.source_hash.is_empty(),
+        "source hash must be recorded"
+    );
+
+    // Wipe the build cache (WASM + sidecar + descriptor) so the next
+    // call is a true cold compile, not a sidecar-revalidate fast path.
+    let _ = std::fs::remove_dir_all(tmp.join("build"));
+
+    // Run 2: same source bytes, fresh compile.
+    let second = runtime()
+        .block_on(async { provider.get_component(&module).await })
+        .expect("second compile should succeed");
+    assert_eq!(
+        provider.compile_count(),
+        2,
+        "wiping the cache must force a fresh compile"
+    );
+    assert_eq!(
+        first.source_hash, second.source_hash,
+        "byte-identical source closure must produce a byte-identical source_hash \
+         across runs (issue #1059: kiln json otherwise churns its `generator_source_hash` \
+         field on every cold compile)"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn docstring_only_edit_preserves_source_hash() {
+    // The point of switching the per-file hash from raw bytes to the
+    // canonical token stream (issue #1059): docstring and comment
+    // edits must not change the generator source hash, so they do not
+    // churn `generator_source_hash` in every consumer's kiln.json.
+    let tmp = unique_tmp("kiln-source-hash-doc-only");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    let helper_path = tmp.join("helper.wado");
+    std::fs::write(
+        &helper_path,
+        "/// Original docstring.\npub fn answer() -> i32 { return 42; }\n",
+    )
+    .unwrap();
+
+    let entry_src = r#"
+use { RawRequest, Response, Error, bind_request } from "core:kiln";
+use { answer } from "./helper.wado";
+
+pub struct Options {
+    pub verbose: bool,
+}
+
+export fn generate(raw: RawRequest) -> Result<Response, Error> {
+    let req = match bind_request::<Options>(raw) {
+        Ok(r) => r,
+        Err(e) => return Result::Err(e),
+    };
+    let _ = req.options.verbose;
+    let _ = answer();
+    return Result::Ok(Response { files: [] });
+}
+"#;
+    let gen_path = tmp.join("entry.wado");
+    std::fs::write(&gen_path, entry_src).unwrap();
+
+    let provider = CliGeneratorProvider::new(tmp.clone());
+    let module = GeneratorModule::LocalPath(InvocationPath::normalize("./entry.wado"));
+
+    let baseline = runtime()
+        .block_on(async { provider.get_component(&module).await })
+        .expect("baseline compile should succeed");
+
+    // Edit only the docstring. Comment-only/whitespace-only edits in
+    // `.wado` files MUST NOT change the source hash now that hashing
+    // routes through the canonical token stream.
+    std::fs::write(
+        &helper_path,
+        "//! New module-level doc.\n/// Tweaked docstring with extra detail.\n// Plus a stray line comment.\npub fn answer() -> i32 { return 42; }\n",
+    )
+    .unwrap();
+    let after_doc = runtime()
+        .block_on(async { provider.get_component(&module).await })
+        .expect("post-doc-edit compile should succeed");
+    assert_eq!(
+        baseline.source_hash, after_doc.source_hash,
+        "docstring/comment-only edits must not change the source hash"
+    );
+
+    // Whitespace/formatting changes also must be invisible to the hash.
+    std::fs::write(
+        &helper_path,
+        "//! New module-level doc.\n/// Tweaked docstring with extra detail.\n// Plus a stray line comment.\npub fn answer() -> i32 {\n    return 42;\n}\n",
+    )
+    .unwrap();
+    let after_format = runtime()
+        .block_on(async { provider.get_component(&module).await })
+        .expect("post-format compile should succeed");
+    assert_eq!(
+        baseline.source_hash, after_format.source_hash,
+        "whitespace-only edits must not change the source hash"
+    );
+
+    // A real semantic edit (return value change) MUST still bump the hash.
+    std::fs::write(
+        &helper_path,
+        "/// Original docstring.\npub fn answer() -> i32 { return 99; }\n",
+    )
+    .unwrap();
+    let after_semantic = runtime()
+        .block_on(async { provider.get_component(&module).await })
+        .expect("post-semantic-edit compile should succeed");
+    assert_ne!(
+        baseline.source_hash, after_semantic.source_hash,
+        "a real source change must still bump the hash — otherwise the cache \
+         would silently reuse stale generator output"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn transitive_edit_then_revert_restores_source_hash() {
+    // Tighter regression for issue #1059. The user's exact scenario:
+    // start at HEAD, edit a transitive `.wado` file, run tests (which
+    // regenerate kiln json), revert the edit, run tests again — the
+    // resulting `generator_source_hash` must match the HEAD value.
+    let tmp = unique_tmp("kiln-source-hash-revert");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    let helper_path = tmp.join("helper.wado");
+    let helper_original = "pub fn answer() -> i32 { return 42; }\n";
+    std::fs::write(&helper_path, helper_original).unwrap();
+
+    let entry_src = r#"
+use { RawRequest, Response, Error, bind_request } from "core:kiln";
+use { answer } from "./helper.wado";
+
+pub struct Options {
+    pub verbose: bool,
+}
+
+export fn generate(raw: RawRequest) -> Result<Response, Error> {
+    let req = match bind_request::<Options>(raw) {
+        Ok(r) => r,
+        Err(e) => return Result::Err(e),
+    };
+    let _ = req.options.verbose;
+    let _ = answer();
+    return Result::Ok(Response { files: [] });
+}
+"#;
+    let gen_path = tmp.join("entry.wado");
+    std::fs::write(&gen_path, entry_src).unwrap();
+
+    let provider = CliGeneratorProvider::new(tmp.clone());
+    let module = GeneratorModule::LocalPath(InvocationPath::normalize("./entry.wado"));
+
+    // Step 1: compile at "HEAD" — capture the baseline hash.
+    let head = runtime()
+        .block_on(async { provider.get_component(&module).await })
+        .expect("HEAD compile should succeed");
+    let baseline = head.source_hash;
+
+    // Step 2: edit the transitive helper to a different body.
+    std::fs::write(&helper_path, "pub fn answer() -> i32 { return 99; }\n").unwrap();
+    let edited = runtime()
+        .block_on(async { provider.get_component(&module).await })
+        .expect("edited compile should succeed");
+    assert_ne!(
+        edited.source_hash, baseline,
+        "the edit must change the source hash, otherwise this test does not exercise \
+         the revert path"
+    );
+
+    // Step 3: revert the helper to its original byte content.
+    std::fs::write(&helper_path, helper_original).unwrap();
+    let reverted = runtime()
+        .block_on(async { provider.get_component(&module).await })
+        .expect("post-revert compile should succeed");
+    assert_eq!(
+        reverted.source_hash, baseline,
+        "after reverting the transitive file, the source hash must match the HEAD \
+         baseline (issue #1059)"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// Probe for issue #1059 against the real `package-gale` generator —
+/// the generator the original report was filed against. Skipped when
+/// the workspace layout does not include `package-gale` (e.g. the
+/// crate is consumed standalone). When it does, this is the strongest
+/// signal we have that the production-shape closure (~34 `.wado`
+/// files including the 6k-line `parser_gen.wado`) hashes
+/// deterministically across cold compiles.
+#[test]
+fn package_gale_generator_source_hash_is_stable_across_cold_compiles() {
+    let workspace_root: PathBuf = match std::env::var("CARGO_MANIFEST_DIR") {
+        Ok(s) => PathBuf::from(s)
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_default(),
+        Err(_) => return, // not in a cargo invocation
+    };
+    let package_gale = workspace_root.join("package-gale");
+    let generator_rel = "./src/generator.wado";
+    if !package_gale.join("src/generator.wado").is_file() {
+        eprintln!(
+            "package_gale_generator_source_hash_is_stable_across_cold_compiles: skipping, no package-gale generator at {}",
+            package_gale.display()
+        );
+        return;
+    }
+
+    let cache_dir = package_gale.join("build/kiln/generators");
+    let metadata_dir = package_gale.join("build/kiln/metadata");
+
+    let module = GeneratorModule::LocalPath(InvocationPath::normalize(generator_rel));
+    let provider = CliGeneratorProvider::new(package_gale);
+
+    let _ = std::fs::remove_dir_all(&cache_dir);
+    let _ = std::fs::remove_dir_all(&metadata_dir);
+
+    let first = runtime()
+        .block_on(async { provider.get_component(&module).await })
+        .expect("first cold compile of package-gale generator should succeed");
+    let first_hash = first.source_hash;
+
+    let _ = std::fs::remove_dir_all(&cache_dir);
+    let _ = std::fs::remove_dir_all(&metadata_dir);
+
+    let second = runtime()
+        .block_on(async { provider.get_component(&module).await })
+        .expect("second cold compile of package-gale generator should succeed");
+
+    assert_eq!(
+        first_hash, second.source_hash,
+        "package-gale generator's source_hash drifted across two cold compiles \
+         with no source changes (issue #1059)"
+    );
 }
 
 #[test]
