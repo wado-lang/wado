@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778938601260,
+  "lastUpdate": 1778968013051,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22453,6 +22453,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/516bff5053bb3a26df14b02c9016528942620dd6"
         },
         "date": 1778938600865,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510826,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "608a1c3014dede4083918e4bdf32f00300aadd2d",
+          "message": "Merge pull request #1089 from wado-lang/claude/check-cm-attribute-VjuJe\n\nrefactor(compiler): unify CM-attribute handling under `CmBoundary`",
+          "timestamp": "2026-05-17T06:40:35+09:00",
+          "tree_id": "b5b3b706a94eb38787f5094a2525b2a12a0b00b9",
+          "url": "https://github.com/wado-lang/wado/commit/608a1c3014dede4083918e4bdf32f00300aadd2d"
+        },
+        "date": 1778968012656,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
