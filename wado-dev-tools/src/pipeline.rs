@@ -487,7 +487,12 @@ fn diagnostics_summary(host: &FilesystemCompilerHost, prefix: &str) -> String {
     let diags = host.diagnostics();
     let errors: Vec<String> = diags
         .iter()
-        .filter(|d| d.severity == wado_compiler::Severity::Error)
+        .filter(|d| {
+            matches!(
+                d.severity,
+                wado_compiler::Severity::Error | wado_compiler::Severity::Fatal
+            )
+        })
         .map(|d| match &d.span {
             Some(span) => format!("{}:{}:{}: {}", span.file, span.line, span.column, d.message),
             None => d.message.clone(),
