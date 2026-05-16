@@ -2528,6 +2528,9 @@ pub struct NamespacedGenericType {
 
 #[derive(Debug, Clone)]
 pub struct FunctionType {
+    /// `true` for `fn mut(...)` (closure may mutate captures);
+    /// `false` for `fn(...)` (read-only captures).
+    pub is_mut: bool,
     pub params: Vec<Type>,
     pub return_type: Type,
     pub effects: Vec<String>,
@@ -2593,11 +2596,19 @@ pub struct AssocTypeBound {
 
 /// A single trait bound on a generic parameter.
 /// Simple: `Ord`; with associated type bindings: `Builder<Output = T>`.
+/// `fn(...)` / `fn mut(...)` closure-type bound: `<F: fn(i32) -> i32>` —
+/// surface syntax for the internal `Fn` / `FnMut` traits; the parsed function
+/// signature is recorded in `fn_signature` and the bound's `name` is set to
+/// `"Fn"` or `"FnMut"` for diagnostic and resolver routing.
 #[derive(Debug, Clone)]
 pub struct TraitBound {
     pub name: String,
     pub assoc_types: Vec<AssocTypeBound>,
     pub span: Span,
+    /// Set when the bound was written as `fn(...)` / `fn mut(...)` in source.
+    /// Carries the parsed closure signature so the resolver can constrain the
+    /// generic parameter to that exact function type at use sites.
+    pub fn_signature: Option<Box<FunctionType>>,
 }
 
 /// Generic type parameter declaration: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Builder<Output = T>>`

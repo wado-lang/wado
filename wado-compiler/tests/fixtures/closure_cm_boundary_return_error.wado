@@ -1,0 +1,10 @@
+// Closures cannot cross the Component Model boundary. Exporting a
+// function whose return type is a closure is a compile error.
+// See wep-2026-01-16-closure-implementation.md ("Component Model Boundary").
+
+export fn run() -> fn(i32) -> i32 {
+    return |x: i32| x + 1;
+}
+
+__DATA__
+{"compile_error": "closure"}

@@ -788,7 +788,7 @@ struct PathParamsDeserializer {
 
 struct PathParamsStructAccess {
     de: PathParamsDeserializer,
-    lookup: fn(&String, i32, i32) -> Option<i32>,
+    lookup: fn mut(&String, i32, i32) -> Option<i32>,
 }
 
 impl Deserializer for PathParamsDeserializer {
@@ -852,7 +852,7 @@ impl Deserializer for PathParamsDeserializer {
         return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a map", -1));
     }
     fn begin_struct(&mut self, _name: &String, _num_fields: i32,
-                    lookup: fn(&String, i32, i32) -> Option<i32>)
+                    lookup: fn mut(&String, i32, i32) -> Option<i32>)
         -> Result<PathParamsStructAccess, DeserializeError>
         with stores[self]
     {

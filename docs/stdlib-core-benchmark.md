@@ -55,7 +55,7 @@ Optional input size, shown in the header (e.g. `"631044 bytes"`).
 
 Create a benchmark with default settings (single iteration, no input size).
 
-#### `pub fn run<T>(&mut self, label: String, f: fn() -> T) -> T with Stdout, MonotonicClock`
+#### `pub fn run<T>(&mut self, label: String, f: fn mut() -> T) -> T with Stdout, MonotonicClock`
 
 Run a single phase. Performs warmup (if any) then `iterations` timed
 runs of `f`. Prints the header on first call. Returns the final

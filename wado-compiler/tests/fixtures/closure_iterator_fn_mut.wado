@@ -1,0 +1,37 @@
+// Iterator methods now accept `fn mut(...)` closures. Per WEP, picking
+// `fn mut` lets callers pass mutating closures (e.g. accumulating into
+// outer state) without losing the ability to pass pure ones via
+// `fn <: fn mut` sub-typing.
+
+test "fold can accumulate via outer mut" {
+    let nums: Array<i32> = [1, 2, 3, 4, 5];
+
+    // Side-channel accumulation through a captured mut binding.
+    let mut side_total = 0;
+    let acc_sum = nums.iter().fold(0, |acc: i32, x: i32| {
+        side_total += x;
+        return acc + x;
+    });
+    assert acc_sum == 15;
+    assert side_total == 15;
+}
+
+test "for_each method runs side effects" {
+    let nums: Array<i32> = [10, 20, 30];
+
+    let mut total = 0;
+    nums.iter().for_each(|x: i32| {
+        total += x;
+    });
+    assert total == 60;
+}
+
+test "pure fn still accepted via sub-typing" {
+    let nums: Array<i32> = [1, 2, 3];
+    let doubled = nums.iter().map(|x: i32| x * 2).collect();
+    assert doubled[0] == 2;
+    assert doubled[2] == 6;
+}
+
+__DATA__
+{"test": {}}

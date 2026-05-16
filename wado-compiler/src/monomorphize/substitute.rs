@@ -221,6 +221,7 @@ impl Monomorphizer {
                 type_table.make_mut_ref(new_inner)
             }
             ResolvedType::Function {
+                is_mut,
                 params,
                 return_type,
                 effects,
@@ -231,7 +232,13 @@ impl Monomorphizer {
                     .map(|&p| self.substitute_type(p, substitution, type_table))
                     .collect();
                 let new_return_type = self.substitute_type(return_type, substitution, type_table);
-                type_table.make_function(new_params, new_return_type, effects, stores)
+                type_table.make_function_with_mut(
+                    is_mut,
+                    new_params,
+                    new_return_type,
+                    effects,
+                    stores,
+                )
             }
             ResolvedType::GenericInstance {
                 name,

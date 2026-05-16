@@ -2276,7 +2276,30 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     .collect();
                 type_table.make_tuple(elem_types)
             }
-            // TODO: Function, ClosureType, etc. are not yet handled — returning UNKNOWN
+            Type::Function(func_ty) => {
+                // Resolve param / return types statically so that cross-module
+                // consumers of `all_struct_fields` (e.g. the CM-boundary
+                // closure check at item.rs) see a real `ResolvedType::Function`
+                // rather than `UNKNOWN`. Effects/stores get resolved later when
+                // a per-function scope exists; for this static pre-pass an
+                // empty effect set is fine because callers only read
+                // shape-level information (is the field a closure type?).
+                let params: Vec<TypeId> = func_ty
+                    .params
+                    .iter()
+                    .map(|p| Self::resolve_type_static(p, type_table, lookup))
+                    .collect();
+                let return_type =
+                    Self::resolve_type_static(&func_ty.return_type, type_table, lookup);
+                type_table.make_function_with_mut(
+                    func_ty.is_mut,
+                    params,
+                    return_type,
+                    Vec::new(),
+                    Vec::new(),
+                )
+            }
+            // TODO: ClosureType, etc. are not yet handled — returning UNKNOWN
             // causes stale/wrong TypeIds in all_struct_fields when used as struct field types.
             _ => TypeTable::UNKNOWN,
         }
@@ -2431,6 +2454,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     type_params,
                 );
                 type_table.intern(crate::tir::ResolvedType::Function {
+                    is_mut: func_type.is_mut,
                     params,
                     return_type,
                     effects: vec![],

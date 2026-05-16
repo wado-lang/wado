@@ -93,7 +93,7 @@ impl SyntaxDefinition {
                     "interface",
                 ],
                 storage_modifier: vec![
-                    "pub", "export", "mut", "async", "move", "unique", "stores", "reactive",
+                    "pub", "export", "mut", "async", "unique", "stores", "reactive",
                 ],
                 other: vec![
                     "use", "from", "import", "test", "as", "with", "in", "of", "assert",
@@ -243,7 +243,6 @@ mod tests {
             "effect",
             "interface",
             "reactive",
-            "move",
             "unique",
             "struct",
             "enum",

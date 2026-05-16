@@ -706,17 +706,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         &mut self,
         unary: &ast::UnaryExpr,
         ctx: &mut FunctionContext,
-        expected_type: Option<TypeId>,
+        _expected_type: Option<TypeId>,
     ) -> TirExpr {
-        // Special case: `&mut || { body }` - mutable closure desugaring.
-        // The `&mut` here is purely syntactic — the resulting value is still a
-        // function value, so the expected fn type flows directly to the closure.
-        if unary.op == UnaryOp::MutRef
-            && let ast::Expr::Closure(closure_expr) = &unary.expr
-        {
-            return self.resolve_mutable_closure(closure_expr, ctx, unary.span, expected_type);
-        }
-
         let expr = self.resolve_expr(&unary.expr, ctx, None);
         let op = util::convert_unary_op(unary.op);
 

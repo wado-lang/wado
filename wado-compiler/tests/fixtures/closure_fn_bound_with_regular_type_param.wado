@@ -1,0 +1,34 @@
+// Regression: a function whose generic parameter list mixes a fn-bound
+// param with a regular type param. Per WEP, `<F: fn(...)>` is eagerly
+// realised to the bound's function type — but the *remaining* type
+// params must keep their original `register_generic_params` indices,
+// otherwise monomorphisation's substitution key disagrees with the
+// `TypeParam(name, index)` interned at registration and `T` gets
+// silently skipped.
+
+fn transform<F: fn(i32) -> i32, T>(f: F, x: T, y: i32) -> T {
+    // `f` exercises the eager fn-type binding; `x` exercises the
+    // regular type param. Returning `x` is enough — the monomorphiser
+    // must substitute T = i32 (call site below) for the return type.
+    let _ = f(y);
+    return x;
+}
+
+// Reverse order — verifies indices stay stable regardless of where the
+// fn-bound param appears in the declaration.
+fn pick<T, F: fn(T) -> T>(x: T, f: F) -> T {
+    return f(x);
+}
+
+test "fn-bound and regular type params coexist" {
+    let r: i32 = transform(|x: i32| x * 2, 7, 5);
+    assert r == 7;
+}
+
+test "fn-bound after regular type param" {
+    let r = pick(10, |x: i32| x + 1);
+    assert r == 11;
+}
+
+__DATA__
+{"test": {}}

@@ -1076,31 +1076,68 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 }
 
-                // Method-level type params (e.g. `fn make<T>(x: T)` -> register T)
-                for (i, tp) in method_type_params
+                // Method-level effect params (e.g. `fn run_with<effect E>(...)
+                // with E`) live on a separate channel from type params. Seed
+                // them BEFORE registering the type params so that eager
+                // `<F: fn() with E>` bound resolution sees `E` as
+                // `EffectRef::Param` rather than a phantom
+                // `EffectRef::Concrete`.
+                let old_effect_params = std::mem::take(&mut scope.current_effect_params);
+                let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
+                let method_effect_params: Vec<&ast::GenericParam> =
+                    method_type_params.iter().filter(|p| p.is_effect).collect();
+                scope.current_effect_params = method_effect_params
                     .iter()
-                    .filter(|p| !p.is_effect)
-                    .enumerate()
-                {
+                    .map(|p| p.name.clone())
+                    .collect();
+                scope.current_effect_param_decls = method_effect_params
+                    .iter()
+                    .map(|p| (p.name.clone(), p.id))
+                    .collect();
+
+                // Method-level type params (e.g. `fn make<T>(x: T) -> T`).
+                // Fn-bound params (`<F: fn(...)>`) are eagerly resolved to the
+                // bound's function type and do NOT consume a `TypeParam` index
+                // slot — mirrors the free-function path in
+                // `trait_env::register_generic_params`. This keeps the dense
+                // index space for real type params so the substitution map in
+                // `substitute_type_params` lines up.
+                let mut idx = impl_offset;
+                for tp in method_type_params.iter().filter(|p| !p.is_effect) {
                     if scope.trait_ctx.type_params.contains_key(&tp.name) {
                         continue;
                     }
-                    let idx = impl_offset + i as u32;
-                    let type_id = if tp.is_pack {
-                        scope
-                            .type_table
-                            .borrow_mut()
-                            .make_type_pack(tp.name.clone(), idx)
+                    let fn_bound_sig = if tp.is_pack {
+                        None
                     } else {
-                        scope
-                            .type_table
-                            .borrow_mut()
-                            .make_type_param(tp.name.clone(), idx)
+                        tp.bounds.iter().find_map(|b| b.fn_signature.as_ref())
+                    };
+                    let (type_id, consumed_index) = if tp.is_pack {
+                        (
+                            scope
+                                .type_table
+                                .borrow_mut()
+                                .make_type_pack(tp.name.clone(), idx),
+                            true,
+                        )
+                    } else if let Some(sig) = fn_bound_sig {
+                        (scope.resolve_type(&ast::Type::Function(sig.clone())), false)
+                    } else {
+                        (
+                            scope
+                                .type_table
+                                .borrow_mut()
+                                .make_type_param(tp.name.clone(), idx),
+                            true,
+                        )
                     };
                     scope
                         .trait_ctx
                         .type_params
                         .insert(tp.name.clone(), (idx, type_id));
+                    if consumed_index {
+                        idx += 1;
+                    }
                 }
 
                 let param_types: Vec<TypeId> = param_types_ast
@@ -1108,6 +1145,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .map(|ty| scope.resolve_type(ty))
                     .collect();
 
+                scope.current_effect_params = old_effect_params;
+                scope.current_effect_param_decls = old_effect_param_decls;
                 drop(scope);
 
                 (

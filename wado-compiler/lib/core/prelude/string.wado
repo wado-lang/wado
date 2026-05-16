@@ -817,7 +817,7 @@ impl String {
     }
 
     /// Returns the byte index of the first character matching the predicate, or None.
-    pub fn find_char(&self, pred: fn(char) -> bool) -> Option<i32> {
+    pub fn find_char(&self, mut pred: fn mut(char) -> bool) -> Option<i32> {
         let mut iter = self.chars();
         for let mut byte_index = 0; let Some(c) = iter.next(); byte_index += c.len_utf8() {
             if pred(c) {

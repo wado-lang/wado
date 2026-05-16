@@ -158,6 +158,7 @@ fn desugar_type(ty: &Type, ctx: &DesugarContext) -> Type {
         Type::Reference(inner) => Type::Reference(Box::new(desugar_type(inner, ctx))),
         Type::MutReference(inner) => Type::MutReference(Box::new(desugar_type(inner, ctx))),
         Type::Function(f) => Type::Function(Box::new(crate::ast::FunctionType {
+            is_mut: f.is_mut,
             params: f.params.iter().map(|p| desugar_type(p, ctx)).collect(),
             return_type: desugar_type(&f.return_type, ctx),
             effects: f.effects.clone(),

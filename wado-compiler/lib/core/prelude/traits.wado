@@ -286,23 +286,6 @@ pub trait LowerHexAlt {
 pub trait UpperHexAlt {
     fn fmt_alt(&self, f: &mut Formatter);
 }
-/// Trait for callable types (closures and function references).
-/// This trait enables closure monomorphization - functions with `fn(A) -> R` parameters
-/// are desugared to generic functions with `Fn<[A], R>` bounds.
-///
-/// Type parameters:
-/// - `Args`: Tuple of argument types using `[...]` syntax, e.g., `[i32, String]`
-/// - `Ret`: Return type
-/// - `Effects`: Tuple of effect types, defaults to `[]` (pure)
-///
-/// Examples:
-/// - `Fn<[i32], bool>` - takes i32, returns bool, pure
-/// - `Fn<[i32, String], ()>` - takes i32 and String, returns unit, pure
-/// - `Fn<[i32], (), [Stdout]>` - takes i32, returns unit, has Stdout effect
-pub trait Fn<Args, Ret, Effects> {
-    /// Call the function with the given arguments.
-    fn call(&self, args: Args) -> Ret with Effects;
-}
 /// The core iterator trait for sequences of values.
 /// Types implementing this trait can be iterated over using `for-of` loops.
 pub trait Iterator {
@@ -331,13 +314,13 @@ pub trait Iterator {
     }
 
     /// Transforms each element using a function.
-    fn map<U>(&self, f: fn(Self::Item) -> U) -> IterMap<Self, U> {
+    fn map<U>(&self, f: fn mut(Self::Item) -> U) -> IterMap<Self, U> {
         return IterMap { inner: *self, f };
     }
 
     /// Like `reduce`, but takes an explicit initial accumulator instead of using the first element.
     /// Always returns a value (unlike `reduce`, which returns None for empty iterators).
-    fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, Self::Item) -> Acc) -> Acc {
+    fn fold<Acc>(&mut self, init: Acc, mut f: fn mut(Acc, Self::Item) -> Acc) -> Acc {
         let mut acc = init;
         while let Some(item) = self.next() {
             acc = f(acc, item);
@@ -345,8 +328,15 @@ pub trait Iterator {
         return acc;
     }
 
+    /// Calls `f` for every remaining element. Consumes the iterator.
+    fn for_each(&mut self, mut f: fn mut(Self::Item)) {
+        while let Some(item) = self.next() {
+            f(item);
+        }
+    }
+
     /// Returns the first element for which `pred` returns true, advancing the iterator up to that point.
-    fn find(&mut self, pred: fn(Self::Item) -> bool) -> Option<Self::Item> {
+    fn find(&mut self, mut pred: fn mut(Self::Item) -> bool) -> Option<Self::Item> {
         while let Some(item) = self.next() {
             if pred(item) {
                 return Option::Some(item);
@@ -357,7 +347,7 @@ pub trait Iterator {
 
     /// Returns true if `pred` returns true for at least one element (∃). False for empty iterators.
     /// Short-circuits: stops advancing the iterator as soon as a matching element is found.
-    fn any(&mut self, pred: fn(Self::Item) -> bool) -> bool {
+    fn any(&mut self, mut pred: fn mut(Self::Item) -> bool) -> bool {
         while let Some(item) = self.next() {
             if pred(item) {
                 return true;
@@ -368,7 +358,7 @@ pub trait Iterator {
 
     /// Returns true if `pred` returns true for every element (∀). True for empty iterators.
     /// Short-circuits: stops advancing the iterator as soon as a non-matching element is found.
-    fn all(&mut self, pred: fn(Self::Item) -> bool) -> bool {
+    fn all(&mut self, mut pred: fn mut(Self::Item) -> bool) -> bool {
         while let Some(item) = self.next() {
             if !pred(item) {
                 return false;
@@ -399,7 +389,7 @@ pub trait Iterator {
     }
 
     /// Returns the 0-based index of the first element for which `pred` returns true, or None.
-    fn position(&mut self, pred: fn(Self::Item) -> bool) -> Option<i32> {
+    fn position(&mut self, mut pred: fn mut(Self::Item) -> bool) -> Option<i32> {
         let mut idx = 0;
         while let Some(item) = self.next() {
             if pred(item) {
@@ -412,7 +402,7 @@ pub trait Iterator {
 
     /// Reduces elements to a single value without an initial accumulator.
     /// Returns None if the iterator is empty.
-    fn reduce(&mut self, f: fn(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item> {
+    fn reduce(&mut self, mut f: fn mut(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item> {
         if let Some(first) = self.next() {
             let mut acc = first;
             while let Some(item) = self.next() {
@@ -424,7 +414,7 @@ pub trait Iterator {
     }
 
     /// Returns an adapter that skips elements for which `pred` returns false.
-    fn filter(&self, pred: fn(Self::Item) -> bool) -> IterFilter<Self> {
+    fn filter(&self, pred: fn mut(Self::Item) -> bool) -> IterFilter<Self> {
         return IterFilter { inner: *self, pred };
     }
 
@@ -457,7 +447,7 @@ pub trait Iterator {
 /// Generic map iterator adapter that wraps any Iterator.
 pub struct IterMap<I: Iterator, U> {
     pub inner: I,
-    pub f: fn(I::Item) -> U,
+    pub f: fn mut(I::Item) -> U,
 }
 
 impl<I: Iterator, U> Iterator for IterMap<I, U> {
@@ -483,7 +473,7 @@ impl<I: Iterator, U> IntoIterator for IterMap<I, U> {
 /// Generic filter iterator adapter that wraps any Iterator.
 pub struct IterFilter<I: Iterator> {
     pub inner: I,
-    pub pred: fn(I::Item) -> bool,
+    pub pred: fn mut(I::Item) -> bool,
 }
 
 impl<I: Iterator> Iterator for IterFilter<I> {

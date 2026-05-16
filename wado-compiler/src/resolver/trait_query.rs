@@ -721,6 +721,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         for (i, param) in type_params.iter().enumerate() {
             if let Some(&type_arg) = type_args.get(i) {
                 for bound in &param.bounds {
+                    // Skip `fn(...)` / `fn mut(...)` closure-type bounds: they
+                    // are eagerly realised to the bound's function type at
+                    // `register_generic_params`, so the parameter is no longer
+                    // a real generic that needs `type_implements_trait` to
+                    // satisfy a synthetic `Fn` trait.
+                    if bound.fn_signature.is_some() {
+                        continue;
+                    }
                     if self.type_implements_trait(type_arg, &bound.name) {
                         // Register associated type resolutions so the monomorphizer can
                         // substitute e.g. I::Iter → ArrayIter<u8> when I = Array<u8>.

@@ -1,0 +1,10 @@
+// Closures cannot cross the Component Model boundary. Exporting a
+// function with a closure-typed parameter is a compile error.
+// See wep-2026-01-16-closure-implementation.md ("Component Model Boundary").
+
+export fn run(f: fn(i32) -> i32) {
+    let _ = f(0);
+}
+
+__DATA__
+{"compile_error": "closure"}

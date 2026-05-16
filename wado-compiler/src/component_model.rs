@@ -2052,6 +2052,7 @@ impl WasiRegistry {
                     .collect();
                 let resolved_return = self.resolve_type(&func_ty.return_type);
                 Type::Function(Box::new(crate::ast::FunctionType {
+                    is_mut: func_ty.is_mut,
                     params: resolved_params,
                     return_type: resolved_return,
                     effects: func_ty.effects.clone(),

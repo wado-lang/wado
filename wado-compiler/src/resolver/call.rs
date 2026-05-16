@@ -35,6 +35,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let peeled_type_id = self.type_table.borrow().get_ultimate_base_type(peeled_ref);
                 let peeled_type = self.type_table.borrow().get(peeled_type_id).clone();
                 if let ResolvedType::Function {
+                    is_mut: fn_is_mut,
                     params: fn_params,
                     return_type,
                     ..
@@ -42,7 +43,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 {
                     let local_index = local.index;
                     let local_type_id = local.type_id;
+                    let local_is_mut = local.is_mut;
                     let fn_return_type = return_type;
+
+                    // `fn mut` closures need a `mut` callee binding — mirrors
+                    // Rust's FnMut rule.
+                    if fn_is_mut && !local_is_mut {
+                        let _ = self.logger.error(TypeError::ClosureMutBindingRequired {
+                            name: ident.name.clone(),
+                            span: ident.span,
+                        });
+                    }
 
                     // Resolve arguments with coercion awareness based on closure param types
                     let mut args: Vec<TirExpr> = call
@@ -387,6 +398,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             for (i, param) in mtype_params.iter().enumerate() {
                                 if let Some(&type_arg) = method_type_args.get(i) {
                                     for bound in &param.bounds {
+                                        // Skip `fn(...)` / `fn mut(...)` bounds:
+                                        // realised eagerly, not real traits.
+                                        if bound.fn_signature.is_some() {
+                                            continue;
+                                        }
                                         if self.type_implements_trait(type_arg, &bound.name) {
                                             self.register_assoc_types_for_concrete_type_and_trait(
                                                 type_arg,
@@ -1462,13 +1478,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .map(|func| (func.params.clone(), func.type_params.clone()));
 
                     if let Some((params, type_params)) = func_info {
-                        // Set up type params so resolve_type can find pack params
-                        // (inherited scope; only `type_params` is replaced, matching
-                        // the original `mem::take` semantics).
+                        // Set up the callee's generic-param scope before resolving
+                        // its parameter types. Effect params have their own
+                        // channel (`current_effect_param_decls`) and must be
+                        // installed BEFORE `register_generic_params` — eager
+                        // `<F: fn() with E>` bound resolution runs inside
+                        // `register_generic_params` and consults that channel
+                        // to recognise `E` as `EffectRef::Param`.
                         let mut scope = self.enter_inherited_type_param_scope();
                         scope.trait_ctx.type_params.clear();
+                        let old_effect_params = std::mem::take(&mut scope.current_effect_params);
+                        let old_effect_param_decls =
+                            std::mem::take(&mut scope.current_effect_param_decls);
+                        let effect_params: Vec<&ast::GenericParam> =
+                            type_params.iter().filter(|p| p.is_effect).collect();
+                        scope.current_effect_params =
+                            effect_params.iter().map(|p| p.name.clone()).collect();
+                        scope.current_effect_param_decls = effect_params
+                            .iter()
+                            .map(|p| (p.name.clone(), p.id))
+                            .collect();
                         scope.register_generic_params(&type_params, 0);
                         let result = params.iter().map(|p| scope.resolve_type(&p.ty)).collect();
+                        scope.current_effect_params = old_effect_params;
+                        scope.current_effect_param_decls = old_effect_param_decls;
                         drop(scope);
                         return result;
                     }
@@ -2094,16 +2127,31 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return Vec::new();
         };
 
-        // Temporarily register type params so resolve_type can find them
-        // (inherited scope; only `type_params` is replaced, matching the
-        // original `mem::take` semantics).
+        // Temporarily set up the callee's generic-param scope so its parameter
+        // types resolve under the same effect / type-param bindings as the
+        // callee itself would. Effect params have their own channel
+        // (`current_effect_param_decls`); without seeding it, names like the
+        // `E` in `fn each<effect E>(... fn() with E)` would re-resolve to
+        // `EffectRef::Concrete { name: "E" }` and leak out as a phantom
+        // local effect.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.trait_ctx.type_params.clear();
+        let old_effect_params = std::mem::take(&mut scope.current_effect_params);
+        let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
+        let effect_params: Vec<&ast::GenericParam> =
+            fn_type_params.iter().filter(|p| p.is_effect).collect();
+        scope.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
+        scope.current_effect_param_decls = effect_params
+            .iter()
+            .map(|p| (p.name.clone(), p.id))
+            .collect();
         scope.register_generic_params(&fn_type_params, 0);
         let param_types: Vec<TypeId> = fn_params
             .iter()
             .map(|p| scope.resolve_type(&p.ty))
             .collect();
+        scope.current_effect_params = old_effect_params;
+        scope.current_effect_param_decls = old_effect_param_decls;
         drop(scope);
 
         // Substitute type params with explicit type args

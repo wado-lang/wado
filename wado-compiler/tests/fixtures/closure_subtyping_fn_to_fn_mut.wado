@@ -1,0 +1,28 @@
+// Sub-typing `fn <: fn mut`: a read-only closure is usable wherever a
+// `fn mut` is expected. The reverse is rejected (covered in a separate
+// error fixture). See wep-2026-01-16-closure-implementation.md
+// ("fn and fn mut").
+
+fn apply_twice(mut f: fn mut(i32) -> i32, x: i32) -> i32 {
+    return f(f(x));
+}
+
+test "fn coerces to fn mut" {
+    // `add_one` is a `fn(i32) -> i32` — pure read-only capture
+    // (n is read but not mutated).
+    let n = 1;
+    let add_one = |x: i32| x + n;
+    // Passing `fn` where `fn mut` is expected must succeed.
+    let result = apply_twice(add_one, 5);
+    assert result == 7;
+}
+
+test "fn mut accepts a fn closure parameter" {
+    let multiplier = 3;
+    let mul = |x: i32| x * multiplier;
+    let result = apply_twice(mul, 2);
+    assert result == 18;
+}
+
+__DATA__
+{"test": {}}

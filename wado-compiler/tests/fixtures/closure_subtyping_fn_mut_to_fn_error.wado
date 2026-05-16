@@ -1,0 +1,20 @@
+// Sub-typing is one-way: `fn mut` is NOT usable where `fn` is expected.
+// See wep-2026-01-16-closure-implementation.md ("fn and fn mut").
+
+fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+test "fn mut does not coerce to fn" {
+    let mut count = 0;
+    let inc_and_add = |x: i32| {
+        count += 1;
+        return x + count;
+    };
+    // `inc_and_add` is `fn mut(i32) -> i32`; `apply` expects `fn(i32) -> i32`.
+    // This must be a compile error.
+    let _ = apply(inc_and_add, 5);
+}
+
+__DATA__
+{"test": {}, "compile_error": "fn mut"}

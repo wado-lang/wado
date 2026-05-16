@@ -127,6 +127,71 @@ pub(super) fn register_tuple_compiler_item(
 }
 
 impl<H: CompilerHost> Resolver<'_, H> {
+    /// Recursively check whether `type_id` mentions a `fn(...)` / `fn mut(...)`
+    /// closure type. Used to reject closures crossing the Component Model
+    /// boundary (export/import function signatures, CM-exposed record fields,
+    /// variant payloads, etc.). Descends through refs, arrays, generic-arg
+    /// containers, newtype unwrap, and (when the struct's field registry is
+    /// in scope) named-struct field types.
+    pub(super) fn type_contains_closure(&self, type_id: TypeId) -> bool {
+        let type_table = self.type_table.borrow();
+        let mut visited: IndexSet<TypeId> = IndexSet::default();
+        self.type_contains_closure_inner(&type_table, type_id, &mut visited)
+    }
+
+    fn type_contains_closure_inner(
+        &self,
+        type_table: &crate::tir::TypeTable,
+        type_id: TypeId,
+        visited: &mut IndexSet<TypeId>,
+    ) -> bool {
+        if !visited.insert(type_id) {
+            return false;
+        }
+        match type_table.get(type_id) {
+            crate::tir::ResolvedType::Function { .. } => true,
+            crate::tir::ResolvedType::Ref(t)
+            | crate::tir::ResolvedType::MutRef(t)
+            | crate::tir::ResolvedType::Reactive(t)
+            | crate::tir::ResolvedType::BuiltinArray(t) => {
+                self.type_contains_closure_inner(type_table, *t, visited)
+            }
+            crate::tir::ResolvedType::GenericInstance { type_args, .. }
+            | crate::tir::ResolvedType::GenericResource { type_args, .. } => type_args
+                .iter()
+                .any(|t| self.type_contains_closure_inner(type_table, *t, visited)),
+            crate::tir::ResolvedType::Newtype { base_type, .. } => {
+                self.type_contains_closure_inner(type_table, *base_type, visited)
+            }
+            crate::tir::ResolvedType::Struct { name, .. } => {
+                // Recurse into the struct's field types via the resolver's
+                // pre-built field registry. Self-recursive structs are
+                // protected by `visited`.
+                let field_types: Vec<TypeId> = self
+                    .lookup_struct_fields(name)
+                    .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect())
+                    .unwrap_or_default();
+                field_types
+                    .into_iter()
+                    .any(|t| self.type_contains_closure_inner(type_table, t, visited))
+            }
+            crate::tir::ResolvedType::Variant { name, .. } => {
+                // `ResolvedType::Variant` carries only the name; the per-case
+                // payload types live in `all_variant_cases`. Look them up so
+                // a variant case payload containing a closure type fails the
+                // CM boundary check too.
+                let payloads: Vec<TypeId> = self
+                    .lookup_variant_case(name)
+                    .map(|info| info.cases.iter().map(|c| c.payload).collect())
+                    .unwrap_or_default();
+                payloads
+                    .into_iter()
+                    .any(|t| self.type_contains_closure_inner(type_table, t, visited))
+            }
+            _ => false,
+        }
+    }
+
     pub(super) fn resolve_struct(&mut self, struct_decl: &ast::StructDecl) -> TirStruct {
         // Set up type parameters in scope before resolving fields. Use an
         // inherited scope so that any caller-provided `assoc_type_bindings` or
@@ -558,14 +623,35 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// each time; subsequent overwrites inside `resolve_function` keep
     /// the cache consistent with the body's own `TypeId`s.
     pub(super) fn precompute_generic_function_cache(&mut self, func: &Function) {
-        if !func.type_params.iter().any(|p| !p.is_effect) {
+        // Mirror `resolve_function`'s `has_real_type_params` guard exactly:
+        // fn-bound params are realised eagerly and do not need
+        // monomorphisation, so a function whose only non-effect params are
+        // fn-bound has nothing to cache.
+        let has_real_type_params = func
+            .type_params
+            .iter()
+            .any(|p| !p.is_effect && !p.bounds.iter().any(|b| b.fn_signature.is_some()));
+        if !has_real_type_params {
             return;
         }
         let mut scope = self.enter_inherited_type_param_scope();
         scope.trait_ctx.type_params.clear();
         scope.trait_ctx.type_param_bounds.clear();
+        // Install effect params before `register_generic_params` so eager
+        // `<F: fn() with E>` bound resolution sees `E` as `EffectRef::Param`.
+        let old_effect_params = std::mem::take(&mut scope.current_effect_params);
+        let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
+        let effect_params: Vec<&ast::GenericParam> =
+            func.type_params.iter().filter(|p| p.is_effect).collect();
+        scope.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
+        scope.current_effect_param_decls = effect_params
+            .iter()
+            .map(|p| (p.name.clone(), p.id))
+            .collect();
         scope.register_generic_params(&func.type_params, 0);
         scope.populate_generic_function_cache(func);
+        scope.current_effect_params = old_effect_params;
+        scope.current_effect_param_decls = old_effect_param_decls;
     }
 
     /// Populate the three generic-function inference caches
@@ -578,10 +664,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// (e.g. `resolve_function` for `task_return_type`) can avoid resolving
     /// it a second time.
     fn populate_generic_function_cache(&mut self, func: &Function) -> TypeId {
+        // Skip effect params (never real generics) and fn-bound params
+        // (realised eagerly to their bound's function type by
+        // `register_generic_params`, which does not consume a `TypeParam`
+        // index slot for them). The remaining entries' positional order
+        // matches the dense `TypeParam.index` space so the inference cache
+        // and substitution map line up.
         let type_param_list: Vec<(String, TypeId)> = func
             .type_params
             .iter()
             .filter(|p| !p.is_effect)
+            .filter(|p| !p.bounds.iter().any(|b| b.fn_signature.is_some()))
             .filter_map(|p| {
                 self.trait_ctx
                     .type_params
@@ -618,9 +711,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.trait_ctx.type_params.clear();
         scope.trait_ctx.type_param_bounds.clear();
-        scope.register_generic_params(&func.type_params, 0);
 
-        // Set effect params in scope (for resolving effect names in function types)
+        // Set effect params in scope before `register_generic_params`. Eager
+        // `<F: fn() with E>` bound resolution runs inside
+        // `register_generic_params` and consults `current_effect_param_decls`
+        // to recognise `E` as `EffectRef::Param` rather than re-resolving it
+        // to a phantom `EffectRef::Concrete`.
         let old_effect_params = std::mem::take(&mut scope.current_effect_params);
         let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
         let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
@@ -636,6 +732,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .map(|p| (p.name.clone(), p.id))
             .collect();
 
+        scope.register_generic_params(&func.type_params, 0);
+
         // Populate the generic-function inference caches
         // (`generic_function_params`, `generic_function_resolved_param_types`,
         // `generic_function_resolved_return_types`). Populated before the
@@ -643,7 +741,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // with non-generic callers and may be overwritten by external
         // registrations (trait methods, etc.) over time. The declared return
         // type is also used for `task_return_type` in async fns.
-        let has_real_type_params = func.type_params.iter().any(|p| !p.is_effect);
+        // `<F: fn(...)>` bounds are eagerly realised to the bound's function
+        // type and do not consume a `TypeParam` slot — they're not generic
+        // parameters that need monomorphisation.
+        let has_real_type_params = func
+            .type_params
+            .iter()
+            .any(|p| !p.is_effect && !p.bounds.iter().any(|b| b.fn_signature.is_some()));
         let declared_return_type = if has_real_type_params {
             scope.populate_generic_function_cache(func)
         } else {
@@ -683,9 +787,29 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // `export fn` is rejected: the Component Model ABI requires every
         // parameter at the boundary, so defaults cannot divergently exist
         // only on the Wado side.
+        // A function crosses the Component Model boundary when it is either
+        // exported (`export fn ...`) or imported (declaration with no body,
+        // typically carrying `#[canonical(...)]` or `#[cm(...)]`). Closures
+        // may not appear in either side's signature.
+        let is_cm_import = func.body.is_none()
+            && (func.attrs.iter().any(|a| a.cm_import.is_some())
+                || func
+                    .attrs
+                    .iter()
+                    .any(|a| a.name == "canonical" || a.name == "cm"));
+        let crosses_cm_boundary = func.is_export || is_cm_import;
+
         let mut params = Vec::new();
         for param in &func.params {
             let type_id = scope.resolve_type(&param.ty);
+            // Closures cannot cross the Component Model boundary.
+            if crosses_cm_boundary && scope.type_contains_closure(type_id) {
+                let _ = scope.logger.error(TypeError::ClosureAtCmBoundary {
+                    function: func.name.clone(),
+                    position: format!("parameter '{}'", param.name),
+                    span: param.span,
+                });
+            }
             let default_expr = param.default.as_ref().map(|default_ast| {
                 if func.is_export {
                     let _ = scope.logger.error(TypeError::DefaultInExportFn {
@@ -710,6 +834,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
         }
 
+        // Closures cannot cross the CM boundary in return position either.
+        if crosses_cm_boundary && scope.type_contains_closure(return_type) {
+            let _ = scope.logger.error(TypeError::ClosureAtCmBoundary {
+                function: func.name.clone(),
+                position: "return type".to_string(),
+                span: func.span,
+            });
+        }
+
         // Validate stores declarations
         scope.validate_stores(&func.stores, &params, func.span);
 
@@ -731,18 +864,35 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
         }
 
-        // Convert AST type params to TIR type params (while type params still in scope)
+        // Convert AST type params to TIR type params (while type params
+        // still in scope). `<F: fn(...)>` / `<F: fn mut(...)>` bounds are
+        // realised eagerly by `register_generic_params` and do not consume
+        // a `TypeParam` index slot — drop them from the TIR list so the
+        // monomorphiser doesn't try to specialise on the closure's functor
+        // type. The remaining params keep their dense `register_generic_params`
+        // index, which matches both the `TypeParam(name, index)` entries in
+        // the type table and the positional order of the inference cache.
+        let mut non_effect_non_fn_idx: u32 = 0;
         let type_params: Vec<crate::tir::TirTypeParam> = func
             .type_params
             .iter()
-            .enumerate()
-            .map(|(i, p)| crate::tir::TirTypeParam {
-                name: p.name.clone(),
-                is_effect: p.is_effect,
-                is_pack: p.is_pack,
-                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
-                index: i as u32,
+            .filter_map(|p| {
+                if p.is_effect {
+                    return None;
+                }
+                if p.bounds.iter().any(|b| b.fn_signature.is_some()) {
+                    return None;
+                }
+                let idx = non_effect_non_fn_idx;
+                non_effect_non_fn_idx += 1;
+                Some(crate::tir::TirTypeParam {
+                    name: p.name.clone(),
+                    is_effect: p.is_effect,
+                    is_pack: p.is_pack,
+                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                    default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
+                    index: idx,
+                })
             })
             .collect();
 
@@ -1075,24 +1225,69 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .map(|p| (p.name.clone(), p.id))
             .collect();
 
-        // Then, collect method-level type params
+        // Then, collect method-level type params. Mirrors
+        // `register_generic_params` in `trait_env.rs`: `<F: fn(...)>` /
+        // `<F: fn mut(...)>` bounds are realised eagerly to the bound's
+        // function type and do NOT consume a `TypeParam` index slot, so the
+        // index space stays dense for real type params. Effect params have
+        // their own channel (`current_effect_param_decls`, installed above).
         let offset = scope.trait_ctx.type_params.len();
-        for (index, param) in func.type_params.iter().enumerate() {
-            let idx = (offset + index) as u32;
-            let type_id = scope
-                .type_table
-                .borrow_mut()
-                .make_type_param(param.name.clone(), idx);
+        let mut next_idx = offset as u32;
+        for param in &func.type_params {
+            if param.is_effect {
+                continue;
+            }
+            let idx = next_idx;
+            let fn_bound_sig = if param.is_pack {
+                None
+            } else {
+                param.bounds.iter().find_map(|b| b.fn_signature.as_ref())
+            };
+            let (type_id, consumed_index) = if param.is_pack {
+                (
+                    scope
+                        .type_table
+                        .borrow_mut()
+                        .make_type_pack(param.name.clone(), idx),
+                    true,
+                )
+            } else if let Some(sig) = fn_bound_sig {
+                (scope.resolve_type(&ast::Type::Function(sig.clone())), false)
+            } else {
+                (
+                    scope
+                        .type_table
+                        .borrow_mut()
+                        .make_type_param(param.name.clone(), idx),
+                    true,
+                )
+            };
             scope
                 .trait_ctx
                 .type_params
                 .insert(param.name.clone(), (idx, type_id));
-            type_param_list.push((param.name.clone(), type_id));
-            if !param.bounds.is_empty() {
+            // Only push *real* type params (TypeParam-ids) into the
+            // inference cache list. Eagerly-resolved fn-bound params have a
+            // concrete Function type and aren't generics anymore.
+            if fn_bound_sig.is_none() {
+                type_param_list.push((param.name.clone(), type_id));
+            }
+            // Record only "real" trait bounds — `fn`/`fn mut` bounds are
+            // already realised in the parameter's type itself.
+            let real_bounds: Vec<ast::TraitBound> = param
+                .bounds
+                .iter()
+                .filter(|b| b.fn_signature.is_none())
+                .cloned()
+                .collect();
+            if !real_bounds.is_empty() {
                 scope
                     .trait_ctx
                     .type_param_bounds
-                    .insert(param.name.clone(), param.bounds.clone());
+                    .insert(param.name.clone(), real_bounds);
+            }
+            if consumed_index {
+                next_idx += 1;
             }
         }
 
@@ -1220,18 +1415,32 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
         }
 
-        // Convert AST type params to TIR type params (while type params still in scope)
+        // Convert AST type params to TIR type params (while type params still
+        // in scope). Mirror the free-function path in `resolve_function`:
+        // `<F: fn(...)>` bounds are realised eagerly and dropped from the
+        // generic list; the remaining real type params use dense indices so
+        // the substitution map in `substitute_type_params` lines up.
+        let mut non_effect_non_fn_idx: u32 = 0;
         let type_params: Vec<crate::tir::TirTypeParam> = func
             .type_params
             .iter()
-            .enumerate()
-            .map(|(i, p)| crate::tir::TirTypeParam {
-                name: p.name.clone(),
-                is_effect: p.is_effect,
-                is_pack: p.is_pack,
-                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
-                index: i as u32,
+            .filter_map(|p| {
+                if p.is_effect {
+                    return None;
+                }
+                if p.bounds.iter().any(|b| b.fn_signature.is_some()) {
+                    return None;
+                }
+                let idx = non_effect_non_fn_idx;
+                non_effect_non_fn_idx += 1;
+                Some(crate::tir::TirTypeParam {
+                    name: p.name.clone(),
+                    is_effect: p.is_effect,
+                    is_pack: p.is_pack,
+                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                    default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
+                    index: idx,
+                })
             })
             .collect();
 

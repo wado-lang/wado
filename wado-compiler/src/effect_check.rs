@@ -686,9 +686,28 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             } => {
                 self.check_expr(expr)?;
             }
-            TirExprKind::Closure { body, .. } => {
-                // Closures inherit effects from enclosing function, so we continue checking
-                self.check_expr(body)?;
+            TirExprKind::Closure {
+                body,
+                declared_effects,
+                ..
+            } => {
+                // When the closure has an explicit effect annotation (e.g. via
+                // `let f: fn() = ...`), the body must satisfy only that effect
+                // set — leaking outer effects through a more-pure-than-declared
+                // closure type would break callers that trusted the annotation.
+                //
+                // Unannotated closures keep inheriting the enclosing
+                // function's effects, matching the pre-WEP behaviour.
+                if let Some(declared) = declared_effects {
+                    let mut declared_set: IndexSet<EffectRef> = declared.iter().cloned().collect();
+                    declared_set = self.expand_effects(&declared_set);
+                    let saved = std::mem::replace(&mut self.current_effects, declared_set);
+                    let result = self.check_expr(body);
+                    self.current_effects = saved;
+                    result?;
+                } else {
+                    self.check_expr(body)?;
+                }
             }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload_expr) = payload {

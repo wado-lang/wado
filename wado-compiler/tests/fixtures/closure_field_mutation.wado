@@ -1,0 +1,56 @@
+// Regression: a closure body that mutates a captured binding via a
+// compound l-value (`point.x = ...`, `arr[i] = ...`, or a nested
+// path) must still detect the root binding as mutating. Without the
+// root-ident walk in `collect_mutated_vars`, the closure was typed
+// `fn` instead of `fn mut`, no `&mut` reference capture was
+// materialised, and the mutation silently operated on a by-value
+// copy. Visible at `-O2`+ where value-copy elision kicks in.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Pair {
+    p: Point,
+}
+
+test "field-access assignment" {
+    let mut p = Point { x: 0, y: 0 };
+    let mut bump_x = || {
+        p.x = 42;
+    };
+    bump_x();
+    assert p.x == 42;
+}
+
+test "field-access compound assignment" {
+    let mut p = Point { x: 0, y: 0 };
+    let mut inc_y = || {
+        p.y += 7;
+    };
+    inc_y();
+    inc_y();
+    assert p.y == 14;
+}
+
+test "index assignment" {
+    let mut arr: Array<i32> = [10, 20, 30];
+    let mut set_first = || {
+        arr[0] = 99;
+    };
+    set_first();
+    assert arr[0] == 99;
+}
+
+test "nested field path assignment" {
+    let mut pair = Pair { p: Point { x: 0, y: 0 } };
+    let mut bump = || {
+        pair.p.x = 5;
+    };
+    bump();
+    assert pair.p.x == 5;
+}
+
+__DATA__
+{"test": {}}

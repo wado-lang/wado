@@ -1,0 +1,19 @@
+// Effectful closure passed to a non-effect-polymorphic iterator method.
+// `for_each`'s parameter type is `fn mut(Self::Item)` with empty effects
+// (the stdlib hasn't migrated to `<effect E>` yet). The closure's body
+// uses `Stdout` via `println`. Since the stdlib's parameter type
+// genuinely says "no effects declared", the closure body should be
+// allowed to inherit the caller's effect set rather than being
+// restricted to the (empty) declared effects.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let nums: Array<i32> = [1, 2, 3];
+    nums.iter().for_each(|x: i32| {
+        println(`{x}`);
+    });
+}
+
+__DATA__
+{"stdout_contains": ["1", "2", "3"]}

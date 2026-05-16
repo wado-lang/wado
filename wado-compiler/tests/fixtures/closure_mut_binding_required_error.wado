@@ -1,0 +1,17 @@
+// Calling a `fn mut` closure through a non-`mut` binding is a compile
+// error. Mirrors Rust's FnMut rule and corresponds to the &mut self
+// calling convention. See wep-2026-01-16-closure-implementation.md
+// ("Mutability Binding Requirement").
+
+test "fn mut requires mut binding" {
+    let mut count = 0;
+    // `inc` captures `&mut count`, so its type is `fn mut() -> ()`.
+    // Binding it via `let` (not `let mut`) should reject the call below.
+    let inc = || {
+        count += 1;
+    };
+    inc();
+}
+
+__DATA__
+{"test": {}, "compile_error": "mut"}

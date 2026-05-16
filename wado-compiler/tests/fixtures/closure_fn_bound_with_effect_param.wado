@@ -1,0 +1,21 @@
+// Regression: `<effect E, F: fn() with E>` — when the fn-bound contains
+// an effect-param, eager bound resolution in `register_generic_params`
+// must see `E` as `EffectRef::Param`, not a phantom `EffectRef::Concrete`.
+// Otherwise the closure passed at the call site fails effect-checking
+// because its inferred `Stdout` effect can't unify with the phantom
+// `Concrete { name: "E" }`.
+
+use { println, Stdout } from "core:cli";
+
+fn run_with<effect E, F: fn() with E>(mut f: F) with E {
+    f();
+}
+
+export fn run() with Stdout {
+    run_with(|| {
+        println("via fn-bound with effect param");
+    });
+}
+
+__DATA__
+{"stdout_contains": ["via fn-bound with effect param"]}
