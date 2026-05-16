@@ -1205,6 +1205,20 @@ impl FunctionTranslator<'_, '_> {
                                             type_id: field_tid, ..
                                         },
                                     ) => binding_tid != field_tid,
+                                    // Primitive tuple-field stored into a
+                                    // `Box<primitive>` slot: the tuple field's
+                                    // WIR type is `i32` / `i64` / etc., but the
+                                    // binding's local was promoted to a Box
+                                    // wrapper by the address-taken boxing pass
+                                    // (or the resolver inferred `Box<T>` for
+                                    // the variant-generic site, as the
+                                    // synthesized
+                                    // `TreeMap<String, bool>^Serialize` body
+                                    // does). Wrap in `StructNew` so the
+                                    // primitive lands in the Box's payload
+                                    // field instead of being stored straight
+                                    // into the ref slot.
+                                    (WirType::Ref { .. }, _) => true,
                                     _ => false,
                                 };
                                 let value = if needs_boxing {
