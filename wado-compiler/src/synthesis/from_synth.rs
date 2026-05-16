@@ -17,19 +17,18 @@ use crate::tir::{
 };
 
 pub fn synthesize_from(module: &mut TirModule) {
-    // Resolve the canonical `From` trait name via the compiler-item registry
-    // so a stdlib rename of the trait still routes synthesis through the
-    // same anchor. The `From<T>` mangled form keeps the registered name as
-    // its prefix.
-    let from_prefix = {
-        let trait_name = module
-            .type_table
-            .borrow()
-            .compiler_items()
-            .trait_name(CompilerItem::From)
-            .to_string();
-        format!("{trait_name}<")
-    };
+    // Resolve the canonical `From` trait name via the compiler-item
+    // registry so a stdlib rename of the trait still routes synthesis
+    // through the same anchor. The `From<T>` mangled form keeps the
+    // registered name as its prefix; build the prefix from the
+    // registry-driven name and drain matching requests in one pass.
+    let from_trait_name = module
+        .type_table
+        .borrow()
+        .compiler_items()
+        .trait_name(CompilerItem::From)
+        .to_string();
+    let from_prefix = format!("{from_trait_name}<");
     let requests: Vec<SynthesisRequest> = module
         .synthesis_requests
         .extract_if(.., |r| r.trait_name.starts_with(from_prefix.as_str()))
@@ -38,9 +37,8 @@ pub fn synthesize_from(module: &mut TirModule) {
         return;
     }
 
-    let existing = collect_existing_from_methods(module, &from_prefix);
+    let existing = collect_existing_from_methods(module, &from_trait_name);
     let mut generated = Vec::new();
-    let from_trait_name = from_prefix.trim_end_matches('<');
 
     for req in &requests {
         let from_type_name = extract_from_type_name(&req.trait_name, &from_prefix);
@@ -67,9 +65,9 @@ fn extract_from_type_name(trait_name: &str, from_prefix: &str) -> String {
 
 fn collect_existing_from_methods(
     module: &TirModule,
-    from_prefix: &str,
+    from_trait_name: &str,
 ) -> crate::hashmap::IndexSet<String> {
-    let from_bare = from_prefix.trim_end_matches('<');
+    let from_prefix = format!("{from_trait_name}<");
     module
         .functions
         .iter()
@@ -77,7 +75,8 @@ fn collect_existing_from_methods(
             let func = f.borrow();
             func.method_info.as_ref().and_then(|info| {
                 info.trait_name.as_ref().and_then(|trait_name| {
-                    if trait_name == from_bare || trait_name.starts_with(from_prefix) {
+                    if trait_name == from_trait_name || trait_name.starts_with(from_prefix.as_str())
+                    {
                         Some(MethodName::format_local(
                             &info.base_struct_name,
                             Some(trait_name),

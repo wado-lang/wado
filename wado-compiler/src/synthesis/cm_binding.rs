@@ -502,7 +502,8 @@ mod tests {
 
     use super::export_adapter::synthesize_lift_from_flat_params;
     use super::types::{
-        compute_export_flat_param_types, export_needs_param_lifting, param_needs_lifting,
+        CmStdlibNames, compute_export_flat_param_types, export_needs_param_lifting,
+        param_needs_lifting,
     };
     use super::*;
     use crate::ast::{NamedType, Type};
@@ -597,7 +598,7 @@ mod tests {
     fn flatten_param_i32() {
         let reg = WasiRegistry::new();
         assert_eq!(
-            flatten_param_type(&named_type("i32"), &reg),
+            flatten_param_type(&named_type("i32"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I32]
         );
     }
@@ -606,7 +607,7 @@ mod tests {
     fn flatten_param_i64() {
         let reg = WasiRegistry::new();
         assert_eq!(
-            flatten_param_type(&named_type("i64"), &reg),
+            flatten_param_type(&named_type("i64"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I64]
         );
     }
@@ -615,7 +616,7 @@ mod tests {
     fn flatten_param_f64() {
         let reg = WasiRegistry::new();
         assert_eq!(
-            flatten_param_type(&named_type("f64"), &reg),
+            flatten_param_type(&named_type("f64"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::F64]
         );
     }
@@ -624,7 +625,7 @@ mod tests {
     fn flatten_param_string() {
         let reg = WasiRegistry::new();
         assert_eq!(
-            flatten_param_type(&named_type("String"), &reg),
+            flatten_param_type(&named_type("String"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I32, TypeTable::I32]
         );
     }
@@ -633,7 +634,7 @@ mod tests {
     fn flatten_param_bool() {
         let reg = WasiRegistry::new();
         assert_eq!(
-            flatten_param_type(&named_type("bool"), &reg),
+            flatten_param_type(&named_type("bool"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I32]
         );
     }
@@ -641,18 +642,20 @@ mod tests {
     #[test]
     fn flatten_param_unit() {
         let reg = WasiRegistry::new();
-        assert!(flatten_param_type(&Type::Tuple(vec![]), &reg).is_empty());
+        assert!(
+            flatten_param_type(&Type::Tuple(vec![]), &reg, &CmStdlibNames::for_tests()).is_empty()
+        );
     }
 
     #[test]
     fn flatten_param_newtype_u64() {
         let (reg, _) = WasiRegistry::build_from_stdlib();
         assert_eq!(
-            flatten_param_type(&named_type("Duration"), reg),
+            flatten_param_type(&named_type("Duration"), reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I64]
         );
         assert_eq!(
-            flatten_param_type(&named_type("Mark"), reg),
+            flatten_param_type(&named_type("Mark"), reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I64]
         );
     }
@@ -909,6 +912,7 @@ mod tests {
             i32_const(100),
             &mut 0,
             &mut vec![],
+            &CmStdlibNames::for_tests(),
         );
         assert_eq!(stmts.len(), 1);
     }
@@ -926,6 +930,7 @@ mod tests {
             i32_const(100),
             &mut 0,
             &mut vec![],
+            &CmStdlibNames::for_tests(),
         );
         assert_eq!(stmts.len(), 1);
     }
@@ -939,6 +944,7 @@ mod tests {
             i32_const(100),
             &mut 0,
             &mut vec![],
+            &CmStdlibNames::for_tests(),
         );
         assert!(stmts.is_empty());
     }
@@ -957,6 +963,7 @@ mod tests {
             i32_const(100),
             &mut next_local,
             &mut vec![],
+            &CmStdlibNames::for_tests(),
         );
         // Should produce: let __packed = cm_lower_string(value); store ptr; store len
         assert_eq!(stmts.len(), 3);
@@ -1165,7 +1172,8 @@ mod tests {
     #[test]
     fn compute_flat_params_empty() {
         let params: Vec<(String, Type)> = vec![];
-        let type_table = TypeTable::new();
+        let mut type_table = TypeTable::new();
+        register_option_result_for_tests(&mut type_table);
         let tir_modules = IndexMap::default();
         let flat = compute_export_flat_param_types(&params, &tir_modules, &type_table);
         assert!(flat.is_empty());
@@ -1177,7 +1185,8 @@ mod tests {
             ("a".to_string(), named_type("i32")),
             ("b".to_string(), named_type("f64")),
         ];
-        let type_table = TypeTable::new();
+        let mut type_table = TypeTable::new();
+        register_option_result_for_tests(&mut type_table);
         let tir_modules = IndexMap::default();
         let flat = compute_export_flat_param_types(&params, &tir_modules, &type_table);
         assert_eq!(flat, vec![cm_abi::CmValType::I32, cm_abi::CmValType::F64]);
@@ -1186,7 +1195,8 @@ mod tests {
     #[test]
     fn compute_flat_params_string() {
         let params = vec![("name".to_string(), named_type("String"))];
-        let type_table = TypeTable::new();
+        let mut type_table = TypeTable::new();
+        register_option_result_for_tests(&mut type_table);
         let tir_modules = IndexMap::default();
         let flat = compute_export_flat_param_types(&params, &tir_modules, &type_table);
         assert_eq!(flat, vec![cm_abi::CmValType::I32, cm_abi::CmValType::I32]);
@@ -1199,7 +1209,8 @@ mod tests {
             ("name".to_string(), named_type("String")),
             ("b".to_string(), named_type("f32")),
         ];
-        let type_table = TypeTable::new();
+        let mut type_table = TypeTable::new();
+        register_option_result_for_tests(&mut type_table);
         let tir_modules = IndexMap::default();
         let flat = compute_export_flat_param_types(&params, &tir_modules, &type_table);
         assert_eq!(

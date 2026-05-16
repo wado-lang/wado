@@ -39,6 +39,7 @@ fn replace_wasi_derived_type_recursive(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
+    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
     let old_type = {
         let mut tt = type_table.borrow_mut();
         wasi_type_to_type_id(wasi_type, &mut tt, wasi_registry, wasi_package)
@@ -67,7 +68,7 @@ fn replace_wasi_derived_type_recursive(
         }
     }
     match wasi_type {
-        Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
+        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
             let tt = type_table.borrow();
             if let Some(new_elem_args) = tt.generic_type_args(user_type)
                 && new_elem_args.len() == 1
@@ -880,6 +881,7 @@ fn rewrite_calls_in_expr(
     wasi_registry: &WasiRegistry,
     type_table: &Rc<RefCell<TypeTable>>,
 ) {
+    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
     // Check if this is an effect-like Call that should be rewritten
     let is_effect_call = matches!(&expr.kind, TirExprKind::Call { func, .. }
         if func.module_source.clone().is_effect_like() && func.module_source.clone().interface_name().is_some());
@@ -923,7 +925,7 @@ fn rewrite_calls_in_expr(
                     if i < adapter.params.len() && adapter.params[i].type_id != arg.expr.type_id {
                         let is_gc_passthrough = wasi_func.is_some_and(|f| {
                             i < f.params.len()
-                                && is_gc_passthrough_param(&f.params[i].2, wasi_registry)
+                                && is_gc_passthrough_param(&f.params[i].2, wasi_registry, &names)
                         });
                         if is_streaming && adapter.params[i].type_id == TypeTable::I32 {
                             // Streaming: keep adapter param as i32, cast the arg instead
@@ -1070,6 +1072,7 @@ fn rewrite_calls_in_expr(
                                 && is_gc_passthrough_param(
                                     &f.params[wasi_param_idx].2,
                                     wasi_registry,
+                                    &names,
                                 )
                         });
                         if is_streaming && adapter.params[param_idx].type_id == TypeTable::I32 {
@@ -1140,11 +1143,11 @@ fn rewrite_calls_in_expr(
                         continue;
                     }
                     let param_type = &func_info.params[wasi_param_idx].2;
-                    let flat_tys = flatten_param_type(param_type, wasi_registry);
+                    let flat_tys = flatten_param_type(param_type, wasi_registry, &names);
                     if flat_tys.is_empty() {
                         continue;
                     }
-                    if is_gc_passthrough_param(param_type, wasi_registry) {
+                    if is_gc_passthrough_param(param_type, wasi_registry, &names) {
                         if matches!(arg.expr.kind, TirExprKind::Null) {
                             let option_type_id = {
                                 let mut tt = type_table.borrow_mut();
@@ -1236,10 +1239,10 @@ fn rewrite_calls_in_expr(
                     for (i, (_name, _, param_type)) in func_info.params.iter().enumerate() {
                         let is_gc_passthrough = matches!(
                             param_type,
-                            Type::Named(n) if n.name == "String"
+                            Type::Named(n) if n.name == names.string
                         ) || matches!(
                             param_type,
-                            Type::Generic(g) if g.name == "Array" && g.args.len() == 1
+                            Type::Generic(g) if g.name == names.array && g.args.len() == 1
                         );
                         if is_gc_passthrough {
                             if flat_idx < adapter.params.len()
@@ -1254,7 +1257,7 @@ fn rewrite_calls_in_expr(
                             }
                             flat_idx += 1;
                         } else {
-                            let flat_tys = flatten_param_type(param_type, wasi_registry);
+                            let flat_tys = flatten_param_type(param_type, wasi_registry, &names);
                             flat_idx += flat_tys.len().max(1);
                         }
                     }
@@ -1283,11 +1286,11 @@ fn rewrite_calls_in_expr(
             let flat_call_args = if let Some(func_info) = &wasi_func_info {
                 let mut flat = Vec::new();
                 for (i, (_param_name, _, param_type)) in func_info.params.iter().enumerate() {
-                    let flat_tys = flatten_param_type(param_type, wasi_registry);
+                    let flat_tys = flatten_param_type(param_type, wasi_registry, &names);
                     if flat_tys.is_empty() || i >= taken_args.len() {
                         continue;
                     }
-                    if is_gc_passthrough_param(param_type, wasi_registry) {
+                    if is_gc_passthrough_param(param_type, wasi_registry, &names) {
                         let arg = &taken_args[i];
                         // Convert bare Null to VariantConstruct None.
                         // Use the binding's param type (from the WASI registry)

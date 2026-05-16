@@ -1164,9 +1164,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ty: &Type,
         wasi_package: Option<&str>,
     ) -> TypeId {
+        let string_struct_name = self
+            .type_table
+            .borrow()
+            .compiler_items()
+            .struct_name(crate::compiler_item::CompilerItem::String)
+            .to_string();
+        let array_struct_name = self
+            .type_table
+            .borrow()
+            .compiler_items()
+            .struct_name(crate::compiler_item::CompilerItem::Array)
+            .to_string();
+        if let Type::Named(named) = ty
+            && named.name == string_struct_name
+        {
+            return self.get_string_struct_type();
+        }
         match ty {
             Type::Named(named) => match named.name.as_str() {
-                "String" => self.get_string_struct_type(),
                 "i8" => TypeTable::I8,
                 "i16" => TypeTable::I16,
                 "i32" => TypeTable::I32,
@@ -1316,11 +1332,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 }
             },
+            Type::Generic(generic)
+                if generic.name == array_struct_name && generic.args.len() == 1 =>
+            {
+                let elem_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
+                self.type_table.borrow_mut().make_array(elem_type)
+            }
             Type::Generic(generic) => match generic.name.as_str() {
-                "Array" if generic.args.len() == 1 => {
-                    let elem_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
-                    self.type_table.borrow_mut().make_array(elem_type)
-                }
                 "Option" if generic.args.len() == 1 => {
                     let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
                     self.type_table.borrow_mut().make_option(inner_type)

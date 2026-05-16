@@ -421,23 +421,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // against the impl's owning type. This is the only place
                     // where the method declaration AND its owner type are
                     // simultaneously in scope.
-                    {
-                        use crate::compiler_item::Resolved;
-                        for method in &impl_block.methods {
-                            super::item::register_method_compiler_item(
-                                &scope.type_table,
-                                &method.attrs,
-                                &method.name,
-                                &scope.get_type_name(&impl_block.ty),
-                                &scope.current_module_source,
-                                method.span,
-                                scope.logger,
-                            );
-                            // Keep `Resolved` referenced even if the helper
-                            // ends up renamed; this comment is a placeholder
-                            // for IDE find-usages searches.
-                            let _ = std::marker::PhantomData::<Resolved>;
-                        }
+                    for method in &impl_block.methods {
+                        super::item::register_method_compiler_item(
+                            &scope.type_table,
+                            &method.attrs,
+                            &method.name,
+                            &scope.get_type_name(&impl_block.ty),
+                            &scope.current_module_source,
+                            method.span,
+                            scope.logger,
+                        );
                     }
 
                     for method in &impl_block.methods {

@@ -318,6 +318,13 @@ fn build_template_block(
     ctx: &TemplateCtx,
 ) -> TirExpr {
     let tt = ctx.tt;
+    let string_struct_name = tt
+        .borrow()
+        .compiler_items()
+        .struct_name(crate::compiler_item::CompilerItem::String)
+        .to_string();
+    let with_capacity_qualified =
+        crate::name::MethodName::format_local(&string_struct_name, None, "with_capacity");
     let label = "__tmpl".to_string();
 
     // Estimate capacity: sum of literal lengths + 16 per interpolation
@@ -336,10 +343,10 @@ fn build_template_block(
         TirExprKind::Call {
             func: FunctionRef {
                 module_source: ModuleSource::string(),
-                name: "String::with_capacity".to_string(),
+                name: with_capacity_qualified.clone(),
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
-                    "String".to_string(),
+                    string_struct_name.clone(),
                     None,
                     "with_capacity".to_string(),
                 )),
@@ -390,15 +397,17 @@ fn build_template_block(
                     string_type,
                     span,
                 );
+                let push_str_qualified =
+                    crate::name::MethodName::format_local(&string_struct_name, None, "push_str");
                 let push_str_call = TirExpr::new(
                     TirExprKind::method_call(
                         Box::new(buf_ref),
                         FunctionRef {
                             module_source: ModuleSource::string(),
-                            name: "String::push_str".to_string(),
+                            name: push_str_qualified,
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
-                                "String".to_string(),
+                                string_struct_name.clone(),
                                 None,
                                 "push_str".to_string(),
                             )),
@@ -433,15 +442,20 @@ fn build_template_block(
                     );
                     // Deref if needed (&String → String)
                     let derefed = deref_to_inner(*resolved, string_type, span);
+                    let push_str_qualified = crate::name::MethodName::format_local(
+                        &string_struct_name,
+                        None,
+                        "push_str",
+                    );
                     let push_str_call = TirExpr::new(
                         TirExprKind::method_call(
                             Box::new(buf_ref),
                             FunctionRef {
                                 module_source: ModuleSource::string(),
-                                name: "String::push_str".to_string(),
+                                name: push_str_qualified,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
-                                    "String".to_string(),
+                                    string_struct_name.clone(),
                                     None,
                                     "push_str".to_string(),
                                 )),

@@ -781,12 +781,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let (type_name, concrete_type_args) = {
             let tt = self.type_table.borrow();
             let effective_id = tt.get_ultimate_base_type(concrete_type_id);
+            let array_name = tt
+                .compiler_items()
+                .struct_name(crate::compiler_item::CompilerItem::Array)
+                .to_string();
             match tt.get(effective_id).clone() {
                 ResolvedType::GenericInstance {
                     name, type_args, ..
                 } => (name, type_args),
                 ResolvedType::Struct { name, .. } => (name, vec![]),
-                ResolvedType::BuiltinArray(elem) => ("Array".to_string(), vec![elem]),
+                ResolvedType::BuiltinArray(elem) => (array_name, vec![elem]),
                 // Primitives (`i32`, `f64`, `bool`, ...) can implement traits
                 // with associated types just like structs. Without this arm,
                 // a generic call like `parse_range::<i32>(...)` would skip
