@@ -178,27 +178,31 @@ fn discover_packages(
     let mut runs: Vec<PackageRun> = Vec::new();
     let mut queue: Vec<PathBuf> = Vec::new();
 
-    let root_manifest = if apply_manifest_excludes {
-        package_manifest_excludes(&invocation_root)?
+    let (root_exclude_manifest, root_include_manifest) = if apply_manifest_excludes {
+        package_manifest_test_filters(&invocation_root)?
     } else {
-        Vec::new()
+        (Vec::new(), Vec::new())
     };
-    let root_excludes = compile_excludes(&root_manifest, extra_excludes)?;
+    let root_excludes = compile_excludes(&root_exclude_manifest, extra_excludes)?;
+    let root_includes = compile_includes(&root_include_manifest)?;
     walk_into(
         &invocation_root,
         &invocation_root,
         &root_excludes,
+        &root_includes,
         &mut runs,
         &mut queue,
     )?;
 
     while let Some(pkg_root) = queue.pop() {
-        let manifest = package_manifest_excludes(&pkg_root)?;
-        let excludes = compile_excludes(&manifest, extra_excludes)?;
+        let (exclude_manifest, include_manifest) = package_manifest_test_filters(&pkg_root)?;
+        let excludes = compile_excludes(&exclude_manifest, extra_excludes)?;
+        let includes = compile_includes(&include_manifest)?;
         walk_into(
             &pkg_root,
             &invocation_root,
             &excludes,
+            &includes,
             &mut runs,
             &mut queue,
         )?;
@@ -222,6 +226,14 @@ fn compile_excludes(
     discover::ExcludeSet::compile(&combined).map_err(CliExit::error)
 }
 
+/// Compile a package's include set from the manifest's `[test].include`
+/// patterns. There is no CLI counterpart (yet) — includes are a manifest
+/// concept that lets stdlib-style packages keep `*_test.wado` files visible
+/// inside an otherwise-excluded directory.
+fn compile_includes(manifest: &[String]) -> Result<discover::IncludeSet, CliExit> {
+    discover::IncludeSet::compile(manifest).map_err(CliExit::error)
+}
+
 /// Walk a single package root, append its `PackageRun`, and queue its
 /// sub-packages (in source order — pushed in reverse so the LIFO `pop`
 /// emits them root-first).
@@ -229,10 +241,12 @@ fn walk_into(
     pkg_root: &Path,
     invocation_root: &Path,
     excludes: &discover::ExcludeSet,
+    includes: &discover::IncludeSet,
     runs: &mut Vec<PackageRun>,
     queue: &mut Vec<PathBuf>,
 ) -> Result<(), CliExit> {
-    let result = discover::discover_test_files(pkg_root, excludes).map_err(CliExit::error)?;
+    let result =
+        discover::discover_test_files(pkg_root, excludes, includes).map_err(CliExit::error)?;
     let label = relative_label(invocation_root, pkg_root);
     let paths = result.files.iter().map(|p| display_path(p)).collect();
     runs.push(PackageRun { label, paths });
@@ -242,13 +256,17 @@ fn walk_into(
     Ok(())
 }
 
-/// Read `[test].exclude` from the `wado.toml` rooted at `pkg_root` (if any).
-/// Returns the empty list when no manifest sits exactly at that directory —
-/// sub-packages without their own `wado.toml` simply contribute no excludes.
-fn package_manifest_excludes(pkg_root: &Path) -> Result<Vec<String>, CliExit> {
+/// Read `[test].exclude` and `[test].include` from the `wado.toml` rooted at
+/// `pkg_root` (if any). Returns empty lists when no manifest sits exactly at
+/// that directory — sub-packages without their own `wado.toml` simply
+/// contribute no filters.
+fn package_manifest_test_filters(pkg_root: &Path) -> Result<(Vec<String>, Vec<String>), CliExit> {
     match project_manifest::discover(pkg_root) {
-        Ok(Some(project)) if project.root == pkg_root => Ok(project.manifest.test.exclude),
-        Ok(_) => Ok(Vec::new()),
+        Ok(Some(project)) if project.root == pkg_root => Ok((
+            project.manifest.test.exclude,
+            project.manifest.test.include,
+        )),
+        Ok(_) => Ok((Vec::new(), Vec::new())),
         Err(e) => Err(CliExit::error(e)),
     }
 }
