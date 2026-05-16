@@ -398,7 +398,7 @@ async fn compile_one(
         };
         let result = wado_compiler::compile_with_options(source, &host, Some(input_path), options)
             .await
-            .map_err(|_| "compilation failed".to_string())?;
+            .map_err(|_| diagnostics_summary(&host, "compilation failed"))?;
         let mut config = wasmprinter::Config::new();
         config.fold_instructions(true);
         let mut wat = String::new();
