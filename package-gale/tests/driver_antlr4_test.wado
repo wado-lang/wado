@@ -66,7 +66,6 @@ test "tokenize lexer commands" {
     assert tokens.len() >= 5, `expected at least 5 tokens, got {tokens.len()}`;
 }
 
-// --- Parser tests ---
 
 test "parse minimal grammar" {
     // ANTLR4 lexer produces ID tokens, but the parser expects RULE_REF/TOKEN_REF
@@ -76,7 +75,6 @@ test "parse minimal grammar" {
     assert result matches { Err(_) }, "expected parse to fail due to missing semantic predicates";
 }
 
-// --- User-defined channel routing ---
 //
 // ANTLRv4Lexer declares `channels { OFF_CHANNEL, COMMENT }`, so DEFAULT=0,
 // HIDDEN=1, OFF_CHANNEL=2, COMMENT=3. DOC/BLOCK/LINE comments route to

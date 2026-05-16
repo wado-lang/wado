@@ -1,13 +1,4 @@
-use {
-    Grammar,
-    ParserRule,
-    Alternative,
-    Element,
-    RepeatElement,
-    RepeatKind,
-    LabelElement,
-    GroupElement,
-} from "./ir.wado";
+use { Grammar, ParserRule, Alternative, Element, RepeatElement, GroupElement } from "./ir.wado";
 use {
     rule_type_name,
     literal_field_name,
@@ -31,10 +22,24 @@ use {
     str_set_insert_all,
     gen_visibility_comment,
     to_snake_case,
+    first_contains,
+    dedup_append_arr,
+    dedup_name,
+    peek_dedup_name,
+    element_field_info,
+    replay_element_names,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, is_simple_token_group, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
 use { TreeSet } from "core:collections";
+use { PredictionNode, build_prediction } from "./prediction.wado";
+use {
+    compute_overlap_groups,
+    has_multi_alt_groups,
+    sort_group_by_specificity,
+    sort_group_by_mandatory_count_desc,
+    sort_group_by_element_count,
+} from "./alt_grouping.wado";
 use {
     LoweredGrammar,
     Rule,
@@ -77,891 +82,6 @@ use {
 use { unwrap_label } from "./lr_util.wado";
 use { compute_shapes_for_alt, shape_lookahead_signature_for_alt } from "./lower.wado";
 
-fn first_contains(first: &Array<String>, token: &String) -> bool {
-    for let item of first {
-        if *item == *token {
-            return true;
-        }
-    }
-    return false;
-}
-
-fn dedup_append_arr(arr: &mut Array<String>, source: &Array<String>) {
-    for let tk of source {
-        if !first_contains(arr, tk) {
-            arr.push(*tk);
-        }
-    }
-}
-
-// --- Prediction Engine ---
-
-variant PredictionNode {
-    Leaf(i32),
-    Dispatch(PredictionDispatch),
-    Consume(ConsumeNode),
-    Ambiguous(Array<i32>),
-}
-
-struct ConsumeNode {
-    element: Element,
-    child: PredictionNode,
-}
-
-struct PredictionDispatch {
-    depth: i32,
-    branches: Array<PredictionBranch>,
-}
-
-struct PredictionBranch {
-    tokens: Array<String>,
-    child: PredictionNode,
-}
-
-/// Return the index of an existing branch whose child equals `child`, or -1
-/// when no branch matches. Callers use this to fold a new (token, child) entry
-/// into an existing branch instead of creating a duplicate.
-fn find_merge_branch(branches: &Array<PredictionBranch>, child: &PredictionNode) -> i32 {
-    for let mut b = 0; b < branches.len(); b += 1 {
-        if prediction_node_eq(&branches[b].child, child) {
-            return b;
-        }
-    }
-    return -1;
-}
-
-fn build_prediction(alt_indices: &Array<i32>, first_sets: &Array<Array<String>>, alt_elements: &Array<Array<Element>>, depth: i32, max_depth: i32, ctx: &mut GenContext) -> PredictionNode {
-    // Build initial SLL configs: one per alternative, at element position 0.
-    let mut configs: Array<SllConfig> = [];
-    for let mut i = 0; i < alt_indices.len(); i += 1 {
-        configs.push(SllConfig {
-            alt_index: alt_indices[i],
-            elements: alt_elements[i],
-            pos: 0,
-            return_stack: [],
-        });
-    }
-    let tree = build_sll_node(&configs, 0, max_depth, ctx);
-    return strip_dead_consume(tree);
-}
-
-/// Strip Consume nodes whose child contains any Ambiguous — fall back to
-/// Ambiguous from the original position rather than consuming then failing.
-/// This handles both direct Consume → Ambiguous and indirect cases like
-/// Consume → Dispatch → (Branch → Ambiguous).
-fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
-    return match node {
-        Consume(c) => {
-            let child = strip_dead_consume(c.child);
-            if prediction_contains_ambiguous(&child) {
-                let mut indices: Array<i32> = [];
-                prediction_collect_all_indices(&child, &mut indices);
-                PredictionNode::Ambiguous(indices);
-            } else {
-                PredictionNode::Consume(ConsumeNode { element: c.element, child });
-            }
-        },
-        Dispatch(d) => {
-            let mut new_branches: Array<PredictionBranch> = [];
-            for let b of d.branches {
-                new_branches.push(PredictionBranch {
-                    tokens: b.tokens,
-                    child: strip_dead_consume(b.child),
-                });
-            }
-            PredictionNode::Dispatch(PredictionDispatch { depth: d.depth, branches: new_branches });
-        },
-        _ => node,
-    };
-}
-
-fn prediction_contains_ambiguous(node: &PredictionNode) -> bool {
-    return match *node {
-        Ambiguous(_) => true,
-        Consume(c) => prediction_contains_ambiguous(&c.child),
-        Dispatch(d) => {
-            for let b of &d.branches {
-                if prediction_contains_ambiguous(&b.child) {
-                    return true;
-                }
-            }
-            return false;
-        },
-        Leaf(_) => false,
-    };
-}
-
-fn prediction_collect_all_indices(node: &PredictionNode, out: &mut Array<i32>) {
-    match *node {
-        Ambiguous(indices) => {
-            for let i of &indices {
-                if !out.iter().any(|x: i32| x == *i) {
-                    out.push(*i);
-                }
-            }
-        },
-        Leaf(idx) => {
-            if !out.iter().any(|x: i32| x == idx) {
-                out.push(idx);
-            }
-        },
-        Consume(c) => prediction_collect_all_indices(&c.child, out),
-        Dispatch(d) => {
-            for let b of &d.branches {
-                prediction_collect_all_indices(&b.child, out);
-            }
-        },
-    }
-}
-
-
-struct SllReturn {
-    elements: Array<Element>,
-    pos: i32,
-}
-
-struct SllConfig {
-    alt_index: i32,
-    elements: Array<Element>,
-    pos: i32,
-    return_stack: Array<SllReturn>,
-}
-
-fn sll_config_clone(c: &SllConfig) -> SllConfig {
-    return SllConfig {
-        alt_index: c.alt_index,
-        elements: c.elements,
-        pos: c.pos,
-        return_stack: c.return_stack,
-    };
-}
-
-fn push_return(stack: &Array<SllReturn>, elements: Array<Element>, pos: i32) -> Array<SllReturn> {
-    let mut new_stack: Array<SllReturn> = [];
-    for let s of stack {
-        new_stack.push(*s);
-    }
-    new_stack.push(SllReturn { elements, pos });
-    return new_stack;
-}
-
-fn pop_return(c: &SllConfig) -> SllConfig {
-    let last_idx = c.return_stack.len() - 1;
-    let ret = &c.return_stack[last_idx];
-    let mut new_stack: Array<SllReturn> = [];
-    for let mut i = 0; i < last_idx; i += 1 {
-        new_stack.push(c.return_stack[i]);
-    }
-    return SllConfig {
-        alt_index: c.alt_index,
-        elements: ret.elements,
-        pos: ret.pos,
-        return_stack: new_stack,
-    };
-}
-
-
-/// Identity closure — nullable handling is done in sll_config_first
-/// (first_of_elements_from) and sll_advance (explicit skip logic).
-fn sll_closure(configs: &Array<SllConfig>) -> Array<SllConfig> {
-    return *configs;
-}
-
-/// True when the config has fully consumed its elements and has no return
-/// frame to pop into — i.e. the alt's body is finished and any further token
-/// belongs to the calling context. Opaque configs (`pos < 0`) are not at-end.
-///
-/// The check walks `return_stack` from the most-recently-pushed frame back
-/// to the oldest, mirroring what a sequence of `pop_return` calls would
-/// expose. Walking by index keeps this O(n); the previous recursive
-/// implementation was O(n^2) because each `pop_return` rebuilt the entire
-/// surviving prefix of `return_stack` into a fresh `Array`.
-fn config_is_at_end(c: &SllConfig) -> bool {
-    if c.pos < 0 {
-        return false;
-    }
-    if c.pos < c.elements.len() {
-        return false;
-    }
-    let mut i = c.return_stack.len();
-    while i > 0 {
-        i -= 1;
-        let frame = &c.return_stack[i];
-        if frame.pos < frame.elements.len() {
-            return false;
-        }
-    }
-    return true;
-}
-
-
-/// Compute FIRST set of the current position in a config.
-/// Includes tokens from nullable elements that were skipped by closure.
-/// When at end of elements with a return stack, pops and continues from caller.
-fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> Array<String> {
-    if c.pos < 0 {
-        return [];
-    }
-    if c.pos >= c.elements.len() {
-        if c.return_stack.is_empty() {
-            return [];
-        }
-        let popped = pop_return(c);
-        return sll_config_first(&popped, ctx);
-    }
-    return ctx.first_of_elements_from(&c.elements, c.pos);
-}
-
-/// Advance a config by one token. For terminals, advance pos.
-/// For RuleRef, expand into the rule's alternatives (entering the rule).
-fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth: i32 = 0) -> Array<SllConfig> {
-    // Limit inline expansion depth to prevent explosion from recursive rules.
-    if inline_depth > 2 {
-        return [];
-    }
-    if c.pos < 0 {
-        return [];
-    }
-    // End of current elements: pop return stack if available.
-    if c.pos >= c.elements.len() {
-        if c.return_stack.is_empty() {
-            return [];
-        }
-        let popped = pop_return(c);
-        return sll_advance(&popped, token, ctx, inline_depth);
-    }
-    let elem = &c.elements[c.pos];
-
-    // Nullable element (Optional, Star): either match its inner or skip it.
-    if is_nullable(elem) {
-        let mut results: Array<SllConfig> = [];
-        let mut visiting: Array<String> = [];
-        if first_contains(&ctx.first_of_element(elem, &mut visiting), token) {
-            // Check if the inner element is a multi-token RuleRef.
-            // If so, enter it via return stack instead of skipping to pos+1.
-            let mut entered = false;
-            if let Repeat(rep) = elem {
-                if let RuleRef(rr) = rep.element {
-                    let mut stv: Array<String> = [];
-                    if !ctx.rule_is_single_token(&rr.name, &mut stv) && c.return_stack.len() < 1 {
-                        let inner_rule = ctx.find_rule(&rr.name);
-                        let inner_alt_count = if let Some(r) = inner_rule {
-                            r.alternatives.len();
-                        } else {
-                            0;
-                        };
-                        if inner_alt_count <= 8 {
-                            entered = true;
-                            let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
-                            if let Some(inner_rule) = inner_rule {
-                                for let alt of inner_rule.alternatives {
-                                    let mut v2: Array<String> = [];
-                                    if !first_contains(&ctx.first_of_alt(&alt, &mut v2), token) {
-                                        continue;
-                                    }
-                                    let exp = SllConfig {
-                                        alt_index: c.alt_index,
-                                        elements: alt.elements,
-                                        pos: 0,
-                                        return_stack: new_stack,
-                                    };
-                                    let advanced = sll_advance(&exp, token, ctx, inline_depth + 1);
-                                    for let a of advanced {
-                                        results.push(a);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if !entered {
-                results.push(SllConfig {
-                    alt_index: c.alt_index,
-                    elements: c.elements,
-                    pos: c.pos + 1,
-                    return_stack: c.return_stack,
-                });
-            }
-        }
-        // Also try skipping: advance past all consecutive nullables non-recursively.
-        let mut skip_pos = c.pos + 1;
-        while skip_pos < c.elements.len() && is_nullable(&c.elements[skip_pos]) {
-            let mut v: Array<String> = [];
-            if first_contains(&ctx.first_of_element(&c.elements[skip_pos], &mut v), token) {
-                results.push(SllConfig {
-                    alt_index: c.alt_index,
-                    elements: c.elements,
-                    pos: skip_pos + 1,
-                    return_stack: c.return_stack,
-                });
-            }
-            skip_pos += 1;
-        }
-        if skip_pos < c.elements.len() {
-            let skipped_elem = &c.elements[skip_pos];
-            if let TokenRef(t) = skipped_elem {
-                if `TK_{t.name}` == *token {
-                    results.push(SllConfig {
-                        alt_index: c.alt_index,
-                        elements: c.elements,
-                        pos: skip_pos + 1,
-                        return_stack: c.return_stack,
-                    });
-                }
-            } else if let Literal(l) = skipped_elem {
-                if literal_const_name(&l.text) == *token {
-                    results.push(SllConfig {
-                        alt_index: c.alt_index,
-                        elements: c.elements,
-                        pos: skip_pos + 1,
-                        return_stack: c.return_stack,
-                    });
-                }
-            } else if let RuleRef(r) = skipped_elem {
-                let mut v: Array<String> = [];
-                if first_contains(&ctx.first_of_rule(&r.name, &mut v), token) {
-                    let mut stv: Array<String> = [];
-                    if ctx.rule_is_single_token(&r.name, &mut stv) {
-                        results.push(SllConfig {
-                            alt_index: c.alt_index,
-                            elements: c.elements,
-                            pos: skip_pos + 1,
-                            return_stack: c.return_stack,
-                        });
-                    } else {
-                        results.push(SllConfig {
-                            alt_index: c.alt_index,
-                            elements: c.elements,
-                            pos: -1,
-                            return_stack: c.return_stack,
-                        });
-                    }
-                }
-            } else {
-                let mut v: Array<String> = [];
-                if first_contains(&ctx.first_of_element(skipped_elem, &mut v), token) {
-                    results.push(SllConfig {
-                        alt_index: c.alt_index,
-                        elements: c.elements,
-                        pos: skip_pos + 1,
-                        return_stack: c.return_stack,
-                    });
-                }
-            }
-        }
-        return results;
-    }
-
-    // Terminal: if token matches, advance past this element.
-    if let TokenRef(t) = elem {
-        if `TK_{t.name}` == *token {
-            return [SllConfig {
-                    alt_index: c.alt_index,
-                    elements: c.elements,
-                    pos: c.pos + 1,
-                    return_stack: c.return_stack,
-                }];
-        }
-        return [];
-    }
-    if let Literal(l) = elem {
-        if literal_const_name(&l.text) == *token {
-            return [SllConfig {
-                    alt_index: c.alt_index,
-                    elements: c.elements,
-                    pos: c.pos + 1,
-                    return_stack: c.return_stack,
-                }];
-        }
-        return [];
-    }
-
-    // RuleRef: advance past only if the rule always consumes exactly one token.
-    // Multi-token rules return opaque (pos=-1); expansion happens in build_sll_node
-    // only when needed to resolve ambiguity.
-    if let RuleRef(r) = elem {
-        let mut visiting: Array<String> = [];
-        let rule_first = ctx.first_of_rule(&r.name, &mut visiting);
-        if !first_contains(&rule_first, token) {
-            return [];
-        }
-        let mut st_visiting: Array<String> = [];
-        if ctx.rule_is_single_token(&r.name, &mut st_visiting) {
-            // Single-token rule: safe to advance, element position == token position.
-            return [SllConfig {
-                    alt_index: c.alt_index,
-                    elements: c.elements,
-                    pos: c.pos + 1,
-                    return_stack: c.return_stack,
-                }];
-        }
-        // Multi-token rule: token matches FIRST but we can't advance past it.
-        // Return config with pos = -1 as a sentinel meaning "opaque match".
-        return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: -1, return_stack: c.return_stack }];
-    }
-
-    // Group: treat as consuming one token if the token is in FIRST(group).
-    if let Group(g) = elem {
-        let mut group_first = TreeSet::<String>::new();
-        for let alt of g.alternatives {
-            let mut visiting: Array<String> = [];
-            let af = ctx.first_of_alt(alt, &mut visiting);
-            str_set_insert_all(&mut group_first, &af);
-        }
-        if group_first.contains(*token) {
-            return [SllConfig {
-                    alt_index: c.alt_index,
-                    elements: c.elements,
-                    pos: c.pos + 1,
-                    return_stack: c.return_stack,
-                }];
-        }
-        return [];
-    }
-
-    // Repeat: treat as consuming the inner element.
-    if let Repeat(rep) = elem {
-        let mut inner_first: Array<String> = [];
-        let mut visiting: Array<String> = [];
-        inner_first = ctx.first_of_element(&rep.element, &mut visiting);
-        if first_contains(&inner_first, token) {
-            // Advance past the repeat element (simplified: treat as consuming 1 token).
-            return [SllConfig {
-                    alt_index: c.alt_index,
-                    elements: c.elements,
-                    pos: c.pos + 1,
-                    return_stack: c.return_stack,
-                }];
-        }
-        return [];
-    }
-
-    // Label: unwrap.
-    if let Label(lab) = elem {
-        let unwrapped = SllConfig {
-            alt_index: c.alt_index,
-            elements: replace_element_at(&c.elements, c.pos, &lab.element),
-            pos: c.pos,
-            return_stack: c.return_stack,
-        };
-        return sll_advance(&unwrapped, token, ctx, inline_depth);
-    }
-
-    return [];
-}
-
-fn replace_element_at(elements: &Array<Element>, pos: i32, replacement: &Element) -> Array<Element> {
-    let mut result: Array<Element> = [];
-    for let mut i = 0; i < elements.len(); i += 1 {
-        if i == pos {
-            result.push(*replacement);
-        } else {
-            result.push(elements[i]);
-        }
-    }
-    return result;
-}
-
-/// Collect unique alt indices from configs.
-fn sll_unique_alts(configs: &Array<SllConfig>) -> Array<i32> {
-    let mut alts: Array<i32> = [];
-    for let c of configs {
-        if !array_contains_i32(&alts, c.alt_index) {
-            alts.push(c.alt_index);
-        }
-    }
-    return alts;
-}
-
-/// Deduplicate configs: merge configs with the same (alt_index) that reach
-/// the same prediction outcome. For SLL, two configs with the same alt_index
-/// are equivalent for prediction purposes.
-fn sll_dedup_by_alt(configs: &Array<SllConfig>) -> Array<SllConfig> {
-    let mut seen_alts: Array<i32> = [];
-    let mut result: Array<SllConfig> = [];
-    for let c of configs {
-        if !array_contains_i32(&seen_alts, c.alt_index) {
-            seen_alts.push(c.alt_index);
-            result.push(sll_config_clone(c));
-        }
-    }
-    return result;
-}
-
-fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &mut GenContext) -> PredictionNode {
-    let closed = sll_closure(configs);
-
-    // Guard: if too many configs, fall back to Ambiguous (codegen scan-dispatches) to avoid explosion.
-    if closed.len() > 200 {
-        let alts = sll_unique_alts(&closed);
-        return PredictionNode::Ambiguous(alts);
-    }
-
-    // Check unique alternatives.
-    let alts = sll_unique_alts(&closed);
-    if alts.len() == 1 {
-        return PredictionNode::Leaf(alts[0]);
-    }
-    if alts.len() == 0 || depth >= max_depth {
-        return PredictionNode::Ambiguous(alts);
-    }
-
-    // Check for common prefix: if all configs are at a terminal element
-    // that is the same across all configs, emit Consume.
-    let common = sll_find_common_terminal(&closed);
-    if let Some(elem) = common {
-        // Advance all configs past this shared terminal.
-        let mut advanced: Array<SllConfig> = [];
-        for let c of closed {
-            advanced.push(SllConfig {
-                alt_index: c.alt_index,
-                elements: c.elements,
-                pos: c.pos + 1,
-                return_stack: c.return_stack,
-            });
-        }
-        let child = build_sll_node(&advanced, depth, max_depth, ctx);
-        return PredictionNode::Consume(ConsumeNode { element: elem, child });
-    }
-
-    // Compute FIRST set for each config.
-    let mut all_tokens: Array<String> = [];
-    let mut all_tokens_seen = TreeSet::<String>::new();
-    let mut config_firsts: Array<Array<String>> = [];
-    let mut config_first_sets: Array<TreeSet<String>> = [];
-    for let c of closed {
-        let first = sll_config_first(&c, ctx);
-        config_first_sets.push(str_set_from(&first));
-        config_firsts.push(first);
-        for let tk of first {
-            if !all_tokens_seen.contains(tk) {
-                all_tokens_seen.insert(tk);
-                all_tokens.push(tk);
-            }
-        }
-    }
-
-    // Build dispatch branches.
-    let mut branches: Array<PredictionBranch> = [];
-
-    for let mut t = 0; t < all_tokens.len(); t += 1 {
-        let tk = &all_tokens[t];
-
-        // Advance all configs that can match this token.
-        let mut next_configs: Array<SllConfig> = [];
-        let mut opaque_alts: Array<i32> = [];
-        for let mut i = 0; i < closed.len(); i += 1 {
-            if config_first_sets[i].contains(*tk) {
-                let advanced = sll_advance(&closed[i], tk, ctx);
-                for let a of advanced {
-                    if a.pos == -1 {
-                        // Opaque config: multi-token RuleRef, can't advance past.
-                        if !array_contains_i32(&opaque_alts, a.alt_index) {
-                            opaque_alts.push(a.alt_index);
-                        }
-                    } else {
-                        next_configs.push(a);
-                    }
-                }
-            }
-        }
-
-        if next_configs.len() == 0 && opaque_alts.len() == 0 {
-            continue;
-        }
-
-        // Dedup: keep one config per alt (SLL ignores context).
-        let deduped = sll_dedup_by_alt(&next_configs);
-        let mut next_alts = sll_unique_alts(&deduped);
-        // Add opaque alts (they survive regardless of further lookahead).
-        for let oa of opaque_alts {
-            if !array_contains_i32(&next_alts, oa) {
-                next_alts.push(oa);
-            }
-        }
-
-        let child = if next_alts.len() == 1 {
-            // Resolved: this token uniquely identifies one alternative.
-            PredictionNode::Leaf(next_alts[0]);
-        } else if opaque_alts.len() > 0 {
-            // Still ambiguous with opaque alts: try expansion before giving up.
-            let expanded = try_expand_opaque(&closed, tk, &next_configs, opaque_alts, depth + 1, max_depth, ctx);
-            if let Some(node) = expanded {
-                node;
-            } else {
-                PredictionNode::Ambiguous(next_alts);
-            }
-        } else {
-            // Still ambiguous: recurse with deeper lookahead.
-            build_sll_node(&deduped, depth + 1, max_depth, ctx);
-        };
-        let idx = find_merge_branch(&branches, &child);
-        if idx >= 0 {
-            branches[idx].tokens.push(*tk);
-        } else {
-            branches.push(PredictionBranch { tokens: [*tk], child });
-        }
-    }
-
-    // Detect at-end configs: their alts are fully consumed at this depth and
-    // would simply return to the caller. They have empty FIRST sets, so the
-    // per-token loop above silently dropped them — that left the dispatcher
-    // missing a "default" path for tokens belonging to the calling context.
-    //
-    // Two cases:
-    //  * No explicit branches but exactly one at-end alt → that alt is the
-    //    only valid match at this point. Return Leaf so the caller commits.
-    //  * Both explicit branches and at-end alts → ambiguous in general.
-    //    A token-dispatch on the explicit branch is unsafe because the
-    //    branch can fail at parse time (e.g. typespec `ID '[' ']'` matches
-    //    the lookahead `[` but the body `[ ]` won't match `[ <e> ]`),
-    //    leaving the at-end alt as the only correct choice. Fall back to
-    //    Ambiguous so the codegen's longest-match scan dispatch picks the
-    //    alt whose body actually parses (cf. ANTLR4's adaptive prediction).
-    //  * Multiple at-end alts → true ambiguity → Ambiguous.
-    let mut at_end_alts: Array<i32> = [];
-    for let c of &closed {
-        if config_is_at_end(c) && !array_contains_i32(&at_end_alts, c.alt_index) {
-            at_end_alts.push(c.alt_index);
-        }
-    }
-
-    if at_end_alts.len() >= 1 && branches.len() >= 1 {
-        return PredictionNode::Ambiguous(alts);
-    }
-
-    if branches.len() == 0 {
-        if at_end_alts.len() == 1 {
-            return PredictionNode::Leaf(at_end_alts[0]);
-        }
-        return PredictionNode::Ambiguous(alts);
-    }
-    return PredictionNode::Dispatch(PredictionDispatch { depth, branches });
-}
-
-/// Try to resolve opaque configs by expanding their multi-token RuleRefs.
-/// Uses ATN-style expansion: enter referenced rules, advance by one token,
-/// then compute FIRST sets at the decision point's lookahead level.
-/// Builds a flat Dispatch — never calls build_sll_node on expanded configs.
-fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_opaque_configs: &Array<SllConfig>, opaque_alts: Array<i32>, depth: i32, max_depth: i32, ctx: &mut GenContext) -> Option<PredictionNode> {
-    if depth >= max_depth {
-        return null;
-    }
-    // Rule diversity check: only expand when opaque configs reference different rules.
-    let mut rule_refs = TreeSet::<String>::new();
-    for let c of original_configs {
-        if !array_contains_i32(&opaque_alts, c.alt_index) {
-            continue;
-        }
-        if c.pos < 0 || c.pos >= c.elements.len() {
-            continue;
-        }
-        if let RuleRef(r) = c.elements[c.pos] {
-            rule_refs.insert(r.name);
-        }
-    }
-    if rule_refs.len() <= 1 {
-        return null;
-    }
-    // Expand opaque configs by entering their RuleRefs and advancing by token.
-    let mut expanded_configs: Array<SllConfig> = [];
-    for let c of original_configs {
-        if !array_contains_i32(&opaque_alts, c.alt_index) {
-            continue;
-        }
-        if c.pos < 0 || c.pos >= c.elements.len() {
-            continue;
-        }
-        if let RuleRef(r) = c.elements[c.pos] {
-            let found_rule = ctx.find_rule(&r.name);
-            if let Some(found_rule) = found_rule {
-                if found_rule.alternatives.len() > 8 {
-                    continue;
-                }
-                let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
-                for let alt of found_rule.alternatives {
-                    // Pre-filter: skip alternatives whose FIRST doesn't contain the token.
-                    let mut v: Array<String> = [];
-                    if !first_contains(&ctx.first_of_alt(&alt, &mut v), token) {
-                        continue;
-                    }
-                    let exp = SllConfig {
-                        alt_index: c.alt_index,
-                        elements: alt.elements,
-                        pos: 0,
-                        return_stack: new_stack,
-                    };
-                    let advanced = sll_advance(&exp, token, ctx);
-                    for let a of advanced {
-                        if a.pos != -1 {
-                            expanded_configs.push(a);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if expanded_configs.is_empty() {
-        return null;
-    }
-    // Combine non-opaque (already advanced) with expanded configs.
-    // All configs have consumed the same number of input tokens (depth),
-    // so their FIRST sets are all at the same lookahead level (depth).
-    let mut all_configs: Array<SllConfig> = [];
-    for let c of non_opaque_configs {
-        all_configs.push(sll_config_clone(c));
-    }
-    for let ec of expanded_configs {
-        all_configs.push(ec);
-    }
-    // Compute FIRST for each config at the decision point level.
-    let mut all_tokens: Array<String> = [];
-    let mut all_tokens_seen = TreeSet::<String>::new();
-    let mut config_first_sets: Array<TreeSet<String>> = [];
-    for let c of all_configs {
-        let first = sll_config_first(&c, ctx);
-        let first_set = str_set_from(&first);
-        config_first_sets.push(first_set);
-        for let tk of first {
-            if !all_tokens_seen.contains(tk) {
-                all_tokens_seen.insert(tk);
-                all_tokens.push(tk);
-            }
-        }
-    }
-    // Build flat Dispatch: for each token, find which alt_indices match.
-    let mut branches: Array<PredictionBranch> = [];
-    let mut has_improvement = false;
-    for let mut t = 0; t < all_tokens.len(); t += 1 {
-        let tk = &all_tokens[t];
-        let mut token_alts: Array<i32> = [];
-        for let mut i = 0; i < all_configs.len(); i += 1 {
-            if config_first_sets[i].contains(*tk) {
-                if !array_contains_i32(&token_alts, all_configs[i].alt_index) {
-                    token_alts.push(all_configs[i].alt_index);
-                }
-            }
-        }
-        let child = if token_alts.len() == 1 {
-            has_improvement = true;
-            PredictionNode::Leaf(token_alts[0]);
-        } else {
-            PredictionNode::Ambiguous(token_alts.sorted());
-        };
-        let idx = find_merge_branch(&branches, &child);
-        if idx >= 0 {
-            branches[idx].tokens.push(*tk);
-        } else {
-            branches.push(PredictionBranch { tokens: [*tk], child });
-        }
-    }
-    if !has_improvement || branches.is_empty() {
-        return null;
-    }
-    // Only use if ALL branches are Leaf — any Ambiguous branch means expansion
-    // didn't fully resolve, and the code generator's Dispatch has no fallback
-    // for unmatched tokens, which would silently drop valid inputs.
-    for let b of branches {
-        if let Ambiguous(_) = b.child {
-            return null;
-        }
-    }
-    // Safety: verify all original opaque alts appear in at least one branch.
-    let mut covered_alts: Array<i32> = [];
-    for let b of branches {
-        if let Leaf(idx) = b.child {
-            if !array_contains_i32(&covered_alts, idx) {
-                covered_alts.push(idx);
-            }
-        }
-    }
-    for let oa of opaque_alts {
-        if !array_contains_i32(&covered_alts, oa) {
-            return null;
-        }
-    }
-    return Option::<PredictionNode>::Some(PredictionNode::Dispatch(PredictionDispatch { depth, branches }));
-}
-
-
-/// Check if all configs are at the same terminal element (for Consume).
-fn sll_find_common_terminal(configs: &Array<SllConfig>) -> Option<Element> {
-    if configs.len() < 2 {
-        return null;
-    }
-    for let c of configs {
-        if c.pos >= c.elements.len() {
-            return null;
-        }
-    }
-    let first_elem = &configs[0].elements[configs[0].pos];
-    if let TokenRef(t) = first_elem {
-        for let mut i = 1; i < configs.len(); i += 1 {
-            let elem = &configs[i].elements[configs[i].pos];
-            if let TokenRef(other) = elem {
-                if other.name != t.name {
-                    return null;
-                }
-            } else {
-                return null;
-            }
-        }
-        return Option::<Element>::Some(*first_elem);
-    }
-    if let Literal(l) = first_elem {
-        for let mut i = 1; i < configs.len(); i += 1 {
-            let elem = &configs[i].elements[configs[i].pos];
-            if let Literal(other) = elem {
-                if other.text != l.text {
-                    return null;
-                }
-            } else {
-                return null;
-            }
-        }
-        return Option::<Element>::Some(*first_elem);
-    }
-    return null;
-}
-
-fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
-    return match [*a, *b] {
-        [Leaf(ai), Leaf(bi)] => ai == bi,
-        [Ambiguous(aa), Ambiguous(ba)] => {
-            if aa.len() != ba.len() {
-                return false;
-            }
-            for let mut i = 0; i < aa.len(); i += 1 {
-                if aa[i] != ba[i] {
-                    return false;
-                }
-            }
-            true;
-        },
-        // Consume nodes: check same element kind and recurse on child.
-        [Consume(ca), Consume(cb)] => element_eq(&ca.element, &cb.element) && prediction_node_eq(&ca.child, &cb.child),
-        _ => false,
-    };
-}
-
-fn element_eq(a: &Element, b: &Element) -> bool {
-    return match [*a, *b] {
-        [TokenRef(na), TokenRef(nb)] => na.name == nb.name,
-        [Literal(ta), Literal(tb)] => ta.text == tb.text,
-        _ => false,
-    };
-}
-
-fn array_contains_i32(arr: &Array<i32>, val: i32) -> bool {
-    for let mut i = 0; i < arr.len(); i += 1 {
-        if arr[i] == val {
-            return true;
-        }
-    }
-    return false;
-}
-
 pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
     // Phase 3 — `lowered` mirrors `grammar.parser_rules` rule-for-rule
     // by name and order. emit still consumes surface IR for the body
@@ -996,8 +116,9 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
         }
         for let mut idx = emitted_count; idx < cur; idx += 1 {
             let entry = &entries[idx];
-            assert idx < lowered.variant_rules.len(),
-                `gen_parser: follow-variant entry #{idx} ({entry.rule_name} mask=[{join_kinds(&entry.mask)}]) was registered during emit but not by lower's pre-pass — lower and emit must agree via compute_call_site_follow`;
+            assert idx < lowered.variant_rules.len(), `gen_parser: follow-variant entry #{idx} ({entry.rule_name} mask=[{join_kinds(
+                &entry.mask,
+            )}]) was registered during emit but not by lower's pre-pass — lower and emit must agree via compute_call_site_follow`;
             emit_follow_variant_from_gir(w, &lowered.variant_rules[idx], ctx);
         }
         emitted_count = cur;
@@ -1215,7 +336,6 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     w.blank();
 }
 
-// --- Alternative Scan Helpers ---
 // For each alternative in an Ambiguous group that has a scannable prefix,
 // generate a scan_<rule>_bt_<N> function. This function scans only the
 // scannable prefix of the alternative, which is enough to distinguish it
@@ -1283,7 +403,6 @@ fn alt_scan_is_full(elements: &Array<Element>, ctx: &mut GenContext) -> bool {
     return scannable_prefix_len(elements, ctx) == elements.len();
 }
 
-// --- Scan Function Generation ---
 // Scan functions recognize parser rules by walking token kinds without building
 // CST nodes or constructing error messages. They return the token position after
 // successful recognition, or -1 on failure. Used to disambiguate Ambiguous
@@ -1341,7 +460,9 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
         let scan_body = if let Simple(s) = lowered_rule {
             &s.scan_body;
         } else {
-            panic("gen_scan_function_named: single-alt rule but lowered_rule is not Simple — lower_rule invariant violated");
+            panic(
+                "gen_scan_function_named: single-alt rule but lowered_rule is not Simple — lower_rule invariant violated",
+            );
         };
         w.line("let mut pos = pos;");
         gen_scan_op_elements(w, &scan_body.elements, 0, scan_body.elements.len(), ctx, &"return -1;");
@@ -1379,7 +500,9 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
         let scan_alts = if let MultiAlt(m) = lowered_rule {
             &m.scan_alts;
         } else {
-            panic("gen_scan_function_named: multi-alt rule but lowered_rule is not MultiAlt — lower_rule invariant violated");
+            panic(
+                "gen_scan_function_named: multi-alt rule but lowered_rule is not MultiAlt — lower_rule invariant violated",
+            );
         };
         gen_scan_multi_alt(w, &rule.alternatives, scan_alts, ctx);
     }
@@ -1991,7 +1114,11 @@ fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContex
         // `i32::MAX` for the trailing self-ref to short-circuit
         // any LR climb in the target rule; every other call site
         // leaves it at the default `0`.
-        let min_prec = if let Some(p) = rc.min_prec_arg { p } else { min_prec_override };
+        let min_prec = if let Some(p) = rc.min_prec_arg {
+            p;
+        } else {
+            min_prec_override;
+        };
         w.line(`pos = {fn_name}(tokens, pos, {min_prec});`);
         w.line(`if pos < 0 \{ {*fail_stmt} \}`);
         return;
@@ -2049,7 +1176,11 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         // from bt-scan's trailing-self-ref site, so `min_prec` here
         // is always the rule's default `0` (or whatever
         // `min_prec_arg` baked at lower time, e.g. LR self-refs).
-        let min_prec = if let Some(p) = rc.min_prec_arg { p } else { 0 };
+        let min_prec = if let Some(p) = rc.min_prec_arg {
+            p;
+        } else {
+            0;
+        };
         w.line(`pos = {fn_name}(tokens, pos, {min_prec});`);
         return;
     }
@@ -2499,7 +1630,10 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         }
     }
 
-    let has_lr = match lowered_rule { LeftRecursive(_) => true, _ => false };
+    let has_lr = match lowered_rule {
+        LeftRecursive(_) => true,
+        _ => false,
+    };
 
     if has_lr {
         let atom_name = `{*fn_name}_atom`;
@@ -2624,7 +1758,11 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
         let elem = &alt.elements[i];
         let op = &body.ops[i - ops_offset];
         if let Repeat(rep) = elem {
-            let rep_op = if let Repeat(r) = op { r } else { panic("gen_alt_body_skip: Repeat element / op mismatch") };
+            let rep_op = if let Repeat(r) = op {
+                r;
+            } else {
+                panic("gen_alt_body_skip: Repeat element / op mismatch");
+            };
             gen_op_repeat(w, rep, rep_op, ctx, &mut name_counts);
         } else if op_is_leaf(op) {
             gen_op_leaf(w, op, ctx, &mut name_counts);
@@ -2704,14 +1842,17 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<O
     // calculation; that path never reaches here. Wado's power-assert
     // surfaces the lengths automatically — the contract note in the
     // message points callers at the right entry point.
-    assert ops.len() == elements.len(),
-        "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies must use gen_alt_body_skip";
+    assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies must use gen_alt_body_skip";
     let mut name_counts: Array<[String, i32]> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
         let op = &ops[i];
         if let Repeat(rep) = elem {
-            let rep_op = if let Repeat(r) = op { r } else { panic("gen_alt_elements: Repeat element / op mismatch") };
+            let rep_op = if let Repeat(r) = op {
+                r;
+            } else {
+                panic("gen_alt_elements: Repeat element / op mismatch");
+            };
             gen_op_repeat(w, rep, rep_op, ctx, &mut name_counts);
         } else if op_is_leaf(op) {
             gen_op_leaf(w, op, ctx, &mut name_counts);
@@ -2734,13 +1875,16 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<O
 /// `gen_op_list_label`; Repeat / Label / Not still flow through the
 /// surface `gen_repeat*` helpers (Phase 2-C migrates the Repeat arm).
 fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<Op>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
-    assert ops.len() == elements.len(),
-        "gen_elements_with_non_greedy: ops / elements length mismatch";
+    assert ops.len() == elements.len(), "gen_elements_with_non_greedy: ops / elements length mismatch";
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
         let op = &ops[i];
         if let Repeat(rep) = elem {
-            let rep_op = if let Repeat(r) = op { r } else { panic("gen_elements_with_non_greedy: Repeat element / op mismatch") };
+            let rep_op = if let Repeat(r) = op {
+                r;
+            } else {
+                panic("gen_elements_with_non_greedy: Repeat element / op mismatch");
+            };
             let follow = inner_walker_follow_for_repeat(rep, rep_op, elements, i, outer_follow, ctx);
             gen_op_repeat_with_follow_override(w, rep, rep_op, ctx, name_counts, &follow);
         } else if op_is_leaf(op) {
@@ -2906,7 +2050,9 @@ fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, rep_op: &RepeatOp, elem:
     return match rep_op.body_shape {
         LeafRuleCall | LeafOther => gen_op_leaf(w, op, ctx, name_counts),
         StorableGroup => gen_op_storable_group_inner(w, op, elem, ctx, name_counts, outer_follow),
-        TransparentGroup => panic("gen_op_inner_for_storable_repeat: TransparentGroup body is not storable here — caller must dispatch via the non-storable arm"),
+        TransparentGroup => panic(
+            "gen_op_inner_for_storable_repeat: TransparentGroup body is not storable here — caller must dispatch via the non-storable arm",
+        ),
     };
 }
 
@@ -3007,7 +2153,7 @@ fn gen_op_absent_optional_field(w: &mut CodeWriter, op: &Op, name_counts: &mut A
         match rep_op.kind {
             Optional => w.line(`let {rep_op.field}: Option<{inner_type}> = null;`),
             Star | Plus => w.line(`let mut {rep_op.field}: Array<{inner_type}> = [];`),
-        };
+        }
         return;
     }
     if let ListLabel(ll) = op {
@@ -3095,21 +2241,69 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
     let inner_elem = &rep.element;
 
     return match &rep_op.strategy {
-        OptionalLookahead(s) => emit_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &opt_field, &inner_type, &inner_field, &gen_lookahead_condition(ctx, &s.sig)),
-        OptionalShapeLookahead(s) => emit_op_optional_with_shape_lookahead_storable(w, g_op, g_elem, s, ctx, name_counts, &opt_field, &inner_type, &inner_field),
+        OptionalLookahead(s) => emit_op_storable_optional_with_first(
+            w,
+            rep_op,
+            inner_elem,
+            ctx,
+            &opt_field,
+            &inner_type,
+            &inner_field,
+            &gen_lookahead_condition(ctx, &s.sig),
+        ),
+        OptionalShapeLookahead(s) => emit_op_optional_with_shape_lookahead_storable(
+            w,
+            g_op,
+            g_elem,
+            s,
+            ctx,
+            name_counts,
+            &opt_field,
+            &inner_type,
+            &inner_field,
+        ),
         OptionalScanGuard => {
             let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
-            emit_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &opt_field, &inner_type, &inner_field, &`{scan_pos_var} >= 0`);
+            emit_op_storable_optional_with_first(
+                w,
+                rep_op,
+                inner_elem,
+                ctx,
+                &opt_field,
+                &inner_type,
+                &inner_field,
+                &`{scan_pos_var} >= 0`,
+            );
         },
         // `pick_optional_specialised` returned `null` and lower fell
         // through to the mask-aware decision: gate on
         // `body_first_set` (`Plain`) or the mask-subtracted variant
         // (`WithFollowSubtraction`).
-        Plain => emit_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &opt_field, &inner_type, &inner_field, &ctx.first_check_str(&rep_op.body_first_set)),
-        WithFollowSubtraction(s) => emit_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &opt_field, &inner_type, &inner_field, &ctx.first_check_str(&s.effective_first)),
+        Plain => emit_op_storable_optional_with_first(
+            w,
+            rep_op,
+            inner_elem,
+            ctx,
+            &opt_field,
+            &inner_type,
+            &inner_field,
+            &ctx.first_check_str(&rep_op.body_first_set),
+        ),
+        WithFollowSubtraction(s) => emit_op_storable_optional_with_first(
+            w,
+            rep_op,
+            inner_elem,
+            ctx,
+            &opt_field,
+            &inner_type,
+            &inner_field,
+            &ctx.first_check_str(&s.effective_first),
+        ),
         // Suppressed / NonGreedy / Suppressed are caught upstream;
         // reaching here is a lower-side bug.
-        Suppressed | NonGreedy(_) => panic("gen_op_storable_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug"),
+        Suppressed | NonGreedy(_) => panic(
+            "gen_op_storable_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
+        ),
     };
 }
 
@@ -3137,15 +2331,31 @@ fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
     let _ = dedup_name(&rep_op.field, name_counts);
 
     return match &rep_op.strategy {
-        OptionalShapeLookahead(s) => emit_op_optional_with_shape_lookahead_transparent(w, g_op, g_elem, s, ctx, name_counts),
-        OptionalLookahead(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gen_lookahead_condition(ctx, &s.sig)),
+        OptionalShapeLookahead(s) => emit_op_optional_with_shape_lookahead_transparent(
+            w,
+            g_op,
+            g_elem,
+            s,
+            ctx,
+            name_counts,
+        ),
+        OptionalLookahead(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gen_lookahead_condition(
+            ctx,
+            &s.sig,
+        )),
         OptionalScanGuard => {
             let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
             emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &`{scan_pos_var} >= 0`);
         },
-        Plain => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &ctx.first_check_str(&rep_op.body_first_set)),
-        WithFollowSubtraction(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &ctx.first_check_str(&s.effective_first)),
-        Suppressed | NonGreedy(_) => panic("gen_op_transparent_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug"),
+        Plain => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &ctx.first_check_str(
+            &rep_op.body_first_set,
+        )),
+        WithFollowSubtraction(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &ctx.first_check_str(
+            &s.effective_first,
+        )),
+        Suppressed | NonGreedy(_) => panic(
+            "gen_op_transparent_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
+        ),
     };
 }
 
@@ -3256,7 +2466,9 @@ fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &
                             gen_op_dispatch_element(w, &inner_body.ops[j], &inner_alt.elements[j], ctx, &mut nc);
                         }
                     } else {
-                        panic("emit_op_optional_with_shape_lookahead_transparent: single-alt Group surface but non-Group op");
+                        panic(
+                            "emit_op_optional_with_shape_lookahead_transparent: single-alt Group surface but non-Group op",
+                        );
                     }
                 } else {
                     gen_op_dispatch_element(w, actual_op, actual_elem, ctx, &mut nc);
@@ -3554,15 +2766,16 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         // here because lower replaces them with op-driven walkers
         // before this point. Probe with a panic so a future
         // regression is surfaced.
-        panic("gen_element: Repeat element reached the retired surface walker — route through op-driven `gen_op_repeat_with_follow_override`");
+        panic(
+            "gen_element: Repeat element reached the retired surface walker — route through op-driven `gen_op_repeat_with_follow_override`",
+        );
     }
     if let Group(g) = elem {
         // After the Phase 2-G op-driven migration, only token-only
         // groups reach this surface walker — every other Group
         // classification (SimpleCst, SingleAlt, General) is handled
         // by op-driven walkers before `gen_element` is invoked.
-        assert is_token_only_group(&g.alternatives),
-            "gen_element: only token-only groups reach the surface walker; other classifications must be handled op-driven before gen_element is invoked";
+        assert is_token_only_group(&g.alternatives), "gen_element: only token-only groups reach the surface walker; other classifications must be handled op-driven before gen_element is invoked";
         gen_consume_token_group(w, &g.alternatives, ctx, name_counts);
         return;
     }
@@ -3597,20 +2810,6 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     }
 }
 
-/// Predict what `dedup_name(base, counts)` would return without
-/// incrementing the count. Used by the `Label` case in `gen_element` to
-/// alias the inner element's emitted binding under the label name —
-/// the inner emission performs the actual `dedup_name` (which both
-/// computes and increments), and we need to know the resulting name
-/// before that to emit the alias.
-fn peek_dedup_name(base: &String, counts: &Array<[String, i32]>) -> String {
-    let count = get_count(counts, base);
-    if count > 0 {
-        return `{base}_{count + 1}`;
-    }
-    return *base;
-}
-
 /// Op-driven top-level Repeat dispatcher. Walkers reach this with
 /// `rep` (surface) and `rep_op` (lowered, carrying baked follow /
 /// strategy / scannable / has-field). Internally routes to the
@@ -3632,7 +2831,11 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
     // so even with a covering mask its loop must still emit — fall
     // through to the Star/Plus arm in that case.
     if let Suppressed = &rep_op.strategy {
-        let is_plus = if let Plus = rep.kind { true } else { false };
+        let is_plus = if let Plus = rep.kind {
+            true;
+        } else {
+            false;
+        };
         if !is_plus {
             gen_op_repeat_suppressed(w, rep, rep_op, name_counts);
             return;
@@ -3684,7 +2887,14 @@ fn gen_op_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
     let follow_second = &rep_op.caller_follow_second;
     let while_cond = compute_non_greedy_condition(rep_op, follow, follow_second, ctx);
     return match rep_op.body_shape {
-        LeafRuleCall | LeafOther | StorableGroup => gen_op_repeat_non_greedy_storable(w, rep, rep_op, ctx, name_counts, &while_cond),
+        LeafRuleCall | LeafOther | StorableGroup => gen_op_repeat_non_greedy_storable(
+            w,
+            rep,
+            rep_op,
+            ctx,
+            name_counts,
+            &while_cond,
+        ),
         TransparentGroup => gen_op_repeat_non_greedy_transparent(w, rep, rep_op, ctx, name_counts, &while_cond),
     };
 }
@@ -3694,8 +2904,12 @@ fn gen_op_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
 /// those into a list field of the surrounding alt's CST struct.
 fn gen_op_repeat_non_greedy_storable(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, while_cond: &String) {
     let inner = &rep.element;
-    let is_plus = if let Plus = rep.kind { true } else { false };
-    let iter_follow_unused = ([] as Array<String>);
+    let is_plus = if let Plus = rep.kind {
+        true;
+    } else {
+        false;
+    };
+    let iter_follow_unused = [] as Array<String>;
     let inner_field = op_field(&rep_op.body);
     let inner_type = op_field_type(&rep_op.body);
     let list_field = rep_op.field;
@@ -3741,7 +2955,11 @@ fn gen_op_repeat_non_greedy_transparent(w: &mut CodeWriter, rep: &RepeatElement,
         panic("gen_op_repeat_non_greedy_transparent: lower marked TransparentGroup but body op is not Op::Group");
     };
     let inner = &rep.element;
-    let is_plus = if let Plus = rep.kind { true } else { false };
+    let is_plus = if let Plus = rep.kind {
+        true;
+    } else {
+        false;
+    };
     let _ = dedup_name(&rep_op.field, name_counts);
     if is_plus {
         let mut nc: Array<[String, i32]> = [];
@@ -3793,7 +3011,9 @@ fn gen_op_repeat_optional_group(w: &mut CodeWriter, rep: &RepeatElement, rep_op:
         TransparentGroup => gen_op_transparent_optional(w, rep, rep_op, g_op, g_elem, ctx, name_counts),
         // Caller (`gen_op_repeat_optional_greedy`) routes only Group
         // shapes here; the leaf shapes have their own arms upstream.
-        LeafRuleCall | LeafOther => panic("gen_op_repeat_optional_group: leaf body_shape reached the Group dispatcher — caller-side bug"),
+        LeafRuleCall | LeafOther => panic(
+            "gen_op_repeat_optional_group: leaf body_shape reached the Group dispatcher — caller-side bug",
+        ),
     };
 }
 
@@ -3881,7 +3101,14 @@ fn gen_op_repeat_star_plus_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_o
             };
             gen_op_repeat_star_plus_non_storable_group(w, rep, rep_op, g_op, ctx, name_counts);
         },
-        LeafRuleCall | LeafOther | StorableGroup => gen_op_repeat_star_plus_storable(w, rep, rep_op, ctx, name_counts, follow),
+        LeafRuleCall | LeafOther | StorableGroup => gen_op_repeat_star_plus_storable(
+            w,
+            rep,
+            rep_op,
+            ctx,
+            name_counts,
+            follow,
+        ),
     };
 }
 
@@ -3959,11 +3186,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
     };
     // Per-iteration follow propagated into a nested non-greedy Repeat
     // inside a SingleAlt body — `first(inner) ∪ outer_follow`.
-    let iter_follow = if rep_op.body_is_single_alt_group {
-        union_kind_arrays(&inner_first, follow);
-    } else {
-        *follow;
-    };
+    let iter_follow = if rep_op.body_is_single_alt_group { union_kind_arrays(&inner_first, follow) } else { *follow };
     let inner_type = op_field_type(&rep_op.body);
     let inner_field = op_field(&rep_op.body);
     let list_field = rep_op.field;
@@ -4016,7 +3239,6 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
         }
     }
 }
-
 
 
 fn wildcard_non_greedy_condition(ctx: &mut GenContext, follow_first: &Array<String>) -> String {
@@ -4210,151 +3432,6 @@ fn collect_not_set_tokens(alts: &Array<Alternative>, out: &mut Array<String>) ->
     return true;
 }
 
-fn has_field(elem: &Element) -> bool {
-    if let TokenRef(_) | Literal(_) | RuleRef(_) = elem {
-        return true;
-    }
-    if let Wildcard(_) = elem {
-        return true;
-    }
-    if let Not(_) = elem {
-        return true;
-    }
-    if let Label(lab) = elem {
-        return has_field(&lab.element);
-    }
-    if let Group(g) = elem {
-        return is_storable_group(&g.alternatives);
-    }
-    return false;
-}
-
-/// Returns true if `elem` is a list-label (`items+=X`). List labels store
-/// matches in an `Array<InnerType>` named by `lab.name`.
-fn is_list_label(elem: &Element) -> bool {
-    if let Label(lab) = elem {
-        return lab.list;
-    }
-    return false;
-}
-
-fn element_field_info(elem: &Element) -> [String, String] {
-    if let TokenRef(t) = elem {
-        return [t.field_name, "Token"];
-    }
-    if let Literal(l) = elem {
-        return [literal_field_name(&l.text), "Token"];
-    }
-    if let RuleRef(r) = elem {
-        return [r.field_name, rule_type_name(&r.name)];
-    }
-    if let Wildcard(_) = elem {
-        return ["wildcard", "Token"];
-    }
-    if let Not(ne) = elem {
-        return [not_element_field_name(&ne.element), "Token"];
-    }
-    if let Label(lab) = elem {
-        if lab.list {
-            let inner = element_field_info(&lab.element);
-            return [lab.field_name, `Array<{inner.1}>`];
-        }
-        return element_field_info(&lab.element);
-    }
-    if let Group(g) = elem {
-        if is_simple_cst_group(&g.alternatives) {
-            return [group_field_base_name(&g.alternatives), group_variant_type_name(&g.alternatives)];
-        }
-        if is_token_only_group(&g.alternatives) {
-            return [token_group_field_name(&g.alternatives), "Token"];
-        }
-        if is_single_alt_group(&g.alternatives) {
-            return [single_alt_group_field_name(&g.alternatives[0]), single_alt_group_type_name(&g.alternatives[0])];
-        }
-        if is_general_group(&g.alternatives) {
-            // Post Phase 2-G every general-group reference flows through
-            // the GIR `gen_op_group` / `gen_general_group_store*` chain
-            // which consumes lower-baked `GeneralShape.variant_type` /
-            // `alt_struct_names`. The surface-IR `element_field_info`
-            // helper is reached only by legacy walker fallbacks; if a
-            // future regression routes a general Group here we want
-            // emit to fail loudly rather than silently re-derive the
-            // type name from a stale walker field.
-            panic("element_field_info: general Group reached the surface helper — route through `gen_op_group`/`gen_general_group_store*` instead");
-        }
-        // Non-storable group falls through with the placeholder return.
-    }
-    return ["_", "Token"];
-}
-
-/// Replay name counting for an element without emitting code.
-/// This advances the dedup counter so subsequent elements get correct suffixes.
-fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>) {
-    if let TokenRef(t) = elem {
-        dedup_name(&t.field_name, name_counts);
-        return;
-    }
-    if let Literal(l) = elem {
-        dedup_name(&literal_field_name(&l.text), name_counts);
-        return;
-    }
-    if let RuleRef(r) = elem {
-        dedup_name(&r.field_name, name_counts);
-        return;
-    }
-    if let Wildcard(_) = elem {
-        dedup_name(&"wildcard", name_counts);
-        return;
-    }
-    if let Not(ne) = elem {
-        dedup_name(&not_element_field_name(&ne.element), name_counts);
-        return;
-    }
-    if let Repeat(rep) = elem {
-        if has_field(&rep.element) {
-            if is_list_label(&rep.element) {
-                let info = element_field_info(&rep.element);
-                dedup_name(&info.0, name_counts);
-                return;
-            }
-            let info = element_field_info(&rep.element);
-            if let Star | Plus = rep.kind {
-                dedup_name(&`{info.0}_list`, name_counts);
-            }
-            if let Optional = rep.kind {
-                dedup_name(&info.0, name_counts);
-            }
-        }
-        return;
-    }
-    if let Label(lab) = elem {
-        if has_field(&lab.element) {
-            dedup_name(&lab.field_name, name_counts);
-        }
-        return;
-    }
-    if let Group(g) = elem {
-        if is_simple_cst_group(&g.alternatives) {
-            dedup_name(&group_field_base_name(&g.alternatives), name_counts);
-        } else if is_token_only_group(&g.alternatives) {
-            dedup_name(&token_group_field_name(&g.alternatives), name_counts);
-        } else if is_single_alt_group(&g.alternatives) {
-            dedup_name(&single_alt_group_field_name(&g.alternatives[0]), name_counts);
-        } else if is_general_group(&g.alternatives) {
-            // Replay only runs over the skipped prefix of an alt
-            // (`gen_alt_body_skip` callers), which by construction
-            // consists of token-shaped leaves (TokenRef / Literal).
-            // A general Group in that prefix would mean the prediction
-            // tree consumed beyond the scannable leading prefix — not
-            // a path any committed grammar produces.
-            panic("replay_element_names: general Group reached the skip-replay walker — only token-shaped prefix elements should be replayed");
-        }
-        // Non-storable group: nothing to seed in `name_counts`. The
-        // inner ops are emitted normally afterwards via `body.ops`.
-        return;
-    }
-}
-
 fn rule_ref_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext) -> bool {
     if sorted_group.len() < 2 {
         return false;
@@ -4511,8 +3588,7 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
                 let mut sorted_group = group.sorted();
                 sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
 
-                assert rule_ref_group_all_scannable(&sorted_group, alts, ctx),
-                    "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
+                assert rule_ref_group_all_scannable(&sorted_group, alts, ctx), "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
                 gen_rule_ref_group_scan_dispatch(
                     w,
                     &sorted_group,
@@ -4593,9 +3669,17 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape
             let mut sorted_group = group.sorted();
             sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
 
-            assert rule_ref_group_all_scannable(&sorted_group, alts, ctx),
-                "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
-            gen_rule_ref_group_scan_dispatch(w, &sorted_group, alts, g_op_scan_alts, &inner_var, type_name, ctx, name_counts);
+            assert rule_ref_group_all_scannable(&sorted_group, alts, ctx), "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
+            gen_rule_ref_group_scan_dispatch(
+                w,
+                &sorted_group,
+                alts,
+                g_op_scan_alts,
+                &inner_var,
+                type_name,
+                ctx,
+                name_counts,
+            );
         }
     }
     w.end();  // if/else if chain
@@ -4641,7 +3725,16 @@ fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: 
             } else {
                 w.else_begin("else");
             }
-            gen_general_alt_construct(w, alts, &g_op_alts[alt_idx], alt_idx, &type_name, &gs.alt_struct_names, ctx, name_counts);
+            gen_general_alt_construct(
+                w,
+                alts,
+                &g_op_alts[alt_idx],
+                alt_idx,
+                &type_name,
+                &gs.alt_struct_names,
+                ctx,
+                name_counts,
+            );
         }
         w.end_with(";");
     } else {
@@ -4668,7 +3761,17 @@ fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: 
 
             if group.len() == 1 {
                 let alt_idx = group[0];
-                gen_general_alt_parse_and_store(w, alts, &g_op_alts[alt_idx], alt_idx, &type_name, &gs.alt_struct_names, &opt_var, ctx, name_counts);
+                gen_general_alt_parse_and_store(
+                    w,
+                    alts,
+                    &g_op_alts[alt_idx],
+                    alt_idx,
+                    &type_name,
+                    &gs.alt_struct_names,
+                    &opt_var,
+                    ctx,
+                    name_counts,
+                );
             } else {
                 let mut sorted_group = group.sorted();
                 sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
@@ -4740,11 +3843,32 @@ fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: &GeneralShape, g_
 
         if group.len() == 1 {
             let alt_idx = group[0];
-            gen_general_alt_parse_and_store(w, alts, &g_op_alts[alt_idx], alt_idx, &type_name, &gs.alt_struct_names, &inner_var, ctx, name_counts);
+            gen_general_alt_parse_and_store(
+                w,
+                alts,
+                &g_op_alts[alt_idx],
+                alt_idx,
+                &type_name,
+                &gs.alt_struct_names,
+                &inner_var,
+                ctx,
+                name_counts,
+            );
         } else {
             let mut sorted_group = group.sorted();
             sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
-            gen_general_group_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, &type_name, &gs.alt_struct_names, &inner_var, ctx, name_counts);
+            gen_general_group_dispatch(
+                w,
+                alts,
+                g_op_alts,
+                g_op_scan_alts,
+                &sorted_group,
+                &type_name,
+                &gs.alt_struct_names,
+                &inner_var,
+                ctx,
+                name_counts,
+            );
         }
     }
     w.end();
@@ -4785,9 +3909,19 @@ fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, body
 /// `gen_general_group_scan_dispatch`. Backtracking has been removed; an
 /// unscannable alt is a codegen-time error.
 fn gen_general_group_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, sorted_group: &Array<i32>, type_name: &String, alt_struct_names: &Array<String>, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    assert general_group_all_scannable(sorted_group, alts, ctx),
-        "general group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
-    gen_general_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, sorted_group, type_name, alt_struct_names, inner_var, ctx, name_counts);
+    assert general_group_all_scannable(sorted_group, alts, ctx), "general group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
+    gen_general_group_scan_dispatch(
+        w,
+        alts,
+        g_op_alts,
+        g_op_scan_alts,
+        sorted_group,
+        type_name,
+        alt_struct_names,
+        inner_var,
+        ctx,
+        name_counts,
+    );
 }
 
 /// Returns true iff every alt in `sorted_group` has at least one element
@@ -4857,7 +3991,17 @@ fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>
             w.else_begin(`else if {winner_var} == {k}`);
         }
 
-        gen_general_alt_parse_and_store(w, alts, &g_op_alts[alt_idx], alt_idx, type_name, alt_struct_names, inner_var, ctx, name_counts);
+        gen_general_alt_parse_and_store(
+            w,
+            alts,
+            &g_op_alts[alt_idx],
+            alt_idx,
+            type_name,
+            alt_struct_names,
+            inner_var,
+            ctx,
+            name_counts,
+        );
     }
     w.end();
 }
@@ -5523,16 +4667,14 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
             let mut sorted_group = group.sorted();
             sort_group_by_specificity(&mut sorted_group, first_sets);
             let mut pred_indices: Array<i32> = [];
-            let mut pred_firsts: Array<Array<String>> = [];
             let mut pred_elements: Array<Array<Element>> = [];
             for let mut k = 0; k < sorted_group.len(); k += 1 {
                 let idx = sorted_group[k];
                 let real_idx = non_lr_indices[idx];
                 pred_indices.push(real_idx);
-                pred_firsts.push(first_sets[idx]);
                 pred_elements.push(rule.alternatives[real_idx].elements);
             }
-            let tree = build_prediction(&pred_indices, &pred_firsts, &pred_elements, 0, 5, ctx);
+            let tree = build_prediction(&pred_indices, &pred_elements, 5, ctx);
             gen_prediction_code(w, &tree, &fn_name, &rule.alternatives, lowered_rule, type_name, ctx);
         }
 
@@ -5686,251 +4828,4 @@ fn find_needed_depth(all_position_sets: &Array<Array<Array<String>>>) -> i32 {
         }
     }
     return max_k;
-}
-
-fn dedup_name(base: &String, counts: &mut Array<[String, i32]>) -> String {
-    let count = get_count(counts, base);
-    increment_count(counts, base);
-    if count > 0 {
-        return `{base}_{count + 1}`;
-    }
-    return *base;
-}
-
-fn get_count(counts: &Array<[String, i32]>, name: &String) -> i32 {
-    for let entry of counts {
-        if entry.0 == *name {
-            return entry.1;
-        }
-    }
-    return 0;
-}
-
-fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
-    for let mut i = 0; i < counts.len(); i += 1 {
-        if counts[i].0 == *name {
-            let prev = counts[i].1;
-            counts[i] = [*name, prev + 1];
-            return;
-        }
-    }
-    counts.push([*name, 1]);
-}
-
-fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<i32>> {
-    let n = first_sets.len();
-    let mut group_ids: Array<i32> = [];
-    for let mut i = 0; i < n; i += 1 {
-        group_ids.push(i);
-    }
-    for let mut i = 0; i < n; i += 1 {
-        for let mut j = i + 1; j < n; j += 1 {
-            if sets_overlap(&first_sets[i], &first_sets[j]) {
-                let gi = group_ids[i];
-                let gj = group_ids[j];
-                if gi != gj {
-                    for let mut k = 0; k < n; k += 1 {
-                        if group_ids[k] == gj {
-                            group_ids[k] = gi;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    let mut seen_ids: Array<i32> = [];
-    let mut groups: Array<Array<i32>> = [];
-    for let mut i = 0; i < n; i += 1 {
-        let gid = group_ids[i];
-        let mut found = -1;
-        for let mut s = 0; s < seen_ids.len(); s += 1 {
-            if seen_ids[s] == gid {
-                found = s;
-                break;
-            }
-        }
-        if found >= 0 {
-            groups[found].push(i);
-        } else {
-            seen_ids.push(gid);
-            groups.push([i]);
-        }
-    }
-    return groups;
-}
-
-fn has_multi_alt_groups(groups: &Array<Array<i32>>) -> bool {
-    for let group of groups {
-        if group.len() > 1 {
-            return true;
-        }
-    }
-    return false;
-}
-
-fn sort_group_by_specificity(group: &mut Array<i32>, first_sets: &Array<Array<String>>) {
-    // Sort by first set size ascending: smaller first set = more specific = try first.
-    // Ties broken by original order (stable-ish bubble sort).
-    for let mut i = 0; i < group.len(); i += 1 {
-        for let mut j = i + 1; j < group.len(); j += 1 {
-            if first_sets[group[j]].len() < first_sets[group[i]].len() {
-                let tmp = group[i];
-                group[i] = group[j];
-                group[j] = tmp;
-            }
-        }
-    }
-}
-
-// Priority bands consumed by `alt_sort_priority` and friends. Higher
-// = try first.
-//
-// `MultiTokenLed` (4) is most specific: a multi-element alt whose
-// first non-nullable element is a fixed token (e.g. `K_CAST '(' expr
-// K_AS type_name ')'`). The leading token uniquely identifies the
-// alt, so committing on first match is safe.
-//
-// `BareRuleRef` (3) is the catch-all rank: a single-RuleRef alt
-// whose body can match complex internal patterns (`join_clause`,
-// `expr`). Tried before `MultiRuleRefLed` so single-RuleRef
-// catch-alls win against multi-element-RuleRef siblings — this is
-// what SQLite-style `(table_or_subquery (',' tor)* | join_clause)`
-// dispatch relies on.
-//
-// `MultiRuleRefLed` (2) is a multi-element alt whose first non-
-// nullable element is itself a RuleRef. Less specific than
-// `BareRuleRef` because the RuleRef prefix is shared with the
-// catch-all sibling.
-//
-// `BareToken` (1) is a single Token/Literal alt — the cheapest
-// fallback (e.g. `K_INSERT` alone).
-global ALT_PRIORITY_MULTI_TOKEN_LED: i32 = 4;
-global ALT_PRIORITY_BARE_RULE_REF: i32 = 3;
-global ALT_PRIORITY_MULTI_RULE_REF_LED: i32 = 2;
-global ALT_PRIORITY_BARE_TOKEN: i32 = 1;
-
-fn alt_sort_priority(alt: &Alternative) -> i32 {
-    if alt.elements.len() == 1 {
-        let elem = &alt.elements[0];
-        if let RuleRef(_) = elem {
-            return ALT_PRIORITY_BARE_RULE_REF;
-        }
-        return ALT_PRIORITY_BARE_TOKEN;
-    }
-    // Multi-element: check first non-nullable element.
-    for let elem of alt.elements {
-        if is_nullable(&elem) {
-            continue;
-        }
-        if let TokenRef(_) | Literal(_) = elem {
-            return ALT_PRIORITY_MULTI_TOKEN_LED;
-        }
-        break;
-    }
-    return ALT_PRIORITY_MULTI_RULE_REF_LED;
-}
-
-/// Sort `group` so the alt with the most MANDATORY (non-deeply-
-/// nullable) elements comes first, breaking ties by `alt_sort_priority`
-/// (single-RuleRef catch-alls win against multi-element-RuleRef
-/// siblings) and finally source order. Used by the prediction tree's
-/// `Ambiguous` case (and the matching parse-side group dispatches) to
-/// pick the longer MANDATORY match between alts that share a prefix.
-///
-/// Counting mandatory elements only is the LL distinguisher:
-/// `( a b | a )` (where `b` is mandatory) sorts the 2-elem alt first,
-/// while `( a b? | a )` (where `b?` is optional) ties on mandatory
-/// length and falls through to priority — which prefers the single-
-/// RuleRef catch-all the way ANTLR4's full-context fallback does for
-/// SQLite-style `( tor (',' tor)* | join_clause )` groupings.
-fn sort_group_by_mandatory_count_desc(group: &mut Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext) {
-    for let mut i = 0; i < group.len(); i += 1 {
-        for let mut j = i + 1; j < group.len(); j += 1 {
-            let li = ll_match_length(&alts[group[i]], ctx);
-            let lj = ll_match_length(&alts[group[j]], ctx);
-            let mut swap = false;
-            if lj > li {
-                swap = true;
-            } else if lj == li {
-                let pi = alt_sort_priority(&alts[group[i]]);
-                let pj = alt_sort_priority(&alts[group[j]]);
-                if pj > pi {
-                    swap = true;
-                } else if pj == pi {
-                    if group[j] < group[i] {
-                        swap = true;
-                    }
-                }
-            }
-            if swap {
-                let tmp = group[i];
-                group[i] = group[j];
-                group[j] = tmp;
-            }
-        }
-    }
-}
-
-/// LL-aware "match length" for `alt`, used to sort group alternatives so
-/// the more specific LL alt wins on overlap-prefix ties. Counts every
-/// mandatory top-level element plus every *trailing* deep-nullable
-/// element that is first-exact (single-token-derived; see
-/// `GenContext::element_is_first_exact`).
-///
-/// Why this is the right key: a first-exact nullable trailing element
-/// like `b?` (where `b : Y`) is "1 token whose presence is decisive" —
-/// when `Y` is in the input, alt 0 of `(a b? | a)` is the LL-correct
-/// pick because `b?` will fire and consume `Y`. Counting it as a
-/// pseudo-mandatory token sorts alt 0 ahead of the bare-RuleRef
-/// catch-all alt 1, mirroring ANTLR4's full-context LL preference for
-/// the longer meaningful match. Multi-element nullable structures
-/// (SQLite's `(',' tor)*` Star) stay at the original count because
-/// their first set is not first-exact, preserving the join-clause
-/// catch-all behaviour their grammars depend on.
-///
-/// The `seen_mandatory` gate restricts the trailing-nullable bonus to
-/// nullables that follow a committed token. A *leading* nullable like
-/// `b?` in `( b? a c | a c )` cannot disambiguate length: the runtime
-/// has not yet committed to either alt at that position, so claiming
-/// "alt 0 has 3 tokens" is no better signal than "alt 1 has 2" —
-/// either alt's `a c` will match. Counting only post-mandatory
-/// nullables means the bonus fires exactly when it can shorten the
-/// LL decision: after a shared prefix has committed, a tail-position
-/// `b?` whose presence is decisive elects the longer alt.
-fn ll_match_length(alt: &Alternative, ctx: &mut GenContext) -> i32 {
-    let mut count: i32 = 0;
-    let mut seen_mandatory: bool = false;
-    for let elem of &alt.elements {
-        let mut visiting: Array<String> = [];
-        if !ctx.element_is_nullable_deep(elem, &mut visiting) {
-            count += 1;
-            seen_mandatory = true;
-        } else if seen_mandatory && ctx.element_is_first_exact(elem) {
-            count += 1;
-        }
-    }
-    return count;
-}
-
-fn sort_group_by_element_count(group: &mut Array<i32>, alts: &Array<Alternative>) {
-    for let mut i = 0; i < group.len(); i += 1 {
-        for let mut j = i + 1; j < group.len(); j += 1 {
-            let pi = alt_sort_priority(&alts[group[i]]);
-            let pj = alt_sort_priority(&alts[group[j]]);
-            let mut swap = false;
-            if pj > pi {
-                swap = true;
-            } else if pj == pi {
-                // Within same-priority tier: more elements = more specific = first
-                if alts[group[j]].elements.len() > alts[group[i]].elements.len() {
-                    swap = true;
-                }
-            }
-            if swap {
-                let tmp = group[i];
-                group[i] = group[j];
-                group[j] = tmp;
-            }
-        }
-    }
 }
