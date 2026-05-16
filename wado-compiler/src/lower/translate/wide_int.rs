@@ -213,18 +213,25 @@ fn create_i128_eq_call(
         right_ref_type,
         span,
     );
+    let eq_trait_name = type_table
+        .borrow()
+        .compiler_items()
+        .trait_name(crate::compiler_item::CompilerItem::Eq)
+        .to_string();
+    let method_info = LocalMethodName::new(
+        "i128".to_string(),
+        Some(eq_trait_name),
+        "eq".to_string(),
+    );
+    let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::method_call(
             Box::new(receiver),
             FunctionRef {
                 module_source: ModuleSource::int128(),
-                name: "i128^Eq::eq".to_string(),
+                name: mangled_name,
                 monomorph_info: None,
-                method_info: Some(LocalMethodName::new(
-                    "i128".to_string(),
-                    Some("Eq".to_string()),
-                    "eq".to_string(),
-                )),
+                method_info: Some(method_info),
             },
             vec![],
             vec![CallArg::new(arg_ref, false)],
@@ -262,18 +269,25 @@ fn create_u128_eq_call(
         right_ref_type,
         span,
     );
+    let eq_trait_name = type_table
+        .borrow()
+        .compiler_items()
+        .trait_name(crate::compiler_item::CompilerItem::Eq)
+        .to_string();
+    let method_info = LocalMethodName::new(
+        "u128".to_string(),
+        Some(eq_trait_name),
+        "eq".to_string(),
+    );
+    let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::method_call(
             Box::new(receiver),
             FunctionRef {
                 module_source: ModuleSource::int128(),
-                name: "u128^Eq::eq".to_string(),
+                name: mangled_name,
                 monomorph_info: None,
-                method_info: Some(LocalMethodName::new(
-                    "u128".to_string(),
-                    Some("Eq".to_string()),
-                    "eq".to_string(),
-                )),
+                method_info: Some(method_info),
             },
             vec![],
             vec![CallArg::new(arg_ref, false)],

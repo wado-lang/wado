@@ -65,6 +65,10 @@ pub enum CompilerItem {
     // ── Traits ────────────────────────────────────────────────────────
     /// `Default` — `Default::default()` synthesis anchor.
     Default,
+    /// `Eq` — anchor for synthesised `==` / `!=` lowering and the
+    /// auto-derive checks that decide whether a compound type
+    /// (struct, variant, generic instance) implements `Eq`.
+    Eq,
     /// `From<T>` — synthesised by the `From` synthesiser.
     From,
     /// `core:serde::Serialize` — anchor for `Serialize` impl synthesis.
@@ -108,6 +112,7 @@ impl CompilerItem {
         Self::Option,
         Self::Result,
         Self::Default,
+        Self::Eq,
         Self::From,
         Self::Serialize,
         Self::Deserialize,
@@ -136,6 +141,7 @@ impl CompilerItem {
             Self::Option => "option",
             Self::Result => "result",
             Self::Default => "default",
+            Self::Eq => "eq",
             Self::From => "from",
             Self::Serialize => "serialize",
             Self::Deserialize => "deserialize",
@@ -163,7 +169,7 @@ impl CompilerItem {
                 CompilerItemKind::Struct
             }
             Self::Option | Self::Result => CompilerItemKind::Variant,
-            Self::Default | Self::From | Self::Serialize | Self::Deserialize => {
+            Self::Default | Self::Eq | Self::From | Self::Serialize | Self::Deserialize => {
                 CompilerItemKind::Trait
             }
             Self::ArrayPush
@@ -421,6 +427,30 @@ impl CompilerItems {
             } => (module_source, name.as_str()),
             other => kind_mismatch_ice(item, "Trait", other),
         }
+    }
+
+    /// Name-only convenience for a [`CompilerItemKind::Trait`] item.
+    /// Equivalent to `require_trait(item).1`; the dedicated helper
+    /// keeps use sites readable when only the trait name is needed
+    /// (e.g. when constructing a synthesised `LocalMethodName`).
+    pub fn trait_name(&self, item: CompilerItem) -> &str {
+        self.require_trait(item).1
+    }
+
+    /// Name-only convenience for a [`CompilerItemKind::Struct`] item.
+    pub fn struct_name(&self, item: CompilerItem) -> &str {
+        self.require_struct(item).1
+    }
+
+    /// Name-only convenience for a [`CompilerItemKind::Variant`] item.
+    pub fn variant_name(&self, item: CompilerItem) -> &str {
+        self.require_variant(item).1
+    }
+
+    /// Name-only convenience for a [`CompilerItemKind::Method`] item.
+    /// Returns the unmangled method name (e.g. `"push_str"`).
+    pub fn method_name(&self, item: CompilerItem) -> &str {
+        self.require_method(item).2
     }
 
     /// Module-only accessor for a trait.

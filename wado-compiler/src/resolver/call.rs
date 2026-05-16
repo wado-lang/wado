@@ -607,11 +607,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             );
                             let from_type = args[0].type_id;
                             let from_type_name = self.type_table.borrow().type_name(from_type);
+                            let from_trait_name = self
+                                .type_table
+                                .borrow()
+                                .compiler_items()
+                                .trait_name(crate::compiler_item::CompilerItem::From)
+                                .to_string();
                             let matching_impl = self.current_module_items.iter().any(|item| {
                                 if let Item::Impl(impl_block) = item
                                     && impl_block.is_synthesize_request
                                     && let Some(trait_type) = &impl_block.trait_type
-                                    && Self::get_type_name_static(trait_type) == "From"
+                                    && Self::get_type_name_static(trait_type) == from_trait_name
                                     && Self::get_type_name_static(&impl_block.ty) == prefix
                                 {
                                     if let ast::Type::Generic(generic) = trait_type

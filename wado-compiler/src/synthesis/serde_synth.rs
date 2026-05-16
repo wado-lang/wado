@@ -76,57 +76,66 @@ pub fn synthesize_serde(project: &mut Package) {
         if requests.is_empty() {
             continue;
         }
+        let (serialize_trait_name, deserialize_trait_name) = {
+            let tt = module.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items
+                    .trait_name(crate::compiler_item::CompilerItem::Serialize)
+                    .to_string(),
+                items
+                    .trait_name(crate::compiler_item::CompilerItem::Deserialize)
+                    .to_string(),
+            )
+        };
         let existing = collect_existing_trait_methods(module);
         let mut generated = Vec::new();
 
         for req in &requests {
-            match req.trait_name.as_str() {
-                "Serialize" => {
-                    let key = MethodName::format_local(
-                        &req.target_type_name,
-                        Some("Serialize"),
-                        "serialize",
-                    );
+            let trait_name = req.trait_name.as_str();
+            if trait_name == serialize_trait_name {
+                let key = MethodName::format_local(
+                    &req.target_type_name,
+                    Some(&serialize_trait_name),
+                    "serialize",
+                );
+                if existing.contains(&key) {
+                    continue;
+                }
+                let func = generate_struct_serialize(module, req)
+                    .or_else(|| generate_enum_serialize(module, req))
+                    .or_else(|| generate_variant_serialize(module, req))
+                    .or_else(|| generate_flags_serialize(module, req));
+                if let Some(f) = func {
+                    generated.push(Rc::new(RefCell::new(f)));
+                }
+            } else if trait_name == deserialize_trait_name {
+                let key = MethodName::format_local(
+                    &req.target_type_name,
+                    Some(&deserialize_trait_name),
+                    "deserialize",
+                );
                     if existing.contains(&key) {
                         continue;
                     }
-                    let func = generate_struct_serialize(module, req)
-                        .or_else(|| generate_enum_serialize(module, req))
-                        .or_else(|| generate_variant_serialize(module, req))
-                        .or_else(|| generate_flags_serialize(module, req));
+                if let Some((lookup_func, deser_func)) =
+                    generate_struct_deserialize(module, req)
+                {
+                    generated.push(Rc::new(RefCell::new(lookup_func)));
+                    generated.push(Rc::new(RefCell::new(deser_func)));
+                } else {
+                    let func = generate_enum_deserialize(module, req)
+                        .or_else(|| generate_variant_deserialize(module, req))
+                        .or_else(|| generate_flags_deserialize(module, req));
                     if let Some(f) = func {
                         generated.push(Rc::new(RefCell::new(f)));
                     }
                 }
-                "Deserialize" => {
-                    let key = MethodName::format_local(
-                        &req.target_type_name,
-                        Some("Deserialize"),
-                        "deserialize",
-                    );
-                    if existing.contains(&key) {
-                        continue;
-                    }
-                    if let Some((lookup_func, deser_func)) =
-                        generate_struct_deserialize(module, req)
-                    {
-                        generated.push(Rc::new(RefCell::new(lookup_func)));
-                        generated.push(Rc::new(RefCell::new(deser_func)));
-                    } else {
-                        let func = generate_enum_deserialize(module, req)
-                            .or_else(|| generate_variant_deserialize(module, req))
-                            .or_else(|| generate_flags_deserialize(module, req));
-                        if let Some(f) = func {
-                            generated.push(Rc::new(RefCell::new(f)));
-                        }
-                    }
-                }
-                other => {
-                    panic!(
-                        "unsupported synthesis trait `{other}` for `{}`",
-                        req.target_type_name
-                    );
-                }
+            } else {
+                panic!(
+                    "unsupported synthesis trait `{trait_name}` for `{}`",
+                    req.target_type_name
+                );
             }
         }
 
@@ -711,6 +720,12 @@ fn generate_struct_deserialize(
     let module_source = module.module_source.clone();
     let serde_module = ModuleSource::serde();
 
+    let deserialize_trait_name = module
+        .type_table
+        .borrow()
+        .compiler_items()
+        .trait_name(crate::compiler_item::CompilerItem::Deserialize)
+        .to_string();
     let mut tt = module.type_table.borrow_mut();
 
     let struct_type = req.target_type_id;
@@ -1187,11 +1202,14 @@ fn generate_struct_deserialize(
 
     let method_info = LocalMethodName::new(
         req.target_type_name.clone(),
-        Some("Deserialize".to_string()),
+        Some(deserialize_trait_name.clone()),
         "deserialize".to_string(),
     );
-    let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some("Deserialize"), "deserialize");
+    let qualified_name = MethodName::format_local(
+        &req.target_type_name,
+        Some(&deserialize_trait_name),
+        "deserialize",
+    );
 
     let deser_func = TirFunction {
         module_source: ModuleSource::default(),
@@ -1619,6 +1637,18 @@ fn generate_enum_deserialize(
     let span = synth_span();
     let serde_module = ModuleSource::serde();
 
+    let (eq_trait_name, deserialize_trait_name) = {
+        let tt = module.type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items
+                .trait_name(crate::compiler_item::CompilerItem::Eq)
+                .to_string(),
+            items
+                .trait_name(crate::compiler_item::CompilerItem::Deserialize)
+                .to_string(),
+        )
+    };
     let mut tt = module.type_table.borrow_mut();
 
     let enum_type = req.target_type_id;
@@ -1818,7 +1848,7 @@ fn generate_enum_deserialize(
         );
         let eq_method = LocalMethodName::new(
             "String".to_string(),
-            Some("Eq".to_string()),
+            Some(eq_trait_name.clone()),
             "eq".to_string(),
         );
         let condition = TirExpr::new(
@@ -1934,11 +1964,14 @@ fn generate_enum_deserialize(
 
     let method_info = LocalMethodName::new(
         req.target_type_name.clone(),
-        Some("Deserialize".to_string()),
+        Some(deserialize_trait_name.clone()),
         "deserialize".to_string(),
     );
-    let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some("Deserialize"), "deserialize");
+    let qualified_name = MethodName::format_local(
+        &req.target_type_name,
+        Some(&deserialize_trait_name),
+        "deserialize",
+    );
 
     Some(TirFunction {
         module_source: ModuleSource::default(),
@@ -2284,6 +2317,18 @@ fn generate_variant_deserialize(
     let span = synth_span();
     let serde_module = ModuleSource::serde();
 
+    let (eq_trait_name, deserialize_trait_name) = {
+        let tt = module.type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items
+                .trait_name(crate::compiler_item::CompilerItem::Eq)
+                .to_string(),
+            items
+                .trait_name(crate::compiler_item::CompilerItem::Deserialize)
+                .to_string(),
+        )
+    };
     let mut tt = module.type_table.borrow_mut();
 
     let variant_type = req.target_type_id;
@@ -2563,7 +2608,7 @@ fn generate_variant_deserialize(
         );
         let eq_method = LocalMethodName::new(
             "String".to_string(),
-            Some("Eq".to_string()),
+            Some(eq_trait_name.clone()),
             "eq".to_string(),
         );
         let condition = TirExpr::new(
@@ -2757,11 +2802,14 @@ fn generate_variant_deserialize(
 
     let method_info = LocalMethodName::new(
         req.target_type_name.clone(),
-        Some("Deserialize".to_string()),
+        Some(deserialize_trait_name.clone()),
         "deserialize".to_string(),
     );
-    let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some("Deserialize"), "deserialize");
+    let qualified_name = MethodName::format_local(
+        &req.target_type_name,
+        Some(&deserialize_trait_name),
+        "deserialize",
+    );
 
     Some(TirFunction {
         module_source: ModuleSource::default(),
@@ -3098,6 +3146,18 @@ fn generate_flags_deserialize(
     let span = synth_span();
     let serde_module = ModuleSource::serde();
 
+    let (eq_trait_name, deserialize_trait_name) = {
+        let tt = module.type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items
+                .trait_name(crate::compiler_item::CompilerItem::Eq)
+                .to_string(),
+            items
+                .trait_name(crate::compiler_item::CompilerItem::Deserialize)
+                .to_string(),
+        )
+    };
     let mut tt = module.type_table.borrow_mut();
 
     let flags_type = req.target_type_id;
@@ -3217,7 +3277,7 @@ fn generate_flags_deserialize(
         );
         let eq_method = LocalMethodName::new(
             "String".to_string(),
-            Some("Eq".to_string()),
+            Some(eq_trait_name.clone()),
             "eq".to_string(),
         );
         let condition = TirExpr::new(
@@ -3382,11 +3442,14 @@ fn generate_flags_deserialize(
 
     let method_info = LocalMethodName::new(
         req.target_type_name.clone(),
-        Some("Deserialize".to_string()),
+        Some(deserialize_trait_name.clone()),
         "deserialize".to_string(),
     );
-    let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some("Deserialize"), "deserialize");
+    let qualified_name = MethodName::format_local(
+        &req.target_type_name,
+        Some(&deserialize_trait_name),
+        "deserialize",
+    );
 
     Some(TirFunction {
         module_source: ModuleSource::default(),

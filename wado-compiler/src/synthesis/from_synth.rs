@@ -7,6 +7,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::compiler_item::CompilerItem;
 use crate::name::{LocalMethodName, MethodName};
 use crate::synthesis::common::{
     block, local_ref, make_synthetic_method, param_local, return_stmt, synth_span,
@@ -16,20 +17,34 @@ use crate::tir::{
 };
 
 pub fn synthesize_from(module: &mut TirModule) {
+    // Resolve the canonical `From` trait name via the compiler-item registry
+    // so a stdlib rename of the trait still routes synthesis through the
+    // same anchor. The `From<T>` mangled form keeps the registered name as
+    // its prefix.
+    let from_prefix = {
+        let trait_name = module
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_name(CompilerItem::From)
+            .to_string();
+        format!("{trait_name}<")
+    };
     let requests: Vec<SynthesisRequest> = module
         .synthesis_requests
-        .extract_if(.., |r| r.trait_name.starts_with("From<"))
+        .extract_if(.., |r| r.trait_name.starts_with(from_prefix.as_str()))
         .collect();
     if requests.is_empty() {
         return;
     }
 
-    let existing = collect_existing_from_methods(module);
+    let existing = collect_existing_from_methods(module, &from_prefix);
     let mut generated = Vec::new();
+    let from_trait_name = from_prefix.trim_end_matches('<');
 
     for req in &requests {
-        let from_type_name = extract_from_type_name(&req.trait_name);
-        let from_trait = format!("From<{from_type_name}>");
+        let from_type_name = extract_from_type_name(&req.trait_name, &from_prefix);
+        let from_trait = format!("{from_trait_name}<{from_type_name}>");
         let key = MethodName::format_local(&req.target_type_name, Some(&from_trait), "from");
         if existing.contains(&key) {
             continue;
@@ -42,15 +57,19 @@ pub fn synthesize_from(module: &mut TirModule) {
     module.functions.extend(generated);
 }
 
-fn extract_from_type_name(trait_name: &str) -> String {
+fn extract_from_type_name(trait_name: &str, from_prefix: &str) -> String {
     trait_name
-        .strip_prefix("From<")
+        .strip_prefix(from_prefix)
         .and_then(|s| s.strip_suffix('>'))
         .unwrap_or(trait_name)
         .to_string()
 }
 
-fn collect_existing_from_methods(module: &TirModule) -> crate::hashmap::IndexSet<String> {
+fn collect_existing_from_methods(
+    module: &TirModule,
+    from_prefix: &str,
+) -> crate::hashmap::IndexSet<String> {
+    let from_bare = from_prefix.trim_end_matches('<');
     module
         .functions
         .iter()
@@ -58,7 +77,7 @@ fn collect_existing_from_methods(module: &TirModule) -> crate::hashmap::IndexSet
             let func = f.borrow();
             func.method_info.as_ref().and_then(|info| {
                 info.trait_name.as_ref().and_then(|trait_name| {
-                    if trait_name == "From" || trait_name.starts_with("From<") {
+                    if trait_name == from_bare || trait_name.starts_with(from_prefix) {
                         Some(MethodName::format_local(
                             &info.base_struct_name,
                             Some(trait_name),

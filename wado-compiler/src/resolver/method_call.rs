@@ -2063,6 +2063,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> bool {
         let target_name = Self::get_type_name_static(target_type);
         let arg_type_name = self.type_table.borrow().type_name(*arg_type_id);
+        let from_trait_name = self
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_name(crate::compiler_item::CompilerItem::From)
+            .to_string();
         let check_impl = |impl_block: &ast::ImplBlock| -> bool {
             if !impl_block.is_synthesize_request {
                 return false;
@@ -2070,7 +2076,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let Some(trait_type) = &impl_block.trait_type else {
                 return false;
             };
-            if Self::get_type_name_static(trait_type) != "From"
+            if Self::get_type_name_static(trait_type) != from_trait_name
                 || Self::get_type_name_static(&impl_block.ty) != target_name
             {
                 return false;
@@ -2132,9 +2138,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
         method_name: &str,
         arg_type_name: Option<&str>,
     ) -> Option<StaticMethodRef> {
+        let from_trait_name = self
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_name(crate::compiler_item::CompilerItem::From)
+            .to_string();
+        let is_from_or_try_from = |base: &str| -> bool {
+            base == from_trait_name || base == "TryFrom"
+        };
         let resolve_trait_name = |trait_type: &ast::Type| -> String {
             let base = Self::get_type_name_static(trait_type);
-            if base == "From" || base == "TryFrom" {
+            if is_from_or_try_from(&base) {
                 self.get_type_name_full(trait_type)
             } else {
                 base
@@ -2146,13 +2161,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 return true;
             };
             let base = Self::get_type_name_static(trait_type);
-            if (base == "From" || base == "TryFrom")
+            if is_from_or_try_from(&base)
                 && let ast::Type::Generic(g) = trait_type
                 && let Some(arg) = g.args.first()
             {
                 return Self::get_type_name_static(arg) == expected;
             }
-            base != "From" && base != "TryFrom"
+            !is_from_or_try_from(&base)
         };
 
         let check_impl = |impl_block: &ast::ImplBlock| -> Option<String> {

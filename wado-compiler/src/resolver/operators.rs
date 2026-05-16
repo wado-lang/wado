@@ -2,6 +2,7 @@
 
 use crate::ast::{self, BinaryOp, UnaryOp};
 use crate::compiler_host::CompilerHost;
+use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
@@ -184,10 +185,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 // Handle Eq trait (== and !=)
                 if matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq) {
+                    let eq_trait_name = self
+                        .type_table
+                        .borrow()
+                        .compiler_items()
+                        .trait_name(CompilerItem::Eq)
+                        .to_string();
                     let Some(resolved) = self.resolve_trait_method_for_op(
                         &struct_name,
                         lookup_type_id,
-                        "Eq",
+                        &eq_trait_name,
                         "eq",
                         false,
                     ) else {
@@ -282,8 +289,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     && let Some((_trait_name, info)) =
                         self.find_method_in_trait_bounds(&bound_names, "eq", left.type_id)
                 {
+                    let eq_trait_name = self
+                        .type_table
+                        .borrow()
+                        .compiler_items()
+                        .trait_name(CompilerItem::Eq)
+                        .to_string();
                     let resolved = ResolvedTraitMethod {
-                        trait_name: "Eq".to_string(),
+                        trait_name: eq_trait_name,
                         method_name: "eq".to_string(),
                         impl_name: name.clone(),
                         self_kind: info.self_kind,
@@ -624,20 +637,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     BinaryOp::GtEq => ">=",
                     _ => "?",
                 };
-                let trait_name = match binary.op {
-                    BinaryOp::Add => "Add",
-                    BinaryOp::Sub => "Sub",
-                    BinaryOp::Mul => "Mul",
-                    BinaryOp::Div => "Div",
-                    BinaryOp::Mod => "Rem",
-                    BinaryOp::BitAnd => "BitAnd",
-                    BinaryOp::BitOr => "BitOr",
-                    BinaryOp::BitXor => "BitXor",
-                    BinaryOp::Shl => "Shl",
-                    BinaryOp::Shr => "Shr",
-                    BinaryOp::Eq | BinaryOp::NotEq => "Eq",
-                    BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => "Ord",
-                    _ => "?",
+                let eq_trait_name = type_table
+                    .compiler_items()
+                    .trait_name(CompilerItem::Eq)
+                    .to_string();
+                let trait_name: String = match binary.op {
+                    BinaryOp::Add => "Add".to_string(),
+                    BinaryOp::Sub => "Sub".to_string(),
+                    BinaryOp::Mul => "Mul".to_string(),
+                    BinaryOp::Div => "Div".to_string(),
+                    BinaryOp::Mod => "Rem".to_string(),
+                    BinaryOp::BitAnd => "BitAnd".to_string(),
+                    BinaryOp::BitOr => "BitOr".to_string(),
+                    BinaryOp::BitXor => "BitXor".to_string(),
+                    BinaryOp::Shl => "Shl".to_string(),
+                    BinaryOp::Shr => "Shr".to_string(),
+                    BinaryOp::Eq | BinaryOp::NotEq => eq_trait_name,
+                    BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => "Ord".to_string(),
+                    _ => "?".to_string(),
                 };
                 drop(type_table);
                 let _ = self.logger.error(TypeError::InvalidPattern {
