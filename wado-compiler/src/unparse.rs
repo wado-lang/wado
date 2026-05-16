@@ -1897,9 +1897,14 @@ impl<'a> Unparser<'a> {
             }
             Pattern::Variant {
                 variant_name,
+                variant_qualifier,
                 bindings,
                 ..
             } => {
+                if let Some(qualifier) = variant_qualifier {
+                    self.unparse_type(qualifier);
+                    self.output.push_str("::");
+                }
                 self.output.push_str(variant_name);
                 if !bindings.is_empty() {
                     self.delimited("(", ")", bindings, Unparser::unparse_pattern);
@@ -2999,9 +3004,14 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
         }
         Pattern::Variant {
             variant_name,
+            variant_qualifier,
             bindings,
             ..
         } => {
+            if let Some(qualifier) = variant_qualifier {
+                unparse_type_into(qualifier, output);
+                output.push_str("::");
+            }
             output.push_str(variant_name);
             if !bindings.is_empty() {
                 delimited_into("(", ")", bindings, output, unparse_pattern_into);

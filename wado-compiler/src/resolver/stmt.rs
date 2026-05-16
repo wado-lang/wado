@@ -3,7 +3,7 @@
 use crate::ast::{
     self, AstId, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr, ExprStmt,
     ForOfStmt, IdentExpr, IfStmt, LetStmt, Literal, LoopStmt, MethodCallExpr, Pattern, ReturnStmt,
-    Stmt, TaskReturnStmt, UnaryExpr, UnaryOp,
+    Stmt, TaskReturnStmt, Type, UnaryExpr, UnaryOp,
 };
 use crate::compiler_host::CompilerHost;
 use crate::tir::{
@@ -570,7 +570,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    fn is_known_case_of_type(&self, type_id: TypeId, case_name: &str) -> bool {
+    fn is_known_case_of_type(
+        &mut self,
+        type_id: TypeId,
+        case_name: &str,
+        qualifier: Option<&Type>,
+    ) -> bool {
+        if !self.pattern_qualifier_matches_scrutinee(type_id, qualifier) {
+            return false;
+        }
         let resolved = self.type_table.borrow().get(type_id).clone();
         match &resolved {
             ResolvedType::Enum { name, .. } => self
@@ -584,6 +592,83 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
             _ => false,
         }
+    }
+
+    fn pattern_qualifier_matches_scrutinee(
+        &mut self,
+        scrutinee_type: TypeId,
+        qualifier: Option<&Type>,
+    ) -> bool {
+        let Some(qualifier) = qualifier else {
+            return true;
+        };
+        let scrutinee_resolved = self.type_table.borrow().get(scrutinee_type).clone();
+        let (scrutinee_name, scrutinee_module, scrutinee_arg_len) = match &scrutinee_resolved {
+            ResolvedType::Enum {
+                name,
+                module_source,
+            }
+            | ResolvedType::Variant {
+                name,
+                module_source,
+            } => (name.as_str(), module_source, None),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => (name.as_str(), module_source, Some(type_args.len())),
+            _ => {
+                return false;
+            }
+        };
+        match qualifier {
+            Type::Named(t) => t.name == scrutinee_name,
+            Type::Generic(g) => {
+                g.name == scrutinee_name && scrutinee_arg_len.is_none_or(|n| n == g.args.len())
+            }
+            Type::NamespacedGeneric(ns) => {
+                ns.name == scrutinee_name
+                    && scrutinee_arg_len.is_none_or(|n| n == ns.args.len())
+                    && self
+                        .namespace_imports
+                        .get(&ns.namespace)
+                        .is_some_and(|m| m == scrutinee_module)
+            }
+            Type::Function(_)
+            | Type::Tuple(_)
+            | Type::Reference(_)
+            | Type::MutReference(_)
+            | Type::TypePackSpread(_, _) => false,
+        }
+    }
+
+    fn format_pattern_case_name(&self, case_name: &str, qualifier: Option<&Type>) -> String {
+        let Some(qualifier) = qualifier else {
+            return case_name.to_string();
+        };
+        format!("{}::{case_name}", format_pattern_qualifier_type(qualifier))
+    }
+
+    /// Build the lookup key for `associated_constants`, matching how the map was
+    /// populated via `get_type_name` (base name only, no generic type arguments).
+    ///
+    /// For example, `Maybe<i32>::CONST` must look up as `"Maybe::CONST"` because
+    /// `get_type_name` strips generic args when building the key.
+    fn format_assoc_const_key(variant_name: &str, qualifier: Option<&Type>) -> String {
+        let Some(qualifier) = qualifier else {
+            return variant_name.to_string();
+        };
+        let base = match qualifier {
+            Type::Named(t) => t.name.as_str(),
+            Type::Generic(t) => t.name.as_str(),
+            Type::NamespacedGeneric(t) => t.name.as_str(),
+            Type::Function(_)
+            | Type::Tuple(_)
+            | Type::Reference(_)
+            | Type::MutReference(_)
+            | Type::TypePackSpread(_, _) => return variant_name.to_string(),
+        };
+        format!("{base}::{variant_name}")
     }
 
     /// Resolve a let pattern (for tuple/struct destructuring).
@@ -1113,7 +1198,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // The parser does not use case to disambiguate; instead, we check
                 // whether the name is a known case of the scrutinee type.
                 if !matches!(pattern, Pattern::MutIdent { .. })
-                    && self.is_known_case_of_type(scrutinee_type, name)
+                    && self.is_known_case_of_type(scrutinee_type, name, None)
                 {
                     // Delegate to the Variant branch with empty bindings.
                     // Preserve the identifier's AstId/span as name_id/name_span so
@@ -1121,6 +1206,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return self.resolve_if_pattern_inner(
                         &Pattern::Variant {
                             variant_name: name.clone(),
+                            variant_qualifier: None,
                             name_id: Some(*id),
                             name_span: *name_span,
                             bindings: vec![],
@@ -1270,20 +1356,33 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Pattern::Variant {
                 variant_name,
+                variant_qualifier,
                 name_id,
                 name_span,
                 bindings,
                 span,
             } => {
+                let normalized_variant_name = variant_name.as_str();
+                let qualified_variant_name =
+                    self.format_pattern_case_name(variant_name, variant_qualifier.as_ref());
                 // Bare uppercase identifier that is not a known case of the scrutinee type.
                 // Check if it's an associated constant (e.g., `i32::MAX`) before falling back
                 // to a variable binding.
-                if bindings.is_empty() && !self.is_known_case_of_type(scrutinee_type, variant_name)
+                if bindings.is_empty()
+                    && !self.is_known_case_of_type(
+                        scrutinee_type,
+                        normalized_variant_name,
+                        variant_qualifier.as_ref(),
+                    )
                 {
-                    // Check for associated constants (e.g., `i32::MAX`, `f64::PI`)
+                    // Check for associated constants (e.g., `i32::MAX`, `f64::PI`).
+                    // Use the base type name (no generic args) to match how
+                    // `associated_constants` keys are built via `get_type_name`.
+                    let assoc_const_key =
+                        Self::format_assoc_const_key(variant_name, variant_qualifier.as_ref());
                     // Resolve to literal patterns when possible for switch optimization.
                     if let Some((const_ty, const_expr)) =
-                        self.associated_constants.get(variant_name).cloned()
+                        self.associated_constants.get(&assoc_const_key).cloned()
                     {
                         let type_id = self.resolve_type(&const_ty);
                         let resolved = self.resolve_expr(&const_expr, ctx, Some(type_id));
@@ -1338,15 +1437,34 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .intern(ResolvedType::MutRef(scrutinee_type)),
                         RefBinding::None => scrutinee_type,
                     };
-                    let index = ctx.add_local(variant_name.clone(), binding_type, false, None);
+                    let index =
+                        ctx.add_local(qualified_variant_name.clone(), binding_type, false, None);
                     return TirPattern::Binding {
-                        name: variant_name.clone(),
+                        name: qualified_variant_name,
                         local_index: index,
                         type_id: binding_type,
                     };
                 }
 
                 let resolved_type = self.type_table.borrow().get(scrutinee_type).clone();
+                if !self
+                    .pattern_qualifier_matches_scrutinee(scrutinee_type, variant_qualifier.as_ref())
+                {
+                    let expected = match &resolved_type {
+                        ResolvedType::Enum { name, .. } => format!("valid case of enum {name}"),
+                        ResolvedType::Variant { name, .. }
+                        | ResolvedType::GenericInstance { name, .. } => {
+                            format!("valid case of variant {name}")
+                        }
+                        _ => "variant or enum case".to_string(),
+                    };
+                    let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                        expected,
+                        found: qualified_variant_name,
+                        span: *span,
+                    });
+                    return TirPattern::Wildcard;
+                }
 
                 // Handle enum types (no payload, just discriminant matching)
                 if let ResolvedType::Enum { name, .. } = &resolved_type {
@@ -1358,7 +1476,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                     // Look up the enum case index
                     if let Some(enum_info) = self.lookup_enum_case(name).cloned() {
-                        if let Some(case_data) = enum_info.find_case(variant_name).cloned() {
+                        if let Some(case_data) =
+                            enum_info.find_case(normalized_variant_name).cloned()
+                        {
                             // Record pattern's case-name identifier -> enum case decl
                             if let Some(id) = name_id {
                                 self.record_reference_to_decl(
@@ -1370,7 +1490,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             let _ = name_span;
                             return TirPattern::Enum {
                                 enum_type: scrutinee_type,
-                                case_name: variant_name.clone(),
+                                case_name: normalized_variant_name.to_string(),
                                 case_index: case_data.index,
                             };
                         }
@@ -1384,7 +1504,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     .collect::<Vec<_>>()
                                     .join(", ")
                             ),
-                            found: variant_name.clone(),
+                            found: self
+                                .format_pattern_case_name(variant_name, variant_qualifier.as_ref()),
                             span: *span,
                         });
                         return TirPattern::Wildcard;
@@ -1413,7 +1534,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     && let Some(case_data) = variant_info
                         .cases
                         .iter()
-                        .find(|c| c.name == *variant_name)
+                        .find(|c| c.name == normalized_variant_name)
                         .cloned()
                 {
                     self.record_reference_to_decl(
@@ -1428,16 +1549,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Determine the payload type for the variant case.
                 let payload_type: TypeId = match &resolved_type {
                     // Non-generic variant
-                    ResolvedType::Variant { name, .. } => {
-                        self.get_variant_case_payload_type(name, variant_name, &[], *span)
-                    }
+                    ResolvedType::Variant { name, .. } => self.get_variant_case_payload_type(
+                        name,
+                        normalized_variant_name,
+                        &[],
+                        *span,
+                    ),
                     // Generic variant instantiation
                     ResolvedType::GenericInstance {
                         name, type_args, ..
                     } => {
                         // Check if this is a variant (not a struct)
                         if self.contains_variant(name) {
-                            self.get_variant_case_payload_type(name, variant_name, type_args, *span)
+                            self.get_variant_case_payload_type(
+                                name,
+                                normalized_variant_name,
+                                type_args,
+                                *span,
+                            )
                         } else {
                             let _ = self.logger.error(TypeError::PatternTypeMismatch {
                                 expected: "variant type".to_string(),
@@ -1489,7 +1618,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 TirPattern::Variant {
                     enum_type: scrutinee_type,
-                    variant_name: variant_name.clone(),
+                    variant_name: normalized_variant_name.to_string(),
                     bindings: resolved_bindings,
                     payload_type,
                 }
@@ -1725,8 +1854,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ResolvedType::Struct { ref name, .. } if name == "u128"
         );
 
-        let start_val = Self::pattern_to_i128(start, is_unsigned);
-        let end_val = Self::pattern_to_i128(end, is_unsigned);
+        let start_val = self.pattern_to_i128(start, is_unsigned);
+        let end_val = self.pattern_to_i128(end, is_unsigned);
 
         let (Some(start_val), Some(end_val)) = (start_val, end_val) else {
             let _ = self.logger.error(TypeError::InvalidPattern {
@@ -1761,7 +1890,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    fn pattern_to_i128(pattern: &Pattern, is_unsigned: bool) -> Option<i128> {
+    fn pattern_to_i128(&self, pattern: &Pattern, is_unsigned: bool) -> Option<i128> {
         match pattern {
             Pattern::Literal(Literal::Number(repr)) => {
                 if is_unsigned {
@@ -1775,30 +1904,49 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Pattern::Variant {
                 variant_name,
+                variant_qualifier,
                 bindings,
                 ..
             } if bindings.is_empty() => {
                 // Could be an associated constant like i32::MAX, i32::MIN
-                match variant_name.as_str() {
-                    "i8::MAX" => Some(i128::from(i8::MAX)),
-                    "i8::MIN" => Some(i128::from(i8::MIN)),
-                    "i16::MAX" => Some(i128::from(i16::MAX)),
-                    "i16::MIN" => Some(i128::from(i16::MIN)),
-                    "i32::MAX" => Some(i128::from(i32::MAX)),
-                    "i32::MIN" => Some(i128::from(i32::MIN)),
-                    "i64::MAX" => Some(i128::from(i64::MAX)),
-                    "i64::MIN" => Some(i128::from(i64::MIN)),
-                    "u8::MAX" => Some(i128::from(u8::MAX)),
-                    "u8::MIN" => Some(i128::from(u8::MIN)),
-                    "u16::MAX" => Some(i128::from(u16::MAX)),
-                    "u16::MIN" => Some(i128::from(u16::MIN)),
-                    "u32::MAX" => Some(i128::from(u32::MAX)),
-                    "u32::MIN" => Some(i128::from(u32::MIN)),
-                    "u64::MAX" => Some(i128::from(u64::MAX)),
-                    "u64::MIN" => Some(i128::from(u64::MIN)),
-                    _ => None,
-                }
+                self.primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name)
             }
+            _ => None,
+        }
+    }
+
+    fn primitive_assoc_const_to_i128(
+        &self,
+        qualifier: Option<&Type>,
+        const_name: &str,
+    ) -> Option<i128> {
+        let ty_name = match qualifier? {
+            Type::Named(named) => named.name.as_str(),
+            Type::Generic(generic) => generic.name.as_str(),
+            Type::NamespacedGeneric(namespaced) => namespaced.name.as_str(),
+            Type::Function(_)
+            | Type::Tuple(_)
+            | Type::Reference(_)
+            | Type::MutReference(_)
+            | Type::TypePackSpread(_, _) => return None,
+        };
+        match (ty_name, const_name) {
+            ("i8", "MAX") => Some(i128::from(i8::MAX)),
+            ("i8", "MIN") => Some(i128::from(i8::MIN)),
+            ("i16", "MAX") => Some(i128::from(i16::MAX)),
+            ("i16", "MIN") => Some(i128::from(i16::MIN)),
+            ("i32", "MAX") => Some(i128::from(i32::MAX)),
+            ("i32", "MIN") => Some(i128::from(i32::MIN)),
+            ("i64", "MAX") => Some(i128::from(i64::MAX)),
+            ("i64", "MIN") => Some(i128::from(i64::MIN)),
+            ("u8", "MAX") => Some(i128::from(u8::MAX)),
+            ("u8", "MIN") => Some(i128::from(u8::MIN)),
+            ("u16", "MAX") => Some(i128::from(u16::MAX)),
+            ("u16", "MIN") => Some(i128::from(u16::MIN)),
+            ("u32", "MAX") => Some(i128::from(u32::MAX)),
+            ("u32", "MIN") => Some(i128::from(u32::MIN)),
+            ("u64", "MAX") => Some(i128::from(u64::MAX)),
+            ("u64", "MIN") => Some(i128::from(u64::MIN)),
             _ => None,
         }
     }
@@ -2389,6 +2537,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let (some_pattern, then_block) = if ref_mode == RefBinding::None {
             let pattern = Pattern::Variant {
                 variant_name: "Some".to_string(),
+                variant_qualifier: None,
                 name_id: None,
                 name_span: span,
                 bindings: vec![for_of.binding.clone()],
@@ -2413,6 +2562,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             };
             let pattern = Pattern::Variant {
                 variant_name: "Some".to_string(),
+                variant_qualifier: None,
                 name_id: None,
                 name_span: span,
                 bindings: vec![elem_pattern],
@@ -2575,6 +2725,46 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Resolve a continue statement
     pub(super) fn resolve_continue(&mut self, continue_stmt: &ContinueStmt) -> TirStmt {
         TirStmt::new(TirStmtKind::Continue, continue_stmt.span)
+    }
+}
+
+fn format_pattern_qualifier_type(ty: &Type) -> String {
+    match ty {
+        Type::Named(t) => t.name.clone(),
+        Type::Generic(t) => {
+            let args = t
+                .args
+                .iter()
+                .map(format_pattern_qualifier_type)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{}<{args}>", t.name)
+        }
+        Type::NamespacedGeneric(t) => {
+            if t.args.is_empty() {
+                format!("{}::{}", t.namespace, t.name)
+            } else {
+                let args = t
+                    .args
+                    .iter()
+                    .map(format_pattern_qualifier_type)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{}::{}<{args}>", t.namespace, t.name)
+            }
+        }
+        Type::Function(_) => "fn".to_string(),
+        Type::Tuple(types) => {
+            let elems = types
+                .iter()
+                .map(format_pattern_qualifier_type)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("[{elems}]")
+        }
+        Type::Reference(inner) => format!("&{}", format_pattern_qualifier_type(inner)),
+        Type::MutReference(inner) => format!("&mut {}", format_pattern_qualifier_type(inner)),
+        Type::TypePackSpread(name, _) => format!("..{name}"),
     }
 }
 
