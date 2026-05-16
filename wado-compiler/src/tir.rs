@@ -209,13 +209,7 @@ impl SubstitutionContext {
                     .map(|&p| self.substitute(p, type_table))
                     .collect();
                 let new_return = self.substitute(return_type, type_table);
-                type_table.make_function_with_mut(
-                    is_mut,
-                    new_params,
-                    new_return,
-                    effects,
-                    stores,
-                )
+                type_table.make_function_with_mut(is_mut, new_params, new_return, effects, stores)
             }
             ResolvedType::GenericResource {
                 name,

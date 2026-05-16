@@ -650,9 +650,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         for param in &func.params {
             let type_id = scope.resolve_type(&param.ty);
             // Closures cannot cross the Component Model boundary.
-            if func.is_export
-                && Self::type_contains_closure(&scope.type_table.borrow(), type_id)
-            {
+            if func.is_export && Self::type_contains_closure(&scope.type_table.borrow(), type_id) {
                 let _ = scope.logger.error(TypeError::ClosureAtCmBoundary {
                     function: func.name.clone(),
                     position: format!("parameter '{}'", param.name),
@@ -684,9 +682,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Closures cannot cross the CM boundary in return position either.
-        if func.is_export
-            && Self::type_contains_closure(&scope.type_table.borrow(), return_type)
-        {
+        if func.is_export && Self::type_contains_closure(&scope.type_table.borrow(), return_type) {
             let _ = scope.logger.error(TypeError::ClosureAtCmBoundary {
                 function: func.name.clone(),
                 position: "return type".to_string(),

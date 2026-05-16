@@ -69,12 +69,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // opaque to the effect checker — swapping to them would
                 // produce spurious errors. Leave those closures inheriting
                 // outer effects.
-                let declared_effects =
-                    if effects.iter().all(|e| self.is_real_effect_symbol(e)) {
-                        Some(effects.clone())
-                    } else {
-                        None
-                    };
+                let declared_effects = if effects.iter().all(|e| self.is_real_effect_symbol(e)) {
+                    Some(effects.clone())
+                } else {
+                    None
+                };
                 Some(ExpectedFn {
                     params: params.clone(),
                     return_type: *return_type,
@@ -269,7 +268,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let mut all_locals = closure_ctx.locals;
         let body_locals = all_locals.split_off(params.len());
 
-        let declared_effects = expected_fn.as_ref().and_then(|ef| ef.declared_effects.clone());
+        let declared_effects = expected_fn
+            .as_ref()
+            .and_then(|ef| ef.declared_effects.clone());
 
         let closure_tir = TirExpr::new(
             TirExprKind::Closure {
