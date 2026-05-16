@@ -352,8 +352,8 @@ Tasks:
 
 - [x] Walk closure body in `resolve_closure` to classify outer-name usage; emit the `&mut __ref_*` ref desugar inline (`resolver/closure.rs`)
 - [x] Tag closure type `is_mut = any(capture.is_mut)`
-- [x] Retire `&mut || ...` source form. `resolver/operators.rs` now rejects it with `AmpMutClosureSyntaxRetired`; `resolve_mutable_closure` is deleted.
-- [x] Migrate fixtures `closure_2.wado`, `closure_3.wado` away from `&mut ||`; `closure_amp_mut_syntax_retired_error.wado` locks the rejection in
+- [x] Retire `&mut || ...` source form. The special-case dispatch to `resolve_mutable_closure` is gone, and `resolve_mutable_closure` itself is deleted. The syntax now falls through to the ordinary unary path, where the natural type / binding error covers it (e.g. `&mut <closure value>` produces `&mut fn mut(...)` which then trips the regular type-mismatch / `mut`-binding checks downstream). A dedicated `AmpMutClosureSyntaxRetired` diagnostic was prototyped and dropped: no Wado users exist yet, so a migration window is unnecessary.
+- [x] Migrate fixtures `closure_2.wado`, `closure_3.wado` away from `&mut ||`
 
 ### Phase 5: `mut` binding enforcement
 

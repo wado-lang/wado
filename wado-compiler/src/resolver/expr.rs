@@ -1904,6 +1904,81 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     Self::collect_mutated_vars_stmt(stmt, result);
                 }
             }
+            ast::Stmt::While(ws) => {
+                match &ws.condition {
+                    ast::Condition::Expr(cond) => Self::collect_mutated_vars(cond, result),
+                    ast::Condition::LetChain { elements, .. } => {
+                        for elem in elements {
+                            match elem {
+                                ast::ConditionElement::Let { expr, .. } => {
+                                    Self::collect_mutated_vars(expr, result);
+                                }
+                                ast::ConditionElement::Expr(e) => {
+                                    Self::collect_mutated_vars(e, result);
+                                }
+                            }
+                        }
+                    }
+                }
+                for stmt in &ws.body.stmts {
+                    Self::collect_mutated_vars_stmt(stmt, result);
+                }
+            }
+            ast::Stmt::For(fs) => {
+                if let Some(init) = &fs.init {
+                    Self::collect_mutated_vars_stmt(init, result);
+                }
+                if let Some(cond) = &fs.condition {
+                    match cond {
+                        ast::Condition::Expr(c) => Self::collect_mutated_vars(c, result),
+                        ast::Condition::LetChain { elements, .. } => {
+                            for elem in elements {
+                                match elem {
+                                    ast::ConditionElement::Let { expr, .. } => {
+                                        Self::collect_mutated_vars(expr, result);
+                                    }
+                                    ast::ConditionElement::Expr(e) => {
+                                        Self::collect_mutated_vars(e, result);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if let Some(update) = &fs.update {
+                    Self::collect_mutated_vars(update, result);
+                }
+                for stmt in &fs.body.stmts {
+                    Self::collect_mutated_vars_stmt(stmt, result);
+                }
+            }
+            ast::Stmt::ForOf(fo) => {
+                Self::collect_mutated_vars(&fo.iterable, result);
+                for stmt in &fo.body.stmts {
+                    Self::collect_mutated_vars_stmt(stmt, result);
+                }
+            }
+            ast::Stmt::Return(rs) => {
+                if let Some(v) = &rs.value {
+                    Self::collect_mutated_vars(v, result);
+                }
+            }
+            ast::Stmt::Break(bs) => {
+                if let Some(v) = &bs.value {
+                    Self::collect_mutated_vars(v, result);
+                }
+            }
+            ast::Stmt::Assert(a) => {
+                Self::collect_mutated_vars(&a.condition, result);
+                if let Some(msg) = &a.message {
+                    Self::collect_mutated_vars(msg, result);
+                }
+            }
+            ast::Stmt::LabeledBlock(lb) => {
+                for stmt in &lb.block.stmts {
+                    Self::collect_mutated_vars_stmt(stmt, result);
+                }
+            }
             ast::Stmt::Match(m) => {
                 Self::collect_mutated_vars(&m.expr, result);
                 for arm in &m.arms {
@@ -1913,6 +1988,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     Self::collect_mutated_vars(&arm.body, result);
                 }
             }
+            // Continue, Use, TaskReturn, etc. carry no expressions that could
+            // mutate outer captures — safe to ignore.
             _ => {}
         }
     }
