@@ -58,7 +58,7 @@ type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(22)
 
-type "functype//core:prelude/string.wado/String::concat" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(23)
+type "functype//core:prelude/string.wado/String^Add::add" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(23)
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(24)
 
@@ -124,11 +124,11 @@ fn "./variant_struct_concat_module.wado/format_str"(s, opts) {
     let pad: ref "core:prelude/string.wado//String";
     pad = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("  "), used: 2 };
     return let __match_scrut_0: ref "./variant_struct_concat_module.wado//Align", __match_scrut_0 = opts.align, (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/String::concat"(s, pad);
+        "core:prelude/string.wado/String^Add::add"(s, pad);
     } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/String::concat"(pad, s);
+        "core:prelude/string.wado/String^Add::add"(pad, s);
     } else {
-        "core:prelude/string.wado/String::concat"("core:prelude/string.wado/String::concat"(pad, s), pad);
+        "core:prelude/string.wado/String^Add::add"("core:prelude/string.wado/String^Add::add"(pad, s), pad);
     });
 }
 
@@ -241,17 +241,17 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     self.used = new_used;
 }
 
-fn "core:prelude/string.wado/String::concat"(a, b) {
+fn "core:prelude/string.wado/String^Add::add"(self, other) {
     let len_a: i32;
     let len_b: i32;
     let total: i32;
     let repr: ref builtin::array<u8>;
-    len_a = a.used;
-    len_b = b.used;
+    len_a = self.used;
+    len_b = other.used;
     total = len_a + len_b;
     repr = builtin::array_new<u8>(total);
-    builtin::array_copy<u8>(repr, 0, a.repr, 0, len_a);
-    builtin::array_copy<u8>(repr, len_a, b.repr, 0, len_b);
+    builtin::array_copy<u8>(repr, 0, self.repr, 0, len_a);
+    builtin::array_copy<u8>(repr, len_a, other.repr, 0, len_b);
     return struct.new "core:prelude/string.wado//String" { repr: repr, used: total };
 }
 

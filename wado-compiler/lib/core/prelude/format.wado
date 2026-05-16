@@ -132,11 +132,11 @@ impl Formatter {
             self.buf.append_byte_filled(fill_byte, left_pad);
             let mut i = content_len - 1;
             while i >= 0 {
-                self.buf.set_byte(start_pos + left_pad + i, self.buf.get_byte(start_pos + i));
+                self.buf.set_byte_unchecked(start_pos + left_pad + i, self.buf.get_byte_unchecked(start_pos + i));
                 i = i - 1;
             }
             for let mut j = 0; j < left_pad; j += 1 {
-                self.buf.set_byte(start_pos + j, fill_byte);
+                self.buf.set_byte_unchecked(start_pos + j, fill_byte);
             }
             self.buf.append_byte_filled(fill_byte, right_pad);
         } else {
@@ -144,11 +144,11 @@ impl Formatter {
             self.buf.append_byte_filled(fill_byte, padding);
             let mut i = content_len - 1;
             while i >= 0 {
-                self.buf.set_byte(start_pos + padding + i, self.buf.get_byte(start_pos + i));
+                self.buf.set_byte_unchecked(start_pos + padding + i, self.buf.get_byte_unchecked(start_pos + i));
                 i = i - 1;
             }
             for let mut j = 0; j < padding; j += 1 {
-                self.buf.set_byte(start_pos + j, fill_byte);
+                self.buf.set_byte_unchecked(start_pos + j, fill_byte);
             }
         }
     }

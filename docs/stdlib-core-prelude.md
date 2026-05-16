@@ -3052,13 +3052,26 @@ Get the length of the string in bytes
 
 Check if the string is empty
 
-#### `pub fn get_byte(&self, index: i32) -> u8`
+#### `pub fn get_byte_unchecked(&self, index: i32) -> u8`
 
-Get a byte at the given index (low-level - prefer bytes() iterator)
+Read the byte at `index` without bounds checks.
 
-#### `pub fn set_byte(&mut self, index: i32, value: u8)`
+# Safety (caller-side preconditions)
 
-Set a byte at the given index (low-level)
+- `0 <= index < self.len()`.
+
+For safe byte access, use `bytes()` iterator instead. This method is
+reserved for performance-critical code where bounds have been proven.
+
+#### `pub fn set_byte_unchecked(&mut self, index: i32, value: u8)`
+
+Write the byte at `index` without bounds or UTF-8 checks.
+
+# Safety (caller-side preconditions)
+
+- `0 <= index < self.len()`.
+- The resulting byte sequence must remain valid UTF-8. This is the
+  caller's responsibility (cf. Rust's `as_bytes_mut`, which is `unsafe`).
 
 #### `pub fn internal_raw_bytes(&self) -> builtin::array<u8>`
 
@@ -3099,10 +3112,24 @@ Much faster than a loop for large n (e.g., trailing zeros in large integers).
 Appends another string to this string.
 Grows the string if necessary (O(1) amortized).
 
-#### `pub fn concat(a: String, b: String) -> String`
+#### `pub fn push_bytes_unchecked(&mut self, bytes: Array<u8>)`
 
-Concatenate two strings into a new string
-This is a static method: String::concat(a, b)
+Append all bytes of `bytes` to this string (bulk-copy, single `array_copy`).
+
+# Safety (caller-side preconditions)
+
+- The resulting byte sequence (existing bytes + new bytes) must be valid UTF-8.
+
+#### `pub fn push_str_range_unchecked(&mut self, s: String, start: i32, end: i32)`
+
+Append the byte range `[start, end)` of `s` to this string
+(bulk-copy, single `array_copy`).
+
+# Safety (caller-side preconditions)
+
+- `0 <= start <= end <= s.len()`.
+- `start` and `end` must lie on UTF-8 character boundaries of `s`.
+- The resulting byte sequence must remain valid UTF-8.
 
 #### `pub fn bytes(&self) -> StrUtf8ByteIter`
 
@@ -3119,6 +3146,16 @@ Returns None if `byte_index` is past the end of the string or there
 aren't enough bytes to form a full UTF-8 sequence.
 Assumes `byte_index` is on a character boundary (the string is valid UTF-8).
 
+#### `pub fn char_at_byte_unchecked(&self, byte_index: i32) -> char`
+
+Decodes the UTF-8 character starting at `byte_index` without bounds checks.
+
+# Safety (caller-side preconditions)
+
+- `byte_index` lies on a UTF-8 character boundary.
+- The full multi-byte sequence (1–4 bytes) starting at `byte_index`
+  is in range `[0, self.len())`.
+
 #### `pub fn push(&mut self, c: char)`
 
 Appends a Unicode scalar value (char) to this string.
@@ -3126,16 +3163,26 @@ Appends a Unicode scalar value (char) to this string.
 #### `pub fn truncate(&mut self, byte_len: i32)`
 
 Truncates the string to the given byte length.
-Panics if `byte_len` is not on a UTF-8 character boundary.
+Panics if `byte_len` is negative or not on a UTF-8 character boundary.
+
+#### `pub fn truncate_unchecked(&mut self, byte_len: i32)`
+
+Truncate without bounds or UTF-8 boundary checks.
+
+# Safety (caller-side preconditions)
+
+- `0 <= byte_len <= self.len()`.
+- `byte_len` lies on a UTF-8 character boundary.
 
 #### `pub fn truncate_chars(&mut self, char_count: i32)`
 
 Truncate the string to the given number of characters.
 If `char_count` >= number of characters, the string is unchanged.
 
-#### `pub fn truncate_bytes(&mut self, byte_len: i32)`
+#### `pub fn is_char_boundary(&self, byte_index: i32) -> bool`
 
-@deprecated Use `truncate` instead.
+Returns true if `byte_index` is 0, `self.len()`, or the start of a
+UTF-8 character in this string. Mirrors Rust's `str::is_char_boundary`.
 
 #### `pub fn pop(&mut self) -> Option<char>`
 
@@ -3156,10 +3203,6 @@ Reserves capacity for at least `additional` more bytes.
 #### `pub fn shrink_to_fit(&mut self)`
 
 Shrinks the capacity to match the current byte length.
-
-#### `pub fn as_bytes(&self) -> Array<u8>`
-
-Returns the bytes of this string as an Array<u8>.
 
 #### `pub fn trim_ascii_start(&self) -> String`
 
@@ -3202,7 +3245,18 @@ Non-ASCII bytes are compared exactly.
 
 #### `pub fn substr_bytes(&self, start: i32, end: i32) -> String`
 
-Extract a substring by byte range [start, end).
+Extract a substring by byte range `[start, end)`.
+Panics if the range is out of bounds or either end is not on a UTF-8 boundary.
+
+#### `pub fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String`
+
+Extract a substring by byte range `[start, end)` without bounds or
+UTF-8 boundary checks.
+
+# Safety (caller-side preconditions)
+
+- `0 <= start <= end <= self.len()`.
+- `start` and `end` lie on UTF-8 character boundaries.
 
 #### `pub fn contains(&self, pat: String) -> bool`
 
@@ -3235,17 +3289,45 @@ Returns the byte index of the first character matching the predicate, or None.
 #### `pub fn insert(&mut self, byte_index: i32, ch: char)`
 
 Inserts a character at the given byte index.
-Panics if `byte_index` is not on a UTF-8 character boundary.
+Panics if `byte_index` is out of bounds or not on a UTF-8 character boundary.
+
+#### `pub fn insert_unchecked(&mut self, byte_index: i32, ch: char)`
+
+Inserts a character at `byte_index` without bounds or UTF-8 boundary checks.
+
+# Safety (caller-side preconditions)
+
+- `0 <= byte_index <= self.len()`.
+- `byte_index` lies on a UTF-8 character boundary.
 
 #### `pub fn insert_str(&mut self, byte_index: i32, s: String)`
 
 Inserts a string at the given byte index.
-Panics if `byte_index` is not on a UTF-8 character boundary.
+Panics if `byte_index` is out of bounds or not on a UTF-8 character boundary.
+
+#### `pub fn insert_str_unchecked(&mut self, byte_index: i32, s: String)`
+
+Inserts a string at `byte_index` without bounds or UTF-8 boundary checks.
+
+# Safety (caller-side preconditions)
+
+- `0 <= byte_index <= self.len()`.
+- `byte_index` lies on a UTF-8 character boundary.
 
 #### `pub fn remove(&mut self, byte_index: i32) -> char`
 
 Removes and returns the character at the given byte index.
-Panics if the index is not on a UTF-8 character boundary.
+Panics if the index is out of bounds or not on a UTF-8 character boundary.
+
+#### `pub fn remove_unchecked(&mut self, byte_index: i32) -> char`
+
+Removes and returns the character at `byte_index` without bounds or
+UTF-8 boundary checks.
+
+# Safety (caller-side preconditions)
+
+- `0 <= byte_index < self.len()`.
+- `byte_index` lies on a UTF-8 character boundary.
 
 #### `pub fn repeat(&self, n: i32) -> String`
 

@@ -108,11 +108,11 @@ impl DfaRouter {
         let mut params = TreeMap::<String, String>::new();
         let plen = path.len();
         // Skip leading '/' if any.
-        let mut pos = if plen > 0 && path.get_byte(0) == '/' as u8 { 1 } else { 0 };
+        let mut pos = if plen > 0 && path.get_byte_unchecked(0) == '/' as u8 { 1 } else { 0 };
         let mut state: i32 = 0;
         while pos < plen {
             let mut end = pos;
-            while end < plen && path.get_byte(end) != '/' as u8 {
+            while end < plen && path.get_byte_unchecked(end) != '/' as u8 {
                 end += 1;
             }
             if end == pos {
@@ -207,8 +207,8 @@ fn cmp_string_to_byte_range(label: &String, path: &String, start: i32, end: i32)
     let blen = end - start;
     let cmp_len = if llen < blen { llen } else { blen };
     for let mut i = 0; i < cmp_len; i += 1 {
-        let a = label.get_byte(i);
-        let b = path.get_byte(start + i);
+        let a = label.get_byte_unchecked(i);
+        let b = path.get_byte_unchecked(start + i);
         if a < b {
             return Ordering::Less;
         }

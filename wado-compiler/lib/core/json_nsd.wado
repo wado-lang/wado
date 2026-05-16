@@ -315,7 +315,7 @@ impl DeserializeSeq for NsdSeqAccess {
         if self.de.pos >= self.de.input.len() {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
-        if self.de.input.get_byte(self.de.pos) as i32 == ']' as i32 {
+        if self.de.input.get_byte_unchecked(self.de.pos) as i32 == ']' as i32 {
             return Result::Ok(null);
         }
         if !self.first {
@@ -346,7 +346,7 @@ impl DeserializeMap for NsdMapAccess {
         if self.de.pos >= self.de.input.len() {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
-        if self.de.input.get_byte(self.de.pos) as i32 == '}' as i32 {
+        if self.de.input.get_byte_unchecked(self.de.pos) as i32 == '}' as i32 {
             return Result::Ok(null);
         }
         if !self.first {
@@ -385,7 +385,7 @@ impl DeserializeStruct for NsdStructAccess {
         if self.de.pos >= self.de.input.len() {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
-        if self.de.input.get_byte(self.de.pos) as i32 == ']' as i32 {
+        if self.de.input.get_byte_unchecked(self.de.pos) as i32 == ']' as i32 {
             return Result::Ok(null);
         }
         if !self.first {
@@ -542,7 +542,7 @@ impl Deserializer for NsdDeserializer {
         if self.de.pos >= self.de.input.len() {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
-        let b = self.de.input.get_byte(self.de.pos) as i32;
+        let b = self.de.input.get_byte_unchecked(self.de.pos) as i32;
         if b == '[' as i32 {
             // Payload variant: [disc, payload]
             self.de.pos += 1;

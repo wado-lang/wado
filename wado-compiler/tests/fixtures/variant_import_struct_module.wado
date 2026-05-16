@@ -34,8 +34,8 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
         pad.push_str(" ");
     }
     return match opts.align {
-        Left => String::concat(s, pad),
-        Right => String::concat(pad, s),
+        Left => s + pad,
+        Right => pad + s,
         Center => {
             let left = pad_len / 2;
             let right = pad_len - left;
@@ -47,7 +47,7 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
             for let mut i = 0; i < right; i += 1 {
                 rpad.push_str(" ");
             }
-            String::concat(String::concat(lpad, s), rpad);
+            lpad + s + rpad;
         },
     };
 }

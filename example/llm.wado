@@ -47,15 +47,15 @@ fn send_post(api_key: String, body: String) -> Response with Client {
     let headers = Fields::new();
     headers.append(
         "authorization" as FieldName,
-        `Bearer {api_key}`.as_bytes() as FieldValue,
+        `Bearer {api_key}`.bytes().collect() as FieldValue,
     );
     headers.append(
         "content-type" as FieldName,
-        "application/json".as_bytes() as FieldValue,
+        "application/json".bytes().collect() as FieldValue,
     );
     headers.append(
         "user-agent" as FieldName,
-        #file.as_bytes() as FieldValue,
+        #file.bytes().collect() as FieldValue,
     );
 
     let [req, _req_future] = Request::new(
@@ -74,7 +74,7 @@ fn send_post(api_key: String, body: String) -> Response with Client {
     // calls rendezvous with it and the whole body flows out without
     // deadlock.
     let subtask = Client::send(req);
-    body_tx.write(body.as_bytes());
+    body_tx.write(body.bytes().collect());
     body_tx.drop();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 

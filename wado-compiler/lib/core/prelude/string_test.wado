@@ -173,43 +173,43 @@ test "collect multibyte chars" {
     assert bytes.len() == 7;
 }
 
-test "truncate_bytes ASCII" {
+test "truncate ASCII" {
     let mut s = "hello world";
     s.truncate(5);
     assert s == "hello";
 }
 
-test "truncate_bytes no-op when len >= current" {
+test "truncate no-op when len >= current" {
     let mut s = "hi";
     s.truncate(10);
     assert s == "hi";
 }
 
-test "truncate_bytes to zero" {
+test "truncate to zero" {
     let mut s = "abc";
     s.truncate(0);
     assert s == "";
 }
 
-test "truncate_bytes UTF-8 3-byte boundary" {
+test "truncate UTF-8 3-byte boundary" {
     let mut s = "日本語";
     s.truncate(6);
     assert s == "日本";
 }
 
-test "truncate_bytes exact length" {
+test "truncate exact length" {
     let mut s = "hello";
     s.truncate(5);
     assert s == "hello";
 }
 
-test "truncate_bytes UTF-8 2-byte boundary" {
+test "truncate UTF-8 2-byte boundary" {
     let mut s = "ñé";
     s.truncate(2);
     assert s == "ñ";
 }
 
-test "truncate_bytes UTF-8 4-byte boundary" {
+test "truncate UTF-8 4-byte boundary" {
     let mut s = "😀😃";
     s.truncate(4);
     assert s == "😀";
@@ -417,7 +417,7 @@ test "trim_ascii_end" {
 
 test "trim_ascii preserves non-ASCII" {
     // NO-BREAK SPACE (U+00A0) is not ASCII whitespace
-    let s = String::concat('\u{A0}'.to_string(), "hello");
+    let s = '\u{A0}'.to_string() + "hello";
     assert s.trim_ascii() == s;
 }
 
@@ -445,24 +445,24 @@ test "trim_end" {
 
 test "trim Unicode whitespace" {
     let nbsp = '\u{A0}'.to_string();
-    let s = String::concat(String::concat(nbsp, "hello"), nbsp);
+    let s = nbsp + "hello" + nbsp;
     assert s.trim() == "hello";
 }
 
 test "trim IDEOGRAPHIC SPACE" {
     let ideographic = '\u{3000}'.to_string();
-    let s = String::concat(String::concat(ideographic, "日本語"), ideographic);
+    let s = ideographic + "日本語" + ideographic;
     assert s.trim() == "日本語";
 }
 
 test "trim mixed ASCII and Unicode whitespace" {
     let nbsp = '\u{A0}'.to_string();
-    let s = String::concat(String::concat(" ", String::concat(nbsp, "hello")), " ");
+    let s = " " + nbsp + "hello" + " ";
     assert s.trim() == "hello";
 }
 
-test "String::concat" {
-    let combined = String::concat(String::concat("Hello", ", "), "World!");
+test "string addition" {
+    let combined = "Hello" + ", " + "World!";
     assert combined == "Hello, World!";
 }
 
@@ -776,15 +776,15 @@ test "shrink_to_fit" {
     assert s == "hi";
 }
 
-test "as_bytes" {
-    let bytes = "Hello".as_bytes();
+test "bytes collect" {
+    let bytes: Array<u8> = "Hello".bytes().collect();
     assert bytes.len() == 5;
     assert bytes[0] == 72;
     assert bytes[4] == 111;
 }
 
-test "as_bytes multibyte" {
-    let bytes = "日".as_bytes();
+test "bytes collect multibyte" {
+    let bytes: Array<u8> = "日".bytes().collect();
     assert bytes.len() == 3;
     assert bytes[0] == 0xE6;
     assert bytes[1] == 0x97;
@@ -1004,4 +1004,125 @@ test "eq_ignore_ascii_case empty" {
 test "eq_ignore_ascii_case non-ASCII unchanged" {
     assert "café".eq_ignore_ascii_case("café");
     assert !"café".eq_ignore_ascii_case("CAFÉ");
+}
+
+test "is_char_boundary at start and end" {
+    let s = "hello";
+    assert s.is_char_boundary(0);
+    assert s.is_char_boundary(5);
+}
+
+test "is_char_boundary ASCII" {
+    let s = "hello";
+    for let mut i = 0; i <= 5; i += 1 {
+        assert s.is_char_boundary(i);
+    }
+}
+
+test "is_char_boundary multibyte" {
+    // "日本" — 6 bytes, 3 bytes each
+    let s = "日本";
+    assert s.is_char_boundary(0);
+    assert !s.is_char_boundary(1);
+    assert !s.is_char_boundary(2);
+    assert s.is_char_boundary(3);
+    assert !s.is_char_boundary(4);
+    assert !s.is_char_boundary(5);
+    assert s.is_char_boundary(6);
+}
+
+test "is_char_boundary out of range" {
+    let s = "hi";
+    assert !s.is_char_boundary(-1);
+    assert !s.is_char_boundary(3);
+}
+
+test "char_at_byte_unchecked ASCII" {
+    let s = "hi";
+    assert s.char_at_byte_unchecked(0) == 'h';
+    assert s.char_at_byte_unchecked(1) == 'i';
+}
+
+test "char_at_byte_unchecked multibyte" {
+    let s = "日本";
+    assert s.char_at_byte_unchecked(0) == '日';
+    assert s.char_at_byte_unchecked(3) == '本';
+}
+
+test "push_bytes_unchecked ASCII" {
+    let mut s = String::with_capacity(0);
+    let bytes: Array<u8> = ['h' as u8, 'i' as u8];
+    s.push_bytes_unchecked(bytes);
+    assert s == "hi";
+}
+
+test "push_bytes_unchecked empty" {
+    let mut s = "abc";
+    let bytes: Array<u8> = [];
+    s.push_bytes_unchecked(bytes);
+    assert s == "abc";
+}
+
+test "push_bytes_unchecked multibyte" {
+    let mut s = "x";
+    let bytes: Array<u8> = [0xE6, 0x97, 0xA5];  // "日"
+    s.push_bytes_unchecked(bytes);
+    assert s == "x日";
+}
+
+test "push_str_range_unchecked ASCII" {
+    let mut dst = "[";
+    let src = "hello";
+    dst.push_str_range_unchecked(src, 1, 4);
+    dst.push_str("]");
+    assert dst == "[ell]";
+}
+
+test "push_str_range_unchecked full range" {
+    let mut dst = String::with_capacity(0);
+    dst.push_str_range_unchecked("abcd", 0, 4);
+    assert dst == "abcd";
+}
+
+test "push_str_range_unchecked empty range" {
+    let mut dst = "x";
+    dst.push_str_range_unchecked("hello", 2, 2);
+    assert dst == "x";
+}
+
+test "push_str_range_unchecked multibyte" {
+    let mut dst = String::with_capacity(0);
+    let src = "日本語";
+    dst.push_str_range_unchecked(src, 3, 6);  // "本"
+    assert dst == "本";
+}
+
+test "substr_bytes_unchecked basic" {
+    let s = "hello";
+    assert s.substr_bytes_unchecked(1, 4) == "ell";
+}
+
+test "truncate_unchecked basic" {
+    let mut s = "hello";
+    s.truncate_unchecked(3);
+    assert s == "hel";
+}
+
+test "insert_unchecked ASCII" {
+    let mut s = "ac";
+    s.insert_unchecked(1, 'b');
+    assert s == "abc";
+}
+
+test "insert_str_unchecked ASCII" {
+    let mut s = "<>";
+    s.insert_str_unchecked(1, "x");
+    assert s == "<x>";
+}
+
+test "remove_unchecked ASCII" {
+    let mut s = "abc";
+    let c = s.remove_unchecked(1);
+    assert c == 'b';
+    assert s == "ac";
 }

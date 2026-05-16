@@ -1,7 +1,7 @@
-// truncate_bytes on a non-UTF-8 boundary should trap
+// truncate on a non-UTF-8 boundary should trap
 export fn run() {
     let mut s = "日本語";  // 9 bytes: 3+3+3
-    s.truncate_bytes(4);  // byte 4 is a continuation byte (10xxxxxx)
+    s.truncate(4);  // byte 4 is a continuation byte (10xxxxxx)
 }
 
 __DATA__

@@ -3356,7 +3356,7 @@ pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHea
     // File name (null-terminated)
     if header.name.len() > 0 {
         for let mut i = 0; i < header.name.len(); i += 1 {
-            output.push(header.name.get_byte(i));
+            output.push(header.name.get_byte_unchecked(i));
         }
         output.push(0);
     }
@@ -3364,7 +3364,7 @@ pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHea
     // Comment (null-terminated)
     if header.comment.len() > 0 {
         for let mut i = 0; i < header.comment.len(); i += 1 {
-            output.push(header.comment.get_byte(i));
+            output.push(header.comment.get_byte_unchecked(i));
         }
         output.push(0);
     }

@@ -392,12 +392,12 @@ impl<H> Router<H> {
         with stores[self, path]
     {
         let plen = path.len();
-        let mut pos = if plen > 0 && path.get_byte(0) == '/' as u8 { 1 } else { 0 };
+        let mut pos = if plen > 0 && path.get_byte_unchecked(0) == '/' as u8 { 1 } else { 0 };
         let mut state: i32 = 0;
         let mut ranges: Array<i32> = [];
         while pos < plen {
             let mut end = pos;
-            while end < plen && path.get_byte(end) != '/' as u8 {
+            while end < plen && path.get_byte_unchecked(end) != '/' as u8 {
                 end += 1;
             }
             if end == pos {
@@ -508,11 +508,11 @@ impl<H> Router<H> {
 
     fn allowed_methods_dynamic(&self, path: &String) -> Array<Method> {
         let plen = path.len();
-        let mut pos = if plen > 0 && path.get_byte(0) == '/' as u8 { 1 } else { 0 };
+        let mut pos = if plen > 0 && path.get_byte_unchecked(0) == '/' as u8 { 1 } else { 0 };
         let mut state: i32 = 0;
         while pos < plen {
             let mut end = pos;
-            while end < plen && path.get_byte(end) != '/' as u8 {
+            while end < plen && path.get_byte_unchecked(end) != '/' as u8 {
                 end += 1;
             }
             if end == pos {
@@ -669,7 +669,7 @@ fn set_method_specific(entries: &mut Array<MethodEntry>, method: Method, handler
 fn strip_query(s: String) -> String {
     let len = s.len();
     for let mut i = 0; i < len; i += 1 {
-        let b = s.get_byte(i);
+        let b = s.get_byte_unchecked(i);
         if b == '?' as u8 || b == '#' as u8 {
             return s.substr_bytes(0, i);
         }
@@ -681,10 +681,10 @@ fn strip_query(s: String) -> String {
 /// malformed input.
 fn parse_pattern(path: &String) -> Array<Segment> {
     let bytes = path.len();
-    if bytes == 0 || path.get_byte(0) != '/' as u8 {
+    if bytes == 0 || path.get_byte_unchecked(0) != '/' as u8 {
         panic("route pattern must start with '/'");
     }
-    if bytes > 1 && path.get_byte(bytes - 1) == '/' as u8 {
+    if bytes > 1 && path.get_byte_unchecked(bytes - 1) == '/' as u8 {
         panic("route pattern must not contain empty segments (no '//' or trailing '/')");
     }
     let mut out: Array<Segment> = [];
@@ -692,7 +692,7 @@ fn parse_pattern(path: &String) -> Array<Segment> {
     let mut i = 1;
     while i < bytes {
         let mut j = i;
-        while j < bytes && path.get_byte(j) != '/' as u8 {
+        while j < bytes && path.get_byte_unchecked(j) != '/' as u8 {
             j += 1;
         }
         if wildcard_seen {
@@ -702,7 +702,7 @@ fn parse_pattern(path: &String) -> Array<Segment> {
         if seg.is_empty() {
             panic("route pattern must not contain empty segments (no '//' or trailing '/')");
         }
-        let item = match seg.get_byte(0) as char {
+        let item = match seg.get_byte_unchecked(0) as char {
             ':' => {
                 let name = seg.substr_bytes(1, seg.len());
                 if name.is_empty() {
@@ -759,8 +759,8 @@ fn cmp_string_to_byte_range(label: &String, path: &String, start: i32, end: i32)
     let blen = end - start;
     let cmp_len = if llen < blen { llen } else { blen };
     for let mut i = 0; i < cmp_len; i += 1 {
-        let a = label.get_byte(i);
-        let b = path.get_byte(start + i);
+        let a = label.get_byte_unchecked(i);
+        let b = path.get_byte_unchecked(start + i);
         if a < b {
             return Ordering::Less;
         }
@@ -827,7 +827,7 @@ impl Deserializer for PathParamsDeserializer {
         // Determine the UTF-8 sequence length from the leading byte and
         // verify the captured slice encodes exactly one codepoint.
         // `String::char_at_byte` decodes without substring allocation.
-        let b0 = self.src.path.get_byte(s);
+        let b0 = self.src.path.get_byte_unchecked(s);
         let expected = if b0 < 0x80 { 1 } else if b0 < 0xC0 { 0 } else if b0 < 0xE0 { 2 } else if b0 < 0xF0 { 3 } else { 4 };
         if expected == 0 || len != expected {
             return Result::Err(DeserializeError::invalid_value(self.format_error("char"), s as i64));
@@ -908,7 +908,7 @@ impl PathParamsDeserializer {
     fn path_bytes_eq(&self, start: i32, pat: String) -> bool {
         let plen = pat.len();
         for let mut i = 0; i < plen; i += 1 {
-            if self.src.path.get_byte(start + i) != pat.get_byte(i) {
+            if self.src.path.get_byte_unchecked(start + i) != pat.get_byte_unchecked(i) {
                 return false;
             }
         }

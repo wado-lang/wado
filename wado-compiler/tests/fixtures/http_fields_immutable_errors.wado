@@ -22,12 +22,12 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // append on immutable → Err
     let append_result = headers.append(
         "x-new" as FieldName,
-        "value".as_bytes() as FieldValue,
+        "value".bytes().collect() as FieldValue,
     );
     assert append_result matches { Err(_) };
 
     // set on immutable → Err
-    let values: Array<FieldValue> = ["val".as_bytes() as FieldValue];
+    let values: Array<FieldValue> = ["val".bytes().collect() as FieldValue];
     let set_result = headers.set("host" as FieldName, values);
     assert set_result matches { Err(_) };
 
@@ -43,7 +43,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let entries = headers.copy_all();
     let cloned = headers.clone();
     // The cloned copy is mutable
-    let clone_append = cloned.append("x-clone" as FieldName, "ok".as_bytes() as FieldValue);
+    let clone_append = cloned.append("x-clone" as FieldName, "ok".bytes().collect() as FieldValue);
     assert clone_append matches { Ok(_) };
 
     // Return success
@@ -53,7 +53,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [response, _tx_future] = Response::new(resp_headers, Option::<Stream<u8>>::Some(resp_rx), trailers_future);
 
     task return Result::<Response, ErrorCode>::Ok(response);
-    resp_tx.write("ok".as_bytes());
+    resp_tx.write("ok".bytes().collect());
     resp_tx.drop();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }
