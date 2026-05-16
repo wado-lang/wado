@@ -12,6 +12,7 @@
 //!
 //! See `docs/wep-2026-05-11-nir.md`.
 
+pub(super) mod pattern;
 mod switch;
 mod wide_int;
 

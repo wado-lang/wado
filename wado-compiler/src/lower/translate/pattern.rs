@@ -11,10 +11,11 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-/// Run the pattern planner: a TIR-mutating pass that rewrites
+/// Pattern lowering: a TIR-mutating pass that rewrites
 /// `LetDestructure` / `IfLet` into explicit `Let` + `If` chains and
-/// converts dense integer `Match` expressions into `Switch`.
-pub fn plan(flat: &mut FlatPackage) {
+/// expands or-patterns in `Match` arms. Runs as the last TIR-touching
+/// pass before the translator walks TIR → NIR.
+pub fn lower(flat: &mut FlatPackage) {
     // Build a map keyed by (variant_name, module_source). The
     // module_source axis is required so that two modules each
     // declaring a variant with the same name keep their case
