@@ -262,10 +262,9 @@ fn walk_into(
 /// contribute no filters.
 fn package_manifest_test_filters(pkg_root: &Path) -> Result<(Vec<String>, Vec<String>), CliExit> {
     match project_manifest::discover(pkg_root) {
-        Ok(Some(project)) if project.root == pkg_root => Ok((
-            project.manifest.test.exclude,
-            project.manifest.test.include,
-        )),
+        Ok(Some(project)) if project.root == pkg_root => {
+            Ok((project.manifest.test.exclude, project.manifest.test.include))
+        }
         Ok(_) => Ok((Vec::new(), Vec::new())),
         Err(e) => Err(CliExit::error(e)),
     }

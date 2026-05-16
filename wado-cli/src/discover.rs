@@ -281,7 +281,9 @@ fn walk_dir(
                 continue;
             }
 
-            walk_dir(&path, root, excludes, includes, submodules, rules, visited, out)?;
+            walk_dir(
+                &path, root, excludes, includes, submodules, rules, visited, out,
+            )?;
         } else if path.extension().is_some_and(|ext| ext == "wado") {
             out.files.push(path);
         }
@@ -586,7 +588,8 @@ pathology = should-not-match\n\
         )
         .unwrap();
 
-        let result = discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default()).unwrap();
+        let result =
+            discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default()).unwrap();
         let got = names_of(root, &result.files);
         assert!(got.contains("a.wado"));
         assert!(!got.contains("subpkg/main.wado"));
