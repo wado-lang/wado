@@ -498,7 +498,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let string_type = self
             .type_table
             .borrow_mut()
-            .make_struct("String".to_string(), ModuleSource::string());
+            .make_compiler_struct(crate::compiler_item::CompilerItem::String);
         let i32_type = TypeTable::I32;
 
         // Get type args for monomorphization from builder type

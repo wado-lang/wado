@@ -292,10 +292,15 @@ fn build_copy_return_expr(
     // type in the closure happens to be a non-monomorphized template
     // wrapper. The shape that *does* need a non-identity copy
     // (Array<T> / tuple) is recovered by the explicit checks below.
+    let array_name = type_table
+        .borrow()
+        .compiler_items()
+        .struct_name(crate::compiler_item::CompilerItem::Array)
+        .to_string();
     if let ResolvedType::GenericInstance {
         name, type_args, ..
     } = resolved
-        && name == "Array"
+        && name == &array_name
         && type_args.len() == 1
         && is_synth_safe_element(type_args[0], type_table, project)
     {
@@ -493,7 +498,22 @@ fn is_synth_safe_element(
             if TypeTable::is_tuple_type(&name, &module_source) {
                 return true;
             }
-            if name == "Array" || name == "String" || name == "Box" {
+            let (array_name, string_name, box_name) = {
+                let tt = type_table.borrow();
+                let items = tt.compiler_items();
+                (
+                    items
+                        .struct_name(crate::compiler_item::CompilerItem::Array)
+                        .to_string(),
+                    items
+                        .struct_name(crate::compiler_item::CompilerItem::String)
+                        .to_string(),
+                    items
+                        .struct_name(crate::compiler_item::CompilerItem::Box)
+                        .to_string(),
+                )
+            };
+            if name == array_name || name == string_name || name == box_name {
                 return true;
             }
             // A concrete monomorphised struct entry is the strongest

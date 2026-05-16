@@ -865,6 +865,19 @@ impl TypeTable {
             .trait_module(crate::compiler_item::CompilerItem::Default)
     }
 
+    /// Make the struct type for a registered [`CompilerItem`] variant
+    /// of kind [`CompilerItemKind::Struct`]. Reads both the module
+    /// source and the struct name from the registry so the call site
+    /// does not hard-code either. Panics with a clear ICE message when
+    /// the item is not registered or has the wrong kind.
+    pub fn make_compiler_struct(&mut self, item: crate::compiler_item::CompilerItem) -> TypeId {
+        let (module_source, name) = {
+            let (m, n) = self.compiler_items.require_struct(item);
+            (m.clone(), n.to_string())
+        };
+        self.make_struct(name, module_source)
+    }
+
     /// Create an `Option<T>` type using the module source registered
     /// via `#[compiler_item("option")]`.
     pub fn make_option(&mut self, inner: TypeId) -> TypeId {

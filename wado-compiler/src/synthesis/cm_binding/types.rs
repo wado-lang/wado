@@ -71,7 +71,14 @@ pub fn wasi_type_to_type_id(
     registry: &WasiRegistry,
     wasi_package: &str,
 ) -> TypeId {
+    let string_struct_name = type_table
+        .compiler_items()
+        .struct_name(crate::compiler_item::CompilerItem::String)
+        .to_string();
     match ty {
+        Type::Named(named) if named.name.as_str() == string_struct_name => {
+            type_table.make_compiler_struct(crate::compiler_item::CompilerItem::String)
+        }
         Type::Named(named) => match named.name.as_str() {
             "i8" => TypeTable::I8,
             "i16" => TypeTable::I16,
@@ -87,7 +94,6 @@ pub fn wasi_type_to_type_id(
             "char" => TypeTable::CHAR,
             // Unit type written as a named type "()"
             "()" => TypeTable::UNIT,
-            "String" => type_table.make_struct("String".to_string(), ModuleSource::string()),
             // Resource/enum/variant types - look up the already-resolved TypeId.
             // Lookups are strictly scoped by `(name, wasi_package)`. If the
             // primary scope misses, we consult the registry for the canonical
@@ -103,37 +109,51 @@ pub fn wasi_type_to_type_id(
                 })
                 .unwrap_or(TypeTable::I32),
         },
-        Type::Generic(g) => match g.name.as_str() {
-            "Array" if g.args.len() == 1 => {
+        Type::Generic(g) => {
+            let array_name = type_table
+                .compiler_items()
+                .struct_name(crate::compiler_item::CompilerItem::Array)
+                .to_string();
+            if g.name.as_str() == array_name && g.args.len() == 1 {
                 let elem_type =
                     wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                type_table.make_array(elem_type)
+                return type_table.make_array(elem_type);
             }
-            "Option" if g.args.len() == 1 => {
+            let option_name = type_table
+                .compiler_items()
+                .variant_name(crate::compiler_item::CompilerItem::Option)
+                .to_string();
+            let result_name = type_table
+                .compiler_items()
+                .variant_name(crate::compiler_item::CompilerItem::Result)
+                .to_string();
+            if g.name.as_str() == option_name && g.args.len() == 1 {
                 let inner_type =
                     wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                type_table.make_option(inner_type)
+                return type_table.make_option(inner_type);
             }
-            "Result" if g.args.len() == 2 => {
+            if g.name.as_str() == result_name && g.args.len() == 2 {
                 let ok_type = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 let err_type = wasi_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
-                type_table.make_result(ok_type, err_type)
+                return type_table.make_result(ok_type, err_type);
             }
-            "Stream" if g.args.len() == 1 => {
-                let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                type_table.make_stream(inner)
+            match g.name.as_str() {
+                "Stream" if g.args.len() == 1 => {
+                    let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                    type_table.make_stream(inner)
+                }
+                "Future" if g.args.len() == 1 => {
+                    let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                    type_table.make_future(inner)
+                }
+                "AsyncCall" if g.args.len() == 1 => {
+                    let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                    type_table.make_async_call(inner)
+                }
+                // Own/Borrow are handle types represented as i32
+                "Own" | "Borrow" => TypeTable::I32,
+                _ => TypeTable::UNIT,
             }
-            "Future" if g.args.len() == 1 => {
-                let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                type_table.make_future(inner)
-            }
-            "AsyncCall" if g.args.len() == 1 => {
-                let inner = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                type_table.make_async_call(inner)
-            }
-            // Own/Borrow are handle types represented as i32
-            "Own" | "Borrow" => TypeTable::I32,
-            _ => TypeTable::UNIT,
         },
         Type::Tuple(types) if types.is_empty() => TypeTable::UNIT,
         Type::Tuple(types) => {

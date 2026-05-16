@@ -506,7 +506,7 @@ fn generate_struct_serialize(
     let ref_self_type = tt.make_ref(struct_type);
     let s_type_param = tt.make_type_param("S".to_string(), 0);
     let mut_ref_s = tt.make_mut_ref(s_type_param);
-    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
     let ser_error_type = tt.make_struct("SerializeError".to_string(), serde_module.clone());
     let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
@@ -729,7 +729,7 @@ fn generate_struct_deserialize(
     let mut tt = module.type_table.borrow_mut();
 
     let struct_type = req.target_type_id;
-    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
     let option_i32 = tt.make_option(TypeTable::I32);
     let deser_error_type = tt.make_struct("DeserializeError".to_string(), serde_module.clone());
@@ -1492,7 +1492,7 @@ fn generate_enum_serialize(
     let ref_self_type = tt.make_ref(enum_type);
     let s_type_param = tt.make_type_param("S".to_string(), 0);
     let mut_ref_s = tt.make_mut_ref(s_type_param);
-    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
     let ser_error_type = tt.make_struct("SerializeError".to_string(), serde_module.clone());
     let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
@@ -1637,7 +1637,7 @@ fn generate_enum_deserialize(
     let span = synth_span();
     let serde_module = ModuleSource::serde();
 
-    let (eq_trait_name, deserialize_trait_name) = {
+    let (eq_trait_name, deserialize_trait_name, string_struct_name) = {
         let tt = module.type_table.borrow();
         let items = tt.compiler_items();
         (
@@ -1647,12 +1647,15 @@ fn generate_enum_deserialize(
             items
                 .trait_name(crate::compiler_item::CompilerItem::Deserialize)
                 .to_string(),
+            items
+                .struct_name(crate::compiler_item::CompilerItem::String)
+                .to_string(),
         )
     };
     let mut tt = module.type_table.borrow_mut();
 
     let enum_type = req.target_type_id;
-    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
     let deser_error_type = tt.make_struct("DeserializeError".to_string(), serde_module.clone());
     let deser_error_kind_type = tt
@@ -1847,7 +1850,7 @@ fn generate_enum_deserialize(
             span,
         );
         let eq_method = LocalMethodName::new(
-            "String".to_string(),
+            string_struct_name.clone(),
             Some(eq_trait_name.clone()),
             "eq".to_string(),
         );
@@ -2036,7 +2039,7 @@ fn generate_variant_serialize(
     let ref_self_type = tt.make_ref(variant_type);
     let s_type_param = tt.make_type_param("S".to_string(), 0);
     let mut_ref_s = tt.make_mut_ref(s_type_param);
-    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
     let ser_error_type = tt.make_struct("SerializeError".to_string(), serde_module.clone());
     let ser_error_kind_type = tt
@@ -2317,7 +2320,7 @@ fn generate_variant_deserialize(
     let span = synth_span();
     let serde_module = ModuleSource::serde();
 
-    let (eq_trait_name, deserialize_trait_name) = {
+    let (eq_trait_name, deserialize_trait_name, string_struct_name) = {
         let tt = module.type_table.borrow();
         let items = tt.compiler_items();
         (
@@ -2327,12 +2330,15 @@ fn generate_variant_deserialize(
             items
                 .trait_name(crate::compiler_item::CompilerItem::Deserialize)
                 .to_string(),
+            items
+                .struct_name(crate::compiler_item::CompilerItem::String)
+                .to_string(),
         )
     };
     let mut tt = module.type_table.borrow_mut();
 
     let variant_type = req.target_type_id;
-    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
     let deser_error_type = tt.make_struct("DeserializeError".to_string(), serde_module.clone());
     let deser_error_kind_type = tt
@@ -2607,7 +2613,7 @@ fn generate_variant_deserialize(
             span,
         );
         let eq_method = LocalMethodName::new(
-            "String".to_string(),
+            string_struct_name.clone(),
             Some(eq_trait_name.clone()),
             "eq".to_string(),
         );
@@ -2911,13 +2917,19 @@ fn generate_flags_serialize(
     let span = synth_span();
     let serde_module = ModuleSource::serde();
 
+    let string_struct_name = module
+        .type_table
+        .borrow()
+        .compiler_items()
+        .struct_name(crate::compiler_item::CompilerItem::String)
+        .to_string();
     let mut tt = module.type_table.borrow_mut();
 
     let flags_type = req.target_type_id;
     let ref_self_type = tt.make_ref(flags_type);
     let s_type_param = tt.make_type_param("S".to_string(), 0);
     let mut_ref_s = tt.make_mut_ref(s_type_param);
-    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
     let ser_error_type = tt.make_struct("SerializeError".to_string(), serde_module.clone());
     let ser_error_kind_type = tt
@@ -3013,7 +3025,7 @@ fn generate_flags_serialize(
             "SerializeSeq",
             "element",
             serde_module.clone(),
-            vec!["String".to_string()],
+            vec![string_struct_name.clone()],
             vec![string_type],
             vec![ref_expr(
                 string_lit(member_name, string_type, span),
@@ -3146,7 +3158,7 @@ fn generate_flags_deserialize(
     let span = synth_span();
     let serde_module = ModuleSource::serde();
 
-    let (eq_trait_name, deserialize_trait_name) = {
+    let (eq_trait_name, deserialize_trait_name, string_struct_name) = {
         let tt = module.type_table.borrow();
         let items = tt.compiler_items();
         (
@@ -3156,6 +3168,9 @@ fn generate_flags_deserialize(
             items
                 .trait_name(crate::compiler_item::CompilerItem::Deserialize)
                 .to_string(),
+            items
+                .struct_name(crate::compiler_item::CompilerItem::String)
+                .to_string(),
         )
     };
     let mut tt = module.type_table.borrow_mut();
@@ -3163,7 +3178,7 @@ fn generate_flags_deserialize(
     let flags_type = req.target_type_id;
     let d_type_param = tt.make_type_param("D".to_string(), 0);
     let mut_ref_d = tt.make_mut_ref(d_type_param);
-    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
     let deser_error_type = tt.make_struct("DeserializeError".to_string(), serde_module.clone());
     let deser_error_kind_type = tt
@@ -3246,7 +3261,7 @@ fn generate_flags_deserialize(
         "DeserializeSeq",
         "next_element",
         serde_module.clone(),
-        vec!["String".to_string()],
+        vec![string_struct_name.clone()],
         vec![string_type],
         vec![],
         result_option_string_err,
@@ -3276,7 +3291,7 @@ fn generate_flags_deserialize(
             span,
         );
         let eq_method = LocalMethodName::new(
-            "String".to_string(),
+            string_struct_name.clone(),
             Some(eq_trait_name.clone()),
             "eq".to_string(),
         );

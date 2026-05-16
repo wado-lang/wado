@@ -28,8 +28,11 @@ pub(super) fn should_rewrite(
     arms: &[TirMatchArm],
     type_table: &TypeTable,
 ) -> bool {
+    let items = type_table.compiler_items();
+    let i128_name = items.struct_name(crate::compiler_item::CompilerItem::I128);
+    let u128_name = items.struct_name(crate::compiler_item::CompilerItem::U128);
     let is_wide_int = match type_table.get(scrutinee_type) {
-        ResolvedType::Struct { name, .. } => name == "i128" || name == "u128",
+        ResolvedType::Struct { name, .. } => name == i128_name || name == u128_name,
         _ => false,
     };
     if !is_wide_int {

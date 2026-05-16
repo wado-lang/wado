@@ -45,9 +45,17 @@ use crate::module_source::ModuleSource;
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum CompilerItem {
     // ── Types (structs / generic structs) ────────────────────────────
+    /// `Array<T>` — the heap-backed sequence struct. Recognised by
+    /// the CM lift, value-copy synthesis, and serde codegen so the
+    /// compiler always points at the right concrete `Array` struct.
+    Array,
     /// `Box<T>` — boxes primitive values into a struct that
     /// participates in GC tracing.
     Box,
+    /// `i128` — the signed 128-bit wide-int struct.
+    I128,
+    /// `u128` — the unsigned 128-bit wide-int struct.
+    U128,
     /// `RangeExclusive<T>` — `a..b` literals.
     RangeExclusive,
     /// `RangeInclusive<T>` — `a..=b` literals.
@@ -55,6 +63,10 @@ pub enum CompilerItem {
     /// `Request<T>` — the Kiln CM adapter wraps decoded options in
     /// this struct.
     KilnRequest,
+    /// `String` — the GC-backed UTF-8 string struct. Synthesised
+    /// codegen (CM binding, serde, format) refers to it through this
+    /// item so the Rust side never hard-codes the struct name.
+    String,
 
     // ── Variants (sum types) ──────────────────────────────────────────
     /// `Option<T>` — `Some(_)` / `None`.
@@ -105,10 +117,14 @@ impl CompilerItem {
     /// Every variant, in declaration order. Used by validation passes
     /// that need to check the full registry.
     pub const ALL: &'static [CompilerItem] = &[
+        Self::Array,
         Self::Box,
+        Self::I128,
+        Self::U128,
         Self::RangeExclusive,
         Self::RangeInclusive,
         Self::KilnRequest,
+        Self::String,
         Self::Option,
         Self::Result,
         Self::Default,
@@ -134,10 +150,14 @@ impl CompilerItem {
     /// references must agree.
     pub fn attr_name(self) -> &'static str {
         match self {
+            Self::Array => "array",
             Self::Box => "box",
+            Self::I128 => "i128",
+            Self::U128 => "u128",
             Self::RangeExclusive => "range_exclusive",
             Self::RangeInclusive => "range_inclusive",
             Self::KilnRequest => "kiln_request",
+            Self::String => "string",
             Self::Option => "option",
             Self::Result => "result",
             Self::Default => "default",
@@ -165,9 +185,14 @@ impl CompilerItem {
     /// `#[compiler_item("option")]` on a trait.
     pub fn expected_kind(self) -> CompilerItemKind {
         match self {
-            Self::Box | Self::RangeExclusive | Self::RangeInclusive | Self::KilnRequest => {
-                CompilerItemKind::Struct
-            }
+            Self::Array
+            | Self::Box
+            | Self::I128
+            | Self::U128
+            | Self::RangeExclusive
+            | Self::RangeInclusive
+            | Self::KilnRequest
+            | Self::String => CompilerItemKind::Struct,
             Self::Option | Self::Result => CompilerItemKind::Variant,
             Self::Default | Self::Eq | Self::From | Self::Serialize | Self::Deserialize => {
                 CompilerItemKind::Trait

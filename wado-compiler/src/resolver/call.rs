@@ -1378,7 +1378,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn get_string_struct_type(&mut self) -> TypeId {
         self.type_table
             .borrow_mut()
-            .make_struct("String".to_string(), ModuleSource::string())
+            .make_compiler_struct(crate::compiler_item::CompilerItem::String)
     }
 
     /// Build a `from_pair` call for i128/u128 large literal construction

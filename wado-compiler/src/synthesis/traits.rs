@@ -753,7 +753,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
     let mut tt = module.type_table.borrow_mut();
     let formatter_type = tt.make_struct("Formatter".to_string(), ModuleSource::format());
     let fmt_type = tt.make_mut_ref(formatter_type);
-    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
 
     // Enums
     let enum_infos: Vec<_> = module
@@ -787,7 +787,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
     let struct_infos = collect_struct_visible_fields(module);
 
     for (name, fields, has_hidden, sspan) in &struct_infos {
-        if name == "String" || name == "Formatter" {
+        if name == tt.compiler_items().struct_name(crate::compiler_item::CompilerItem::String) || name == "Formatter" {
             continue;
         }
         if ctx.has_impl(name, "Inspect") {
@@ -1672,7 +1672,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     let mut tt = module.type_table.borrow_mut();
     let formatter_type = tt.make_struct("Formatter".to_string(), ModuleSource::format());
     let fmt_type = tt.make_mut_ref(formatter_type);
-    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let span = synth_span();
 
     // `Inspect` may be provided either as a trait impl (via TraitEnv / the
@@ -1716,7 +1716,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     let struct_infos = collect_struct_visible_fields(module);
 
     for (name, fields, has_hidden, sspan) in &struct_infos {
-        if name == "String" || name == "Formatter" {
+        if name == tt.compiler_items().struct_name(crate::compiler_item::CompilerItem::String) || name == "Formatter" {
             continue;
         }
         if ctx.has_impl(name, "InspectAlt") {
@@ -2378,6 +2378,18 @@ fn generate_fallback_impls(
     let mut generated = Vec::new();
 
     let span = synth_span();
+    let (string_name, array_name) = {
+        let tt = module.type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items
+                .struct_name(crate::compiler_item::CompilerItem::String)
+                .to_string(),
+            items
+                .struct_name(crate::compiler_item::CompilerItem::Array)
+                .to_string(),
+        )
+    };
     let mut tt = module.type_table.borrow_mut();
     let formatter_type = tt.make_struct("Formatter".to_string(), ModuleSource::format());
     let fmt_type = tt.make_mut_ref(formatter_type);
@@ -2432,7 +2444,7 @@ fn generate_fallback_impls(
         .map(|s| s.name.clone())
         .collect();
     for name in &struct_names {
-        if name == "String" || name == "Formatter" {
+        if name == &string_name || name == "Formatter" {
             continue;
         }
         if !needs_fallback(name, ctx) {
@@ -2451,7 +2463,7 @@ fn generate_fallback_impls(
         .map(|s| (s.name.clone(), s.type_params.clone()))
         .collect();
     for (name, type_params) in &generic_struct_infos {
-        if name == "Array" {
+        if name == &array_name {
             continue;
         }
         if !needs_fallback(name, ctx) {
@@ -2666,10 +2678,14 @@ fn trait_impl_module(
     ref_module: ModuleSource,
     string_module: ModuleSource,
 ) -> ModuleSource {
+    let string_struct_name = tt
+        .compiler_items()
+        .struct_name(crate::compiler_item::CompilerItem::String)
+        .to_string();
     match tt.get(type_id).clone() {
         ResolvedType::Primitive(_) => ModuleSource::primitive(),
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => ref_module,
-        ResolvedType::Struct { ref name, .. } if name == "String" => string_module,
+        ResolvedType::Struct { ref name, .. } if name == &string_struct_name => string_module,
         ResolvedType::Struct {
             ref module_source, ..
         }

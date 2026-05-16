@@ -332,10 +332,14 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                         let user_returns_result = {
                             let user_func = user_func_rc.borrow();
                             let tt = entry_type_table.borrow();
+                            let result_name = tt
+                                .compiler_items()
+                                .variant_name(crate::compiler_item::CompilerItem::Result)
+                                .to_string();
                             matches!(
                                 tt.get(user_func.return_type),
                                 ResolvedType::GenericInstance { name, .. }
-                                    if name == "Result"
+                                    if *name == result_name
                             )
                         };
 
@@ -518,10 +522,11 @@ mod tests {
         })
     }
 
-    /// Register the `Option` and `Result` compiler items against
-    /// `ModuleSource::prelude()` so `make_option` / `make_result` work
-    /// in unit tests. Production resolution wires these up when the
-    /// stdlib resolver visits `core:prelude`.
+    /// Register the `Option`, `Result`, `String`, and `Array` compiler
+    /// items against the relevant prelude modules so `make_option` /
+    /// `make_result` and the type-identity reads inside `lift` /
+    /// `cm_binding` succeed in unit tests. Production resolution wires
+    /// these up when the stdlib resolver visits `core:prelude`.
     fn register_option_result_for_tests(tt: &mut TypeTable) {
         use crate::compiler_item::{CompilerItem, Resolved};
         let _ = tt.compiler_items_mut().register(
@@ -536,6 +541,20 @@ mod tests {
             Resolved::Variant {
                 module_source: ModuleSource::prelude(),
                 name: "Result".to_string(),
+            },
+        );
+        let _ = tt.compiler_items_mut().register(
+            CompilerItem::String,
+            Resolved::Struct {
+                module_source: ModuleSource::string(),
+                name: "String".to_string(),
+            },
+        );
+        let _ = tt.compiler_items_mut().register(
+            CompilerItem::Array,
+            Resolved::Struct {
+                module_source: ModuleSource::prelude(),
+                name: "Array".to_string(),
             },
         );
     }
