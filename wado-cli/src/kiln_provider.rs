@@ -29,6 +29,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use wado_compiler::kiln::{GeneratorModule, OptionsDescriptor};
+use wado_compiler::lexer::Lexer;
+use wado_compiler::token::canonical_token_bytes;
 use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel};
 
 use crate::compiler_host::FilesystemCompilerHost;
@@ -125,7 +127,7 @@ impl CliGeneratorProvider {
             let abs = base.join(&entry.path);
             let bytes = std::fs::read(&abs).ok()?;
             let recorded = hex32_to_array(&entry.hash)?;
-            let actual = sha256_of(&bytes);
+            let actual = hash_source(&entry.path, &bytes);
             if actual != recorded {
                 return None;
             }
@@ -399,7 +401,7 @@ impl CompilerHost for SilentHost {
         let inner_fut = self.inner.load_source(path);
         async move {
             let bytes = inner_fut.await?;
-            let hash = sha256_of(&bytes);
+            let hash = hash_source(&path_owned, &bytes);
             if let Ok(mut guard) = loaded.lock() {
                 guard.push((path_owned, hash));
             }
@@ -428,6 +430,58 @@ fn sha256_of(bytes: &[u8]) -> [u8; 32] {
     let mut out = [0u8; 32];
     out.copy_from_slice(&digest);
     out
+}
+
+/// `true` when `path` looks like a Wado source file. Other extensions
+/// (binary blobs from `#include_bytes`, text payloads from
+/// `#include_str`, raw `.wat` assets) keep the byte-content hash so a
+/// single-byte edit still invalidates the cache.
+fn is_wado_source(path: &str) -> bool {
+    matches!(path.rsplit_once('.'), Some((_, ext)) if ext.eq_ignore_ascii_case("wado"))
+}
+
+/// Source-file hash routed by extension. `.wado` files run through the
+/// canonical token-stream encoding so comments, doc comments, and
+/// formatting changes do not perturb the hash; everything else falls
+/// back to a plain content hash.
+///
+/// On lex failure we deliberately fall back to the byte hash: the file
+/// might be a `.wado` shaped sidecar that is not actually parseable
+/// (broken on disk between the cache write and validate), and the
+/// downstream cache check will still detect drift via byte-hash
+/// inequality.
+fn hash_source(path: &str, bytes: &[u8]) -> [u8; 32] {
+    if !is_wado_source(path) {
+        return sha256_of(bytes);
+    }
+    let Ok(source) = std::str::from_utf8(bytes) else {
+        return sha256_of(bytes);
+    };
+    let mut lexer = Lexer::new(source);
+    let Ok(tokens) = lexer.tokenize() else {
+        return sha256_of(bytes);
+    };
+    // Canonical token bytes ignore spans and (because the lexer peels
+    // comments off into a side channel before returning the token list)
+    // every line/block/doc comment.
+    let mut buf: Vec<u8> = Vec::with_capacity(bytes.len());
+    buf.extend_from_slice(b"wado-token-stream-v1\n");
+    for tok in &tokens {
+        canonical_token_bytes(&mut buf, &tok.kind);
+    }
+    // Shebang and the `__DATA__` trailer carry semantic content that
+    // the parser still sees, so fold them into the hash too.
+    if let Some(shebang) = lexer.shebang() {
+        buf.push(b'#');
+        buf.extend_from_slice(shebang.as_bytes());
+        buf.push(0);
+    }
+    if let Some(data) = lexer.data_section() {
+        buf.push(b'D');
+        buf.extend_from_slice(data.as_bytes());
+        buf.push(0);
+    }
+    sha256_of(&buf)
 }
 
 /// Sidecar file persisted next to a cached generator WASM, listing every
@@ -461,7 +515,12 @@ struct SourceEntry {
     hash: String,
 }
 
-const SIDECAR_VERSION: u32 = 1;
+/// Bumped together with the `combined_sources_hash` magic below
+/// whenever the source-hash inputs change. v2 introduced the canonical
+/// token-stream encoding for `.wado` files (see [`hash_source`]) so
+/// docstring/whitespace edits no longer perturb the hash; pre-existing
+/// v1 sidecars are silently treated as cache misses on read.
+const SIDECAR_VERSION: u32 = 2;
 
 fn dedup_sort_sources(mut sources: Vec<(String, [u8; 32])>) -> Vec<(String, [u8; 32])> {
     sources.sort_by(|a, b| a.0.cmp(&b.0));
@@ -471,7 +530,11 @@ fn dedup_sort_sources(mut sources: Vec<(String, [u8; 32])>) -> Vec<(String, [u8;
 
 fn combined_sources_hash(sources: &[(String, [u8; 32])]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"kiln-generator-sources-v1\n");
+    // v2: per-file hashes for `.wado` sources are now token-stream
+    // hashes (see `hash_source`); the magic moves in lockstep with the
+    // sidecar version so a downgrade or rebuild against an older
+    // compiler cannot silently mix v1 and v2 inputs.
+    hasher.update(b"kiln-generator-sources-v2\n");
     for (path, hash) in sources {
         hasher.update(path.as_bytes());
         hasher.update(b"\n");
