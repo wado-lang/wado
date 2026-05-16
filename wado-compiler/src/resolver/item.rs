@@ -539,8 +539,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.trait_ctx.type_params.clear();
         scope.trait_ctx.type_param_bounds.clear();
+        // Mirror `resolve_function`: install effect params before
+        // `register_generic_params` so eager `<F: fn() with E>` bounds see
+        // `E` as `EffectRef::Param`.
+        let old_effect_params = std::mem::take(&mut scope.current_effect_params);
+        let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
+        let effect_params: Vec<&ast::GenericParam> =
+            func.type_params.iter().filter(|p| p.is_effect).collect();
+        scope.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
+        scope.current_effect_param_decls = effect_params
+            .iter()
+            .map(|p| (p.name.clone(), p.id))
+            .collect();
         scope.register_generic_params(&func.type_params, 0);
         scope.populate_generic_function_cache(func);
+        scope.current_effect_params = old_effect_params;
+        scope.current_effect_param_decls = old_effect_param_decls;
     }
 
     /// Populate the three generic-function inference caches
@@ -553,10 +567,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// (e.g. `resolve_function` for `task_return_type`) can avoid resolving
     /// it a second time.
     fn populate_generic_function_cache(&mut self, func: &Function) -> TypeId {
+        // Skip effect params (never real generics) and fn-bound params
+        // (realised eagerly to their bound's function type by
+        // `register_generic_params`, which does not consume a `TypeParam`
+        // index slot for them). The remaining entries' positional order
+        // matches the dense `TypeParam.index` space so the inference cache
+        // and substitution map line up.
         let type_param_list: Vec<(String, TypeId)> = func
             .type_params
             .iter()
             .filter(|p| !p.is_effect)
+            .filter(|p| !p.bounds.iter().any(|b| b.fn_signature.is_some()))
             .filter_map(|p| {
                 self.trait_ctx
                     .type_params
@@ -593,9 +614,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.trait_ctx.type_params.clear();
         scope.trait_ctx.type_param_bounds.clear();
-        scope.register_generic_params(&func.type_params, 0);
 
-        // Set effect params in scope (for resolving effect names in function types)
+        // Set effect params in scope before `register_generic_params`. Eager
+        // `<F: fn() with E>` bound resolution runs inside
+        // `register_generic_params` and consults `current_effect_param_decls`
+        // to recognise `E` as `EffectRef::Param` rather than re-resolving it
+        // to a phantom `EffectRef::Concrete`.
         let old_effect_params = std::mem::take(&mut scope.current_effect_params);
         let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
         let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
@@ -611,6 +635,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .map(|p| (p.name.clone(), p.id))
             .collect();
 
+        scope.register_generic_params(&func.type_params, 0);
+
         // Populate the generic-function inference caches
         // (`generic_function_params`, `generic_function_resolved_param_types`,
         // `generic_function_resolved_return_types`). Populated before the
@@ -618,7 +644,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // with non-generic callers and may be overwritten by external
         // registrations (trait methods, etc.) over time. The declared return
         // type is also used for `task_return_type` in async fns.
-        let has_real_type_params = func.type_params.iter().any(|p| !p.is_effect);
+        // `<F: fn(...)>` bounds are eagerly realised to the bound's function
+        // type and do not consume a `TypeParam` slot — they're not generic
+        // parameters that need monomorphisation.
+        let has_real_type_params = func
+            .type_params
+            .iter()
+            .any(|p| !p.is_effect && !p.bounds.iter().any(|b| b.fn_signature.is_some()));
         let declared_return_type = if has_real_type_params {
             scope.populate_generic_function_cache(func)
         } else {
@@ -735,23 +767,35 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
         }
 
-        // Convert AST type params to TIR type params (while type params still in scope).
-        // `<F: fn(...)>` / `<F: fn mut(...)>` bounds are eagerly realised to the
-        // bound's function type by `register_generic_params`, so the parameter
-        // is no longer a real generic — drop it from `type_params` to avoid
-        // spurious monomorphisation attempts at call sites.
+        // Convert AST type params to TIR type params (while type params
+        // still in scope). `<F: fn(...)>` / `<F: fn mut(...)>` bounds are
+        // realised eagerly by `register_generic_params` and do not consume
+        // a `TypeParam` index slot — drop them from the TIR list so the
+        // monomorphiser doesn't try to specialise on the closure's functor
+        // type. The remaining params keep their dense `register_generic_params`
+        // index, which matches both the `TypeParam(name, index)` entries in
+        // the type table and the positional order of the inference cache.
+        let mut non_effect_non_fn_idx: u32 = 0;
         let type_params: Vec<crate::tir::TirTypeParam> = func
             .type_params
             .iter()
-            .filter(|p| !p.bounds.iter().any(|b| b.fn_signature.is_some()))
-            .enumerate()
-            .map(|(i, p)| crate::tir::TirTypeParam {
-                name: p.name.clone(),
-                is_effect: p.is_effect,
-                is_pack: p.is_pack,
-                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
-                index: i as u32,
+            .filter_map(|p| {
+                if p.is_effect {
+                    return None;
+                }
+                if p.bounds.iter().any(|b| b.fn_signature.is_some()) {
+                    return None;
+                }
+                let idx = non_effect_non_fn_idx;
+                non_effect_non_fn_idx += 1;
+                Some(crate::tir::TirTypeParam {
+                    name: p.name.clone(),
+                    is_effect: p.is_effect,
+                    is_pack: p.is_pack,
+                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                    default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
+                    index: idx,
+                })
             })
             .collect();
 

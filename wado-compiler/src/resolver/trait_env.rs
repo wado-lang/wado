@@ -699,23 +699,36 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             // to the bound's function type. The closure-type bound is just
             // surface syntax for "F is exactly this signature" — eager
             // substitution lets `f: F` be callable inside the body and folds
-            // every callsite onto the same shared canonical closure shape
-            // (no per-closure monomorphisation required).
+            // every callsite onto the same shared canonical closure shape.
+            //
+            // Fn-bound params do NOT consume a `TypeParam` index slot. This
+            // keeps the index space dense for real type params so the
+            // substitution map in `substitute_type_params` (which is keyed by
+            // `TypeParam.index`) lines up with the positional order used by
+            // the inference cache. Without this, mixed declarations like
+            // `<F: fn(...), T>` would leave `T` at `TypeParam(_, 1)` while
+            // the cache placed it at position 0, breaking substitution.
             let fn_bound_sig = if tp.is_pack {
                 None
             } else {
                 tp.bounds.iter().find_map(|b| b.fn_signature.as_ref())
             };
-            let type_id = if tp.is_pack {
-                self.type_table
-                    .borrow_mut()
-                    .make_type_pack(tp.name.clone(), idx)
+            let (type_id, consumed_index) = if tp.is_pack {
+                (
+                    self.type_table
+                        .borrow_mut()
+                        .make_type_pack(tp.name.clone(), idx),
+                    true,
+                )
             } else if let Some(sig) = fn_bound_sig {
-                self.resolve_type(&ast::Type::Function(sig.clone()))
+                (self.resolve_type(&ast::Type::Function(sig.clone())), false)
             } else {
-                self.type_table
-                    .borrow_mut()
-                    .make_type_param(tp.name.clone(), idx)
+                (
+                    self.type_table
+                        .borrow_mut()
+                        .make_type_param(tp.name.clone(), idx),
+                    true,
+                )
             };
             self.trait_ctx
                 .type_params
@@ -737,7 +750,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     .type_param_bounds
                     .insert(tp.name.clone(), real_bounds);
             }
-            idx += 1;
+            if consumed_index {
+                idx += 1;
+            }
         }
         idx
     }

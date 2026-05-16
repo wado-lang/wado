@@ -398,6 +398,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             for (i, param) in mtype_params.iter().enumerate() {
                                 if let Some(&type_arg) = method_type_args.get(i) {
                                     for bound in &param.bounds {
+                                        // Skip `fn(...)` / `fn mut(...)` bounds:
+                                        // realised eagerly, not real traits.
+                                        if bound.fn_signature.is_some() {
+                                            continue;
+                                        }
                                         if self.type_implements_trait(type_arg, &bound.name) {
                                             self.register_assoc_types_for_concrete_type_and_trait(
                                                 type_arg,
@@ -1474,17 +1479,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                     if let Some((params, type_params)) = func_info {
                         // Set up the callee's generic-param scope before resolving
-                        // its parameter types. Type params go through
-                        // `register_generic_params`; effect params have their own
+                        // its parameter types. Effect params have their own
                         // channel (`current_effect_param_decls`) and must be
-                        // installed here too — otherwise effect names like the
-                        // `E` in `fn each<effect E>(... fn() with E)` re-resolve
-                        // to `EffectRef::Concrete { name: "E" }` instead of
-                        // `EffectRef::Param`, leaking the callee's bound out of
-                        // its own signature.
+                        // installed BEFORE `register_generic_params` — eager
+                        // `<F: fn() with E>` bound resolution runs inside
+                        // `register_generic_params` and consults that channel
+                        // to recognise `E` as `EffectRef::Param`.
                         let mut scope = self.enter_inherited_type_param_scope();
                         scope.trait_ctx.type_params.clear();
-                        scope.register_generic_params(&type_params, 0);
                         let old_effect_params = std::mem::take(&mut scope.current_effect_params);
                         let old_effect_param_decls =
                             std::mem::take(&mut scope.current_effect_param_decls);
@@ -1496,6 +1498,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .iter()
                             .map(|p| (p.name.clone(), p.id))
                             .collect();
+                        scope.register_generic_params(&type_params, 0);
                         let result = params.iter().map(|p| scope.resolve_type(&p.ty)).collect();
                         scope.current_effect_params = old_effect_params;
                         scope.current_effect_param_decls = old_effect_param_decls;
@@ -2133,7 +2136,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // local effect.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.trait_ctx.type_params.clear();
-        scope.register_generic_params(&fn_type_params, 0);
         let old_effect_params = std::mem::take(&mut scope.current_effect_params);
         let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
         let effect_params: Vec<&ast::GenericParam> =
@@ -2143,6 +2145,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .iter()
             .map(|p| (p.name.clone(), p.id))
             .collect();
+        scope.register_generic_params(&fn_type_params, 0);
         let param_types: Vec<TypeId> = fn_params
             .iter()
             .map(|p| scope.resolve_type(&p.ty))
