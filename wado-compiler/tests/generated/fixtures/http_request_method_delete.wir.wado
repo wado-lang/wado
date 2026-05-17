@@ -170,7 +170,7 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(23)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>] {  // TypeId(24)
+struct tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(24)
     mut 0: i32,
     mut 1: i32,
 }
@@ -270,7 +270,7 @@ type "functype//wado-compiler/tests/fixtures/http_request_method_delete.wado/__c
 
 type "functype//wado-compiler/tests/fixtures/http_request_method_delete.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(52)
 
-type "functype//wado-compiler/tests/fixtures/http_request_method_delete.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";  // TypeId(53)
+type "functype//wado-compiler/tests/fixtures/http_request_method_delete.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(53)
 
 type "functype//wado-compiler/tests/fixtures/http_request_method_delete.wado/__cm_export__handle" = fn(i32);  // TypeId(54)
 
@@ -479,7 +479,7 @@ fn "wado-compiler/tests/fixtures/http_request_method_delete.wado/handle"(request
     let __packed_158: i64;
     let __ptr_159: i32;
     let __len_160: i32;
-    let __pattern_temp_1: ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_1: ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     method = "wado-compiler/tests/fixtures/http_request_method_delete.wado/__cm_binding__Request_get_method"(request);
     let __match_scrut_0: ref "wasi:http/types.wado//Method";
     __match_scrut_0 = method;
@@ -910,7 +910,7 @@ fn "wado-compiler/tests/fixtures/http_request_method_delete.wado/__cm_binding__R
     __lifted_result_7 = builtin::load_i32(__outptr + 0);
     __lifted_result_8 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_7, 1: __lifted_result_8 };
+    return struct.new "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_7, 1: __lifted_result_8 };
 }
 
 fn "wado-compiler/tests/fixtures/http_request_method_delete.wado/__cm_export__handle"(request) {

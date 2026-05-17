@@ -118,7 +118,7 @@ struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:fi
     mut __cm_lift: ref struct,
 }
 
-struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>> {  // TypeId(16)
+struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>> {  // TypeId(16)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
@@ -239,11 +239,11 @@ type "functype//wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_write_via_stream" = fn(i32, i32, i64) -> i32;  // TypeId(53)
 
-type "functype//wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_rename_at" = fn(i32, ref "core:prelude/string.wado//String", i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>";  // TypeId(54)
+type "functype//wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_rename_at" = fn(i32, ref "core:prelude/string.wado//String", i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>";  // TypeId(54)
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_stat" = fn(i32) -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>";  // TypeId(55)
 
-type "functype//wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_unlink_file_at" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>";  // TypeId(56)
+type "functype//wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_unlink_file_at" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>";  // TypeId(56)
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_lift__Descriptor_open_at" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(57)
 
@@ -293,7 +293,7 @@ type "functype//core:prelude/Array<core:prelude/types.wado/Tuple<wasi:filesystem
 
 type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(80)
 
-type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>") -> ref null "wasi:filesystem/types.wado//ErrorCode";  // TypeId(81)
+type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>") -> ref null "wasi:filesystem/types.wado//ErrorCode";  // TypeId(81)
 
 type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(82)
 
@@ -508,7 +508,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/run"() with 
         "wasi/future-drop-readable:transmission-cli"(handle_66);
         return;
     }
-    rename_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_rename_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename_src.txt"), used: 14 }, dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename_dst.txt"), used: 14 }));
+    rename_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_rename_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename_src.txt"), used: 14 }, dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename_dst.txt"), used: 14 }));
     if ref.is_null(rename_result) {
         message_69 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: rename_at succeeded"), used: 27 };
         let __pair_temp_5: i64;
@@ -632,7 +632,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/run"() with 
         "core:cli/write_to_stream"(tx_119, message_117, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_120);
     }
-    unlink_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename_dst.txt"), used: 14 }));
+    unlink_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename_dst.txt"), used: 14 }));
     if ref.is_null(unlink_result) {
         message_123 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: removed rename_dst.txt"), used: 30 };
         let __pair_temp_13: i64;
@@ -701,7 +701,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/run"() with 
         "core:cli/write_to_stream"(tx_149, message_147, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_150);
     }
-    unlink_missing = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nonexistent_file.txt"), used: 20 }));
+    unlink_missing = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nonexistent_file.txt"), used: 20 }));
     if ref.is_null(unlink_missing) == 0 {
         message_153 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: nonexistent file returns error (correct)"), used: 48 };
         let __pair_temp_18: i64;
@@ -832,7 +832,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding
     builtin::store_i32(__params_buf + 16, builtin::i32_wrap_i64(__new_path_packed));
     builtin::store_i32(__params_buf + 20, builtin::i32_wrap_i64(__new_path_packed >> 32_i64));
     __subtask_packed = "wasi/wasi:filesystem/Descriptor::rename_at"(__params_buf, __async_outptr);
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_1" { env: struct.new "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado//__Closure_3" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__closure_wrapper_1") } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_1" { env: struct.new "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado//__Closure_3" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__closure_wrapper_1") } };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_stat"(self) with Descriptor {
@@ -850,7 +850,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_binding
     __path_packed = "core:internal/cm_lower_string"(path);
     __async_outptr = "mem/realloc"(0, 0, 4, 20);
     __subtask_packed = "wasi/wasi:filesystem/Descriptor::unlink_file_at"(self, builtin::i32_wrap_i64(__path_packed), builtin::i32_wrap_i64(__path_packed >> 32_i64), __async_outptr);
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_1" { env: struct.new "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado//__Closure_5" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__closure_wrapper_3") } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_1" { env: struct.new "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado//__Closure_5" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__closure_wrapper_3") } };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_rename_unlink.wado/__cm_lift__Descriptor_open_at"(__outptr) {
@@ -1937,7 +1937,7 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesy
     return result;
 }
 
-fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"(self) {
+fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"(self) {
     let handle_1: i32;
     let raw: i32;
     let ws_3: i32;

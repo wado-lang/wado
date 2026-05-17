@@ -73,7 +73,7 @@ struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:fi
     mut __cm_lift: ref struct,
 }
 
-struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>> {  // TypeId(9)
+struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>> {  // TypeId(9)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
@@ -147,7 +147,7 @@ type "functype//wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__c
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Preopens_get_directories" = fn() -> ref "core:prelude//Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>";  // TypeId(33)
 
-type "functype//wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_unlink_file_at" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>";  // TypeId(34)
+type "functype//wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_unlink_file_at" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>";  // TypeId(34)
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_open_at" = fn(i32, i32, ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>";  // TypeId(35)
 
@@ -183,7 +183,7 @@ type "functype//core:prelude/Array<core:prelude/types.wado/Tuple<wasi:filesystem
 
 type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(51)
 
-type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>") -> ref null "wasi:filesystem/types.wado//ErrorCode";  // TypeId(52)
+type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>") -> ref null "wasi:filesystem/types.wado//ErrorCode";  // TypeId(52)
 
 type "functype//core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>::grow" = fn(ref "core:prelude//Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>");  // TypeId(53)
 
@@ -296,7 +296,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/run"() with Std
         break __inline_Array_core_prelude_types_wado_Tuple_wasi_filesystem_types_wado_Descriptor_core_prelude_string_wado_String___IndexValue_i32___index_value_5: builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0);
         unreachable;
     }.0;
-    drop("core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive_test.txt"), used: 18 })));
+    drop("core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive_test.txt"), used: 18 })));
     excl_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive_test.txt"), used: 18 }, 5, 2));
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(excl_result) {
         message_26 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive: new file created successfully"), used: 40 };
@@ -402,7 +402,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/run"() with Std
         "core:cli/write_to_stream"(tx_70, message_68, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_71);
     }
-    unlink_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive_test.txt"), used: 18 }));
+    unlink_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exclusive_test.txt"), used: 18 }));
     if ref.is_null(unlink_result) {
         message_74 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unlink: cleaned up exclusive_test.txt"), used: 37 };
         let __pair_temp_10: i64;
@@ -501,7 +501,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__D
     __path_packed = "core:internal/cm_lower_string"(path);
     __async_outptr = "mem/realloc"(0, 0, 4, 20);
     __subtask_packed = "wasi/wasi:filesystem/Descriptor::unlink_file_at"(self, builtin::i32_wrap_i64(__path_packed), builtin::i32_wrap_i64(__path_packed >> 32_i64), __async_outptr);
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado//__Closure_2" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__closure_wrapper_0") } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado//__Closure_2" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__closure_wrapper_0") } };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_open_flags.wado/__cm_binding__Descriptor_open_at"(self, path_flags, path, open_flags, flags) with Descriptor {
@@ -949,7 +949,7 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesy
     return result;
 }
 
-fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"(self) {
+fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"(self) {
     let handle_1: i32;
     let raw: i32;
     let ws_3: i32;

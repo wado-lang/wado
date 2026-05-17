@@ -117,15 +117,15 @@ pub fn monomorphize(flat: &mut FlatPackage) {
     for func_rc in &flat.functions {
         let f = func_rc.borrow();
         let key = (f.module_source.clone(), f.name.clone());
-        if seen_functions.insert(key, ()).is_some() {
-            panic!(
-                "duplicate function `{}` in module `{}` after monomorphization. \
-                 `module_source` is the canonical namespace; two functions with \
-                 the same mangled name landing in the same module indicate a \
-                 synthesis or monomorphization bug.",
-                f.name, f.module_source
-            );
-        }
+        assert!(
+            seen_functions.insert(key, ()).is_none(),
+            "duplicate function `{}` in module `{}` after monomorphization. \
+             `module_source` is the canonical namespace; two functions with \
+             the same mangled name landing in the same module indicate a \
+             synthesis or monomorphization bug.",
+            f.name,
+            f.module_source
+        );
     }
 
     // Strip effect params from all functions. Effect params have been validated by the

@@ -9,7 +9,7 @@ struct core:prelude/string.wado//String {  // TypeId(1)
     mut used: i32,
 }
 
-struct tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>] {  // TypeId(2)
+struct tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>] {  // TypeId(2)
     mut 0: i32,
     mut 1: i32,
 }
@@ -22,7 +22,7 @@ struct core:prelude/array.wado//ArrayIter<u8> {  // TypeId(4)
     mut index: i32,
 }
 
-struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>> {  // TypeId(5)
+struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>> {  // TypeId(5)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
@@ -30,12 +30,12 @@ struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wa
     mut __cm_lift: ref struct,
 }
 
-variant core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error> {  // TypeId(6)
+variant core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error> {  // TypeId(6)
     Ok,
     Err(i32),
 }
 
-struct core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>::Err {  // TypeId(7)
+struct core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>::Err {  // TypeId(7)
     discriminant: i32,
     payload_0: i32,
 }
@@ -45,7 +45,7 @@ struct core:prelude//Array<u8> {  // TypeId(8)
     mut used: i32,
 }
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";  // TypeId(9)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(9)
 
 struct canonical//CanonicalClosure_0 {  // TypeId(10)
     env: ref null struct,
@@ -88,15 +88,15 @@ type "functype//wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_bindin
 
 type "functype//wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_new" = fn() -> i32;  // TypeId(28)
 
-type "functype//wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_send" = fn(i32, i32) -> ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>]";  // TypeId(29)
+type "functype//wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_send" = fn(i32, i32) -> ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>]";  // TypeId(29)
 
-type "functype//wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_receive" = fn(i32, i32) -> ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>]";  // TypeId(30)
+type "functype//wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_receive" = fn(i32, i32) -> ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>]";  // TypeId(30)
 
-type "functype//wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_connect" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>";  // TypeId(31)
+type "functype//wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_connect" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>";  // TypeId(31)
 
 type "functype//wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Error_to_debug_string" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(32)
 
-type "functype//wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_lift__Connector_connect" = fn(i32) -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";  // TypeId(33)
+type "functype//wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_lift__Connector_connect" = fn(i32) -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(33)
 
 type "functype//wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_export__run" = fn();  // TypeId(34)
 
@@ -132,11 +132,11 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/array.wado/Array<u8>::extend" = fn(ref "core:prelude//Array<u8>", ref "core:prelude//Array<u8>");  // TypeId(50)
 
-type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>") -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";  // TypeId(51)
+type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>") -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(51)
 
 type "functype//core:prelude/array.wado/Array<u8>::grow_to" = fn(ref "core:prelude//Array<u8>", i32);  // TypeId(52)
 
-type "functype//wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";  // TypeId(53)
+type "functype//wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(53)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(54)
 
@@ -187,7 +187,7 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/run"() with Stdout, Con
     let chunk: ref "core:prelude//Array<u8>";
     let s: ref "core:prelude/string.wado//String";
     let __local_14: ref "core:prelude/string.wado//String";
-    let __pattern_temp_3: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>]";
+    let __pattern_temp_3: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>]";
     let rx: i32;
     let tx: i32;
     let handle: i32;
@@ -211,11 +211,11 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/run"() with Stdout, Con
     __pattern_temp_3 = "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_receive"(conn, cipher_rx);
     tls_rx = __pattern_temp_3.0;
     "wasi/stream-drop-writable"(cipher_tx);
-    let __match_scrut_0: ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";
-    __match_scrut_0 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>::wait"("wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_connect"(conn, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mock.example"), used: 12 }));
+    let __match_scrut_0: ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";
+    __match_scrut_0 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"("wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_connect"(conn, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mock.example"), used: 12 }));
     if __match_scrut_0.discriminant == 0 {
     } else {
-        e = ref.cast "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>::Err"(__match_scrut_0).payload_0;
+        e = ref.cast "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>::Err"(__match_scrut_0).payload_0;
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(46), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected handshake failure: "), used: 30 });
@@ -281,7 +281,7 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector
     __lifted_result_3 = builtin::load_i32(__outptr + 0);
     __lifted_result_4 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>]" { 0: __lifted_result_3, 1: __lifted_result_4 };
+    return struct.new "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>]" { 0: __lifted_result_3, 1: __lifted_result_4 };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_receive"(self, ciphertext) with Connector {
@@ -293,7 +293,7 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector
     __lifted_result_3 = builtin::load_i32(__outptr + 0);
     __lifted_result_4 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>]" { 0: __lifted_result_3, 1: __lifted_result_4 };
+    return struct.new "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>]" { 0: __lifted_result_3, 1: __lifted_result_4 };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_connect"(this, server_name) with Connector {
@@ -303,7 +303,7 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector
     __server_name_packed = "core:internal/cm_lower_string"(server_name);
     __async_outptr = "mem/realloc"(0, 0, 4, 8);
     __subtask_packed = "wasi/wasi:tls/Connector::connect"(this, builtin::i32_wrap_i64(__server_name_packed), builtin::i32_wrap_i64(__server_name_packed >> 32_i64), __async_outptr);
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 8, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado//__Closure_2" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__closure_wrapper_0") } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 8, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado//__Closure_2" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__closure_wrapper_0") } };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Error_to_debug_string"(self) with Error {
@@ -327,13 +327,13 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Error_to_
 
 fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_lift__Connector_connect"(__outptr) {
     let __disc: i32;
-    let __result_val: ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";
+    let __result_val: ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";
     __disc = builtin::load_u8(__outptr);
     __result_val = ref.null none;
     if __disc == 0 {
-        __result_val = struct.new "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>" { 0 };
+        __result_val = struct.new "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>" { 0 };
     } else {
-        __result_val = struct.new "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>::Err" { discriminant: 1, payload_0: builtin::load_i32(__outptr + 4) };
+        __result_val = struct.new "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>::Err" { discriminant: 1, payload_0: builtin::load_i32(__outptr + 4) };
     }
     return __result_val;
 }
@@ -756,11 +756,11 @@ fn "core:prelude/array.wado/Array<u8>::extend"(self, other) {
     self.used = new_used;
 }
 
-fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>::wait"(self) {
+fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"(self) {
     let handle_1: i32;
     let raw: i32;
     let ws_3: i32;
-    let result: ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";
+    let result: ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";
     let handle_6: i32;
     handle_1 = self.__cm_packed >> 4;
     if handle_1 != 0 {
@@ -787,7 +787,7 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:t
         "wasi/subtask-drop"(raw);
         "wasi/waitable-set-drop"(ws_3);
     }
-    result = block -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>" {
+    result = block -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>" {
         let __indirect_call_0: ref "canonical//CanonicalClosure_0";
         __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(self.__cm_lift);
         call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, self.__cm_outptr);

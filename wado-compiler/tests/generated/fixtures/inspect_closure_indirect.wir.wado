@@ -537,56 +537,67 @@ condition: `{h.cb:#?}` == \"|a: i32| (a * 3)\"
 
 fn "wado-compiler/tests/fixtures/inspect_closure_indirect.wado/__test_5_let_bound_closure_stored_in_struct_field_passed_across_fn_boundary_keeps_source"() {
     let inner: ref struct;
-    let __v0: ref "core:prelude/string.wado//String";
+    let __v0: ref struct;
+    let __v1: ref "core:prelude/string.wado//String";
     let __cond: bool;
-    let __local_4: ref "core:prelude/string.wado//String";
-    let __local_5: ref "core:prelude/format.wado//Formatter";
+    let __local_5: ref "core:prelude/string.wado//String";
+    let __local_6: ref "core:prelude/format.wado//Formatter";
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let other: ref "core:prelude/string.wado//String";
     let len_a: i32;
-    let f_21: ref "core:prelude/format.wado//Formatter";
+    let f_22: ref "core:prelude/format.wado//Formatter";
     let __sroa_h_cb: ref struct;
     inner = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/inspect_closure_indirect.wado//__Closure_7" {  }, inspect: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/inspect_closure_indirect.wado/__closure_inspect_wrapper_4"), inspect_alt: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/inspect_closure_indirect.wado/__closure_inspect_alt_wrapper_4"), func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/inspect_closure_indirect.wado/__closure_wrapper_4") };
     __sroa_h_cb = inner;
-    __v0 = __inline_fmt_alt_0____tmpl: block -> ref "core:prelude/string.wado//String" {
+    __v0 = __sroa_h_cb;
+    __v1 = __inline_fmt_alt_0____tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-        "wado-compiler/tests/fixtures/inspect_closure_indirect.wado/Fn<1,i32>^InspectAlt::inspect_alt"(__sroa_h_cb, __local_2);
+        "wado-compiler/tests/fixtures/inspect_closure_indirect.wado/Fn<1,i32>^InspectAlt::inspect_alt"(__v0, __local_2);
         break __inline_fmt_alt_0____tmpl: __local_1;
         unreachable;
     };
     __cond = __inline_String_Eq__eq_3: block -> bool {
         other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|a: i32| (a * 3)"), used: 16 };
-        len_a = __v0.used;
+        len_a = __v1.used;
         if len_a != other.used {
             break __inline_String_Eq__eq_3: 0;
         }
-        break __inline_String_Eq__eq_3: "core:prelude/string.wado/String^Eq::eq_bytes"(__v0.repr, other.repr, len_a);
+        break __inline_String_Eq__eq_3: "core:prelude/string.wado/String^Eq::eq_bytes"(__v1.repr, other.repr, len_a);
         unreachable;
     };
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-            __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(153), used: 0 };
-            "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_5_let_bound_closure_stored_in_struct_field_passed_across_fn_boundary_keeps_source"), used: 88 });
-            "core:prelude/string.wado/String::push"(__local_4, 32);
-            "core:prelude/string.wado/String::push"(__local_4, 97);
-            "core:prelude/string.wado/String::push"(__local_4, 116);
-            "core:prelude/string.wado/String::push"(__local_4, 32);
-            "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/inspect_closure_indirect.wado"), used: 58 });
-            "core:prelude/string.wado/String::push"(__local_4, 58);
-            __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-            f_21 = __local_5;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(55, f_21);
-            "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+            __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(176), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_5_let_bound_closure_stored_in_struct_field_passed_across_fn_boundary_keeps_source"), used: 88 });
+            "core:prelude/string.wado/String::push"(__local_5, 32);
+            "core:prelude/string.wado/String::push"(__local_5, 97);
+            "core:prelude/string.wado/String::push"(__local_5, 116);
+            "core:prelude/string.wado/String::push"(__local_5, 32);
+            "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/inspect_closure_indirect.wado"), used: 58 });
+            "core:prelude/string.wado/String::push"(__local_5, 58);
+            __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+            f_22 = __local_6;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(55, f_22);
+            "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: fmt_alt(h.cb) == \"|a: i32| (a * 3)\"
 "), used: 48 });
-            "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fmt_alt(h.cb): "), used: 15 });
-            __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-            "core:prelude/format.wado/String^Inspect::inspect"(__v0, __local_5);
-            "core:prelude/string.wado/String::push"(__local_4, 10);
-            break __tmpl: __local_4;
+            "core:prelude/string.wado/String::push"(__local_5, 104);
+            "core:prelude/string.wado/String::push"(__local_5, 46);
+            "core:prelude/string.wado/String::push"(__local_5, 99);
+            "core:prelude/string.wado/String::push"(__local_5, 98);
+            "core:prelude/string.wado/String::push"(__local_5, 58);
+            "core:prelude/string.wado/String::push"(__local_5, 32);
+            __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+            "wado-compiler/tests/fixtures/inspect_closure_indirect.wado/Fn<1,i32>^Inspect::inspect"(__v0, __local_6);
+            "core:prelude/string.wado/String::push"(__local_5, 10);
+            "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fmt_alt(h.cb): "), used: 15 });
+            __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+            "core:prelude/format.wado/String^Inspect::inspect"(__v1, __local_6);
+            "core:prelude/string.wado/String::push"(__local_5, 10);
+            break __tmpl: __local_5;
             unreachable;
         });
         unreachable;

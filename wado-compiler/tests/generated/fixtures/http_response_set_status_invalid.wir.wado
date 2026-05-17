@@ -152,7 +152,7 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(21)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>] {  // TypeId(22)
+struct tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(22)
     mut 0: i32,
     mut 1: i32,
 }
@@ -212,7 +212,7 @@ struct core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/t
     payload_0: ref "wasi:http/types.wado//ErrorCode",
 }
 
-variant core:prelude/types.wado//Result<unit,unit> {  // TypeId(34)
+variant core:prelude/types.wado//Result<(),()> {  // TypeId(34)
     Ok,
     Err,
 }
@@ -257,9 +257,9 @@ type "functype//wado-compiler/tests/fixtures/http_response_set_status_invalid.wa
 
 type "functype//wado-compiler/tests/fixtures/http_response_set_status_invalid.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(51)
 
-type "functype//wado-compiler/tests/fixtures/http_response_set_status_invalid.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";  // TypeId(52)
+type "functype//wado-compiler/tests/fixtures/http_response_set_status_invalid.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(52)
 
-type "functype//wado-compiler/tests/fixtures/http_response_set_status_invalid.wado/__cm_binding__Response_set_status_code" = fn(i32, i32) -> ref "core:prelude/types.wado//Result<unit,unit>";  // TypeId(53)
+type "functype//wado-compiler/tests/fixtures/http_response_set_status_invalid.wado/__cm_binding__Response_set_status_code" = fn(i32, i32) -> ref "core:prelude/types.wado//Result<(),()>";  // TypeId(53)
 
 type "functype//wado-compiler/tests/fixtures/http_response_set_status_invalid.wado/__cm_binding__Response_get_status_code" = fn(i32) -> u16;  // TypeId(54)
 
@@ -331,15 +331,15 @@ fn "wado-compiler/tests/fixtures/http_response_set_status_invalid.wado/handle"()
     let trailers_tx: i32;
     let headers: i32;
     let response: i32;
-    let ok_result: ref "core:prelude/types.wado//Result<unit,unit>";
+    let ok_result: ref "core:prelude/types.wado//Result<(),()>";
     let __cond_6: bool;
     let __v0_7: u16;
     let __cond_8: bool;
-    let err_result_0: ref "core:prelude/types.wado//Result<unit,unit>";
+    let err_result_0: ref "core:prelude/types.wado//Result<(),()>";
     let __cond_10: bool;
     let __v0_11: u16;
     let __cond_12: bool;
-    let err_result_max: ref "core:prelude/types.wado//Result<unit,unit>";
+    let err_result_max: ref "core:prelude/types.wado//Result<(),()>";
     let __cond_14: bool;
     let __v0_15: u16;
     let __cond_16: bool;
@@ -489,7 +489,7 @@ fn "wado-compiler/tests/fixtures/http_response_set_status_invalid.wado/handle"()
     let __packed_177: i64;
     let __ptr_178: i32;
     let __len_179: i32;
-    let __pattern_temp_1: ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_1: ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let f_192: ref "core:prelude/format.wado//Formatter";
     let f_197: ref "core:prelude/format.wado//Formatter";
     let s_203: ref "core:prelude/string.wado//String";
@@ -510,7 +510,7 @@ fn "wado-compiler/tests/fixtures/http_response_set_status_invalid.wado/handle"()
     __pattern_temp_1 = "wado-compiler/tests/fixtures/http_response_set_status_invalid.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future);
     response = __pattern_temp_1.0;
     ok_result = "wado-compiler/tests/fixtures/http_response_set_status_invalid.wado/__cm_binding__Response_set_status_code"(response, 201);
-    let __match_scrut_0: ref "core:prelude/types.wado//Result<unit,unit>";
+    let __match_scrut_0: ref "core:prelude/types.wado//Result<(),()>";
     __match_scrut_0 = ok_result;
     __cond_6 = (if __match_scrut_0.discriminant == 0 -> bool {
         1;
@@ -580,7 +580,7 @@ condition: response.get_status_code() == 201
         unreachable;
     }
     err_result_0 = "wado-compiler/tests/fixtures/http_response_set_status_invalid.wado/__cm_binding__Response_set_status_code"(response, 0);
-    let __match_scrut_1: ref "core:prelude/types.wado//Result<unit,unit>";
+    let __match_scrut_1: ref "core:prelude/types.wado//Result<(),()>";
     __match_scrut_1 = err_result_0;
     __cond_10 = (if __match_scrut_1.discriminant == 1 -> bool {
         1;
@@ -650,7 +650,7 @@ condition: response.get_status_code() == 201
         unreachable;
     }
     err_result_max = "wado-compiler/tests/fixtures/http_response_set_status_invalid.wado/__cm_binding__Response_set_status_code"(response, 65535);
-    let __match_scrut_2: ref "core:prelude/types.wado//Result<unit,unit>";
+    let __match_scrut_2: ref "core:prelude/types.wado//Result<(),()>";
     __match_scrut_2 = err_result_max;
     __cond_14 = (if __match_scrut_2.discriminant == 1 -> bool {
         1;
@@ -1064,18 +1064,18 @@ fn "wado-compiler/tests/fixtures/http_response_set_status_invalid.wado/__cm_bind
     __lifted_result_7 = builtin::load_i32(__outptr + 0);
     __lifted_result_8 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_7, 1: __lifted_result_8 };
+    return struct.new "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_7, 1: __lifted_result_8 };
 }
 
 fn "wado-compiler/tests/fixtures/http_response_set_status_invalid.wado/__cm_binding__Response_set_status_code"(self, status_code) with Response {
     let __disc: i32;
-    let __result_val: ref "core:prelude/types.wado//Result<unit,unit>";
+    let __result_val: ref "core:prelude/types.wado//Result<(),()>";
     __disc = "wasi/wasi:http/Response::set_status_code"(self, status_code);
     __result_val = ref.null none;
     if __disc == 0 {
-        __result_val = struct.new "core:prelude/types.wado//Result<unit,unit>" { 0 };
+        __result_val = struct.new "core:prelude/types.wado//Result<(),()>" { 0 };
     } else {
-        __result_val = struct.new "core:prelude/types.wado//Result<unit,unit>" { 1 };
+        __result_val = struct.new "core:prelude/types.wado//Result<(),()>" { 1 };
     }
     return __result_val;
 }

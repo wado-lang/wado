@@ -171,7 +171,7 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(25)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct tuple//[Request, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>] {  // TypeId(26)
+struct tuple//[Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(26)
     mut 0: i32,
     mut 1: i32,
 }
@@ -251,7 +251,7 @@ struct core:prelude/types.wado//Option<Stream<u8>>::Some {  // TypeId(41)
     payload_0: i32,
 }
 
-variant core:prelude/types.wado//Result<unit,unit> {  // TypeId(42)
+variant core:prelude/types.wado//Result<(),()> {  // TypeId(42)
     Ok,
     Err,
 }
@@ -312,13 +312,13 @@ type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__c
 
 type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//Array<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(64)
 
-type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> ref "tuple//[Request, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";  // TypeId(65)
+type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> ref "tuple//[Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(65)
 
-type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Request_set_scheme" = fn(i32, ref null "wasi:http/types.wado//Scheme") -> ref "core:prelude/types.wado//Result<unit,unit>";  // TypeId(66)
+type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Request_set_scheme" = fn(i32, ref null "wasi:http/types.wado//Scheme") -> ref "core:prelude/types.wado//Result<(),()>";  // TypeId(66)
 
-type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Request_set_authority" = fn(i32, ref null "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<unit,unit>";  // TypeId(67)
+type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Request_set_authority" = fn(i32, ref null "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<(),()>";  // TypeId(67)
 
-type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Request_set_path_with_query" = fn(i32, ref null "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<unit,unit>";  // TypeId(68)
+type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Request_set_path_with_query" = fn(i32, ref null "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<(),()>";  // TypeId(68)
 
 type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Client_send" = fn(i32) -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";  // TypeId(69)
 
@@ -521,7 +521,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/handle"() with 
     let __packed_157: i64;
     let __ptr_158: i32;
     let __len_159: i32;
-    let __pattern_temp_2: ref "tuple//[Request, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_2: ref "tuple//[Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let self_164: ref "core:prelude/string.wado//String";
     let self_165: ref "core:prelude/string.wado//StrUtf8ByteIter";
     let __b_166: ref "core:prelude//Array<u8>";
@@ -1021,7 +1021,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__R
     __lifted_result_11 = builtin::load_i32(__outptr + 0);
     __lifted_result_12 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Request, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_11, 1: __lifted_result_12 };
+    return struct.new "tuple//[Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_11, 1: __lifted_result_12 };
 }
 
 fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Request_set_scheme"(self, scheme) with Request {
@@ -1034,7 +1034,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__R
     let __scheme_s_p1: i32;
     let __scheme_s_c2_packed: i64;
     let __disc: i32;
-    let __result_val: ref "core:prelude/types.wado//Result<unit,unit>";
+    let __result_val: ref "core:prelude/types.wado//Result<(),()>";
     __scheme_disc = ref.is_null(scheme) == 0;
     __scheme_inner0 = 0;
     __scheme_inner1 = 0;
@@ -1055,9 +1055,9 @@ fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__R
     __disc = "wasi/wasi:http/Request::set_scheme"(self, __scheme_disc, __scheme_inner0, __scheme_inner1, __scheme_inner2);
     __result_val = ref.null none;
     if __disc == 0 {
-        __result_val = struct.new "core:prelude/types.wado//Result<unit,unit>" { 0 };
+        __result_val = struct.new "core:prelude/types.wado//Result<(),()>" { 0 };
     } else {
-        __result_val = struct.new "core:prelude/types.wado//Result<unit,unit>" { 1 };
+        __result_val = struct.new "core:prelude/types.wado//Result<(),()>" { 1 };
     }
     return __result_val;
 }
@@ -1068,7 +1068,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__R
     let __authority_inner1: i32;
     let __authority_s_packed: i64;
     let __disc: i32;
-    let __result_val: ref "core:prelude/types.wado//Result<unit,unit>";
+    let __result_val: ref "core:prelude/types.wado//Result<(),()>";
     __authority_disc = ref.is_null(authority) == 0;
     __authority_inner0 = 0;
     __authority_inner1 = 0;
@@ -1080,9 +1080,9 @@ fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__R
     __disc = "wasi/wasi:http/Request::set_authority"(self, __authority_disc, __authority_inner0, __authority_inner1);
     __result_val = ref.null none;
     if __disc == 0 {
-        __result_val = struct.new "core:prelude/types.wado//Result<unit,unit>" { 0 };
+        __result_val = struct.new "core:prelude/types.wado//Result<(),()>" { 0 };
     } else {
-        __result_val = struct.new "core:prelude/types.wado//Result<unit,unit>" { 1 };
+        __result_val = struct.new "core:prelude/types.wado//Result<(),()>" { 1 };
     }
     return __result_val;
 }
@@ -1093,7 +1093,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__R
     let __path_with_query_inner1: i32;
     let __path_with_query_s_packed: i64;
     let __disc: i32;
-    let __result_val: ref "core:prelude/types.wado//Result<unit,unit>";
+    let __result_val: ref "core:prelude/types.wado//Result<(),()>";
     __path_with_query_disc = ref.is_null(path_with_query) == 0;
     __path_with_query_inner0 = 0;
     __path_with_query_inner1 = 0;
@@ -1105,9 +1105,9 @@ fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__R
     __disc = "wasi/wasi:http/Request::set_path_with_query"(self, __path_with_query_disc, __path_with_query_inner0, __path_with_query_inner1);
     __result_val = ref.null none;
     if __disc == 0 {
-        __result_val = struct.new "core:prelude/types.wado//Result<unit,unit>" { 0 };
+        __result_val = struct.new "core:prelude/types.wado//Result<(),()>" { 0 };
     } else {
-        __result_val = struct.new "core:prelude/types.wado//Result<unit,unit>" { 1 };
+        __result_val = struct.new "core:prelude/types.wado//Result<(),()>" { 1 };
     }
     return __result_val;
 }
