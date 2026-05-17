@@ -1000,7 +1000,9 @@ fn trait_impl_module(
         | ResolvedType::Enum { module_source, .. }
         | ResolvedType::Variant { module_source, .. }
         | ResolvedType::Newtype { module_source, .. }
-        | ResolvedType::Flags { module_source, .. } => Some(module_source.clone()),
+        | ResolvedType::Flags { module_source, .. }
+        | ResolvedType::GenericInstance { module_source, .. }
+        | ResolvedType::GenericResource { module_source, .. } => Some(module_source.clone()),
         _ => None,
     };
 
