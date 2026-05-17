@@ -16,7 +16,37 @@ use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
 use super::types::{FunctionContext, TypeError};
 
+/// View of a `ResolvedType::Function` after peeling references and
+/// fn-type newtypes. Returned by [`Resolver::as_fn_signature`].
+struct FnSignature {
+    is_mut: bool,
+    params: Vec<TypeId>,
+    return_type: TypeId,
+}
+
 impl<H: CompilerHost> Resolver<'_, H> {
+    /// If `type_id` is a function type — possibly behind references or
+    /// fn-type newtypes such as `type Handler = fn(...);` — return its
+    /// signature. Otherwise return `None`. Borrows the type table once.
+    fn as_fn_signature(&self, type_id: TypeId) -> Option<FnSignature> {
+        let table = self.type_table.borrow();
+        let peeled_ref = table.peel_refs(type_id);
+        let base = table.get_ultimate_base_type(peeled_ref);
+        match table.get(base) {
+            ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                ..
+            } => Some(FnSignature {
+                is_mut: *is_mut,
+                params: params.clone(),
+                return_type: *return_type,
+            }),
+            _ => None,
+        }
+    }
+
     pub(super) fn resolve_call(
         &mut self,
         call: &ast::CallExpr,
@@ -24,55 +54,41 @@ impl<H: CompilerHost> Resolver<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TirExpr {
         // Check if this is a closure call (calling a local variable with function type)
-        if let Expr::Ident(ident) = &call.callee {
-            // No :: means it could be a local variable
-            if !ident.name.contains("::")
-                && let Some(local) = ctx.lookup(&ident.name)
-            {
-                // Check if the local has a function type (possibly behind references
-                // or fn-type newtypes such as `type Handler = fn(...);`).
-                let peeled_ref = self.type_table.borrow().peel_refs(local.type_id);
-                let peeled_type_id = self.type_table.borrow().get_ultimate_base_type(peeled_ref);
-                let peeled_type = self.type_table.borrow().get(peeled_type_id).clone();
-                if let ResolvedType::Function {
-                    is_mut: fn_is_mut,
-                    params: fn_params,
-                    return_type,
-                    ..
-                } = peeled_type
-                {
-                    let local_index = local.index;
-                    let local_type_id = local.type_id;
-                    let local_is_mut = local.is_mut;
+        if let Expr::Ident(ident) = &call.callee
+            && !ident.name.contains("::")
+            && let Some(local) = ctx.lookup(&ident.name)
+            && let Some(sig) = self.as_fn_signature(local.type_id)
+        {
+            let local_index = local.index;
+            let local_type_id = local.type_id;
+            let local_is_mut = local.is_mut;
 
-                    // `fn mut` closures need a `mut` callee binding — mirrors
-                    // Rust's FnMut rule.
-                    if fn_is_mut && !local_is_mut {
-                        let _ = self.logger.error(TypeError::ClosureMutBindingRequired {
-                            name: ident.name.clone(),
-                            span: ident.span,
-                        });
-                    }
-
-                    let local_expr = TirExpr::new(
-                        TirExprKind::Local {
-                            index: local_index,
-                            name: ident.name.clone(),
-                        },
-                        local_type_id,
-                        ident.span,
-                    );
-
-                    return self.build_indirect_call(
-                        call,
-                        ctx,
-                        local_expr,
-                        &fn_params,
-                        return_type,
-                        /* pad_with_defaults */ true,
-                    );
-                }
+            // `fn mut` closures need a `mut` callee binding — mirrors
+            // Rust's FnMut rule.
+            if sig.is_mut && !local_is_mut {
+                let _ = self.logger.error(TypeError::ClosureMutBindingRequired {
+                    name: ident.name.clone(),
+                    span: ident.span,
+                });
             }
+
+            let local_expr = TirExpr::new(
+                TirExprKind::Local {
+                    index: local_index,
+                    name: ident.name.clone(),
+                },
+                local_type_id,
+                ident.span,
+            );
+
+            return self.build_indirect_call(
+                call,
+                ctx,
+                local_expr,
+                &sig.params,
+                sig.return_type,
+                /* pad_with_defaults */ true,
+            );
         }
 
         // Indirect call on a non-identifier callee. Any expression whose
@@ -85,22 +101,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // branch never alters method dispatch (Rust policy).
         if !matches!(&call.callee, Expr::Ident(_)) {
             let callee_expr = self.resolve_expr(&call.callee, ctx, None);
-            let peeled_ref = self.type_table.borrow().peel_refs(callee_expr.type_id);
-            let peeled_type_id = self.type_table.borrow().get_ultimate_base_type(peeled_ref);
-            let peeled_type = self.type_table.borrow().get(peeled_type_id).clone();
 
-            if let ResolvedType::Function {
-                params: fn_params,
-                return_type,
-                ..
-            } = peeled_type
-            {
+            if let Some(sig) = self.as_fn_signature(callee_expr.type_id) {
                 return self.build_indirect_call(
                     call,
                     ctx,
                     callee_expr,
-                    &fn_params,
-                    return_type,
+                    &sig.params,
+                    sig.return_type,
                     /* pad_with_defaults */ false,
                 );
             }
