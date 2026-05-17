@@ -35,6 +35,7 @@ pub mod parser;
 pub mod resolver;
 pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
+pub use stdlib_snapshot::prewarm as prewarm_stdlib_snapshot;
 pub mod symbol;
 pub mod syntax;
 pub mod synthesis;

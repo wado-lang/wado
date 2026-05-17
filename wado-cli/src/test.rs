@@ -1287,6 +1287,36 @@ async fn run_one_package(
     Ok(totals)
 }
 
+/// Build the thread-local stdlib snapshot on `parallelism` distinct
+/// blocking-pool worker threads in parallel, ahead of any compile work.
+///
+/// Each worker would otherwise build the snapshot lazily on its first
+/// `annotate_loaded` call (~120 ms), serialising the cost behind that
+/// task.  A `std::sync::Barrier` keeps every prewarm task running
+/// simultaneously so tokio's blocking pool allocates `parallelism`
+/// distinct threads; those same threads are then reused for the
+/// `spawn_blocking` compile tasks scheduled by [`collect_test_jobs`],
+/// turning each first-compile from a cold miss into a cache hit.
+async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
+    let parallelism = parallelism.max(1);
+    let barrier = Arc::new(std::sync::Barrier::new(parallelism));
+    let handles: Vec<_> = (0..parallelism)
+        .map(|_| {
+            let barrier = Arc::clone(&barrier);
+            tokio::task::spawn_blocking(move || {
+                wado_compiler::prewarm_stdlib_snapshot();
+                // Block until every prewarm task is concurrently
+                // running so the blocking pool cannot satisfy all
+                // tasks with a single thread.
+                barrier.wait();
+            })
+        })
+        .collect();
+    for handle in handles {
+        let _ = handle.await;
+    }
+}
+
 pub async fn run(opts: TestOptions) {
     let overall_start = Instant::now();
     let multi_pkg = opts.package_runs.len() > 1;
@@ -1294,6 +1324,15 @@ pub async fn run(opts: TestOptions) {
     let jobs = opts.jobs;
     let package_runs = opts.package_runs;
     let preopened_dirs = Arc::new(opts.preopened_dirs);
+
+    // Prewarm the stdlib snapshot on `jobs` distinct worker threads
+    // before Phase 1 starts.  Each worker would otherwise build the
+    // snapshot (~120 ms) on its first compile and steal that time
+    // from the first batch of compiles; running the builds in
+    // parallel up-front amortises the cost and leaves the tokio
+    // blocking-pool threads in the steady state that subsequent
+    // `spawn_blocking` compile tasks can re-use.
+    prewarm_stdlib_snapshot_on_workers(jobs).await;
 
     let mut grand = PackageTotals::default();
     for pkg_run in &package_runs {

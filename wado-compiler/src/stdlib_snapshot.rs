@@ -98,6 +98,18 @@ pub(crate) fn get_or_init_snapshot() -> Option<Rc<Annotated>> {
     }))
 }
 
+/// Build the current thread's snapshot now, ahead of the first
+/// `annotate_loaded` call.  Intended for parallel batch drivers (e.g.
+/// `wado test`) to amortise the ~120 ms snapshot build across worker
+/// threads before any compile work is scheduled, instead of paying
+/// the cost on each worker's first compile.
+///
+/// No-op if the snapshot is already built on this thread, or if
+/// called re-entrantly from inside [`build_snapshot`].
+pub fn prewarm() {
+    let _ = get_or_init_snapshot();
+}
+
 /// Drive the full loader + `annotate_loaded` pipeline on an empty
 /// entry source.  The loader's implicit-modules pass pulls in
 /// `core:prelude` and its transitive closure, matching the stdlib
