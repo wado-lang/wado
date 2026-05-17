@@ -814,7 +814,7 @@ fn parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
             gd_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                pos = scan_a__follow_1(tokens, pos, 0);
+                pos = scan_a__follow_0(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
                 pos = scan_b(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
@@ -937,34 +937,6 @@ fn parse_a__follow_0(p: &mut Parser) -> Result<ANode, ParseError> {
         p.peek().span,
         ["TK_X", "TK_Z"],
     ));
-}
-
-fn scan_a__follow_1(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_X {
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_X { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_Z {
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_Z { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
-        }
-    }
-    return pos;
 }
 
 pub fn parse(input: &String) -> Result<RNode, ParseError> {

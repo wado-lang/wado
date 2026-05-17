@@ -999,7 +999,23 @@ impl GenContext {
                 acc;
             },
             Label(lab) => self.tail_greedy_k_prefix_of_element(&lab.element, max_k, visiting),
-            RuleRef(r) => self.tail_greedy_k_prefix_of_rule(&r.name, max_k, visiting),
+            // Deliberately DO NOT recurse through `RuleRef`: a rule
+            // whose body has no direct tail-greedy `Repeat` cannot
+            // emit a K-prefix gate, so registering a K-prefix variant
+            // for it produces a "transparent" body whose only purpose
+            // is to thread the mask down to nested call sites. That
+            // threading is broken for multi-alt rules anyway (the
+            // dispatcher emit calls regular `parse_<rule>_bt_<n>`
+            // helpers rather than the variant's
+            // `<fn_name>_bt_<n>`s), so the cascade dies at the next
+            // multi-alt rule. By stopping the analysis at `RuleRef`
+            // we register K-prefix variants only for rules that will
+            // emit a real gate, drastically reducing generated parser
+            // size for grammars with deep call chains like TypeScript
+            // (without losing any actual coverage — the existing
+            // 1-token mask path still covers transitive tail-greedy
+            // for single-token-inner cases that invariant 1 admits).
+            RuleRef(_) => [],
             TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => [],
         };
     }
@@ -1073,13 +1089,17 @@ impl GenContext {
                 }
             }
         }
-        // K-prefix activation: register a multi-token variant when the
-        // caller's deterministic K-prefix overlaps the rule's
-        // tail-greedy K-prefix at depth 0. This admits multi-token
-        // inner Repeats that the single-token analysis (and its
-        // soundness invariant 1) rejects.
+        // K-prefix activation: only register a multi-token variant
+        // when the 1-token path FAILED to capture the conflict (i.e.
+        // `tail_greedy_first_of_rule` returned `[]` because the
+        // tail-greedy `Repeat`'s inner is multi-token, blocked by
+        // soundness invariant 1). When the 1-token mask already
+        // fires, its variant body's subtractive gate is at least as
+        // restrictive as a K-prefix gate keyed on the same depth-0
+        // tokens — emitting a parallel K-prefix variant would just
+        // duplicate the body and bloat the generated parser.
         let mut k_prefix_canonical: Array<Array<String>> = [];
-        if !caller_k_prefix.is_empty() {
+        if intersection.is_empty() && !caller_k_prefix.is_empty() {
             let mut k_visiting: Array<String> = [];
             let max_k_for_iter = caller_k_prefix.len();
             let iter_kp = self.tail_greedy_k_prefix_of_rule(rule_name, max_k_for_iter, &mut k_visiting);

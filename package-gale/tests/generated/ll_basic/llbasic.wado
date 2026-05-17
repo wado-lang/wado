@@ -770,7 +770,7 @@ fn parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
             gd_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                pos = scan_a__follow_1(tokens, pos, 0);
+                pos = scan_a__follow_0(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
                 pos = scan_b(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
@@ -842,13 +842,6 @@ fn parse_a__follow_0(p: &mut Parser) -> Result<ANode, ParseError> {
         x,
         y,
     });
-}
-
-fn scan_a__follow_1(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_X { return -1; }
-    pos += 1;
-    return pos;
 }
 
 pub fn parse(input: &String) -> Result<RNode, ParseError> {

@@ -821,7 +821,7 @@ fn parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
             gd_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                pos = scan_a__follow_1(tokens, pos, 0);
+                pos = scan_a__follow_0(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
                 pos = scan_b(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
@@ -994,93 +994,6 @@ fn parse_a__follow_0(p: &mut Parser, min_prec: i32 = 0) -> Result<ANode, ParseEr
                     break;
                 }
                 result = parse_a__follow_0_lr_1(p, result, start)?;
-            } else {
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-    return Result::<ANode, ParseError>::Ok(result);
-}
-
-fn scan_a__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_X { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_a__follow_1_lr_1(tokens: &Array<Token>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUS { return -1; }
-    pos += 1;
-    pos = scan_a__follow_1(tokens, pos, 2);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_a__follow_1(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_a__follow_1_atom(tokens, pos);
-    if pos < 0 { return -1; }
-    loop {
-        let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-        if suffix_kind == TK_LIT_PLUS {
-            if 1 >= min_prec {
-                let lr_saved_pos = pos;
-                pos = scan_a__follow_1_lr_1(tokens, pos);
-                if pos < 0 { pos = lr_saved_pos; break; }
-            } else {
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-    return pos;
-}
-
-fn parse_a__follow_1_atom(p: &mut Parser) -> Result<ANode, ParseError> {
-    let start = p.peek().span.start;
-    let kind = p.peek_kind();
-    if kind == TK_X {
-        let x = p.expect(TK_X)?;
-        let y: Option<Token> = null;
-        return Result::<ANode, ParseError>::Ok(ANode::Alt0(AAlt0 {
-            span: Span::new(start, i32::max(start, p.last_end())),
-            x,
-            y,
-        }));
-    }
-    return Result::<ANode, ParseError>::Err(ParseError::new(
-        "expected a",
-        p.peek().span,
-        ["TK_X"],
-    ));
-}
-
-fn parse_a__follow_1_lr_1(p: &mut Parser, left: ANode, start: i32) -> Result<ANode, ParseError> {
-    let plus = p.expect(TK_LIT_PLUS)?;
-    let a_2 = parse_a__follow_1(p, 2)?;
-    return Result::<ANode, ParseError>::Ok(ANode::Alt1(AAlt1 {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        a: left,
-        plus,
-        a_2,
-    }));
-}
-
-fn parse_a__follow_1(p: &mut Parser, min_prec: i32 = 0) -> Result<ANode, ParseError> {
-    let start = p.peek().span.start;
-    let mut result = parse_a__follow_1_atom(p)?;
-    loop {
-        let suffix_kind = p.peek_kind();
-        if suffix_kind == TK_LIT_PLUS {
-            if 1 >= min_prec {
-                if scan_a__follow_1_lr_1(&p.tokens, p.pos) < 0 {
-                    break;
-                }
-                result = parse_a__follow_1_lr_1(p, result, start)?;
             } else {
                 break;
             }
