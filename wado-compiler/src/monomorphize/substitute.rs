@@ -32,22 +32,54 @@ impl Monomorphizer {
         // Rewrite function signatures and bodies
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
-            for param in &mut func.params {
-                param.type_id = rewriter.rewrite_type_id(param.type_id);
-            }
-            func.return_type = rewriter.rewrite_type_id(func.return_type);
-            for local in &mut func.locals {
-                local.type_id = rewriter.rewrite_type_id(local.type_id);
-            }
-            if let Some(body) = &mut func.body {
-                rewriter.visit_block(body);
-            }
+            Self::rewrite_types_in_function_inner(&mut rewriter, &mut func);
         }
 
         // Rewrite global variable initializers
         for global in &mut module.globals {
             global.ty = rewriter.rewrite_type_id(global.ty);
             rewriter.visit_expr(&mut global.initializer);
+        }
+    }
+
+    /// Rewrite all `GenericInstance` `type_ids` in a single `TirFunction` —
+    /// the per-function dual of [`Self::rewrite_types_in_module`].
+    ///
+    /// Phase 9's inner loop calls this on every newly-instantiated function
+    /// (after struct monomorphisation has run to fixpoint over the types
+    /// reachable from its body) so that, by the time
+    /// `collect_function_instantiation_sites` walks the body, every
+    /// `TypeId` it consumes — including `Call`/`MethodCall::type_args` —
+    /// is in canonical `Struct` form. Without this, function-call queues
+    /// produced by Phase 9 carry pre-monomorphisation `GenericInstance`
+    /// `TypeId`s that mangle identically to their post-monomorphisation
+    /// `Struct` counterparts, violating `function_id_for` injectivity
+    /// over `project.functions`.
+    pub fn rewrite_types_in_function(
+        &self,
+        func: &mut crate::tir::TirFunction,
+        type_table: &mut TypeTable,
+    ) {
+        let mut rewriter = TypeRewriter {
+            mono: self,
+            type_table,
+        };
+        Self::rewrite_types_in_function_inner(&mut rewriter, func);
+    }
+
+    fn rewrite_types_in_function_inner(
+        rewriter: &mut TypeRewriter<'_>,
+        func: &mut crate::tir::TirFunction,
+    ) {
+        for param in &mut func.params {
+            param.type_id = rewriter.rewrite_type_id(param.type_id);
+        }
+        func.return_type = rewriter.rewrite_type_id(func.return_type);
+        for local in &mut func.locals {
+            local.type_id = rewriter.rewrite_type_id(local.type_id);
+        }
+        if let Some(body) = &mut func.body {
+            rewriter.visit_block(body);
         }
     }
 
@@ -419,6 +451,31 @@ impl TirMutVisitor for TypeRewriter<'_> {
 
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         expr.type_id = self.rewrite_type_id(expr.type_id);
+
+        // Rewrite explicit `type_args` on `Call`/`MethodCall` so post-monomorphisation
+        // `InstantiationKey`s built from them use the canonical (substituted)
+        // `Struct` form rather than the resolver-assigned `GenericInstance`
+        // form. Without this, two queue paths for the same logical
+        // instantiation — one driven by call-site `type_args` (left as
+        // `GenericInstance` by the resolver) and another driven by
+        // receiver/struct_key paths (already rewritten to `Struct`) —
+        // would hash distinct yet mangle identically, producing two
+        // `TirFunction`s sharing one `function_id_for`.
+        //
+        // The default `walk_expr` does not descend into `type_args` (see
+        // `tir_visitor.rs`'s `Call`/`MethodCall` patterns, which only
+        // bind `args`), so rewrite them explicitly here. `Call`'s own
+        // body rewrites (param substitution, etc.) happen via
+        // `substitute_types_in_expr` at `instantiate_function` time and
+        // are independent of this whole-module rewrite.
+        match &mut expr.kind {
+            TirExprKind::Call { type_args, .. } | TirExprKind::MethodCall { type_args, .. } => {
+                for type_arg in type_args.iter_mut() {
+                    *type_arg = self.rewrite_type_id(*type_arg);
+                }
+            }
+            _ => {}
+        }
 
         if let TirExprKind::StructLiteral {
             struct_type,

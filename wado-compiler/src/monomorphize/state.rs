@@ -132,114 +132,25 @@ impl Monomorphizer {
         true
     }
 
-    /// Replace each `TypeId` in `args` that is a pre-substitution
-    /// `GenericInstance` with its post-substitution `Struct` form via the
-    /// monomorphizer's `type_substitutions` map.
-    fn canonicalize_type_ids(&self, args: &mut [TypeId]) {
-        for arg in args.iter_mut() {
-            if let Some(&canonical) = self.structs.type_substitutions.get(arg) {
-                *arg = canonical;
-            }
-        }
-    }
-
-    /// Canonicalise every `TypeId` carried by `key` so pre-/post-substitution
-    /// variants of the same logical type collapse onto a single `Hash`/`Eq`
-    /// form. `mangle_type_arg_for_generic` deliberately produces the same
-    /// mangled name for a `GenericInstance{Wrapper, [i32]}` and its
-    /// post-substitution `Struct{Wrapper<i32>}` (the "stable across the
-    /// substitution boundary" invariant), so without this step a queue
-    /// driven by pre-substitution `TypeId`s and another driven by
-    /// post-substitution `TypeId`s would emit two `TirFunction`s sharing
-    /// one `function_id_for`.
-    pub fn canonicalize_key(&self, key: &mut InstantiationKey) {
-        self.canonicalize_type_ids(&mut key.impl_type_args);
-        self.canonicalize_type_ids(&mut key.method_type_args);
-    }
-
-    /// Apply the (potentially-grown) substitution map to every key
-    /// currently held in `instantiated` and `pending`. Call after each
-    /// new struct instantiation so that `InstantiationKey`s queued before
-    /// the relevant `GenericInstance` was monomorphised retroactively
-    /// pick up the new canonical form. Without this, queue-time
-    /// canonicalisation alone would leave a stale `GenericInstance`
-    /// `TypeId` pinned in the map while later passes see the new `Struct`
-    /// form, producing two entries for the same logical function.
-    pub fn re_canonicalize_function_keys(&mut self) {
-        let subs = &self.structs.type_substitutions;
-        if subs.is_empty() {
-            return;
-        }
-        // Rebuild `instantiated`, collapsing duplicates that share a
-        // canonical key onto one entry. Both pre-canonical forms map to
-        // the same mangled string, so any survivor's value is correct.
-        let entries: Vec<(InstantiationKey, String)> =
-            self.functions.instantiated.drain(..).collect();
-        for (mut key, mangled) in entries {
-            for arg in key
-                .impl_type_args
-                .iter_mut()
-                .chain(key.method_type_args.iter_mut())
-            {
-                if let Some(&canonical) = subs.get(arg) {
-                    *arg = canonical;
-                }
-            }
-            self.functions.instantiated.insert(key, mangled);
-        }
-        // Rebuild `pending` similarly, but drop any canonical key that
-        // would re-queue an already-popped instantiation (i.e. one no
-        // longer in `instantiated`'s key set is impossible here because
-        // `instantiated` was just rebuilt; the relevant check is against
-        // duplicates introduced by the canonical collapse).
-        let pending: Vec<InstantiationKey> = std::mem::take(&mut self.functions.pending);
-        let mut seen: IndexMap<InstantiationKey, ()> = IndexMap::default();
-        for mut key in pending {
-            for arg in key
-                .impl_type_args
-                .iter_mut()
-                .chain(key.method_type_args.iter_mut())
-            {
-                if let Some(&canonical) = subs.get(arg) {
-                    *arg = canonical;
-                }
-            }
-            if seen.contains_key(&key) {
-                continue;
-            }
-            seen.insert(key.clone(), ());
-            self.functions.pending.push(key);
-        }
-    }
-
-    /// Look up the mangled name for a function instantiation by key,
-    /// canonicalising the key first so callers can pass either the
-    /// pre- or post-substitution form and find the same stored entry.
+    /// Look up the mangled name for a function instantiation by key.
     pub fn lookup_function_instantiation(&self, key: &InstantiationKey) -> Option<&String> {
-        let mut canonical = key.clone();
-        self.canonicalize_key(&mut canonical);
-        self.functions.instantiated.get(&canonical)
+        self.functions.instantiated.get(key)
     }
 
     /// Queue a function instantiation if not already queued. Returns true
     /// if newly queued.
     ///
-    /// Function identity over `project.functions` is
-    /// `(module_source, mangled_name)` — exactly the shape
-    /// `function_id_for(func)` reads, and the load-bearing invariant for
-    /// DCE's position-based retain (asserted at `optimize/dce.rs`).
-    ///
-    /// The queued key is canonicalised first via
-    /// [`Self::canonicalize_key`] so pre-/post-substitution forms of the
-    /// same logical type produce identical `Hash`/`Eq`. Together with
-    /// faithful Ref/MutRef mangling (so `[&T]` and `[T]` mangle to
-    /// distinct names) and [`Self::re_canonicalize_function_keys`] (run
-    /// whenever a new struct monomorphisation widens
-    /// `type_substitutions`), this makes `function_id_for(func)` injective
-    /// over `project.functions` by construction — no separate dedupe
-    /// pass needed.
-    pub fn try_queue_function(&mut self, mut key: InstantiationKey, mangled_name: String) -> bool {
-        self.canonicalize_key(&mut key);
+    /// Dedupe is keyed solely on the full `InstantiationKey`. Together
+    /// with faithful Ref/MutRef mangling (so `[&T]` and `[T]` mangle to
+    /// distinct names) and `TypeRewriter`'s post-monomorphisation
+    /// type-id rewrite over **every** `TypeId` field reachable from a
+    /// `TirFunction` body — including `Call`/`MethodCall::type_args` —
+    /// every concrete instantiation site reaches `try_queue_function`
+    /// with `GenericInstance`/`Struct`-canonicalised type args. That
+    /// makes `function_id_for(func)` injective over `project.functions`
+    /// by construction — the load-bearing invariant for DCE's
+    /// position-based retain (asserted at `optimize/dce.rs:675`).
+    pub fn try_queue_function(&mut self, key: InstantiationKey, mangled_name: String) -> bool {
         if self.functions.instantiated.contains_key(&key) {
             return false;
         }

@@ -481,15 +481,6 @@ pub struct TypeTable {
     /// (e.g., `impl Iterator for ArrayIter<T> { type Item = T; }`).
     /// Used by the monomorphizer to resolve associated types for `GenericInstance` types.
     generic_assoc_type_defs: IndexMap<(String, String), TypeId>,
-    /// `Struct TypeId → impl_type_args` recovered side index. A
-    /// post-monomorphisation `Struct` (e.g. `ArrayIter<i32>`) collapses
-    /// the original generic's `(base_name, type_args)` into a single
-    /// mangled `name`. `resolve_generic_assoc_type` needs both pieces to
-    /// look up the generic-impl's associated type definition and
-    /// substitute the type-param binding, so we stash the original
-    /// `type_args` here when the monomorphised `Struct` is interned via
-    /// `make_monomorphized_struct`.
-    monomorphized_struct_type_args: IndexMap<TypeId, Vec<TypeId>>,
     /// Erasure redirects: set by `erase_newtypes_and_flags()`.
     /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
     /// Newtype → ultimate base type; Flags → u32.
@@ -569,7 +560,6 @@ impl TypeTable {
             compiler_items: crate::compiler_item::CompilerItems::new(),
             assoc_type_resolutions: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
-            monomorphized_struct_type_args: IndexMap::default(),
             redirects: IndexMap::default(),
             newtype_to_base_name: IndexMap::default(),
             struct_name_index: IndexMap::default(),
@@ -1091,26 +1081,18 @@ impl TypeTable {
     ///
     /// - `name`: The fully mangled name (e.g., "`TreeMap`<String,i32>")
     /// - `base_name`: The original generic struct name (e.g., "`TreeMap`")
-    /// - `type_args`: The concrete type-id args the generic was instantiated with
-    ///   (e.g. `[String, i32]` for `TreeMap<String, i32>`). Stashed in a side
-    ///   index so [`Self::resolve_generic_assoc_type`] can recover them for the
-    ///   post-substitution `Struct` form, mirroring the lookup it does for the
-    ///   pre-substitution `GenericInstance` form.
     pub fn make_monomorphized_struct(
         &mut self,
         name: String,
         module_source: ModuleSource,
         base_name: String,
-        type_args: Vec<TypeId>,
     ) -> TypeId {
-        let id = self.intern(ResolvedType::Struct {
+        self.intern(ResolvedType::Struct {
             name,
             module_source,
             is_monomorphized: true,
             base_name: Some(base_name),
-        });
-        self.monomorphized_struct_type_args.insert(id, type_args);
-        id
+        })
     }
 
     pub fn make_variant(&mut self, name: String, module_source: ModuleSource) -> TypeId {
@@ -1390,26 +1372,11 @@ impl TypeTable {
             .insert((base_struct_name, assoc_name), type_param_id);
     }
 
-    /// Resolve an associated type for a `GenericInstance` or post-substitution
-    /// `Struct` type using generic definitions.
-    ///
-    /// For `ArrayIter<i32>::Item`: looks up `("ArrayIter", "Item")` →
-    /// `TypeParam(0)`, then substitutes using the instance's `type_args`
-    /// to get `i32`. Works regardless of whether `concrete_id` is the
-    /// pre-substitution `GenericInstance{ArrayIter, [i32]}` form or the
-    /// post-substitution `Struct{ArrayIter<i32>}` form — the latter
-    /// recovers `(base_name, type_args)` from the
-    /// `monomorphized_struct_type_args` side index populated by
-    /// [`Self::make_monomorphized_struct`].
-    ///
-    /// For non-trivial defs (e.g. `type IntoIter = Self;` whose stored
-    /// def is `GenericInstance{base, [TypeParam(0)...]}`), the def's
-    /// embedded `TypeParam`s are substituted using the input
-    /// `type_args` via [`Self::substitute_type_params`], so the resolved
-    /// type comes out fully concrete (e.g. `GenericInstance{ArrayIter,
-    /// [u8]}` rather than a copy of the original `[T]` form).
+    /// Resolve an associated type for a `GenericInstance` type using generic definitions.
+    /// For `ArrayIter<i32>::Item`: looks up `("ArrayIter", "Item")` → `TypeParam(0)`,
+    /// then substitutes using the instance's `type_args` to get `i32`.
     pub fn resolve_generic_assoc_type(
-        &mut self,
+        &self,
         concrete_id: TypeId,
         assoc_name: &str,
     ) -> Option<TypeId> {
@@ -1417,17 +1384,6 @@ impl TypeTable {
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => (name, type_args),
-            ResolvedType::Struct {
-                base_name: Some(base),
-                is_monomorphized: true,
-                ..
-            } => {
-                let args = self
-                    .monomorphized_struct_type_args
-                    .get(&concrete_id)
-                    .cloned()?;
-                (base, args)
-            }
             _ => return None,
         };
         let def_type_id = *self
@@ -1455,18 +1411,7 @@ impl TypeTable {
                 }
                 self.resolve_generic_assoc_type(inner_concrete_id, &inner_assoc_name)
             }
-            _ => {
-                // Non-trivial def (e.g. `type IntoIter = Self;` stored as
-                // `GenericInstance{base, [TypeParam(0)...]}`). Substitute
-                // its embedded `TypeParam`s using the input `type_args` so
-                // the returned type is fully concrete.
-                let substitution: IndexMap<u32, TypeId> = type_args
-                    .iter()
-                    .enumerate()
-                    .map(|(i, &tid)| (i as u32, tid))
-                    .collect();
-                Some(self.substitute_type_params(def_type_id, &substitution))
-            }
+            _ => Some(def_type_id),
         }
     }
 

@@ -94,7 +94,6 @@ impl BoxLowerer {
             struct_name.clone(),
             self.box_module_source.clone(),
             "Box".to_string(),
-            vec![inner_type_id],
         );
 
         // Create the TirStruct definition with a single `value` field
