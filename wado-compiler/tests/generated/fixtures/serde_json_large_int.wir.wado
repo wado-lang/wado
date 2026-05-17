@@ -405,9 +405,9 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(130)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_large_int.wado/u64^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>";  // TypeId(131)
+type "functype//wado-compiler/tests/fixtures/serde_json_large_int.wado/i64^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>";  // TypeId(131)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_large_int.wado/i64^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>";  // TypeId(132)
+type "functype//wado-compiler/tests/fixtures/serde_json_large_int.wado/u64^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>";  // TypeId(132)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(133)
 
@@ -4591,12 +4591,12 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
 }
 
-fn "wado-compiler/tests/fixtures/serde_json_large_int.wado/u64^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
-    return "core:json/JsonDeserializer^Deserializer::deserialize_u64"(d);
-}
-
 fn "wado-compiler/tests/fixtures/serde_json_large_int.wado/i64^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
     return "core:json/JsonDeserializer^Deserializer::deserialize_i64"(d);
+}
+
+fn "wado-compiler/tests/fixtures/serde_json_large_int.wado/u64^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
+    return "core:json/JsonDeserializer^Deserializer::deserialize_u64"(d);
 }
 
 export fn "wado-compiler/tests/fixtures/serde_json_large_int.wado/__cm_export____test_0_i64_small_value_as_number" as "__test_0_i64_small_value_as_number"

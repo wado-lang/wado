@@ -102,13 +102,13 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(33)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>");  // TypeId(34)
+type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::join" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(34)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::join" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(35)
+type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(35)
 
-type "functype//core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/iter_map_collect_variant.wado/Color>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/iter_map_collect_variant.wado/Color>") -> ref null "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//Color";  // TypeId(36)
+type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>");  // TypeId(36)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(37)
+type "functype//core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/iter_map_collect_variant.wado/Color>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/iter_map_collect_variant.wado/Color>") -> ref null "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//Color";  // TypeId(37)
 
 type "functype//wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//Color") -> ref "core:prelude/string.wado//String";  // TypeId(38)
 
@@ -444,6 +444,52 @@ fn "core:prelude/format.wado/Formatter::pad"(self, content) {
     }
 }
 
+fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::join"(self, separator) {
+    let buf_2: ref "core:prelude/string.wado//String";
+    let f_3: ref "core:prelude/format.wado//Formatter";
+    let i: i32;
+    let item: ref "core:prelude/string.wado//String";
+    let capacity: i32;
+    let _licm_used_12: i32;
+    let _licm_repr_13: ref "builtin::array<core:prelude/string.wado/String>";
+    buf_2 = __inline_String__with_capacity_0: block -> ref "core:prelude/string.wado//String" {
+        capacity = self.used * 8;
+        break __inline_String__with_capacity_0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity), used: 0 };
+        unreachable;
+    };
+    f_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: buf_2 };
+    __for_14: block {
+        i = 0;
+        _licm_used_12 = self.used;
+        _licm_repr_13 = self.repr;
+        block {
+            l33: loop {
+                if i >= _licm_used_12 {
+                    break __for_14;
+                }
+                if i > 0 {
+                    "core:prelude/string.wado/String::push_str"(f_3.buf, separator);
+                }
+                item = builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_13, i);
+                "core:prelude/format.wado/Formatter::pad"(f_3, item);
+                i = i + 1;
+                continue l33;
+            };
+        };
+    };
+    return buf_2;
+}
+
+fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self);
+    }
+    builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
+    self.used = used + 1;
+}
+
 fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
@@ -464,53 +510,17 @@ fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self) 
     __for_0: block {
         i = 0;
         block {
-            l33: loop {
+            l38: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "core:prelude/string.wado//String">(new_repr, i, builtin::array_get<ref "core:prelude/string.wado//String">(old_repr, i));
                 i = i + 1;
-                continue l33;
+                continue l38;
             };
         };
     };
     self.repr = new_repr;
-}
-
-fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::join"(self, separator) {
-    let buf_2: ref "core:prelude/string.wado//String";
-    let f_3: ref "core:prelude/format.wado//Formatter";
-    let i: i32;
-    let item: ref "core:prelude/string.wado//String";
-    let capacity: i32;
-    let _licm_used_12: i32;
-    let _licm_repr_13: ref "builtin::array<core:prelude/string.wado/String>";
-    buf_2 = __inline_String__with_capacity_0: block -> ref "core:prelude/string.wado//String" {
-        capacity = self.used * 8;
-        break __inline_String__with_capacity_0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity), used: 0 };
-        unreachable;
-    };
-    f_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: buf_2 };
-    __for_14: block {
-        i = 0;
-        _licm_used_12 = self.used;
-        _licm_repr_13 = self.repr;
-        block {
-            l36: loop {
-                if i >= _licm_used_12 {
-                    break __for_14;
-                }
-                if i > 0 {
-                    "core:prelude/string.wado/String::push_str"(f_3.buf, separator);
-                }
-                item = builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_13, i);
-                "core:prelude/format.wado/Formatter::pad"(f_3, item);
-                i = i + 1;
-                continue l36;
-            };
-        };
-    };
-    return buf_2;
 }
 
 fn "core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/iter_map_collect_variant.wado/Color>^Iterator::next"(self) {
@@ -521,16 +531,6 @@ fn "core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/iter_map_coll
     item = builtin::array_get<ref "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//Color">(self.repr, self.index);
     self.index = self.index + 1;
     return item;
-}
-
-fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self);
-    }
-    builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
-    self.used = used + 1;
 }
 
 fn "wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__Closure_2::__call"(c) {

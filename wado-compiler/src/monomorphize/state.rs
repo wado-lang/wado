@@ -24,12 +24,14 @@ pub(super) struct StructInstState {
 
 /// Tracks function monomorphization state
 pub(super) struct FuncInstState {
-    /// Map from (`generic_func_name`, `type_args`) to mangled function name
+    /// Map from canonicalised `InstantiationKey` to the mangled function
+    /// name. Keys are canonicalised by [`Monomorphizer::canonicalize_key`]
+    /// before insert/lookup so that pre-/post-substitution `TypeId`
+    /// variants of the same logical type collapse onto a single entry.
     pub instantiated: IndexMap<InstantiationKey, String>,
-    /// Work queue of pending function instantiations
+    /// Work queue of pending function instantiations. Holds canonicalised
+    /// keys.
     pub pending: Vec<InstantiationKey>,
-    /// Reverse lookup: mangled function name -> `InstantiationKey`
-    pub mangled_to_key: IndexMap<String, InstantiationKey>,
     /// Project-wide trait knowledge inherited from the package. Used by
     /// receiver-substitution and comparison-lowering paths to find the
     /// module that owns `impl <trait> for <type>` without rebuilding a
@@ -108,7 +110,6 @@ impl Monomorphizer {
             functions: FuncInstState {
                 instantiated: IndexMap::default(),
                 pending: Vec::new(),
-                mangled_to_key: IndexMap::default(),
                 trait_env,
             },
             current_impl_type_param_count: 0,
@@ -131,40 +132,31 @@ impl Monomorphizer {
         true
     }
 
-    /// Queue a function instantiation if not already queued. Returns true if newly queued.
+    /// Look up the mangled name for a function instantiation by key.
+    pub fn lookup_function_instantiation(&self, key: &InstantiationKey) -> Option<&String> {
+        self.functions.instantiated.get(key)
+    }
+
+    /// Queue a function instantiation if not already queued. Returns true
+    /// if newly queued.
     ///
-    /// Dedupes on (1) the full `InstantiationKey` and (2) a same-module
-    /// mangled-name match. `mangle_type_arg_for_generic` strips
-    /// `Ref`/`MutRef` wrappers from type arguments, so a blanket like
-    /// `impl<T> Inspect for &T` can queue with both
-    /// `impl_type_args = [Array<char>]` and `impl_type_args = [&Array<char>]`
-    /// from different rewrite paths in the same module. Those keys are
-    /// distinct under `Hash`/`Eq` but produce identical mangled function
-    /// names, and `instantiate_function` stamps the resulting `TirFunction`
-    /// with `key.module_source`, so emitting both creates a
-    /// `function_id_for` collision in `project.functions` (`FreeFunctionName`
-    /// keys by `(module_source, name)`). Cross-module duplicates are *not*
-    /// deduped because their resulting `TirFunctions` live in different
-    /// modules and DCE can keep them apart by position.
+    /// Dedupe is keyed solely on the full `InstantiationKey`. Together
+    /// with faithful Ref/MutRef mangling (so `[&T]` and `[T]` mangle to
+    /// distinct names) and `TypeRewriter`'s post-monomorphisation
+    /// type-id rewrite over **every** `TypeId` field reachable from a
+    /// `TirFunction` body — including `Call`/`MethodCall::type_args` —
+    /// every concrete instantiation site reaches `try_queue_function`
+    /// with `GenericInstance`/`Struct`-canonicalised type args. That
+    /// makes `function_id_for(func)` injective over `project.functions`
+    /// by construction — the load-bearing invariant for DCE's
+    /// position-based retain (asserted at `optimize/dce.rs:675`).
     pub fn try_queue_function(&mut self, key: InstantiationKey, mangled_name: String) -> bool {
         if self.functions.instantiated.contains_key(&key) {
             return false;
         }
-        if let Some(prior_key) = self.functions.mangled_to_key.get(&mangled_name)
-            && prior_key.module_source == key.module_source
-        {
-            // Record the key → mangled_name mapping so `call_rewrite` can
-            // resolve this key to the existing instantiation, but don't
-            // re-queue (no second TirFunction emitted).
-            self.functions.instantiated.insert(key, mangled_name);
-            return false;
-        }
         self.functions
             .instantiated
-            .insert(key.clone(), mangled_name.clone());
-        self.functions
-            .mangled_to_key
-            .insert(mangled_name, key.clone());
+            .insert(key.clone(), mangled_name);
         self.functions.pending.push(key);
         true
     }

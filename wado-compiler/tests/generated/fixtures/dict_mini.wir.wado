@@ -88,9 +88,9 @@ type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(32)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow" = fn(ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>");  // TypeId(33)
+type "functype//core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push" = fn(ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>", ref "tuple//[String, String]");  // TypeId(33)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push" = fn(ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>", ref "tuple//[String, String]");  // TypeId(34)
+type "functype//core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow" = fn(ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>");  // TypeId(34)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
 
@@ -852,39 +852,6 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
-    let old_repr: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
-    let used: i32;
-    let i: i32;
-    let a: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a = capacity * 2;
-        break __inline_i32_max_0: select i32(a > 4, a, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<ref "tuple//[String, String]">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l81: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "tuple//[String, String]">(new_repr, i, builtin::array_get<ref "tuple//[String, String]">(old_repr, i));
-                i = i + 1;
-                continue l81;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
 fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::has"(self, key) {
     let i: i32;
     let self_6: ref "core:prelude/string.wado//String";
@@ -900,7 +867,7 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
         _licm_repr_11 = _licm_entries_9.repr;
         _licm_used_16 = key.used;
         block {
-            l84: loop {
+            l81: loop {
                 if i >= _licm_used_10 {
                     break __for_2;
                 }
@@ -916,7 +883,7 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
                     return 1;
                 }
                 i = i + 1;
-                continue l84;
+                continue l81;
             };
         };
     };
@@ -938,7 +905,7 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
         _licm_repr_13 = _licm_entries_11.repr;
         _licm_used_18 = key.used;
         block {
-            l89: loop {
+            l86: loop {
                 if i >= _licm_used_12 {
                     break __for_1;
                 }
@@ -954,7 +921,7 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
                     return builtin::array_get<ref "tuple//[String, String]">(_licm_repr_13, i).1;
                 }
                 i = i + 1;
-                continue l89;
+                continue l86;
             };
         };
     };
@@ -978,7 +945,7 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
         _licm_repr_19 = _licm_entries_13.repr;
         _licm_used_20 = key.used;
         block {
-            l94: loop {
+            l91: loop {
                 if i >= _licm_used_18 {
                     break __for_0;
                 }
@@ -997,7 +964,7 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
                     return;
                 }
                 i = i + 1;
-                continue l94;
+                continue l91;
             };
         };
     };
@@ -1012,6 +979,39 @@ fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/str
     }
     builtin::array_set<ref "tuple//[String, String]">(self.repr, used, value);
     self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
+    let old_repr: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
+    let used: i32;
+    let i: i32;
+    let a: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        a = capacity * 2;
+        break __inline_i32_max_0: select i32(a > 4, a, 4);
+        unreachable;
+    };
+    new_repr = builtin::array_new<ref "tuple//[String, String]">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l97: loop {
+                if i >= used {
+                    break __for_0;
+                }
+                builtin::array_set<ref "tuple//[String, String]">(new_repr, i, builtin::array_get<ref "tuple//[String, String]">(old_repr, i));
+                i = i + 1;
+                continue l97;
+            };
+        };
+    };
+    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/dict_mini.wado/__cm_export__run" as "run"

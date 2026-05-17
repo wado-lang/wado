@@ -1962,6 +1962,34 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
 }
 
+fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
+    let variant_name_4: ref "core:prelude/string.wado//String";
+    let variant_name_8: ref "core:prelude/string.wado//String";
+    let variant_name_12: ref "core:prelude/string.wado//String";
+    return let __match_scrut_0: "wado-compiler/tests/fixtures/serde_json_synth_enum.wado//enum:Color", __match_scrut_0 = self, (if __match_scrut_0 == 0 -> ref null "core:serde//SerializeError" {
+        __inline_JsonSerializer_Serializer__serialize_unit_variant_0: block -> ref null "core:serde//SerializeError" {
+            variant_name_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Red"), used: 3 };
+            "core:json/write_escaped_string"(s, variant_name_4);
+            break __inline_JsonSerializer_Serializer__serialize_unit_variant_0: ref.null none;
+            unreachable;
+        };
+    } else if __match_scrut_0 == 1 -> ref null "core:serde//SerializeError" {
+        __inline_JsonSerializer_Serializer__serialize_unit_variant_1: block -> ref null "core:serde//SerializeError" {
+            variant_name_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Green"), used: 5 };
+            "core:json/write_escaped_string"(s, variant_name_8);
+            break __inline_JsonSerializer_Serializer__serialize_unit_variant_1: ref.null none;
+            unreachable;
+        };
+    } else {
+        __inline_JsonSerializer_Serializer__serialize_unit_variant_2: block -> ref null "core:serde//SerializeError" {
+            variant_name_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Blue"), used: 4 };
+            "core:json/write_escaped_string"(s, variant_name_12);
+            break __inline_JsonSerializer_Serializer__serialize_unit_variant_2: ref.null none;
+            unreachable;
+        };
+    });
+}
+
 fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
     let va: ref "core:json//JsonVariantAccess";
     let __disc_r: ref "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>";
@@ -2095,34 +2123,6 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Deserialize::d
     } else {
         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__sroa___va_r_case1_payload_0) };
     }
-}
-
-fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
-    let variant_name_4: ref "core:prelude/string.wado//String";
-    let variant_name_8: ref "core:prelude/string.wado//String";
-    let variant_name_12: ref "core:prelude/string.wado//String";
-    return let __match_scrut_0: "wado-compiler/tests/fixtures/serde_json_synth_enum.wado//enum:Color", __match_scrut_0 = self, (if __match_scrut_0 == 0 -> ref null "core:serde//SerializeError" {
-        __inline_JsonSerializer_Serializer__serialize_unit_variant_0: block -> ref null "core:serde//SerializeError" {
-            variant_name_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Red"), used: 3 };
-            "core:json/write_escaped_string"(s, variant_name_4);
-            break __inline_JsonSerializer_Serializer__serialize_unit_variant_0: ref.null none;
-            unreachable;
-        };
-    } else if __match_scrut_0 == 1 -> ref null "core:serde//SerializeError" {
-        __inline_JsonSerializer_Serializer__serialize_unit_variant_1: block -> ref null "core:serde//SerializeError" {
-            variant_name_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Green"), used: 5 };
-            "core:json/write_escaped_string"(s, variant_name_8);
-            break __inline_JsonSerializer_Serializer__serialize_unit_variant_1: ref.null none;
-            unreachable;
-        };
-    } else {
-        __inline_JsonSerializer_Serializer__serialize_unit_variant_2: block -> ref null "core:serde//SerializeError" {
-            variant_name_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Blue"), used: 4 };
-            "core:json/write_escaped_string"(s, variant_name_12);
-            break __inline_JsonSerializer_Serializer__serialize_unit_variant_2: ref.null none;
-            unreachable;
-        };
-    });
 }
 
 export fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/__cm_export____test_0_enum_serialize_red" as "__test_0_enum_serialize_red"

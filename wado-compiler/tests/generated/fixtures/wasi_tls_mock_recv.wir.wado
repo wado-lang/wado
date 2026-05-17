@@ -132,9 +132,9 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/array.wado/Array<u8>::extend" = fn(ref "core:prelude//Array<u8>", ref "core:prelude//Array<u8>");  // TypeId(50)
 
-type "functype//core:prelude/array.wado/Array<u8>::grow_to" = fn(ref "core:prelude//Array<u8>", i32);  // TypeId(51)
+type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>") -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";  // TypeId(51)
 
-type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>") -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";  // TypeId(52)
+type "functype//core:prelude/array.wado/Array<u8>::grow_to" = fn(ref "core:prelude//Array<u8>", i32);  // TypeId(52)
 
 type "functype//wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";  // TypeId(53)
 
@@ -741,16 +741,6 @@ fn "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>
     return 0, builder;
 }
 
-fn "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(self) {
-    let item: u8;
-    if self.index >= self.used {
-        return 1, 0;
-    }
-    item = builtin::array_get<u8>(self.repr, self.index);
-    self.index = self.index + 1;
-    return 0, item;
-}
-
 fn "core:prelude/array.wado/Array<u8>::extend"(self, other) {
     let other_len: i32;
     let new_used: i32;
@@ -764,6 +754,46 @@ fn "core:prelude/array.wado/Array<u8>::extend"(self, other) {
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
+}
+
+fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>::wait"(self) {
+    let handle_1: i32;
+    let raw: i32;
+    let ws_3: i32;
+    let result: ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";
+    let handle_6: i32;
+    handle_1 = self.__cm_packed >> 4;
+    if handle_1 != 0 {
+        raw = handle_1;
+        ws_3 = "wasi/waitable-set-new"();
+        drop(__inline_cm_waitable_join_0: block -> i32 {
+            handle_6 = raw;
+            "wasi/waitable-join"(handle_6, ws_3);
+            break __inline_cm_waitable_join_0: handle_6;
+            unreachable;
+        });
+        b60: block {
+            l61: loop {
+                let event_mv_code: i32;
+                let event_mv_handle: i32;
+                let event_mv_payload: u32;
+                multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
+                if event_mv_payload == 2 {
+                    break b60;
+                }
+                continue l61;
+            };
+        };
+        "wasi/subtask-drop"(raw);
+        "wasi/waitable-set-drop"(ws_3);
+    }
+    result = block -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>" {
+        let __indirect_call_0: ref "canonical//CanonicalClosure_0";
+        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(self.__cm_lift);
+        call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, self.__cm_outptr);
+    };
+    drop("mem/realloc"(self.__cm_outptr, self.__cm_size, self.__cm_align, 0));
+    return result;
 }
 
 fn "core:prelude/array.wado/Array<u8>::grow_to"(self, min_capacity) {
@@ -794,57 +824,27 @@ fn "core:prelude/array.wado/Array<u8>::grow_to"(self, min_capacity) {
     __for_1: block {
         i = 0;
         block {
-            l62: loop {
+            l66: loop {
                 if i >= used {
                     break __for_1;
                 }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l62;
+                continue l66;
             };
         };
     };
     self.repr = new_repr;
 }
 
-fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:tls/types.wado/Error>>::wait"(self) {
-    let handle_1: i32;
-    let raw: i32;
-    let ws_3: i32;
-    let result: ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>";
-    let handle_6: i32;
-    handle_1 = self.__cm_packed >> 4;
-    if handle_1 != 0 {
-        raw = handle_1;
-        ws_3 = "wasi/waitable-set-new"();
-        drop(__inline_cm_waitable_join_0: block -> i32 {
-            handle_6 = raw;
-            "wasi/waitable-join"(handle_6, ws_3);
-            break __inline_cm_waitable_join_0: handle_6;
-            unreachable;
-        });
-        b65: block {
-            l66: loop {
-                let event_mv_code: i32;
-                let event_mv_handle: i32;
-                let event_mv_payload: u32;
-                multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
-                if event_mv_payload == 2 {
-                    break b65;
-                }
-                continue l66;
-            };
-        };
-        "wasi/subtask-drop"(raw);
-        "wasi/waitable-set-drop"(ws_3);
+fn "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(self) {
+    let item: u8;
+    if self.index >= self.used {
+        return 1, 0;
     }
-    result = block -> ref "core:prelude/types.wado//Result<unit,wasi:tls/types.wado/Error>" {
-        let __indirect_call_0: ref "canonical//CanonicalClosure_0";
-        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(self.__cm_lift);
-        call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, self.__cm_outptr);
-    };
-    drop("mem/realloc"(self.__cm_outptr, self.__cm_size, self.__cm_align, 0));
-    return result;
+    item = builtin::array_get<u8>(self.repr, self.index);
+    self.index = self.index + 1;
+    return 0, item;
 }
 
 fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__Closure_2::__call"(__fn_ref_p0) {

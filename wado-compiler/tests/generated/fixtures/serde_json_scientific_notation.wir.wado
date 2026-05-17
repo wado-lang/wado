@@ -517,17 +517,17 @@ type "functype//core:prelude/format.wado/Formatter::apply_padding" = fn(ref "cor
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(173)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/f32^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>";  // TypeId(174)
+type "functype//wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/i32^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>";  // TypeId(174)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/f64^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>";  // TypeId(175)
+type "functype//wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/i64^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>";  // TypeId(175)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/u64^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>";  // TypeId(176)
+type "functype//wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/u32^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>";  // TypeId(176)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/u32^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>";  // TypeId(177)
+type "functype//wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/u64^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>";  // TypeId(177)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/i64^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>";  // TypeId(178)
+type "functype//wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/f64^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>";  // TypeId(178)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/i32^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>";  // TypeId(179)
+type "functype//wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/f32^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>";  // TypeId(179)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(180)
 
@@ -6763,6 +6763,26 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
+fn "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/i32^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
+    return "core:json/JsonDeserializer::parse_i32_direct"(d);
+}
+
+fn "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/i64^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
+    return "core:json/JsonDeserializer^Deserializer::deserialize_i64"(d);
+}
+
+fn "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/u32^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
+    return "core:json/JsonDeserializer^Deserializer::deserialize_u32"(d);
+}
+
+fn "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/u64^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
+    return "core:json/JsonDeserializer^Deserializer::deserialize_u64"(d);
+}
+
+fn "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/f64^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
+    return "core:json/JsonDeserializer::parse_f64_direct"(d);
+}
+
 fn "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/f32^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
     let __qm_v: f64;
     let __qm_e: ref "core:serde//DeserializeError";
@@ -6780,26 +6800,6 @@ fn "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/f32^Deseria
         break __inline_JsonDeserializer_Deserializer__deserialize_f32_0: struct.new "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: builtin::f32_demote_f64(v) };
         unreachable;
     };
-}
-
-fn "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/f64^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
-    return "core:json/JsonDeserializer::parse_f64_direct"(d);
-}
-
-fn "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/u64^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
-    return "core:json/JsonDeserializer^Deserializer::deserialize_u64"(d);
-}
-
-fn "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/u32^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
-    return "core:json/JsonDeserializer^Deserializer::deserialize_u32"(d);
-}
-
-fn "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/i64^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
-    return "core:json/JsonDeserializer^Deserializer::deserialize_i64"(d);
-}
-
-fn "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/i32^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
-    return "core:json/JsonDeserializer::parse_i32_direct"(d);
 }
 
 export fn "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/__cm_export____test_0_i32_from_1e2" as "__test_0_i32_from_1e2"

@@ -2042,8 +2042,20 @@ impl TypeTable {
                 let unqualified = crate::name::mangle_generic_name(name, &args);
                 format!("{module_source}/{unqualified}")
             }
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                self.mangle_type_arg_for_generic(*inner)
+            // Ref / MutRef are preserved in the mangled output so that
+            // `Box<T>` and `Box<&T>` (semantically distinct instantiations)
+            // map to distinct mangled names. Stripping refs here used to
+            // collapse two `InstantiationKey`s like `[Array<char>]` and
+            // `[&Array<char>]` to the same mangled function name, breaking
+            // `function_id_for` injectivity in `project.functions`
+            // (issue #1093). Sites that want the "base type name" use
+            // `mangle_type_name` (or `base_type_name`), which peels refs by
+            // delegating through `TypeNameInfo::Ref`.
+            ResolvedType::Ref(inner) => {
+                format!("&{}", self.mangle_type_arg_for_generic(*inner))
+            }
+            ResolvedType::MutRef(inner) => {
+                format!("&mut {}", self.mangle_type_arg_for_generic(*inner))
             }
             // Primitives / arrays / functions delegate to `mangle_type_name`.
             _ => self.mangle_type_name(id),
