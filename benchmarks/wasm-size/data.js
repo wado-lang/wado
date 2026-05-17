@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778970194186,
+  "lastUpdate": 1778981376255,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22541,6 +22541,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f13c231728045a1ac51ebff530eb0d24fcec3cf2"
         },
         "date": 1778970193779,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510826,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "42e5deaa46cd27282e2660ac30bad5af68d7bc67",
+          "message": "Merge pull request #1092 from wado-lang/claude/optimize-rust-test-speed-dKoqh\n\nperf(optimize/dce): speed up early DCE on monomorph-heavy programs",
+          "timestamp": "2026-05-17T10:18:32+09:00",
+          "tree_id": "a97d349890548ceaeebc1f6adb536646e9c7034d",
+          "url": "https://github.com/wado-lang/wado/commit/42e5deaa46cd27282e2660ac30bad5af68d7bc67"
+        },
+        "date": 1778981375862,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
