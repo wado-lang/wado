@@ -89,10 +89,20 @@ pub(crate) fn get_or_init_snapshot() -> Option<Rc<Annotated>> {
     }
     Some(SNAPSHOT.with(|cell| {
         cell.get_or_init(|| {
+            // Drop guard so the flag is cleared even if `build_snapshot`
+            // panics — otherwise an upstream `catch_unwind` (test
+            // harness, fuzzer) would leave `BUILDING` stuck at `true`
+            // for the rest of the thread's lifetime, permanently
+            // disabling the cache on that thread.
+            struct ResetGuard;
+            impl Drop for ResetGuard {
+                fn drop(&mut self) {
+                    BUILDING.with(|c| c.set(false));
+                }
+            }
             BUILDING.with(|c| c.set(true));
-            let result = Rc::new(build_snapshot());
-            BUILDING.with(|c| c.set(false));
-            result
+            let _guard = ResetGuard;
+            Rc::new(build_snapshot())
         })
         .clone()
     }))
