@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779013280471,
+  "lastUpdate": 1779038121482,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22981,6 +22981,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/80f9328679a8b8c0472a88e308347eb563187862"
         },
         "date": 1779013280224,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 490666,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2379a2aa369ea4ee123c9a35a5fe04f66e2fe90a",
+          "message": "Merge pull request #1109 from wado-lang/claude/fix-push-str-reference-Nu2M6\n\nfix!: reject implicit T → &T at call/assignment sites (#1105)",
+          "timestamp": "2026-05-18T02:08:59+09:00",
+          "tree_id": "55041b4313b2d59b2a8bae18bf179c1a5aac4941",
+          "url": "https://github.com/wado-lang/wado/commit/2379a2aa369ea4ee123c9a35a5fe04f66e2fe90a"
+        },
+        "date": 1779038121092,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
