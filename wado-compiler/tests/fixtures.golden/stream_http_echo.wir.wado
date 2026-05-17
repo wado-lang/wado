@@ -467,6 +467,7 @@ fn "wado-compiler/tests/fixtures/stream_http_echo.wado/handle"(request) {
     let __len_167: i32;
     let __pattern_temp_1: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>]";
     let __pattern_temp_4: ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_5: ref null "core:prelude//Array<u8>";
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new:transmission-http"();
     let __mv_lo_1: i32;
@@ -813,10 +814,9 @@ fn "wado-compiler/tests/fixtures/stream_http_echo.wado/handle"(request) {
     __iter_15 = struct.new "core:prelude/array.wado//ArrayIter<core:prelude/array.wado/Array<u8>>" { repr: chunks.repr, used: chunks.used, index: 0 };
     b41: block {
         l42: loop {
-            let __match_scrut_0: ref null "core:prelude//Array<u8>";
-            __match_scrut_0 = "core:prelude/array.wado/ArrayIter<core:prelude/array.wado/Array<u8>>^Iterator::next"(__iter_15);
-            if ref.is_null(__match_scrut_0) == 0 {
-                chunk_16 = ref.as_non_null(__match_scrut_0);
+            __pattern_temp_5 = "core:prelude/array.wado/ArrayIter<core:prelude/array.wado/Array<u8>>^Iterator::next"(__iter_15);
+            if ref.is_null(__pattern_temp_5) == 0 {
+                chunk_16 = ref.as_non_null(__pattern_temp_5);
                 "core:internal/cm_stream_write_u8"(resp_tx, chunk_16);
             } else {
                 break b41;

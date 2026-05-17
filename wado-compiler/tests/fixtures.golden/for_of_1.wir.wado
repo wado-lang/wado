@@ -133,11 +133,11 @@ fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_basic"() with Stdout {
     __iter_3 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: numbers.repr, used: 5, index: 0 };
     b0: block {
         l1: loop {
-            let __sroa___match_scrut_0_discriminant: i32;
-            let __sroa___match_scrut_0_payload_0: i32;
-            multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_3);
-            if __sroa___match_scrut_0_discriminant == 0 {
-                n = __sroa___match_scrut_0_payload_0;
+            let __sroa___pattern_temp_0_7_discriminant: i32;
+            let __sroa___pattern_temp_0_7_payload_0: i32;
+            multivalue_bind [__sroa___pattern_temp_0_7_discriminant, __sroa___pattern_temp_0_7_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_3);
+            if __sroa___pattern_temp_0_7_discriminant == 0 {
+                n = __sroa___pattern_temp_0_7_payload_0;
                 sum = sum + n;
             } else {
                 break b0;
@@ -175,16 +175,16 @@ fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_break"() with Stdout {
     let numbers: ref "core:prelude//Array<i32>";
     let __iter_2: ref "core:prelude/array.wado//ArrayIter<i32>";
     let n: i32;
-    let __local_4_4: ref "core:prelude/string.wado//String";
+    let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let message_20: ref "core:prelude/string.wado//String";
-    let rx_21: i32;
-    let tx_22: i32;
-    let handle_23: i32;
-    let message_32: ref "core:prelude/string.wado//String";
-    let rx_33: i32;
-    let tx_34: i32;
-    let handle_35: i32;
+    let message_21: ref "core:prelude/string.wado//String";
+    let rx_22: i32;
+    let tx_23: i32;
+    let handle_24: i32;
+    let message_33: ref "core:prelude/string.wado//String";
+    let rx_34: i32;
+    let tx_35: i32;
+    let handle_36: i32;
     numbers = __seq_lit: block -> ref "core:prelude//Array<i32>" {
         __b = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
         break __seq_lit: __b;
@@ -193,19 +193,19 @@ fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_break"() with Stdout {
     __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: numbers.repr, used: 5, index: 0 };
     b3: block {
         l4: loop {
-            let __sroa___match_scrut_0_discriminant: i32;
-            let __sroa___match_scrut_0_payload_0: i32;
-            multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
-            if __sroa___match_scrut_0_discriminant == 0 {
-                n = __sroa___match_scrut_0_payload_0;
+            let __sroa___pattern_temp_0_6_discriminant: i32;
+            let __sroa___pattern_temp_0_6_payload_0: i32;
+            multivalue_bind [__sroa___pattern_temp_0_6_discriminant, __sroa___pattern_temp_0_6_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
+            if __sroa___pattern_temp_0_6_discriminant == 0 {
+                n = __sroa___pattern_temp_0_6_payload_0;
                 if n == 3 {
                     break b3;
                 }
-                message_20 = __tmpl: block -> ref "core:prelude/string.wado//String" {
-                    __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-                    __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4_4 };
+                message_21 = __tmpl: block -> ref "core:prelude/string.wado//String" {
+                    __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+                    __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                     "core:prelude/primitive.wado/i32::fmt_decimal"(n, __local_5);
-                    break __tmpl: __local_4_4;
+                    break __tmpl: __local_4;
                     unreachable;
                 };
                 let __pair_temp_1: i64;
@@ -213,28 +213,28 @@ fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_break"() with Stdout {
                 let __mv_lo_1: i32;
                 let __mv_hi_1: i32;
                 multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-                rx_21 = __mv_lo_1;
-                tx_22 = __mv_hi_1;
-                handle_23 = "wado-compiler/tests/fixtures/for_of_1.wado/__cm_binding__Stdout_write_via_stream"(rx_21);
-                "core:cli/write_to_stream"(tx_22, message_20, 1);
-                "wasi/future-drop-readable:transmission-cli"(handle_23);
+                rx_22 = __mv_lo_1;
+                tx_23 = __mv_hi_1;
+                handle_24 = "wado-compiler/tests/fixtures/for_of_1.wado/__cm_binding__Stdout_write_via_stream"(rx_22);
+                "core:cli/write_to_stream"(tx_23, message_21, 1);
+                "wasi/future-drop-readable:transmission-cli"(handle_24);
             } else {
                 break b3;
             }
             continue l4;
         };
     };
-    message_32 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("done"), used: 4 };
+    message_33 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("done"), used: 4 };
     let __pair_temp_2: i64;
     __pair_temp_2 = "wasi/stream-new"();
     let __mv_lo_2: i32;
     let __mv_hi_2: i32;
     multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
-    rx_33 = __mv_lo_2;
-    tx_34 = __mv_hi_2;
-    handle_35 = "wado-compiler/tests/fixtures/for_of_1.wado/__cm_binding__Stdout_write_via_stream"(rx_33);
-    "core:cli/write_to_stream"(tx_34, message_32, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_35);
+    rx_34 = __mv_lo_2;
+    tx_35 = __mv_hi_2;
+    handle_36 = "wado-compiler/tests/fixtures/for_of_1.wado/__cm_binding__Stdout_write_via_stream"(rx_34);
+    "core:cli/write_to_stream"(tx_35, message_33, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_36);
 }
 
 fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_continue"() with Stdout {
@@ -242,7 +242,7 @@ fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_continue"() with Stdout {
     let numbers: ref "core:prelude//Array<i32>";
     let __iter_2: ref "core:prelude/array.wado//ArrayIter<i32>";
     let n: i32;
-    let __local_4_4: ref "core:prelude/string.wado//String";
+    let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let message: ref "core:prelude/string.wado//String";
     let rx: i32;
@@ -256,19 +256,19 @@ fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_continue"() with Stdout {
     __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: numbers.repr, used: 5, index: 0 };
     b7: block {
         l8: loop {
-            let __sroa___match_scrut_0_discriminant: i32;
-            let __sroa___match_scrut_0_payload_0: i32;
-            multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
-            if __sroa___match_scrut_0_discriminant == 0 {
-                n = __sroa___match_scrut_0_payload_0;
+            let __sroa___pattern_temp_0_6_discriminant: i32;
+            let __sroa___pattern_temp_0_6_payload_0: i32;
+            multivalue_bind [__sroa___pattern_temp_0_6_discriminant, __sroa___pattern_temp_0_6_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
+            if __sroa___pattern_temp_0_6_discriminant == 0 {
+                n = __sroa___pattern_temp_0_6_payload_0;
                 if n == 3 {
                     continue l8;
                 }
                 message = __tmpl: block -> ref "core:prelude/string.wado//String" {
-                    __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-                    __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4_4 };
+                    __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+                    __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                     "core:prelude/primitive.wado/i32::fmt_decimal"(n, __local_5);
-                    break __tmpl: __local_4_4;
+                    break __tmpl: __local_4;
                     unreachable;
                 };
                 let __pair_temp_1: i64;
@@ -294,16 +294,16 @@ fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_empty"() with Stdout {
     let empty: ref "core:prelude//Array<i32>";
     let __iter_2: ref "core:prelude/array.wado//ArrayIter<i32>";
     let item: i32;
-    let __local_4_4: ref "core:prelude/string.wado//String";
+    let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let message_10: ref "core:prelude/string.wado//String";
-    let rx_11: i32;
-    let tx_12: i32;
-    let handle_13: i32;
-    let message_22: ref "core:prelude/string.wado//String";
-    let rx_23: i32;
-    let tx_24: i32;
-    let handle_25: i32;
+    let message_11: ref "core:prelude/string.wado//String";
+    let rx_12: i32;
+    let tx_13: i32;
+    let handle_14: i32;
+    let message_23: ref "core:prelude/string.wado//String";
+    let rx_24: i32;
+    let tx_25: i32;
+    let handle_26: i32;
     empty = __seq_lit: block -> ref "core:prelude//Array<i32>" {
         __b = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __b;
@@ -312,17 +312,17 @@ fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_empty"() with Stdout {
     __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: empty.repr, used: 0, index: 0 };
     b11: block {
         l12: loop {
-            let __sroa___match_scrut_0_discriminant: i32;
-            let __sroa___match_scrut_0_payload_0: i32;
-            multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
-            if __sroa___match_scrut_0_discriminant == 0 {
-                item = __sroa___match_scrut_0_payload_0;
-                message_10 = __tmpl: block -> ref "core:prelude/string.wado//String" {
-                    __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
-                    "core:prelude/string.wado/String::push_str"(__local_4_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("should not print: "), used: 18 });
-                    __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4_4 };
+            let __sroa___pattern_temp_0_6_discriminant: i32;
+            let __sroa___pattern_temp_0_6_payload_0: i32;
+            multivalue_bind [__sroa___pattern_temp_0_6_discriminant, __sroa___pattern_temp_0_6_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
+            if __sroa___pattern_temp_0_6_discriminant == 0 {
+                item = __sroa___pattern_temp_0_6_payload_0;
+                message_11 = __tmpl: block -> ref "core:prelude/string.wado//String" {
+                    __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
+                    "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("should not print: "), used: 18 });
+                    __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                     "core:prelude/primitive.wado/i32::fmt_decimal"(item, __local_5);
-                    break __tmpl: __local_4_4;
+                    break __tmpl: __local_4;
                     unreachable;
                 };
                 let __pair_temp_1: i64;
@@ -330,28 +330,28 @@ fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_empty"() with Stdout {
                 let __mv_lo_1: i32;
                 let __mv_hi_1: i32;
                 multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-                rx_11 = __mv_lo_1;
-                tx_12 = __mv_hi_1;
-                handle_13 = "wado-compiler/tests/fixtures/for_of_1.wado/__cm_binding__Stdout_write_via_stream"(rx_11);
-                "core:cli/write_to_stream"(tx_12, message_10, 1);
-                "wasi/future-drop-readable:transmission-cli"(handle_13);
+                rx_12 = __mv_lo_1;
+                tx_13 = __mv_hi_1;
+                handle_14 = "wado-compiler/tests/fixtures/for_of_1.wado/__cm_binding__Stdout_write_via_stream"(rx_12);
+                "core:cli/write_to_stream"(tx_13, message_11, 1);
+                "wasi/future-drop-readable:transmission-cli"(handle_14);
             } else {
                 break b11;
             }
             continue l12;
         };
     };
-    message_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("done"), used: 4 };
+    message_23 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("done"), used: 4 };
     let __pair_temp_2: i64;
     __pair_temp_2 = "wasi/stream-new"();
     let __mv_lo_2: i32;
     let __mv_hi_2: i32;
     multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
-    rx_23 = __mv_lo_2;
-    tx_24 = __mv_hi_2;
-    handle_25 = "wado-compiler/tests/fixtures/for_of_1.wado/__cm_binding__Stdout_write_via_stream"(rx_23);
-    "core:cli/write_to_stream"(tx_24, message_22, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_25);
+    rx_24 = __mv_lo_2;
+    tx_25 = __mv_hi_2;
+    handle_26 = "wado-compiler/tests/fixtures/for_of_1.wado/__cm_binding__Stdout_write_via_stream"(rx_24);
+    "core:cli/write_to_stream"(tx_25, message_23, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_26);
 }
 
 fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_generic_method"() with Stdout {
@@ -370,10 +370,10 @@ fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_generic_method"() with Std
     __iter_1 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: __sroa_c_items.repr, used: 3, index: 0 };
     b14: block {
         l15: loop {
-            let __sroa___match_scrut_0_discriminant: i32;
-            let __sroa___match_scrut_0_payload_0: i32;
-            multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_1);
-            if __sroa___match_scrut_0_discriminant == 0 {
+            let __sroa___pattern_temp_0_14_discriminant: i32;
+            let __sroa___pattern_temp_0_14_payload_0: i32;
+            multivalue_bind [__sroa___pattern_temp_0_14_discriminant, __sroa___pattern_temp_0_14_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_1);
+            if __sroa___pattern_temp_0_14_discriminant == 0 {
             } else {
                 break b14;
             }

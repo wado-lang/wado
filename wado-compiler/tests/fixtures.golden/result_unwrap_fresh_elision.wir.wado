@@ -145,8 +145,9 @@ fn "wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/run"() with St
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let v: ref "core:prelude//Array<u8>";
-    let f_12: ref "core:prelude/format.wado//Formatter";
-    let f_17: ref "core:prelude/format.wado//Formatter";
+    let __local_2: ref "core:prelude/types.wado//Result<core:prelude/array.wado/Array<u8>,core:prelude/string.wado/String>";
+    let f_13: ref "core:prelude/format.wado//Formatter";
+    let f_18: ref "core:prelude/format.wado//Formatter";
     let message: ref "core:prelude/string.wado//String";
     let rx: i32;
     let tx: i32;
@@ -154,12 +155,10 @@ fn "wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/run"() with St
     let __sroa_self_value: ref "core:prelude/types.wado//Result<core:prelude/array.wado/Array<u8>,core:prelude/string.wado/String>";
     data = __inline_Result_core_prelude_array_wado_Array_u8__core_prelude_string_wado_String___unwrap_2: block -> ref "core:prelude//Array<u8>" {
         __sroa_self_value = "wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/make_result"();
-        let __match_scrut_0: ref "core:prelude/types.wado//Result<core:prelude/array.wado/Array<u8>,core:prelude/string.wado/String>";
-        __match_scrut_0 = __sroa_self_value;
-        if ref.test "core:prelude/types.wado//Result<core:prelude/array.wado/Array<u8>,core:prelude/string.wado/String>::Ok"(__match_scrut_0) {
-            v = ref.cast "core:prelude/types.wado//Result<core:prelude/array.wado/Array<u8>,core:prelude/string.wado/String>::Ok"(__match_scrut_0).payload_0;
+        __local_2 = __sroa_self_value;
+        if ref.test "core:prelude/types.wado//Result<core:prelude/array.wado/Array<u8>,core:prelude/string.wado/String>::Ok"(__local_2) {
+            v = ref.cast "core:prelude/types.wado//Result<core:prelude/array.wado/Array<u8>,core:prelude/string.wado/String>::Ok"(__local_2).payload_0;
             break __inline_Result_core_prelude_array_wado_Array_u8__core_prelude_string_wado_String___unwrap_2: v;
-        } else {
         }
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Result::unwrap() on an Err value"), used: 39 });
         unreachable;
@@ -180,15 +179,15 @@ fn "wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado/run"() with St
             "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/result_unwrap_fresh_elision.wado"), used: 61 });
             "core:prelude/string.wado/String::push"(__local_3, 58);
             __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
-            f_12 = __local_4;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(17, f_12);
+            f_13 = __local_4;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(17, f_13);
             "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: data.len() == 3
 "), used: 28 });
             "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("data.len(): "), used: 12 });
             __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
-            f_17 = __local_4;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, f_17);
+            f_18 = __local_4;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, f_18);
             "core:prelude/string.wado/String::push"(__local_3, 10);
             break __tmpl: __local_3;
             unreachable;

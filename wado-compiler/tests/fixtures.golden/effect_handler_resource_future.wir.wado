@@ -424,113 +424,108 @@ condition: f.read_count == 1
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__effect_dispatch__Future<i32>__new"() {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Dispatch_Future<i32>";
-    let __local_1: ref "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Dispatch_Future<i32>";
-    let __local_2: ref "tuple//[Future<i32>, FutureWritable<i32>]";
+    let __d: ref "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Dispatch_Future<i32>";
+    let __result: ref "tuple//[Future<i32>, FutureWritable<i32>]";
     __saved = global:__effect_Future<i32>;
     if ref.is_null(__saved) == 0 {
-        __local_1 = ref.as_non_null(__saved);
-        global:__effect_Future<i32> = __local_1.outer;
-        __local_2 = block -> ref "tuple//[Future<i32>, FutureWritable<i32>]" {
-            let __indirect_call_1: ref "canonical//CanonicalClosure_0";
-            __indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"(__local_1.op_new);
-            call_ref "functype/$canonical_closure_fn_0"(__indirect_call_1.func, __indirect_call_1.env);
+        __d = ref.as_non_null(__saved);
+        global:__effect_Future<i32> = __d.outer;
+        __result = block -> ref "tuple//[Future<i32>, FutureWritable<i32>]" {
+            let __indirect_call_0: ref "canonical//CanonicalClosure_0";
+            __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(__d.op_new);
+            call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
         };
         global:__effect_Future<i32> = __saved;
-        return __local_2;
+        return __result;
     } else {
-        return let __pair_temp_1: i64, __pair_temp_1 = "wasi/future-new:s32"(), let __mv_lo_1: i32, let __mv_hi_1: i32, multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64)), struct.new "tuple//[Future<i32>, FutureWritable<i32>]" { 0: __mv_lo_1, 1: __mv_hi_1 };
+        return let __pair_temp_2: i64, __pair_temp_2 = "wasi/future-new:s32"(), let __mv_lo_2: i32, let __mv_hi_2: i32, multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64)), struct.new "tuple//[Future<i32>, FutureWritable<i32>]" { 0: __mv_lo_2, 1: __mv_hi_2 };
     }
-    unreachable;
 }
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__effect_dispatch__Future<i32>__read"(self) {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Dispatch_Future<i32>";
-    let __local_2: ref "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Dispatch_Future<i32>";
-    let __local_3: ref "core:prelude/types.wado//Option<i32>";
+    let __d: ref "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Dispatch_Future<i32>";
+    let __result: ref "core:prelude/types.wado//Option<i32>";
     __saved = global:__effect_Future<i32>;
     if ref.is_null(__saved) == 0 {
-        __local_2 = ref.as_non_null(__saved);
-        global:__effect_Future<i32> = __local_2.outer;
-        __local_3 = block -> ref "core:prelude/types.wado//Option<i32>" {
-            let __indirect_call_2: ref "canonical//CanonicalClosure_1";
-            __indirect_call_2 = ref.cast "canonical//CanonicalClosure_1"(__local_2.op_read);
-            call_ref "functype/$canonical_closure_fn_1"(__indirect_call_2.func, __indirect_call_2.env, self);
+        __d = ref.as_non_null(__saved);
+        global:__effect_Future<i32> = __d.outer;
+        __result = block -> ref "core:prelude/types.wado//Option<i32>" {
+            let __indirect_call_0: ref "canonical//CanonicalClosure_1";
+            __indirect_call_0 = ref.cast "canonical//CanonicalClosure_1"(__d.op_read);
+            call_ref "functype/$canonical_closure_fn_1"(__indirect_call_0.func, __indirect_call_0.env, self);
         };
         global:__effect_Future<i32> = __saved;
-        return __local_3;
+        return __result;
     } else {
-        return let __fr_handle_1: i32, let __fr_ptr_1: i32, let __fr_result_1: i32, __fr_handle_1 = self, __fr_ptr_1 = "mem/realloc"(0, 0, 8, 40), __fr_result_1 = "wasi/future-read:s32"(__fr_handle_1, __fr_ptr_1), if __fr_result_1 == -1 {
-            let __fr_ws_1: i32;
-            let __fr_evtptr_1: i32;
-            __fr_ws_1 = "wasi/waitable-set-new"();
-            "wasi/waitable-join"(__fr_handle_1, __fr_ws_1);
-            __fr_evtptr_1 = "mem/realloc"(0, 0, 4, 8);
-            drop("wasi/waitable-set-wait"(__fr_ws_1, __fr_evtptr_1));
-            drop("mem/realloc"(__fr_evtptr_1, 8, 4, 0));
-            "wasi/waitable-join"(__fr_handle_1, 0);
-            "wasi/waitable-set-drop"(__fr_ws_1);
-            __fr_result_1 = 0;
-        }, let __fr_opt_2: ref "core:prelude/types.wado//Option<i32>", __fr_opt_2 = (if (__fr_result_1 & 15) == 0 -> ref "core:prelude/types.wado//Option<i32>" {
-            struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: builtin::load_i32(__fr_ptr_1) };
+        return let __fr_handle_2: i32, let __fr_ptr_2: i32, let __fr_result_2: i32, __fr_handle_2 = self, __fr_ptr_2 = "mem/realloc"(0, 0, 8, 40), __fr_result_2 = "wasi/future-read:s32"(__fr_handle_2, __fr_ptr_2), if __fr_result_2 == -1 {
+            let __fr_ws_2: i32;
+            let __fr_evtptr_2: i32;
+            __fr_ws_2 = "wasi/waitable-set-new"();
+            "wasi/waitable-join"(__fr_handle_2, __fr_ws_2);
+            __fr_evtptr_2 = "mem/realloc"(0, 0, 4, 8);
+            drop("wasi/waitable-set-wait"(__fr_ws_2, __fr_evtptr_2));
+            drop("mem/realloc"(__fr_evtptr_2, 8, 4, 0));
+            "wasi/waitable-join"(__fr_handle_2, 0);
+            "wasi/waitable-set-drop"(__fr_ws_2);
+            __fr_result_2 = 0;
+        }, let __fr_opt_3: ref "core:prelude/types.wado//Option<i32>", __fr_opt_3 = (if (__fr_result_2 & 15) == 0 -> ref "core:prelude/types.wado//Option<i32>" {
+            struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: builtin::load_i32(__fr_ptr_2) };
         } else {
             struct.new "core:prelude/types.wado//Option<i32>" { 1 };
-        }), drop("mem/realloc"(__fr_ptr_1, 40, 8, 0)), __fr_opt_2;
+        }), drop("mem/realloc"(__fr_ptr_2, 40, 8, 0)), __fr_opt_3;
     }
-    unreachable;
 }
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__effect_dispatch__Future<i32>__drop"(self) {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Dispatch_Future<i32>";
-    let __local_2: ref "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Dispatch_Future<i32>";
+    let __d: ref "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Dispatch_Future<i32>";
     __saved = global:__effect_Future<i32>;
     if ref.is_null(__saved) == 0 {
-        __local_2 = ref.as_non_null(__saved);
-        global:__effect_Future<i32> = __local_2.outer;
+        __d = ref.as_non_null(__saved);
+        global:__effect_Future<i32> = __d.outer;
         let __indirect_call_0: ref "canonical//CanonicalClosure_2";
-        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_2"(__local_2.op_drop);
+        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_2"(__d.op_drop);
         call_ref "functype/$canonical_closure_fn_2"(__indirect_call_0.func, __indirect_call_0.env, self);
         global:__effect_Future<i32> = __saved;
         return;
     } else {
         return "wasi/future-drop-readable:s32"(self);
     }
-    unreachable;
 }
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__effect_dispatch__FutureWritable<i32>__write"(self, value) {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Dispatch_FutureWritable<i32>";
-    let __local_3: ref "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Dispatch_FutureWritable<i32>";
+    let __d: ref "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Dispatch_FutureWritable<i32>";
     __saved = global:__effect_FutureWritable<i32>;
     if ref.is_null(__saved) == 0 {
-        __local_3 = ref.as_non_null(__saved);
-        global:__effect_FutureWritable<i32> = __local_3.outer;
-        let __indirect_call_1: ref "canonical//CanonicalClosure_3";
-        __indirect_call_1 = ref.cast "canonical//CanonicalClosure_3"(__local_3.op_write);
-        call_ref "functype/$canonical_closure_fn_3"(__indirect_call_1.func, __indirect_call_1.env, self, value);
+        __d = ref.as_non_null(__saved);
+        global:__effect_FutureWritable<i32> = __d.outer;
+        let __indirect_call_0: ref "canonical//CanonicalClosure_3";
+        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_3"(__d.op_write);
+        call_ref "functype/$canonical_closure_fn_3"(__indirect_call_0.func, __indirect_call_0.env, self, value);
         global:__effect_FutureWritable<i32> = __saved;
         return;
     } else {
-        return let __fw_write_ptr_1: i32, __fw_write_ptr_1 = "mem/realloc"(0, 0, 4, 4), builtin::store_i32(__fw_write_ptr_1, value), drop("wasi/future-write:s32"(self, __fw_write_ptr_1));
+        return let __fw_write_ptr_2: i32, __fw_write_ptr_2 = "mem/realloc"(0, 0, 4, 4), builtin::store_i32(__fw_write_ptr_2, value), drop("wasi/future-write:s32"(self, __fw_write_ptr_2));
     }
-    unreachable;
 }
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__effect_dispatch__FutureWritable<i32>__drop"(self) {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Dispatch_FutureWritable<i32>";
-    let __local_2: ref "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Dispatch_FutureWritable<i32>";
+    let __d: ref "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Dispatch_FutureWritable<i32>";
     __saved = global:__effect_FutureWritable<i32>;
     if ref.is_null(__saved) == 0 {
-        __local_2 = ref.as_non_null(__saved);
-        global:__effect_FutureWritable<i32> = __local_2.outer;
+        __d = ref.as_non_null(__saved);
+        global:__effect_FutureWritable<i32> = __d.outer;
         let __indirect_call_0: ref "canonical//CanonicalClosure_2";
-        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_2"(__local_2.op_drop);
+        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_2"(__d.op_drop);
         call_ref "functype/$canonical_closure_fn_2"(__indirect_call_0.func, __indirect_call_0.env, self);
         global:__effect_FutureWritable<i32> = __saved;
         return;
     } else {
         return "wasi/future-drop-writable:s32"(self);
     }
-    unreachable;
 }
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

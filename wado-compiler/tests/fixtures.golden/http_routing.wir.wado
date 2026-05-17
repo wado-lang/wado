@@ -413,10 +413,11 @@ fn "wado-compiler/tests/fixtures/http_routing.wado/handle"(request) {
     let __ptr_157: i32;
     let __len_158: i32;
     let __pattern_temp_1: ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
-    let other_163: ref "core:prelude/string.wado//String";
-    let len_a_164: i32;
-    let other_166: ref "core:prelude/string.wado//String";
-    let len_a_167: i32;
+    let v: ref "core:prelude/string.wado//String";
+    let other_165: ref "core:prelude/string.wado//String";
+    let len_a_166: i32;
+    let other_168: ref "core:prelude/string.wado//String";
+    let len_a_169: i32;
     path = "wado-compiler/tests/fixtures/http_routing.wado/__cm_binding__Request_get_path_with_query"(request);
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
@@ -429,29 +430,32 @@ fn "wado-compiler/tests/fixtures/http_routing.wado/handle"(request) {
     __pattern_temp_1 = "wado-compiler/tests/fixtures/http_routing.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future);
     response = __pattern_temp_1.0;
     if ref.is_null(path) == 0 {
-        p = ref.as_non_null(path);
-        if __inline_String_Eq__eq_2: block -> bool {
-            other_163 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/not-found"), used: 10 };
-            len_a_164 = p.used;
-            if len_a_164 != other_163.used {
-                break __inline_String_Eq__eq_2: 0;
+        p = __inline__value_copy_T19_2: block -> ref "core:prelude/string.wado//String" {
+            v = ref.as_non_null(path);
+            break __inline__value_copy_T19_2: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
+            unreachable;
+        };
+        if __inline_String_Eq__eq_3: block -> bool {
+            other_165 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/not-found"), used: 10 };
+            len_a_166 = p.used;
+            if len_a_166 != other_165.used {
+                break __inline_String_Eq__eq_3: 0;
             }
-            break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(p.repr, other_163.repr, len_a_164);
+            break __inline_String_Eq__eq_3: "core:prelude/string.wado/String^Eq::eq_bytes"(p.repr, other_165.repr, len_a_166);
             unreachable;
         } {
             drop("wado-compiler/tests/fixtures/http_routing.wado/__cm_binding__Response_set_status_code"(response, 404));
-        } else if __inline_String_Eq__eq_3: block -> bool {
-            other_166 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/created"), used: 8 };
-            len_a_167 = p.used;
-            if len_a_167 != other_166.used {
-                break __inline_String_Eq__eq_3: 0;
+        } else if __inline_String_Eq__eq_4: block -> bool {
+            other_168 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/created"), used: 8 };
+            len_a_169 = p.used;
+            if len_a_169 != other_168.used {
+                break __inline_String_Eq__eq_4: 0;
             }
-            break __inline_String_Eq__eq_3: "core:prelude/string.wado/String^Eq::eq_bytes"(p.repr, other_166.repr, len_a_167);
+            break __inline_String_Eq__eq_4: "core:prelude/string.wado/String^Eq::eq_bytes"(p.repr, other_168.repr, len_a_169);
             unreachable;
         } {
             drop("wado-compiler/tests/fixtures/http_routing.wado/__cm_binding__Response_set_status_code"(response, 201));
         }
-    } else {
     }
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;

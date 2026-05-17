@@ -197,7 +197,7 @@ impl<'a> PatternLowerer<'a> {
 
     /// True when a top-level `Variant` / `Enum` pattern's payload bindings
     /// are all flat `Binding` or `Wildcard` leaves — i.e. no nested
-    /// destructuring or refutable sub-patterns. The IfLet path lowers
+    /// destructuring or refutable sub-patterns. The `IfLet` path lowers
     /// such patterns to an explicit
     /// `Let __scrut + If VariantTest + Let bindings = VariantPayload`
     /// chain so the variant SROA pass can scalarize a freshly
@@ -324,7 +324,9 @@ impl<'a> PatternLowerer<'a> {
                 TypeTable::BOOL,
                 span,
             ),
-            _ => unreachable!("variant_pattern_uses_only_simple_bindings gates Variant / Enum only"),
+            _ => {
+                unreachable!("variant_pattern_uses_only_simple_bindings gates Variant / Enum only")
+            }
         };
 
         // Build the then block: extract payload bindings, run hoist

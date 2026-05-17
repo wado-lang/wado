@@ -103,22 +103,23 @@ fn "wado-compiler/tests/fixtures/global_nullable_option_ref.wado/run"() with Std
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let c_7: ref "wado-compiler/tests/fixtures/global_nullable_option_ref.wado//Counter";
-    let c_8: ref "wado-compiler/tests/fixtures/global_nullable_option_ref.wado//Counter";
+    let __local_1_8: ref null "wado-compiler/tests/fixtures/global_nullable_option_ref.wado//Counter";
     let c_9: ref "wado-compiler/tests/fixtures/global_nullable_option_ref.wado//Counter";
+    let __local_1_10: ref null "wado-compiler/tests/fixtures/global_nullable_option_ref.wado//Counter";
+    let c_11: ref "wado-compiler/tests/fixtures/global_nullable_option_ref.wado//Counter";
+    let __local_1_12: ref null "wado-compiler/tests/fixtures/global_nullable_option_ref.wado//Counter";
     let message: ref "core:prelude/string.wado//String";
     let rx: i32;
     let tx: i32;
     let handle: i32;
-    let f_18: ref "core:prelude/format.wado//Formatter";
-    let f_23: ref "core:prelude/format.wado//Formatter";
-    let f_28: ref "core:prelude/format.wado//Formatter";
+    let f_21: ref "core:prelude/format.wado//Formatter";
+    let f_26: ref "core:prelude/format.wado//Formatter";
+    let f_31: ref "core:prelude/format.wado//Formatter";
     v0 = __inline_read_counter_2: block -> i32 {
-        let __match_scrut_0: ref null "wado-compiler/tests/fixtures/global_nullable_option_ref.wado//Counter";
-        __match_scrut_0 = global:current_counter;
-        if ref.is_null(__match_scrut_0) == 0 {
-            c_7 = ref.as_non_null(__match_scrut_0);
+        __local_1_8 = global:current_counter;
+        if ref.is_null(__local_1_8) == 0 {
+            c_7 = ref.as_non_null(__local_1_8);
             break __inline_read_counter_2: c_7.value;
-        } else {
         }
         break __inline_read_counter_2: -1;
         unreachable;
@@ -126,24 +127,20 @@ fn "wado-compiler/tests/fixtures/global_nullable_option_ref.wado/run"() with Std
     c_1 = struct.new "wado-compiler/tests/fixtures/global_nullable_option_ref.wado//Counter" { value: 7 };
     global:current_counter = c_1;
     v1 = __inline_read_counter_3: block -> i32 {
-        let __match_scrut_1: ref null "wado-compiler/tests/fixtures/global_nullable_option_ref.wado//Counter";
-        __match_scrut_1 = global:current_counter;
-        if ref.is_null(__match_scrut_1) == 0 {
-            c_8 = ref.as_non_null(__match_scrut_1);
-            break __inline_read_counter_3: c_8.value;
-        } else {
+        __local_1_10 = global:current_counter;
+        if ref.is_null(__local_1_10) == 0 {
+            c_9 = ref.as_non_null(__local_1_10);
+            break __inline_read_counter_3: c_9.value;
         }
         break __inline_read_counter_3: -1;
         unreachable;
     };
     global:current_counter = ref.null none;
     v2 = __inline_read_counter_4: block -> i32 {
-        let __match_scrut_2: ref null "wado-compiler/tests/fixtures/global_nullable_option_ref.wado//Counter";
-        __match_scrut_2 = global:current_counter;
-        if ref.is_null(__match_scrut_2) == 0 {
-            c_9 = ref.as_non_null(__match_scrut_2);
-            break __inline_read_counter_4: c_9.value;
-        } else {
+        __local_1_12 = global:current_counter;
+        if ref.is_null(__local_1_12) == 0 {
+            c_11 = ref.as_non_null(__local_1_12);
+            break __inline_read_counter_4: c_11.value;
         }
         break __inline_read_counter_4: -1;
         unreachable;
@@ -151,16 +148,16 @@ fn "wado-compiler/tests/fixtures/global_nullable_option_ref.wado/run"() with Std
     message = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
         __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-        f_18 = __local_5;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(v0, f_18);
+        f_21 = __local_5;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(v0, f_21);
         "core:prelude/string.wado/String::push"(__local_4, 44);
         __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-        f_23 = __local_5;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(v1, f_23);
+        f_26 = __local_5;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(v1, f_26);
         "core:prelude/string.wado/String::push"(__local_4, 44);
         __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-        f_28 = __local_5;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(v2, f_28);
+        f_31 = __local_5;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(v2, f_31);
         break __tmpl: __local_4;
         unreachable;
     };

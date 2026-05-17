@@ -475,10 +475,10 @@ fn "wado-compiler/tests/fixtures/http_request_path.wado/handle"(request) {
     let __packed_160: i64;
     let __ptr_161: i32;
     let __len_162: i32;
-    let __pattern_temp_1: ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_2: ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
     let other: ref "core:prelude/string.wado//String";
     let len_a: i32;
-    let f_176: ref "core:prelude/format.wado//Formatter";
+    let f_177: ref "core:prelude/format.wado//Formatter";
     path = "wado-compiler/tests/fixtures/http_request_path.wado/__cm_binding__Request_get_path_with_query"(request);
     if ref.is_null(path) == 0 {
         p = ref.as_non_null(path);
@@ -509,8 +509,8 @@ fn "wado-compiler/tests/fixtures/http_request_path.wado/handle"(request) {
                 "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_request_path.wado"), used: 51 });
                 "core:prelude/string.wado/String::push"(__local_10, 58);
                 __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
-                f_176 = __local_11;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(10, f_176);
+                f_177 = __local_11;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(10, f_177);
                 "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: p == \"/hello\"
 "), used: 26 });
@@ -537,8 +537,8 @@ condition: p == \"/hello\"
     trailers_future = __mv_lo_1;
     trailers_tx = __mv_hi_1;
     headers = "wado-compiler/tests/fixtures/http_request_path.wado/__cm_binding__Fields_new"();
-    __pattern_temp_1 = "wado-compiler/tests/fixtures/http_request_path.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future);
-    response = __pattern_temp_1.0;
+    __pattern_temp_2 = "wado-compiler/tests/fixtures/http_request_path.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future);
+    response = __pattern_temp_2.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
     __tv_2 = 0;
@@ -1418,44 +1418,44 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let __iter_2: ref "core:prelude/string.wado//StrCharIter";
     let c_3: char;
-    let self_6: ref "core:prelude/string.wado//StrCharIter";
-    let self_7: ref "core:prelude/string.wado//String";
-    let _licm_buf_32: ref "core:prelude/string.wado//String";
+    let self_7: ref "core:prelude/string.wado//StrCharIter";
+    let self_8: ref "core:prelude/string.wado//String";
+    let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
     __iter_2 = __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
-        self_6 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
-            self_7 = self;
-            break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: self_7.repr, used: self_7.used, byte_index: 0 };
+        self_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
+            self_8 = self;
+            break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: self_8.repr, used: self_8.used, byte_index: 0 };
             unreachable;
         };
-        break __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: self_6;
+        break __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: self_7;
         unreachable;
     };
-    _licm_buf_32 = f.buf;
+    _licm_buf_33 = f.buf;
     b109: block {
         l110: loop {
-            let __sroa___match_scrut_0_discriminant: i32;
-            let __sroa___match_scrut_0_payload_0: char;
-            multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
-            if __sroa___match_scrut_0_discriminant == 0 {
-                c_3 = __sroa___match_scrut_0_payload_0;
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: char;
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                c_3 = __sroa___pattern_temp_0_payload_0;
                 if c_3 == 34 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_32, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_32, 34);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 34);
                 } else if c_3 == 92 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_32, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_32, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
                 } else if c_3 == 10 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_32, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_32, 110);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 110);
                 } else if c_3 == 13 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_32, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_32, 114);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 114);
                 } else if c_3 == 9 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_32, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_32, 116);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 116);
                 } else {
-                    "core:prelude/string.wado/String::push"(_licm_buf_32, c_3);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, c_3);
                 }
             } else {
                 break b109;

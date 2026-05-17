@@ -739,7 +739,8 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<wado-compiler/tes
     let i: i32;
     let j: i32;
     let k: i32;
-    let a_13: i32;
+    let __pattern_temp_0: "core:prelude/traits.wado//enum:Ordering";
+    let a_14: i32;
     let __sroa_a_value: i32;
     let __sroa_b_value: i32;
     n = self.used;
@@ -765,8 +766,8 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<wado-compiler/tes
                             mid = start + width;
                             if mid < n {
                                 end = __inline_i32_min_0: block -> i32 {
-                                    a_13 = start + (width * 2);
-                                    break __inline_i32_min_0: select i32(a_13 < n, a_13, n);
+                                    a_14 = start + (width * 2);
+                                    break __inline_i32_min_0: select i32(a_14 < n, a_14, n);
                                     unreachable;
                                 };
                                 i = start;
@@ -782,18 +783,17 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<wado-compiler/tes
                                                 if j < end {
                                                     __sroa_a_value = builtin::array_get<i32>(src, i);
                                                     __sroa_b_value = builtin::array_get<i32>(src, j);
-                                                    let __match_scrut_0: "core:prelude/traits.wado//enum:Ordering";
-                                                    __match_scrut_0 = __inline_i32_Ord__cmp_0: block -> "core:prelude/traits.wado//enum:Ordering" {
+                                                    __pattern_temp_0 = __inline_i32_Ord__cmp_2: block -> "core:prelude/traits.wado//enum:Ordering" {
                                                         if __sroa_a_value < __sroa_b_value {
-                                                            break __inline_i32_Ord__cmp_0: 0;
+                                                            break __inline_i32_Ord__cmp_2: 0;
                                                         }
                                                         if __sroa_a_value > __sroa_b_value {
-                                                            break __inline_i32_Ord__cmp_0: 2;
+                                                            break __inline_i32_Ord__cmp_2: 2;
                                                         }
-                                                        break __inline_i32_Ord__cmp_0: 1;
+                                                        break __inline_i32_Ord__cmp_2: 1;
                                                         unreachable;
                                                     };
-                                                    if __match_scrut_0 == 2 {
+                                                    if __pattern_temp_0 == 2 {
                                                         builtin::array_set<i32>(buf, k, __sroa_b_value);
                                                         j = j + 1;
                                                     } else {

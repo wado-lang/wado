@@ -413,6 +413,7 @@ fn "wado-compiler/tests/fixtures/http_routing_created.wado/handle"(request) {
     let __ptr_157: i32;
     let __len_158: i32;
     let __pattern_temp_1: ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
+    let v: ref "core:prelude/string.wado//String";
     let other: ref "core:prelude/string.wado//String";
     let len_a: i32;
     path = "wado-compiler/tests/fixtures/http_routing_created.wado/__cm_binding__Request_get_path_with_query"(request);
@@ -427,19 +428,22 @@ fn "wado-compiler/tests/fixtures/http_routing_created.wado/handle"(request) {
     __pattern_temp_1 = "wado-compiler/tests/fixtures/http_routing_created.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future);
     response = __pattern_temp_1.0;
     if ref.is_null(path) == 0 {
-        p = ref.as_non_null(path);
-        if __inline_String_Eq__eq_2: block -> bool {
+        p = __inline__value_copy_T19_2: block -> ref "core:prelude/string.wado//String" {
+            v = ref.as_non_null(path);
+            break __inline__value_copy_T19_2: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
+            unreachable;
+        };
+        if __inline_String_Eq__eq_3: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/created"), used: 8 };
             len_a = p.used;
             if len_a != other.used {
-                break __inline_String_Eq__eq_2: 0;
+                break __inline_String_Eq__eq_3: 0;
             }
-            break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(p.repr, other.repr, len_a);
+            break __inline_String_Eq__eq_3: "core:prelude/string.wado/String^Eq::eq_bytes"(p.repr, other.repr, len_a);
             unreachable;
         } {
             drop("wado-compiler/tests/fixtures/http_routing_created.wado/__cm_binding__Response_set_status_code"(response, 201));
         }
-    } else {
     }
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;

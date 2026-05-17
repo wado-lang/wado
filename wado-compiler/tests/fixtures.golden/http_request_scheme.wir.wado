@@ -473,13 +473,13 @@ fn "wado-compiler/tests/fixtures/http_request_scheme.wado/handle"(request) {
     let __packed_159: i64;
     let __ptr_160: i32;
     let __len_161: i32;
-    let __pattern_temp_1: ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_2: ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
     scheme = "wado-compiler/tests/fixtures/http_request_scheme.wado/__cm_binding__Request_get_scheme"(request);
     if ref.is_null(scheme) == 0 {
         s = ref.as_non_null(scheme);
-        let __match_scrut_1: ref "wasi:http/types.wado//Scheme";
-        __match_scrut_1 = s;
-        __cond = (if __match_scrut_1.discriminant == 0 -> bool {
+        let __match_scrut_0: ref "wasi:http/types.wado//Scheme";
+        __match_scrut_0 = s;
+        __cond = (if __match_scrut_0.discriminant == 0 -> bool {
             1;
         } else {
             0;
@@ -510,7 +510,6 @@ condition: s matches { Http }
             });
             unreachable;
         }
-    } else {
     }
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
@@ -520,8 +519,8 @@ condition: s matches { Http }
     trailers_future = __mv_lo_1;
     trailers_tx = __mv_hi_1;
     headers = "wado-compiler/tests/fixtures/http_request_scheme.wado/__cm_binding__Fields_new"();
-    __pattern_temp_1 = "wado-compiler/tests/fixtures/http_request_scheme.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future);
-    response = __pattern_temp_1.0;
+    __pattern_temp_2 = "wado-compiler/tests/fixtures/http_request_scheme.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future);
+    response = __pattern_temp_2.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
     __tv_2 = 0;
