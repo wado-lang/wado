@@ -59,8 +59,9 @@ use copy_prop::propagate_copies;
 use cse::eliminate_common_subexprs;
 use dae::eliminate_dead_arguments;
 use dce::{
-    analyze_project, filter_bytes_literals, remove_unreachable_closure_functors,
-    remove_unreachable_functions, remove_unreachable_globals, remove_unreachable_types,
+    analyze_project, filter_bytes_literals, filter_string_literals,
+    remove_unreachable_closure_functors, remove_unreachable_functions, remove_unreachable_globals,
+    remove_unreachable_types,
 };
 use drve::eliminate_dead_return_values;
 use elide_local::elide_write_only_locals;
@@ -230,20 +231,16 @@ pub fn optimize(
 
 fn run_dce(project: &mut NirPackage, profiler: &dyn SpanEmitter) {
     profiler.span_start("tir/dce");
-    // Iterate to fixed point: `remove_unreachable_globals` rewrites
-    // function bodies (drops `GlobalVarSet` for dead globals), which can
-    // turn previously-reachable callees into dead code. A single pass
-    // would leave them in the WIR; iterating until the function set
-    // stops shrinking removes the transitively-dead helpers.
-    loop {
-        let reachable = analyze_project(project);
-        let before = project.functions.len();
-        remove_unreachable_functions(project, &reachable);
-        remove_unreachable_globals(project);
-        if project.functions.len() == before {
-            break;
-        }
-    }
+    // Single pass per `run_dce` invocation. `remove_unreachable_globals`
+    // can rewrite function bodies (it drops `GlobalVarSet` for dead
+    // globals), which may orphan calls inside the dropped initializers,
+    // but the *final* `run_dce` after the optimizer cleans those up — the
+    // savings here aren't worth the cost of an extra full call-graph
+    // rebuild (the dominant cost of this pass).
+    let reachable_positions = analyze_project(project);
+    remove_unreachable_functions(project, &reachable_positions);
+    remove_unreachable_globals(project);
+    filter_string_literals(project);
     remove_unreachable_types(project);
     filter_bytes_literals(project);
     remove_unreachable_closure_functors(project);
