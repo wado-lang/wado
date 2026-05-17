@@ -230,9 +230,9 @@ type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core
 
 type "functype//wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>";  // TypeId(75)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_synth_flags.wado/String^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>";  // TypeId(76)
+type "functype//core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>" = fn(ref "core:json//JsonSeqSerializer", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(76)
 
-type "functype//core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>" = fn(ref "core:json//JsonSeqSerializer", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(77)
+type "functype//wado-compiler/tests/fixtures/serde_json_synth_flags.wado/String^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>";  // TypeId(77)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(78)
 
@@ -2087,6 +2087,35 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
 }
 
+fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
+    let count: i32;
+    let seq: ref "core:json//JsonSeqSerializer";
+    let __sroa___fused_payload_10_buf: ref "core:prelude/string.wado//String";
+    count = 0;
+    if (self & 1) != 0 {
+        count = 1;
+    }
+    count = count + ((self & 2) != 0);
+    count = count + ((self & 4) != 0);
+    "core:prelude/string.wado/String::push"(s, 91);
+    __sroa___fused_payload_10_buf = s;
+    seq = struct.new "core:json//JsonSeqSerializer" { buf: __sroa___fused_payload_10_buf, count: 0 };
+    if (self & 1) != 0 {
+        drop("core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(seq, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Read"), used: 4 }));
+    }
+    if (self & 2) != 0 {
+        drop("core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(seq, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Write"), used: 5 }));
+    }
+    if (self & 4) != 0 {
+        drop("core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(seq, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Execute"), used: 7 }));
+    }
+    return __inline_JsonSeqSerializer_SerializeSeq__end_2: block -> ref null "core:serde//SerializeError" {
+        "core:prelude/string.wado/String::push"(seq.buf, 93);
+        break __inline_JsonSeqSerializer_SerializeSeq__end_2: ref.null none;
+        unreachable;
+    };
+}
+
 fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
     let __seq_r: ref "core:prelude/types.wado//Result<core:json/JsonSeqAccess,core:serde/DeserializeError>";
     let seq: ref "core:json//JsonSeqAccess";
@@ -2121,8 +2150,8 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Deserialize::
             unreachable;
         };
         bits = 0;
-        b198: block {
-            l199: loop {
+        b202: block {
+            l203: loop {
                 let __sroa___elem_r_discriminant: i32;
                 let __sroa___elem_r_case0_payload_0: ref null "core:prelude/string.wado//String";
                 let __sroa___elem_r_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -2145,7 +2174,7 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Deserialize::
                             unreachable;
                         } {
                             bits = bits | 1;
-                            continue l199;
+                            continue l203;
                         }
                         if __inline_String_Eq__eq_4: block -> bool {
                             other_20 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Write"), used: 5 };
@@ -2157,7 +2186,7 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Deserialize::
                             unreachable;
                         } {
                             bits = bits | 2;
-                            continue l199;
+                            continue l203;
                         }
                         if __inline_String_Eq__eq_5: block -> bool {
                             other_23 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Execute"), used: 7 };
@@ -2169,7 +2198,7 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Deserialize::
                             unreachable;
                         } {
                             bits = bits | 4;
-                            continue l199;
+                            continue l203;
                         }
                         return struct.new "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 4, message: ref.as_non_null(__tmpl: block -> ref "core:prelude/string.wado//String" {
                             __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 };
@@ -2179,12 +2208,12 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Deserialize::
                             unreachable;
                         }), offset: -1_i64 } };
                     } else {
-                        break b198;
+                        break b202;
                     }
                 } else {
                     return struct.new "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__sroa___elem_r_case1_payload_0) };
                 }
-                continue l199;
+                continue l203;
             };
         };
         drop("core:json/JsonDeserializer::expect_char"(seq.de, 93));
@@ -2243,39 +2272,6 @@ fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<core:prelude/string.wad
     }
 }
 
-fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/String^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
-    return "core:json/JsonDeserializer::read_json_string"(d);
-}
-
-fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
-    let count: i32;
-    let seq: ref "core:json//JsonSeqSerializer";
-    let __sroa___fused_payload_10_buf: ref "core:prelude/string.wado//String";
-    count = 0;
-    if (self & 1) != 0 {
-        count = 1;
-    }
-    count = count + ((self & 2) != 0);
-    count = count + ((self & 4) != 0);
-    "core:prelude/string.wado/String::push"(s, 91);
-    __sroa___fused_payload_10_buf = s;
-    seq = struct.new "core:json//JsonSeqSerializer" { buf: __sroa___fused_payload_10_buf, count: 0 };
-    if (self & 1) != 0 {
-        drop("core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(seq, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Read"), used: 4 }));
-    }
-    if (self & 2) != 0 {
-        drop("core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(seq, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Write"), used: 5 }));
-    }
-    if (self & 4) != 0 {
-        drop("core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(seq, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Execute"), used: 7 }));
-    }
-    return __inline_JsonSeqSerializer_SerializeSeq__end_2: block -> ref null "core:serde//SerializeError" {
-        "core:prelude/string.wado/String::push"(seq.buf, 93);
-        break __inline_JsonSeqSerializer_SerializeSeq__end_2: ref.null none;
-        unreachable;
-    };
-}
-
 fn "core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(self, value) {
     let r: ref null "core:serde//SerializeError";
     let __sroa_ser_buf: ref "core:prelude/string.wado//String";
@@ -2291,6 +2287,10 @@ fn "core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/S
     self.buf = __sroa_ser_buf;
     self.count = self.count + 1;
     return r;
+}
+
+fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/String^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
+    return "core:json/JsonDeserializer::read_json_string"(d);
 }
 
 export fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/__cm_export____test_0_flags_serialize_single" as "__test_0_flags_serialize_single"

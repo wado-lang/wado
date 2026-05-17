@@ -1586,6 +1586,24 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
 }
 
+fn "wado-compiler/tests/fixtures/static_method_in_generic_context.wado/Foo^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
+    let __local_2: ref "core:prelude/string.wado//String";
+    let __local_3: ref "core:prelude/format.wado//Formatter";
+    let v: ref "core:prelude/string.wado//String";
+    return __inline_JsonSerializer_Serializer__serialize_string_0: block -> ref null "core:serde//SerializeError" {
+        v = __tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+            __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
+            "core:prelude/primitive.wado/i32::fmt_decimal"(self, __local_3);
+            break __tmpl: __local_2;
+            unreachable;
+        };
+        "core:json/write_escaped_string"(s, v);
+        break __inline_JsonSerializer_Serializer__serialize_string_0: ref.null none;
+        unreachable;
+    };
+}
+
 fn "wado-compiler/tests/fixtures/static_method_in_generic_context.wado/Foo^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
     let s: ref "core:prelude/string.wado//String";
     let e: ref "core:serde//DeserializeError";
@@ -1622,24 +1640,6 @@ fn "wado-compiler/tests/fixtures/static_method_in_generic_context.wado/Foo^Deser
     } else {
         struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/static_method_in_generic_context.wado/Foo,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 4, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid Foo"), used: 11 }, offset: 0_i64 } };
     });
-}
-
-fn "wado-compiler/tests/fixtures/static_method_in_generic_context.wado/Foo^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
-    let __local_2: ref "core:prelude/string.wado//String";
-    let __local_3: ref "core:prelude/format.wado//Formatter";
-    let v: ref "core:prelude/string.wado//String";
-    return __inline_JsonSerializer_Serializer__serialize_string_0: block -> ref null "core:serde//SerializeError" {
-        v = __tmpl: block -> ref "core:prelude/string.wado//String" {
-            __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-            __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-            "core:prelude/primitive.wado/i32::fmt_decimal"(self, __local_3);
-            break __tmpl: __local_2;
-            unreachable;
-        };
-        "core:json/write_escaped_string"(s, v);
-        break __inline_JsonSerializer_Serializer__serialize_string_0: ref.null none;
-        unreachable;
-    };
 }
 
 export fn "wado-compiler/tests/fixtures/static_method_in_generic_context.wado/__cm_export____test_0_roundtrip" as "__test_0_roundtrip"

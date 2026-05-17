@@ -154,17 +154,17 @@ type "functype//core:prelude/array.wado/ArrayIter<core:prelude/types.wado/Option
 
 type "functype//core:prelude/format.wado/Array<core:prelude/array.wado/Array<i32>>^Inspect::inspect" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>", ref "core:prelude/format.wado//Formatter");  // TypeId(52)
 
-type "functype//core:prelude/array.wado/Array<i32>^Inspect::inspect" = fn(ref "core:prelude//Array<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(53)
+type "functype//core:prelude/format.wado/Array<i32>^Inspect::inspect" = fn(ref "core:prelude//Array<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(53)
 
-type "functype//core:prelude/format.wado/Array<i32>^Inspect::inspect" = fn(ref "core:prelude//Array<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(54)
+type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(54)
 
-type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(55)
+type "functype//core:prelude/array.wado/ArrayIter<core:prelude/array.wado/Array<i32>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<core:prelude/array.wado/Array<i32>>") -> ref null "core:prelude//Array<i32>";  // TypeId(55)
 
-type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(56)
+type "functype//core:prelude/array.wado/ArrayIter<core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>>") -> ref null "core:prelude//Array<core:prelude/array.wado/Array<i32>>";  // TypeId(56)
 
-type "functype//core:prelude/array.wado/ArrayIter<core:prelude/array.wado/Array<i32>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<core:prelude/array.wado/Array<i32>>") -> ref null "core:prelude//Array<i32>";  // TypeId(57)
+type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(57)
 
-type "functype//core:prelude/array.wado/ArrayIter<core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>>") -> ref null "core:prelude//Array<core:prelude/array.wado/Array<i32>>";  // TypeId(58)
+type "functype//core:prelude/array.wado/Array<i32>^Inspect::inspect" = fn(ref "core:prelude//Array<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(58)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(59)
 
@@ -1395,7 +1395,7 @@ fn "core:prelude/format.wado/Array<core:prelude/array.wado/Array<i32>>^Inspect::
     "core:prelude/string.wado/String::push"(f.buf, 93);
 }
 
-fn "core:prelude/array.wado/Array<i32>^Inspect::inspect"(self, f) {
+fn "core:prelude/format.wado/Array<i32>^Inspect::inspect"(self, f) {
     let i: i32;
     let s: ref "core:prelude/string.wado//String";
     let _licm_used_16: i32;
@@ -1423,34 +1423,6 @@ fn "core:prelude/array.wado/Array<i32>^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 93);
 }
 
-fn "core:prelude/format.wado/Array<i32>^Inspect::inspect"(self, f) {
-    let i: i32;
-    let s: ref "core:prelude/string.wado//String";
-    let _licm_used_16: i32;
-    let _licm_repr_17: ref builtin::array<i32>;
-    "core:prelude/string.wado/String::push"(f.buf, 91);
-    __for_5: block {
-        i = 0;
-        _licm_used_16 = self.used;
-        _licm_repr_17 = self.repr;
-        block {
-            l100: loop {
-                if i >= _licm_used_16 {
-                    break __for_5;
-                }
-                if i > 0 {
-                    s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 };
-                    "core:prelude/string.wado/String::push_str"(f.buf, s);
-                }
-                "core:prelude/primitive.wado/i32::fmt_decimal"(builtin::array_get<i32>(_licm_repr_17, i), f);
-                i = i + 1;
-                continue l100;
-            };
-        };
-    };
-    "core:prelude/string.wado/String::push"(f.buf, 93);
-}
-
 fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
     let used: i32;
     used = self.used;
@@ -1459,39 +1431,6 @@ fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
     }
     builtin::array_set<i32>(self.repr, used, value);
     self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<i32>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<i32>;
-    let old_repr: ref builtin::array<i32>;
-    let used: i32;
-    let i: i32;
-    let a: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a = capacity * 2;
-        break __inline_i32_max_0: select i32(a > 4, a, 4);
-        unreachable;
-    };
-    new_repr = builtin::array_new<i32>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l105: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
-                i = i + 1;
-                continue l105;
-            };
-        };
-    };
-    self.repr = new_repr;
 }
 
 fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
@@ -1522,6 +1461,67 @@ fn "core:prelude/array.wado/ArrayIter<core:prelude/array.wado/Array<core:prelude
     item = builtin::array_get<ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>">(self.repr, self.index);
     self.index = self.index + 1;
     return item;
+}
+
+fn "core:prelude/array.wado/Array<i32>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<i32>;
+    let old_repr: ref builtin::array<i32>;
+    let used: i32;
+    let i: i32;
+    let a: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        a = capacity * 2;
+        break __inline_i32_max_0: select i32(a > 4, a, 4);
+        unreachable;
+    };
+    new_repr = builtin::array_new<i32>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l104: loop {
+                if i >= used {
+                    break __for_0;
+                }
+                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
+                i = i + 1;
+                continue l104;
+            };
+        };
+    };
+    self.repr = new_repr;
+}
+
+fn "core:prelude/array.wado/Array<i32>^Inspect::inspect"(self, f) {
+    let i: i32;
+    let s: ref "core:prelude/string.wado//String";
+    let _licm_used_16: i32;
+    let _licm_repr_17: ref builtin::array<i32>;
+    "core:prelude/string.wado/String::push"(f.buf, 91);
+    __for_5: block {
+        i = 0;
+        _licm_used_16 = self.used;
+        _licm_repr_17 = self.repr;
+        block {
+            l107: loop {
+                if i >= _licm_used_16 {
+                    break __for_5;
+                }
+                if i > 0 {
+                    s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 };
+                    "core:prelude/string.wado/String::push_str"(f.buf, s);
+                }
+                "core:prelude/primitive.wado/i32::fmt_decimal"(builtin::array_get<i32>(_licm_repr_17, i), f);
+                i = i + 1;
+                continue l107;
+            };
+        };
+    };
+    "core:prelude/string.wado/String::push"(f.buf, 93);
 }
 
 export fn "wado-compiler/tests/fixtures/nested_array.wado/__cm_export__run" as "run"

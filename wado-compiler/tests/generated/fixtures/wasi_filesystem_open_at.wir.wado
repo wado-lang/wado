@@ -164,9 +164,9 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>::push" = fn(ref "core:prelude//Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>", ref "tuple//[Descriptor, String]");  // TypeId(46)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>::grow" = fn(ref "core:prelude//Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>");  // TypeId(47)
+type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(47)
 
-type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(48)
+type "functype//core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>::grow" = fn(ref "core:prelude//Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>");  // TypeId(48)
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(49)
 
@@ -760,6 +760,46 @@ fn "core:prelude/Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/
     self.used = used + 1;
 }
 
+fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"(self) {
+    let handle_1: i32;
+    let raw: i32;
+    let ws_3: i32;
+    let result: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
+    let handle_6: i32;
+    handle_1 = self.__cm_packed >> 4;
+    if handle_1 != 0 {
+        raw = handle_1;
+        ws_3 = "wasi/waitable-set-new"();
+        drop(__inline_cm_waitable_join_0: block -> i32 {
+            handle_6 = raw;
+            "wasi/waitable-join"(handle_6, ws_3);
+            break __inline_cm_waitable_join_0: handle_6;
+            unreachable;
+        });
+        b65: block {
+            l66: loop {
+                let event_mv_code: i32;
+                let event_mv_handle: i32;
+                let event_mv_payload: u32;
+                multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
+                if event_mv_payload == 2 {
+                    break b65;
+                }
+                continue l66;
+            };
+        };
+        "wasi/subtask-drop"(raw);
+        "wasi/waitable-set-drop"(ws_3);
+    }
+    result = block -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
+        let __indirect_call_0: ref "canonical//CanonicalClosure_0";
+        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(self.__cm_lift);
+        call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, self.__cm_outptr);
+    };
+    drop("mem/realloc"(self.__cm_outptr, self.__cm_size, self.__cm_align, 0));
+    return result;
+}
+
 fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
@@ -780,57 +820,17 @@ fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<wasi:filesystem/
     __for_0: block {
         i = 0;
         block {
-            l65: loop {
+            l70: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "tuple//[Descriptor, String]">(new_repr, i, builtin::array_get<ref "tuple//[Descriptor, String]">(old_repr, i));
                 i = i + 1;
-                continue l65;
+                continue l70;
             };
         };
     };
     self.repr = new_repr;
-}
-
-fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"(self) {
-    let handle_1: i32;
-    let raw: i32;
-    let ws_3: i32;
-    let result: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
-    let handle_6: i32;
-    handle_1 = self.__cm_packed >> 4;
-    if handle_1 != 0 {
-        raw = handle_1;
-        ws_3 = "wasi/waitable-set-new"();
-        drop(__inline_cm_waitable_join_0: block -> i32 {
-            handle_6 = raw;
-            "wasi/waitable-join"(handle_6, ws_3);
-            break __inline_cm_waitable_join_0: handle_6;
-            unreachable;
-        });
-        b68: block {
-            l69: loop {
-                let event_mv_code: i32;
-                let event_mv_handle: i32;
-                let event_mv_payload: u32;
-                multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
-                if event_mv_payload == 2 {
-                    break b68;
-                }
-                continue l69;
-            };
-        };
-        "wasi/subtask-drop"(raw);
-        "wasi/waitable-set-drop"(ws_3);
-    }
-    result = block -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
-        let __indirect_call_0: ref "canonical//CanonicalClosure_0";
-        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(self.__cm_lift);
-        call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, self.__cm_outptr);
-    };
-    drop("mem/realloc"(self.__cm_outptr, self.__cm_size, self.__cm_align, 0));
-    return result;
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/__Closure_2::__call"(__fn_ref_p0) {

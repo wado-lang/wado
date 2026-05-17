@@ -124,7 +124,7 @@ impl Monomorphizer {
                     method_type_args: inferred_args,
                     method_info: original_method_info.clone(),
                 };
-                if let Some(mangled) = self.functions.instantiated.get(&key) {
+                if let Some(mangled) = self.lookup_function_instantiation(&key) {
                     *func = FunctionRef {
                         module_source: key.module_source.clone(),
                         name: mangled.clone(),
@@ -174,7 +174,7 @@ impl Monomorphizer {
                         method_type_args: monomorph.method_type_args.clone(),
                         method_info: Some(info.clone()),
                     };
-                    if let Some(mangled) = self.functions.instantiated.get(&key) {
+                    if let Some(mangled) = self.lookup_function_instantiation(&key) {
                         let original_method_info = func.method_info.clone();
                         *func = FunctionRef {
                             module_source: key.module_source.clone(),
@@ -240,7 +240,7 @@ impl Monomorphizer {
                     method_type_args: type_args.clone(),
                     method_info: None,
                 };
-                if let Some(mangled) = self.functions.instantiated.get(&key) {
+                if let Some(mangled) = self.lookup_function_instantiation(&key) {
                     let original_method_info = method_func.method_info.clone();
                     *method_func = FunctionRef {
                         module_source: key.module_source.clone(),
@@ -292,7 +292,7 @@ impl Monomorphizer {
                             method_type_args: type_args.clone(),
                             method_info: None,
                         };
-                        if let Some(mangled) = self.functions.instantiated.get(&combined_key) {
+                        if let Some(mangled) = self.lookup_function_instantiation(&combined_key) {
                             let original_method_info = method_func.method_info.clone();
                             *method_func = FunctionRef {
                                 module_source: combined_key.module_source.clone(),
@@ -377,7 +377,7 @@ impl Monomorphizer {
             });
 
             for key in possible_keys {
-                if let Some(mangled) = self.functions.instantiated.get(&key) {
+                if let Some(mangled) = self.lookup_function_instantiation(&key) {
                     // Preserve original method_info
                     let original_method_info = method_func.method_info.clone();
                     *method_func = FunctionRef {
@@ -412,7 +412,7 @@ impl Monomorphizer {
                     method_info: None,
                 };
                 let ms = key.module_source.clone();
-                self.functions.instantiated.get(&key).map(|mangled| {
+                self.lookup_function_instantiation(&key).map(|mangled| {
                     (
                         mangled.clone(),
                         mono.generic_name.clone(),
@@ -471,7 +471,7 @@ impl Monomorphizer {
                     method_type_args: vec![],
                     method_info: None,
                 };
-                if let Some(mangled) = self.functions.instantiated.get(&key) {
+                if let Some(mangled) = self.lookup_function_instantiation(&key) {
                     let original_method_info = method_func.method_info.clone();
                     *method_func = FunctionRef {
                         module_source: key.module_source.clone(),

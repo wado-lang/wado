@@ -1967,16 +1967,6 @@ fn "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>
     return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: builder };
 }
 
-fn "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(self) {
-    let item: u8;
-    if self.index >= self.used {
-        return 1, 0;
-    }
-    item = builtin::array_get<u8>(self.repr, self.index);
-    self.index = self.index + 1;
-    return 0, item;
-}
-
 fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"(self) {
     let handle_1: i32;
     let raw: i32;
@@ -1993,16 +1983,16 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/t
             break __inline_cm_waitable_join_0: handle_6;
             unreachable;
         });
-        b172: block {
-            l173: loop {
+        b171: block {
+            l172: loop {
                 let event_mv_code: i32;
                 let event_mv_handle: i32;
                 let event_mv_payload: u32;
                 multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if event_mv_payload == 2 {
-                    break b172;
+                    break b171;
                 }
-                continue l173;
+                continue l172;
             };
         };
         "wasi/subtask-drop"(raw);
@@ -2047,17 +2037,27 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l178: loop {
+            l177: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l178;
+                continue l177;
             };
         };
     };
     self.repr = new_repr;
+}
+
+fn "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(self) {
+    let item: u8;
+    if self.index >= self.used {
+        return 1, 0;
+    }
+    item = builtin::array_get<u8>(self.repr, self.index);
+    self.index = self.index + 1;
+    return 0, item;
 }
 
 fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/__Closure_2::__call"(__fn_ref_p0) {

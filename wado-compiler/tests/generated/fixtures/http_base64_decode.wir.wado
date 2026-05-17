@@ -307,11 +307,11 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/string.wado/String::from_utf8_lossy<core:prelude/array.wado/Array<u8>>" = fn(ref "core:prelude//Array<u8>") -> ref "core:prelude/string.wado//String";  // TypeId(72)
 
-type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> ref "core:prelude/types.wado//Option<u8>";  // TypeId(73)
+type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(73)
 
-type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(74)
+type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(74)
 
-type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(75)
+type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> ref "core:prelude/types.wado//Option<u8>";  // TypeId(75)
 
 type "functype//wasi/future-new" = fn() -> i64;  // TypeId(76)
 
@@ -2030,16 +2030,6 @@ fn "core:prelude/string.wado/String::from_utf8_lossy<core:prelude/array.wado/Arr
     return builder;
 }
 
-fn "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(self) {
-    let item: u8;
-    if self.index >= self.used {
-        return struct.new "core:prelude/types.wado//Option<u8>" { 1 };
-    }
-    item = builtin::array_get<u8>(self.repr, self.index);
-    self.index = self.index + 1;
-    return struct.new "core:prelude/types.wado//Option<u8>::Some" { discriminant: 0, payload_0: item };
-}
-
 fn "core:prelude/array.wado/Array<u8>::push"(self, value) {
     let used: i32;
     used = self.used;
@@ -2070,17 +2060,27 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l204: loop {
+            l203: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l204;
+                continue l203;
             };
         };
     };
     self.repr = new_repr;
+}
+
+fn "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(self) {
+    let item: u8;
+    if self.index >= self.used {
+        return struct.new "core:prelude/types.wado//Option<u8>" { 1 };
+    }
+    item = builtin::array_get<u8>(self.repr, self.index);
+    self.index = self.index + 1;
+    return struct.new "core:prelude/types.wado//Option<u8>::Some" { discriminant: 0, payload_0: item };
 }
 
 export fn "wado-compiler/tests/fixtures/http_base64_decode.wado/__cm_export__handle" as "handle"

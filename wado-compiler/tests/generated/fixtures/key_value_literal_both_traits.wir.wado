@@ -99,13 +99,13 @@ type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(37)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>");  // TypeId(38)
+type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(38)
 
 type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(39)
 
-type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(40)
+type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>");  // TypeId(40)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(41)
+type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(41)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
@@ -1006,6 +1006,75 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
+fn "wado-compiler/tests/fixtures/key_value_literal_both_traits.wado/Bag<i32>::get_by_key"(self, key) {
+    let i: i32;
+    let self_6: ref "core:prelude/string.wado//String";
+    let len_a: i32;
+    let _licm_keys_11: ref "core:prelude//Array<core:prelude/string.wado/String>";
+    let _licm_values_12: ref "core:prelude//Array<i32>";
+    let _licm_used_13: i32;
+    let _licm_repr_14: ref "builtin::array<core:prelude/string.wado/String>";
+    let _licm_used_15: i32;
+    let _licm_repr_16: ref builtin::array<i32>;
+    let _licm_used_21: i32;
+    i = 0;
+    _licm_keys_11 = self.keys;
+    _licm_values_12 = self.values;
+    _licm_used_13 = _licm_keys_11.used;
+    _licm_repr_14 = _licm_keys_11.repr;
+    _licm_used_15 = _licm_values_12.used;
+    _licm_repr_16 = _licm_values_12.repr;
+    _licm_used_21 = key.used;
+    b85: block {
+        l86: loop {
+            if i >= _licm_used_13 {
+                break b85;
+            }
+            if __inline_String_Eq__eq_2: block -> bool {
+                self_6 = builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_14, i);
+                len_a = self_6.used;
+                if len_a != _licm_used_21 {
+                    break __inline_String_Eq__eq_2: 0;
+                }
+                break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_6.repr, key.repr, len_a);
+                unreachable;
+            } {
+                return 0, __inline_Array_i32__IndexValue_i32___index_value_3: block -> i32 {
+                    if i >= _licm_used_15 {
+                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    }
+                    break __inline_Array_i32__IndexValue_i32___index_value_3: builtin::array_get<i32>(_licm_repr_16, i);
+                    unreachable;
+                };
+            }
+            i = i + 1;
+            continue l86;
+        };
+    };
+    return 1, 0;
+}
+
+fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self);
+    }
+    builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<i32>::grow"(self);
+    }
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
+}
+
 fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
@@ -1026,27 +1095,17 @@ fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self) 
     __for_0: block {
         i = 0;
         block {
-            l86: loop {
+            l94: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "core:prelude/string.wado//String">(new_repr, i, builtin::array_get<ref "core:prelude/string.wado//String">(old_repr, i));
                 i = i + 1;
-                continue l86;
+                continue l94;
             };
         };
     };
     self.repr = new_repr;
-}
-
-fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<i32>::grow"(self);
-    }
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
 }
 
 fn "core:prelude/array.wado/Array<i32>::grow"(self) {
@@ -1069,76 +1128,17 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l90: loop {
+            l97: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l90;
+                continue l97;
             };
         };
     };
     self.repr = new_repr;
-}
-
-fn "wado-compiler/tests/fixtures/key_value_literal_both_traits.wado/Bag<i32>::get_by_key"(self, key) {
-    let i: i32;
-    let self_6: ref "core:prelude/string.wado//String";
-    let len_a: i32;
-    let _licm_keys_11: ref "core:prelude//Array<core:prelude/string.wado/String>";
-    let _licm_values_12: ref "core:prelude//Array<i32>";
-    let _licm_used_13: i32;
-    let _licm_repr_14: ref "builtin::array<core:prelude/string.wado/String>";
-    let _licm_used_15: i32;
-    let _licm_repr_16: ref builtin::array<i32>;
-    let _licm_used_21: i32;
-    i = 0;
-    _licm_keys_11 = self.keys;
-    _licm_values_12 = self.values;
-    _licm_used_13 = _licm_keys_11.used;
-    _licm_repr_14 = _licm_keys_11.repr;
-    _licm_used_15 = _licm_values_12.used;
-    _licm_repr_16 = _licm_values_12.repr;
-    _licm_used_21 = key.used;
-    b92: block {
-        l93: loop {
-            if i >= _licm_used_13 {
-                break b92;
-            }
-            if __inline_String_Eq__eq_2: block -> bool {
-                self_6 = builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_14, i);
-                len_a = self_6.used;
-                if len_a != _licm_used_21 {
-                    break __inline_String_Eq__eq_2: 0;
-                }
-                break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_6.repr, key.repr, len_a);
-                unreachable;
-            } {
-                return 0, __inline_Array_i32__IndexValue_i32___index_value_3: block -> i32 {
-                    if i >= _licm_used_15 {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_i32__IndexValue_i32___index_value_3: builtin::array_get<i32>(_licm_repr_16, i);
-                    unreachable;
-                };
-            }
-            i = i + 1;
-            continue l93;
-        };
-    };
-    return 1, 0;
-}
-
-fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self);
-    }
-    builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
-    self.used = used + 1;
 }
 
 export fn "wado-compiler/tests/fixtures/key_value_literal_both_traits.wado/__cm_export__run" as "run"
