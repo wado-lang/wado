@@ -1274,6 +1274,16 @@ fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
     self.used = used + 1;
 }
 
+fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
+    let item: i32;
+    if self.index >= self.used {
+        return 1, 0;
+    }
+    item = builtin::array_get<i32>(self.repr, self.index);
+    self.index = self.index + 1;
+    return 0, item;
+}
+
 fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
@@ -1294,27 +1304,17 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l97: loop {
+            l98: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l97;
+                continue l98;
             };
         };
     };
     self.repr = new_repr;
-}
-
-fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
-    let item: i32;
-    if self.index >= self.used {
-        return 1, 0;
-    }
-    item = builtin::array_get<i32>(self.repr, self.index);
-    self.index = self.index + 1;
-    return 0, item;
 }
 
 export fn "wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/__cm_export____test_0_continue_in_for_of_inside_c_style_for" as "__test_0_continue_in_for_of_inside_c_style_for"

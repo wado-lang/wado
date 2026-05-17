@@ -325,16 +325,12 @@ impl Monomorphizer {
             // doing it per-function would be `O(N · |type_table|)` and is
             // the source of the historical compiler-time regression.
             loop {
-                self.collect_instantiation_sites(
-                    &module.type_table.borrow(),
-                    &valid_struct_names,
-                );
+                self.collect_instantiation_sites(&module.type_table.borrow(), &valid_struct_names);
                 if self.structs.pending.is_empty() {
                     break;
                 }
                 while let Some(struct_key) = self.structs.pending.pop() {
-                    let key_pair =
-                        (struct_key.name.clone(), struct_key.module_source.clone());
+                    let key_pair = (struct_key.name.clone(), struct_key.module_source.clone());
                     if let Some(generic_struct) = generic_structs.get(&key_pair)
                         && let Some(s) = self.instantiate_struct(
                             generic_struct,
@@ -350,10 +346,7 @@ impl Monomorphizer {
 
             // Steps 3 + 4: rewrite each new body, then collect its call sites.
             for mut concrete in batch {
-                self.rewrite_types_in_function(
-                    &mut concrete,
-                    &mut module.type_table.borrow_mut(),
-                );
+                self.rewrite_types_in_function(&mut concrete, &mut module.type_table.borrow_mut());
                 if let Some(body) = &concrete.body {
                     let type_table = module.type_table.borrow();
                     let mut collector = func_inst::InstantiationCollector {

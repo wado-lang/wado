@@ -222,13 +222,13 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/array.wado/Array<i32>::sort_by" = fn(ref "core:prelude//Array<i32>", ref struct);  // TypeId(80)
 
-type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(81)
+type "functype//core:prelude/traits.wado/IterFilter<core:prelude/array.wado/ArrayIter<i32>>^Iterator::next" = fn(ref "core:prelude/traits.wado//IterFilter<core:prelude/array.wado/ArrayIter<i32>>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(81)
 
-type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(82)
+type "functype//core:prelude/array.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(82)
 
-type "functype//core:prelude/array.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(83)
+type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(83)
 
-type "functype//core:prelude/traits.wado/IterFilter<core:prelude/array.wado/ArrayIter<i32>>^Iterator::next" = fn(ref "core:prelude/traits.wado//IterFilter<core:prelude/array.wado/ArrayIter<i32>>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(84)
+type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(84)
 
 type "functype//wado-compiler/tests/fixtures/closure_3.wado/__Closure_6::__call" = fn(i32) -> bool;  // TypeId(85)
 
@@ -2853,6 +2853,43 @@ fn "core:prelude/array.wado/Array<i32>::sort_by"(self, cmp) {
     };
 }
 
+fn "core:prelude/traits.wado/IterFilter<core:prelude/array.wado/ArrayIter<i32>>^Iterator::next"(self) {
+    let item: i32;
+    let __pattern_temp_0: ref "core:prelude/types.wado//Option<i32>";
+    let _licm_inner_3: ref "core:prelude/array.wado//ArrayIter<i32>";
+    let _licm_pred_4: ref struct;
+    _licm_inner_3 = self.inner;
+    _licm_pred_4 = self.pred;
+    block {
+        l175: loop {
+            __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(_licm_inner_3);
+            if ref.test "core:prelude/types.wado//Option<i32>::Some"(__pattern_temp_0) {
+                item = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__pattern_temp_0).payload_0;
+                if block -> bool {
+                    let __indirect_call_0: ref "canonical//CanonicalClosure_2";
+                    __indirect_call_0 = ref.cast "canonical//CanonicalClosure_2"(_licm_pred_4);
+                    call_ref "functype/$canonical_closure_fn_2"(__indirect_call_0.func, __indirect_call_0.env, item);
+                } {
+                    return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: item };
+                }
+            } else {
+                return struct.new "core:prelude/types.wado//Option<i32>" { 1 };
+            }
+            continue l175;
+        };
+    };
+}
+
+fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
+    let item: i32;
+    if self.index >= self.used {
+        return struct.new "core:prelude/types.wado//Option<i32>" { 1 };
+    }
+    item = builtin::array_get<i32>(self.repr, self.index);
+    self.index = self.index + 1;
+    return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: item };
+}
+
 fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
     let used: i32;
     used = self.used;
@@ -2883,54 +2920,17 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l176: loop {
+            l182: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l176;
+                continue l182;
             };
         };
     };
     self.repr = new_repr;
-}
-
-fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
-    let item: i32;
-    if self.index >= self.used {
-        return struct.new "core:prelude/types.wado//Option<i32>" { 1 };
-    }
-    item = builtin::array_get<i32>(self.repr, self.index);
-    self.index = self.index + 1;
-    return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: item };
-}
-
-fn "core:prelude/traits.wado/IterFilter<core:prelude/array.wado/ArrayIter<i32>>^Iterator::next"(self) {
-    let item: i32;
-    let __pattern_temp_0: ref "core:prelude/types.wado//Option<i32>";
-    let _licm_inner_3: ref "core:prelude/array.wado//ArrayIter<i32>";
-    let _licm_pred_4: ref struct;
-    _licm_inner_3 = self.inner;
-    _licm_pred_4 = self.pred;
-    block {
-        l180: loop {
-            __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(_licm_inner_3);
-            if ref.test "core:prelude/types.wado//Option<i32>::Some"(__pattern_temp_0) {
-                item = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__pattern_temp_0).payload_0;
-                if block -> bool {
-                    let __indirect_call_0: ref "canonical//CanonicalClosure_2";
-                    __indirect_call_0 = ref.cast "canonical//CanonicalClosure_2"(_licm_pred_4);
-                    call_ref "functype/$canonical_closure_fn_2"(__indirect_call_0.func, __indirect_call_0.env, item);
-                } {
-                    return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: item };
-                }
-            } else {
-                return struct.new "core:prelude/types.wado//Option<i32>" { 1 };
-            }
-            continue l180;
-        };
-    };
 }
 
 fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_2::__call"(self, x) {

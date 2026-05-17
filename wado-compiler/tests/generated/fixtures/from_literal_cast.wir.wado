@@ -98,9 +98,9 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(36)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>");  // TypeId(37)
+type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(37)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(38)
+type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>");  // TypeId(38)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(39)
 
@@ -977,6 +977,16 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
 }
 
+fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self);
+    }
+    builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
+    self.used = used + 1;
+}
+
 fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
@@ -997,27 +1007,17 @@ fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self) 
     __for_0: block {
         i = 0;
         block {
-            l85: loop {
+            l86: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "core:prelude/string.wado//String">(new_repr, i, builtin::array_get<ref "core:prelude/string.wado//String">(old_repr, i));
                 i = i + 1;
-                continue l85;
+                continue l86;
             };
         };
     };
     self.repr = new_repr;
-}
-
-fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self);
-    }
-    builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
-    self.used = used + 1;
 }
 
 export fn "wado-compiler/tests/fixtures/from_literal_cast.wado/__cm_export__run" as "run"

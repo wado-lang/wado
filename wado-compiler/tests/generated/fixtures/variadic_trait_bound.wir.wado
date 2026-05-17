@@ -35,9 +35,9 @@ struct tuple//[i32, String, bool] {  // TypeId(5)
     mut 2: bool,
 }
 
-struct tuple//[Tuple<i32,String,bool>, Tuple<i32,String,bool>] {  // TypeId(6)
-    mut 0: ref "tuple//[i32, String, bool]",
-    mut 1: ref "tuple//[i32, String, bool]",
+struct tuple//[Tuple<i32,String>, Tuple<i32,String>] {  // TypeId(6)
+    mut 0: ref "tuple//[i32, String]",
+    mut 1: ref "tuple//[i32, String]",
 }
 
 struct tuple//[Tuple<i32>, Tuple<i32>] {  // TypeId(7)
@@ -45,9 +45,9 @@ struct tuple//[Tuple<i32>, Tuple<i32>] {  // TypeId(7)
     mut 1: ref "tuple//[i32]",
 }
 
-struct tuple//[Tuple<i32,String>, Tuple<i32,String>] {  // TypeId(8)
-    mut 0: ref "tuple//[i32, String]",
-    mut 1: ref "tuple//[i32, String]",
+struct tuple//[Tuple<i32,String,bool>, Tuple<i32,String,bool>] {  // TypeId(8)
+    mut 0: ref "tuple//[i32, String, bool]",
+    mut 1: ref "tuple//[i32, String, bool]",
 }
 
 enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(9)
@@ -104,11 +104,11 @@ type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(35)
 
-type "functype//wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,core:prelude/string.wado/String,bool>^Eq::eq" = fn(ref "tuple//[i32, String, bool]", ref "tuple//[i32, String, bool]") -> bool;  // TypeId(36)
+type "functype//wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "tuple//[i32, String]", ref "tuple//[i32, String]") -> bool;  // TypeId(36)
 
 type "functype//wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32>^Eq::eq" = fn(ref "tuple//[i32]", ref "tuple//[i32]") -> bool;  // TypeId(37)
 
-type "functype//wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "tuple//[i32, String]", ref "tuple//[i32, String]") -> bool;  // TypeId(38)
+type "functype//wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,core:prelude/string.wado/String,bool>^Eq::eq" = fn(ref "tuple//[i32, String, bool]", ref "tuple//[i32, String, bool]") -> bool;  // TypeId(38)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
@@ -1089,6 +1089,47 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
+fn "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,core:prelude/string.wado/String>^Eq::eq"(self, other) {
+    let a_8: ref "core:prelude/string.wado//String";
+    let b_9: ref "core:prelude/string.wado//String";
+    let len_a: i32;
+    let __sroa___sroa___tuple_2_0_0: i32;
+    let __sroa___sroa___tuple_2_0_1: i32;
+    let __sroa___sroa___tuple_2_1_0: ref "core:prelude/string.wado//String";
+    let __sroa___sroa___tuple_2_1_1: ref "core:prelude/string.wado//String";
+    __sroa___sroa___tuple_2_0_0 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: self, 1: other }.0.0;
+    __sroa___sroa___tuple_2_0_1 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: self, 1: other }.1.0;
+    __sroa___sroa___tuple_2_1_0 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: self, 1: other }.0.1;
+    __sroa___sroa___tuple_2_1_1 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: self, 1: other }.1.1;
+    if __sroa___sroa___tuple_2_0_0 != __sroa___sroa___tuple_2_0_1 {
+        return 0;
+    }
+    a_8 = __sroa___sroa___tuple_2_1_0;
+    b_9 = __sroa___sroa___tuple_2_1_1;
+    if __inline_String_Eq__eq_0: block -> bool {
+        len_a = a_8.used;
+        if len_a != b_9.used {
+            break __inline_String_Eq__eq_0: 0;
+        }
+        break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(a_8.repr, b_9.repr, len_a);
+        unreachable;
+    } == 0 {
+        return 0;
+    }
+    return 1;
+}
+
+fn "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32>^Eq::eq"(self, other) {
+    let __sroa___sroa___tuple_2_0_0: i32;
+    let __sroa___sroa___tuple_2_0_1: i32;
+    __sroa___sroa___tuple_2_0_0 = struct.new "tuple//[Tuple<i32>, Tuple<i32>]" { 0: self, 1: other }.0.0;
+    __sroa___sroa___tuple_2_0_1 = struct.new "tuple//[Tuple<i32>, Tuple<i32>]" { 0: self, 1: other }.1.0;
+    if __sroa___sroa___tuple_2_0_0 != __sroa___sroa___tuple_2_0_1 {
+        return 0;
+    }
+    return 1;
+}
+
 fn "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,core:prelude/string.wado/String,bool>^Eq::eq"(self, other) {
     let a_8: ref "core:prelude/string.wado//String";
     let b_9: ref "core:prelude/string.wado//String";
@@ -1121,47 +1162,6 @@ fn "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,core:prelud
         return 0;
     }
     if __sroa___sroa___tuple_2_2_0 != __sroa___sroa___tuple_2_2_1 {
-        return 0;
-    }
-    return 1;
-}
-
-fn "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32>^Eq::eq"(self, other) {
-    let __sroa___sroa___tuple_2_0_0: i32;
-    let __sroa___sroa___tuple_2_0_1: i32;
-    __sroa___sroa___tuple_2_0_0 = struct.new "tuple//[Tuple<i32>, Tuple<i32>]" { 0: self, 1: other }.0.0;
-    __sroa___sroa___tuple_2_0_1 = struct.new "tuple//[Tuple<i32>, Tuple<i32>]" { 0: self, 1: other }.1.0;
-    if __sroa___sroa___tuple_2_0_0 != __sroa___sroa___tuple_2_0_1 {
-        return 0;
-    }
-    return 1;
-}
-
-fn "wado-compiler/tests/fixtures/variadic_trait_bound.wado/Tuple<i32,core:prelude/string.wado/String>^Eq::eq"(self, other) {
-    let a_8: ref "core:prelude/string.wado//String";
-    let b_9: ref "core:prelude/string.wado//String";
-    let len_a: i32;
-    let __sroa___sroa___tuple_2_0_0: i32;
-    let __sroa___sroa___tuple_2_0_1: i32;
-    let __sroa___sroa___tuple_2_1_0: ref "core:prelude/string.wado//String";
-    let __sroa___sroa___tuple_2_1_1: ref "core:prelude/string.wado//String";
-    __sroa___sroa___tuple_2_0_0 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: self, 1: other }.0.0;
-    __sroa___sroa___tuple_2_0_1 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: self, 1: other }.1.0;
-    __sroa___sroa___tuple_2_1_0 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: self, 1: other }.0.1;
-    __sroa___sroa___tuple_2_1_1 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: self, 1: other }.1.1;
-    if __sroa___sroa___tuple_2_0_0 != __sroa___sroa___tuple_2_0_1 {
-        return 0;
-    }
-    a_8 = __sroa___sroa___tuple_2_1_0;
-    b_9 = __sroa___sroa___tuple_2_1_1;
-    if __inline_String_Eq__eq_0: block -> bool {
-        len_a = a_8.used;
-        if len_a != b_9.used {
-            break __inline_String_Eq__eq_0: 0;
-        }
-        break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(a_8.repr, b_9.repr, len_a);
-        unreachable;
-    } == 0 {
         return 0;
     }
     return 1;
