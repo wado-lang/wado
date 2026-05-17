@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778990939632,
+  "lastUpdate": 1778995725901,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22737,6 +22737,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 510826,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "453f8d5a9d0d98ee0bf9cbb481df44031d1194f5",
+          "message": "Merge pull request #1096 from wado-lang/claude/lower-native-nir-w4p5o\n\nrefactor(lower): relocate pattern lowering + Switch into translator (NIR 9.C.1)",
+          "timestamp": "2026-05-17T14:22:10+09:00",
+          "tree_id": "5b5b84c2af410ff10dda62852a83a6ef232f1c8d",
+          "url": "https://github.com/wado-lang/wado/commit/453f8d5a9d0d98ee0bf9cbb481df44031d1194f5"
+        },
+        "date": 1778995725510,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 490666,
             "unit": "bytes"
           }
         ]
