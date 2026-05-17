@@ -135,6 +135,8 @@ type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "
 
 type "functype//wado-compiler/tests/fixtures/struct_eq_auto_user_override.wado/ApproxFloat^Eq::eq" = fn(f64, f64) -> bool;  // TypeId(57)
 
+type "functype//wado-compiler/tests/fixtures/struct_eq_auto_user_override.wado/ApproxFloat^Inspect::inspect" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(58)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
 import fn wasi/task-return from "wasi/task-return";
@@ -166,23 +168,7 @@ fn "wado-compiler/tests/fixtures/struct_eq_auto_user_override.wado/run"() {
     let __local_11: ref "core:prelude/string.wado//String";
     let __local_12: ref "core:prelude/format.wado//Formatter";
     let f_16: ref "core:prelude/format.wado//Formatter";
-    let f_21: ref "core:prelude/format.wado//Formatter";
-    let s_23: ref "core:prelude/string.wado//String";
-    let s_25: ref "core:prelude/string.wado//String";
-    let s_29: ref "core:prelude/string.wado//String";
-    let f_32: ref "core:prelude/format.wado//Formatter";
-    let s_34: ref "core:prelude/string.wado//String";
-    let s_36: ref "core:prelude/string.wado//String";
-    let s_40: ref "core:prelude/string.wado//String";
-    let f_44: ref "core:prelude/format.wado//Formatter";
-    let f_49: ref "core:prelude/format.wado//Formatter";
-    let s_51: ref "core:prelude/string.wado//String";
-    let s_53: ref "core:prelude/string.wado//String";
-    let s_57: ref "core:prelude/string.wado//String";
-    let f_60: ref "core:prelude/format.wado//Formatter";
-    let s_62: ref "core:prelude/string.wado//String";
-    let s_64: ref "core:prelude/string.wado//String";
-    let s_68: ref "core:prelude/string.wado//String";
+    let f_24: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -219,27 +205,13 @@ condition: a == b
             "core:prelude/string.wado/String::push"(__local_9, 58);
             "core:prelude/string.wado/String::push"(__local_9, 32);
             __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
-            f_21 = __local_10;
-            s_23 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ApproxFloat { "), used: 14 };
-            "core:prelude/string.wado/String::push_str"(__local_10.buf, s_23);
-            s_25 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value: "), used: 7 };
-            "core:prelude/string.wado/String::push_str"(f_21.buf, s_25);
-            "core:prelude/primitive.wado/f64::inspect_into"(__v0_3.value, f_21);
-            s_29 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
-            "core:prelude/string.wado/String::push_str"(f_21.buf, s_29);
+            "wado-compiler/tests/fixtures/struct_eq_auto_user_override.wado/ApproxFloat^Inspect::inspect"(__v0_3.value, __local_10);
             "core:prelude/string.wado/String::push"(__local_9, 10);
             "core:prelude/string.wado/String::push"(__local_9, 98);
             "core:prelude/string.wado/String::push"(__local_9, 58);
             "core:prelude/string.wado/String::push"(__local_9, 32);
             __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
-            f_32 = __local_10;
-            s_34 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ApproxFloat { "), used: 14 };
-            "core:prelude/string.wado/String::push_str"(__local_10.buf, s_34);
-            s_36 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value: "), used: 7 };
-            "core:prelude/string.wado/String::push_str"(f_32.buf, s_36);
-            "core:prelude/primitive.wado/f64::inspect_into"(__v1_4.value, f_32);
-            s_40 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
-            "core:prelude/string.wado/String::push_str"(f_32.buf, s_40);
+            "wado-compiler/tests/fixtures/struct_eq_auto_user_override.wado/ApproxFloat^Inspect::inspect"(__v1_4.value, __local_10);
             "core:prelude/string.wado/String::push"(__local_9, 10);
             break __tmpl: __local_9;
             unreachable;
@@ -263,8 +235,8 @@ condition: a == b
             "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/struct_eq_auto_user_override.wado"), used: 62 });
             "core:prelude/string.wado/String::push"(__local_11, 58);
             __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
-            f_44 = __local_12;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(22, f_44);
+            f_24 = __local_12;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(22, f_24);
             "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: a != c
 "), used: 19 });
@@ -272,27 +244,13 @@ condition: a != c
             "core:prelude/string.wado/String::push"(__local_11, 58);
             "core:prelude/string.wado/String::push"(__local_11, 32);
             __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
-            f_49 = __local_12;
-            s_51 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ApproxFloat { "), used: 14 };
-            "core:prelude/string.wado/String::push_str"(__local_12.buf, s_51);
-            s_53 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value: "), used: 7 };
-            "core:prelude/string.wado/String::push_str"(f_49.buf, s_53);
-            "core:prelude/primitive.wado/f64::inspect_into"(__v0_6.value, f_49);
-            s_57 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
-            "core:prelude/string.wado/String::push_str"(f_49.buf, s_57);
+            "wado-compiler/tests/fixtures/struct_eq_auto_user_override.wado/ApproxFloat^Inspect::inspect"(__v0_6.value, __local_12);
             "core:prelude/string.wado/String::push"(__local_11, 10);
             "core:prelude/string.wado/String::push"(__local_11, 99);
             "core:prelude/string.wado/String::push"(__local_11, 58);
             "core:prelude/string.wado/String::push"(__local_11, 32);
             __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
-            f_60 = __local_12;
-            s_62 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ApproxFloat { "), used: 14 };
-            "core:prelude/string.wado/String::push_str"(__local_12.buf, s_62);
-            s_64 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value: "), used: 7 };
-            "core:prelude/string.wado/String::push_str"(f_60.buf, s_64);
-            "core:prelude/primitive.wado/f64::inspect_into"(__v1_7.value, f_60);
-            s_68 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
-            "core:prelude/string.wado/String::push_str"(f_60.buf, s_68);
+            "wado-compiler/tests/fixtures/struct_eq_auto_user_override.wado/ApproxFloat^Inspect::inspect"(__v1_7.value, __local_12);
             "core:prelude/string.wado/String::push"(__local_11, 10);
             break __tmpl: __local_11;
             unreachable;
@@ -1704,6 +1662,19 @@ fn "wado-compiler/tests/fixtures/struct_eq_auto_user_override.wado/ApproxFloat^E
         diff;
     });
     return abs_diff < 0.001;
+}
+
+fn "wado-compiler/tests/fixtures/struct_eq_auto_user_override.wado/ApproxFloat^Inspect::inspect"(self, f) {
+    let s_3: ref "core:prelude/string.wado//String";
+    let s_5: ref "core:prelude/string.wado//String";
+    let s_9: ref "core:prelude/string.wado//String";
+    s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ApproxFloat { "), used: 14 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_3);
+    s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value: "), used: 7 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_5);
+    "core:prelude/primitive.wado/f64::inspect_into"(self, f);
+    s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_9);
 }
 
 fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {

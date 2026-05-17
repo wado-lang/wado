@@ -94,6 +94,30 @@ test "fn keyword requires semantic predicates" {
     assert result matches { Err(_) }, "expected parse to fail due to missing semantic predicates";
 }
 
+// Multi-token tail-greedy K-prefix gate (parse-side + scan-side).
+//
+// Rust's `expression` rule has alts whose tail is an Optional expression
+// whose body's first set includes `{`:
+//
+//   | KW_BREAK    LIFETIME_OR_LABEL? expression?
+//   | KW_CONTINUE LIFETIME_OR_LABEL? expression?
+//   | KW_RETURN                      expression?
+//   | expression DOTDOT              expression?
+//
+// In `if EXPR { … }` the trailing block starts with `{`. Before this PR
+// Gale's greedy SLL ate the block as the optional `expression?` and
+// then failed because `if` had no `blockExpression` left. The K-prefix
+// variant `parse_expression__follow_<id>_atom` / `_lr_<n>` now gates
+// each Optional with `peek_kind() == TK_LCURLYBRACE → null`, and the
+// scan-side mirror gate in `gen_scan_op_repeat` keeps the alt
+// tournament happy so the cascade reaches parse.
+test "tree: bare `return` as if condition (K-prefix gate)" {
+    let r = rust::parse(&"const X: i32 = if return { 1 } else { 2 };");
+    if let Err(e) = &r {
+        panic(`parse failed: {e:?}`);
+    }
+}
+
 
 fn assert_tree(input: &String, expected: &String) {
     let root = rust::parse(input).unwrap();

@@ -87,11 +87,11 @@ impl RadixRouter {
             let seg = &segs[i];
             match seg {
                 Literal(lit) => {
-                    buffer.push_str("/");
-                    buffer.push_str(*lit);
+                    buffer.push_str(&"/");
+                    buffer.push_str(lit);
                 },
                 Param(name) => {
-                    buffer.push_str("/");
+                    buffer.push_str(&"/");
                     cur = self.insert_literal(cur, &buffer);
                     buffer = String::with_capacity(32);
                     if self.nodes[cur].param_target < 0 {
@@ -103,7 +103,7 @@ impl RadixRouter {
                     cur = self.nodes[cur].param_target;
                 },
                 Wildcard(name) => {
-                    buffer.push_str("/");
+                    buffer.push_str(&"/");
                     cur = self.insert_literal(cur, &buffer);
                     self.nodes[cur].wildcard_handler = handler_id;
                     self.nodes[cur].wildcard_method = method;

@@ -384,6 +384,7 @@ fn build_template_block(
         .borrow_mut()
         .make_struct("Formatter".to_string(), ModuleSource::format());
     let mut_ref_formatter = tt.borrow_mut().make_mut_ref(formatter_type);
+    let ref_string_type = tt.borrow_mut().make_ref(string_type);
     let mut fmt_local_index: Option<u32> = None;
 
     for part in parts {
@@ -399,6 +400,18 @@ fn build_template_block(
                 );
                 let push_str_qualified =
                     crate::name::MethodName::format_local(&string_struct_name, None, "push_str");
+                let literal_ref = TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Ref,
+                        expr: Box::new(TirExpr::new(
+                            TirExprKind::StringLiteral(s),
+                            string_type,
+                            span,
+                        )),
+                    },
+                    ref_string_type,
+                    span,
+                );
                 let push_str_call = TirExpr::new(
                     TirExprKind::method_call(
                         Box::new(buf_ref),
@@ -413,10 +426,7 @@ fn build_template_block(
                             )),
                         },
                         vec![],
-                        vec![CallArg::new(
-                            TirExpr::new(TirExprKind::StringLiteral(s), string_type, span),
-                            false,
-                        )],
+                        vec![CallArg::new(literal_ref, false)],
                     ),
                     TypeTable::UNIT,
                     span,
@@ -440,8 +450,16 @@ fn build_template_block(
                         string_type,
                         span,
                     );
-                    // Deref if needed (&String → String)
+                    // Normalize to &String regardless of ref level
                     let derefed = deref_to_inner(*resolved, string_type, span);
+                    let arg_ref = TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(derefed),
+                        },
+                        ref_string_type,
+                        span,
+                    );
                     let push_str_qualified = crate::name::MethodName::format_local(
                         &string_struct_name,
                         None,
@@ -461,7 +479,7 @@ fn build_template_block(
                                 )),
                             },
                             vec![],
-                            vec![CallArg::new(derefed, false)],
+                            vec![CallArg::new(arg_ref, false)],
                         ),
                         TypeTable::UNIT,
                         span,

@@ -144,14 +144,14 @@ fn walk(dir: &Descriptor, depth: i32, prefix: String, opts: &Options, stats: &mu
                 match sub {
                     Ok(d) => {
                         let mut child_prefix = String::with_capacity(prefix.len() + 4);
-                        child_prefix.push_str(prefix);
-                        child_prefix.push_str(next_prefix_fragment);
+                        child_prefix.push_str(&prefix);
+                        child_prefix.push_str(&next_prefix_fragment);
                         walk(&d, depth + 1, child_prefix, opts, stats);
                     },
                     Err(_) => {
                         let mut child_prefix = String::with_capacity(prefix.len() + 4);
-                        child_prefix.push_str(prefix);
-                        child_prefix.push_str(next_prefix_fragment);
+                        child_prefix.push_str(&prefix);
+                        child_prefix.push_str(&next_prefix_fragment);
                         println(`{child_prefix}[error opening dir]`);
                     },
                 }

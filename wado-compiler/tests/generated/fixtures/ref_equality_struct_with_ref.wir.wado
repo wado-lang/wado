@@ -115,6 +115,8 @@ type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "c
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(45)
 
+type "functype//wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Inner^Inspect::inspect" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(46)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
 import fn wasi/task-return from "wasi/task-return";
@@ -697,6 +699,19 @@ fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Eq:
     });
 }
 
+fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Inner^Inspect::inspect"(self, f) {
+    let s_3: ref "core:prelude/string.wado//String";
+    let s_5: ref "core:prelude/string.wado//String";
+    let s_11: ref "core:prelude/string.wado//String";
+    s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Inner { "), used: 8 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_3);
+    s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value: "), used: 7 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_5);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self, f);
+    s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_11);
+}
+
 fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Inspect::inspect"(self, f) {
     let s_3: ref "core:prelude/string.wado//String";
     let s_5: ref "core:prelude/string.wado//String";
@@ -705,11 +720,7 @@ fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Ins
     let self_10: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner";
     let inner: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner";
     let s_14: ref "core:prelude/string.wado//String";
-    let self_15: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner";
-    let s_18: ref "core:prelude/string.wado//String";
-    let s_20: ref "core:prelude/string.wado//String";
-    let s_26: ref "core:prelude/string.wado//String";
-    let s_28: ref "core:prelude/string.wado//String";
+    let s_16: ref "core:prelude/string.wado//String";
     s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Container { "), used: 12 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_3);
     s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("name: "), used: 6 };
@@ -723,16 +734,9 @@ fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Ins
     s_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&"), used: 1 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_14);
     inner = self_10;
-    self_15 = inner;
-    s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Inner { "), used: 8 };
-    "core:prelude/string.wado/String::push_str"(f.buf, s_18);
-    s_20 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value: "), used: 7 };
-    "core:prelude/string.wado/String::push_str"(f.buf, s_20);
-    "core:prelude/primitive.wado/i32::fmt_decimal"(self_15.value, f);
-    s_26 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
-    "core:prelude/string.wado/String::push_str"(f.buf, s_26);
-    s_28 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
-    "core:prelude/string.wado/String::push_str"(f.buf, s_28);
+    "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Inner^Inspect::inspect"(inner.value, f);
+    s_16 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_16);
 }
 
 fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, prefix, digit_count) {

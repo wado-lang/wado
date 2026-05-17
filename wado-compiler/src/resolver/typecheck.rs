@@ -74,14 +74,10 @@ pub(super) fn check_assignable(
         return TypeCheckResult::Incompatible;
     }
     if !actual_is_ref && expected_is_ref {
-        // non-ref -> &T: incompatible for types that require boxing
-        let needs_box = matches!(
-            type_table.get(expected_inner),
-            ResolvedType::Variant { .. } | ResolvedType::Primitive(_) | ResolvedType::Enum { .. }
-        );
-        if needs_box {
-            return TypeCheckResult::Incompatible;
-        }
+        // non-ref -> &T: always incompatible. The caller must take the
+        // reference explicitly with `&` (or `&mut`); the type checker
+        // never inserts an implicit ref at a call/assignment boundary.
+        return TypeCheckResult::Incompatible;
     }
     // Both refs: check inner compatibility
     if actual_is_ref && expected_is_ref {

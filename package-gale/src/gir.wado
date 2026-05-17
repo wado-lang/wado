@@ -578,6 +578,21 @@ pub struct RepeatOp {
     /// can legitimately clear to `[]` for inner greedy Optionals)
     /// before subtracting from the body first set.
     pub position_mask: Array<String>,
+    /// Multi-token follow mask installed when this `Repeat` sits at a
+    /// position whose surrounding suffix is deep-nullable AND the
+    /// enclosing variant carries a K-prefix mask (see
+    /// `FollowVariantEntry.k_prefix_mask`). Emit's
+    /// `gen_op_repeat_*` family checks the next `k_prefix_mask.len()`
+    /// tokens at iter entry; if every depth-set matches, the iter is
+    /// suppressed (yield to caller).
+    ///
+    /// Empty (`[]`) for non-variant bodies and for variant bodies whose
+    /// caller had no deterministic K-prefix at the call site. Required
+    /// to close the multi-token tail-greedy gap (TODO.md) — the
+    /// soundness invariant from the single-token path is preserved
+    /// structurally by the per-depth check (HTMLParser's nested-tag
+    /// inputs differ from the closing-tag mask at depth ≥ 1).
+    pub k_prefix_mask: Array<Array<String>>,
     /// True iff the inner element is fully scannable (has a complete
     /// `scan_<rule>` / inline scan equivalent). Drives emit's choice
     /// between `loop` + scan-guard and `while` + first-check loop
@@ -879,6 +894,11 @@ pub struct ScanRepeatElem {
     /// pre-Phase-2-F `gen_scan_repeat_optional_with_follow` contract).
     /// Empty when the Repeat is at the alt's tail.
     pub caller_follow_first: Array<String>,
+    /// Scan-side mirror of `RepeatOp.k_prefix_mask`. Same semantics:
+    /// when non-empty, the scan-side emit gates iter entry on a K-token
+    /// peek so scan-driven dispatch stays consistent with the parse-side
+    /// variant body's yield decision.
+    pub k_prefix_mask: Array<Array<String>>,
 }
 
 pub variant ScanRepeatStrategy {

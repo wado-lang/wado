@@ -44,7 +44,7 @@ struct JsonWriter {
 
 impl JsonWriter {
     fn write(&mut self, s: &String) {
-        self.buf.push_str(*s);
+        self.buf.push_str(s);
     }
 }
 
@@ -211,10 +211,10 @@ struct Point {
 
 impl Serialize for Point {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        let mut st = s.begin_struct("Point", 2);
+        let mut st = s.begin_struct(&"Point", 2);
         if let Ok(mut st) = st {
-            st.field::<f64>("x", &self.x);
-            st.field::<f64>("y", &self.y);
+            st.field::<f64>(&"x", &self.x);
+            st.field::<f64>(&"y", &self.y);
             return st.end();
         }
         return Result::<(), SerializeError>::Err(SerializeError { message: "begin_struct failed" });
@@ -231,13 +231,13 @@ struct User {
 
 impl Serialize for User {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        let mut st = s.begin_struct("User", 5);
+        let mut st = s.begin_struct(&"User", 5);
         if let Ok(mut st) = st {
-            st.field::<String>("name", &self.name);
-            st.field::<i32>("age", &self.age);
-            st.field::<bool>("active", &self.active);
-            st.field::<Option<Point>>("location", &self.location);
-            st.field::<Array<String>>("tags", &self.tags);
+            st.field::<String>(&"name", &self.name);
+            st.field::<i32>(&"age", &self.age);
+            st.field::<bool>(&"active", &self.active);
+            st.field::<Option<Point>>(&"location", &self.location);
+            st.field::<Array<String>>(&"tags", &self.tags);
             return st.end();
         }
         return Result::<(), SerializeError>::Err(SerializeError { message: "begin_struct failed" });

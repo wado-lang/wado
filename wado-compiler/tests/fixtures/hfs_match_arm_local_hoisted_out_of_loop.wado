@@ -6,7 +6,7 @@
 // Background: discovered while investigating a `null reference` trap inside
 // `core:json/JsonDeserializer::read_json_string` with the optimizer's
 // inline threshold raised to 33+. After threshold-33 inlining, the
-// panic-template `let mut __r: String = ...; ...push_str(...);` ended up
+// panic-template `let mut __r: String = ...; ...push_str(&...);` ended up
 // inside the `_` match arm of an outer loop. HFS scalarized `__r.used` and
 // `__r.repr`, hoisting `let mut __hfs_used_158: i32 = __r.used;` and
 // `let mut __hfs_repr_159: ... = __r.repr;` to before the loop where `__r`

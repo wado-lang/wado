@@ -102,7 +102,7 @@ fn percent_encode_char(c: char, out: &mut String) {
     } else {
         for let b of c.encode_utf8() {
             let n = b as i32;
-            out.push_str(`%{n:02X}`);
+            out.push_str(&`%{n:02X}`);
         }
     }
 }
@@ -157,7 +157,7 @@ fn percent_encode_query_component(input: &String) -> String {
         } else {
             for let b of c.encode_utf8() {
                 let n = b as i32;
-                out.push_str(`%{n:02X}`);
+                out.push_str(&`%{n:02X}`);
             }
         }
     }
@@ -229,9 +229,9 @@ pub fn format_query(params: TreeMap<String, String>) -> String {
             out.push('&');
         }
         let entry = entries[i];
-        out.push_str(percent_encode_query_component(&entry.0));
+        out.push_str(&percent_encode_query_component(&entry.0));
         out.push('=');
-        out.push_str(percent_encode_query_component(&entry.1));
+        out.push_str(&percent_encode_query_component(&entry.1));
     }
     return out;
 }
@@ -259,7 +259,7 @@ fn remove_dot_segments(path: String) -> String {
         if i > 0 {
             result.push('/');
         }
-        result.push_str(stack[i]);
+        result.push_str(&stack[i]);
     }
     return result;
 }
@@ -472,7 +472,7 @@ impl Url {
         } else if !path_part.starts_with("/") {
             let mut p = String::with_capacity(path_part.len() + 1);
             p.push('/');
-            p.push_str(path_part);
+            p.push_str(&path_part);
             url.path = p;
         } else {
             url.path = path_part;
@@ -493,13 +493,13 @@ impl Url {
     /// Serializes the URL back to a string.
     pub fn to_string(&self) -> String {
         let mut out = String::with_capacity(64);
-        out.push_str(self.scheme);
-        out.push_str("://");
-        out.push_str(self.authority());
-        out.push_str(self.path_with_query());
+        out.push_str(&self.scheme);
+        out.push_str(&"://");
+        out.push_str(&self.authority());
+        out.push_str(&self.path_with_query());
         if let Some(f) = self.fragment {
             out.push('#');
-            out.push_str(f);
+            out.push_str(&f);
         }
         return out;
     }
@@ -508,22 +508,22 @@ impl Url {
     pub fn authority(&self) -> String {
         let mut out = String::with_capacity(32);
         if !self.username.is_empty() {
-            out.push_str(self.username);
+            out.push_str(&self.username);
             if !self.password.is_empty() {
                 out.push(':');
-                out.push_str(self.password);
+                out.push_str(&self.password);
             }
             out.push('@');
         }
         if self.host.contains(":") {
             out.push('[');
-            out.push_str(self.host);
+            out.push_str(&self.host);
             out.push(']');
         } else {
-            out.push_str(self.host);
+            out.push_str(&self.host);
         }
         if let Some(p) = self.port {
-            out.push_str(`:{p}`);
+            out.push_str(&`:{p}`);
         }
         return out;
     }
@@ -531,17 +531,17 @@ impl Url {
     /// Returns the origin: scheme://host[:port] (excludes credentials).
     pub fn origin(&self) -> String {
         let mut out = String::with_capacity(32);
-        out.push_str(self.scheme);
-        out.push_str("://");
+        out.push_str(&self.scheme);
+        out.push_str(&"://");
         if self.host.contains(":") {
             out.push('[');
-            out.push_str(self.host);
+            out.push_str(&self.host);
             out.push(']');
         } else {
-            out.push_str(self.host);
+            out.push_str(&self.host);
         }
         if let Some(p) = self.port {
-            out.push_str(`:{p}`);
+            out.push_str(&`:{p}`);
         }
         return out;
     }
@@ -550,9 +550,9 @@ impl Url {
     pub fn path_with_query(&self) -> String {
         if let Some(q) = self.query {
             let mut out = String::with_capacity(self.path.len() + 1 + q.len());
-            out.push_str(self.path);
+            out.push_str(&self.path);
             out.push('?');
-            out.push_str(q);
+            out.push_str(&q);
             return out;
         }
         return self.path;
@@ -643,8 +643,8 @@ impl Url {
             let base = self.path;
             let merged = if let Some(last_slash) = base.rfind("/") {
                 let mut m = String::with_capacity(last_slash + 1 + r_path.len());
-                m.push_str(base.substr_bytes(0, last_slash + 1));
-                m.push_str(r_path);
+                m.push_str(&base.substr_bytes(0, last_slash + 1));
+                m.push_str(&r_path);
                 m;
             } else {
                 r_path;
@@ -733,7 +733,7 @@ fn normalize_percent_encoding(input: &String) -> String {
                 if is_unreserved_char(decoded as u8 as char) {
                     out.push(decoded as u8 as char);
                 } else {
-                    out.push_str(`%{decoded:02X}`);
+                    out.push_str(&`%{decoded:02X}`);
                 }
                 i += 3;
                 continue;
@@ -747,7 +747,7 @@ fn normalize_percent_encoding(input: &String) -> String {
 
 impl Display for Url {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(self.to_string());
+        f.write_str(&self.to_string());
     }
 }
 
