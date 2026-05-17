@@ -85,16 +85,17 @@ fn normalize_ast_debug(debug: &str) -> String {
 ///
 /// This catches bugs where the formatter changes program meaning (e.g., dropping
 /// parentheses, reordering operators, losing expressions).
+///
+/// Panics on parse errors in either `source` or the formatter output: the
+/// source passed in is expected to be valid, and a silent skip would let
+/// typos in the test itself report success while testing nothing.
 fn assert_format_preserves_ast(source: &str) {
-    let formatted = match wado_compiler::format(source) {
-        Ok(f) => f,
-        Err(_) => return, // skip sources that don't parse
-    };
+    let formatted = wado_compiler::format(source)
+        .unwrap_or_else(|e| panic!("test source failed to format: {e:?}\n\nSource:\n{source}"));
 
-    let original_ast = match wado_compiler::parse(source) {
-        Ok(r) => r.ast,
-        Err(_) => return,
-    };
+    let original_ast = wado_compiler::parse(source)
+        .unwrap_or_else(|e| panic!("test source failed to parse: {e:?}\n\nSource:\n{source}"))
+        .ast;
     let formatted_ast = match wado_compiler::parse(&formatted) {
         Ok(r) => r.ast,
         Err(e) => panic!(
@@ -1558,6 +1559,35 @@ fn run() {
         let doubled = x * 2;
         return doubled + x;
     };
+    let direct = (|x: i32| x + 1)(41);
+}
+",
+    );
+}
+
+#[test]
+fn test_roundtrip_ast_call_on_compound_callee() {
+    // Each statement here uses a callee shape that lives above the
+    // postfix level (or is otherwise call-ambiguous). The formatter must
+    // keep the parens around the callee so the AST round-trips.
+    assert_format_preserves_ast(
+        r"
+type FnI = fn(i32) -> i32;
+
+fn make() -> FnI {
+    return |x: i32| x + 1;
+}
+
+fn flag() -> bool {
+    return true;
+}
+
+fn run() {
+    let cast_call = (make() as FnI)(10);
+    let if_call = (if flag() { make() } else { make() })(10);
+    let match_call = (match flag() { true => make(), false => make() })(10);
+    let unary_call = (-make())(10);
+    let binary_call = (make() + make())(10);
 }
 ",
     );

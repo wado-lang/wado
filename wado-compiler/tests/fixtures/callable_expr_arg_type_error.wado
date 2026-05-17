@@ -1,0 +1,14 @@
+// Argument type mismatch on an indirect call must report the type error,
+// not silently coerce or report something unrelated.
+
+fn pair() -> [fn(i32) -> i32, fn(i32) -> i32] {
+    return [|x: i32| x + 1, |x: i32| x * 2];
+}
+
+export fn run() {
+    let p = pair();
+    let _ = p[0]("hello");
+}
+
+__DATA__
+{"compile_error": "type mismatch"}

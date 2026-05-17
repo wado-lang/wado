@@ -168,6 +168,9 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// Expression in callee position whose type is not a function.
+    CalleeNotCallable { type_name: String, span: Span },
+
     /// Invalid numeric literal
     InvalidLiteral { message: String, span: Span },
 
@@ -395,6 +398,13 @@ impl std::fmt::Display for TypeError {
                     f,
                     "{}:{}: expected {} arguments, found {}",
                     span.line, span.column, expected, found
+                )
+            }
+            TypeError::CalleeNotCallable { type_name, span } => {
+                write!(
+                    f,
+                    "{}:{}: expression is not callable: type '{}' is not a function",
+                    span.line, span.column, type_name
                 )
             }
             TypeError::InvalidLiteral { message, span } => {
@@ -699,6 +709,11 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             } => (
                 Code::TypeMismatch,
                 format!("expected {expected} arguments, found {found}"),
+                *span,
+            ),
+            TypeError::CalleeNotCallable { type_name, span } => (
+                Code::TypeMismatch,
+                format!("expression is not callable: type '{type_name}' is not a function"),
                 *span,
             ),
             TypeError::InvalidLiteral { message, span } => {

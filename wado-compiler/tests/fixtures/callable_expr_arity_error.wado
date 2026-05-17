@@ -1,0 +1,14 @@
+// Calling a function-typed value with the wrong number of arguments must
+// produce an arity-mismatch error, not silently miscompile.
+
+fn pair() -> [fn(i32) -> i32, fn(i32) -> i32] {
+    return [|x: i32| x + 1, |x: i32| x * 2];
+}
+
+export fn run() {
+    let p = pair();
+    let _ = p[0](1, 2);
+}
+
+__DATA__
+{"compile_error": "expected 1 arguments, found 2"}
