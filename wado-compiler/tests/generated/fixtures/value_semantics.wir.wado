@@ -202,6 +202,7 @@ fn "wado-compiler/tests/fixtures/value_semantics.wado/value_semantics_array"() w
 
 fn "wado-compiler/tests/fixtures/value_semantics.wado/value_semantics_string"() with Stdout {
     let a: ref "core:prelude/string.wado//String";
+    let b: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/string.wado//String";
     let message_4: ref "core:prelude/string.wado//String";
@@ -213,6 +214,7 @@ fn "wado-compiler/tests/fixtures/value_semantics.wado/value_semantics_string"() 
     let tx_13: i32;
     let handle_14: i32;
     a = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+    b = a;
     message_4 = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
         "core:prelude/string.wado/String::push"(__local_2, 97);
@@ -235,7 +237,7 @@ fn "wado-compiler/tests/fixtures/value_semantics.wado/value_semantics_string"() 
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
         "core:prelude/string.wado/String::push"(__local_3, 98);
         "core:prelude/string.wado/String::push"(__local_3, 61);
-        "core:prelude/string.wado/String::push_str"(__local_3, a);
+        "core:prelude/string.wado/String::push_str"(__local_3, b);
         break __tmpl: __local_3;
         unreachable;
     };

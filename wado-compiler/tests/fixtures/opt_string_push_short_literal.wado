@@ -1,5 +1,5 @@
 // Regression test: TIR `string_push` pass rewrites
-// `buf.push_str("short_constant")` (≤8 ASCII bytes) into a sequence of
+// `buf.push_str(&"short_constant")` (≤8 ASCII bytes) into a sequence of
 // `buf.push(c)` calls, eliminating the temporary `String` allocation that
 // the literal would otherwise materialize at lowering. The pass runs
 // *before* `inline`; once the inliner expands `push_str`'s body the
@@ -26,9 +26,9 @@ use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
     let mut buf = String::with_capacity(32);
-    buf.push_str("0.");   // 2 bytes — should rewrite to push('0'); push('.')
-    buf.push_str(".");    // 1 byte  — should rewrite to push('.')
-    buf.push_str("inf");  // 3 bytes — should rewrite to push('i'); push('n'); push('f')
+    buf.push_str(&"0.");   // 2 bytes — should rewrite to push('0'); push('.')
+    buf.push_str(&".");    // 1 byte  — should rewrite to push('.')
+    buf.push_str(&"inf");  // 3 bytes — should rewrite to push('i'); push('n'); push('f')
     println(buf);
 }
 

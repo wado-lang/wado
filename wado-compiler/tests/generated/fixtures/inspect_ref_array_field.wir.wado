@@ -85,6 +85,8 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(32)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(33)
 
+type "functype//wado-compiler/tests/fixtures/inspect_ref_array_field.wado/Wrapper^Inspect::inspect" = fn(ref "core:prelude//Array<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(34)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
 import fn wasi/task-return from "wasi/task-return";
@@ -107,33 +109,15 @@ fn "wado-compiler/tests/fixtures/inspect_ref_array_field.wado/run"() with Stdout
     let rx: i32;
     let tx: i32;
     let handle: i32;
-    let f_23: ref "core:prelude/format.wado//Formatter";
-    let s_25: ref "core:prelude/string.wado//String";
-    let s_27: ref "core:prelude/string.wado//String";
-    let inner: ref "core:prelude//Array<i32>";
-    let s_32: ref "core:prelude/string.wado//String";
-    let s_34: ref "core:prelude/string.wado//String";
-    let __sroa_w_data: ref "core:prelude//Array<i32>";
     arr = __seq_lit: block -> ref "core:prelude//Array<i32>" {
         __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __b_0;
         unreachable;
     };
-    __sroa_w_data = arr;
     message = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
-        f_23 = __local_4;
-        s_25 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Wrapper { "), used: 10 };
-        "core:prelude/string.wado/String::push_str"(__local_4.buf, s_25);
-        s_27 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("data: "), used: 6 };
-        "core:prelude/string.wado/String::push_str"(f_23.buf, s_27);
-        s_32 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&"), used: 1 };
-        "core:prelude/string.wado/String::push_str"(f_23.buf, s_32);
-        inner = __sroa_w_data;
-        "core:prelude/array.wado/Array<i32>^Inspect::inspect"(inner, f_23);
-        s_34 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
-        "core:prelude/string.wado/String::push_str"(f_23.buf, s_34);
+        "wado-compiler/tests/fixtures/inspect_ref_array_field.wado/Wrapper^Inspect::inspect"(arr, __local_4);
         break __tmpl: __local_3;
         unreachable;
     };
@@ -372,6 +356,26 @@ fn "core:prelude/string.wado/String::push"(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     }
+}
+
+fn "wado-compiler/tests/fixtures/inspect_ref_array_field.wado/Wrapper^Inspect::inspect"(self, f) {
+    let s_3: ref "core:prelude/string.wado//String";
+    let s_5: ref "core:prelude/string.wado//String";
+    let self_6: ref "core:prelude//Array<i32>";
+    let inner: ref "core:prelude//Array<i32>";
+    let s_10: ref "core:prelude/string.wado//String";
+    let s_12: ref "core:prelude/string.wado//String";
+    s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Wrapper { "), used: 10 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_3);
+    s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("data: "), used: 6 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_5);
+    self_6 = self;
+    s_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&"), used: 1 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_10);
+    inner = self_6;
+    "core:prelude/array.wado/Array<i32>^Inspect::inspect"(inner, f);
+    s_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_12);
 }
 
 fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, prefix, digit_count) {

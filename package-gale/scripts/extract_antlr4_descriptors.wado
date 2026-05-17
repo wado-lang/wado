@@ -125,7 +125,7 @@ fn parse_descriptor_text(text: &String) -> ParsedDescriptor {
                 current_value = String::with_capacity(256);
             },
             None => {
-                current_value.push_str(line);
+                current_value.push_str(&line);
                 current_value.push('\n');
             },
         }
@@ -235,7 +235,7 @@ fn post_process(raw: &String) -> String {
     }
     if trimmed.contains("\n") {
         let mut s = String::with_capacity(trimmed.len() + 1);
-        s.push_str(trimmed);
+        s.push_str(&trimmed);
         s.push('\n');
         return s;
     }
@@ -505,10 +505,10 @@ fn escape_for_wado_str(s: &String) -> String {
     for let c of s.chars() {
         match c {
             '\\' => {
-                out.push_str("\\\\");
+                out.push_str(&"\\\\");
             },
             '"' => {
-                out.push_str("\\\"");
+                out.push_str(&"\\\"");
             },
             _ => {
                 out.push(c);
@@ -688,9 +688,9 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     let mut categories_str = String::with_capacity(64);
     for let mut i = 0; i < categories.len(); i += 1 {
         if i > 0 {
-            categories_str.push_str(", ");
+            categories_str.push_str(&", ");
         }
-        categories_str.push_str(categories[i]);
+        categories_str.push_str(&categories[i]);
     }
     println(`extract: categories   = {categories_str}`);
 

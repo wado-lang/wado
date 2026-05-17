@@ -18,21 +18,21 @@ fn assert_tree(input: &String, expected: &String) {
 
 fn unparse_xml(node: &CstNode) -> String {
     let mut out = String::with_capacity(256);
-    out.push_str(`<{node.name}>`);
+    out.push_str(&`<{node.name}>`);
     for let child of &node.children {
         if let Token(t) = *child {
             for let trivia of &t.leading_trivia {
                 trivia.text.push_to(&mut out);
             }
             let kind_name = sqlite::token_kind_name(t.kind);
-            out.push_str(`<{kind_name}>`);
+            out.push_str(&`<{kind_name}>`);
             t.text.push_to(&mut out);
-            out.push_str(`</{kind_name}>`);
+            out.push_str(&`</{kind_name}>`);
         } else if let Node(n) = *child {
-            out.push_str(unparse_xml(n));
+            out.push_str(&unparse_xml(&n));
         }
     }
-    out.push_str(`</{node.name}>`);
+    out.push_str(&`</{node.name}>`);
     return out;
 }
 
@@ -66,57 +66,57 @@ fn assert_xml(input: &String, expected: &String) {
 
 test "select_literal" {
     assert_xml(
-        "SELECT 1;",
-        "<parse><sql_stmt_list><sql_stmt><factored_select_stmt><select_core><K_SELECT>SELECT</K_SELECT><result_column><expr><literal_value> <NUMERIC_LITERAL>1</NUMERIC_LITERAL></literal_value></expr></result_column></select_core></factored_select_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
+        &"SELECT 1;",
+        &"<parse><sql_stmt_list><sql_stmt><factored_select_stmt><select_core><K_SELECT>SELECT</K_SELECT><result_column><expr><literal_value> <NUMERIC_LITERAL>1</NUMERIC_LITERAL></literal_value></expr></result_column></select_core></factored_select_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
 }
 
 test "select_column" {
     assert_xml(
-        "SELECT a, b FROM t;",
-        "<parse><sql_stmt_list><sql_stmt><factored_select_stmt><select_core><K_SELECT>SELECT</K_SELECT><result_column><expr><column_name><any_name> <IDENTIFIER>a</IDENTIFIER></any_name></column_name></expr></result_column><TK_LIT_COMMA>,</TK_LIT_COMMA><result_column><expr><column_name><any_name> <IDENTIFIER>b</IDENTIFIER></any_name></column_name></expr></result_column> <K_FROM>FROM</K_FROM><join_clause><table_or_subquery><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name></table_or_subquery></join_clause></select_core></factored_select_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
+        &"SELECT a, b FROM t;",
+        &"<parse><sql_stmt_list><sql_stmt><factored_select_stmt><select_core><K_SELECT>SELECT</K_SELECT><result_column><expr><column_name><any_name> <IDENTIFIER>a</IDENTIFIER></any_name></column_name></expr></result_column><TK_LIT_COMMA>,</TK_LIT_COMMA><result_column><expr><column_name><any_name> <IDENTIFIER>b</IDENTIFIER></any_name></column_name></expr></result_column> <K_FROM>FROM</K_FROM><join_clause><table_or_subquery><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name></table_or_subquery></join_clause></select_core></factored_select_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
 }
 
 test "create_table" {
     assert_xml(
-        "CREATE TABLE t (a INTEGER, b TEXT);",
-        "<parse><sql_stmt_list><sql_stmt><create_table_stmt><K_CREATE>CREATE</K_CREATE> <K_TABLE>TABLE</K_TABLE><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name> <TK_LIT_LPAREN>(</TK_LIT_LPAREN><column_def><column_name><any_name><IDENTIFIER>a</IDENTIFIER></any_name></column_name><type_name><name><any_name> <IDENTIFIER>INTEGER</IDENTIFIER></any_name></name></type_name></column_def><TK_LIT_COMMA>,</TK_LIT_COMMA><column_def><column_name><any_name> <IDENTIFIER>b</IDENTIFIER></any_name></column_name><type_name><name><any_name> <IDENTIFIER>TEXT</IDENTIFIER></any_name></name></type_name></column_def><TK_LIT_RPAREN>)</TK_LIT_RPAREN></create_table_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
+        &"CREATE TABLE t (a INTEGER, b TEXT);",
+        &"<parse><sql_stmt_list><sql_stmt><create_table_stmt><K_CREATE>CREATE</K_CREATE> <K_TABLE>TABLE</K_TABLE><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name> <TK_LIT_LPAREN>(</TK_LIT_LPAREN><column_def><column_name><any_name><IDENTIFIER>a</IDENTIFIER></any_name></column_name><type_name><name><any_name> <IDENTIFIER>INTEGER</IDENTIFIER></any_name></name></type_name></column_def><TK_LIT_COMMA>,</TK_LIT_COMMA><column_def><column_name><any_name> <IDENTIFIER>b</IDENTIFIER></any_name></column_name><type_name><name><any_name> <IDENTIFIER>TEXT</IDENTIFIER></any_name></name></type_name></column_def><TK_LIT_RPAREN>)</TK_LIT_RPAREN></create_table_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
 }
 
 test "insert" {
     assert_xml(
-        "INSERT INTO t VALUES (1, 'hello');",
-        "<parse><sql_stmt_list><sql_stmt><insert_stmt><K_INSERT>INSERT</K_INSERT> <K_INTO>INTO</K_INTO><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name> <K_VALUES>VALUES</K_VALUES> <TK_LIT_LPAREN>(</TK_LIT_LPAREN><expr><literal_value><NUMERIC_LITERAL>1</NUMERIC_LITERAL></literal_value></expr><TK_LIT_COMMA>,</TK_LIT_COMMA><expr><literal_value> <STRING_LITERAL>'hello'</STRING_LITERAL></literal_value></expr><TK_LIT_RPAREN>)</TK_LIT_RPAREN></insert_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
+        &"INSERT INTO t VALUES (1, 'hello');",
+        &"<parse><sql_stmt_list><sql_stmt><insert_stmt><K_INSERT>INSERT</K_INSERT> <K_INTO>INTO</K_INTO><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name> <K_VALUES>VALUES</K_VALUES> <TK_LIT_LPAREN>(</TK_LIT_LPAREN><expr><literal_value><NUMERIC_LITERAL>1</NUMERIC_LITERAL></literal_value></expr><TK_LIT_COMMA>,</TK_LIT_COMMA><expr><literal_value> <STRING_LITERAL>'hello'</STRING_LITERAL></literal_value></expr><TK_LIT_RPAREN>)</TK_LIT_RPAREN></insert_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
 }
 
 test "delete" {
     assert_xml(
-        "DELETE FROM t WHERE a = 1;",
-        "<parse><sql_stmt_list><sql_stmt><delete_stmt><K_DELETE>DELETE</K_DELETE> <K_FROM>FROM</K_FROM><qualified_table_name><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name></qualified_table_name> <K_WHERE>WHERE</K_WHERE><expr><expr><column_name><any_name> <IDENTIFIER>a</IDENTIFIER></any_name></column_name></expr> <TK_LIT_EQ>=</TK_LIT_EQ><expr><literal_value> <NUMERIC_LITERAL>1</NUMERIC_LITERAL></literal_value></expr></expr></delete_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
+        &"DELETE FROM t WHERE a = 1;",
+        &"<parse><sql_stmt_list><sql_stmt><delete_stmt><K_DELETE>DELETE</K_DELETE> <K_FROM>FROM</K_FROM><qualified_table_name><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name></qualified_table_name> <K_WHERE>WHERE</K_WHERE><expr><expr><column_name><any_name> <IDENTIFIER>a</IDENTIFIER></any_name></column_name></expr> <TK_LIT_EQ>=</TK_LIT_EQ><expr><literal_value> <NUMERIC_LITERAL>1</NUMERIC_LITERAL></literal_value></expr></expr></delete_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
 }
 
 test "update" {
     assert_xml(
-        "UPDATE t SET a = 1 WHERE b = 2;",
-        "<parse><sql_stmt_list><sql_stmt><update_stmt><K_UPDATE>UPDATE</K_UPDATE><qualified_table_name><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name></qualified_table_name> <K_SET>SET</K_SET><column_name><any_name> <IDENTIFIER>a</IDENTIFIER></any_name></column_name> <TK_LIT_EQ>=</TK_LIT_EQ><expr><literal_value> <NUMERIC_LITERAL>1</NUMERIC_LITERAL></literal_value></expr> <K_WHERE>WHERE</K_WHERE><expr><expr><column_name><any_name> <IDENTIFIER>b</IDENTIFIER></any_name></column_name></expr> <TK_LIT_EQ>=</TK_LIT_EQ><expr><literal_value> <NUMERIC_LITERAL>2</NUMERIC_LITERAL></literal_value></expr></expr></update_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
+        &"UPDATE t SET a = 1 WHERE b = 2;",
+        &"<parse><sql_stmt_list><sql_stmt><update_stmt><K_UPDATE>UPDATE</K_UPDATE><qualified_table_name><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name></qualified_table_name> <K_SET>SET</K_SET><column_name><any_name> <IDENTIFIER>a</IDENTIFIER></any_name></column_name> <TK_LIT_EQ>=</TK_LIT_EQ><expr><literal_value> <NUMERIC_LITERAL>1</NUMERIC_LITERAL></literal_value></expr> <K_WHERE>WHERE</K_WHERE><expr><expr><column_name><any_name> <IDENTIFIER>b</IDENTIFIER></any_name></column_name></expr> <TK_LIT_EQ>=</TK_LIT_EQ><expr><literal_value> <NUMERIC_LITERAL>2</NUMERIC_LITERAL></literal_value></expr></expr></update_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
 }
 
 test "drop_table" {
     assert_xml(
-        "DROP TABLE t;",
-        "<parse><sql_stmt_list><sql_stmt><drop_table_stmt><K_DROP>DROP</K_DROP> <K_TABLE>TABLE</K_TABLE><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name></drop_table_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
+        &"DROP TABLE t;",
+        &"<parse><sql_stmt_list><sql_stmt><drop_table_stmt><K_DROP>DROP</K_DROP> <K_TABLE>TABLE</K_TABLE><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name></drop_table_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
 }
 
 test "begin" {
     assert_xml(
-        "BEGIN;",
-        "<parse><sql_stmt_list><sql_stmt><begin_stmt><K_BEGIN>BEGIN</K_BEGIN></begin_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
+        &"BEGIN;",
+        &"<parse><sql_stmt_list><sql_stmt><begin_stmt><K_BEGIN>BEGIN</K_BEGIN></begin_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
 }
 

@@ -7,6 +7,7 @@ use {
     RepeatElement,
     RepeatKind,
     GroupElement,
+    LabelElement,
     Visibility,
 } from "./ir.wado";
 use { GenContext } from "./gen_context.wado";
@@ -233,12 +234,16 @@ test "tail_greedy_first: transitive via tail RuleRef" {
 }
 
 
+fn empty_k_prefix() -> Array<Array<String>> {
+    return [];
+}
+
 test "intern_follow_variant: empty intersection returns null" {
     // a : X Y? ; tail_greedy = {Y}. caller_follow = {Z}. intersection = {}.
     let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]);
     let mut ctx = mk_ctx_with([a]);
     let follow: Array<String> = ["TK_Z"];
-    let result = ctx.intern_follow_variant(&"a", &follow, true);
+    let result = ctx.intern_follow_variant(&"a", &follow, &empty_k_prefix(), true);
     assert if let Some(_) = result {
         false;
     } else {
@@ -251,7 +256,7 @@ test "intern_follow_variant: non-empty intersection returns Some(id)" {
     let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]);
     let mut ctx = mk_ctx_with([a]);
     let follow: Array<String> = ["TK_Y", "TK_Z"];
-    let result = ctx.intern_follow_variant(&"a", &follow, true);
+    let result = ctx.intern_follow_variant(&"a", &follow, &empty_k_prefix(), true);
     let id = if let Some(id) = result {
         id;
     } else {
@@ -271,8 +276,8 @@ test "intern_follow_variant: same intersection re-uses id and merges flags" {
     let mut ctx = mk_ctx_with([a]);
     let follow1: Array<String> = ["TK_Y"];
     let follow2: Array<String> = ["TK_Y", "TK_W"];  // same intersection {Y}
-    let id1 = ctx.intern_follow_variant(&"a", &follow1, true).unwrap();
-    let id2 = ctx.intern_follow_variant(&"a", &follow2, false).unwrap();
+    let id1 = ctx.intern_follow_variant(&"a", &follow1, &empty_k_prefix(), true).unwrap();
+    let id2 = ctx.intern_follow_variant(&"a", &follow2, &empty_k_prefix(), false).unwrap();
     assert id1 == id2;
     let entries = ctx.follow_variants();
     assert entries.len() == 1;
@@ -285,8 +290,8 @@ test "intern_follow_variant: different rules get distinct ids" {
     let b = mk_rule("b", [alt([tk("X"), opt(tk("Y"))])]);
     let mut ctx = mk_ctx_with([a, b]);
     let follow: Array<String> = ["TK_Y"];
-    let id_a = ctx.intern_follow_variant(&"a", &follow, true).unwrap();
-    let id_b = ctx.intern_follow_variant(&"b", &follow, true).unwrap();
+    let id_a = ctx.intern_follow_variant(&"a", &follow, &empty_k_prefix(), true).unwrap();
+    let id_b = ctx.intern_follow_variant(&"b", &follow, &empty_k_prefix(), true).unwrap();
     assert id_a != id_b, `expected distinct ids, got {id_a} and {id_b}`;
     assert ctx.follow_variants().len() == 2;
 }
@@ -296,7 +301,7 @@ test "intern_follow_variant: unknown rule returns null" {
     // No rules in ctx; lookup fails up front.
     let mut ctx = mk_ctx();
     let follow: Array<String> = ["TK_Y"];
-    let result = ctx.intern_follow_variant(&"nonexistent", &follow, true);
+    let result = ctx.intern_follow_variant(&"nonexistent", &follow, &empty_k_prefix(), true);
     assert if let Some(_) = result {
         false;
     } else {
@@ -314,7 +319,7 @@ test "intern_follow_variant: multi-alt rule registers (Phase 5 step 5)" {
     let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))]), alt([tk("Z")])]);
     let mut ctx = mk_ctx_with([a]);
     let follow: Array<String> = ["TK_Y"];
-    let result = ctx.intern_follow_variant(&"a", &follow, true);
+    let result = ctx.intern_follow_variant(&"a", &follow, &empty_k_prefix(), true);
     assert if let Some(id) = result {
         id == 0;
     } else {
@@ -337,7 +342,7 @@ test "intern_follow_variant: left-recursive rule registers (Phase 5 step 6)" {
     let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))]), alt([rr("a"), tk("PLUS"), rr("a")])]);
     let mut ctx = mk_ctx_with([a]);
     let follow: Array<String> = ["TK_Y"];
-    let result = ctx.intern_follow_variant(&"a", &follow, true);
+    let result = ctx.intern_follow_variant(&"a", &follow, &empty_k_prefix(), true);
     assert if let Some(id) = result {
         id == 0;
     } else {
@@ -353,12 +358,67 @@ test "intern_follow_variant: empty caller_follow returns null" {
     let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]);
     let mut ctx = mk_ctx_with([a]);
     let follow: Array<String> = [];
-    let result = ctx.intern_follow_variant(&"a", &follow, true);
+    let result = ctx.intern_follow_variant(&"a", &follow, &empty_k_prefix(), true);
     assert if let Some(_) = result {
         false;
     } else {
         true;
     }, "expected null for empty caller_follow";
+    assert ctx.follow_variants().is_empty();
+}
+
+test "intern_follow_variant: K-prefix path registers when 1-token path is empty (multi-token inner)" {
+    // a : N (X Y)+ ;  // multi-token inner — tail_greedy_first_of_rule
+    // returns [] (invariant 1), so the 1-token caller_follow path
+    // never registers. The K-prefix path admits the multi-token inner
+    // and registers when the caller's deterministic K-prefix overlaps
+    // the iter's K-prefix at depth 0.
+    let xy = group([alt([tk("X"), tk("Y")])]);
+    let plus_xy = Element::Repeat(RepeatElement {
+        kind: RepeatKind::Plus,
+        element: xy,
+        non_greedy: false,
+    });
+    let a = mk_rule("a", [alt([tk("N"), plus_xy])]);
+    let mut ctx = mk_ctx_with([a]);
+    // Caller's 1-token follow is empty (no overlap path); caller's
+    // K-prefix is [{X}, {Y}, {Z}] — matches iter's [{X}, {Y}] at depth 0.
+    let empty_1: Array<String> = [];
+    let caller_kp: Array<Array<String>> = [["TK_X"], ["TK_Y"], ["TK_Z"]];
+    let result = ctx.intern_follow_variant(&"a", &empty_1, &caller_kp, false);
+    let id = if let Some(id) = result {
+        id;
+    } else {
+        panic("expected Some via K-prefix path");
+    };
+    assert id == 0, `expected id 0, got {id}`;
+    let entries = ctx.follow_variants();
+    assert entries.len() == 1;
+    assert entries[0].rule_name == "a";
+    assert entries[0].mask.is_empty(), "1-token mask should be empty";
+    assert entries[0].k_prefix_mask.len() == 3, `K-prefix mask should have 3 depths, got {entries[0].k_prefix_mask.len()}`;
+    let expected_x: Array<String> = ["TK_X"];
+    let expected_y: Array<String> = ["TK_Y"];
+    let expected_z: Array<String> = ["TK_Z"];
+    assert entries[0].k_prefix_mask[0] == expected_x;
+    assert entries[0].k_prefix_mask[1] == expected_y;
+    assert entries[0].k_prefix_mask[2] == expected_z;
+}
+
+test "intern_follow_variant: K-prefix path is silent when iter has no overlap at depth 0" {
+    // a : X Y? ; iter first {Y}. Caller K-prefix [{Z}, {W}] — no
+    // overlap at depth 0 → no K-prefix variant. (Caller_follow {Z}
+    // 1-token also has no intersection → no 1-token variant.)
+    let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]);
+    let mut ctx = mk_ctx_with([a]);
+    let follow: Array<String> = ["TK_Z"];
+    let caller_kp: Array<Array<String>> = [["TK_Z"], ["TK_W"]];
+    let result = ctx.intern_follow_variant(&"a", &follow, &caller_kp, false);
+    assert if let Some(_) = result {
+        false;
+    } else {
+        true;
+    }, "expected null (no overlap)";
     assert ctx.follow_variants().is_empty();
 }
 
@@ -391,4 +451,380 @@ test "tail_greedy_first: tail Optional with single-token-alt Group inner is also
     let mut visiting: Array<String> = [];
     let tg = ctx.tail_greedy_first_of_rule(&"r", &mut visiting);
     assert tg.is_empty(), `expected empty (Group inner blanket-excluded), got {tg.len()} tokens`;
+}
+
+
+// `position_first_sets_from`: K-token prefix FIRST sets walked from an
+// element slice. Generalises `alt_position_first_sets` (which is the
+// `start = 0` special case) by accepting an arbitrary `start` index.
+// Used by `compute_call_site_k_prefix_mask` to build multi-token
+// follow masks for `intern_follow_variant_k` — the multi-token analog
+// of `compute_call_site_follow_and_mask`.
+
+test "position_first_sets_from: full single-token sequence X Y Z, K=3" {
+    let mut ctx = mk_ctx();
+    let elements: Array<Element> = [tk("X"), tk("Y"), tk("Z")];
+    let r = ctx.position_first_sets_from(&elements, 0, 3);
+    let expected_x: Array<String> = ["TK_X"];
+    let expected_y: Array<String> = ["TK_Y"];
+    let expected_z: Array<String> = ["TK_Z"];
+    assert r.len() == 3, `expected K=3, got {r.len()}`;
+    assert r[0] == expected_x;
+    assert r[1] == expected_y;
+    assert r[2] == expected_z;
+}
+
+test "position_first_sets_from: start offset skips leading elements" {
+    let mut ctx = mk_ctx();
+    let elements: Array<Element> = [tk("N"), tk("X"), tk("Y"), tk("Z")];
+    let r = ctx.position_first_sets_from(&elements, 1, 3);
+    let expected_x: Array<String> = ["TK_X"];
+    let expected_y: Array<String> = ["TK_Y"];
+    let expected_z: Array<String> = ["TK_Z"];
+    assert r.len() == 3, `expected K=3 from offset 1, got {r.len()}`;
+    assert r[0] == expected_x;
+    assert r[1] == expected_y;
+    assert r[2] == expected_z;
+}
+
+test "position_first_sets_from: max_k truncates the result" {
+    let mut ctx = mk_ctx();
+    let elements: Array<Element> = [tk("X"), tk("Y"), tk("Z"), tk("W")];
+    let r = ctx.position_first_sets_from(&elements, 0, 2);
+    let expected_x: Array<String> = ["TK_X"];
+    let expected_y: Array<String> = ["TK_Y"];
+    assert r.len() == 2, `expected K=2 (truncated), got {r.len()}`;
+    assert r[0] == expected_x;
+    assert r[1] == expected_y;
+}
+
+test "position_first_sets_from: stops at end of sequence shorter than max_k" {
+    let mut ctx = mk_ctx();
+    let elements: Array<Element> = [tk("X"), tk("Y")];
+    let r = ctx.position_first_sets_from(&elements, 0, 5);
+    let expected_x: Array<String> = ["TK_X"];
+    let expected_y: Array<String> = ["TK_Y"];
+    assert r.len() == 2, `expected K=2 (capped by sequence length), got {r.len()}`;
+    assert r[0] == expected_x;
+    assert r[1] == expected_y;
+}
+
+test "position_first_sets_from: nullable element halts past-advance but keeps the set" {
+    // [X, Y?, Z]: position 0 = X (single-token), advance. Position 1 = deep
+    // first of (Y?, Z) = {Y, Z}; Y? is not single-token (Repeat) → halt
+    // advancing. Result: [[X], [Y, Z]]. Length 2 (can't go deeper because
+    // we cannot keep input-offset alignment past a nullable).
+    let mut ctx = mk_ctx();
+    let elements: Array<Element> = [tk("X"), opt(tk("Y")), tk("Z")];
+    let r = ctx.position_first_sets_from(&elements, 0, 3);
+    let expected_x: Array<String> = ["TK_X"];
+    let expected_yz: Array<String> = ["TK_Y", "TK_Z"];
+    assert r.len() == 2, `expected K=2 (halted at Y?), got {r.len()}`;
+    assert r[0] == expected_x;
+    let mut d1 = r[1];
+    d1.sort();
+    assert d1 == expected_yz, `expected [TK_Y, TK_Z], got {d1}`;
+}
+
+test "position_first_sets_from: start at end returns empty" {
+    let mut ctx = mk_ctx();
+    let elements: Array<Element> = [tk("X"), tk("Y")];
+    let r = ctx.position_first_sets_from(&elements, 2, 3);
+    assert r.is_empty(), `expected empty (start past end), got {r.len()}`;
+}
+
+// `tail_greedy_k_prefix_of_rule`: K-token prefix that a rule's
+// tail-greedy `Repeat` consumes per iteration. Multi-token analog of
+// `tail_greedy_first_of_rule` — admits inners that
+// `element_is_single_token` rejects (multi-element sequences, Groups)
+// PROVIDED the inner is `element_is_first_exact` (deterministic
+// k-token prefix). The caller intersects this with its K-prefix follow
+// to decide whether to register a multi-token follow variant.
+
+test "tail_greedy_k_prefix_of_rule: tail Optional with 2-token inner returns [[X], [Y]]" {
+    // r : N (X Y)? ;  // (X Y) inner consumes exactly 2 tokens per iter.
+    let r = mk_rule("r", [alt([tk("N"), opt(group([alt([tk("X"), tk("Y")])]))])]);
+    let mut ctx = mk_ctx_with([r]);
+    let mut visiting: Array<String> = [];
+    let prefixes = ctx.tail_greedy_k_prefix_of_rule(&"r", 3, &mut visiting);
+    assert prefixes.len() == 2, `expected K=2, got {prefixes.len()}`;
+    let expected_x: Array<String> = ["TK_X"];
+    let expected_y: Array<String> = ["TK_Y"];
+    assert prefixes[0] == expected_x;
+    assert prefixes[1] == expected_y;
+}
+
+test "tail_greedy_k_prefix_of_rule: tail Plus matches Optional shape" {
+    // The classic gap case: r : N (X Y)+ ;
+    // `+` requires at least one iter but the SUBSEQUENT iters share the
+    // same K-prefix as the Optional shape — the variant suppresses
+    // entering subsequent iters when the input matches the caller's
+    // K-prefix.
+    let xy = group([alt([tk("X"), tk("Y")])]);
+    let plus_xy = Element::Repeat(RepeatElement {
+        kind: RepeatKind::Plus,
+        element: xy,
+        non_greedy: false,
+    });
+    let r = mk_rule("r", [alt([tk("N"), plus_xy])]);
+    let mut ctx = mk_ctx_with([r]);
+    let mut visiting: Array<String> = [];
+    let prefixes = ctx.tail_greedy_k_prefix_of_rule(&"r", 3, &mut visiting);
+    assert prefixes.len() == 2, `expected K=2 for (X Y)+, got {prefixes.len()}`;
+    let expected_x: Array<String> = ["TK_X"];
+    let expected_y: Array<String> = ["TK_Y"];
+    assert prefixes[0] == expected_x;
+    assert prefixes[1] == expected_y;
+}
+
+test "tail_greedy_k_prefix_of_rule: max_k truncates the prefix" {
+    // r : N (X Y Z W)+ ; max_k=2 → only [[X], [Y]].
+    let xyzw = group([alt([tk("X"), tk("Y"), tk("Z"), tk("W")])]);
+    let plus = Element::Repeat(RepeatElement {
+        kind: RepeatKind::Plus,
+        element: xyzw,
+        non_greedy: false,
+    });
+    let r = mk_rule("r", [alt([tk("N"), plus])]);
+    let mut ctx = mk_ctx_with([r]);
+    let mut visiting: Array<String> = [];
+    let prefixes = ctx.tail_greedy_k_prefix_of_rule(&"r", 2, &mut visiting);
+    assert prefixes.len() == 2, `expected K=2 (capped by max_k), got {prefixes.len()}`;
+    let expected_x: Array<String> = ["TK_X"];
+    let expected_y: Array<String> = ["TK_Y"];
+    assert prefixes[0] == expected_x;
+    assert prefixes[1] == expected_y;
+}
+
+test "tail_greedy_k_prefix_of_rule: single-token inner gives K=1 prefix" {
+    // r : X Y? ;  — degenerate case: K=1 prefix [[Y]] equals existing
+    // `tail_greedy_first_of_rule` projected to length-1 prefix.
+    let r = mk_rule("r", [alt([tk("X"), opt(tk("Y"))])]);
+    let mut ctx = mk_ctx_with([r]);
+    let mut visiting: Array<String> = [];
+    let prefixes = ctx.tail_greedy_k_prefix_of_rule(&"r", 3, &mut visiting);
+    assert prefixes.len() == 1, `expected K=1 (single-token inner), got {prefixes.len()}`;
+    let expected_y: Array<String> = ["TK_Y"];
+    assert prefixes[0] == expected_y;
+}
+
+test "tail_greedy_k_prefix_of_rule: rule without tail-greedy returns empty" {
+    // r : X Y ;  // no Repeat at tail.
+    let r = mk_rule("r", [alt([tk("X"), tk("Y")])]);
+    let mut ctx = mk_ctx_with([r]);
+    let mut visiting: Array<String> = [];
+    let prefixes = ctx.tail_greedy_k_prefix_of_rule(&"r", 3, &mut visiting);
+    assert prefixes.is_empty(), `expected empty (no tail Repeat), got {prefixes.len()}`;
+}
+
+test "tail_greedy_k_prefix_of_rule: does NOT recurse through RuleRef" {
+    // outer : a ; a : N (X Y)+ ;
+    // `outer`'s body has no direct Repeat — only a RuleRef to `a`.
+    // The K-prefix path used to walk through the RuleRef and adopt
+    // `a`'s tail-greedy; the resulting "transparent" variant on
+    // `outer` cascaded through multi-alt dispatchers whose per-alt
+    // helpers were emitted but never called (pre-existing emit
+    // shape), bloating generated parsers like TypeScript by ~7000
+    // lines / ~240 functions. Stopping the recursion at `RuleRef`
+    // keeps K-prefix focused on rules that actually emit a gate.
+    let xy = group([alt([tk("X"), tk("Y")])]);
+    let plus_xy = Element::Repeat(RepeatElement {
+        kind: RepeatKind::Plus,
+        element: xy,
+        non_greedy: false,
+    });
+    let a = mk_rule("a", [alt([tk("N"), plus_xy])]);
+    let outer = mk_rule("outer", [alt([rr("a")])]);
+    let mut ctx = mk_ctx_with([outer, a]);
+    let mut visiting: Array<String> = [];
+    let outer_kp = ctx.tail_greedy_k_prefix_of_rule(&"outer", 3, &mut visiting);
+    assert outer_kp.is_empty(), `outer has no direct Repeat — K-prefix should not recurse through RuleRef, got {outer_kp.len()} depths`;
+    // Sanity: `a` still reports its direct tail-greedy K-prefix.
+    let mut a_visiting: Array<String> = [];
+    let a_kp = ctx.tail_greedy_k_prefix_of_rule(&"a", 3, &mut a_visiting);
+    assert a_kp.len() == 2, `direct Repeat in 'a' still produces K=2 prefix, got {a_kp.len()}`;
+}
+
+test "tail_greedy_k_prefix_of_rule: multi-alt inner blocks past depth 1" {
+    // r : X (A | B)? ; — inner Group has multi-alt single-token alts.
+    // Depth 0 = {A, B}. Past depth 0, the alt is undetermined (different
+    // alts pick different next tokens, but here there ARE no further
+    // tokens because each alt is single-element). So K=1 prefix
+    // [{A, B}]. Conservative: only emit when each alt is a deterministic
+    // sequence — for multi-alt cases, the prefix is the depth-0 SET.
+    let inner = group([alt([tk("A")]), alt([tk("B")])]);
+    let r = mk_rule("r", [alt([tk("X"), opt(inner)])]);
+    let mut ctx = mk_ctx_with([r]);
+    let mut visiting: Array<String> = [];
+    let prefixes = ctx.tail_greedy_k_prefix_of_rule(&"r", 3, &mut visiting);
+    assert prefixes.len() == 1, `expected K=1 (multi-alt halts past depth 0), got {prefixes.len()}`;
+    let mut d0 = prefixes[0];
+    d0.sort();
+    let expected: Array<String> = ["TK_A", "TK_B"];
+    assert d0 == expected, `expected [TK_A, TK_B], got {d0}`;
+}
+
+// `deep_position_first_sets_from`: K-prefix that recurses through
+// single-alt non-recursive `RuleRef`s. Generalises
+// `position_first_sets_from` to see "into" the rule body when computing
+// a caller's K-prefix mask. For our `r : a c EOF` fixture, calling
+// `position_first_sets_from` at start=1 only sees `c` as one
+// non-single-token element (K=1); the deep variant walks `c`'s body so
+// the mask captures `[{X}, {Y}, {Z}]` — exactly what the variant body's
+// K-prefix gate needs to disambiguate multi-iter inputs.
+
+test "deep_position_first_sets_from: recurses into single-alt RuleRef" {
+    // r : a c ; c : X Y Z ;
+    let c_rule = mk_rule("c", [alt([tk("X"), tk("Y"), tk("Z")])]);
+    let r_rule = mk_rule("r", [alt([rr("a"), rr("c")])]);
+    let mut ctx = mk_ctx_with([r_rule, c_rule]);
+    let elements: Array<Element> = [rr("a"), rr("c")];
+    let mut visiting: Array<String> = [];
+    let [r, consumed] = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
+    let expected_x: Array<String> = ["TK_X"];
+    let expected_y: Array<String> = ["TK_Y"];
+    let expected_z: Array<String> = ["TK_Z"];
+    assert r.len() == 3, `expected K=3 by recursing into c, got {r.len()}`;
+    assert r[0] == expected_x;
+    assert r[1] == expected_y;
+    assert r[2] == expected_z;
+    assert consumed == 1, `expected one surface element (c) consumed, got {consumed}`;
+}
+
+test "deep_position_first_sets_from: halts on multi-alt RuleRef" {
+    // Multi-alt rules can have alt-specific prefixes that diverge past
+    // depth 0. Per-depth UNION across alts would over-yield (the mask
+    // would match alt-mixing inputs that no real alt admits). Safe
+    // fallback: halt at the multi-alt RuleRef, keeping only the prefix
+    // accumulated so far.
+    //
+    // Here `c` is multi-alt; `r : a c ; c : X | Y ;` deep-walked from
+    // start=1 (at `c`) should emit nothing (no accumulator before c).
+    let c_rule = mk_rule("c", [alt([tk("X")]), alt([tk("Y")])]);
+    let r_rule = mk_rule("r", [alt([rr("a"), rr("c")])]);
+    let mut ctx = mk_ctx_with([r_rule, c_rule]);
+    let elements: Array<Element> = [rr("a"), rr("c")];
+    let mut visiting: Array<String> = [];
+    let [r, consumed] = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
+    assert r.is_empty(), `expected empty (multi-alt halts), got {r.len()}`;
+    assert consumed == 0, `multi-alt halt must not advance the cursor, got {consumed}`;
+}
+
+test "deep_position_first_sets_from: cycles bail to keep the analysis terminating" {
+    // r : a r ;  -- r references itself.
+    let r_rule = mk_rule("r", [alt([rr("a"), rr("r")])]);
+    let mut ctx = mk_ctx_with([r_rule]);
+    let elements: Array<Element> = [rr("a"), rr("r")];
+    let mut visiting: Array<String> = ["r"];  // simulate being inside r's expansion
+    let [prefixes, consumed] = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
+    assert prefixes.is_empty(), `expected empty (cycle), got {prefixes.len()}`;
+    assert consumed == 0, `cycle halt must not advance the cursor, got {consumed}`;
+}
+
+test "deep_position_first_sets_from: tokens before RuleRef accumulate normally" {
+    // [X, c]  where c : Y Z ;  → [[X], [Y], [Z]].
+    let c_rule = mk_rule("c", [alt([tk("Y"), tk("Z")])]);
+    let mut ctx = mk_ctx_with([c_rule]);
+    let elements: Array<Element> = [tk("X"), rr("c")];
+    let mut visiting: Array<String> = [];
+    let [r, consumed] = ctx.deep_position_first_sets_from(&elements, 0, 3, &mut visiting);
+    let expected_x: Array<String> = ["TK_X"];
+    let expected_y: Array<String> = ["TK_Y"];
+    let expected_z: Array<String> = ["TK_Z"];
+    assert r.len() == 3, `expected K=3, got {r.len()}`;
+    assert r[0] == expected_x;
+    assert r[1] == expected_y;
+    assert r[2] == expected_z;
+    assert consumed == 2, `both surface elements consumed, got {consumed}`;
+}
+
+test "deep_position_first_sets_from: matches shallow walk for single-token-only sequence" {
+    // Shallow and deep agree when the suffix is all tokens (no RuleRefs).
+    let mut ctx = mk_ctx();
+    let elements: Array<Element> = [tk("X"), tk("Y"), tk("Z")];
+    let mut visiting: Array<String> = [];
+    let [deep, _] = ctx.deep_position_first_sets_from(&elements, 0, 3, &mut visiting);
+    let shallow = ctx.position_first_sets_from(&elements, 0, 3);
+    assert deep.len() == shallow.len(), `length mismatch: deep={deep.len()}, shallow={shallow.len()}`;
+    for let mut d = 0; d < deep.len(); d += 1 {
+        let mut a_set = deep[d];
+        a_set.sort();
+        let mut b_set = shallow[d];
+        b_set.sort();
+        assert a_set == b_set, `mismatch at depth {d}: {a_set} vs {b_set}`;
+    }
+}
+
+test "deep_position_first_sets_from: halt inside expanded RuleRef stops outer walk" {
+    // Regression: if a single-alt RuleRef's body halts mid-walk (e.g.
+    // its body contains a multi-alt RuleRef or Group), the outer walk
+    // must NOT advance past the halted RuleRef onto subsequent surface
+    // elements at misaligned depths.
+    //
+    // Setup: r : c Z ;  c : X (A | B) ;
+    //  - `c`'s body walks `X` (push {X}) then halts at the multi-alt
+    //    Group `(A | B)`.
+    //  - If the outer walk naïvely incremented cursor past `c`, it
+    //    would push {Z} at depth 1, but actual input depth 1 inside
+    //    the expanded `c` is `{A, B}` (or further depending on the
+    //    Group's first set). The result would mis-claim `Z` at depth 1.
+    //
+    // Expected: walk halts after pushing {X}; subsequent {Z} must NOT
+    // appear in the result, and `consumed` reflects "halted inside c".
+    let c_rule = mk_rule("c", [alt([tk("X"), group([alt([tk("A")]), alt([tk("B")])])])]);
+    let mut ctx = mk_ctx_with([c_rule]);
+    let elements: Array<Element> = [rr("c"), tk("Z")];
+    let mut visiting: Array<String> = [];
+    let [prefixes, consumed] = ctx.deep_position_first_sets_from(&elements, 0, 4, &mut visiting);
+    let expected_x: Array<String> = ["TK_X"];
+    assert prefixes.len() == 1, `expected K=1 (halt after X), got {prefixes.len()}: {prefixes}`;
+    assert prefixes[0] == expected_x;
+    assert consumed == 0, `expansion of 'c' must NOT advance cursor when its body halts, got {consumed}`;
+}
+
+test "deep_position_first_sets_from: halt inside Label stops outer walk" {
+    // Same misalignment shape as the RuleRef arm, but the halting
+    // recursion is for a labelled element whose inner is a multi-alt
+    // Group. The Label arm must propagate the halt up.
+    let mut ctx = mk_ctx();
+    // [label=(A|B), Z] — Label wraps a multi-alt Group that halts.
+    let multi = group([alt([tk("A")]), alt([tk("B")])]);
+    let labelled = Element::Label(LabelElement {
+        name: "lab",
+        list: false,
+        element: multi,
+    });
+    let elements: Array<Element> = [labelled, tk("Z")];
+    let mut visiting: Array<String> = [];
+    let [prefixes, consumed] = ctx.deep_position_first_sets_from(&elements, 0, 4, &mut visiting);
+    // The Label arm halts because its inner element is a Group; we
+    // accept either "no depths pushed" or "Group's first pushed" but
+    // the {Z} at depth 1 must not appear because the outer walk
+    // cannot align past the halted Label.
+    let expected_z: Array<String> = ["TK_Z"];
+    let mut z_at_misaligned_depth = false;
+    for let depth_set of &prefixes {
+        if *depth_set == expected_z {
+            z_at_misaligned_depth = true;
+        }
+    }
+    assert !z_at_misaligned_depth, `Z must not bleed past a halted Label, got {prefixes}`;
+    assert consumed == 0, `Label halt must not advance the surface cursor, got {consumed}`;
+}
+
+test "position_first_sets_from: matches alt_position_first_sets at start=0" {
+    // The new helper is a strict generalisation: at `start = 0` it
+    // produces the same result as the original.
+    let mut ctx = mk_ctx();
+    let a = alt([tk("X"), opt(tk("Y")), tk("Z")]);
+    let direct = ctx.position_first_sets_from(&a.elements, 0, 4);
+    let via_alt = ctx.alt_position_first_sets(&a, 4);
+    assert direct.len() == via_alt.len(), `length mismatch: direct={direct.len()}, via_alt={via_alt.len()}`;
+    for let mut d = 0; d < direct.len(); d += 1 {
+        let mut a_set = direct[d];
+        a_set.sort();
+        let mut b_set = via_alt[d];
+        b_set.sort();
+        assert a_set == b_set, `mismatch at depth {d}: {a_set} vs {b_set}`;
+    }
 }

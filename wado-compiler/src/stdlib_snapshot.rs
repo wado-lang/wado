@@ -126,7 +126,7 @@ pub fn prewarm() {
 /// subset every real compile loads.
 fn build_snapshot() -> Annotated {
     let host = SnapshotHost;
-    let logger = Logger::new(&host, LogLevel::Off);
+    let logger = Logger::new(&host, LogLevel::Warn);
 
     // `wado-compiler` has no async runtime dependency (it must compile
     // to `wasm32-unknown-unknown`, see crate-level `CLAUDE.md`).  The
@@ -254,11 +254,20 @@ impl CompilerHost for SnapshotHost {
         })
     }
 
-    fn emit_diagnostic(&self, _diagnostic: Diagnostic) {
-        // Stdlib should be diagnostic-free.  Suppress anything that
-        // does fire so a stray warning during snapshot construction
-        // does not pollute the user's build output; a fatal Bail
-        // surfaces through the `expect` in `build_snapshot` instead.
+    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+        // Surface stdlib diagnostics so a stray error or warning during
+        // snapshot construction is visible to the user rather than
+        // swallowed behind the `expect` in `build_snapshot`. The
+        // `Logger` already filters by `LogLevel`, so anything that
+        // reaches us here is worth printing.
+        let where_ = diagnostic.span.as_ref().map_or_else(
+            || "<stdlib>".to_string(),
+            |s| format!("{}:{}:{}", s.file, s.line, s.column),
+        );
+        eprintln!(
+            "stdlib snapshot {}: {} at {}",
+            diagnostic.severity, diagnostic.message, where_
+        );
     }
 
     async fn run_generator(

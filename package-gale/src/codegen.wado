@@ -77,23 +77,23 @@ fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
         }
     }
     let mut parts = String::with_capacity(32);
-    parts.push_str("#![generated(by = \"gale\", sources = [");
+    parts.push_str(&"#![generated(by = \"gale\", sources = [");
     for let mut i = 0; i < sources.len(); i += 1 {
         if i > 0 {
-            parts.push_str(", ");
+            parts.push_str(&", ");
         }
         parts.push('"');
-        parts.push_str(sources[i]);
+        parts.push_str(&sources[i]);
         parts.push('"');
     }
-    parts.push_str("])]");
+    parts.push_str(&"])]");
     w.line(&parts);
     w.blank();
 }
 
 fn gen_runtime(w: &mut CodeWriter) {
-    w.raw(#include_str("./runtime.wado"));
-    w.raw("\n");
+    w.raw(&#include_str("./runtime.wado"));
+    w.raw(&"\n");
 }
 
 /// Surface grammar-level options and named actions from the .g4 prequel as
@@ -107,7 +107,7 @@ fn gen_grammar_metadata(w: &mut CodeWriter, grammar: &Grammar) {
     if grammar.options.is_empty() && grammar.named_actions.is_empty() {
         return;
     }
-    w.line("// Grammar metadata from source .g4 prequels:");
+    w.line(&"// Grammar metadata from source .g4 prequels:");
     for let opt of &grammar.options {
         w.line(&`//   option {opt.name} = {format_option_value(&opt.value)}`);
     }
@@ -130,7 +130,7 @@ fn format_option_value(v: &OptionValue) -> String {
                 if i > 0 {
                     out.push('.');
                 }
-                out.push_str(parts[i]);
+                out.push_str(&parts[i]);
             }
             out;
         },
@@ -153,8 +153,8 @@ fn gen_token_kind(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>) {
             }
         }
     }
-    e.add_member("Eof");
-    e.add_member("Error");
+    e.add_member(&"Eof");
+    e.add_member(&"Error");
     e.emit(w);
     w.blank();
 }
@@ -288,7 +288,7 @@ fn gen_ops_nested_types(w: &mut CodeWriter, ops: &Array<Op>, rule_name: &String,
 
 fn gen_op_nested_types(w: &mut CodeWriter, op: &Op, rule_name: &String, emitted: &mut Array<String>) {
     return match *op {
-        Group(g) => gen_group_nested_types(w, g, rule_name, emitted),
+        Group(g) => gen_group_nested_types(w, &g, rule_name, emitted),
         Repeat(r) => gen_op_nested_types(w, &r.body, rule_name, emitted),
         ListLabel(ll) => gen_op_nested_types(w, &ll.inner, rule_name, emitted),
         Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => {

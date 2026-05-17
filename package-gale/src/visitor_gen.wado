@@ -31,18 +31,18 @@ fn gen_walk_fn(w: &mut CodeWriter, rule: &ParserRule, rule_name: &String) {
 
     let mut group_counter: i32 = 0;
     if rule.alternatives.len() == 1 {
-        w.line(`v.enter_rule(&"{rule.name}", &node.span);`);
-        gen_walk_alt_body(w, &rule.alternatives[0], "node", rule_name, &mut group_counter);
-        w.line(`v.exit_rule(&"{rule.name}", &node.span);`);
+        w.line(&`v.enter_rule(&"{rule.name}", &node.span);`);
+        gen_walk_alt_body(w, &rule.alternatives[0], &"node", rule_name, &mut group_counter);
+        w.line(&`v.exit_rule(&"{rule.name}", &node.span);`);
     } else {
         let case_names = case_names_for_rule(&rule.alternatives);
-        w.begin("match node");
+        w.begin(&"match node");
         for let mut i = 0; i < rule.alternatives.len(); i += 1 {
             let alt = &rule.alternatives[i];
-            w.begin(`{case_names[i]}(n) =>`);
-            w.line(`v.enter_rule(&"{rule.name}", &n.span);`);
-            gen_walk_alt_body(w, alt, "n", rule_name, &mut group_counter);
-            w.line(`v.exit_rule(&"{rule.name}", &n.span);`);
+            w.begin(&`{case_names[i]}(n) =>`);
+            w.line(&`v.enter_rule(&"{rule.name}", &n.span);`);
+            gen_walk_alt_body(w, alt, &"n", rule_name, &mut group_counter);
+            w.line(&`v.exit_rule(&"{rule.name}", &n.span);`);
             w.end();
         }
         w.end();  // match
@@ -63,16 +63,16 @@ fn gen_walk_field(w: &mut CodeWriter, field: &WalkField, var: &String) {
     let name = &field.name;
     match field.wrapper {
         Direct => {
-            gen_walk_action(w, &field.action, `&{var}.{name}`);
+            gen_walk_action(w, &field.action, &`&{var}.{name}`);
         },
         ArrayWrap => {
-            w.begin(`for let item of &{var}.{name}`);
-            gen_walk_action(w, &field.action, "item");
+            w.begin(&`for let item of &{var}.{name}`);
+            gen_walk_action(w, &field.action, &"item");
             w.end();
         },
         OptionalWrap => {
-            w.begin(`if let Some(item) = &{var}.{name}`);
-            gen_walk_action(w, &field.action, "item");
+            w.begin(&`if let Some(item) = &{var}.{name}`);
+            gen_walk_action(w, &field.action, &"item");
             w.end();
         },
     }
@@ -80,8 +80,8 @@ fn gen_walk_field(w: &mut CodeWriter, field: &WalkField, var: &String) {
 
 fn gen_walk_action(w: &mut CodeWriter, action: &WalkAction, expr: &String) {
     match action {
-        VisitToken => w.line(`v.visit_token({expr});`),
-        WalkRule(rule_name) => w.line(`walk_{rule_name}(v, {expr});`),
+        VisitToken => w.line(&`v.visit_token({expr});`),
+        WalkRule(rule_name) => w.line(&`walk_{rule_name}(v, {expr});`),
         WalkGroup(cases) => gen_walk_group_match(w, expr, cases),
         WalkStruct(fields) => {
             // Strip leading '&' from expr so child gen_walk_field calls
@@ -153,21 +153,21 @@ fn repeat_inner_walk_field(elem: &Element, rule_name: &String, group_counter: &m
 }
 
 fn gen_walk_group_match(w: &mut CodeWriter, expr: &String, cases: &Array<GroupCaseInfo>) {
-    w.begin(`match {expr}`);
+    w.begin(&`match {expr}`);
     for let c of cases {
-        w.begin(`{c.case_name}(inner) =>`);
-        w.line(`walk_{c.rule_name}(v, inner);`);
+        w.begin(&`{c.case_name}(inner) =>`);
+        w.line(&`walk_{c.rule_name}(v, inner);`);
         w.end();
     }
     w.end();
 }
 
 fn gen_walk_general_group_match(w: &mut CodeWriter, expr: &String, cases: &Array<GeneralGroupCaseInfo>) {
-    w.begin(`match {expr}`);
+    w.begin(&`match {expr}`);
     for let c of cases {
-        w.begin(`{c.case_name}(inner) =>`);
+        w.begin(&`{c.case_name}(inner) =>`);
         for let f of &c.fields {
-            gen_walk_field(w, f, "inner");
+            gen_walk_field(w, f, &"inner");
         }
         w.end();
     }
@@ -182,9 +182,9 @@ fn gen_to_tree_fn(w: &mut CodeWriter, grammar: &Grammar) {
     let root_type = rule_type_name(&root_rule.name);
 
     w.begin(&`pub fn to_tree(node: &{root_type}) -> CstNode`);
-    w.line("let mut recorder = TreeRecorder::new();");
-    w.line(`walk_{root_rule.name}(&mut recorder, node);`);
-    w.line("return recorder.build();");
+    w.line(&"let mut recorder = TreeRecorder::new();");
+    w.line(&`walk_{root_rule.name}(&mut recorder, node);`);
+    w.line(&"return recorder.build();");
     w.end();
     w.blank();
 }

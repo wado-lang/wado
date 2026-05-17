@@ -25,6 +25,11 @@ pub struct String {
 }
 
 impl String {
+    /// Create a new empty string with no allocated capacity.
+    pub fn new() -> String {
+        return String::with_capacity(0);
+    }
+
     /// Create a new empty string with the specified capacity
     /// The string starts empty but has space for `capacity` bytes
     pub fn with_capacity(capacity: i32) -> String {
@@ -146,7 +151,7 @@ impl String {
     /// Appends another string to this string.
     /// Grows the string if necessary (O(1) amortized).
     #[compiler_item("string_push_str")]
-    pub fn push_str(&mut self, other: String) {
+    pub fn push_str(&mut self, other: &String) {
         let other_len = other.len();
         if other_len == 0 {
             return;
@@ -204,8 +209,8 @@ impl Add for String {
 
     pub fn add(&self, other: &Self) -> Self::Output {
         let mut result = String::with_capacity(self.len() + other.len());
-        result.push_str(*self);
-        result.push_str(*other);
+        result.push_str(self);
+        result.push_str(other);
         return result;
     }
 }

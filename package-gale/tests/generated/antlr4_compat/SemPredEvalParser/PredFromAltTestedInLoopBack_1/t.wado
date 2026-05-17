@@ -183,18 +183,18 @@ impl CstNode {
 }
 
 fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
-    out.push_str(`({node.name}`);
+    out.push_str(&`({node.name}`);
     for let child of &node.children {
         if let Token(t) = *child {
             if !t.text.is_empty() {
-                out.push_str(` {t.text}`);
+                out.push_str(&` {t.text}`);
             }
         } else if let Node(n) = *child {
-            out.push_str(" ");
-            cst_to_string_tree_impl(out, n);
+            out.push_str(&" ");
+            cst_to_string_tree_impl(out, &n);
         }
     }
-    out.push_str(")");
+    out.push_str(&")");
 }
 
 /// Normalize a multi-line S-expression string for comparison.
@@ -313,13 +313,13 @@ impl Visitor for HighlightVisitor {
 fn escape_html(out: &mut String, text: &String) {
     for let c of text.chars() {
         if c == '&' {
-            out.push_str("&amp;");
+            out.push_str(&"&amp;");
         } else if c == '<' {
-            out.push_str("&lt;");
+            out.push_str(&"&lt;");
         } else if c == '>' {
-            out.push_str("&gt;");
+            out.push_str(&"&gt;");
         } else if c == '"' {
-            out.push_str("&quot;");
+            out.push_str(&"&quot;");
         } else {
             out.push(c);
         }
@@ -328,13 +328,13 @@ fn escape_html(out: &mut String, text: &String) {
 
 fn escape_html_char(out: &mut String, c: char) {
     if c == '&' {
-        out.push_str("&amp;");
+        out.push_str(&"&amp;");
     } else if c == '<' {
-        out.push_str("&lt;");
+        out.push_str(&"&lt;");
     } else if c == '>' {
-        out.push_str("&gt;");
+        out.push_str(&"&gt;");
     } else if c == '"' {
-        out.push_str("&quot;");
+        out.push_str(&"&quot;");
     } else {
         out.push(c);
     }
@@ -363,9 +363,9 @@ pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> St
             }
             pos += 1;
         }
-        out.push_str("<span class=\"");
+        out.push_str(&"<span class=\"");
         push_class(&mut out, &cap.capture);
-        out.push_str("\">");
+        out.push_str(&"\">");
         let end = cap.end;
         while pos < end {
             if let Some(c) = iter.next() {
@@ -373,7 +373,7 @@ pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> St
             }
             pos += 1;
         }
-        out.push_str("</span>");
+        out.push_str(&"</span>");
     }
     while let Some(c) = iter.next() {
         escape_html_char(&mut out, c);
@@ -702,7 +702,7 @@ fn scan_file_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn scan_para(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_para_content(tokens, pos, 0);
+    pos = scan_para_content__follow_0(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_NL { return -1; }
     pos += 1;
@@ -787,7 +787,7 @@ fn parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
 
 fn parse_para(p: &mut Parser) -> Result<ParaNode, ParseError> {
     let start = p.peek().span.start;
-    let para_content = parse_para_content(p)?;
+    let para_content = parse_para_content__follow_0(p)?;
     let nl = p.expect(TK_NL)?;
     let nl_2 = p.expect(TK_NL)?;
     return Result::<ParaNode, ParseError>::Ok(ParaNode {
@@ -851,6 +851,108 @@ fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     return Result::<SNode, ParseError>::Ok(SNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         lit_s,
+    });
+}
+
+fn scan_para_content__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    let gp_3 = pos;
+    sg_3: {
+        pos = gp_3;
+        sg_3_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { break sg_3_0; }
+            pos += 1;
+            break sg_3;
+        }
+        pos = gp_3;
+        sg_3_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_3_1; }
+            pos += 1;
+            break sg_3;
+        }
+        pos = gp_3;
+        sg_3_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_NL { break sg_3_2; }
+            pos += 1;
+            break sg_3;
+        }
+        return -1;
+    }
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !((pos + 0 < tokens.len() && tokens[pos + 0].kind == TK_NL) && (pos + 1 < tokens.len() && tokens[pos + 1].kind == TK_NL)) {
+        let sp = pos;
+        let gp_4 = pos;
+        sg_4: {
+            pos = gp_4;
+            sg_4_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { break sg_4_0; }
+                pos += 1;
+                break sg_4;
+            }
+            pos = gp_4;
+            sg_4_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_4_1; }
+                pos += 1;
+                break sg_4;
+            }
+            pos = gp_4;
+            sg_4_2: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_NL { break sg_4_2; }
+                pos += 1;
+                break sg_4;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    return pos;
+}
+
+fn parse_para_content__follow_0(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
+    let start = p.peek().span.start;
+    let mut lit_s_or_lit_x_or_nl_list: Array<Token> = [];
+    let mut _plus_first = true;
+    loop {
+        if !_plus_first {
+            if p.peek_kind() == TK_NL && p.peek_at(1) == TK_NL { break; }
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                let gp_5 = pos;
+                sg_5: {
+                    pos = gp_5;
+                    sg_5_0: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { break sg_5_0; }
+                        pos += 1;
+                        break sg_5;
+                    }
+                    pos = gp_5;
+                    sg_5_1: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_5_1; }
+                        pos += 1;
+                        break sg_5;
+                    }
+                    pos = gp_5;
+                    sg_5_2: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_NL { break sg_5_2; }
+                        pos += 1;
+                        break sg_5;
+                    }
+                    break rep_scan;
+                }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        _plus_first = false;
+        let lit_s_or_lit_x_or_nl = p.advance();
+        lit_s_or_lit_x_or_nl_list.push(lit_s_or_lit_x_or_nl);
+    }
+    return Result::<ParaContentNode, ParseError>::Ok(ParaContentNode {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        lit_s_or_lit_x_or_nl_list,
     });
 }
 

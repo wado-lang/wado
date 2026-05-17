@@ -120,6 +120,8 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout {
+    let label: ref "core:prelude/string.wado//String";
+    let name: ref "core:prelude/string.wado//String";
     let __b_8: ref "core:prelude//Array<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>";
     let items: ref "core:prelude//Array<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>";
     let __iter_10: ref "core:prelude/array.wado//ArrayIter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>";
@@ -177,9 +179,10 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
     let __sroa_tagged_label: ref "core:prelude/string.wado//String";
     let __sroa_pair_1: ref "core:prelude/string.wado//String";
     __sroa_tagged_label = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("A"), used: 1 };
+    label = __sroa_tagged_label;
     message_43 = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_23 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 };
-        "core:prelude/string.wado/String::push_str"(__local_23, __sroa_tagged_label);
+        "core:prelude/string.wado/String::push_str"(__local_23, label);
         "core:prelude/string.wado/String::push"(__local_23, 58);
         "core:prelude/string.wado/String::push"(__local_23, 32);
         __local_24 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_23 };
@@ -204,9 +207,10 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
     "core:cli/write_to_stream"(tx_45, message_43, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_46);
     __sroa_pair_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("origin"), used: 6 };
+    name = __sroa_pair_1;
     message_60 = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_25 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 };
-        "core:prelude/string.wado/String::push_str"(__local_25, __sroa_pair_1);
+        "core:prelude/string.wado/String::push_str"(__local_25, name);
         "core:prelude/string.wado/String::push"(__local_25, 58);
         "core:prelude/string.wado/String::push"(__local_25, 32);
         __local_26 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_25 };

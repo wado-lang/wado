@@ -557,7 +557,7 @@ pub fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
 
     if decimal_pos <= 0 {
         // Need leading zeros: 0.00...digits
-        buf.push_str("0.");
+        buf.push_str(&"0.");
         fill_zeros(buf, -decimal_pos);
         let digit_offset = buf.len();
         fill_zeros(buf, nd);
@@ -614,9 +614,9 @@ pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
     }
 
     // Exponent
-    buf.push_str(if upper { "E" } else { "e" });
+    buf.push_str(&if upper { "E" } else { "e" });
     if exp < 0 {
-        buf.push_str("-");
+        buf.push_str(&"-");
     }
 
     let abs_exp = if exp < 0 { -exp } else { exp };
@@ -651,7 +651,7 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
 
     if decimal_pos <= 0 {
         let leading_zeros = -decimal_pos;
-        buf.push_str("0.");
+        buf.push_str(&"0.");
         if precision <= leading_zeros {
             fill_zeros(buf, precision);
             return;
@@ -676,7 +676,7 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
         write_digits_at(buf, start, d, nd);
         fill_zeros(buf, decimal_pos - nd);
         if precision > 0 {
-            buf.push_str(".");
+            buf.push_str(&".");
             fill_zeros(buf, precision);
         }
     } else {
@@ -755,9 +755,9 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
     }
 
     let exp = p + nd - 1;
-    buf.push_str(if upper { "E" } else { "e" });
+    buf.push_str(&if upper { "E" } else { "e" });
     if exp < 0 {
-        buf.push_str("-");
+        buf.push_str(&"-");
     }
 
     let abs_exp = if exp < 0 { -exp } else { exp };

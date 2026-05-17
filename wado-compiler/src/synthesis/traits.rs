@@ -808,6 +808,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
     let formatter_type = tt.make_struct("Formatter".to_string(), ModuleSource::format());
     let fmt_type = tt.make_mut_ref(formatter_type);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
+    let ref_string_type = tt.make_ref(string_type);
 
     // Enums
     let enum_infos: Vec<_> = module
@@ -832,6 +833,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             ref_type,
             fmt_type,
             string_type,
+            ref_string_type,
             *espan,
         ))));
         ctx.record_impl(name, "Inspect");
@@ -862,6 +864,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             ref_type,
             fmt_type,
             string_type,
+            ref_string_type,
             &module_source,
             &mut tt,
             *sspan,
@@ -886,6 +889,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             ref_type,
             fmt_type,
             string_type,
+            ref_string_type,
             &module_source,
             &mut tt,
             *sspan,
@@ -908,6 +912,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             ref_type,
             fmt_type,
             string_type,
+            ref_string_type,
             &module_source,
             &mut tt,
             *vspan,
@@ -932,6 +937,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             ref_type,
             fmt_type,
             string_type,
+            ref_string_type,
             &module_source,
             &mut tt,
             *vspan,
@@ -965,6 +971,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             ref_type,
             fmt_type,
             string_type,
+            ref_string_type,
             fspan,
         ))));
         ctx.record_impl(name, "Inspect");
@@ -991,6 +998,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             ref_type,
             fmt_type,
             string_type,
+            ref_string_type,
             &module_source,
             &mut tt,
             synth_span(),
@@ -1043,6 +1051,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
                     ref_type,
                     fmt_type,
                     string_type,
+                    ref_string_type,
                     span,
                 ))));
                 // Same per-module rationale as the Function arm above.
@@ -1069,6 +1078,7 @@ fn generate_enum_inspect_fn(
     ref_enum_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
+    ref_string_type: TypeId,
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(enum_name, "Inspect", "inspect");
@@ -1084,6 +1094,7 @@ fn generate_enum_inspect_fn(
                 format!("{enum_name}::{case_name}"),
                 fmt(),
                 string_type,
+                ref_string_type,
                 span,
             )],
             span,
@@ -1149,6 +1160,7 @@ fn generate_struct_inspect_fn(
     ref_struct_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
+    ref_string_type: TypeId,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -1163,6 +1175,7 @@ fn generate_struct_inspect_fn(
         ref_struct_type,
         fmt_type,
         string_type,
+        ref_string_type,
         module_source,
         tt,
         span,
@@ -1190,12 +1203,13 @@ fn build_struct_inspect_body(
     ref_struct_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
+    ref_string_type: TypeId,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
 ) -> Vec<TirStmt> {
     let fmt = || local_expr(1, "f", fmt_type, span);
-    let write = |s: String| write_str_stmt(s, fmt(), string_type, span);
+    let write = |s: String| write_str_stmt(s, fmt(), string_type, ref_string_type, span);
     let mut stmts = Vec::new();
 
     if fields.is_empty() {
@@ -1253,6 +1267,7 @@ fn generate_variant_inspect_fn(
     ref_variant_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
+    ref_string_type: TypeId,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -1267,6 +1282,7 @@ fn generate_variant_inspect_fn(
         ref_variant_type,
         fmt_type,
         string_type,
+        ref_string_type,
         module_source,
         tt,
         span,
@@ -1294,13 +1310,14 @@ fn build_variant_inspect_body(
     ref_variant_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
+    ref_string_type: TypeId,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
 ) -> Vec<TirStmt> {
     let deref_self = || deref_local(0, "self", ref_variant_type, variant_type, span);
     let fmt = || local_expr(1, "f", fmt_type, span);
-    let write = |s: String| write_str_stmt(s, fmt(), string_type, span);
+    let write = |s: String| write_str_stmt(s, fmt(), string_type, ref_string_type, span);
 
     let mut chain: Option<TirExpr> = None;
     for (case_name, case_index, payload_type) in cases.iter().rev() {
@@ -1365,6 +1382,7 @@ fn generate_newtype_inspect_fn(
     ref_newtype_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
+    ref_string_type: TypeId,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -1386,7 +1404,13 @@ fn generate_newtype_inspect_fn(
 
     let stmts = vec![
         inspect_call(cast_to_base, base_type, fmt(), module_source, tt, span),
-        write_str_stmt(format!(" as {newtype_name}"), fmt(), string_type, span),
+        write_str_stmt(
+            format!(" as {newtype_name}"),
+            fmt(),
+            string_type,
+            ref_string_type,
+            span,
+        ),
     ];
 
     make_synthetic_method(
@@ -1410,6 +1434,7 @@ fn generate_flags_inspect_fn(
     ref_flags_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
+    ref_string_type: TypeId,
     span: &Span,
 ) -> TirFunction {
     let method_info = trait_method_info(flags_name, "Inspect", "inspect");
@@ -1455,6 +1480,7 @@ fn generate_flags_inspect_fn(
                     format!("{flags_name}::none()"),
                     fmt_local(),
                     string_type,
+                    ref_string_type,
                     *span,
                 )],
                 *span,
@@ -1541,7 +1567,13 @@ fn generate_flags_inspect_fn(
                 TirExprKind::If {
                     condition: Box::new(sep_cond),
                     then_branch: TirBlock::new(
-                        vec![write_str_stmt(" | ", fmt_local(), string_type, *span)],
+                        vec![write_str_stmt(
+                            " | ",
+                            fmt_local(),
+                            string_type,
+                            ref_string_type,
+                            *span,
+                        )],
                         *span,
                     ),
                     else_branch: None,
@@ -1556,6 +1588,7 @@ fn generate_flags_inspect_fn(
             format!("{flags_name}::{member_name}"),
             fmt_local(),
             string_type,
+            ref_string_type,
             *span,
         ));
 
@@ -1687,6 +1720,7 @@ fn generate_opaque_inspect_fn(
     ref_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
+    ref_string_type: TypeId,
     span: Span,
 ) -> TirFunction {
     let method_info =
@@ -1699,6 +1733,7 @@ fn generate_opaque_inspect_fn(
             type_name.to_string(),
             fmt,
             string_type,
+            ref_string_type,
             span,
         )],
         span,
@@ -1732,6 +1767,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     let formatter_type = tt.make_struct("Formatter".to_string(), ModuleSource::format());
     let fmt_type = tt.make_mut_ref(formatter_type);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
+    let ref_string_type = tt.make_ref(string_type);
     let span = synth_span();
 
     // `Inspect` may be provided either as a trait impl (via TraitEnv / the
@@ -1796,6 +1832,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             ref_type,
             fmt_type,
             string_type,
+            ref_string_type,
             &module_source,
             &mut tt,
             *sspan,
@@ -1820,6 +1857,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             ref_type,
             fmt_type,
             string_type,
+            ref_string_type,
             &module_source,
             &mut tt,
             *sspan,
@@ -1842,6 +1880,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             ref_type,
             fmt_type,
             string_type,
+            ref_string_type,
             &module_source,
             &mut tt,
             *vspan,
@@ -1866,6 +1905,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             ref_type,
             fmt_type,
             string_type,
+            ref_string_type,
             &module_source,
             &mut tt,
             *vspan,
@@ -1996,6 +2036,7 @@ fn generate_struct_inspect_alt_fn(
     ref_struct_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
+    ref_string_type: TypeId,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -2010,6 +2051,7 @@ fn generate_struct_inspect_alt_fn(
         ref_struct_type,
         fmt_type,
         string_type,
+        ref_string_type,
         module_source,
         tt,
         span,
@@ -2037,12 +2079,13 @@ fn build_struct_inspect_alt_body(
     ref_struct_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
+    ref_string_type: TypeId,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
 ) -> Vec<TirStmt> {
     let fmt = || local_expr(1, "f", fmt_type, span);
-    let write = |s: &str| write_str_stmt(s.to_string(), fmt(), string_type, span);
+    let write = |s: &str| write_str_stmt(s.to_string(), fmt(), string_type, ref_string_type, span);
     let newline_indent =
         || formatter_call("write_newline_indent", fmt(), None::<(&str, TypeId)>, span);
 
@@ -2054,6 +2097,7 @@ fn build_struct_inspect_alt_body(
             format!("{struct_name}{suffix}"),
             fmt(),
             string_type,
+            ref_string_type,
             span,
         ));
         return stmts;
@@ -2071,6 +2115,7 @@ fn build_struct_inspect_alt_body(
             format!("{field_name}: "),
             fmt(),
             string_type,
+            ref_string_type,
             span,
         ));
         let field_access = field_access_local(
@@ -2116,6 +2161,7 @@ fn generate_variant_inspect_alt_fn(
     ref_variant_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
+    ref_string_type: TypeId,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -2130,6 +2176,7 @@ fn generate_variant_inspect_alt_fn(
         ref_variant_type,
         fmt_type,
         string_type,
+        ref_string_type,
         module_source,
         tt,
         span,
@@ -2156,6 +2203,7 @@ fn build_variant_inspect_alt_body(
     ref_variant_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
+    ref_string_type: TypeId,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -2179,6 +2227,7 @@ fn build_variant_inspect_alt_body(
                 format!("{variant_name}::{case_name}"),
                 fmt_local(),
                 string_type,
+                ref_string_type,
                 span,
             ));
         } else {
@@ -2213,7 +2262,13 @@ fn build_variant_inspect_alt_body(
                 tt,
                 span,
             ));
-            then_stmts.push(write_str_stmt(",", fmt_local(), string_type, span));
+            then_stmts.push(write_str_stmt(
+                ",",
+                fmt_local(),
+                string_type,
+                ref_string_type,
+                span,
+            ));
             // f.close_brace(")")
             then_stmts.push(formatter_call(
                 "close_brace",
