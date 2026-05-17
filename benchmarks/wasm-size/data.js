@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778983541196,
+  "lastUpdate": 1778990939632,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22673,6 +22673,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0ed904182b716d92066d314bad48a2753c6f8e30"
         },
         "date": 1778983540803,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510826,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "faad6a85b4021cab83f2a8ec602987dd677bd5c9",
+          "message": "Merge pull request #1097 from wado-lang/claude/ignore-generated-files-Wq7Vj\n\nrefactor: move golden fixtures under tests/generated/ so bot reviewers skip them",
+          "timestamp": "2026-05-17T12:55:12+09:00",
+          "tree_id": "3a3c92b7ff3be5e75ce71fd83ce517003d0fd4f3",
+          "url": "https://github.com/wado-lang/wado/commit/faad6a85b4021cab83f2a8ec602987dd677bd5c9"
+        },
+        "date": 1778990939311,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
