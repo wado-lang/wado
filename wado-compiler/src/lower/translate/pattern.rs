@@ -195,6 +195,226 @@ impl<'a> PatternLowerer<'a> {
         prepend
     }
 
+    /// True when a top-level `Variant` / `Enum` pattern's payload bindings
+    /// are all flat `Binding` or `Wildcard` leaves — i.e. no nested
+    /// destructuring or refutable sub-patterns. The IfLet path lowers
+    /// such patterns to an explicit
+    /// `Let __scrut + If VariantTest + Let bindings = VariantPayload`
+    /// chain so the variant SROA pass can scalarize a freshly
+    /// constructed scrutinee value through the consumer (the `for-of`
+    /// byte-loop hot path lives here).
+    fn variant_pattern_uses_only_simple_bindings(pattern: &TirPattern) -> bool {
+        match pattern {
+            TirPattern::Variant { bindings, .. } => bindings
+                .iter()
+                .all(|b| matches!(b, TirPattern::Binding { .. } | TirPattern::Wildcard)),
+            TirPattern::Enum { .. } => true,
+            _ => false,
+        }
+    }
+
+    /// Lower an `IfLet` with a top-level simple `Variant` / `Enum`
+    /// pattern to the SROA-friendly explicit form:
+    ///
+    /// ```text
+    /// let __scrut = scrutinee;
+    /// if VariantTest(__scrut, case) {
+    ///     let binding_0 = VariantPayload(__scrut, case).payload_0;
+    ///     ... (mut-binding hoist Let stmts, then the body)
+    /// } else {
+    ///     else_block
+    /// }
+    /// ```
+    ///
+    /// This recreates the shape `lower_if_pattern_option` produced
+    /// before 9.C.2 specifically for the common `if let Some(x) =
+    /// fresh-variant`-shaped scrutinee, so the variant SROA pass can
+    /// fold the variant aggregate away. Falling through to the
+    /// generic two-arm-Match form (the post-9.C.2 default) routes
+    /// through `wir_build::pattern_match` arm-binding extraction,
+    /// which the SROA pass doesn't recognize — the iterator
+    /// `.next()` `Option<u8>` allocation in the `for-of` byte loop
+    /// stays as a `struct.new` per iteration and the benchmark
+    /// regresses 4-8×.
+    fn lower_if_variant_pattern(
+        &mut self,
+        scrutinee: TirExpr,
+        pattern: TirPattern,
+        prepend: Vec<TirStmt>,
+        then_block: &mut TirBlock,
+        else_block: Option<TirBlock>,
+        span: Span,
+        out: &mut Vec<TirStmt>,
+        type_table: &TypeTable,
+    ) {
+        let scrut_type = scrutinee.type_id;
+        let scrut_idx = self.alloc_local(scrut_type);
+        let scrut_name = self.next_temp_name();
+
+        out.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: scrut_name.clone(),
+                local_index: scrut_idx,
+                is_mut: false,
+                is_reactive: false,
+                type_id: scrut_type,
+                value: scrutinee,
+                skip_value_copy: true,
+            },
+            span,
+        ));
+
+        let scrut_ref = || {
+            TirExpr::new(
+                TirExprKind::Local {
+                    index: scrut_idx,
+                    name: scrut_name.clone(),
+                },
+                scrut_type,
+                span,
+            )
+        };
+
+        let condition = match &pattern {
+            TirPattern::Variant {
+                enum_type,
+                variant_name,
+                ..
+            } => {
+                let module_source = match type_table.get(scrut_type) {
+                    ResolvedType::Variant { module_source, .. } => module_source.clone(),
+                    ResolvedType::GenericInstance { module_source, .. } => module_source.clone(),
+                    _ => ModuleSource::builtin(),
+                };
+                let case_index = self
+                    .get_case_index(
+                        &Self::variant_name_for_type(*enum_type, type_table),
+                        &module_source,
+                        variant_name,
+                    )
+                    .unwrap_or(0);
+                TirExpr::new(
+                    TirExprKind::VariantTest {
+                        expr: Box::new(scrut_ref()),
+                        case_index,
+                        case_name: variant_name.clone(),
+                    },
+                    TypeTable::BOOL,
+                    span,
+                )
+            }
+            TirPattern::Enum {
+                case_index,
+                case_name,
+                ..
+            } => TirExpr::new(
+                TirExprKind::Binary {
+                    op: TirBinaryOp::Eq,
+                    left: Box::new(scrut_ref()),
+                    right: Box::new(TirExpr::new(
+                        TirExprKind::EnumConstruct {
+                            enum_type: scrut_type,
+                            case_index: *case_index,
+                            case_name: case_name.clone(),
+                        },
+                        scrut_type,
+                        span,
+                    )),
+                },
+                TypeTable::BOOL,
+                span,
+            ),
+            _ => unreachable!("variant_pattern_uses_only_simple_bindings gates Variant / Enum only"),
+        };
+
+        // Build the then block: extract payload bindings, run hoist
+        // prepends, then the original body.
+        let mut new_then_stmts: Vec<TirStmt> = Vec::new();
+        if let TirPattern::Variant {
+            bindings,
+            payload_type,
+            ..
+        } = &pattern
+        {
+            for (i, binding) in bindings.iter().enumerate() {
+                if let TirPattern::Binding {
+                    name,
+                    local_index,
+                    type_id,
+                } = binding
+                {
+                    let payload = TirExpr::new(
+                        TirExprKind::VariantPayload {
+                            expr: Box::new(scrut_ref()),
+                            case_index: 0,
+                            payload_type: *payload_type,
+                        },
+                        *payload_type,
+                        span,
+                    );
+                    let value = if bindings.len() == 1 {
+                        payload
+                    } else {
+                        TirExpr::new(
+                            TirExprKind::FieldAccess {
+                                expr: Box::new(payload),
+                                field_index: i as u32,
+                                field_name: i.to_string(),
+                            },
+                            *type_id,
+                            span,
+                        )
+                    };
+                    new_then_stmts.push(TirStmt::new(
+                        TirStmtKind::Let {
+                            name: name.clone(),
+                            local_index: *local_index,
+                            is_mut: false,
+                            is_reactive: false,
+                            type_id: *type_id,
+                            value,
+                            skip_value_copy: false,
+                        },
+                        span,
+                    ));
+                }
+            }
+        }
+        new_then_stmts.extend(prepend);
+        self.lower_block(then_block, type_table);
+        new_then_stmts.extend(std::mem::take(&mut then_block.stmts));
+        let new_then = TirBlock {
+            stmts: new_then_stmts,
+            span,
+        };
+
+        let lowered_else = else_block.map(|mut b| {
+            self.lower_block(&mut b, type_table);
+            b
+        });
+
+        out.push(TirStmt::new(
+            TirStmtKind::If {
+                condition,
+                then_block: new_then,
+                else_block: lowered_else,
+            },
+            span,
+        ));
+    }
+
+    /// Return the variant type's name (the `name` field of
+    /// `ResolvedType::Variant` or `ResolvedType::GenericInstance`)
+    /// for the case-index lookup. The hidden-name handling mirrors
+    /// `pattern_to_condition_and_bindings` from the pre-9.C.2 code.
+    fn variant_name_for_type(type_id: TypeId, type_table: &TypeTable) -> String {
+        match type_table.get(type_id) {
+            ResolvedType::Variant { name, .. } => name.clone(),
+            ResolvedType::GenericInstance { name, .. } => name.clone(),
+            _ => String::new(),
+        }
+    }
+
     fn hoist_mut_bindings_in_pattern(
         &mut self,
         pattern: &mut TirPattern,
@@ -1400,13 +1620,50 @@ impl<'a> PatternLowerer<'a> {
                     return;
                 }
 
-                // Refutable patterns (Variant / Enum / Struct / Tuple /
-                // literal sub-patterns / ...): rewrite to a two-arm
-                // `match` and let the Match path handle preprocessing
-                // (or-pattern expansion, ref deref, refutable sub-pattern
-                // extraction). After preprocessing the Match flows
-                // through to NIR Match, where `wir_build::pattern_match`
-                // generates the VariantTest / VariantPayload / etc. chain.
+                // Top-level `Variant` / `Enum` patterns lower to
+                // `Let __scrut + If VariantTest + body-prepended
+                // VariantPayload extraction`, not to a two-arm `Match`.
+                // The optimizer's variant SROA pass scalarizes a
+                // freshly-constructed variant value across an
+                // `If VariantTest` + `VariantPayload` consumer, but
+                // doesn't recognize `Match` arm-binding extraction. A
+                // hot `for-of` byte loop desugars to
+                // `if let Some(b) = iter.next() { … } else break`, and
+                // the iterator's `next()` returns a fresh
+                // `struct.new Option<u8>` every iteration — SROA needs
+                // to fold that allocation away or the inner loop
+                // allocates per iteration (4-8× slowdown on the
+                // float-to-string benchmark).
+                let span = stmt.span;
+                if matches!(
+                    pattern,
+                    TirPattern::Variant { .. } | TirPattern::Enum { .. }
+                ) && Self::variant_pattern_uses_only_simple_bindings(&pattern)
+                {
+                    let mut pattern = pattern;
+                    let mut then_block = then_block;
+                    let prepend = self.hoist_mut_bindings(&mut pattern, span);
+                    self.lower_if_variant_pattern(
+                        scrutinee,
+                        pattern,
+                        prepend,
+                        &mut then_block,
+                        else_block,
+                        span,
+                        out,
+                        type_table,
+                    );
+                    return;
+                }
+
+                // Other refutable patterns (Struct / Tuple / literal
+                // sub-patterns / nested Variant bindings): rewrite to a
+                // two-arm `match` and let the Match path handle
+                // preprocessing (or-pattern expansion, ref deref,
+                // refutable sub-pattern extraction). After
+                // preprocessing the Match flows through to NIR Match,
+                // where `wir_build::pattern_match` generates the
+                // VariantTest / VariantPayload / etc. chain.
                 //
                 // The arm body types follow each branch's own
                 // [`block_result_type`]; the Match's `type_id` follows
@@ -1415,7 +1672,6 @@ impl<'a> PatternLowerer<'a> {
                 // no else, the surrounding `Block::block_result_type`
                 // already collapses to `Unit`, so the Match is `Unit`
                 // and the then-branch value is discarded.
-                let span = stmt.span;
 
                 // Hoist `mut`-binding pattern leaves into immutable temps
                 // and rebind via prepended `Let` statements in the then
