@@ -3003,6 +3003,10 @@ UTF-8 encoded string type with O(1) amortized push_str
 
 _Fields are private._
 
+#### `pub fn new() -> String`
+
+Create a new empty string with no allocated capacity.
+
 #### `pub fn with_capacity(capacity: i32) -> String`
 
 Create a new empty string with the specified capacity

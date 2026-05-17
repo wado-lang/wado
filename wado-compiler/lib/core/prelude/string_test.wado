@@ -491,6 +491,22 @@ test "String::with_capacity starts empty" {
     assert s.is_empty();
 }
 
+test "String::new starts empty" {
+    let s = String::new();
+    assert s.len() == 0;
+    assert s.is_empty();
+    assert s.capacity() == 0;
+}
+
+test "String::new is usable as a growable buffer" {
+    let mut s = String::new();
+    s.push_str("Hello");
+    s.push(',');
+    s.push(' ');
+    s.push_str("World!");
+    assert s == "Hello, World!";
+}
+
 test "push_str updates len" {
     let mut s = String::with_capacity(10);
     assert s.len() == 0;
