@@ -1,0 +1,22 @@
+// Regression: `&mut <expr>` arguments must not have their operand extracted
+// into a fresh `let __v = <expr>;` intermediate. The reconstructed call would
+// then try `&mut __v` against an immutable binding, producing
+// `cannot take &mut of immutable variable '__v'`.
+//
+// Surfaced in `package-gale/src/lower.wado` after the power-assert step-1
+// recursion landed: `assert ctx.is_alt_scannable(&alts[*idx].elements, &mut visiting), ...`.
+
+fn flip(b: &mut bool) -> bool {
+    *b = !*b;
+    return *b;
+}
+
+export fn run() with Stdout {
+    let mut visiting = false;
+    assert flip(&mut visiting);
+}
+
+__DATA__
+{
+    "stdout": ""
+}

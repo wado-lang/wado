@@ -1571,6 +1571,16 @@ fn collect_intermediates(
             if unary.op == UnaryOp::Ref && matches!(&unary.expr, Expr::Ident(_)) {
                 return;
             }
+            // `&mut <expr>` requires a mutable lvalue. Extracting the operand
+            // into a fresh `let __v = <expr>` produces an immutable binding,
+            // so the reconstructed `&mut __v` then fails with "cannot take
+            // &mut of immutable variable". Don't extract the operand at all;
+            // the `&mut <expr>` itself stays as one intermediate when this
+            // node sits inside a Call/MethodCall arg (its outer context
+            // already drives the necessary captures).
+            if unary.op == UnaryOp::MutRef {
+                return;
+            }
             // Recurse into operand
             collect_intermediates(&unary.expr, intermediates, counter, false);
             // Also collect the unary expression itself if not root
