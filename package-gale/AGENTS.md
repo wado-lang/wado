@@ -161,11 +161,12 @@ test "parse JSON.g4" {
 | `RustParser.g4`         | Rust         | Split parser. Has semantic predicates and `superClass`.                   |
 | `TypeScriptLexer.g4`    | TypeScript   | Split lexer. Has semantic predicates and `superClass`.                    |
 | `TypeScriptParser.g4`   | TypeScript   | Split parser. Has many semantic predicates and `superClass`.              |
-| `ll_basic.g4`           | LL fixture   | Combined. Tail-greedy `Y?` with required follow `b : Y` — passes (v1 LL). |
-| `ll_nullable_suffix.g4` | LL fixture   | Combined. Like `ll_basic` but next sibling is nullable — `#[TODO]`.       |
-| `ll_multi_alt.g4`       | LL fixture   | Combined. Tail-greedy callee is multi-alt — `#[TODO]`.                    |
-| `ll_lr_atom.g4`         | LL fixture   | Combined. Tail-greedy callee is left-recursive — `#[TODO]`.               |
-| `ll_ctx_follow.g4`      | LL fixture   | Combined. Follow propagation through a passthrough rule — `#[TODO]`.      |
+| `ll_basic.g4`            | LL fixture   | Combined. Tail-greedy `Y?` with required follow `b : Y` — passes (v1 LL). |
+| `ll_nullable_suffix.g4`  | LL fixture   | Combined. Like `ll_basic` but next sibling is nullable — `#[TODO]`.       |
+| `ll_multi_alt.g4`        | LL fixture   | Combined. Tail-greedy callee is multi-alt — `#[TODO]`.                    |
+| `ll_lr_atom.g4`          | LL fixture   | Combined. Tail-greedy callee is left-recursive — `#[TODO]`.               |
+| `ll_ctx_follow.g4`       | LL fixture   | Combined. Follow propagation through a passthrough rule — `#[TODO]`.      |
+| `ll_multi_token_tail.g4` | LL fixture   | Combined. Tail-greedy `Repeat`'s inner is multi-token — `#[TODO]`.        |
 
 Clean grammars (JSON, sexpression, calculator, SQLite, CSS3, HTML) contain no target-language-dependent elements and should be fully parseable and code-generatable.
 

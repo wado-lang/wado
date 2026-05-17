@@ -25,8 +25,12 @@ emitted today.
 
 Action items:
 
-- [ ] Add a regression fixture (`tests/grammars/ll_multi_token_tail.g4`)
+- [x] Add a regression fixture (`tests/grammars/ll_multi_token_tail.g4`)
       and `#[TODO]` driver test that exercises the gap.
+      `r : a c EOF ; a : N (X Y)+ ; c : X Y Z ;` on input
+      `N X Y X Y Z` — `a`'s greedy `(X Y)+` eats the trailing iter that
+      `c` needs. Sourced shape from upstream
+      `runtime-testsuite/.../ParserExec/PredictionMode_LL.txt`.
 - [ ] Decide whether to (a) extend the static analysis to track
       multi-token-prefix sequences in the follow mask, or (b) emit a
       2-token-lookahead variant. Option (a) is consistent with the
