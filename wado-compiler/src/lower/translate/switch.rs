@@ -76,12 +76,20 @@ pub(super) fn analyze(
             TirPattern::Enum { case_index, .. } => {
                 value_to_arm.push((i64::from(*case_index), arm_idx));
             }
-            TirPattern::Wildcard | TirPattern::Binding { .. } => {
+            TirPattern::Wildcard => {
                 if default_arm.is_some() {
                     return None;
                 }
                 default_arm = Some(arm_idx);
             }
+            // A `Binding` default arm (`n => use(n)`) needs an
+            // arm-local `Let n = scrutinee` that `build` doesn't
+            // emit. Rather than special-case the emit, bail out of
+            // the Switch rewrite — the normal `Match` lowering path
+            // handles the binding correctly. Pre-9.C.1 the same gap
+            // was present and accepted Binding here, silently zero-
+            // initialising the bound local at runtime for matches
+            // dense enough to trigger the Switch rewrite.
             _ => return None,
         }
     }

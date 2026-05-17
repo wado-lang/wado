@@ -1,0 +1,40 @@
+// REGRESSION: dense-integer Match with a `Binding` default arm
+// silently broke. `lower::translate::switch::analyze` accepted the
+// binding as a default arm (matching `Wildcard | Binding`) but
+// `build` only cloned the arm body into the default block — no
+// `Let` was emitted to bind the local to the scrutinee. The
+// bound variable was therefore Wasm-default-initialised (0)
+// instead of holding the actual scrutinee value, producing
+// silently wrong results.
+//
+// Mitigated since 9.C.1 by `SWITCH_MIN_CASES = 8` — the bug only
+// fires when a dense-integer match has 8+ literal arms plus a
+// binding catch-all. This fixture exercises that exact shape.
+
+export fn classify(value: i32) -> i32 {
+    return match value {
+        0 => 100,
+        1 => 101,
+        2 => 102,
+        3 => 103,
+        4 => 104,
+        5 => 105,
+        6 => 106,
+        7 => 107,
+        n => n * 10,
+    };
+}
+
+export fn run() {
+    assert classify(0) == 100;
+    assert classify(7) == 107;
+    // `n` would be 0 instead of 42 if Switch optimization swallowed the binding.
+    assert classify(42) == 420;
+    assert classify(-3) == -30;
+    assert classify(100) == 1000;
+}
+
+__DATA__
+{
+    "stdout": ""
+}
