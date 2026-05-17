@@ -30,6 +30,7 @@ impl Monomorphizer {
             mangled_name.clone(),
             struct_module_source,
             key.name.clone(), // base_name: the original generic struct name
+            key.impl_type_args.clone(), // type_args for resolve_generic_assoc_type
         );
 
         // Find the GenericInstance TypeId and record the substitution early
@@ -100,6 +101,19 @@ impl Monomorphizer {
             span: generic.span,
             serde_rename_all: generic.serde_rename_all.clone(),
         };
+
+        // A new `GenericInstance → Struct` substitution was just recorded.
+        // Walk every already-queued / already-instantiated function
+        // `InstantiationKey` and rewrite its `TypeId` args through the
+        // updated substitution map so that pre-substitution and
+        // post-substitution forms of the same logical type collapse onto
+        // a single canonical key. Without this, `try_queue_function`'s
+        // dedupe would still see two `Hash`/`Eq` distinct keys for the
+        // same logical function whenever one was queued before this
+        // struct was monomorphised and another after — the source of the
+        // historical `function_id_for` collisions across the
+        // `GenericInstance` ↔ `Struct` boundary.
+        self.re_canonicalize_function_keys();
 
         Some(concrete)
     }

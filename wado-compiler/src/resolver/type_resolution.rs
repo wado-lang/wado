@@ -158,7 +158,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // resolve_generic_assoc_type can derive i32 from ("ArrayIter", "Item") → TypeParam(0).
                 if let Some(resolved) = self
                     .type_table
-                    .borrow()
+                    .borrow_mut()
                     .resolve_generic_assoc_type(param_type_id, &namespaced.name)
                 {
                     return resolved;

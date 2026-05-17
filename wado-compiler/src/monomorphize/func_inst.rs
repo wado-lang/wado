@@ -733,7 +733,7 @@ impl Monomorphizer {
         key: &InstantiationKey,
         type_table: &mut TypeTable,
     ) -> Option<TirFunction> {
-        let mangled_name = self.functions.instantiated.get(key)?.clone();
+        let mangled_name = self.lookup_function_instantiation(key)?.clone();
 
         // Build substitution map: type param index -> concrete type
         // Include both method-level type params AND impl block type params
