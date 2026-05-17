@@ -48,7 +48,7 @@ mise run report-wasm-size  # hello_world, pi_approx, zlib, and so on
 - Perform red/green TDD.
 - A compiler bug is always P0 — no exceptions. Stop, write a minimal reproducible e2e fixture, and fix it before continuing if it blocks the current task.
 - A pre-existing issue — whether you find it or a reviewer points it out — must be fixed, with TDD when practical.
-- Never pipe `mise run …` (or any long-running build/test command) into `tail`, `head`, or similar filters. A bare pipe returns the filter's exit code, so a failing inner task is silently reported as success (see issue #1083). If you must trim output, use `set -o pipefail`, check `${PIPESTATUS[0]}`, or redirect to a file and `tail` the file afterwards.
+- Don't pipe long-running commands (`mise run …`, `cargo test`, etc.) into `tail` or `head`. Redirect to a file and inspect it afterwards if you need to trim output.
 - Use the `rust` skill when writing Rust.
 - Use the `wado` skill when writing Wado code or designing Wado language features.
 
