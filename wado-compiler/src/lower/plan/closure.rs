@@ -1215,24 +1215,6 @@ impl TirRefVisitor for LocalCollector<'_> {
         }
         self.walk_stmt(stmt);
     }
-
-    fn visit_pattern(&mut self, pattern: &TirPattern) {
-        // Pattern bindings declare locals the same way `Let` stmts do —
-        // `wir_build` stores variant payloads / tuple elements to those
-        // slots when it lowers an arm. Without collecting them here, a
-        // `match` inside a closure body would leave the synthesized
-        // `__call` method missing those locals (codegen reports
-        // "unresolved local: __local_N").
-        if let TirPattern::Binding {
-            local_index,
-            type_id,
-            ..
-        } = pattern
-        {
-            self.locals.push((*local_index, *type_id));
-        }
-        self.walk_pattern(pattern);
-    }
 }
 
 /// Phase 2 visitor: decide which closures are safe to specialise.
