@@ -44,6 +44,14 @@ pub fn lower(flat: &mut FlatPackage) {
     }
 
     let type_table = flat.type_table.borrow();
+    let eq_trait_name = type_table
+        .compiler_items()
+        .trait_name(crate::compiler_item::CompilerItem::Eq)
+        .to_string();
+    let string_struct_name = type_table
+        .compiler_items()
+        .struct_name(crate::compiler_item::CompilerItem::String)
+        .to_string();
     for func_rc in &flat.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(mut body) = func.body.take() {
@@ -51,8 +59,14 @@ pub fn lower(flat: &mut FlatPackage) {
             let local_count = func.local_count;
             let locals = std::mem::take(&mut func.locals);
 
-            let mut lowerer =
-                PatternLowerer::new(local_count, locals, &variant_case_map, &struct_fields_map);
+            let mut lowerer = PatternLowerer::new(
+                local_count,
+                locals,
+                eq_trait_name.clone(),
+                string_struct_name.clone(),
+                &variant_case_map,
+                &struct_fields_map,
+            );
             lowerer.lower_block(&mut body, &type_table);
 
             // Put the values back
@@ -69,6 +83,15 @@ struct PatternLowerer<'a> {
     local_count: u32,
     locals: Vec<TirLocal>,
     temp_counter: u32,
+    /// Canonical stdlib name of the `Eq` trait. Resolved once from the
+    /// compiler-item registry so synthesised `String^Eq::eq` calls
+    /// follow stdlib renames without falling back to a hard-coded
+    /// `"Eq"` literal.
+    eq_trait_name: String,
+    /// Canonical stdlib name of the `String` struct, resolved through
+    /// the same registry so the receiver-type slot of the synthesised
+    /// `String^Eq::eq` `LocalMethodName` tracks renames too.
+    string_struct_name: String,
     /// Map from (`variant_name`, `module_source`) to a list of
     /// (`case_name`, `case_index`) pairs. The `module_source` axis
     /// is required because Wado allows two modules to each declare a
@@ -84,6 +107,8 @@ impl<'a> PatternLowerer<'a> {
     fn new(
         local_count: u32,
         locals: Vec<TirLocal>,
+        eq_trait_name: String,
+        string_struct_name: String,
         variant_case_map: &'a IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
         struct_fields_map: &'a IndexMap<(String, ModuleSource), Vec<TirField>>,
     ) -> Self {
@@ -91,6 +116,8 @@ impl<'a> PatternLowerer<'a> {
             local_count,
             locals,
             temp_counter: 0,
+            eq_trait_name,
+            string_struct_name,
             variant_case_map,
             struct_fields_map,
         }
@@ -1156,18 +1183,20 @@ impl<'a> PatternLowerer<'a> {
         // The WIR translate phase handles ref wrapping for method calls,
         // so we pass the values directly and let translate handle self-kind adjustment.
         // However, the arg explicitly needs &String since that's the method signature.
+        let method_info = LocalMethodName::new(
+            self.string_struct_name.clone(),
+            Some(self.eq_trait_name.clone()),
+            "eq".to_string(),
+        );
+        let mangled_name = method_info.to_mangled_name();
         TirExpr::new(
             TirExprKind::method_call(
                 Box::new(receiver),
                 FunctionRef {
                     module_source: ModuleSource::string(),
-                    name: "String^Eq::eq".to_string(),
+                    name: mangled_name,
                     monomorph_info: None,
-                    method_info: Some(LocalMethodName::new(
-                        "String".to_string(),
-                        Some("Eq".to_string()),
-                        "eq".to_string(),
-                    )),
+                    method_info: Some(method_info),
                 },
                 vec![],
                 vec![CallArg::new(
