@@ -189,6 +189,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             &struct_decl.attrs,
                             &struct_decl.name,
                             module_source,
+                            struct_decl.span,
+                            logger,
                         );
                     }
                     Item::Variant(variant_decl) => {
@@ -216,6 +218,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             &variant_decl.attrs,
                             &variant_decl.name,
                             module_source,
+                            variant_decl.span,
+                            logger,
                         );
                     }
                     Item::Enum(enum_decl) => {
@@ -231,6 +235,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     Vec::new(),
                                 ),
                             );
+                        super::item::register_enum_compiler_item(
+                            &type_table,
+                            &enum_decl.attrs,
+                            &enum_decl.name,
+                            module_source,
+                            enum_decl.span,
+                            logger,
+                        );
                     }
                     Item::Resource(resource_decl) => {
                         all_resource_types
@@ -255,6 +267,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             &trait_decl.attrs,
                             &trait_decl.name,
                             module_source,
+                            trait_decl.span,
+                            logger,
                         );
                     }
                     Item::TupleTypeDecl(decl) => {
@@ -262,6 +276,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             &type_table,
                             &decl.attrs,
                             module_source,
+                            decl.span,
+                            logger,
                         );
                     }
                     _ => {}

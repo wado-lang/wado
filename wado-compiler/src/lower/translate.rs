@@ -565,9 +565,16 @@ impl FunctionTranslator<'_, '_> {
                 .get(spec.functor_id as usize)
         {
             let nir_receiver = self.convert_expr(callee);
-            let call_method_name = MethodName::format_local(&functor.struct_name, None, "__call");
-            let call_method_info =
-                LocalMethodName::new(functor.struct_name.clone(), None, "__call".to_string());
+            let call_method_name = MethodName::format_local(
+                &functor.struct_name,
+                None,
+                crate::name::CLOSURE_CALL_METHOD,
+            );
+            let call_method_info = LocalMethodName::new(
+                functor.struct_name.clone(),
+                None,
+                crate::name::CLOSURE_CALL_METHOD.to_string(),
+            );
             let call_method_borrow = functor.call_method.borrow();
             let params_is_mut: Vec<bool> = call_method_borrow
                 .params

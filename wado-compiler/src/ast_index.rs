@@ -606,7 +606,7 @@ mod tests {
         };
         // pattern should be `Some(v)`; the binding pattern is the first
         // child.
-        let crate::ast::Pattern::Variant { bindings, .. } = pattern else {
+        let crate::ast::Pattern::Variant { bindings, .. } = pattern.as_ref() else {
             panic!("expected variant pattern");
         };
         let crate::ast::Pattern::Ident { id, span, .. } = &bindings[0] else {

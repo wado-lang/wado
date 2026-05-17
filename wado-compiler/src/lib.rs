@@ -451,6 +451,43 @@ fn compile_after_load<H: CompilerHost>(
         return Err(Bail);
     }
 
+    // Validate that every required `CompilerItem` was registered by the
+    // resolver. A missing required item is a stdlib bug — every Wado-side
+    // declaration that anchors a compiler item must carry the matching
+    // `#[compiler_item("...")]` attribute. Surfacing it here means the
+    // failure happens at compile time with a clear message, not at the
+    // first synthesis call that reaches for the unregistered item.
+    {
+        let module = package
+            .tir_modules
+            .values()
+            .next()
+            .expect("Package always has at least one TIR module after annotate");
+        let missing = module
+            .type_table
+            .borrow()
+            .compiler_items()
+            .missing_required(&package.target_world);
+        if !missing.is_empty() {
+            for item in &missing {
+                let _ = logger.error(compiler_host::Diagnostic {
+                    severity: compiler_host::Severity::Error,
+                    code: compiler_host::Code::CompilerItemAttr,
+                    message: format!(
+                        "required compiler item `{name}` is not registered; \
+                         the stdlib must declare a `#[compiler_item(\"{name}\")]` \
+                         attribute on the matching {kind} for target world `{world}`",
+                        name = item.attr_name(),
+                        kind = item.expected_kind(),
+                        world = package.target_world,
+                    ),
+                    span: None,
+                });
+            }
+            return Err(Bail);
+        }
+    }
+
     // === Phase 7b: Default-Value Purity Check ===
     // Every `param: T = expr` and `field: T = expr` must be pure. Runs before
     // synthesis so that auto-derived `Default::default()` bodies (which clone

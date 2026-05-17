@@ -98,20 +98,31 @@ fn synthesize_lift_inner(
     // shapes pass through `resolve_type` unchanged.
     let resolved = ctx.wasi_registry.resolve_type(ty);
     let ty = &resolved;
+    // Resolve stdlib struct names through the compiler-item registry so
+    // a rename of `String` / `Array` / `Option` / `Result` flows through
+    // CM lifting without code changes here.
+    let (string_name, array_name, option_name, result_name) = {
+        let tt = ctx.type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items
+                .struct_name(crate::compiler_item::CompilerItem::String)
+                .to_string(),
+            items
+                .struct_name(crate::compiler_item::CompilerItem::Array)
+                .to_string(),
+            items
+                .variant_name(crate::compiler_item::CompilerItem::Option)
+                .to_string(),
+            items
+                .variant_name(crate::compiler_item::CompilerItem::Result)
+                .to_string(),
+        )
+    };
     match ty {
-        Type::Named(named) => match named.name.as_str() {
-            "i32" | "u32" => builtin_call("i32_load", vec![addr], TypeTable::I32),
-            "i64" | "u64" => builtin_call("i64_load", vec![addr], TypeTable::I64),
-            "f32" => builtin_call("f32_load", vec![addr], TypeTable::F32),
-            "f64" => builtin_call("f64_load", vec![addr], TypeTable::F64),
-            "i8" | "u8" => builtin_call("i32_load8_u", vec![addr], TypeTable::U8),
-            "i16" | "u16" => builtin_call("i32_load16_u", vec![addr], TypeTable::U16),
-            "bool" => {
-                let raw = builtin_call("i32_load8_u", vec![addr], TypeTable::U8);
-                binary(TirBinaryOp::NotEq, raw, i32_const(0), TypeTable::BOOL)
-            }
-            "char" => builtin_call("i32_load", vec![addr], TypeTable::CHAR),
-            "String" => {
+        Type::Named(named) => {
+            let named_name = named.name.as_str();
+            if named_name == string_name {
                 let ptr = builtin_call("i32_load", vec![addr.clone()], TypeTable::I32);
                 let len = builtin_call(
                     "i32_load",
@@ -121,87 +132,102 @@ fn synthesize_lift_inner(
                 let string_type_id = ctx
                     .type_table
                     .borrow_mut()
-                    .make_struct("String".to_string(), ModuleSource::string());
-                internal_call("memory_to_gc_string", vec![ptr, len], string_type_id)
+                    .make_compiler_struct(crate::compiler_item::CompilerItem::String);
+                return internal_call("memory_to_gc_string", vec![ptr, len], string_type_id);
             }
-            _ => {
-                // CM named types arrive with `source_interface` populated
-                // either by stdlib bootstrap or by `resolve_cm_source_for`
-                // (fallback to the unique `wasi:*` registrant, biased by the
-                // current binding's WASI package, then to `core:kiln/*` for
-                // generator-world bindings). Non-CM references fall through
-                // to the i32-handle default.
-                if let Some(source) = ctx
-                    .wasi_registry
-                    .resolve_cm_source_for(named, Some(ctx.cm_package))
-                    .map(str::to_string)
-                {
-                    let source = source.as_str();
-                    if let Some(lifted) = try_lift_wasi_variant_or_enum(
-                        named,
-                        source,
-                        addr.clone(),
-                        next_local,
-                        stmts,
-                        locals,
-                        ctx,
-                    ) {
-                        return lifted;
-                    }
-                    if let Some(lifted) = try_lift_wasi_struct(
-                        named,
-                        source,
-                        addr.clone(),
-                        next_local,
-                        stmts,
-                        locals,
-                        ctx,
-                    ) {
-                        return lifted;
-                    }
-                    if let Some(members) = ctx
-                        .wasi_registry
-                        .get_flags_members_by_source(source, &named.name)
-                    {
-                        let load_name = match cm_flags_byte_size(members.len()) {
-                            0 => return i32_const(0),
-                            1 => "i32_load8_u",
-                            2 => "i32_load16_u",
-                            _ => "i32_load",
-                        };
-                        return builtin_call(load_name, vec![addr], TypeTable::I32);
-                    }
-                    if let Some(variants) = ctx
-                        .wasi_registry
-                        .get_enum_variants_by_source(source, &named.name)
-                    {
-                        let load_name = if variants.len() <= 256 {
-                            "i32_load8_u"
-                        } else if variants.len() <= 65536 {
-                            "i32_load16_u"
-                        } else {
-                            "i32_load"
-                        };
-                        return builtin_call(load_name, vec![addr], TypeTable::I32);
-                    }
+            match named_name {
+                "i32" | "u32" => builtin_call("i32_load", vec![addr], TypeTable::I32),
+                "i64" | "u64" => builtin_call("i64_load", vec![addr], TypeTable::I64),
+                "f32" => builtin_call("f32_load", vec![addr], TypeTable::F32),
+                "f64" => builtin_call("f64_load", vec![addr], TypeTable::F64),
+                "i8" | "u8" => builtin_call("i32_load8_u", vec![addr], TypeTable::U8),
+                "i16" | "u16" => builtin_call("i32_load16_u", vec![addr], TypeTable::U16),
+                "bool" => {
+                    let raw = builtin_call("i32_load8_u", vec![addr], TypeTable::U8);
+                    binary(TirBinaryOp::NotEq, raw, i32_const(0), TypeTable::BOOL)
                 }
-                // Default: treat as i32 handles (resources, unknown types)
+                "char" => builtin_call("i32_load", vec![addr], TypeTable::CHAR),
+                _ => {
+                    // CM named types arrive with `source_interface` populated
+                    // either by stdlib bootstrap or by `resolve_cm_source_for`
+                    // (fallback to the unique `wasi:*` registrant, biased by the
+                    // current binding's WASI package, then to `core:kiln/*` for
+                    // generator-world bindings). Non-CM references fall through
+                    // to the i32-handle default.
+                    if let Some(source) = ctx
+                        .wasi_registry
+                        .resolve_cm_source_for(named, Some(ctx.cm_package))
+                        .map(str::to_string)
+                    {
+                        let source = source.as_str();
+                        if let Some(lifted) = try_lift_wasi_variant_or_enum(
+                            named,
+                            source,
+                            addr.clone(),
+                            next_local,
+                            stmts,
+                            locals,
+                            ctx,
+                        ) {
+                            return lifted;
+                        }
+                        if let Some(lifted) = try_lift_wasi_struct(
+                            named,
+                            source,
+                            addr.clone(),
+                            next_local,
+                            stmts,
+                            locals,
+                            ctx,
+                        ) {
+                            return lifted;
+                        }
+                        if let Some(members) = ctx
+                            .wasi_registry
+                            .get_flags_members_by_source(source, &named.name)
+                        {
+                            let load_name = match cm_flags_byte_size(members.len()) {
+                                0 => return i32_const(0),
+                                1 => "i32_load8_u",
+                                2 => "i32_load16_u",
+                                _ => "i32_load",
+                            };
+                            return builtin_call(load_name, vec![addr], TypeTable::I32);
+                        }
+                        if let Some(variants) = ctx
+                            .wasi_registry
+                            .get_enum_variants_by_source(source, &named.name)
+                        {
+                            let load_name = if variants.len() <= 256 {
+                                "i32_load8_u"
+                            } else if variants.len() <= 65536 {
+                                "i32_load16_u"
+                            } else {
+                                "i32_load"
+                            };
+                            return builtin_call(load_name, vec![addr], TypeTable::I32);
+                        }
+                    }
+                    // Default: treat as i32 handles (resources, unknown types)
+                    builtin_call("i32_load", vec![addr], TypeTable::I32)
+                }
+            }
+        }
+        Type::Generic(g) => {
+            let gname = g.name.as_str();
+            if gname == array_name && g.args.len() == 1 {
+                synthesize_lift_list(&g.args[0], addr, next_local, stmts, locals, ctx)
+            } else if gname == option_name && g.args.len() == 1 {
+                synthesize_lift_option_inner(&g.args[0], addr, next_local, stmts, locals, ctx)
+            } else if gname == result_name && g.args.len() == 2 {
+                synthesize_lift_result_inner(
+                    &g.args[0], &g.args[1], addr, next_local, stmts, locals, ctx,
+                )
+            } else {
+                // Own<T>, Borrow<T>, Stream<T>, Future<T> are i32 handles
                 builtin_call("i32_load", vec![addr], TypeTable::I32)
             }
-        },
-        Type::Generic(g) => match g.name.as_str() {
-            "Array" if g.args.len() == 1 => {
-                synthesize_lift_list(&g.args[0], addr, next_local, stmts, locals, ctx)
-            }
-            "Option" if g.args.len() == 1 => {
-                synthesize_lift_option_inner(&g.args[0], addr, next_local, stmts, locals, ctx)
-            }
-            "Result" if g.args.len() == 2 => synthesize_lift_result_inner(
-                &g.args[0], &g.args[1], addr, next_local, stmts, locals, ctx,
-            ),
-            // Own<T>, Borrow<T>, Stream<T>, Future<T> are i32 handles
-            _ => builtin_call("i32_load", vec![addr], TypeTable::I32),
-        },
+        }
         Type::Tuple(elems) if elems.is_empty() => {
             TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span())
         }
@@ -597,11 +623,15 @@ fn synthesize_lift_list(
 
     // Resolve TypeIds for the element type and Array<ElemType>.
     // These are needed by the monomorphizer to instantiate Array::with_capacity and .push().
-    let (elem_type_id, array_type_id) = {
+    let (elem_type_id, array_type_id, array_struct_name) = {
         let mut tt = ctx.type_table.borrow_mut();
         let elem_tid = wasi_type_to_type_id(elem_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
         let array_tid = tt.make_array(elem_tid);
-        (elem_tid, array_tid)
+        let array_name = tt
+            .compiler_items()
+            .struct_name(crate::compiler_item::CompilerItem::Array)
+            .to_string();
+        (elem_tid, array_tid, array_name)
     };
 
     let base_local = alloc_local(next_local, locals, TypeTable::I32);
@@ -630,7 +660,7 @@ fn synthesize_lift_list(
         result_local,
         array_type_id,
         generic_static_call(
-            "Array",
+            &array_struct_name,
             "with_capacity",
             ModuleSource::prelude(),
             vec![elem_type_id],
@@ -689,7 +719,7 @@ fn synthesize_lift_list(
     // __result.push(lifted_elem)
     loop_stmts.push(expr_stmt(generic_method_call(
         local_ref(result_local, "__result", array_type_id),
-        "Array",
+        &array_struct_name,
         "push",
         ModuleSource::prelude(),
         vec![lifted_elem],
@@ -700,6 +730,7 @@ fn synthesize_lift_list(
     loop_stmts.extend(synthesize_free_element(
         elem_ty,
         local_ref(elem_addr_local, "__elem_addr", TypeTable::I32),
+        &string_name_for_free(ctx),
     ));
 
     // __i = __i + 1
@@ -797,7 +828,11 @@ fn synthesize_lift_option_inner(
         local_ref(result_local, "__option_result", option_type_id),
         option_some(lifted, option_type_id),
     )));
-    then_stmts.extend(synthesize_free_element(inner_ty, payload_addr));
+    then_stmts.extend(synthesize_free_element(
+        inner_ty,
+        payload_addr,
+        &string_name_for_free(ctx),
+    ));
 
     stmts.push(if_stmt(
         binary(
@@ -983,9 +1018,21 @@ fn synthesize_lift_tuple(
 ///
 /// For primitives: no-op.
 /// For String: frees the string data buffer.
-fn synthesize_free_element(ty: &Type, addr: TirExpr) -> Vec<TirStmt> {
+/// Look up the canonical stdlib `String` struct name via the
+/// compiler-item registry attached to `ctx`'s type table. Used to
+/// drive [`synthesize_free_element`]'s string match without
+/// hard-coding the literal `"String"`.
+fn string_name_for_free(ctx: &LiftContext<'_>) -> String {
+    ctx.type_table
+        .borrow()
+        .compiler_items()
+        .struct_name(crate::compiler_item::CompilerItem::String)
+        .to_string()
+}
+
+fn synthesize_free_element(ty: &Type, addr: TirExpr, string_name: &str) -> Vec<TirStmt> {
     match ty {
-        Type::Named(named) if named.name == "String" => {
+        Type::Named(named) if named.name == string_name => {
             let ptr = builtin_call("i32_load", vec![addr.clone()], TypeTable::I32);
             let len = builtin_call(
                 "i32_load",
@@ -1003,7 +1050,7 @@ fn synthesize_free_element(ty: &Type, addr: TirExpr) -> Vec<TirStmt> {
             let mut free_stmts = Vec::new();
             for (i, elem_ty) in elems.iter().enumerate() {
                 let elem_addr = binary_add(addr.clone(), i32_const(layout.offsets[i] as i32));
-                free_stmts.extend(synthesize_free_element(elem_ty, elem_addr));
+                free_stmts.extend(synthesize_free_element(elem_ty, elem_addr, string_name));
             }
             free_stmts
         }

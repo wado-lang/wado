@@ -466,7 +466,11 @@ impl ClosureLowerer {
                 _ => collected.return_type,
             };
 
-            let struct_name = format!("__Closure_{}", collected.id);
+            let struct_name = format!(
+                "{prefix}{id}",
+                prefix = crate::name::CLOSURE_STRUCT_PREFIX,
+                id = collected.id,
+            );
             let struct_type_id =
                 type_table.make_struct(struct_name.clone(), self.module_source.clone());
 
@@ -501,7 +505,8 @@ impl ClosureLowerer {
             // Use a qualified name to avoid collisions in the inliner's
             // candidate map. `LocalMethodName` stays unqualified so codegen
             // re-mangles it consistently with other methods.
-            let qualified_method_name = MethodName::format_local(&struct_name, None, "__call");
+            let qualified_method_name =
+                MethodName::format_local(&struct_name, None, crate::name::CLOSURE_CALL_METHOD);
             let self_ref_type = type_table.make_ref(struct_type_id);
 
             let mut params = Vec::with_capacity(1 + collected.params.len());
@@ -596,7 +601,11 @@ impl ClosureLowerer {
 
             // `method_info` carries the unmangled (struct, trait, method)
             // triple so codegen can produce the canonical mangled name.
-            let method_info = LocalMethodName::new(struct_name.clone(), None, "__call".to_string());
+            let method_info = LocalMethodName::new(
+                struct_name.clone(),
+                None,
+                crate::name::CLOSURE_CALL_METHOD.to_string(),
+            );
 
             let call_method = TirFunction {
                 module_source: self.module_source.clone(),
@@ -704,7 +713,8 @@ impl ClosureLowerer {
         let formatter_type =
             type_table.make_struct("Formatter".to_string(), ModuleSource::format());
         let formatter_mut_ref = type_table.make_mut_ref(formatter_type);
-        let string_type = type_table.make_struct("String".to_string(), ModuleSource::string());
+        let string_type =
+            type_table.make_compiler_struct(crate::compiler_item::CompilerItem::String);
 
         for (trait_name, method_name, payload) in [
             ("Inspect", "inspect", signature),

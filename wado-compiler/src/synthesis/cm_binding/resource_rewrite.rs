@@ -233,6 +233,8 @@ fn synthesize_stream_read_func(
     type_table: &RefCell<TypeTable>,
     interner: &RefCell<ModuleSourceInterner>,
 ) -> TirFunction {
+    let array_struct_name =
+        super::types::CmStdlibNames::from_type_table(&type_table.borrow()).array;
     let func_name = format!("__cm_stream_read_{elem_name}");
     let _tuple_type_id = type_table
         .borrow_mut()
@@ -358,7 +360,7 @@ fn synthesize_stream_read_func(
         TirExprKind::Call {
             func: FunctionRef {
                 module_source: ModuleSource::array(),
-                name: format!("Array<{elem_name}>::with_capacity"),
+                name: format!("{array_struct_name}<{elem_name}>::with_capacity"),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: "Array::with_capacity".to_string(),
                     impl_type_args: vec![elem_type_id],
@@ -366,8 +368,8 @@ fn synthesize_stream_read_func(
                     is_blanket: false,
                 }),
                 method_info: Some(LocalMethodName {
-                    struct_name: format!("Array<{elem_name}>"),
-                    base_struct_name: "Array".to_string(),
+                    struct_name: format!("{array_struct_name}<{elem_name}>"),
+                    base_struct_name: array_struct_name.clone(),
                     trait_name: None,
                     base_trait_name: None,
                     trait_type_args: vec![],
@@ -461,7 +463,7 @@ fn synthesize_stream_read_func(
             Box::new(local_ref(arr_idx, "arr", array_type_id)),
             FunctionRef {
                 module_source: ModuleSource::array(),
-                name: format!("Array<{elem_name}>::push"),
+                name: format!("{array_struct_name}<{elem_name}>::push"),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: "Array::push".to_string(),
                     impl_type_args: vec![elem_type_id],
@@ -469,8 +471,8 @@ fn synthesize_stream_read_func(
                     is_blanket: false,
                 }),
                 method_info: Some(LocalMethodName {
-                    struct_name: format!("Array<{elem_name}>"),
-                    base_struct_name: "Array".to_string(),
+                    struct_name: format!("{array_struct_name}<{elem_name}>"),
+                    base_struct_name: array_struct_name,
                     trait_name: None,
                     base_trait_name: None,
                     trait_type_args: vec![],

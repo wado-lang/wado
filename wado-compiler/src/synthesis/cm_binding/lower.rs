@@ -41,8 +41,46 @@ pub fn synthesize_lower(
     addr: TirExpr,
     next_local: &mut u32,
     locals: &mut Vec<TirLocal>,
+    names: &super::types::CmStdlibNames,
 ) -> Vec<TirStmt> {
     match ty {
+        Type::Named(named) if named.name == names.string => {
+            // cm_lower_string(value) returns packed i64: (ptr | (len << 32))
+            let packed_local = *next_local;
+            locals.push(TirLocal::synth(*next_local, TypeTable::I64, false));
+            *next_local += 1;
+            let packed = internal_call("cm_lower_string", vec![value], TypeTable::I64);
+            let mut stmts = vec![let_stmt("__packed", packed_local, TypeTable::I64, packed)];
+
+            // Store ptr (low 32 bits) at addr
+            let ptr = cast(
+                local_ref(packed_local, "__packed", TypeTable::I64),
+                TypeTable::I32,
+            );
+            stmts.push(expr_stmt(builtin_call(
+                "i32_store",
+                vec![addr.clone(), ptr],
+                TypeTable::UNIT,
+            )));
+
+            // Store len (high 32 bits) at addr + 4
+            let shifted = binary(
+                TirBinaryOp::Shr,
+                local_ref(packed_local, "__packed", TypeTable::I64),
+                i64_const(32),
+                TypeTable::I64,
+            );
+            let len = cast(shifted, TypeTable::I32);
+            stmts.push(expr_stmt(builtin_call(
+                "i32_store",
+                vec![
+                    binary(TirBinaryOp::Add, addr, i32_const(4), TypeTable::I32),
+                    len,
+                ],
+                TypeTable::UNIT,
+            )));
+            stmts
+        }
         Type::Named(named) => match named.name.as_str() {
             "i32" | "u32" => vec![expr_stmt(builtin_call(
                 "i32_store",
@@ -90,43 +128,6 @@ pub fn synthesize_lower(
                     TypeTable::UNIT,
                 ))]
             }
-            "String" => {
-                // cm_lower_string(value) returns packed i64: (ptr | (len << 32))
-                let packed_local = *next_local;
-                locals.push(TirLocal::synth(*next_local, TypeTable::I64, false));
-                *next_local += 1;
-                let packed = internal_call("cm_lower_string", vec![value], TypeTable::I64);
-                let mut stmts = vec![let_stmt("__packed", packed_local, TypeTable::I64, packed)];
-
-                // Store ptr (low 32 bits) at addr
-                let ptr = cast(
-                    local_ref(packed_local, "__packed", TypeTable::I64),
-                    TypeTable::I32,
-                );
-                stmts.push(expr_stmt(builtin_call(
-                    "i32_store",
-                    vec![addr.clone(), ptr],
-                    TypeTable::UNIT,
-                )));
-
-                // Store len (high 32 bits) at addr + 4
-                let shifted = binary(
-                    TirBinaryOp::Shr,
-                    local_ref(packed_local, "__packed", TypeTable::I64),
-                    i64_const(32),
-                    TypeTable::I64,
-                );
-                let len = cast(shifted, TypeTable::I32);
-                stmts.push(expr_stmt(builtin_call(
-                    "i32_store",
-                    vec![
-                        binary(TirBinaryOp::Add, addr, i32_const(4), TypeTable::I32),
-                        len,
-                    ],
-                    TypeTable::UNIT,
-                )));
-                stmts
-            }
             // Unknown named types: treat as i32 handles (enums, resources)
             _ => vec![expr_stmt(builtin_call(
                 "i32_store",
@@ -136,8 +137,9 @@ pub fn synthesize_lower(
         },
         Type::Generic(g) => match g.name.as_str() {
             // list<T>: lowered as (ptr, len) pair stored at addr
-            "Array"
-                if g.args.len() == 1 && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
+            name if name == names.array
+                && g.args.len() == 1
+                && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
             {
                 // list<u8>: use cm_lower_array_u8 → packed i64, store (ptr, len)
                 let packed_local = *next_local;
@@ -178,7 +180,7 @@ pub fn synthesize_lower(
                 )));
                 stmts
             }
-            "Array" => {
+            name if name == names.array => {
                 // General list<T>: treat as opaque i32 for now
                 vec![expr_stmt(builtin_call(
                     "i32_store",
@@ -222,6 +224,7 @@ pub(super) fn synthesize_lower_tuple(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) -> Vec<TirStmt> {
+    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
     let layout = cm_abi::layout_tuple(elems);
     let mut stmts = Vec::new();
 
@@ -273,7 +276,7 @@ pub(super) fn synthesize_lower_tuple(
                 type_table,
             )
         } else {
-            synthesize_lower(elem_ty, field_expr, field_addr, next_local, locals)
+            synthesize_lower(elem_ty, field_expr, field_addr, next_local, locals, &names)
         };
         stmts.extend(field_stmts);
     }
@@ -484,10 +487,11 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
+    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
     let resolved = wasi_registry.resolve_type(ty);
     match &resolved {
         // String → cm_lower_string → packed i64 → (ptr, len)
-        Type::Named(n) if n.name == "String" => {
+        Type::Named(n) if n.name == names.string => {
             let packed_local = alloc_local(next_local, locals, TypeTable::I64);
             stmts.push(let_stmt(
                 &format!("{prefix}_packed"),
@@ -555,7 +559,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 .map(|c| {
                     c.payload
                         .as_ref()
-                        .map(|t| flatten_param_type(t, wasi_registry).len())
+                        .map(|t| flatten_param_type(t, wasi_registry, &names).len())
                         .unwrap_or(0)
                 })
                 .max()
@@ -654,6 +658,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
+    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
     let vt = value.type_id;
     let val_local = alloc_local(next_local, locals, vt);
     stmts.push(let_stmt(&format!("{prefix}_optval"), val_local, vt, value));
@@ -679,7 +684,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     ));
 
     // Compute inner flat types
-    let inner_flat_types = flatten_param_type(inner_type, wasi_registry);
+    let inner_flat_types = flatten_param_type(inner_type, wasi_registry, &names);
     if inner_flat_types.is_empty() {
         return;
     }
@@ -758,6 +763,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) -> Vec<TirStmt> {
+    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
     let resolved = wasi_registry.resolve_type(ty);
     match &resolved {
         Type::Named(n) => {
@@ -823,7 +829,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                 return stmts;
             }
             // Fall through to synthesize_lower for primitives and simple types
-            synthesize_lower(&resolved, value, addr, next_local, locals)
+            synthesize_lower(&resolved, value, addr, next_local, locals, &names)
         }
         Type::Tuple(elems) if !elems.is_empty() => synthesize_lower_tuple(
             elems,
@@ -835,6 +841,6 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             wasi_package,
             type_table,
         ),
-        _ => synthesize_lower(&resolved, value, addr, next_local, locals),
+        _ => synthesize_lower(&resolved, value, addr, next_local, locals, &names),
     }
 }

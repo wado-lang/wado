@@ -1,0 +1,12 @@
+// Error: `#[compiler_item("typo")]` with an unrecognized name must surface as a
+// diagnostic rather than being silently dropped. This locks in the contract that
+// stdlib typos fail loud — without it a renamed `CompilerItem` variant on the
+// Rust side would leave the corresponding stdlib annotation pointing at nothing.
+
+#[compiler_item("not_a_real_item")]
+pub struct Garbage {}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "unknown compiler item"}

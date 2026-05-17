@@ -1383,12 +1383,15 @@ fn analyze_expr(
             analyze_expr(functor, current_module, type_table, analysis);
             // The `__call` method is always reached via `ref.func` baked
             // into the canonical closure struct's `func` slot.
-            let struct_name = format!("__Closure_{functor_id}");
+            let struct_name = format!(
+                "{prefix}{functor_id}",
+                prefix = crate::name::CLOSURE_STRUCT_PREFIX,
+            );
             analysis.callees.insert(FunctionId::Method(MethodName::new(
                 closure_module.clone(),
                 struct_name.clone(),
                 None,
-                "__call".to_string(),
+                crate::name::CLOSURE_CALL_METHOD.to_string(),
             )));
 
             // The per-functor `__Closure_N^Inspect` and `^InspectAlt`

@@ -96,6 +96,7 @@ fn lower_to_flat_inner(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     ctx: LiftContext<'_>,
 ) -> Vec<FlatLocal> {
+    let names = super::types::CmStdlibNames::from_type_table(&ctx.type_table.borrow());
     match resolved {
         ResolvedType::Primitive(p) => {
             let (flat_type_id, cm_type) = match p {
@@ -138,7 +139,7 @@ fn lower_to_flat_inner(
                 cm_type: cm_abi::CmValType::I32,
             }]
         }
-        ResolvedType::Struct { name, .. } if name == "String" => {
+        ResolvedType::Struct { name, .. } if name == &names.string => {
             // String → cm_lower_string → packed i64, split to ptr(i32) and len(i32)
             let packed = internal_call("cm_lower_string", vec![value], TypeTable::I64);
             let packed_local = alloc_local(next_local, locals, TypeTable::I64);
@@ -177,7 +178,7 @@ fn lower_to_flat_inner(
         ResolvedType::Unit => vec![],
         ResolvedType::GenericInstance {
             name, type_args, ..
-        } if name == "Array" && type_args.len() == 1 => {
+        } if name == &names.array && type_args.len() == 1 => {
             // Array<T> flat ABI: (ptr: i32, len: i32) pointing at
             // `len * cm_size(T)` bytes of linear memory with `cm_align(T)`
             // alignment, laid out per the Canonical ABI.
@@ -203,7 +204,7 @@ fn lower_to_flat_inner(
                 TypeTable::I32,
                 generic_method_call(
                     local_ref(arr_local, "__arr_val", type_id),
-                    "Array",
+                    &names.array,
                     "len",
                     ModuleSource::prelude(),
                     vec![],
@@ -274,7 +275,7 @@ fn lower_to_flat_inner(
             // __elem = (__arr[__i]) via the IndexValue<i32> trait method.
             let elem_local = alloc_local(next_local, locals, elem_type_id);
             let iv_info = LocalMethodName::new(
-                "Array".to_string(),
+                names.array,
                 Some("IndexValue<i32>".to_string()),
                 "index_value".to_string(),
             );
@@ -456,7 +457,7 @@ fn lower_to_flat_inner(
 
             result
         }
-        ResolvedType::Struct { name, .. } if name != "String" => {
+        ResolvedType::Struct { name, .. } if name != &names.string => {
             // Struct: concatenation of field flat types
             if let Some(struct_decl) = find_struct_decl(name, tir_modules) {
                 let mut result = Vec::new();
@@ -528,7 +529,15 @@ pub(super) fn synthesize_lift_from_flat_params(
     type_table_cell: &RefCell<TypeTable>,
     lift_ctx: LiftContext<'_>,
 ) -> (TirExpr, usize) {
+    let names = super::types::CmStdlibNames::from_type_table(&type_table_cell.borrow());
     match ty {
+        Type::Named(named) if named.name == names.string => {
+            // String flat ABI: (ptr: i32, len: i32) pointing to linear memory
+            let ptr = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
+            let len = local_ref(flat_param_locals[1], "__p", TypeTable::I32);
+            let lifted = internal_call("memory_to_gc_string", vec![ptr, len], target_type_id);
+            (lifted, 2)
+        }
         Type::Named(named) => match named.name.as_str() {
             "i32" | "u32" => (local_ref(flat_param_locals[0], "__p", TypeTable::I32), 1),
             "i64" | "u64" => (local_ref(flat_param_locals[0], "__p", TypeTable::I64), 1),
@@ -543,13 +552,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                 (lifted, 1)
             }
             "char" => (local_ref(flat_param_locals[0], "__p", TypeTable::CHAR), 1),
-            "String" => {
-                // String flat ABI: (ptr: i32, len: i32) pointing to linear memory
-                let ptr = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
-                let len = local_ref(flat_param_locals[1], "__p", TypeTable::I32);
-                let lifted = internal_call("memory_to_gc_string", vec![ptr, len], target_type_id);
-                (lifted, 2)
-            }
             "()" => {
                 let unit = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span());
                 (unit, 0)
@@ -640,9 +642,9 @@ pub(super) fn synthesize_lift_from_flat_params(
             }
         },
         Type::Generic(generic) => match generic.name.as_str() {
-            "Array"
-                if generic.args.len() == 1
-                    && matches!(generic.args[0], Type::Named(ref n) if n.name == "u8") =>
+            n if n == names.array
+                && generic.args.len() == 1
+                && matches!(generic.args[0], Type::Named(ref n) if n.name == "u8") =>
             {
                 // Array<u8> flat ABI: (ptr: i32, len: i32) pointing to linear memory
                 let ptr = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
@@ -650,7 +652,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 let lifted = internal_call("memory_to_gc_array", vec![ptr, len], target_type_id);
                 (lifted, 2)
             }
-            "Array" => {
+            n if n == names.array => {
                 // list<T> flat ABI: (ptr: i32, len: i32) — elements in linear memory
                 // Write ptr/len to a temp memory block so we can reuse synthesize_lift
                 let ptr = local_ref(flat_param_locals[0], "__p", TypeTable::I32);

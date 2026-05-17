@@ -4,126 +4,267 @@ use std::cell::RefCell;
 
 use crate::ast::{self, Function, GlobalDecl, SelfKind, Type};
 use crate::compiler_host::CompilerHost;
-use crate::compiler_item::{CompilerItem, CompilerItemKind, Resolved, parse_compiler_item_attrs};
+use crate::compiler_item::{
+    CompilerItem, CompilerItemKind, RegisterError, Resolved, parse_compiler_item_attrs,
+};
 use crate::hashmap::IndexSet;
+use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
     FunctionKind, TirEffect, TirEffectOp, TirFunction, TirGlobal, TirParam, TirResource, TirStruct,
     TirTest, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
 };
+use crate::token::Span;
 
 use super::Resolver;
 use super::types::{FunctionContext, TypeError};
 
 /// Extract the [`CompilerItem`] marker — if any — from a declaration's
-/// `#[compiler_item("...")]` attributes.
+/// `#[compiler_item("...")]` attributes, emitting a diagnostic for
+/// each unrecognised name. Returns the first matched [`CompilerItem`]
+/// (in attribute order); subsequent matches are silently dropped — a
+/// declaration may carry at most one marker per the design contract.
+pub(super) fn extract_compiler_item<H: CompilerHost>(
+    attrs: &[crate::ast::Attribute],
+    decl_span: Span,
+    logger: &Logger<'_, H>,
+) -> Option<CompilerItem> {
+    let (items, unknown) = parse_compiler_item_attrs(attrs);
+    for raw in unknown {
+        let _ = logger.error(TypeError::CompilerItemAttr {
+            message: format!("unknown compiler item `{raw}`"),
+            span: decl_span,
+        });
+    }
+    items.into_iter().next()
+}
+
+/// Push a [`RegisterError`] into the diagnostic stream. Duplicate
+/// registrations are kept as errors because they always indicate a
+/// stdlib bug (two declarations claiming the same anchor); kind
+/// mismatches are reported by [`check_kind`] before reaching this
+/// path, so the error surface here is small.
+fn report_register_error<H: CompilerHost>(err: RegisterError, span: Span, logger: &Logger<'_, H>) {
+    let _ = logger.error(TypeError::CompilerItemAttr {
+        message: err.to_string(),
+        span,
+    });
+}
+
+/// Run the per-attribute validation that applies to every kind:
 ///
-/// Each declaration carries at most one marker. The parser handles
-/// repeated arguments and multiple attributes; this helper folds them
-/// to the first match and silently drops the rest. (A future
-/// diagnostic pass should reject extras at the attribute site.)
-/// Unknown names are dropped here too — they're caught by the
-/// dedicated diagnostic in [`super::orchestration`].
-pub(super) fn extract_compiler_item(attrs: &[crate::ast::Attribute]) -> Option<CompilerItem> {
-    parse_compiler_item_attrs(attrs).0.into_iter().next()
+/// 1. The attribute is only meaningful inside `core::*` modules; reject
+///    it elsewhere.
+/// 2. The declared kind must match [`CompilerItem::expected_kind`];
+///    otherwise emit a diagnostic and skip registration.
+///
+/// Returns `true` when registration should proceed.
+fn check_compiler_item_placement<H: CompilerHost>(
+    item: CompilerItem,
+    actual_kind: CompilerItemKind,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) -> bool {
+    if !module_source.is_core() {
+        let _ = logger.error(TypeError::CompilerItemAttr {
+            message: format!(
+                "`#[compiler_item(\"{name}\")]` is only valid inside `core::*` modules",
+                name = item.attr_name(),
+            ),
+            span,
+        });
+        return false;
+    }
+    if item.expected_kind() != actual_kind {
+        let _ = logger.error(TypeError::CompilerItemAttr {
+            message: format!(
+                "`#[compiler_item(\"{name}\")]` expects a {expected}, but it is attached to a {actual}",
+                name = item.attr_name(),
+                expected = item.expected_kind(),
+                actual = actual_kind,
+            ),
+            span,
+        });
+        return false;
+    }
+    true
 }
 
 /// Register a struct declaration's `#[compiler_item(...)]` annotation, if any.
-///
-/// Silently ignores items whose [`CompilerItem::expected_kind`] is not
-/// [`CompilerItemKind::Struct`] — the resolver emits a dedicated
-/// diagnostic for kind mismatches in [`super::orchestration`]. The
-/// registry itself ICEs on duplicate registrations; per the design
-/// contract, every `CompilerItem` variant is owned by exactly one
-/// stdlib declaration.
-pub(super) fn register_struct_compiler_item(
+pub(super) fn register_struct_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
     name: &str,
     module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs) else {
+    let Some(item) = extract_compiler_item(attrs, span, logger) else {
         return;
     };
-    if item.expected_kind() != CompilerItemKind::Struct {
+    if !check_compiler_item_placement(item, CompilerItemKind::Struct, module_source, span, logger) {
         return;
     }
     let resolved = Resolved::Struct {
         module_source: module_source.clone(),
         name: name.to_string(),
     };
-    let _ = type_table
+    if let Err(err) = type_table
         .borrow_mut()
         .compiler_items_mut()
-        .register(item, resolved);
+        .register(item, resolved)
+    {
+        report_register_error(err, span, logger);
+    }
 }
 
 /// Register a variant declaration's `#[compiler_item(...)]` annotation, if any.
-pub(super) fn register_variant_compiler_item(
+pub(super) fn register_variant_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
     name: &str,
     module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs) else {
+    let Some(item) = extract_compiler_item(attrs, span, logger) else {
         return;
     };
-    if item.expected_kind() != CompilerItemKind::Variant {
+    if !check_compiler_item_placement(item, CompilerItemKind::Variant, module_source, span, logger)
+    {
         return;
     }
     let resolved = Resolved::Variant {
         module_source: module_source.clone(),
         name: name.to_string(),
     };
-    let _ = type_table
+    if let Err(err) = type_table
         .borrow_mut()
         .compiler_items_mut()
-        .register(item, resolved);
+        .register(item, resolved)
+    {
+        report_register_error(err, span, logger);
+    }
 }
 
-/// Register a trait declaration's `#[compiler_item(...)]` annotation, if any.
-pub(super) fn register_trait_compiler_item(
+/// Register an enum declaration's `#[compiler_item(...)]` annotation, if any.
+pub(super) fn register_enum_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
     name: &str,
     module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs) else {
+    let Some(item) = extract_compiler_item(attrs, span, logger) else {
         return;
     };
-    if item.expected_kind() != CompilerItemKind::Trait {
+    if !check_compiler_item_placement(item, CompilerItemKind::Enum, module_source, span, logger) {
+        return;
+    }
+    let resolved = Resolved::Enum {
+        module_source: module_source.clone(),
+        name: name.to_string(),
+    };
+    if let Err(err) = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved)
+    {
+        report_register_error(err, span, logger);
+    }
+}
+
+/// Register a trait declaration's `#[compiler_item(...)]` annotation, if any.
+pub(super) fn register_trait_compiler_item<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    name: &str,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) {
+    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+        return;
+    };
+    if !check_compiler_item_placement(item, CompilerItemKind::Trait, module_source, span, logger) {
         return;
     }
     let resolved = Resolved::Trait {
         module_source: module_source.clone(),
         name: name.to_string(),
     };
-    let _ = type_table
+    if let Err(err) = type_table
         .borrow_mut()
         .compiler_items_mut()
-        .register(item, resolved);
+        .register(item, resolved)
+    {
+        report_register_error(err, span, logger);
+    }
+}
+
+/// Register an impl-block method's `#[compiler_item(...)]` annotation, if any.
+pub(super) fn register_method_compiler_item<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    method_name: &str,
+    owner_type: &str,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) {
+    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+        return;
+    };
+    if !check_compiler_item_placement(item, CompilerItemKind::Method, module_source, span, logger) {
+        return;
+    }
+    let resolved = Resolved::Method {
+        module_source: module_source.clone(),
+        owner_type: owner_type.to_string(),
+        name: method_name.to_string(),
+    };
+    if let Err(err) = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved)
+    {
+        report_register_error(err, span, logger);
+    }
 }
 
 /// Register a `pub type [..T];` declaration's `#[compiler_item("tuple")]` annotation.
-pub(super) fn register_tuple_compiler_item(
+pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
     module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs) else {
+    let Some(item) = extract_compiler_item(attrs, span, logger) else {
         return;
     };
-    if item.expected_kind() != CompilerItemKind::TupleFamily {
+    if !check_compiler_item_placement(
+        item,
+        CompilerItemKind::TupleFamily,
+        module_source,
+        span,
+        logger,
+    ) {
         return;
     }
     let resolved = Resolved::TupleFamily {
         module_source: module_source.clone(),
     };
-    let _ = type_table
+    if let Err(err) = type_table
         .borrow_mut()
         .compiler_items_mut()
-        .register(item, resolved);
+        .register(item, resolved)
+    {
+        report_register_error(err, span, logger);
+    }
 }
 
 impl<H: CompilerHost> Resolver<'_, H> {
@@ -403,9 +544,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let cm_name = method
                 .attrs
                 .iter()
-                .find(|a| a.name == "cm")
-                .and_then(|a| a.args.first())
-                .map(|a| a.as_str().to_string());
+                .find_map(crate::ast::Attribute::cm_identifier);
             ops.push(TirEffectOp {
                 name: method.name.clone(),
                 params,
@@ -530,6 +669,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             &variant_decl.attrs,
             &variant_decl.name,
             &self.current_module_source,
+            variant_decl.span,
+            self.logger,
         );
 
         TirVariantDecl {
@@ -788,15 +929,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // parameter at the boundary, so defaults cannot divergently exist
         // only on the Wado side.
         // A function crosses the Component Model boundary when it is either
-        // exported (`export fn ...`) or imported (declaration with no body,
-        // typically carrying `#[canonical(...)]` or `#[cm(...)]`). Closures
-        // may not appear in either side's signature.
-        let is_cm_import = func.body.is_none()
-            && (func.attrs.iter().any(|a| a.cm_import.is_some())
-                || func
-                    .attrs
-                    .iter()
-                    .any(|a| a.name == "canonical" || a.name == "cm"));
+        // exported (`export fn ...`) or imported (declaration with no body
+        // carrying `#[canonical(...)]` or `#[cm(...)]`). Closures may not
+        // appear in either side's signature.
+        let is_cm_import =
+            func.body.is_none() && func.attrs.iter().any(|a| a.cm_boundary.is_some());
         let crosses_cm_boundary = func.is_export || is_cm_import;
 
         let mut params = Vec::new();
@@ -935,7 +1072,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             is_cm_export: false,
             is_ambient: Self::extract_is_ambient(&func.attrs),
             inline_hint: Self::extract_inline_hint(&func.attrs),
-            compiler_item: extract_compiler_item(&func.attrs),
+            compiler_item: extract_compiler_item(&func.attrs, func.span, self.logger),
             export_name: Self::extract_export_name(&func.attrs),
             allocator_tag: Self::extract_allocator_tag(&func.attrs),
             kind: FunctionKind::Regular,
@@ -1511,7 +1648,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             is_cm_export: false,
             is_ambient: Self::extract_is_ambient(&func.attrs),
             inline_hint: Self::extract_inline_hint(&func.attrs),
-            compiler_item: extract_compiler_item(&func.attrs),
+            compiler_item: extract_compiler_item(&func.attrs, func.span, self.logger),
             export_name: None,
             allocator_tag: None,
             kind: FunctionKind::Regular,

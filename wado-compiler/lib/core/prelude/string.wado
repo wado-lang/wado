@@ -18,6 +18,7 @@ fn byte_to_ascii_lowercase(b: u8) -> u8 {
     return b | (b >= 'A' as u8 && b <= 'Z' as u8) as u8 * ('A' as u8 ^ 'a' as u8);
 }
 /// UTF-8 encoded string type with O(1) amortized push_str
+#[compiler_item("string")]
 pub struct String {
     repr: builtin::array<u8>,
     used: i32,

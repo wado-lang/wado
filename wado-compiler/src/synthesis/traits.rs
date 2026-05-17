@@ -419,6 +419,18 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
     }
 
     let module_source = module.module_source.clone();
+    let (eq_trait_name, ord_trait_name) = {
+        let tt = module.type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items
+                .trait_name(crate::compiler_item::CompilerItem::Eq)
+                .to_string(),
+            items
+                .trait_name(crate::compiler_item::CompilerItem::Ord)
+                .to_string(),
+        )
+    };
 
     let enum_infos: Vec<_> = module
         .enums
@@ -433,19 +445,26 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
         let enum_type = type_table.make_enum(enum_name.clone(), module_source.clone());
         let ref_enum_type = type_table.make_ref(enum_type);
 
-        if !ctx.has_impl(enum_name, "Eq") {
-            let func = generate_enum_eq_fn(enum_name, enum_type, ref_enum_type, *span);
+        if !ctx.has_impl(enum_name, &eq_trait_name) {
+            let func =
+                generate_enum_eq_fn(enum_name, enum_type, ref_enum_type, &eq_trait_name, *span);
             generated_functions.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(enum_name, "Eq");
+            ctx.record_impl(enum_name, &eq_trait_name);
         }
 
-        if !ctx.has_impl(enum_name, "Ord") {
+        if !ctx.has_impl(enum_name, &ord_trait_name) {
             let ordering_type =
-                type_table.make_enum("Ordering".to_string(), ModuleSource::traits());
-            let func =
-                generate_enum_ord_fn(enum_name, enum_type, ref_enum_type, ordering_type, *span);
+                type_table.make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
+            let func = generate_enum_ord_fn(
+                enum_name,
+                enum_type,
+                ref_enum_type,
+                ordering_type,
+                &ord_trait_name,
+                *span,
+            );
             generated_functions.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(enum_name, "Ord");
+            ctx.record_impl(enum_name, &ord_trait_name);
         }
     }
 
@@ -467,6 +486,18 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
     let module_source = module.module_source.clone();
     let mut generated = Vec::new();
 
+    let (eq_trait_name, ord_trait_name) = {
+        let tt = module.type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items
+                .trait_name(crate::compiler_item::CompilerItem::Eq)
+                .to_string(),
+            items
+                .trait_name(crate::compiler_item::CompilerItem::Ord)
+                .to_string(),
+        )
+    };
     let mut tt = module.type_table.borrow_mut();
 
     let struct_infos = collect_struct_fields(module);
@@ -474,22 +505,23 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
         let ref_struct_type = tt.make_ref(struct_type);
 
-        if !ctx.has_impl(name, "Eq") {
+        if !ctx.has_impl(name, &eq_trait_name) {
             let func = generate_struct_eq_fn(
                 name,
                 &[],
                 fields,
                 ref_struct_type,
                 &module_source,
+                &eq_trait_name,
                 &mut tt,
                 *span,
             );
             generated.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(name, "Eq");
+            ctx.record_impl(name, &eq_trait_name);
         }
 
-        if !ctx.has_impl(name, "Ord") {
-            let ordering_type = tt.make_enum("Ordering".to_string(), ModuleSource::traits());
+        if !ctx.has_impl(name, &ord_trait_name) {
+            let ordering_type = tt.make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
             let func = generate_struct_ord_fn(
                 name,
                 &[],
@@ -497,11 +529,12 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
                 ref_struct_type,
                 ordering_type,
                 &module_source,
+                &ord_trait_name,
                 &mut tt,
                 *span,
             );
             generated.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(name, "Ord");
+            ctx.record_impl(name, &ord_trait_name);
         }
     }
 
@@ -512,22 +545,23 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
             tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
         let ref_struct_type = tt.make_ref(struct_type);
 
-        if !ctx.has_impl(name, "Eq") {
+        if !ctx.has_impl(name, &eq_trait_name) {
             let func = generate_struct_eq_fn(
                 name,
                 type_params,
                 fields,
                 ref_struct_type,
                 &module_source,
+                &eq_trait_name,
                 &mut tt,
                 *span,
             );
             generated.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(name, "Eq");
+            ctx.record_impl(name, &eq_trait_name);
         }
 
-        if !ctx.has_impl(name, "Ord") {
-            let ordering_type = tt.make_enum("Ordering".to_string(), ModuleSource::traits());
+        if !ctx.has_impl(name, &ord_trait_name) {
+            let ordering_type = tt.make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
             let func = generate_struct_ord_fn(
                 name,
                 type_params,
@@ -535,11 +569,12 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
                 ref_struct_type,
                 ordering_type,
                 &module_source,
+                &ord_trait_name,
                 &mut tt,
                 *span,
             );
             generated.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(name, "Ord");
+            ctx.record_impl(name, &ord_trait_name);
         }
     }
 
@@ -571,6 +606,12 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
     let module_source = module.module_source.clone();
     let mut generated = Vec::new();
 
+    let default_trait_name = module
+        .type_table
+        .borrow()
+        .compiler_items()
+        .trait_name(crate::compiler_item::CompilerItem::Default)
+        .to_string();
     let mut tt = module.type_table.borrow_mut();
 
     let infos: Vec<(String, Vec<(String, TypeId, u32, TirExpr)>, Span)> = module
@@ -592,13 +633,14 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
         .collect();
 
     for (name, fields, span) in &infos {
-        if ctx.has_impl(name, "Default") {
+        if ctx.has_impl(name, &default_trait_name) {
             continue;
         }
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
-        let func = generate_struct_default_fn(name, fields, struct_type, *span);
+        let func =
+            generate_struct_default_fn(name, fields, struct_type, &default_trait_name, *span);
         generated.push(Rc::new(RefCell::new(func)));
-        ctx.record_impl(name, "Default");
+        ctx.record_impl(name, &default_trait_name);
     }
 
     drop(tt);
@@ -611,9 +653,10 @@ fn generate_struct_default_fn(
     struct_name: &str,
     fields: &[(String, TypeId, u32, TirExpr)],
     struct_type: TypeId,
+    default_trait_name: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(struct_name, "Default", "default");
+    let method_info = trait_method_info(struct_name, default_trait_name, "default");
     let qualified_name = method_info.to_mangled_name();
 
     let struct_fields = fields
@@ -669,11 +712,17 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
     let module_source = module.module_source.clone();
     let mut generated = Vec::new();
 
+    let eq_trait_name = module
+        .type_table
+        .borrow()
+        .compiler_items()
+        .trait_name(crate::compiler_item::CompilerItem::Eq)
+        .to_string();
     let mut tt = module.type_table.borrow_mut();
 
     let variant_infos = collect_variant_cases(module);
     for (name, cases, span) in &variant_infos {
-        if ctx.has_impl(name, "Eq") {
+        if ctx.has_impl(name, &eq_trait_name) {
             continue;
         }
         let variant_type = tt.make_variant(name.clone(), module_source.clone());
@@ -689,12 +738,12 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
             *span,
         );
         generated.push(Rc::new(RefCell::new(func)));
-        ctx.record_impl(name, "Eq");
+        ctx.record_impl(name, &eq_trait_name);
     }
 
     let generic_variant_infos = collect_generic_variant_cases(module);
     for (name, type_params, cases, span) in &generic_variant_infos {
-        if ctx.has_impl(name, "Eq") {
+        if ctx.has_impl(name, &eq_trait_name) {
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
@@ -712,7 +761,7 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
             *span,
         );
         generated.push(Rc::new(RefCell::new(func)));
-        ctx.record_impl(name, "Eq");
+        ctx.record_impl(name, &eq_trait_name);
     }
 
     drop(tt);
@@ -733,7 +782,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
     let mut tt = module.type_table.borrow_mut();
     let formatter_type = tt.make_struct("Formatter".to_string(), ModuleSource::format());
     let fmt_type = tt.make_mut_ref(formatter_type);
-    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
 
     // Enums
     let enum_infos: Vec<_> = module
@@ -767,7 +816,12 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
     let struct_infos = collect_struct_visible_fields(module);
 
     for (name, fields, has_hidden, sspan) in &struct_infos {
-        if name == "String" || name == "Formatter" {
+        if name
+            == tt
+                .compiler_items()
+                .struct_name(crate::compiler_item::CompilerItem::String)
+            || name == "Formatter"
+        {
             continue;
         }
         if ctx.has_impl(name, "Inspect") {
@@ -1652,7 +1706,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     let mut tt = module.type_table.borrow_mut();
     let formatter_type = tt.make_struct("Formatter".to_string(), ModuleSource::format());
     let fmt_type = tt.make_mut_ref(formatter_type);
-    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let span = synth_span();
 
     // `Inspect` may be provided either as a trait impl (via TraitEnv / the
@@ -1696,7 +1750,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     let struct_infos = collect_struct_visible_fields(module);
 
     for (name, fields, has_hidden, sspan) in &struct_infos {
-        if name == "String" || name == "Formatter" {
+        if name
+            == tt
+                .compiler_items()
+                .struct_name(crate::compiler_item::CompilerItem::String)
+            || name == "Formatter"
+        {
             continue;
         }
         if ctx.has_impl(name, "InspectAlt") {
@@ -2358,6 +2417,18 @@ fn generate_fallback_impls(
     let mut generated = Vec::new();
 
     let span = synth_span();
+    let (string_name, array_name) = {
+        let tt = module.type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items
+                .struct_name(crate::compiler_item::CompilerItem::String)
+                .to_string(),
+            items
+                .struct_name(crate::compiler_item::CompilerItem::Array)
+                .to_string(),
+        )
+    };
     let mut tt = module.type_table.borrow_mut();
     let formatter_type = tt.make_struct("Formatter".to_string(), ModuleSource::format());
     let fmt_type = tt.make_mut_ref(formatter_type);
@@ -2412,7 +2483,7 @@ fn generate_fallback_impls(
         .map(|s| s.name.clone())
         .collect();
     for name in &struct_names {
-        if name == "String" || name == "Formatter" {
+        if name == &string_name || name == "Formatter" {
             continue;
         }
         if !needs_fallback(name, ctx) {
@@ -2431,7 +2502,7 @@ fn generate_fallback_impls(
         .map(|s| (s.name.clone(), s.type_params.clone()))
         .collect();
     for (name, type_params) in &generic_struct_infos {
-        if name == "Array" {
+        if name == &array_name {
             continue;
         }
         if !needs_fallback(name, ctx) {
@@ -2646,10 +2717,14 @@ fn trait_impl_module(
     ref_module: ModuleSource,
     string_module: ModuleSource,
 ) -> ModuleSource {
+    let string_struct_name = tt
+        .compiler_items()
+        .struct_name(crate::compiler_item::CompilerItem::String)
+        .to_string();
     match tt.get(type_id).clone() {
         ResolvedType::Primitive(_) => ModuleSource::primitive(),
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => ref_module,
-        ResolvedType::Struct { ref name, .. } if name == "String" => string_module,
+        ResolvedType::Struct { ref name, .. } if name == &string_struct_name => string_module,
         ResolvedType::Struct {
             ref module_source, ..
         }
@@ -2751,9 +2826,10 @@ fn generate_enum_eq_fn(
     enum_name: &str,
     enum_type: TypeId,
     ref_enum_type: TypeId,
+    eq_trait_name: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(enum_name, "Eq", "eq");
+    let method_info = trait_method_info(enum_name, eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
 
     let comparison = TirExpr::new(
@@ -2800,9 +2876,10 @@ fn generate_enum_ord_fn(
     enum_type: TypeId,
     ref_enum_type: TypeId,
     ordering_type: TypeId,
+    ord_trait_name: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(enum_name, "Ord", "cmp");
+    let method_info = trait_method_info(enum_name, ord_trait_name, "cmp");
     let qualified_name = method_info.to_mangled_name();
 
     let local_a = || local_expr(2, "a", enum_type, span);
@@ -2976,10 +3053,14 @@ fn eq_call_expr(
 ) -> TirExpr {
     let ref_type = tt.make_ref(field_type);
     let arg = ref_expr(other_field, ref_type, span);
+    let eq_trait_name = tt
+        .compiler_items()
+        .trait_name(crate::compiler_item::CompilerItem::Eq)
+        .to_string();
     trait_call_on_type(
         self_field,
         field_type,
-        "Eq",
+        &eq_trait_name,
         "eq",
         TypeTable::BOOL,
         vec![arg],
@@ -3003,10 +3084,14 @@ fn cmp_call_expr(
 ) -> TirExpr {
     let ref_type = tt.make_ref(field_type);
     let arg = ref_expr(other_field, ref_type, span);
+    let ord_trait_name = tt
+        .compiler_items()
+        .trait_name(crate::compiler_item::CompilerItem::Ord)
+        .to_string();
     trait_call_on_type(
         self_field,
         field_type,
-        "Ord",
+        &ord_trait_name,
         "cmp",
         ordering_type,
         vec![arg],
@@ -3039,10 +3124,11 @@ fn generate_struct_eq_fn(
     fields: &[(String, TypeId, u32)],
     ref_struct_type: TypeId,
     module_source: &ModuleSource,
+    eq_trait_name: &str,
     tt: &mut TypeTable,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(struct_name, "Eq", "eq");
+    let method_info = trait_method_info(struct_name, eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
 
     let result = build_struct_eq_chain(fields, ref_struct_type, module_source, tt, span);
@@ -3160,10 +3246,11 @@ fn generate_struct_ord_fn(
     ref_struct_type: TypeId,
     ordering_type: TypeId,
     module_source: &ModuleSource,
+    ord_trait_name: &str,
     tt: &mut TypeTable,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(struct_name, "Ord", "cmp");
+    let method_info = trait_method_info(struct_name, ord_trait_name, "cmp");
     let qualified_name = method_info.to_mangled_name();
 
     let (stmts, locals) = build_struct_ord_body(
@@ -3306,7 +3393,11 @@ fn generate_variant_eq_fn(
     tt: &mut TypeTable,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(variant_name, "Eq", "eq");
+    let eq_trait_name = tt
+        .compiler_items()
+        .trait_name(crate::compiler_item::CompilerItem::Eq)
+        .to_string();
+    let method_info = trait_method_info(variant_name, &eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
 
     let deref_self = || deref_local(0, "self", ref_variant_type, variant_type, span);
