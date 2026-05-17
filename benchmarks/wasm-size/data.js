@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779000608982,
+  "lastUpdate": 1779000921401,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22849,6 +22849,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8d52a4fd1702a27b456eae30f71e5dfb64759d8b"
         },
         "date": 1779000608592,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 490666,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "126c84666934a4daaec1a62bcd284f035ecc868b",
+          "message": "Merge pull request #1102 from wado-lang/claude/verify-mise-task-issue-jLvlE\n\nfix(hooks): prepend pipefail to every Bash tool call",
+          "timestamp": "2026-05-17T15:48:42+09:00",
+          "tree_id": "c0845990bc27c5afc22fe2f43bb1a199183abd35",
+          "url": "https://github.com/wado-lang/wado/commit/126c84666934a4daaec1a62bcd284f035ecc868b"
+        },
+        "date": 1779000921059,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
