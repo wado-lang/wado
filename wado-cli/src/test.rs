@@ -1304,11 +1304,26 @@ async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
         .map(|_| {
             let barrier = Arc::clone(&barrier);
             tokio::task::spawn_blocking(move || {
-                wado_compiler::prewarm_stdlib_snapshot();
+                // Catch any panic from the snapshot build (the only
+                // place this can fail is the `expect` in
+                // `build_snapshot`, which would indicate a stdlib bug)
+                // so that **every** task reaches the barrier.  If one
+                // task panicked before the barrier the remaining
+                // `parallelism - 1` tasks would block forever waiting
+                // for a party count that can never be met,
+                // deadlocking the test runner.  Re-raise after the
+                // barrier so the original panic still propagates
+                // through `handle.await`.
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    wado_compiler::prewarm_stdlib_snapshot();
+                }));
                 // Block until every prewarm task is concurrently
                 // running so the blocking pool cannot satisfy all
                 // tasks with a single thread.
                 barrier.wait();
+                if let Err(panic) = result {
+                    std::panic::resume_unwind(panic);
+                }
             })
         })
         .collect();
