@@ -1,9 +1,9 @@
 ---
 name: git-upstream-sync
-description: Sync current branch with origin/main when a GitHub PR has conflicts. Merges with zdiff3 conflict style, commits conflict markers separately, resolves code conflicts, then runs on-task-done to regenerate golden fixtures and test.
+description: Sync current branch with the upstream origin/main when a GitHub PR has conflicts
 ---
 
-# Git Upstream Sync
+# Overview
 
 Resolve GitHub PR conflicts by merging origin/main into the current branch.
 
@@ -39,17 +39,13 @@ git add -A
 git commit -m "resolve merge conflicts"
 ```
 
-### 4. Run `on-task-done` to regenerate golden fixtures and test
+### 4. Run `mise run test` for sanity check
 
-```sh
-mise run on-task-done
-```
-
-This will format, clippy-fix, regenerate golden fixtures, and run tests — automatically fixing any golden fixture conflicts.
+CI will apply clippy, format, and regenerate golden fixtures, so a quich sanity check is sufficient.
 
 ## Important
 
 - Always use `-c merge.conflictstyle=zdiff3` so the merge base is visible in conflict markers (with zealous zdiff3 reducing noise)
 - Always commit the unresolved conflicts first, then resolve in a separate commit — this preserves a clear record of what the conflicts looked like vs how they were resolved
 - Do NOT squash the two commits together
-- Do NOT manually resolve golden fixture conflicts — `mise run on-task-done` handles them
+- Do NOT manually resolve conflicts in generated files such as golden fixtures
