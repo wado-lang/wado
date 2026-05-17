@@ -1,0 +1,47 @@
+// Call-on-arbitrary-expression: any expression whose type is callable can be
+// directly invoked, regardless of whether it is an identifier, an index
+// expression, a parenthesised expression, or a call chain.
+//
+// Method-call syntax `foo.bar()` is *always* a method call (Rust policy);
+// to call a callable field, use `(foo.bar)()`.
+
+struct Holder {
+    f: fn(i32) -> i32,
+}
+
+fn make_inc() -> fn(i32) -> i32 {
+    return |x: i32| x + 1;
+}
+
+fn pair() -> [fn(i32) -> i32, fn(i32) -> i32] {
+    return [|x: i32| x + 1, |x: i32| x * 2];
+}
+
+test "call on index expression" {
+    let p = pair();
+    assert p[0](5) == 6;
+    assert p[1](5) == 10;
+}
+
+test "call on parenthesised identifier" {
+    let f = make_inc();
+    assert (f)(10) == 11;
+}
+
+test "call on call result" {
+    assert (make_inc())(41) == 42;
+}
+
+test "call on parenthesised field access" {
+    let h = Holder { f: make_inc() };
+    assert (h.f)(99) == 100;
+}
+
+test "call on nested index" {
+    let pp = [pair(), pair()];
+    assert pp[0][0](7) == 8;
+    assert pp[1][1](7) == 14;
+}
+
+__DATA__
+{"test": {}}

@@ -124,10 +124,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-        // Check if this is a field access to a function-typed field (e.g., (self.f)(arg))
-        // This handles calling closures stored in struct fields
-        if let Expr::FieldAccess(_field_access) = &call.callee {
-            // Resolve the callee expression to get the field type
+        // Indirect call on a non-identifier callee. Any expression whose
+        // value type is a function type can be invoked here — e.g.
+        // `arr[i](x)`, `(foo.bar)(x)`, `(get_fn())(x)`, `(|x| x)(1)`.
+        // Identifier callees are handled separately above (locals with
+        // fn type) and below (named functions, static methods, variant
+        // constructors, ...). Method-call syntax `foo.bar()` is parsed as
+        // `MethodCall`, not as `Call { callee: FieldAccess }`, so this
+        // branch never alters method dispatch (Rust policy).
+        if !matches!(&call.callee, Expr::Ident(_)) {
             let callee_expr = self.resolve_expr(&call.callee, ctx, None);
             let peeled_ref = self.type_table.borrow().peel_refs(callee_expr.type_id);
             let peeled_type_id = self.type_table.borrow().get_ultimate_base_type(peeled_ref);
@@ -151,6 +156,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         self.resolve_expr(arg, ctx, expected_type)
                     })
                     .collect();
+
+                // Arity check: function-typed values carry no default-argument
+                // information at the call site.
+                if args.len() != fn_params.len() {
+                    let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                        expected: fn_params.len(),
+                        found: args.len(),
+                        span: call.span,
+                    });
+                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+                }
 
                 // Check each argument type against expected parameter type
                 for (i, arg) in args.iter().enumerate() {
