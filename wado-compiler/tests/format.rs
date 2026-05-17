@@ -1565,6 +1565,26 @@ fn run() {
 }
 
 #[test]
+fn test_roundtrip_ast_call_on_compound_callee() {
+    assert_format_preserves_ast(
+        r"
+type FnI = fn(i32) -> i32;
+
+fn make() -> FnI {
+    return |x: i32| x + 1;
+}
+
+fn run(c: bool) {
+    let cast_call = (make() as FnI)(10);
+    let if_call = (if c { make() } else { make() })(10);
+    let match_call = (match c { true => make(), false => make() })(10);
+    let block_call = ({ let f = make(); f })(10);
+}
+",
+    );
+}
+
+#[test]
 fn test_roundtrip_ast_control_flow() {
     assert_format_preserves_ast(
         r"

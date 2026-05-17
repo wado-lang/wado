@@ -1,7 +1,7 @@
 //! End-to-end tests for Wado compiler
 //!
 //! These tests compile Wado programs from fixtures/*.wado and run them,
-//! verifying the output matches expected values defined in each file's __DATA__ section.
+//! verifying the output matches expected values defined in each file's `__DATA__` section.
 //!
 //! Test fixtures specify the target world via the top-level key in __DATA__:
 //! - (default) no world key — runs as `wasi:cli/command`, checks stdout/stderr
