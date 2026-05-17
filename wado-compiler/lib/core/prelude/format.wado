@@ -61,7 +61,7 @@ impl Formatter {
     }
 
     /// Write a string to the output buffer.
-    pub fn write_str(&mut self, s: String) {
+    pub fn write_str(&mut self, s: &String) {
         self.buf.push_str(s);
     }
 
@@ -82,24 +82,24 @@ impl Formatter {
     pub fn pad(&mut self, content: String) {
         let content_len = content.len();
         if self.width <= 0 || content_len >= self.width {
-            self.buf.push_str(content);
+            self.buf.push_str(&content);
             return;
         }
         let padding = self.width - content_len;
         let align = self.align;
         if align matches { Left } {
-            self.buf.push_str(content);
+            self.buf.push_str(&content);
             self.write_char_n(self.fill, padding);
         } else if align matches { Center } {
             let left_pad = padding / 2;
             let right_pad = padding - left_pad;
             self.write_char_n(self.fill, left_pad);
-            self.buf.push_str(content);
+            self.buf.push_str(&content);
             self.write_char_n(self.fill, right_pad);
         } else {
             // Right (default)
             self.write_char_n(self.fill, padding);
-            self.buf.push_str(content);
+            self.buf.push_str(&content);
         }
     }
 
@@ -190,10 +190,10 @@ impl Formatter {
         if self.width <= 0 || content_len >= self.width {
             // No padding — write sign/prefix, reserve digit area
             if sign_len > 0 {
-                self.buf.push_str(sign);
+                self.buf.push_str(&sign);
             }
             if prefix_len > 0 {
-                self.buf.push_str(prefix);
+                self.buf.push_str(&prefix);
             }
             return self.buf.internal_reserve_uninit(digit_count);
         }
@@ -203,10 +203,10 @@ impl Formatter {
         if self.zero_pad {
             // sign + prefix + zeros + [digits]
             if sign_len > 0 {
-                self.buf.push_str(sign);
+                self.buf.push_str(&sign);
             }
             if prefix_len > 0 {
-                self.buf.push_str(prefix);
+                self.buf.push_str(&prefix);
             }
             self.write_char_n('0', padding);
             return self.buf.internal_reserve_uninit(digit_count);
@@ -216,10 +216,10 @@ impl Formatter {
         if align matches { Left } {
             // [sign prefix digits] [fill...]
             if sign_len > 0 {
-                self.buf.push_str(sign);
+                self.buf.push_str(&sign);
             }
             if prefix_len > 0 {
-                self.buf.push_str(prefix);
+                self.buf.push_str(&prefix);
             }
             let offset = self.buf.internal_reserve_uninit(digit_count);
             self.write_char_n(self.fill, padding);
@@ -230,10 +230,10 @@ impl Formatter {
             let right_pad = padding - left_pad;
             self.write_char_n(self.fill, left_pad);
             if sign_len > 0 {
-                self.buf.push_str(sign);
+                self.buf.push_str(&sign);
             }
             if prefix_len > 0 {
-                self.buf.push_str(prefix);
+                self.buf.push_str(&prefix);
             }
             let offset = self.buf.internal_reserve_uninit(digit_count);
             self.write_char_n(self.fill, right_pad);
@@ -242,10 +242,10 @@ impl Formatter {
             // Right: [fill...] [sign prefix digits]
             self.write_char_n(self.fill, padding);
             if sign_len > 0 {
-                self.buf.push_str(sign);
+                self.buf.push_str(&sign);
             }
             if prefix_len > 0 {
-                self.buf.push_str(prefix);
+                self.buf.push_str(&prefix);
             }
             return self.buf.internal_reserve_uninit(digit_count);
         }
@@ -254,7 +254,7 @@ impl Formatter {
     /// Write indentation (2 spaces per level) for pretty-printing.
     pub fn write_indent(&mut self) {
         for let mut i = 0; i < self.indent; i += 1 {
-            self.write_str("  ");
+            self.write_str(&"  ");
         }
     }
 
@@ -266,7 +266,7 @@ impl Formatter {
 
     /// Open a pretty-printed brace: write opening delimiter, increase indent.
     pub fn open_brace(&mut self, open: String) {
-        self.write_str(open);
+        self.write_str(&open);
         self.indent += 1;
     }
 
@@ -274,7 +274,7 @@ impl Formatter {
     pub fn close_brace(&mut self, close: String) {
         self.indent -= 1;
         self.write_newline_indent();
-        self.write_str(close);
+        self.write_str(&close);
     }
 }
 // Defined here (not in string.wado) to avoid string.wado depending on format.wado,
@@ -318,7 +318,7 @@ impl<T: Inspect> Inspect for Array<T> {
         f.write_char('[');
         for let mut i = 0; i < self.len(); i += 1 {
             if i > 0 {
-                f.write_str(", ");
+                f.write_str(&", ");
             }
             self[i].inspect(f);
         }
@@ -334,7 +334,7 @@ impl<T: Inspect> Display for Array<T> {
 
 impl<T: Inspect> Inspect for &T {
     pub fn inspect(&self, f: &mut Formatter) {
-        f.write_str("&");
+        f.write_str(&"&");
         let inner: &T = *self;
         (*inner).inspect(f);
     }
@@ -342,7 +342,7 @@ impl<T: Inspect> Inspect for &T {
 
 impl<T: Inspect> Inspect for &mut T {
     pub fn inspect(&mut self, f: &mut Formatter) {
-        f.write_str("&mut ");
+        f.write_str(&"&mut ");
         let inner: &mut T = *self;
         (*inner).inspect(f);
     }
@@ -357,7 +357,7 @@ impl InspectAlt for String {
 impl<T: InspectAlt> InspectAlt for Array<T> {
     pub fn inspect_alt(&self, f: &mut Formatter) {
         if self.is_empty() {
-            f.write_str("[]");
+            f.write_str(&"[]");
             return;
         }
         f.open_brace("[");
@@ -378,7 +378,7 @@ impl<T: InspectAlt> DisplayAlt for Array<T> {
 
 impl<T: InspectAlt> InspectAlt for &T {
     pub fn inspect_alt(&self, f: &mut Formatter) {
-        f.write_str("&");
+        f.write_str(&"&");
         let inner: &T = *self;
         (*inner).inspect_alt(f);
     }
@@ -386,7 +386,7 @@ impl<T: InspectAlt> InspectAlt for &T {
 
 impl<T: InspectAlt> InspectAlt for &mut T {
     pub fn inspect_alt(&mut self, f: &mut Formatter) {
-        f.write_str("&mut ");
+        f.write_str(&"&mut ");
         let inner: &mut T = *self;
         (*inner).inspect_alt(f);
     }

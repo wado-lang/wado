@@ -36,17 +36,17 @@ impl Serializer for JsonSerializer {
     type VariantSerializer = JsonVariantSerializer;
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
-        self.buf.push_str(`{v}`);
+        self.buf.push_str(&`{v}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError> {
-        self.buf.push_str(`"{*variant_name}"`);
+        self.buf.push_str(&`"{*variant_name}"`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<JsonVariantSerializer, SerializeError> with stores[self] {
-        self.buf.push_str("{\"" + *variant_name + "\"" + ":");
+        self.buf.push_str(&("{\"" + *variant_name + "\"" + ":"));
         return Result::<JsonVariantSerializer, SerializeError>::Ok(JsonVariantSerializer {
             ser: self,
         });
@@ -59,7 +59,7 @@ impl SerializeVariant for JsonVariantSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.ser.buf.push_str("}");
+        self.ser.buf.push_str(&"}");
         return Result::<(), SerializeError>::Ok(());
     }
 }
@@ -80,14 +80,14 @@ impl Serialize for Shape {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         return match *self {
             Circle(r) => {
-                let mut v = s.begin_variant("Shape", "Circle", 0);
+                let mut v = s.begin_variant(&"Shape", &"Circle", 0);
                 if let Ok(mut v) = v {
                     v.payload::<f64>(&r);
                     return v.end();
                 }
                 return Result::<(), SerializeError>::Err(SerializeError { message: "begin_variant failed" });
             },
-            Point => s.serialize_unit_variant("Shape", "Point", 1),
+            Point => s.serialize_unit_variant(&"Shape", &"Point", 1),
         };
     }
 }

@@ -247,9 +247,13 @@ let n = s.len();                         // UTF8 byte length
 let chars = s.chars().count();           // character count based on Unicode scalars
 
 // String building
+// String::push_str takes its argument by reference (mirrors Rust's `&str` borrow):
+//   pub fn push_str(&mut self, other: &String)
+// Pass with `&` — Wado never implicitly takes a reference at a call site.
 let mut builder = String::with_capacity(20);
-builder.push_str("Hello");
-builder.push_str(", World!");
+let part: String = "Hello";
+builder.push_str(&part);
+builder.push_str(&", World!");
 
 // Iterating over characters
 for let c of "hello".chars() {

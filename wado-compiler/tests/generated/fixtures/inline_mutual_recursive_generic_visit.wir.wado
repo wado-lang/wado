@@ -146,6 +146,8 @@ type "functype//wado-compiler/tests/fixtures/inline_mutual_recursive_generic_vis
 
 type "functype//wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node", ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node") -> bool;  // TypeId(53)
 
+type "functype//wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/LeafNode^Inspect::inspect" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(54)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
 import fn wasi/task-return from "wasi/task-return";
@@ -608,6 +610,19 @@ fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node
     return 0;
 }
 
+fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/LeafNode^Inspect::inspect"(self, f) {
+    let s_3: ref "core:prelude/string.wado//String";
+    let s_5: ref "core:prelude/string.wado//String";
+    let s_11: ref "core:prelude/string.wado//String";
+    s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("LeafNode { "), used: 11 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_3);
+    s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value: "), used: 7 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_5);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self, f);
+    s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_11);
+}
+
 fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/BranchNode^Inspect::inspect"(self, f) {
     let s_3: ref "core:prelude/string.wado//String";
     let s_5: ref "core:prelude/string.wado//String";
@@ -623,32 +638,21 @@ fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Bran
 
 fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node^Inspect::inspect"(self, f) {
     let s_3: ref "core:prelude/string.wado//String";
-    let self_4: ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//LeafNode";
+    let s_5: ref "core:prelude/string.wado//String";
     let s_7: ref "core:prelude/string.wado//String";
     let s_9: ref "core:prelude/string.wado//String";
-    let s_15: ref "core:prelude/string.wado//String";
-    let s_17: ref "core:prelude/string.wado//String";
-    let s_19: ref "core:prelude/string.wado//String";
-    let s_21: ref "core:prelude/string.wado//String";
     if ref.test "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(self) {
         s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Node::Leaf("), used: 11 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_3);
-        self_4 = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(self).payload_0;
-        s_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("LeafNode { "), used: 11 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_7);
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value: "), used: 7 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_9);
-        "core:prelude/primitive.wado/i32::fmt_decimal"(self_4.value, f);
-        s_15 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_15);
-        s_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_17);
+        "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/LeafNode^Inspect::inspect"(ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(self).payload_0.value, f);
+        s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_5);
     } else if ref.test "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Branch"(self) {
-        s_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Node::Branch("), used: 13 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_19);
+        s_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Node::Branch("), used: 13 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_7);
         "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/BranchNode^Inspect::inspect"(ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Branch"(self).payload_0.children, f);
-        s_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_21);
+        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_9);
     }
 }
 

@@ -1249,7 +1249,7 @@ fn join_pipe(tokens: &Array<String>) -> String {
         if i > 0 {
             s.push('|');
         }
-        s.push_str(tokens[i]);
+        s.push_str(&tokens[i]);
     }
     return s;
 }
@@ -1374,10 +1374,10 @@ fn canonical_k_prefix_key(prefix: &Array<Array<String>>) -> String {
     let mut first_depth = true;
     for let depth_set of prefix {
         if !first_depth {
-            s.push_str(";");
+            s.push_str(&";");
         }
         first_depth = false;
-        s.push_str(join_pipe(depth_set));
+        s.push_str(&join_pipe(depth_set));
     }
     return s;
 }

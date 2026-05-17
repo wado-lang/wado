@@ -266,12 +266,14 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Use this when RAII pattern (`span()`) doesn't work due to borrow conflicts.
     /// Must be paired with a corresponding `span_end()` call.
     pub fn span_start(&self, name: &str) {
-        self.host.emit_diagnostic(Diagnostic {
-            severity: Severity::Debug,
-            code: Code::SpanStart,
-            message: name.to_string(),
-            span: None,
-        });
+        if self.should_log(Severity::Debug) {
+            self.host.emit_diagnostic(Diagnostic {
+                severity: Severity::Debug,
+                code: Code::SpanStart,
+                message: name.to_string(),
+                span: None,
+            });
+        }
     }
 
     /// Emit a span end marker
@@ -279,12 +281,14 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Use this when RAII pattern (`span()`) doesn't work due to borrow conflicts.
     /// Must be paired with a corresponding `span_start()` call.
     pub fn span_end(&self, name: &str) {
-        self.host.emit_diagnostic(Diagnostic {
-            severity: Severity::Debug,
-            code: Code::SpanEnd,
-            message: name.to_string(),
-            span: None,
-        });
+        if self.should_log(Severity::Debug) {
+            self.host.emit_diagnostic(Diagnostic {
+                severity: Severity::Debug,
+                code: Code::SpanEnd,
+                message: name.to_string(),
+                span: None,
+            });
+        }
     }
 
     // === Internal helpers ===

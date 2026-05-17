@@ -468,9 +468,20 @@ test "string addition" {
 
 test "String::push_str" {
     let mut builder = String::with_capacity(20);
-    builder.push_str("Hello");
-    builder.push_str(", ");
-    builder.push_str("World!");
+    builder.push_str(&"Hello");
+    builder.push_str(&", ");
+    builder.push_str(&"World!");
+    assert builder == "Hello, World!";
+}
+
+// Issue #1105: push_str accepts &String to align with Rust's `&str` borrow
+// and avoid the per-call deep copy of a `String` argument.
+test "String::push_str accepts &String" {
+    let mut builder = String::with_capacity(20);
+    let greeting: String = "Hello, ";
+    let target: String = "World!";
+    builder.push_str(&greeting);
+    builder.push_str(&target);
     assert builder == "Hello, World!";
 }
 
@@ -489,17 +500,17 @@ test "String::new starts empty" {
 
 test "String::new is usable as a growable buffer" {
     let mut s = String::new();
-    s.push_str("Hello");
+    s.push_str(&"Hello");
     s.push(',');
     s.push(' ');
-    s.push_str("World!");
+    s.push_str(&"World!");
     assert s == "Hello, World!";
 }
 
 test "push_str updates len" {
     let mut s = String::with_capacity(10);
     assert s.len() == 0;
-    s.push_str("Hi");
+    s.push_str(&"Hi");
     assert s.len() == 2;
 }
 
@@ -728,9 +739,9 @@ test "String::from_utf8_unchecked from bytes iter" {
 
 test "push_str" {
     let mut s = String::with_capacity(20);
-    s.push_str("Hello");
-    s.push_str(", ");
-    s.push_str("World!");
+    s.push_str(&"Hello");
+    s.push_str(&", ");
+    s.push_str(&"World!");
     assert s == "Hello, World!";
 }
 
@@ -778,7 +789,7 @@ test "clear" {
 test "capacity and reserve" {
     let mut s = String::with_capacity(10);
     assert s.capacity() >= 10;
-    s.push_str("hi");
+    s.push_str(&"hi");
     s.reserve(100);
     assert s.capacity() >= 102;
     assert s == "hi";
@@ -786,7 +797,7 @@ test "capacity and reserve" {
 
 test "shrink_to_fit" {
     let mut s = String::with_capacity(1000);
-    s.push_str("hi");
+    s.push_str(&"hi");
     s.shrink_to_fit();
     assert s.capacity() == 2;
     assert s == "hi";
@@ -1090,7 +1101,7 @@ test "push_str_range_unchecked ASCII" {
     let mut dst = "[";
     let src = "hello";
     dst.push_str_range_unchecked(src, 1, 4);
-    dst.push_str("]");
+    dst.push_str(&"]");
     assert dst == "[ell]";
 }
 

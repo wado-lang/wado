@@ -10,16 +10,16 @@ use { Formatter } from "core:prelude/format.wado";
 /// Inspect for tuples: `[1, "hello", true]`
 impl<..T: Inspect> Inspect for [..T] {
     fn inspect(&self, f: &mut Formatter) {
-        f.write_str("[");
+        f.write_str(&"[");
         let mut first = true;
         for let v of *self {
             if !first {
-                f.write_str(", ");
+                f.write_str(&", ");
             }
             first = false;
             v.inspect(f);
         }
-        f.write_str("]");
+        f.write_str(&"]");
     }
 }
 
@@ -37,7 +37,7 @@ impl<..T: InspectAlt> InspectAlt for [..T] {
         for let v of *self {
             f.write_newline_indent();
             v.inspect_alt(f);
-            f.write_str(",");
+            f.write_str(&",");
         }
         f.close_brace("]");
     }
@@ -71,16 +71,16 @@ impl<..T: Ord> Ord for [..T] {
 /// Display for tuples: same as Inspect (tuples have no user-facing format).
 impl<..T: Display> Display for [..T] {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str("[");
+        f.write_str(&"[");
         let mut first = true;
         for let v of *self {
             if !first {
-                f.write_str(", ");
+                f.write_str(&", ");
             }
             first = false;
             v.fmt(f);
         }
-        f.write_str("]");
+        f.write_str(&"]");
     }
 }
 
@@ -91,7 +91,7 @@ impl<..T: DisplayAlt> DisplayAlt for [..T] {
         for let v of *self {
             f.write_newline_indent();
             v.fmt_alt(f);
-            f.write_str(",");
+            f.write_str(&",");
         }
         f.close_brace("]");
     }

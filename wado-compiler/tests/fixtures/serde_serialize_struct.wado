@@ -43,26 +43,26 @@ impl Serializer for JsonSerializer {
     type StructSerializer = JsonStructSerializer;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        self.buf.push_str(`{v}`);
+        self.buf.push_str(&`{v}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
-        self.buf.push_str(`"{*v}"`);
+        self.buf.push_str(&`"{*v}"`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
         if v {
-            self.buf.push_str("true");
+            self.buf.push_str(&"true");
         } else {
-            self.buf.push_str("false");
+            self.buf.push_str(&"false");
         }
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn begin_struct(&mut self, name: &String, fields: i32) -> Result<JsonStructSerializer, SerializeError> with stores[self] {
-        self.buf.push_str("{");
+        self.buf.push_str(&"{");
         return Result::<JsonStructSerializer, SerializeError>::Ok(JsonStructSerializer {
             ser: self,
             count: 0,
@@ -73,16 +73,16 @@ impl Serializer for JsonSerializer {
 impl SerializeStruct for JsonStructSerializer {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.ser.buf.push_str(",");
+            self.ser.buf.push_str(&",");
         }
-        self.ser.buf.push_str(`"{*name}":`);
+        self.ser.buf.push_str(&`"{*name}":`);
         value.serialize::<JsonSerializer>(self.ser);
         self.count += 1;
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.ser.buf.push_str("}");
+        self.ser.buf.push_str(&"}");
         return Result::<(), SerializeError>::Ok(());
     }
 }
@@ -116,11 +116,11 @@ struct User {
 // Manual Serialize impl — what the compiler would generate
 impl Serialize for User {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        let mut st = s.begin_struct("User", 3);
+        let mut st = s.begin_struct(&"User", 3);
         if let Ok(mut st) = st {
-            st.field::<String>("userName", &self.name);
-            st.field::<i32>("age", &self.age);
-            st.field::<bool>("active", &self.active);
+            st.field::<String>(&"userName", &self.name);
+            st.field::<i32>(&"age", &self.age);
+            st.field::<bool>(&"active", &self.active);
             return st.end();
         }
         return Result::<(), SerializeError>::Err(SerializeError { message: "begin_struct failed" });

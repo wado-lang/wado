@@ -12,30 +12,30 @@ pub fn gen_highlight(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<L
 fn gen_highlight_mapping(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_tokens: &Array<LitToken>) {
     let mut f = FnSpec::new("highlight_mapping");
     f.set_pub();
-    f.set_return_type("HighlightMapping");
+    f.set_return_type(&"HighlightMapping");
     f.emit_begin(w);
 
-    w.line("let defaults: Array<String> = [");
+    w.line(&"let defaults: Array<String> = [");
     w.indent();
 
     for let rule of lexer_rules {
         if !rule.is_fragment {
             let capture = classify_lexer_rule(rule);
-            w.line(`{escape_string(&capture)},  // TK_{rule.name}`);
+            w.line(&`{escape_string(&capture)},  // TK_{rule.name}`);
         }
     }
-    w.line(`"",  // TK_EOF`);
-    w.line(`"",  // TK_ERROR`);
+    w.line(&`"",  // TK_EOF`);
+    w.line(&`"",  // TK_ERROR`);
 
     for let lit of lit_tokens {
         let capture = classify_literal(&lit.text);
-        w.line(`{escape_string(&capture)},  // {lit.const_name}`);
+        w.line(&`{escape_string(&capture)},  // {lit.const_name}`);
     }
     w.dedent();
-    w.line("];");
+    w.line(&"];");
 
-    w.line("let overrides: Array<HighlightOverride> = [];");
-    w.line("return HighlightMapping { defaults, overrides };");
+    w.line(&"let overrides: Array<HighlightOverride> = [];");
+    w.line(&"return HighlightMapping { defaults, overrides };");
 
     w.end();
     w.blank();
@@ -46,57 +46,57 @@ fn gen_highlight_fn(w: &mut CodeWriter, parser_rules: &Array<ParserRule>) {
 
     let mut f = FnSpec::new("highlight");
     f.set_pub();
-    f.add_param("input", "&String");
-    f.set_return_type("String");
+    f.add_param(&"input", &"&String");
+    f.set_return_type(&"String");
     f.emit_begin(w);
 
-    w.line("let mapping = highlight_mapping();");
-    w.line("let mut visitor = HighlightVisitor::new(mapping);");
-    w.line("let parse_result = parse(input);");
-    w.begin("if let Ok(tree) = parse_result");
-    w.line(`walk_{root_rule}(&mut visitor, &tree);`);
-    w.else_begin("else");
-    w.line("let tokens = tokenize(input);");
-    w.begin("for let token of &tokens");
-    w.line("visitor.visit_token(token);");
+    w.line(&"let mapping = highlight_mapping();");
+    w.line(&"let mut visitor = HighlightVisitor::new(mapping);");
+    w.line(&"let parse_result = parse(input);");
+    w.begin(&"if let Ok(tree) = parse_result");
+    w.line(&`walk_{root_rule}(&mut visitor, &tree);`);
+    w.else_begin(&"else");
+    w.line(&"let tokens = tokenize(input);");
+    w.begin(&"for let token of &tokens");
+    w.line(&"visitor.visit_token(token);");
     w.end();
     w.end();
-    w.line("return highlight_html(input, &visitor.captures);");
+    w.line(&"return highlight_html(input, &visitor.captures);");
 
     w.end();
     w.blank();
 }
 
 fn gen_highlight_run(w: &mut CodeWriter) {
-    w.line("use { args, print, eprintln, Stdout, Stderr, Environment } from \"core:cli\";");
-    w.line("use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from \"wasi:filesystem\";");
+    w.line(&"use { args, print, eprintln, Stdout, Stderr, Environment } from \"core:cli\";");
+    w.line(&"use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from \"wasi:filesystem\";");
     w.blank();
-    w.begin("export fn run() with Stdout, Stderr, Environment, Preopens");
-    w.line("let arguments = args();");
-    w.begin("if arguments.len() < 1");
-    w.line("eprintln(\"Usage: <highlighter> <input-file>\");");
-    w.line("return;");
+    w.begin(&"export fn run() with Stdout, Stderr, Environment, Preopens");
+    w.line(&"let arguments = args();");
+    w.begin(&"if arguments.len() < 1");
+    w.line(&"eprintln(\"Usage: <highlighter> <input-file>\");");
+    w.line(&"return;");
     w.end();
-    w.line("let path = arguments[0];");
-    w.line("let dirs = Preopens::get_directories();");
-    w.line("let root = dirs[0].0;");
+    w.line(&"let path = arguments[0];");
+    w.line(&"let dirs = Preopens::get_directories();");
+    w.line(&"let root = dirs[0].0;");
     w.line(
-        "let file = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait().unwrap();",
+        &"let file = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait().unwrap();",
     );
-    w.line("let [read_stream, _done] = file.read_via_stream(0 as Filesize);");
-    w.line("let mut bytes: Array<u8> = [];");
-    w.begin("loop");
-    w.line("let chunk = read_stream.read(65536);");
-    w.begin("if chunk.len() == 0");
-    w.line("break;");
+    w.line(&"let [read_stream, _done] = file.read_via_stream(0 as Filesize);");
+    w.line(&"let mut bytes: Array<u8> = [];");
+    w.begin(&"loop");
+    w.line(&"let chunk = read_stream.read(65536);");
+    w.begin(&"if chunk.len() == 0");
+    w.line(&"break;");
     w.end();
-    w.begin("for let b of chunk");
-    w.line("bytes.push(b);");
+    w.begin(&"for let b of chunk");
+    w.line(&"bytes.push(b);");
     w.end();
     w.end();
-    w.line("read_stream.drop();");
-    w.line("let input = String::from_utf8_unchecked(bytes);");
-    w.line("print(highlight(&input));");
+    w.line(&"read_stream.drop();");
+    w.line(&"let input = String::from_utf8_unchecked(bytes);");
+    w.line(&"print(highlight(&input));");
     w.end();
     w.blank();
 }
@@ -104,22 +104,22 @@ fn gen_highlight_run(w: &mut CodeWriter) {
 fn classify_lexer_rule(rule: &LexerRule) -> String {
     let name = rule.name;
     if rule.skip {
-        if contains_upper(&name, "WS") || contains_upper(&name, "WHITESPACE") || contains_upper(&name, "NEWLINE") {
+        if contains_upper(&name, &"WS") || contains_upper(&name, &"WHITESPACE") || contains_upper(&name, &"NEWLINE") {
             return "";
         }
     }
-    if contains_upper(&name, "COMMENT")
-        || contains_upper(&name, "LINE_COMMENT")
-        || contains_upper(&name, "BLOCK_COMMENT") {
+    if contains_upper(&name, &"COMMENT")
+        || contains_upper(&name, &"LINE_COMMENT")
+        || contains_upper(&name, &"BLOCK_COMMENT") {
         return "comment";
     }
-    if contains_upper(&name, "DOC_COMMENT") {
+    if contains_upper(&name, &"DOC_COMMENT") {
         return "comment";
     }
-    if name == "STRING" || name == "STRING_LITERAL" || name == "QUOTED_STRING" || contains_upper(&name, "STRING") {
+    if name == "STRING" || name == "STRING_LITERAL" || name == "QUOTED_STRING" || contains_upper(&name, &"STRING") {
         return "string";
     }
-    if name == "CHAR" || name == "CHAR_LITERAL" || contains_upper(&name, "CHAR_LIT") {
+    if name == "CHAR" || name == "CHAR_LITERAL" || contains_upper(&name, &"CHAR_LIT") {
         return "string";
     }
     if name == "NUMBER"
@@ -129,19 +129,19 @@ fn classify_lexer_rule(rule: &LexerRule) -> String {
         || name == "DECIMAL"
         || name == "INTEGER_LITERAL"
         || name == "FLOAT_LITERAL"
-        || contains_upper(&name, "NUMBER")
-        || contains_upper(&name, "NUMERIC") {
+        || contains_upper(&name, &"NUMBER")
+        || contains_upper(&name, &"NUMERIC") {
         return "number";
     }
     if name == "IDENTIFIER" || name == "ID" || name == "NAME" || name == "IDENT" {
         return "";
     }
     // Lexer rules starting with K_ or KW_ are keyword tokens (e.g. K_SELECT, KW_IF)
-    if starts_with(&name, "K_") || starts_with(&name, "KW_") {
+    if starts_with(&name, &"K_") || starts_with(&name, &"KW_") {
         return "keyword";
     }
     // Lexer rules containing KEYWORD are keyword tokens
-    if contains_upper(&name, "KEYWORD") {
+    if contains_upper(&name, &"KEYWORD") {
         return "keyword";
     }
     if rule.skip {
