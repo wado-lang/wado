@@ -132,8 +132,31 @@ impl Monomorphizer {
     }
 
     /// Queue a function instantiation if not already queued. Returns true if newly queued.
+    ///
+    /// Dedupes on (1) the full `InstantiationKey` and (2) a same-module
+    /// mangled-name match. `mangle_type_arg_for_generic` strips
+    /// `Ref`/`MutRef` wrappers from type arguments, so a blanket like
+    /// `impl<T> Inspect for &T` can queue with both
+    /// `impl_type_args = [Array<char>]` and `impl_type_args = [&Array<char>]`
+    /// from different rewrite paths in the same module. Those keys are
+    /// distinct under `Hash`/`Eq` but produce identical mangled function
+    /// names, and `instantiate_function` stamps the resulting `TirFunction`
+    /// with `key.module_source`, so emitting both creates a
+    /// `function_id_for` collision in `project.functions` (`FreeFunctionName`
+    /// keys by `(module_source, name)`). Cross-module duplicates are *not*
+    /// deduped because their resulting `TirFunctions` live in different
+    /// modules and DCE can keep them apart by position.
     pub fn try_queue_function(&mut self, key: InstantiationKey, mangled_name: String) -> bool {
         if self.functions.instantiated.contains_key(&key) {
+            return false;
+        }
+        if let Some(prior_key) = self.functions.mangled_to_key.get(&mangled_name)
+            && prior_key.module_source == key.module_source
+        {
+            // Record the key → mangled_name mapping so `call_rewrite` can
+            // resolve this key to the existing instantiation, but don't
+            // re-queue (no second TirFunction emitted).
+            self.functions.instantiated.insert(key, mangled_name);
             return false;
         }
         self.functions

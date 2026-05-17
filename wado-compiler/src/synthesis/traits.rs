@@ -2683,6 +2683,17 @@ fn inspect_impl_module(type_id: TypeId, tt: &TypeTable, default: &ModuleSource) 
 fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<String>)> {
     let is_concrete = |t: TypeId| !matches!(tt.get(t), ResolvedType::TypeParam { .. });
 
+    // `ResolvedType::Function` collapses to `(arity, return_type)` for the
+    // mangled stub name — its parameter TypeIds are irrelevant because the
+    // `FnCanonicalDispatch` body in `wir_build` casts `self` to the shared
+    // canonical-inspectable base before reading the vtable. Multiple
+    // distinct `Function` TypeIds with the same `(arity, return_type)`
+    // would otherwise each emit an identical stub and collide on
+    // `function_id_for`, which is required to be injective over
+    // `project.functions` (asserted in `optimize/dce`). Dedupe here so
+    // we emit a single representative stub per signature.
+    let mut seen_fn: IndexSet<Vec<String>> = IndexSet::default();
+
     tt.all_types()
         .filter_map(|(id, resolved)| match resolved {
             ResolvedType::GenericInstance {
@@ -2705,6 +2716,9 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<Strin
                     return None;
                 }
                 let args = vec![params.len().to_string(), tt.mangle_type_name(*return_type)];
+                if !seen_fn.insert(args.clone()) {
+                    return None;
+                }
                 Some((*id, "Fn".to_string(), args))
             }
             ResolvedType::GenericResource {
