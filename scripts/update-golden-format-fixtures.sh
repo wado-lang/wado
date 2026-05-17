@@ -8,7 +8,7 @@ set -euo pipefail
 # Expects binaries to be pre-built (on-task-done builds them before calling this).
 
 FIXTURES_DIR="wado-compiler/tests/format.fixtures"
-GOLDEN_DIR="wado-compiler/tests/format.fixtures.golden"
+GOLDEN_DIR="wado-compiler/tests/generated/format.fixtures"
 mkdir -p "$GOLDEN_DIR"
 
 WADO="./target/debug/wado"
