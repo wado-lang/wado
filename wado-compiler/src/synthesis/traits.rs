@@ -274,17 +274,36 @@ pub(crate) struct SynthesisCtx<'env, 'pend> {
 }
 
 impl SynthesisCtx<'_, '_> {
-    /// `true` when an impl of `trait_name` for `<type_name>` defined in the
-    /// current module is already known (either from the AST/synthesised
-    /// `TraitEnv` layer or recorded earlier in this synthesis pass).
-    /// Module-scoped on purpose — `has_impl` is called to dedup auto-derived
-    /// impls, and an impl in a *different* module is irrelevant because
-    /// auto-derived impls always co-locate with their receiver type.
+    /// `true` when an impl of `trait_name` for `<type_name>` is already known
+    /// to the project — either user-written (in the AST layer of `TraitEnv`,
+    /// regardless of which module it lives in) or generated earlier in this
+    /// synthesis pass for the *current* module.
+    ///
+    /// The two halves are deliberately scoped differently:
+    ///
+    /// - The AST-layer check is module-agnostic. A user-written
+    ///   `impl Display for String` in `core:prelude/format` must suppress
+    ///   `synthesize_traits`'s Display-delegates-to-Inspect fallback even
+    ///   when this pass is currently synthesising `core:prelude/string`
+    ///   (String's defining module). Restricting the check to
+    ///   `self.module` would silently shadow the user's impl with the
+    ///   auto-derived fallback the synthesised layer later wins via the
+    ///   `type_module` hint at the call site.
+    /// - The in-pass `pending` check stays module-scoped so two same-name
+    ///   receiver types in different modules (e.g. `struct Widget` in
+    ///   module A and module B) each still get their own auto-derived
+    ///   impl. Without the module component the second derivation would
+    ///   be silently skipped.
     pub(crate) fn has_impl(&self, type_name: &str, trait_name: &str) -> bool {
+        // Module-agnostic AST-layer check: any user-written impl, anywhere
+        // in the project, counts. During synthesis the synthesised layer of
+        // `TraitEnv` is empty (it is rebuilt by `collect_synthesised_impls`
+        // *after* this pass), so `impl_module_for` with no hint reduces to
+        // the AST layer.
         if self
             .trait_env
-            .impl_module_for(type_name, trait_name, Some(&self.module))
-            .is_some_and(|m| m == &self.module)
+            .impl_module_for(type_name, trait_name, None)
+            .is_some()
         {
             return true;
         }

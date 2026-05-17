@@ -268,6 +268,7 @@ impl Ord for String {
 /// Iterator over UTF-8 bytes of a String.
 /// Yields each byte as u8.
 pub struct StrUtf8ByteIter {
+    #[hidden]
     repr: builtin::array<u8>,
     used: i32,
     index: i32,
@@ -293,6 +294,7 @@ impl Iterator for StrUtf8ByteIter {
 /// Iterator over Unicode scalar values (chars) of a String.
 /// Decodes UTF-8 and yields each character.
 pub struct StrCharIter {
+    #[hidden]
     repr: builtin::array<u8>,
     used: i32,
     byte_index: i32,
@@ -1258,9 +1260,11 @@ impl From<char> for String {
 
 /// Iterator over substrings split by a separator.
 pub struct StrSplitIter {
+    #[hidden]
     repr: builtin::array<u8>,
     used: i32,
     pos: i32,
+    #[hidden]
     sep_repr: builtin::array<u8>,
     sep_len: i32,
     finished: bool,
@@ -1304,9 +1308,11 @@ impl Iterator for StrSplitIter {
 
 /// Iterator over substrings split by a separator, limited to `n` parts.
 pub struct StrSplitNIter {
+    #[hidden]
     repr: builtin::array<u8>,
     used: i32,
     pos: i32,
+    #[hidden]
     sep_repr: builtin::array<u8>,
     sep_len: i32,
     remaining: i32,
@@ -1360,6 +1366,7 @@ impl Iterator for StrSplitNIter {
 
 /// Iterator over whitespace-separated substrings.
 pub struct StrSplitWhitespaceIter {
+    #[hidden]
     repr: builtin::array<u8>,
     used: i32,
     pos: i32,
@@ -1394,6 +1401,7 @@ impl Iterator for StrSplitWhitespaceIter {
 
 /// Iterator over lines of a string.
 pub struct StrLinesIter {
+    #[hidden]
     repr: builtin::array<u8>,
     used: i32,
     pos: i32,
@@ -1449,6 +1457,7 @@ impl Iterator for StrLinesIter {
 
 /// Iterator over characters with their byte indices.
 pub struct StrCharIndicesIter {
+    #[hidden]
     repr: builtin::array<u8>,
     used: i32,
     byte_index: i32,
