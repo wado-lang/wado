@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778995725901,
+  "lastUpdate": 1778999650068,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22761,6 +22761,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/453f8d5a9d0d98ee0bf9cbb481df44031d1194f5"
         },
         "date": 1778995725510,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 490666,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2025968085aa30dbee1841f5b48fcdda72b5b594",
+          "message": "Merge pull request #1099 from wado-lang/claude/add-callable-objects-JOkxx\n\nfeat: allow call expressions on any function-typed value",
+          "timestamp": "2026-05-17T15:27:50+09:00",
+          "tree_id": "ce03c4ebb9b8d14da651abb80b8d1d39d41c6eaa",
+          "url": "https://github.com/wado-lang/wado/commit/2025968085aa30dbee1841f5b48fcdda72b5b594"
+        },
+        "date": 1778999649680,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
