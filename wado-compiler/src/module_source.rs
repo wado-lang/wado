@@ -68,7 +68,7 @@ static ENTRY_FILENAME_UNINITIALIZED: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("<uninitialized>"));
 
 fn well_known_arcs() -> Vec<Arc<str>> {
-    vec![
+    let mut arcs: Vec<Arc<str>> = vec![
         PLACEHOLDER_NAME.clone(),
         CORE_PRELUDE.clone(),
         CORE_BUILTIN.clone(),
@@ -90,8 +90,50 @@ fn well_known_arcs() -> Vec<Arc<str>> {
         ENTRY_FILENAME_ENTRY.clone(),
         ENTRY_FILENAME_STDIN.clone(),
         ENTRY_FILENAME_UNINITIALIZED.clone(),
-    ]
+    ];
+    arcs.extend(STDLIB_NAME_ARCS.iter().cloned());
+    arcs
 }
+
+/// Canonical `Arc<str>` values for every stdlib module's `ModuleSource`
+/// payload.
+///
+/// Derived from [`crate::stdlib::ALL_CORE_MODULES`],
+/// [`crate::stdlib::ALL_WASI_MODULES`] and
+/// [`crate::stdlib::ALL_CORE_WASM_ASSETS`] — the single source of truth
+/// for the stdlib module set.  Every [`ModuleSourceInterner`] adopts
+/// these, so `ModuleSource` values for stdlib modules compare
+/// pointer-equal across independently constructed interners. This is
+/// the foundation that lets the stdlib TIR cache key its `IndexMaps` by
+/// `ModuleSource`.
+///
+/// For each variant, the interned payload is the portion of the
+/// import path that lands inside the `ModuleSource` variant:
+///
+/// * [`ModuleSource::Core`] holds the path stripped of its `core:`
+///   prefix (e.g. `"prelude"`, `"prelude/types.wado"`).
+/// * [`ModuleSource::Wasi`] holds the path stripped of its `wasi:`
+///   prefix.
+/// * [`ModuleSource::Wasm`] holds the full canonical path including
+///   the `core:` prefix (matching what the loader passes to
+///   [`ModuleSourceInterner::wasm`]).
+static STDLIB_NAME_ARCS: LazyLock<Vec<Arc<str>>> = LazyLock::new(|| {
+    let mut arcs: Vec<Arc<str>> = Vec::new();
+    for (path, _src) in crate::stdlib::ALL_CORE_MODULES {
+        let name = path.strip_prefix("core:").unwrap_or(path);
+        arcs.push(Arc::<str>::from(name));
+    }
+    for (path, _src) in crate::stdlib::ALL_WASI_MODULES {
+        let interface = path.strip_prefix("wasi:").unwrap_or(path);
+        arcs.push(Arc::<str>::from(interface));
+    }
+    for (path, _bytes) in crate::stdlib::ALL_CORE_WASM_ASSETS {
+        // The loader interns the full canonical path for `Wasm`
+        // variants (no prefix stripping); see `ModuleLoader::handle_wasm_import`.
+        arcs.push(Arc::<str>::from(*path));
+    }
+    arcs
+});
 
 /// Interner for `ModuleSource` payloads. Wraps a generic
 /// [`StringInterner`] and adopts every well-known
