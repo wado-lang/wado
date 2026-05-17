@@ -185,9 +185,7 @@ fn "wado-compiler/tests/fixtures/opt_labeled_block_fusion.wado/run"() with Stdou
         unreachable;
     };
     if ref.test "core:prelude/types.wado//Option<i32>::Some"(a) {
-        let __cast_1: ref "core:prelude/types.wado//Option<i32>::Some";
-        __cast_1 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(a);
-        v_1 = __cast_1.payload_0;
+        v_1 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(a).payload_0;
         __cond_3 = v_1 == 10;
         if __cond_3 == 0 {
             "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -260,9 +258,7 @@ condition: b matches { None }
     };
     c = "wado-compiler/tests/fixtures/opt_labeled_block_fusion.wado/first_positive"(arr);
     if ref.test "core:prelude/types.wado//Option<i32>::Some"(c) {
-        let __cast_2: ref "core:prelude/types.wado//Option<i32>::Some";
-        __cast_2 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(c);
-        v_9 = __cast_2.payload_0;
+        v_9 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(c).payload_0;
         __cond_11 = v_9 == 3;
         if __cond_11 == 0 {
             "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -334,13 +330,13 @@ condition: d matches { None }
         unreachable;
     }
     message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
-    let __pair_temp_3: i64;
-    __pair_temp_3 = "wasi/stream-new"();
-    let __mv_lo_3: i32;
-    let __mv_hi_3: i32;
-    multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
-    rx = __mv_lo_3;
-    tx = __mv_hi_3;
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_1: i32;
+    let __mv_hi_1: i32;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
+    rx = __mv_lo_1;
+    tx = __mv_hi_1;
     handle = "wado-compiler/tests/fixtures/opt_labeled_block_fusion.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);

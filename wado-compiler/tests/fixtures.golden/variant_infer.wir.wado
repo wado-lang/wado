@@ -175,9 +175,7 @@ fn "wado-compiler/tests/fixtures/variant_infer.wado/variant_infer_option_some"()
     let __match_scrut_0: ref null "core:prelude/string.wado//String";
     __match_scrut_0 = a;
     __cond_2 = (if ref.is_null(__match_scrut_0) == 0 -> bool {
-        let __cast_1: ref null "core:prelude/string.wado//String";
-        __cast_1 = ref.as_non_null(__match_scrut_0);
-        s = ref.as_non_null(__cast_1);
+        s = ref.as_non_null(__match_scrut_0);
         __inline_String_Eq__eq_0: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
             len_a = s.used;
@@ -215,9 +213,7 @@ condition: a matches { Some(s) && s == \"hello\" }
     let __match_scrut_1: ref "core:prelude/types.wado//Option<i32>";
     __match_scrut_1 = b;
     __cond_5 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_1) -> bool {
-        let __cast_2: ref "core:prelude/types.wado//Option<i32>::Some";
-        __cast_2 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_1);
-        n = __cast_2.payload_0;
+        n = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_1).payload_0;
         n == 42;
     } else {
         0;
@@ -262,9 +258,7 @@ fn "wado-compiler/tests/fixtures/variant_infer.wado/variant_infer_result_annotat
     let __match_scrut_0: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
     __match_scrut_0 = a;
     __cond_2 = (if ref.test "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(__match_scrut_0) -> bool {
-        let __cast_1: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(__match_scrut_0);
-        n = __cast_1.payload_0;
+        n = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(__match_scrut_0).payload_0;
         n == 42;
     } else {
         0;
@@ -294,9 +288,7 @@ condition: a matches { Ok(n) && n == 42 }
     let __match_scrut_1: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
     __match_scrut_1 = b;
     __cond_5 = (if ref.test "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err"(__match_scrut_1) -> bool {
-        let __cast_2: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err"(__match_scrut_1);
-        e = __cast_2.payload_0;
+        e = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err"(__match_scrut_1).payload_0;
         __inline_String_Eq__eq_4: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fail"), used: 4 };
             len_a = e.used;

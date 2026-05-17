@@ -237,15 +237,13 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
             let __match_scrut_0: ref null "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged";
             __match_scrut_0 = "core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>^Iterator::next"(__iter_10);
             if ref.is_null(__match_scrut_0) == 0 {
-                let __cast_3: ref null "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged";
-                __cast_3 = ref.as_non_null(__match_scrut_0);
-                let __variant_payload_4: ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged";
-                __variant_payload_4 = ref.as_non_null(__cast_3);
-                l = __variant_payload_4.label;
-                let __struct_field_5: ref "tuple//[i32, i32]";
-                __struct_field_5 = __variant_payload_4.coords;
-                a = __struct_field_5.0;
-                b = __struct_field_5.1;
+                let __variant_payload_3: ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged";
+                __variant_payload_3 = ref.as_non_null(__match_scrut_0);
+                l = __variant_payload_3.label;
+                let __struct_field_4: ref "tuple//[i32, i32]";
+                __struct_field_4 = __variant_payload_3.coords;
+                a = __struct_field_4.0;
+                b = __struct_field_4.1;
                 message_80 = __tmpl: block -> ref "core:prelude/string.wado//String" {
                     __local_27 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
                     "core:prelude/string.wado/String::push_str"(__local_27, l);
@@ -256,13 +254,13 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
                     break __tmpl: __local_27;
                     unreachable;
                 };
-                let __pair_temp_6: i64;
-                __pair_temp_6 = "wasi/stream-new"();
-                let __mv_lo_6: i32;
-                let __mv_hi_6: i32;
-                multivalue_bind [__mv_lo_6, __mv_hi_6] = (builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64));
-                rx_81 = __mv_lo_6;
-                tx_82 = __mv_hi_6;
+                let __pair_temp_5: i64;
+                __pair_temp_5 = "wasi/stream-new"();
+                let __mv_lo_5: i32;
+                let __mv_hi_5: i32;
+                multivalue_bind [__mv_lo_5, __mv_hi_5] = (builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64));
+                rx_81 = __mv_lo_5;
+                tx_82 = __mv_hi_5;
                 handle_83 = "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/__cm_binding__Stdout_write_via_stream"(rx_81);
                 "core:cli/write_to_stream"(tx_82, message_80, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_83);
@@ -275,13 +273,13 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
     t = struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("X"), used: 1 }, coords: struct.new "tuple//[i32, i32]" { 0: 100, 1: 200 } };
     let __match_scrut_1: ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged";
     __match_scrut_1 = t;
-    desc = (if let __struct_field_8: ref "tuple//[i32, i32]"; __struct_field_8 = __match_scrut_1.coords; x_15 = __struct_field_8.0; y_16 = __struct_field_8.1; (x_15 + y_16) > 250 -> ref "core:prelude/string.wado//String" {
+    desc = (if let __struct_field_7: ref "tuple//[i32, i32]"; __struct_field_7 = __match_scrut_1.coords; x_15 = __struct_field_7.0; y_16 = __struct_field_7.1; (x_15 + y_16) > 250 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("large"), used: 5 };
     } else {
-        let __struct_field_7: ref "tuple//[i32, i32]";
-        __struct_field_7 = __match_scrut_1.coords;
-        x_17 = __struct_field_7.0;
-        y_18 = __struct_field_7.1;
+        let __struct_field_6: ref "tuple//[i32, i32]";
+        __struct_field_6 = __match_scrut_1.coords;
+        x_17 = __struct_field_6.0;
+        y_18 = __struct_field_6.1;
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_29 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
             __local_30 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_29 };
@@ -296,24 +294,22 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
             unreachable;
         };
     });
-    let __pair_temp_9: i64;
-    __pair_temp_9 = "wasi/stream-new"();
-    let __mv_lo_9: i32;
-    let __mv_hi_9: i32;
-    multivalue_bind [__mv_lo_9, __mv_hi_9] = (builtin::i32_wrap_i64(__pair_temp_9); builtin::i32_wrap_i64(__pair_temp_9 >>u 32_i64));
-    rx_104 = __mv_lo_9;
-    tx_105 = __mv_hi_9;
+    let __pair_temp_8: i64;
+    __pair_temp_8 = "wasi/stream-new"();
+    let __mv_lo_8: i32;
+    let __mv_hi_8: i32;
+    multivalue_bind [__mv_lo_8, __mv_hi_8] = (builtin::i32_wrap_i64(__pair_temp_8); builtin::i32_wrap_i64(__pair_temp_8 >>u 32_i64));
+    rx_104 = __mv_lo_8;
+    tx_105 = __mv_hi_8;
     handle_106 = "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/__cm_binding__Stdout_write_via_stream"(rx_104);
     "core:cli/write_to_stream"(tx_105, desc, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_106);
     opt = struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Point" { x: 7, y: 8 };
     if ref.is_null(opt) == 0 {
-        let __cast_10: ref null "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Point";
-        __cast_10 = ref.as_non_null(opt);
-        let __variant_payload_11: ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Point";
-        __variant_payload_11 = ref.as_non_null(__cast_10);
-        x_21 = __variant_payload_11.x;
-        y_22 = __variant_payload_11.y;
+        let __variant_payload_9: ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Point";
+        __variant_payload_9 = ref.as_non_null(opt);
+        x_21 = __variant_payload_9.x;
+        y_22 = __variant_payload_9.y;
         message_109 = __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_31 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
             __local_32 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_31 };
@@ -321,13 +317,13 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
             break __tmpl: __local_31;
             unreachable;
         };
-        let __pair_temp_12: i64;
-        __pair_temp_12 = "wasi/stream-new"();
-        let __mv_lo_12: i32;
-        let __mv_hi_12: i32;
-        multivalue_bind [__mv_lo_12, __mv_hi_12] = (builtin::i32_wrap_i64(__pair_temp_12); builtin::i32_wrap_i64(__pair_temp_12 >>u 32_i64));
-        rx_110 = __mv_lo_12;
-        tx_111 = __mv_hi_12;
+        let __pair_temp_10: i64;
+        __pair_temp_10 = "wasi/stream-new"();
+        let __mv_lo_10: i32;
+        let __mv_hi_10: i32;
+        multivalue_bind [__mv_lo_10, __mv_hi_10] = (builtin::i32_wrap_i64(__pair_temp_10); builtin::i32_wrap_i64(__pair_temp_10 >>u 32_i64));
+        rx_110 = __mv_lo_10;
+        tx_111 = __mv_hi_10;
         handle_112 = "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/__cm_binding__Stdout_write_via_stream"(rx_110);
         "core:cli/write_to_stream"(tx_111, message_109, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_112);

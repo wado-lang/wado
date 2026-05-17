@@ -3625,22 +3625,16 @@ fn "core:prelude/intparse.wado/parse_i64_radix_range"(s, start, end, radix, max,
     let __match_scrut_0: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>";
     __match_scrut_0 = "core:prelude/intparse.wado/parse_signed_prefix_range"(s, start, end);
     __pattern_temp_0 = (if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_0) -> ref "tuple//[bool, i32]" {
-        let __cast_2: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Ok";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_0);
-        p = __cast_2.payload_0;
+        p = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_0).payload_0;
         p;
     } else {
-        let __cast_1: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Err"(__match_scrut_0);
-        k_7 = __cast_1.payload_0;
+        k_7 = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Err"(__match_scrut_0).payload_0;
         return struct.new "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/intparse.wado//ParseIntError" { kind: k_7 } };
     });
     is_negative = __pattern_temp_0.0;
     digit_start = __pattern_temp_0.1;
     return let __match_scrut_1: ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>", __match_scrut_1 = "core:prelude/intparse.wado/parse_u64_digits"(s, digit_start, end, radix), (if ref.test "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_1) -> ref "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>" {
-        let __cast_4: ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Ok";
-        __cast_4 = ref.cast "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_1);
-        v = __cast_4.payload_0;
+        v = ref.cast "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_1).payload_0;
         if is_negative -> ref "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>" {
             if v >u min_abs -> ref "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>" {
                 struct.new "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_ParseIntError__new_2: block -> ref "core:prelude/intparse.wado//ParseIntError" {
@@ -3661,9 +3655,7 @@ fn "core:prelude/intparse.wado/parse_i64_radix_range"(s, start, end, radix, max,
             struct.new "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>::Ok" { discriminant: 0, payload_0: v };
         }
     } else {
-        let __cast_3: ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Err";
-        __cast_3 = ref.cast "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Err"(__match_scrut_1);
-        k_11 = __cast_3.payload_0;
+        k_11 = ref.cast "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Err"(__match_scrut_1).payload_0;
         kind_12 = (if (if is_negative -> i32 {
             k_11 == 2;
         } else {
@@ -3695,20 +3687,14 @@ fn "core:prelude/intparse.wado/parse_u64_radix_range"(s, start, end, radix, max)
     let __match_scrut_0: ref "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>";
     __match_scrut_0 = "core:prelude/intparse.wado/parse_unsigned_prefix_range"(s, start, end);
     digit_start = (if ref.test "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_0) -> i32 {
-        let __cast_2: ref "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Ok";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_0);
-        i = __cast_2.payload_0;
+        i = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_0).payload_0;
         i;
     } else {
-        let __cast_1: ref "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Err"(__match_scrut_0);
-        k_6 = __cast_1.payload_0;
+        k_6 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/IntErrorKind>::Err"(__match_scrut_0).payload_0;
         return struct.new "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/ParseIntError>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/intparse.wado//ParseIntError" { kind: k_6 } };
     });
     return let __match_scrut_1: ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>", __match_scrut_1 = "core:prelude/intparse.wado/parse_u64_digits"(s, digit_start, end, radix), (if ref.test "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_1) -> ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/ParseIntError>" {
-        let __cast_4: ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Ok";
-        __cast_4 = ref.cast "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_1);
-        v = __cast_4.payload_0;
+        v = ref.cast "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Ok"(__match_scrut_1).payload_0;
         if v >u max -> ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/ParseIntError>" {
             struct.new "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/ParseIntError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_ParseIntError__new_2: block -> ref "core:prelude/intparse.wado//ParseIntError" {
                 kind_12 = 2;
@@ -3719,9 +3705,7 @@ fn "core:prelude/intparse.wado/parse_u64_radix_range"(s, start, end, radix, max)
             struct.new "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/ParseIntError>::Ok" { discriminant: 0, payload_0: v };
         }
     } else {
-        let __cast_3: ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Err";
-        __cast_3 = ref.cast "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Err"(__match_scrut_1);
-        k_9 = __cast_3.payload_0;
+        k_9 = ref.cast "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/IntErrorKind>::Err"(__match_scrut_1).payload_0;
         struct.new "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/ParseIntError>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/intparse.wado//ParseIntError" { kind: k_9 } };
     });
 }
@@ -3750,9 +3734,7 @@ fn "core:prelude/intparse.wado/parse_f64_from_str_range"(s, start, end) {
         }) };
     }
     return let __match_scrut_0: ref "core:prelude/types.wado//Option<f64>", __match_scrut_0 = "core:prelude/fpfmt.wado/parse_text_range"(s, start, end), (if ref.test "core:prelude/types.wado//Option<f64>::Some"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>" {
-        let __cast_1: ref "core:prelude/types.wado//Option<f64>::Some";
-        __cast_1 = ref.cast "core:prelude/types.wado//Option<f64>::Some"(__match_scrut_0);
-        v = __cast_1.payload_0;
+        v = ref.cast "core:prelude/types.wado//Option<f64>::Some"(__match_scrut_0).payload_0;
         struct.new "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok" { discriminant: 0, payload_0: v };
     } else {
         struct.new "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_ParseFloatError__new_2: block -> ref "core:prelude/intparse.wado//ParseFloatError" {
@@ -3850,14 +3832,10 @@ fn "core:json/core/json/from_string<f32>"(input) {
     let __match_scrut_0: ref "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>";
     __match_scrut_0 = "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/f32^Deserialize::deserialize<core:json/JsonDeserializer>"(de);
     v = (if ref.test "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> f32 {
-        let __cast_2: ref "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Ok";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Ok"(__match_scrut_0);
-        __qm_v = __cast_2.payload_0;
+        __qm_v = ref.cast "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Ok"(__match_scrut_0).payload_0;
         __qm_v;
     } else {
-        let __cast_1: ref "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Err"(__match_scrut_0);
-        __qm_e = __cast_1.payload_0;
+        __qm_e = ref.cast "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Err"(__match_scrut_0).payload_0;
         return 1, 0_f32, __qm_e;
     });
     "core:json/JsonDeserializer::skip_whitespace"(de);
@@ -3886,14 +3864,10 @@ fn "core:json/core/json/from_string<f64>"(input) {
     let __match_scrut_0: ref "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>";
     __match_scrut_0 = "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/f64^Deserialize::deserialize<core:json/JsonDeserializer>"(de);
     v = (if ref.test "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> f64 {
-        let __cast_2: ref "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Ok";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Ok"(__match_scrut_0);
-        __qm_v = __cast_2.payload_0;
+        __qm_v = ref.cast "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Ok"(__match_scrut_0).payload_0;
         __qm_v;
     } else {
-        let __cast_1: ref "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Err"(__match_scrut_0);
-        __qm_e = __cast_1.payload_0;
+        __qm_e = ref.cast "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Err"(__match_scrut_0).payload_0;
         return 1, 0, __qm_e;
     });
     "core:json/JsonDeserializer::skip_whitespace"(de);
@@ -3922,14 +3896,10 @@ fn "core:json/core/json/from_string<u64>"(input) {
     let __match_scrut_0: ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>";
     __match_scrut_0 = "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/u64^Deserialize::deserialize<core:json/JsonDeserializer>"(de);
     v = (if ref.test "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> u64 {
-        let __cast_2: ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Ok";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Ok"(__match_scrut_0);
-        __qm_v = __cast_2.payload_0;
+        __qm_v = ref.cast "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Ok"(__match_scrut_0).payload_0;
         __qm_v;
     } else {
-        let __cast_1: ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Err"(__match_scrut_0);
-        __qm_e = __cast_1.payload_0;
+        __qm_e = ref.cast "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Err"(__match_scrut_0).payload_0;
         return 1, 0_i64, __qm_e;
     });
     "core:json/JsonDeserializer::skip_whitespace"(de);
@@ -3958,14 +3928,10 @@ fn "core:json/core/json/from_string<u32>"(input) {
     let __match_scrut_0: ref "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>";
     __match_scrut_0 = "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/u32^Deserialize::deserialize<core:json/JsonDeserializer>"(de);
     v = (if ref.test "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> u32 {
-        let __cast_2: ref "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>::Ok";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>::Ok"(__match_scrut_0);
-        __qm_v = __cast_2.payload_0;
+        __qm_v = ref.cast "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>::Ok"(__match_scrut_0).payload_0;
         __qm_v;
     } else {
-        let __cast_1: ref "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>::Err"(__match_scrut_0);
-        __qm_e = __cast_1.payload_0;
+        __qm_e = ref.cast "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>::Err"(__match_scrut_0).payload_0;
         return 1, 0, __qm_e;
     });
     "core:json/JsonDeserializer::skip_whitespace"(de);
@@ -3994,14 +3960,10 @@ fn "core:json/core/json/from_string<i64>"(input) {
     let __match_scrut_0: ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>";
     __match_scrut_0 = "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/i64^Deserialize::deserialize<core:json/JsonDeserializer>"(de);
     v = (if ref.test "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> i64 {
-        let __cast_2: ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Ok";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Ok"(__match_scrut_0);
-        __qm_v = __cast_2.payload_0;
+        __qm_v = ref.cast "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Ok"(__match_scrut_0).payload_0;
         __qm_v;
     } else {
-        let __cast_1: ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Err"(__match_scrut_0);
-        __qm_e = __cast_1.payload_0;
+        __qm_e = ref.cast "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Err"(__match_scrut_0).payload_0;
         return 1, 0_i64, __qm_e;
     });
     "core:json/JsonDeserializer::skip_whitespace"(de);
@@ -4030,14 +3992,10 @@ fn "core:json/core/json/from_string<i32>"(input) {
     let __match_scrut_0: ref "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>";
     __match_scrut_0 = "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/i32^Deserialize::deserialize<core:json/JsonDeserializer>"(de);
     v = (if ref.test "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> i32 {
-        let __cast_2: ref "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Ok";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Ok"(__match_scrut_0);
-        __qm_v = __cast_2.payload_0;
+        __qm_v = ref.cast "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Ok"(__match_scrut_0).payload_0;
         __qm_v;
     } else {
-        let __cast_1: ref "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err"(__match_scrut_0);
-        __qm_e = __cast_1.payload_0;
+        __qm_e = ref.cast "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err"(__match_scrut_0).payload_0;
         return 1, 0, __qm_e;
     });
     "core:json/JsonDeserializer::skip_whitespace"(de);
@@ -4953,14 +4911,10 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
             } else if esc == 117 {
                 self.pos = __hfs_pos_50;
                 "core:prelude/string.wado/String::push"(result_7, let __match_scrut_1: ref "core:prelude/types.wado//Result<char,core:serde/DeserializeError>"; __match_scrut_1 = "core:json/JsonDeserializer::read_unicode_escape"(self); (if ref.test "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Ok"(__match_scrut_1) -> char {
-                    let __cast_2: ref "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Ok";
-                    __cast_2 = ref.cast "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Ok"(__match_scrut_1);
-                    __qm_v = __cast_2.payload_0;
+                    __qm_v = ref.cast "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Ok"(__match_scrut_1).payload_0;
                     __qm_v;
                 } else {
-                    let __cast_1: ref "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Err";
-                    __cast_1 = ref.cast "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Err"(__match_scrut_1);
-                    __qm_e = __cast_1.payload_0;
+                    __qm_e = ref.cast "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Err"(__match_scrut_1).payload_0;
                     return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __qm_e };
                 }));
                 __hfs_pos_50 = self.pos;
@@ -5049,9 +5003,7 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {
     };
     self.pos = self.pos + 3;
     return let __match_scrut_0: ref "core:prelude/types.wado//Option<char>", __match_scrut_0 = "core:prelude/primitive.wado/char::from_u32"(code), (if ref.test "core:prelude/types.wado//Option<char>::Some"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<char,core:serde/DeserializeError>" {
-        let __cast_1: ref "core:prelude/types.wado//Option<char>::Some";
-        __cast_1 = ref.cast "core:prelude/types.wado//Option<char>::Some"(__match_scrut_0);
-        c_5 = __cast_1.payload_0;
+        c_5 = ref.cast "core:prelude/types.wado//Option<char>::Some"(__match_scrut_0).payload_0;
         struct.new "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: c_5 };
     } else {
         struct.new "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__malformed_4: block -> ref "core:serde//DeserializeError" {
@@ -5117,9 +5069,7 @@ fn "core:json/JsonDeserializer::parse_i64_from"(raw, start) {
             break __inline_f64_FromStr__from_str_range_1: "core:prelude/intparse.wado/parse_f64_from_str_range"(raw, 0, end_24);
             unreachable;
         }, (if ref.test "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>" {
-            let __cast_3: ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok";
-            __cast_3 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0);
-            v_3 = __cast_3.payload_0;
+            v_3 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0).payload_0;
             if v_3 != builtin::f64_floor(v_3) -> ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>" {
                 struct.new "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_2: block -> ref "core:serde//DeserializeError" {
                     msg_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer, got float"), used: 27 };
@@ -5127,13 +5077,9 @@ fn "core:json/JsonDeserializer::parse_i64_from"(raw, start) {
                     unreachable;
                 }) };
             } else if ref.test "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>" {
-                let __cast_2: ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok";
-                __cast_2 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0);
-                v_4 = __cast_2.payload_0;
+                v_4 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0).payload_0;
                 struct.new "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: builtin::i64_trunc_f64_s(v_4) };
             } else if ref.test "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>" {
-                let __cast_1: ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err";
-                __cast_1 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err"(__match_scrut_0);
                 struct.new "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__invalid_value_3: block -> ref "core:serde//DeserializeError" {
                     msg_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid number"), used: 14 };
                     break __inline_DeserializeError__invalid_value_3: struct.new "core:serde//DeserializeError" { kind: 4, message: msg_11, offset: start };
@@ -5143,13 +5089,9 @@ fn "core:json/JsonDeserializer::parse_i64_from"(raw, start) {
                 unreachable;
             }
         } else if ref.test "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>" {
-            let __cast_2: ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok";
-            __cast_2 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0);
-            v_4 = __cast_2.payload_0;
+            v_4 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0).payload_0;
             struct.new "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: builtin::i64_trunc_f64_s(v_4) };
         } else if ref.test "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>" {
-            let __cast_1: ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err";
-            __cast_1 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err"(__match_scrut_0);
             struct.new "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__invalid_value_3: block -> ref "core:serde//DeserializeError" {
                 msg_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid number"), used: 14 };
                 break __inline_DeserializeError__invalid_value_3: struct.new "core:serde//DeserializeError" { kind: 4, message: msg_11, offset: start };
@@ -5164,14 +5106,10 @@ fn "core:json/JsonDeserializer::parse_i64_from"(raw, start) {
         break __inline_i64_FromStr__from_str_range_3: "core:prelude/intparse.wado/parse_i64_radix_range"(raw, 0, end_28, 10, 9223372036854775807_i64, -9223372036854775808_i64);
         unreachable;
     }, (if ref.test "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>::Ok"(__match_scrut_1) -> ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>" {
-        let __cast_5: ref "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>::Ok";
-        __cast_5 = ref.cast "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>::Ok"(__match_scrut_1);
-        v_5 = __cast_5.payload_0;
+        v_5 = ref.cast "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>::Ok"(__match_scrut_1).payload_0;
         struct.new "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: v_5 };
     } else {
-        let __cast_4: ref "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>::Err";
-        __cast_4 = ref.cast "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>::Err"(__match_scrut_1);
-        e = __cast_4.payload_0;
+        e = ref.cast "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>::Err"(__match_scrut_1).payload_0;
         struct.new "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(let __match_scrut_2: "core:prelude/intparse.wado//enum:IntErrorKind"; __match_scrut_2 = e.kind; (if __match_scrut_2 == 2 -> ref "core:serde//DeserializeError" {
             __inline_DeserializeError__overflow_6: block -> ref "core:serde//DeserializeError" {
                 msg_15 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i64"), used: 26 };
@@ -5228,9 +5166,7 @@ fn "core:json/JsonDeserializer::parse_u64_from"(raw, start) {
             break __inline_f64_FromStr__from_str_range_1: "core:prelude/intparse.wado/parse_f64_from_str_range"(raw, 0, end_32);
             unreachable;
         }, (if ref.test "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>" {
-            let __cast_4: ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok";
-            __cast_4 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0);
-            v_3 = __cast_4.payload_0;
+            v_3 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0).payload_0;
             if v_3 < 0 -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>" {
                 struct.new "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__overflow_4: block -> ref "core:serde//DeserializeError" {
                     msg_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative value for u64"), used: 22 };
@@ -5238,9 +5174,7 @@ fn "core:json/JsonDeserializer::parse_u64_from"(raw, start) {
                     unreachable;
                 }) };
             } else if ref.test "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>" {
-                let __cast_3: ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok";
-                __cast_3 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0);
-                v_4 = __cast_3.payload_0;
+                v_4 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0).payload_0;
                 if v_4 != builtin::f64_floor(v_4) -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>" {
                     struct.new "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_6: block -> ref "core:serde//DeserializeError" {
                         msg_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer, got float"), used: 27 };
@@ -5248,13 +5182,9 @@ fn "core:json/JsonDeserializer::parse_u64_from"(raw, start) {
                         unreachable;
                     }) };
                 } else if ref.test "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>" {
-                    let __cast_2: ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok";
-                    __cast_2 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0);
-                    v_5 = __cast_2.payload_0;
+                    v_5 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0).payload_0;
                     struct.new "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: builtin::i64_trunc_f64_u(v_5) };
                 } else if ref.test "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>" {
-                    let __cast_1: ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err";
-                    __cast_1 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err"(__match_scrut_0);
                     struct.new "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__invalid_value_7: block -> ref "core:serde//DeserializeError" {
                         msg_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid number"), used: 14 };
                         break __inline_DeserializeError__invalid_value_7: struct.new "core:serde//DeserializeError" { kind: 4, message: msg_19, offset: start };
@@ -5264,13 +5194,9 @@ fn "core:json/JsonDeserializer::parse_u64_from"(raw, start) {
                     unreachable;
                 }
             } else if ref.test "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>" {
-                let __cast_2: ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok";
-                __cast_2 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0);
-                v_5 = __cast_2.payload_0;
+                v_5 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0).payload_0;
                 struct.new "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: builtin::i64_trunc_f64_u(v_5) };
             } else if ref.test "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>" {
-                let __cast_1: ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err";
-                __cast_1 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err"(__match_scrut_0);
                 struct.new "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__invalid_value_7: block -> ref "core:serde//DeserializeError" {
                     msg_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid number"), used: 14 };
                     break __inline_DeserializeError__invalid_value_7: struct.new "core:serde//DeserializeError" { kind: 4, message: msg_19, offset: start };
@@ -5280,9 +5206,7 @@ fn "core:json/JsonDeserializer::parse_u64_from"(raw, start) {
                 unreachable;
             }
         } else if ref.test "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>" {
-            let __cast_3: ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok";
-            __cast_3 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0);
-            v_4 = __cast_3.payload_0;
+            v_4 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0).payload_0;
             if v_4 != builtin::f64_floor(v_4) -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>" {
                 struct.new "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_6: block -> ref "core:serde//DeserializeError" {
                     msg_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer, got float"), used: 27 };
@@ -5290,13 +5214,9 @@ fn "core:json/JsonDeserializer::parse_u64_from"(raw, start) {
                     unreachable;
                 }) };
             } else if ref.test "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>" {
-                let __cast_2: ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok";
-                __cast_2 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0);
-                v_5 = __cast_2.payload_0;
+                v_5 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0).payload_0;
                 struct.new "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: builtin::i64_trunc_f64_u(v_5) };
             } else if ref.test "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>" {
-                let __cast_1: ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err";
-                __cast_1 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err"(__match_scrut_0);
                 struct.new "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__invalid_value_7: block -> ref "core:serde//DeserializeError" {
                     msg_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid number"), used: 14 };
                     break __inline_DeserializeError__invalid_value_7: struct.new "core:serde//DeserializeError" { kind: 4, message: msg_19, offset: start };
@@ -5306,13 +5226,9 @@ fn "core:json/JsonDeserializer::parse_u64_from"(raw, start) {
                 unreachable;
             }
         } else if ref.test "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>" {
-            let __cast_2: ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok";
-            __cast_2 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0);
-            v_5 = __cast_2.payload_0;
+            v_5 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Ok"(__match_scrut_0).payload_0;
             struct.new "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: builtin::i64_trunc_f64_u(v_5) };
         } else if ref.test "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err"(__match_scrut_0) -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>" {
-            let __cast_1: ref "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err";
-            __cast_1 = ref.cast "core:prelude/types.wado//Result<f64,core:prelude/intparse.wado/ParseFloatError>::Err"(__match_scrut_0);
             struct.new "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__invalid_value_7: block -> ref "core:serde//DeserializeError" {
                 msg_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid number"), used: 14 };
                 break __inline_DeserializeError__invalid_value_7: struct.new "core:serde//DeserializeError" { kind: 4, message: msg_19, offset: start };
@@ -5327,14 +5243,10 @@ fn "core:json/JsonDeserializer::parse_u64_from"(raw, start) {
         break __inline_u64_FromStr__from_str_range_3: "core:prelude/intparse.wado/parse_u64_radix_range"(raw, 0, end_36, 10, -1_i64);
         unreachable;
     }, (if ref.test "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/ParseIntError>::Ok"(__match_scrut_1) -> ref "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>" {
-        let __cast_6: ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/ParseIntError>::Ok";
-        __cast_6 = ref.cast "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/ParseIntError>::Ok"(__match_scrut_1);
-        v_6 = __cast_6.payload_0;
+        v_6 = ref.cast "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/ParseIntError>::Ok"(__match_scrut_1).payload_0;
         struct.new "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: v_6 };
     } else {
-        let __cast_5: ref "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/ParseIntError>::Err";
-        __cast_5 = ref.cast "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/ParseIntError>::Err"(__match_scrut_1);
-        e = __cast_5.payload_0;
+        e = ref.cast "core:prelude/types.wado//Result<u64,core:prelude/intparse.wado/ParseIntError>::Err"(__match_scrut_1).payload_0;
         struct.new "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(let __match_scrut_2: "core:prelude/intparse.wado//enum:IntErrorKind"; __match_scrut_2 = e.kind; (if __match_scrut_2 == 2 -> ref "core:serde//DeserializeError" {
             __inline_DeserializeError__overflow_10: block -> ref "core:serde//DeserializeError" {
                 msg_23 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for u64"), used: 26 };
@@ -6378,14 +6290,10 @@ fn "core:json/JsonDeserializer^Deserializer::deserialize_i64"(self) {
         let __match_scrut_0: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>";
         __match_scrut_0 = "core:json/JsonDeserializer::read_json_string"(self);
         s = (if ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
-            let __cast_2: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok";
-            __cast_2 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok"(__match_scrut_0);
-            __qm_v = __cast_2.payload_0;
+            __qm_v = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok"(__match_scrut_0).payload_0;
             __qm_v;
         } else {
-            let __cast_1: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err";
-            __cast_1 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err"(__match_scrut_0);
-            __qm_e = __cast_1.payload_0;
+            __qm_e = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err"(__match_scrut_0).payload_0;
             return struct.new "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __qm_e };
         });
         return "core:json/JsonDeserializer::parse_i64_from"(s, start);
@@ -6403,14 +6311,10 @@ fn "core:json/JsonDeserializer^Deserializer::deserialize_u32"(self) {
     let __match_scrut_0: ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>";
     __match_scrut_0 = "core:json/JsonDeserializer::parse_i64_direct"(self);
     v = (if ref.test "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> i64 {
-        let __cast_2: ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Ok";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Ok"(__match_scrut_0);
-        __qm_v = __cast_2.payload_0;
+        __qm_v = ref.cast "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Ok"(__match_scrut_0).payload_0;
         __qm_v;
     } else {
-        let __cast_1: ref "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Err"(__match_scrut_0);
-        __qm_e = __cast_1.payload_0;
+        __qm_e = ref.cast "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Err"(__match_scrut_0).payload_0;
         return struct.new "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __qm_e };
     });
     if (if v < 0_i64 -> i32 {
@@ -6454,14 +6358,10 @@ fn "core:json/JsonDeserializer^Deserializer::deserialize_u64"(self) {
         let __match_scrut_0: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>";
         __match_scrut_0 = "core:json/JsonDeserializer::read_json_string"(self);
         s = (if ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
-            let __cast_2: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok";
-            __cast_2 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok"(__match_scrut_0);
-            __qm_v = __cast_2.payload_0;
+            __qm_v = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok"(__match_scrut_0).payload_0;
             __qm_v;
         } else {
-            let __cast_1: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err";
-            __cast_1 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err"(__match_scrut_0);
-            __qm_e = __cast_1.payload_0;
+            __qm_e = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err"(__match_scrut_0).payload_0;
             return struct.new "core:prelude/types.wado//Result<u64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __qm_e };
         });
         return "core:json/JsonDeserializer::parse_u64_from"(s, start);
@@ -6871,14 +6771,10 @@ fn "wado-compiler/tests/fixtures/serde_json_scientific_notation.wado/f32^Deseria
         let __match_scrut_0: ref "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>";
         __match_scrut_0 = "core:json/JsonDeserializer::parse_f64_direct"(d);
         v = (if ref.test "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> f64 {
-            let __cast_2: ref "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Ok";
-            __cast_2 = ref.cast "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Ok"(__match_scrut_0);
-            __qm_v = __cast_2.payload_0;
+            __qm_v = ref.cast "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Ok"(__match_scrut_0).payload_0;
             __qm_v;
         } else {
-            let __cast_1: ref "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Err";
-            __cast_1 = ref.cast "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Err"(__match_scrut_0);
-            __qm_e = __cast_1.payload_0;
+            __qm_e = ref.cast "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Err"(__match_scrut_0).payload_0;
             break __inline_JsonDeserializer_Deserializer__deserialize_f32_0: struct.new "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __qm_e };
         });
         break __inline_JsonDeserializer_Deserializer__deserialize_f32_0: struct.new "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: builtin::f32_demote_f64(v) };

@@ -149,9 +149,7 @@ fn "wado-compiler/tests/fixtures/hfs_aliased_local_whole_read.wado/run"() with S
             let __match_scrut_0: ref null "tuple//[bool, i32, String]";
             __match_scrut_0 = "core:prelude/array.wado/ArrayIter<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>^Iterator::next"(__iter_2);
             if ref.is_null(__match_scrut_0) == 0 {
-                let __cast_1: ref null "tuple//[bool, i32, String]";
-                __cast_1 = ref.as_non_null(__match_scrut_0);
-                x = ref.as_non_null(__cast_1);
+                x = ref.as_non_null(__match_scrut_0);
                 message = __tmpl: block -> ref "core:prelude/string.wado//String" {
                     __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
                     __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4_4 };
@@ -172,13 +170,13 @@ fn "wado-compiler/tests/fixtures/hfs_aliased_local_whole_read.wado/run"() with S
                     break __tmpl: __local_4_4;
                     unreachable;
                 };
-                let __pair_temp_2: i64;
-                __pair_temp_2 = "wasi/stream-new"();
-                let __mv_lo_2: i32;
-                let __mv_hi_2: i32;
-                multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
-                rx = __mv_lo_2;
-                tx = __mv_hi_2;
+                let __pair_temp_1: i64;
+                __pair_temp_1 = "wasi/stream-new"();
+                let __mv_lo_1: i32;
+                let __mv_hi_1: i32;
+                multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
+                rx = __mv_lo_1;
+                tx = __mv_hi_1;
                 handle = "wado-compiler/tests/fixtures/hfs_aliased_local_whole_read.wado/__cm_binding__Stdout_write_via_stream"(rx);
                 "core:cli/write_to_stream"(tx, message, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);

@@ -508,57 +508,55 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
     sym_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_symlink_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_symlink"), used: 12 }));
     if ref.is_null(sym_result) {
         message_30 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink_at: created symlink"), used: 27 };
-        let __pair_temp_6: i64;
-        __pair_temp_6 = "wasi/stream-new"();
-        let __mv_lo_6: i32;
-        let __mv_hi_6: i32;
-        multivalue_bind [__mv_lo_6, __mv_hi_6] = (builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64));
-        rx_31 = __mv_lo_6;
-        tx_32 = __mv_hi_6;
+        let __pair_temp_5: i64;
+        __pair_temp_5 = "wasi/stream-new"();
+        let __mv_lo_5: i32;
+        let __mv_hi_5: i32;
+        multivalue_bind [__mv_lo_5, __mv_hi_5] = (builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64));
+        rx_31 = __mv_lo_5;
+        tx_32 = __mv_hi_5;
         handle_33 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stdout_write_via_stream"(rx_31);
         "core:cli/write_to_stream"(tx_32, message_30, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_33);
     } else {
         if ref.is_null(sym_result) == 0 {
-            let __cast_2: ref null "wasi:filesystem/types.wado//ErrorCode";
-            __cast_2 = ref.as_non_null(sym_result);
-            err = ref.as_non_null(__cast_2);
+            err = ref.as_non_null(sym_result);
             let __match_scrut_2: ref "wasi:filesystem/types.wado//ErrorCode";
             __match_scrut_2 = err;
             if __match_scrut_2.discriminant == 26 {
                 message_36 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink_at: not supported (skipping symlink tests)"), used: 50 };
-                let __pair_temp_3: i64;
-                __pair_temp_3 = "wasi/stream-new"();
-                let __mv_lo_3: i32;
-                let __mv_hi_3: i32;
-                multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
-                rx_37 = __mv_lo_3;
-                tx_38 = __mv_hi_3;
+                let __pair_temp_2: i64;
+                __pair_temp_2 = "wasi/stream-new"();
+                let __mv_lo_2: i32;
+                let __mv_hi_2: i32;
+                multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
+                rx_37 = __mv_lo_2;
+                tx_38 = __mv_hi_2;
                 handle_39 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stdout_write_via_stream"(rx_37);
                 "core:cli/write_to_stream"(tx_38, message_36, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_39);
                 "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/test_link_at"(dir);
                 message_42 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all symlink tests passed"), used: 24 };
-                let __pair_temp_4: i64;
-                __pair_temp_4 = "wasi/stream-new"();
-                let __mv_lo_4: i32;
-                let __mv_hi_4: i32;
-                multivalue_bind [__mv_lo_4, __mv_hi_4] = (builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64));
-                rx_43 = __mv_lo_4;
-                tx_44 = __mv_hi_4;
+                let __pair_temp_3: i64;
+                __pair_temp_3 = "wasi/stream-new"();
+                let __mv_lo_3: i32;
+                let __mv_hi_3: i32;
+                multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
+                rx_43 = __mv_lo_3;
+                tx_44 = __mv_hi_3;
                 handle_45 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stdout_write_via_stream"(rx_43);
                 "core:cli/write_to_stream"(tx_44, message_42, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_45);
                 return;
             }
             message_48 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink_at: failed with unexpected error"), used: 40 };
-            let __pair_temp_5: i64;
-            __pair_temp_5 = "wasi/stream-new"();
-            let __mv_lo_5: i32;
-            let __mv_hi_5: i32;
-            multivalue_bind [__mv_lo_5, __mv_hi_5] = (builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64));
-            rx_49 = __mv_lo_5;
-            tx_50 = __mv_hi_5;
+            let __pair_temp_4: i64;
+            __pair_temp_4 = "wasi/stream-new"();
+            let __mv_lo_4: i32;
+            let __mv_hi_4: i32;
+            multivalue_bind [__mv_lo_4, __mv_hi_4] = (builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64));
+            rx_49 = __mv_lo_4;
+            tx_50 = __mv_hi_4;
             handle_51 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stderr_write_via_stream"(rx_49);
             "core:cli/write_to_stream"(tx_50, message_48, 1);
             "wasi/future-drop-readable:transmission-cli"(handle_51);
@@ -568,9 +566,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
     }
     readlink_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<core:prelude/string.wado/String,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_readlink_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_symlink"), used: 12 }));
     if ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,wasi:filesystem/types.wado/ErrorCode>::Ok"(readlink_result) {
-        let __cast_8: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,wasi:filesystem/types.wado/ErrorCode>::Ok";
-        __cast_8 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,wasi:filesystem/types.wado/ErrorCode>::Ok"(readlink_result);
-        target = __cast_8.payload_0;
+        target = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,wasi:filesystem/types.wado/ErrorCode>::Ok"(readlink_result).payload_0;
         if __inline_String_Eq__eq_14: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 };
             len_a = target.used;
@@ -581,13 +577,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
             unreachable;
         } {
             message_57 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("readlink_at: target is hello.txt (correct)"), used: 42 };
-            let __pair_temp_9: i64;
-            __pair_temp_9 = "wasi/stream-new"();
-            let __mv_lo_9: i32;
-            let __mv_hi_9: i32;
-            multivalue_bind [__mv_lo_9, __mv_hi_9] = (builtin::i32_wrap_i64(__pair_temp_9); builtin::i32_wrap_i64(__pair_temp_9 >>u 32_i64));
-            rx_58 = __mv_lo_9;
-            tx_59 = __mv_hi_9;
+            let __pair_temp_7: i64;
+            __pair_temp_7 = "wasi/stream-new"();
+            let __mv_lo_7: i32;
+            let __mv_hi_7: i32;
+            multivalue_bind [__mv_lo_7, __mv_hi_7] = (builtin::i32_wrap_i64(__pair_temp_7); builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64));
+            rx_58 = __mv_lo_7;
+            tx_59 = __mv_hi_7;
             handle_60 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stdout_write_via_stream"(rx_58);
             "core:cli/write_to_stream"(tx_59, message_57, 1);
             "wasi/future-drop-readable:transmission-cli"(handle_60);
@@ -599,40 +595,36 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
                 break __tmpl: __local_17;
                 unreachable;
             };
-            let __pair_temp_10: i64;
-            __pair_temp_10 = "wasi/stream-new"();
-            let __mv_lo_10: i32;
-            let __mv_hi_10: i32;
-            multivalue_bind [__mv_lo_10, __mv_hi_10] = (builtin::i32_wrap_i64(__pair_temp_10); builtin::i32_wrap_i64(__pair_temp_10 >>u 32_i64));
-            rx_64 = __mv_lo_10;
-            tx_65 = __mv_hi_10;
+            let __pair_temp_8: i64;
+            __pair_temp_8 = "wasi/stream-new"();
+            let __mv_lo_8: i32;
+            let __mv_hi_8: i32;
+            multivalue_bind [__mv_lo_8, __mv_hi_8] = (builtin::i32_wrap_i64(__pair_temp_8); builtin::i32_wrap_i64(__pair_temp_8 >>u 32_i64));
+            rx_64 = __mv_lo_8;
+            tx_65 = __mv_hi_8;
             handle_66 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stderr_write_via_stream"(rx_64);
             "core:cli/write_to_stream"(tx_65, message_63, 1);
             "wasi/future-drop-readable:transmission-cli"(handle_66);
         }
     } else {
         message_70 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("readlink_at: failed"), used: 19 };
-        let __pair_temp_7: i64;
-        __pair_temp_7 = "wasi/stream-new"();
-        let __mv_lo_7: i32;
-        let __mv_hi_7: i32;
-        multivalue_bind [__mv_lo_7, __mv_hi_7] = (builtin::i32_wrap_i64(__pair_temp_7); builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64));
-        rx_71 = __mv_lo_7;
-        tx_72 = __mv_hi_7;
+        let __pair_temp_6: i64;
+        __pair_temp_6 = "wasi/stream-new"();
+        let __mv_lo_6: i32;
+        let __mv_hi_6: i32;
+        multivalue_bind [__mv_lo_6, __mv_hi_6] = (builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64));
+        rx_71 = __mv_lo_6;
+        tx_72 = __mv_hi_6;
         handle_73 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stderr_write_via_stream"(rx_71);
         "core:cli/write_to_stream"(tx_72, message_70, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_73);
     }
     open_via_link = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_open_at"(dir, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_symlink"), used: 12 }, 0, 1));
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(open_via_link) {
-        let __cast_12: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok";
-        __cast_12 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(open_via_link);
-        linked_file = __cast_12.payload_0;
+        linked_file = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(open_via_link).payload_0;
         stat_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_stat"(linked_file));
         if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat_result) {
-            let __cast_13: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok";
-            __cast_13 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat_result);
-            stat = __cast_13.payload_0;
+            stat = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat_result).payload_0;
             if (if let __match_scrut_6: ref "wasi:filesystem/types.wado//DescriptorType"; __match_scrut_6 = stat.type; (if __match_scrut_6.discriminant == 5 -> bool {
                 1;
             } else {
@@ -643,25 +635,25 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
                 0;
             }) {
                 message_76 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink follow: opened file has correct type and size (correct)"), used: 63 };
-                let __pair_temp_14: i64;
-                __pair_temp_14 = "wasi/stream-new"();
-                let __mv_lo_14: i32;
-                let __mv_hi_14: i32;
-                multivalue_bind [__mv_lo_14, __mv_hi_14] = (builtin::i32_wrap_i64(__pair_temp_14); builtin::i32_wrap_i64(__pair_temp_14 >>u 32_i64));
-                rx_77 = __mv_lo_14;
-                tx_78 = __mv_hi_14;
+                let __pair_temp_10: i64;
+                __pair_temp_10 = "wasi/stream-new"();
+                let __mv_lo_10: i32;
+                let __mv_hi_10: i32;
+                multivalue_bind [__mv_lo_10, __mv_hi_10] = (builtin::i32_wrap_i64(__pair_temp_10); builtin::i32_wrap_i64(__pair_temp_10 >>u 32_i64));
+                rx_77 = __mv_lo_10;
+                tx_78 = __mv_hi_10;
                 handle_79 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stdout_write_via_stream"(rx_77);
                 "core:cli/write_to_stream"(tx_78, message_76, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_79);
             } else {
                 message_82 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink follow: unexpected type or size"), used: 39 };
-                let __pair_temp_15: i64;
-                __pair_temp_15 = "wasi/stream-new"();
-                let __mv_lo_15: i32;
-                let __mv_hi_15: i32;
-                multivalue_bind [__mv_lo_15, __mv_hi_15] = (builtin::i32_wrap_i64(__pair_temp_15); builtin::i32_wrap_i64(__pair_temp_15 >>u 32_i64));
-                rx_83 = __mv_lo_15;
-                tx_84 = __mv_hi_15;
+                let __pair_temp_11: i64;
+                __pair_temp_11 = "wasi/stream-new"();
+                let __mv_lo_11: i32;
+                let __mv_hi_11: i32;
+                multivalue_bind [__mv_lo_11, __mv_hi_11] = (builtin::i32_wrap_i64(__pair_temp_11); builtin::i32_wrap_i64(__pair_temp_11 >>u 32_i64));
+                rx_83 = __mv_lo_11;
+                tx_84 = __mv_hi_11;
                 handle_85 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stderr_write_via_stream"(rx_83);
                 "core:cli/write_to_stream"(tx_84, message_82, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_85);
@@ -671,13 +663,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
         __local_18 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_read_via_stream"(linked_file, 0_i64);
         file_rx = __local_18.0;
         read_future = __local_18.1;
-        let __pair_temp_16: i64;
-        __pair_temp_16 = "wasi/stream-new"();
-        let __mv_lo_16: i32;
-        let __mv_hi_16: i32;
-        multivalue_bind [__mv_lo_16, __mv_hi_16] = (builtin::i32_wrap_i64(__pair_temp_16); builtin::i32_wrap_i64(__pair_temp_16 >>u 32_i64));
-        out_rx = __mv_lo_16;
-        out_tx = __mv_hi_16;
+        let __pair_temp_12: i64;
+        __pair_temp_12 = "wasi/stream-new"();
+        let __mv_lo_12: i32;
+        let __mv_hi_12: i32;
+        multivalue_bind [__mv_lo_12, __mv_hi_12] = (builtin::i32_wrap_i64(__pair_temp_12); builtin::i32_wrap_i64(__pair_temp_12 >>u 32_i64));
+        out_rx = __mv_lo_12;
+        out_tx = __mv_hi_12;
         sub = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stdout_write_via_stream"(out_rx);
         b13: block {
             l14: loop {
@@ -695,13 +687,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
         "wasi/future-drop-readable:transmission-filesystem"(read_future);
     } else {
         message_89 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink follow: failed to open"), used: 30 };
-        let __pair_temp_11: i64;
-        __pair_temp_11 = "wasi/stream-new"();
-        let __mv_lo_11: i32;
-        let __mv_hi_11: i32;
-        multivalue_bind [__mv_lo_11, __mv_hi_11] = (builtin::i32_wrap_i64(__pair_temp_11); builtin::i32_wrap_i64(__pair_temp_11 >>u 32_i64));
-        rx_90 = __mv_lo_11;
-        tx_91 = __mv_hi_11;
+        let __pair_temp_9: i64;
+        __pair_temp_9 = "wasi/stream-new"();
+        let __mv_lo_9: i32;
+        let __mv_hi_9: i32;
+        multivalue_bind [__mv_lo_9, __mv_hi_9] = (builtin::i32_wrap_i64(__pair_temp_9); builtin::i32_wrap_i64(__pair_temp_9 >>u 32_i64));
+        rx_90 = __mv_lo_9;
+        tx_91 = __mv_hi_9;
         handle_92 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stderr_write_via_stream"(rx_90);
         "core:cli/write_to_stream"(tx_91, message_89, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_92);
@@ -709,38 +701,38 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
     unlink_sym = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_symlink"), used: 12 }));
     if ref.is_null(unlink_sym) {
         message_95 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink cleanup: removed test_symlink"), used: 37 };
-        let __pair_temp_18: i64;
-        __pair_temp_18 = "wasi/stream-new"();
-        let __mv_lo_18: i32;
-        let __mv_hi_18: i32;
-        multivalue_bind [__mv_lo_18, __mv_hi_18] = (builtin::i32_wrap_i64(__pair_temp_18); builtin::i32_wrap_i64(__pair_temp_18 >>u 32_i64));
-        rx_96 = __mv_lo_18;
-        tx_97 = __mv_hi_18;
+        let __pair_temp_14: i64;
+        __pair_temp_14 = "wasi/stream-new"();
+        let __mv_lo_14: i32;
+        let __mv_hi_14: i32;
+        multivalue_bind [__mv_lo_14, __mv_hi_14] = (builtin::i32_wrap_i64(__pair_temp_14); builtin::i32_wrap_i64(__pair_temp_14 >>u 32_i64));
+        rx_96 = __mv_lo_14;
+        tx_97 = __mv_hi_14;
         handle_98 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stdout_write_via_stream"(rx_96);
         "core:cli/write_to_stream"(tx_97, message_95, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_98);
     } else {
         message_101 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink cleanup: failed"), used: 23 };
-        let __pair_temp_17: i64;
-        __pair_temp_17 = "wasi/stream-new"();
-        let __mv_lo_17: i32;
-        let __mv_hi_17: i32;
-        multivalue_bind [__mv_lo_17, __mv_hi_17] = (builtin::i32_wrap_i64(__pair_temp_17); builtin::i32_wrap_i64(__pair_temp_17 >>u 32_i64));
-        rx_102 = __mv_lo_17;
-        tx_103 = __mv_hi_17;
+        let __pair_temp_13: i64;
+        __pair_temp_13 = "wasi/stream-new"();
+        let __mv_lo_13: i32;
+        let __mv_hi_13: i32;
+        multivalue_bind [__mv_lo_13, __mv_hi_13] = (builtin::i32_wrap_i64(__pair_temp_13); builtin::i32_wrap_i64(__pair_temp_13 >>u 32_i64));
+        rx_102 = __mv_lo_13;
+        tx_103 = __mv_hi_13;
         handle_104 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stderr_write_via_stream"(rx_102);
         "core:cli/write_to_stream"(tx_103, message_101, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_104);
     }
     "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/test_link_at"(dir);
     message_107 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all symlink tests passed"), used: 24 };
-    let __pair_temp_19: i64;
-    __pair_temp_19 = "wasi/stream-new"();
-    let __mv_lo_19: i32;
-    let __mv_hi_19: i32;
-    multivalue_bind [__mv_lo_19, __mv_hi_19] = (builtin::i32_wrap_i64(__pair_temp_19); builtin::i32_wrap_i64(__pair_temp_19 >>u 32_i64));
-    rx_108 = __mv_lo_19;
-    tx_109 = __mv_hi_19;
+    let __pair_temp_15: i64;
+    __pair_temp_15 = "wasi/stream-new"();
+    let __mv_lo_15: i32;
+    let __mv_hi_15: i32;
+    multivalue_bind [__mv_lo_15, __mv_hi_15] = (builtin::i32_wrap_i64(__pair_temp_15); builtin::i32_wrap_i64(__pair_temp_15 >>u 32_i64));
+    rx_108 = __mv_lo_15;
+    tx_109 = __mv_hi_15;
     handle_110 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stdout_write_via_stream"(rx_108);
     "core:cli/write_to_stream"(tx_109, message_107, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_110);
@@ -770,13 +762,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/test_link_at"(dir)
     link_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_link_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 }, dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_hardlink"), used: 13 }));
     if ref.is_null(link_result) {
         message_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("link_at: created hard link"), used: 26 };
-        let __pair_temp_4: i64;
-        __pair_temp_4 = "wasi/stream-new"();
-        let __mv_lo_4: i32;
-        let __mv_hi_4: i32;
-        multivalue_bind [__mv_lo_4, __mv_hi_4] = (builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64));
-        rx_6 = __mv_lo_4;
-        tx_7 = __mv_hi_4;
+        let __pair_temp_3: i64;
+        __pair_temp_3 = "wasi/stream-new"();
+        let __mv_lo_3: i32;
+        let __mv_hi_3: i32;
+        multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
+        rx_6 = __mv_lo_3;
+        tx_7 = __mv_hi_3;
         handle_8 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
         "core:cli/write_to_stream"(tx_7, message_5, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_8);
@@ -784,18 +776,16 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/test_link_at"(dir)
         let __match_scrut_3: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";
         __match_scrut_3 = link_stat;
         if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(__match_scrut_3) {
-            let __cast_5: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok";
-            __cast_5 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(__match_scrut_3);
-            stat = __cast_5.payload_0;
+            stat = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(__match_scrut_3).payload_0;
             if stat.size == 14_i64 {
                 message_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("link_at: hard link has correct size (correct)"), used: 45 };
-                let __pair_temp_6: i64;
-                __pair_temp_6 = "wasi/stream-new"();
-                let __mv_lo_6: i32;
-                let __mv_hi_6: i32;
-                multivalue_bind [__mv_lo_6, __mv_hi_6] = (builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64));
-                rx_12 = __mv_lo_6;
-                tx_13 = __mv_hi_6;
+                let __pair_temp_4: i64;
+                __pair_temp_4 = "wasi/stream-new"();
+                let __mv_lo_4: i32;
+                let __mv_hi_4: i32;
+                multivalue_bind [__mv_lo_4, __mv_hi_4] = (builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64));
+                rx_12 = __mv_lo_4;
+                tx_13 = __mv_hi_4;
                 handle_14 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stdout_write_via_stream"(rx_12);
                 "core:cli/write_to_stream"(tx_13, message_11, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_14);
@@ -805,32 +795,30 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/test_link_at"(dir)
         drop("core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_hardlink"), used: 13 })));
     } else {
         if ref.is_null(link_result) == 0 {
-            let __cast_1: ref null "wasi:filesystem/types.wado//ErrorCode";
-            __cast_1 = ref.as_non_null(link_result);
-            err = ref.as_non_null(__cast_1);
+            err = ref.as_non_null(link_result);
             let __match_scrut_2: ref "wasi:filesystem/types.wado//ErrorCode";
             __match_scrut_2 = err;
             if __match_scrut_2.discriminant == 26 {
                 message_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("link_at: not supported (skipping)"), used: 33 };
-                let __pair_temp_2: i64;
-                __pair_temp_2 = "wasi/stream-new"();
-                let __mv_lo_2: i32;
-                let __mv_hi_2: i32;
-                multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
-                rx_18 = __mv_lo_2;
-                tx_19 = __mv_hi_2;
+                let __pair_temp_1: i64;
+                __pair_temp_1 = "wasi/stream-new"();
+                let __mv_lo_1: i32;
+                let __mv_hi_1: i32;
+                multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
+                rx_18 = __mv_lo_1;
+                tx_19 = __mv_hi_1;
                 handle_20 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stdout_write_via_stream"(rx_18);
                 "core:cli/write_to_stream"(tx_19, message_17, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_20);
             } else {
                 message_23 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("link_at: failed with unexpected error"), used: 37 };
-                let __pair_temp_3: i64;
-                __pair_temp_3 = "wasi/stream-new"();
-                let __mv_lo_3: i32;
-                let __mv_hi_3: i32;
-                multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
-                rx_24 = __mv_lo_3;
-                tx_25 = __mv_hi_3;
+                let __pair_temp_2: i64;
+                __pair_temp_2 = "wasi/stream-new"();
+                let __mv_lo_2: i32;
+                let __mv_hi_2: i32;
+                multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
+                rx_24 = __mv_lo_2;
+                tx_25 = __mv_hi_2;
                 handle_26 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Stderr_write_via_stream"(rx_24);
                 "core:cli/write_to_stream"(tx_25, message_23, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle_26);

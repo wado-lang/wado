@@ -165,9 +165,7 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/run"() with SystemClo
     now = "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__SystemClock_now"();
     offset = "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezone_utc_offset"(now);
     if ref.test "core:prelude/types.wado//Option<i64>::Some"(offset) {
-        let __cast_1: ref "core:prelude/types.wado//Option<i64>::Some";
-        __cast_1 = ref.cast "core:prelude/types.wado//Option<i64>::Some"(offset);
-        ns = __cast_1.payload_0;
+        ns = ref.cast "core:prelude/types.wado//Option<i64>::Some"(offset).payload_0;
         if ns >= 0_i64 {
             __cond_6 = ns < 86400000000000_i64;
             if __cond_6 == 0 {
@@ -302,9 +300,7 @@ condition: debug.len() > 0
     }
     id = "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezone_iana_id"();
     if ref.is_null(id) == 0 {
-        let __cast_2: ref null "core:prelude/string.wado//String";
-        __cast_2 = ref.as_non_null(id);
-        name = ref.as_non_null(__cast_2);
+        name = ref.as_non_null(id);
         __v0_16 = name.used;
         __cond_17 = __v0_16 > 0;
         if __cond_17 == 0 {

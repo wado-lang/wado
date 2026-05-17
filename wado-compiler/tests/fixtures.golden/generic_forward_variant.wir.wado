@@ -131,17 +131,13 @@ fn "wado-compiler/tests/fixtures/generic_forward_variant.wado/run"() {
     __sroa_counter_count = 0;
     __sroa_shape_value = struct.new "wado-compiler/tests/fixtures/generic_forward_variant.wado//Shape::Circle" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/generic_forward_variant.wado//CircleData" { radius: 10 } };
     if ref.test "wado-compiler/tests/fixtures/generic_forward_variant.wado//Shape::Circle"(__sroa_shape_value) {
-        let __cast_2: ref "wado-compiler/tests/fixtures/generic_forward_variant.wado//Shape::Circle";
-        __cast_2 = ref.cast "wado-compiler/tests/fixtures/generic_forward_variant.wado//Shape::Circle"(__sroa_shape_value);
-        c = __cast_2.payload_0;
+        c = ref.cast "wado-compiler/tests/fixtures/generic_forward_variant.wado//Shape::Circle"(__sroa_shape_value).payload_0;
         block {
             v_12 = c.radius;
             __sroa_counter_count = 0 + v_12;
         };
     } else {
-        let __cast_1: ref "wado-compiler/tests/fixtures/generic_forward_variant.wado//Shape::Rect";
-        __cast_1 = ref.cast "wado-compiler/tests/fixtures/generic_forward_variant.wado//Shape::Rect"(__sroa_shape_value);
-        r = __cast_1.payload_0;
+        r = ref.cast "wado-compiler/tests/fixtures/generic_forward_variant.wado//Shape::Rect"(__sroa_shape_value).payload_0;
         block {
             v_14 = r.width + r.height;
             __sroa_counter_count = 0 + v_14;

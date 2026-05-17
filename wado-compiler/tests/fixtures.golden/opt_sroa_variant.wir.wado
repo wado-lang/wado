@@ -148,9 +148,7 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant.wado/sum_bytes"(s) {
                 unreachable;
             };
             if ref.test "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_0) {
-                let __cast_1: ref "core:prelude/types.wado//Option<u8>::Some";
-                __cast_1 = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_0);
-                b = __cast_1.payload_0;
+                b = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_0).payload_0;
                 sum = sum + b;
             } else {
                 break b0;
@@ -334,9 +332,7 @@ condition: count_chars(\"hello\") == 5
             unreachable;
         };
         if ref.test "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_0) {
-            let __cast_1: ref "core:prelude/types.wado//Option<u8>::Some";
-            __cast_1 = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_0);
-            b_56 = __cast_1.payload_0;
+            b_56 = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_0).payload_0;
             break __inline_first_byte_23: b_56;
         } else {
         }
@@ -387,9 +383,7 @@ condition: first_byte(\"Z\") == 90
             unreachable;
         };
         if ref.test "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_1) {
-            let __cast_2: ref "core:prelude/types.wado//Option<u8>::Some";
-            __cast_2 = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_1);
-            b_73 = __cast_2.payload_0;
+            b_73 = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__match_scrut_1).payload_0;
             break __inline_first_byte_33: b_73;
         } else {
         }
@@ -427,13 +421,13 @@ condition: first_byte(\"\") == -1
         unreachable;
     }
     message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
-    let __pair_temp_3: i64;
-    __pair_temp_3 = "wasi/stream-new"();
-    let __mv_lo_3: i32;
-    let __mv_hi_3: i32;
-    multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
-    rx = __mv_lo_3;
-    tx = __mv_hi_3;
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_1: i32;
+    let __mv_hi_1: i32;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
+    rx = __mv_lo_1;
+    tx = __mv_hi_1;
     handle = "wado-compiler/tests/fixtures/opt_sroa_variant.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);

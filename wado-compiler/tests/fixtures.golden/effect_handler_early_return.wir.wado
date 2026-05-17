@@ -213,14 +213,12 @@ fn "wado-compiler/tests/fixtures/effect_handler_early_return.wado/__effect_dispa
     let __local_2: i32;
     __saved = global:__effect_Counter;
     if ref.is_null(__saved) == 0 {
-        let __cast_1: ref null "wado-compiler/tests/fixtures/effect_handler_early_return.wado//__Dispatch_Counter";
-        __cast_1 = ref.as_non_null(__saved);
-        __local_1 = ref.as_non_null(__cast_1);
+        __local_1 = ref.as_non_null(__saved);
         global:__effect_Counter = __local_1.outer;
         __local_2 = block -> i32 {
-            let __indirect_call_1: ref "canonical//CanonicalClosure_0";
-            __indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"(__local_1.op_next);
-            call_ref "functype/$canonical_closure_fn_0"(__indirect_call_1.func, __indirect_call_1.env);
+            let __indirect_call_0: ref "canonical//CanonicalClosure_0";
+            __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(__local_1.op_next);
+            call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
         };
         global:__effect_Counter = __saved;
         return __local_2;

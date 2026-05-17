@@ -168,9 +168,7 @@ fn "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision.wado/run"() w
         let __match_scrut_0: ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision.wado//Data";
         __match_scrut_0 = __sroa_self_value_90;
         if ref.is_null(__match_scrut_0) == 0 {
-            let __cast_1: ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision.wado//Data";
-            __cast_1 = ref.as_non_null(__match_scrut_0);
-            v_27 = ref.as_non_null(__cast_1);
+            v_27 = ref.as_non_null(__match_scrut_0);
             break __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_wado_Data___unwrap_2: v_27;
         } else {
         }
@@ -218,9 +216,7 @@ condition: d1.x == 1
         let __match_scrut_1: ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision.wado//Data";
         __match_scrut_1 = opt;
         if ref.is_null(__match_scrut_1) == 0 {
-            let __cast_2: ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision.wado//Data";
-            __cast_2 = ref.as_non_null(__match_scrut_1);
-            v_40 = ref.as_non_null(__cast_2);
+            v_40 = ref.as_non_null(__match_scrut_1);
             break __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_wado_Data___unwrap_12: v_40;
         } else {
         }
@@ -268,9 +264,7 @@ condition: d2.x == 1
         let __match_scrut_2: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision.wado/Data,core:prelude/string.wado/String>";
         __match_scrut_2 = __sroa_self_value_92;
         if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision.wado/Data,core:prelude/string.wado/String>::Ok"(__match_scrut_2) {
-            let __cast_3: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision.wado/Data,core:prelude/string.wado/String>::Ok";
-            __cast_3 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision.wado/Data,core:prelude/string.wado/String>::Ok"(__match_scrut_2);
-            v_53 = __cast_3.payload_0;
+            v_53 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision.wado/Data,core:prelude/string.wado/String>::Ok"(__match_scrut_2).payload_0;
             break __inline_Result_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_wado_Data_core_prelude_string_wado_String___unwrap_20: v_53;
         } else {
         }
@@ -318,9 +312,7 @@ condition: d3.x == 10
         let __match_scrut_3: ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision.wado//Data";
         __match_scrut_3 = opt2;
         if ref.is_null(__match_scrut_3) == 0 {
-            let __cast_4: ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision.wado//Data";
-            __cast_4 = ref.as_non_null(__match_scrut_3);
-            v_66 = ref.as_non_null(__cast_4);
+            v_66 = ref.as_non_null(__match_scrut_3);
             break __inline_Option_wado_compiler_tests_fixtures_wir_optimize_unwrap_fresh_elision_wado_Data___unwrap_30: v_66;
         } else {
         }
@@ -366,8 +358,6 @@ condition: d4.x == 1
     let __match_scrut_4: ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision.wado//Data";
     __match_scrut_4 = opt2;
     __cond_14 = (if ref.is_null(__match_scrut_4) == 0 -> bool {
-        let __cast_5: ref null "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision.wado//Data";
-        __cast_5 = ref.as_non_null(__match_scrut_4);
         1;
     } else {
         0;
@@ -396,13 +386,13 @@ condition: opt2 matches { Some(_) }
         unreachable;
     }
     message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
-    let __pair_temp_6: i64;
-    __pair_temp_6 = "wasi/stream-new"();
-    let __mv_lo_6: i32;
-    let __mv_hi_6: i32;
-    multivalue_bind [__mv_lo_6, __mv_hi_6] = (builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64));
-    rx = __mv_lo_6;
-    tx = __mv_hi_6;
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_1: i32;
+    let __mv_hi_1: i32;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
+    rx = __mv_lo_1;
+    tx = __mv_hi_1;
     handle = "wado-compiler/tests/fixtures/wir_optimize_unwrap_fresh_elision.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);

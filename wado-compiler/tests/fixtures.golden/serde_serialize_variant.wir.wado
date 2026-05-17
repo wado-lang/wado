@@ -1647,16 +1647,12 @@ fn "wado-compiler/tests/fixtures/serde_serialize_variant.wado/Shape^Serialize::s
     let __local_5: ref "wado-compiler/tests/fixtures/serde_serialize_variant.wado//JsonVariantSerializer";
     let __sroa_v_ser: ref "wado-compiler/tests/fixtures/serde_serialize_variant.wado//JsonSerializer";
     return let __match_scrut_0: ref "wado-compiler/tests/fixtures/serde_serialize_variant.wado//Shape", __match_scrut_0 = self, (if ref.test "wado-compiler/tests/fixtures/serde_serialize_variant.wado//Shape::Circle"(__match_scrut_0) -> ref null "wado-compiler/tests/fixtures/serde_serialize_variant.wado//SerializeError" {
-        let __cast_1: ref "wado-compiler/tests/fixtures/serde_serialize_variant.wado//Shape::Circle";
-        __cast_1 = ref.cast "wado-compiler/tests/fixtures/serde_serialize_variant.wado//Shape::Circle"(__match_scrut_0);
-        r = struct.new "core:prelude/types.wado//Box<f64>" { value: __cast_1.payload_0 };
+        r = struct.new "core:prelude/types.wado//Box<f64>" { value: ref.cast "wado-compiler/tests/fixtures/serde_serialize_variant.wado//Shape::Circle"(__match_scrut_0).payload_0 };
         v_3 = "wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Shape"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Circle"), used: 6 }, 0);
         let __match_scrut_1: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonVariantSerializer,wado-compiler/tests/fixtures/serde_serialize_variant.wado/SerializeError>";
         __match_scrut_1 = v_3;
         if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonVariantSerializer,wado-compiler/tests/fixtures/serde_serialize_variant.wado/SerializeError>::Ok"(__match_scrut_1) {
-            let __cast_2: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonVariantSerializer,wado-compiler/tests/fixtures/serde_serialize_variant.wado/SerializeError>::Ok";
-            __cast_2 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonVariantSerializer,wado-compiler/tests/fixtures/serde_serialize_variant.wado/SerializeError>::Ok"(__match_scrut_1);
-            __local_5 = __cast_2.payload_0;
+            __local_5 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonVariantSerializer,wado-compiler/tests/fixtures/serde_serialize_variant.wado/SerializeError>::Ok"(__match_scrut_1).payload_0;
             __sroa_v_ser = __local_5.ser;
             drop("wado-compiler/tests/fixtures/serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_f64"(__sroa_v_ser.buf, r.value));
             return __inline_JsonVariantSerializer_SerializeVariant__end_3: block -> ref null "wado-compiler/tests/fixtures/serde_serialize_variant.wado//SerializeError" {

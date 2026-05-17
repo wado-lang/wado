@@ -144,16 +144,14 @@ fn "wado-compiler/tests/fixtures/option_match.wado/__cm_export__run"() {
     }
     opt_28 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     if ref.is_null(opt_28) == 0 {
-        let __cast_6: ref null "core:prelude/string.wado//String";
-        __cast_6 = ref.as_non_null(opt_28);
-        x = ref.as_non_null(__cast_6);
-        let __pair_temp_7: i64;
-        __pair_temp_7 = "wasi/stream-new"();
-        let __mv_lo_7: i32;
-        let __mv_hi_7: i32;
-        multivalue_bind [__mv_lo_7, __mv_hi_7] = (builtin::i32_wrap_i64(__pair_temp_7); builtin::i32_wrap_i64(__pair_temp_7 >>u 32_i64));
-        rx_31 = __mv_lo_7;
-        tx_32 = __mv_hi_7;
+        x = ref.as_non_null(opt_28);
+        let __pair_temp_6: i64;
+        __pair_temp_6 = "wasi/stream-new"();
+        let __mv_lo_6: i32;
+        let __mv_hi_6: i32;
+        multivalue_bind [__mv_lo_6, __mv_hi_6] = (builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64));
+        rx_31 = __mv_lo_6;
+        tx_32 = __mv_hi_6;
         handle_33 = "wado-compiler/tests/fixtures/option_match.wado/__cm_binding__Stdout_write_via_stream"(rx_31);
         "core:cli/write_to_stream"(tx_32, x, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_33);

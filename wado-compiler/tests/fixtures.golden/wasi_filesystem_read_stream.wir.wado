@@ -262,19 +262,17 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/run"() with St
     }.0;
     open_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 }, 0, 1));
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(open_result) {
-        let __cast_3: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok";
-        __cast_3 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(open_result);
-        file = __cast_3.payload_0;
+        file = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(open_result).payload_0;
         __local_10 = "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__Descriptor_read_via_stream"(file, 0_i64);
         file_rx = __local_10.0;
         read_future = __local_10.1;
-        let __pair_temp_4: i64;
-        __pair_temp_4 = "wasi/stream-new"();
-        let __mv_lo_4: i32;
-        let __mv_hi_4: i32;
-        multivalue_bind [__mv_lo_4, __mv_hi_4] = (builtin::i32_wrap_i64(__pair_temp_4); builtin::i32_wrap_i64(__pair_temp_4 >>u 32_i64));
-        out_rx = __mv_lo_4;
-        out_tx = __mv_hi_4;
+        let __pair_temp_3: i64;
+        __pair_temp_3 = "wasi/stream-new"();
+        let __mv_lo_3: i32;
+        let __mv_hi_3: i32;
+        multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
+        out_rx = __mv_lo_3;
+        out_tx = __mv_hi_3;
         sub = "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__Stdout_write_via_stream"(out_rx);
         b3: block {
             l4: loop {

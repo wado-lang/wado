@@ -200,9 +200,7 @@ fn "wado-compiler/tests/fixtures/namespace_import_enum.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-cli"(handle_10);
     s = struct.new "./sub/ns_enum_helper.wado//Shape::Circle" { discriminant: 0, payload_0: 3.14 };
     if ref.test "./sub/ns_enum_helper.wado//Shape::Circle"(s) {
-        let __cast_2: ref "./sub/ns_enum_helper.wado//Shape::Circle";
-        __cast_2 = ref.cast "./sub/ns_enum_helper.wado//Shape::Circle"(s);
-        r = __cast_2.payload_0;
+        r = ref.cast "./sub/ns_enum_helper.wado//Shape::Circle"(s).payload_0;
         message_13 = __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_4_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("circle r="), used: 9 });
@@ -211,13 +209,13 @@ fn "wado-compiler/tests/fixtures/namespace_import_enum.wado/run"() with Stdout {
             break __tmpl: __local_4_4;
             unreachable;
         };
-        let __pair_temp_3: i64;
-        __pair_temp_3 = "wasi/stream-new"();
-        let __mv_lo_3: i32;
-        let __mv_hi_3: i32;
-        multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
-        rx_14 = __mv_lo_3;
-        tx_15 = __mv_hi_3;
+        let __pair_temp_2: i64;
+        __pair_temp_2 = "wasi/stream-new"();
+        let __mv_lo_2: i32;
+        let __mv_hi_2: i32;
+        multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
+        rx_14 = __mv_lo_2;
+        tx_15 = __mv_hi_2;
         handle_16 = "wado-compiler/tests/fixtures/namespace_import_enum.wado/__cm_binding__Stdout_write_via_stream"(rx_14);
         "core:cli/write_to_stream"(tx_15, message_13, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_16);

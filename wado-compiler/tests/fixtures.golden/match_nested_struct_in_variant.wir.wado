@@ -110,12 +110,10 @@ fn "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/run"() with
     let __match_scrut_0: ref null "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
     __match_scrut_0 = opt;
     result = (if ref.is_null(__match_scrut_0) == 0 -> ref "core:prelude/string.wado//String" {
-        let __cast_1: ref null "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
-        __cast_1 = ref.as_non_null(__match_scrut_0);
-        let __variant_payload_2: ref "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
-        __variant_payload_2 = ref.as_non_null(__cast_1);
-        x = __variant_payload_2.x;
-        y = __variant_payload_2.y;
+        let __variant_payload_1: ref "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
+        __variant_payload_1 = ref.as_non_null(__match_scrut_0);
+        x = __variant_payload_1.x;
+        y = __variant_payload_1.y;
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 };
             "core:prelude/string.wado/String::push"(__local_4, 112);
@@ -138,13 +136,13 @@ fn "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/run"() with
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 };
     });
-    let __pair_temp_3: i64;
-    __pair_temp_3 = "wasi/stream-new"();
-    let __mv_lo_3: i32;
-    let __mv_hi_3: i32;
-    multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
-    rx = __mv_lo_3;
-    tx = __mv_hi_3;
+    let __pair_temp_2: i64;
+    __pair_temp_2 = "wasi/stream-new"();
+    let __mv_lo_2: i32;
+    let __mv_hi_2: i32;
+    multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
+    rx = __mv_lo_2;
+    tx = __mv_hi_2;
     handle = "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, result, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);

@@ -1421,14 +1421,10 @@ fn "core:json/core/json/from_string<f32>"(input) {
     let __match_scrut_0: ref "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>";
     __match_scrut_0 = "wado-compiler/tests/fixtures/opt_sroa_variant_br_exit.wado/f32^Deserialize::deserialize<core:json/JsonDeserializer>"(de);
     v = (if ref.test "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> f32 {
-        let __cast_2: ref "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Ok";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Ok"(__match_scrut_0);
-        __qm_v = __cast_2.payload_0;
+        __qm_v = ref.cast "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Ok"(__match_scrut_0).payload_0;
         __qm_v;
     } else {
-        let __cast_1: ref "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Err"(__match_scrut_0);
-        __qm_e = __cast_1.payload_0;
+        __qm_e = ref.cast "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Err"(__match_scrut_0).payload_0;
         return 1, 0_f32, __qm_e;
     });
     "core:json/JsonDeserializer::skip_whitespace"(de);
@@ -2378,14 +2374,10 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_br_exit.wado/f32^Deserialize::
         let __match_scrut_0: ref "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>";
         __match_scrut_0 = "core:json/JsonDeserializer::parse_f64_direct"(d);
         v = (if ref.test "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> f64 {
-            let __cast_2: ref "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Ok";
-            __cast_2 = ref.cast "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Ok"(__match_scrut_0);
-            __qm_v = __cast_2.payload_0;
+            __qm_v = ref.cast "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Ok"(__match_scrut_0).payload_0;
             __qm_v;
         } else {
-            let __cast_1: ref "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Err";
-            __cast_1 = ref.cast "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Err"(__match_scrut_0);
-            __qm_e = __cast_1.payload_0;
+            __qm_e = ref.cast "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Err"(__match_scrut_0).payload_0;
             break __inline_JsonDeserializer_Deserializer__deserialize_f32_0: struct.new "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __qm_e };
         });
         break __inline_JsonDeserializer_Deserializer__deserialize_f32_0: struct.new "core:prelude/types.wado//Result<f32,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: builtin::f32_demote_f64(v) };

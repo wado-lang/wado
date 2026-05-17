@@ -201,14 +201,12 @@ fn "wado-compiler/tests/fixtures/effect_handler_with_do.wado/__effect_dispatch__
     let __local_2: u64;
     __saved = global:__effect_MonotonicClock;
     if ref.is_null(__saved) == 0 {
-        let __cast_1: ref null "wado-compiler/tests/fixtures/effect_handler_with_do.wado//__Dispatch_MonotonicClock";
-        __cast_1 = ref.as_non_null(__saved);
-        __local_1 = ref.as_non_null(__cast_1);
+        __local_1 = ref.as_non_null(__saved);
         global:__effect_MonotonicClock = __local_1.outer;
         __local_2 = block -> u64 {
-            let __indirect_call_1: ref "canonical//CanonicalClosure_0";
-            __indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"(__local_1.op_now);
-            call_ref "functype/$canonical_closure_fn_0"(__indirect_call_1.func, __indirect_call_1.env);
+            let __indirect_call_0: ref "canonical//CanonicalClosure_0";
+            __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(__local_1.op_now);
+            call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
         };
         global:__effect_MonotonicClock = __saved;
         return __local_2;
