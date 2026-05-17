@@ -207,11 +207,11 @@ description = "Regenerate WIR golden fixtures"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-mkdir -p wado-compiler/tests/fixtures.golden
-rm -rf wado-compiler/tests/fixtures.golden/*.*
+mkdir -p wado-compiler/tests/generated/fixtures
+rm -rf wado-compiler/tests/generated/fixtures/*.*
 ./target/debug/wado-dev-tools golden-dump \
     --in 'wado-compiler/tests/fixtures/{name}.wado' \
-    --out 'wado-compiler/tests/fixtures.golden/{name}.wir.wado' \
+    --out 'wado-compiler/tests/generated/fixtures/{name}.wir.wado' \
     --phase wir -O2
 """
 
