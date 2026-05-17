@@ -331,7 +331,7 @@ Trivial init-guard removal — removes compiler-generated module-initialization 
 
 ## Testing Strategy
 
-- Golden fixtures — `tests/fixtures.golden/*.wir.wado` captures optimized WIR output. Regenerate with `mise run update-golden-fixtures`.
+- Golden fixtures — `tests/generated/fixtures/*.wir.wado` captures optimized WIR output. Regenerate with `mise run update-golden-fixtures`.
 - WIR pattern tests — `wir_expect:Ox` / `wir_not_expect:Ox` in `__DATA__` blocks of E2E fixtures verify specific optimization effects at a given level.
 - Correctness E2E — `tests/fixtures/*.wado` ensures optimizations preserve semantics across `-O0`/`-O2` (and `-O1`/`-O3`/`-Os` under `WADO_FULL_TEST=1`).
 - Benchmark suite — sieve, mandelbrot, count-prime, fts, zlib (`mise run benchmark-all`).
