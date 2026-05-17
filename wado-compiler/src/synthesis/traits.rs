@@ -1379,7 +1379,13 @@ fn generate_newtype_inspect_fn(
 
     let stmts = vec![
         inspect_call(cast_to_base, base_type, fmt(), module_source, tt, span),
-        write_str_stmt(format!(" as {newtype_name}"), fmt(), string_type, ref_string_type, span),
+        write_str_stmt(
+            format!(" as {newtype_name}"),
+            fmt(),
+            string_type,
+            ref_string_type,
+            span,
+        ),
     ];
 
     make_synthetic_method(
@@ -1536,7 +1542,13 @@ fn generate_flags_inspect_fn(
                 TirExprKind::If {
                     condition: Box::new(sep_cond),
                     then_branch: TirBlock::new(
-                        vec![write_str_stmt(" | ", fmt_local(), string_type, ref_string_type, *span)],
+                        vec![write_str_stmt(
+                            " | ",
+                            fmt_local(),
+                            string_type,
+                            ref_string_type,
+                            *span,
+                        )],
                         *span,
                     ),
                     else_branch: None,
@@ -2225,7 +2237,13 @@ fn build_variant_inspect_alt_body(
                 tt,
                 span,
             ));
-            then_stmts.push(write_str_stmt(",", fmt_local(), string_type, ref_string_type, span));
+            then_stmts.push(write_str_stmt(
+                ",",
+                fmt_local(),
+                string_type,
+                ref_string_type,
+                span,
+            ));
             // f.close_brace(")")
             then_stmts.push(formatter_call(
                 "close_brace",
