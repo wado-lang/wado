@@ -2429,7 +2429,7 @@ Reference to the output buffer
 
 Create a new Formatter with default format spec that writes into the given buffer.
 
-#### `pub fn write_str(&mut self, s: String)`
+#### `pub fn write_str(&mut self, s: &String)`
 
 Write a string to the output buffer.
 

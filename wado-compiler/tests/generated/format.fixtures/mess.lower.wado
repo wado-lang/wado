@@ -2062,12 +2062,12 @@ pub fn write_escaped_string(s: String, f: &mut Formatter) {
             if __variant_test(__pattern_temp_0, case=0, name=Some) {
                 let c: char = __variant_payload(__pattern_temp_0, case=0);
                 match c {
-                    '"' => f.Formatter::write_str("\\\""),
-                    '\' => f.Formatter::write_str("\\\\"),
+                    '"' => f.Formatter::write_str(&"\\\""),
+                    '\' => f.Formatter::write_str(&"\\\\"),
                     '
-' => f.Formatter::write_str("\\n"),
-                    '	' => f.Formatter::write_str("\\t"),
-                    '' => f.Formatter::write_str("\\r"),
+' => f.Formatter::write_str(&"\\n"),
+                    '	' => f.Formatter::write_str(&"\\t"),
+                    '' => f.Formatter::write_str(&"\\r"),
                     _ => f.Formatter::write_char(c),
                 };
             } else {
@@ -7804,11 +7804,11 @@ pub fn "f64^FromStr::from_str"(s: &String) -> Result<f64, ParseFloatError> {
 }
 
 pub fn "unit^Display::fmt"(self: &(), f: &mut Formatter) {
-    f.Formatter::write_str("()");
+    f.Formatter::write_str(&"()");
 }
 
 pub fn "unit^DisplayAlt::fmt_alt"(self: &(), f: &mut Formatter) {
-    f.Formatter::write_str("()");
+    f.Formatter::write_str(&"()");
 }
 
 pub fn "bool^Display::fmt"(self: Box<bool>, f: &mut Formatter) {
@@ -7866,7 +7866,7 @@ pub fn "f64^Display::fmt"(self: Box<f64>, f: &mut Formatter) {
 }
 
 pub fn "unit^Inspect::inspect"(self: &(), f: &mut Formatter) {
-    f.Formatter::write_str("()");
+    f.Formatter::write_str(&"()");
 }
 
 pub fn "bool^Inspect::inspect"(self: Box<bool>, f: &mut Formatter) {
@@ -17396,8 +17396,8 @@ pub fn Formatter::new(buf: &mut String) -> Formatter with stores[buf] {
     return Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, zero_pad: false, width: -1, precision: -1, indent: 0, buf: buf };
 }
 
-pub fn Formatter::write_str(self: &mut Formatter, s: String) {
-    self.buf.String::push_str(&s);
+pub fn Formatter::write_str(self: &mut Formatter, s: &String) {
+    self.buf.String::push_str(s);
 }
 
 pub fn Formatter::write_char(self: &mut Formatter, c: char) {
@@ -17628,7 +17628,7 @@ pub fn Formatter::write_indent(self: &mut Formatter) {
                 break __for_4;
             }
             __for_4_body: {
-                self.Formatter::write_str("  ");
+                self.Formatter::write_str(&"  ");
             }
             i = (i + 1);
         }
@@ -17641,14 +17641,14 @@ pub fn Formatter::write_newline_indent(self: &mut Formatter) {
 }
 
 pub fn Formatter::open_brace(self: &mut Formatter, open: String) {
-    self.Formatter::write_str(open);
+    self.Formatter::write_str(&open);
     self.indent = (self.indent + 1);
 }
 
 pub fn Formatter::close_brace(self: &mut Formatter, close: String) {
     self.indent = (self.indent - 1);
     self.Formatter::write_newline_indent();
-    self.Formatter::write_str(close);
+    self.Formatter::write_str(&close);
 }
 
 pub fn "String^Display::fmt"(self: &String, f: &mut Formatter) {
@@ -18125,27 +18125,27 @@ fn "Tuple<f64,f64>^InspectAlt::inspect_alt"(self: &[f64, f64], f: &mut Formatter
             let v: f64 = __tuple_2.0;
             f.Formatter::write_newline_indent();
             Box<f64> { value: v }."f64^InspectAlt::inspect_alt"::<Formatter>(f);
-            f.Formatter::write_str::<String>(",");
+            f.Formatter::write_str::<String>(&",");
         }
         __tuple_iter_2_1: {
             let v: f64 = __tuple_2.1;
             f.Formatter::write_newline_indent();
             Box<f64> { value: v }."f64^InspectAlt::inspect_alt"::<Formatter>(f);
-            f.Formatter::write_str::<String>(",");
+            f.Formatter::write_str::<String>(&",");
         }
     }
     f.Formatter::close_brace("]");
 }
 
 fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
+    f.Formatter::write_str(&"[");
     let mut first: bool = true;
     __tuple_for_of_3: {
         let __tuple_3: [f64, f64] = "$value_copy$T19"(*self);
         __tuple_iter_3_0: {
             let v: f64 = __tuple_3.0;
             if !first {
-                f.Formatter::write_str::<String>(", ");
+                f.Formatter::write_str::<String>(&", ");
             }
             first = false;
             Box<f64> { value: v }."f64^Inspect::inspect"::<Formatter>(f);
@@ -18153,13 +18153,13 @@ fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
         __tuple_iter_3_1: {
             let v: f64 = __tuple_3.1;
             if !first {
-                f.Formatter::write_str::<String>(", ");
+                f.Formatter::write_str::<String>(&", ");
             }
             first = false;
             Box<f64> { value: v }."f64^Inspect::inspect"::<Formatter>(f);
         }
     }
-    f.Formatter::write_str("]");
+    f.Formatter::write_str(&"]");
 }
 
 fn "Tuple<f64,f64>^Eq::eq"(self: &[f64, f64], other: &[f64, f64]) -> bool {

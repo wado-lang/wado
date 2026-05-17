@@ -1669,12 +1669,12 @@ pub fn write_escaped_string(s: String, f: &mut Formatter) {
             if __variant_test(__pattern_temp_0, case=0, name=Some) {
                 let c: char = __variant_payload(__pattern_temp_0, case=0);
                 match c {
-                    '"' => f.Formatter::write_str("\\\""),
-                    '\' => f.Formatter::write_str("\\\\"),
+                    '"' => f.Formatter::write_str(&"\\\""),
+                    '\' => f.Formatter::write_str(&"\\\\"),
                     '
-' => f.Formatter::write_str("\\n"),
-                    '	' => f.Formatter::write_str("\\t"),
-                    '' => f.Formatter::write_str("\\r"),
+' => f.Formatter::write_str(&"\\n"),
+                    '	' => f.Formatter::write_str(&"\\t"),
+                    '' => f.Formatter::write_str(&"\\r"),
                     _ => f.Formatter::write_char(c),
                 };
             } else {
@@ -7327,11 +7327,11 @@ pub fn "f64^FromStr::from_str"(s: &String) -> Result<f64, ParseFloatError> {
 }
 
 pub fn "unit^Display::fmt"(self: &(), f: &mut Formatter) {
-    f.Formatter::write_str("()");
+    f.Formatter::write_str(&"()");
 }
 
 pub fn "unit^DisplayAlt::fmt_alt"(self: &(), f: &mut Formatter) {
-    f.Formatter::write_str("()");
+    f.Formatter::write_str(&"()");
 }
 
 pub fn "bool^Display::fmt"(self: Box<bool>, f: &mut Formatter) {
@@ -7389,7 +7389,7 @@ pub fn "f64^Display::fmt"(self: Box<f64>, f: &mut Formatter) {
 }
 
 pub fn "unit^Inspect::inspect"(self: &(), f: &mut Formatter) {
-    f.Formatter::write_str("()");
+    f.Formatter::write_str(&"()");
 }
 
 pub fn "bool^Inspect::inspect"(self: Box<bool>, f: &mut Formatter) {
@@ -14421,8 +14421,8 @@ pub fn Formatter::new(buf: &mut String) -> Formatter with stores[buf] {
     return Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, zero_pad: false, width: -1, precision: -1, indent: 0, buf: buf };
 }
 
-pub fn Formatter::write_str(self: &mut Formatter, s: String) {
-    self.buf.String::push_str(&s);
+pub fn Formatter::write_str(self: &mut Formatter, s: &String) {
+    self.buf.String::push_str(s);
 }
 
 pub fn Formatter::write_char(self: &mut Formatter, c: char) {
@@ -14653,7 +14653,7 @@ pub fn Formatter::write_indent(self: &mut Formatter) {
                 break __for_4;
             }
             __for_4_body: {
-                self.Formatter::write_str("  ");
+                self.Formatter::write_str(&"  ");
             }
             i = (i + 1);
         }
@@ -14666,14 +14666,14 @@ pub fn Formatter::write_newline_indent(self: &mut Formatter) {
 }
 
 pub fn Formatter::open_brace(self: &mut Formatter, open: String) {
-    self.Formatter::write_str(open);
+    self.Formatter::write_str(&open);
     self.indent = (self.indent + 1);
 }
 
 pub fn Formatter::close_brace(self: &mut Formatter, close: String) {
     self.indent = (self.indent - 1);
     self.Formatter::write_newline_indent();
-    self.Formatter::write_str(close);
+    self.Formatter::write_str(&close);
 }
 
 pub fn "String^Display::fmt"(self: &String, f: &mut Formatter) {

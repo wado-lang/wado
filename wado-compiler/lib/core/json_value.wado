@@ -159,7 +159,7 @@ impl Visitor for ValueVisitor {
 impl Inspect for Value {
     pub fn inspect(&self, f: &mut Formatter) {
         match self {
-            Null => f.write_str("null"),
+            Null => f.write_str(&"null"),
             Bool(b) => f.write_str(if *b { "true" } else { "false" }),
             Number(n) => (*n).inspect(f),
             String(s) => (*s).inspect(f),
@@ -167,7 +167,7 @@ impl Inspect for Value {
                 f.write_char('[');
                 for let mut i = 0; i < arr.len(); i += 1 {
                     if i > 0 {
-                        f.write_str(", ");
+                        f.write_str(&", ");
                     }
                     arr[i].inspect(f);
                 }
@@ -178,11 +178,11 @@ impl Inspect for Value {
                 let mut first = true;
                 for let [k, v] of map.entries() {
                     if !first {
-                        f.write_str(", ");
+                        f.write_str(&", ");
                     }
                     first = false;
                     k.inspect(f);
-                    f.write_str(": ");
+                    f.write_str(&": ");
                     v.inspect(f);
                 }
                 f.write_char('}');
@@ -194,13 +194,13 @@ impl Inspect for Value {
 impl InspectAlt for Value {
     pub fn inspect_alt(&self, f: &mut Formatter) {
         match self {
-            Null => f.write_str("null"),
+            Null => f.write_str(&"null"),
             Bool(b) => f.write_str(if *b { "true" } else { "false" }),
             Number(n) => (*n).inspect_alt(f),
             String(s) => (*s).inspect_alt(f),
             Array(arr) => {
                 if arr.is_empty() {
-                    f.write_str("[]");
+                    f.write_str(&"[]");
                     return;
                 }
                 f.open_brace("[");
@@ -213,14 +213,14 @@ impl InspectAlt for Value {
             },
             Object(map) => {
                 if map.is_empty() {
-                    f.write_str("{}");
+                    f.write_str(&"{}");
                     return;
                 }
                 f.open_brace("{");
                 for let [k, v] of map.entries() {
                     f.write_newline_indent();
                     k.inspect_alt(f);
-                    f.write_str(": ");
+                    f.write_str(&": ");
                     v.inspect_alt(f);
                     f.write_char(',');
                 }
