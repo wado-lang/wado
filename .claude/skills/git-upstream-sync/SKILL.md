@@ -41,7 +41,7 @@ git commit -m "resolve merge conflicts"
 
 ### 4. Run `mise run test` for sanity check
 
-CI will apply clippy, format, and regenerate golden fixtures, so a quich sanity check is sufficient.
+CI will apply clippy, format, and regenerate golden fixtures, so a quick sanity check is sufficient.
 
 ## Important
 
