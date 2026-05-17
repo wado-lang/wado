@@ -111,6 +111,54 @@ pub const WASI_TLS_TYPES: &str = include_str!("../lib/wasi/tls/types.wado");
 pub const WASI_TLS_CLIENT: &str = include_str!("../lib/wasi/tls/client.wado");
 pub const WASI_TLS_WORLDS: &str = include_str!("../lib/wasi/tls/worlds.wado");
 
+/// All core stdlib statics.
+///
+/// Each entry is `(import_path, source)` where `import_path` matches
+/// what users write in `from "core:..."` expressions. This is the
+/// single source of truth for the set of core stdlib modules: the
+/// loader's `cached_stdlib`, `get_stdlib_module`, and the
+/// `ModuleSourceInterner` well-known arc set all derive from it.
+pub const ALL_CORE_MODULES: &[(&str, &str)] = &[
+    ("core:allocator", CORE_ALLOCATOR),
+    ("core:builtin", CORE_BUILTIN),
+    ("core:cli", CORE_CLI),
+    ("core:collections", CORE_COLLECTIONS),
+    ("core:internal", CORE_INTERNAL),
+    ("core:prelude", CORE_PRELUDE),
+    ("core:prelude/array.wado", CORE_PRELUDE_ARRAY),
+    ("core:prelude/format.wado", CORE_PRELUDE_FORMAT),
+    ("core:prelude/fpfmt.wado", CORE_PRELUDE_FPFMT),
+    ("core:prelude/int128.wado", CORE_PRELUDE_INT128),
+    ("core:prelude/intparse.wado", CORE_PRELUDE_INTPARSE),
+    ("core:prelude/primitive.wado", CORE_PRELUDE_PRIMITIVE),
+    ("core:prelude/range.wado", CORE_PRELUDE_RANGE),
+    ("core:prelude/string.wado", CORE_PRELUDE_STRING),
+    ("core:prelude/traits.wado", CORE_PRELUDE_TRAITS),
+    ("core:prelude/tuple.wado", CORE_PRELUDE_TUPLE),
+    ("core:prelude/types.wado", CORE_PRELUDE_TYPES),
+    ("core:zlib", CORE_ZLIB),
+    ("core:base64", CORE_BASE64),
+    ("core:benchmark", CORE_BENCHMARK),
+    ("core:serde", CORE_SERDE),
+    ("core:json", CORE_JSON),
+    ("core:json_nsd", CORE_JSON_NSD),
+    ("core:json_value", CORE_JSON_VALUE),
+    ("core:simd", CORE_SIMD),
+    ("core:url", CORE_URL),
+    ("core:router", CORE_ROUTER),
+    ("core:kiln", CORE_KILN),
+    ("core:kiln/kiln_host.wado", CORE_KILN_KILN_HOST),
+    ("core:kiln/types.wado", CORE_KILN_TYPES),
+    ("core:kiln/worlds.wado", CORE_KILN_WORLDS),
+];
+
+/// All bundled wasm assets, used for registry building.
+///
+/// Each entry is `(canonical_path, bytes)` matching the canonical
+/// `wasm:`-style path that the loader assigns to
+/// [`ModuleSource::Wasm`].
+pub const ALL_CORE_WASM_ASSETS: &[(&str, &[u8])] = &[("core:libm.wat", CORE_LIBM_WAT)];
+
 /// All WASI interface statics, used for registry building.
 ///
 /// Each entry is `(import_path, source)` where `import_path` matches
@@ -175,10 +223,10 @@ pub const ALL_WASI_MODULES: &[(&str, &str)] = &[
 /// (`./foo.wat`) are loaded through `CompilerHost::load_source` instead.
 #[must_use]
 pub fn get_stdlib_wasm_asset(import_path: &str) -> Option<&'static [u8]> {
-    match import_path {
-        "core:libm.wat" => Some(CORE_LIBM_WAT),
-        _ => None,
-    }
+    ALL_CORE_WASM_ASSETS
+        .iter()
+        .find(|(path, _)| *path == import_path)
+        .map(|(_, bytes)| *bytes)
 }
 
 /// Get embedded module source by import path.
@@ -189,46 +237,11 @@ pub fn get_stdlib_wasm_asset(import_path: &str) -> Option<&'static [u8]> {
 /// # Returns
 /// The source code of the module if found, or `None` if not a standard library module.
 pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
-    match import_path {
-        // Core library
-        "core:prelude" => Some(CORE_PRELUDE),
-        "core:prelude/traits.wado" => Some(CORE_PRELUDE_TRAITS),
-        "core:prelude/int128.wado" => Some(CORE_PRELUDE_INT128),
-        "core:prelude/types.wado" => Some(CORE_PRELUDE_TYPES),
-        "core:prelude/primitive.wado" => Some(CORE_PRELUDE_PRIMITIVE),
-        "core:prelude/string.wado" => Some(CORE_PRELUDE_STRING),
-        "core:prelude/format.wado" => Some(CORE_PRELUDE_FORMAT),
-        "core:prelude/array.wado" => Some(CORE_PRELUDE_ARRAY),
-        "core:prelude/fpfmt.wado" => Some(CORE_PRELUDE_FPFMT),
-        "core:prelude/intparse.wado" => Some(CORE_PRELUDE_INTPARSE),
-        "core:prelude/tuple.wado" => Some(CORE_PRELUDE_TUPLE),
-        "core:prelude/range.wado" => Some(CORE_PRELUDE_RANGE),
-        "core:collections" => Some(CORE_COLLECTIONS),
-        "core:cli" => Some(CORE_CLI),
-        "core:internal" => Some(CORE_INTERNAL),
-        "core:allocator" => Some(CORE_ALLOCATOR),
-        "core:builtin" => Some(CORE_BUILTIN),
-        "core:zlib" => Some(CORE_ZLIB),
-        "core:base64" => Some(CORE_BASE64),
-        "core:benchmark" => Some(CORE_BENCHMARK),
-        "core:serde" => Some(CORE_SERDE),
-        "core:json" => Some(CORE_JSON),
-        "core:json_nsd" => Some(CORE_JSON_NSD),
-        "core:json_value" => Some(CORE_JSON_VALUE),
-        "core:simd" => Some(CORE_SIMD),
-        "core:url" => Some(CORE_URL),
-        "core:router" => Some(CORE_ROUTER),
-        "core:kiln" => Some(CORE_KILN),
-        "core:kiln/kiln_host.wado" => Some(CORE_KILN_KILN_HOST),
-        "core:kiln/types.wado" => Some(CORE_KILN_TYPES),
-        "core:kiln/worlds.wado" => Some(CORE_KILN_WORLDS),
-
-        // WASI interfaces
-        _ => ALL_WASI_MODULES
-            .iter()
-            .find(|(path, _)| *path == import_path)
-            .map(|(_, src)| *src),
-    }
+    ALL_CORE_MODULES
+        .iter()
+        .chain(ALL_WASI_MODULES.iter())
+        .find(|(path, _)| *path == import_path)
+        .map(|(_, src)| *src)
 }
 
 #[cfg(test)]

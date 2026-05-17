@@ -109,6 +109,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             logger,
             invocations,
             interner,
+            None,
         )?;
         let trait_env = state.trait_env.clone();
         let tir_modules = Self::lower_tir_from_state(
@@ -118,6 +119,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             entry_module_source,
             logger,
             included_files,
+            None,
         )?;
         Ok((tir_modules, trait_env))
     }
@@ -133,27 +135,51 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         logger: &'a Logger<'a, H>,
         invocations: crate::kiln::InvocationIndex,
         interner: Rc<RefCell<ModuleSourceInterner>>,
+        snapshot: Option<&crate::annotate::Annotated>,
     ) -> Result<AnnotateState, Bail> {
         let invocations = Rc::new(invocations);
-        // Create a shared type table wrapped in Rc<RefCell<>> for cross-module sharing
-        let type_table = Rc::new(RefCell::new(TypeTable::new()));
-        let mut all_newtypes: IndexMap<ModuleSource, IndexMap<String, TypeId>> =
-            IndexMap::default();
+        // Set of stdlib module sources covered by the snapshot.  When non-empty,
+        // the per-module passes below skip these — their decl info is already
+        // present in the seeded maps.
+        let stdlib_set: IndexSet<ModuleSource> = snapshot
+            .map(crate::stdlib_snapshot::stdlib_sources)
+            .unwrap_or_default();
+        // Seed the shared type table from the snapshot when available so
+        // stdlib `TypeId`s occupy the same indices as in cached `TirModule`s.
+        let type_table = Rc::new(RefCell::new(
+            snapshot.map_or_else(TypeTable::new, |s| s.types.clone()),
+        ));
+        let mut all_newtypes: IndexMap<ModuleSource, IndexMap<String, TypeId>> = snapshot
+            .map(|s| (*s.state.all_newtypes).clone())
+            .unwrap_or_default();
         let mut all_generic_newtypes: IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>> =
-            IndexMap::default();
+            snapshot
+                .map(|s| (*s.state.all_generic_newtypes).clone())
+                .unwrap_or_default();
         let mut all_struct_fields: IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>> =
-            IndexMap::default();
-        let mut all_variant_cases: IndexMap<ModuleSource, IndexMap<String, VariantInfo>> =
-            IndexMap::default();
-        let mut all_enum_cases: IndexMap<ModuleSource, IndexMap<String, EnumInfo>> =
-            IndexMap::default();
-        let mut all_flags_cases: IndexMap<ModuleSource, IndexMap<String, FlagsInfo>> =
-            IndexMap::default();
+            snapshot
+                .map(|s| (*s.state.all_struct_fields).clone())
+                .unwrap_or_default();
+        let mut all_variant_cases: IndexMap<ModuleSource, IndexMap<String, VariantInfo>> = snapshot
+            .map(|s| (*s.state.all_variant_cases).clone())
+            .unwrap_or_default();
+        let mut all_enum_cases: IndexMap<ModuleSource, IndexMap<String, EnumInfo>> = snapshot
+            .map(|s| (*s.state.all_enum_cases).clone())
+            .unwrap_or_default();
+        let mut all_flags_cases: IndexMap<ModuleSource, IndexMap<String, FlagsInfo>> = snapshot
+            .map(|s| (*s.state.all_flags_cases).clone())
+            .unwrap_or_default();
         let mut all_resource_types: IndexMap<ModuleSource, IndexMap<String, ResourceInfo>> =
-            IndexMap::default();
+            snapshot
+                .map(|s| (*s.state.all_resource_types).clone())
+                .unwrap_or_default();
 
         // First pass: collect struct, variant, enum, and resource names from all modules (for forward references)
         for (module_source, module) in modules {
+            if stdlib_set.contains(module_source) {
+                // Already covered by the snapshot seed above.
+                continue;
+            }
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
@@ -289,6 +315,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Each module's lookup goes directly through the in-progress shared
         // tables (`all_*`) via [`TypeLookup`] — no per-module flat-map cloning.
         for (module_source, module) in modules {
+            if stdlib_set.contains(module_source) {
+                // Stdlib fields are already resolved in the seeded maps.
+                continue;
+            }
             let (imported_type_sources, import_original_names) = Self::build_imported_type_sources(
                 &mut interner.borrow_mut(),
                 module,
@@ -560,13 +590,21 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         };
         let builtin_registry = {
             let _span = logger.span("resolve/builtin_registry");
-            let mut registry = BuiltinRegistry::build_from_stdlib(&type_table);
+            let mut registry = if let Some(snap) = snapshot {
+                // The snapshot's registry is bound to the snapshot's
+                // `TypeTable`, whose entries we cloned into `type_table`
+                // above — so the registered `TypeId`s remain valid.
+                snap.state.builtin_registry.clone()
+            } else {
+                BuiltinRegistry::build_from_stdlib(&type_table)
+            };
             // Fold in `#[canonical(...)]` no-body declarations from
             // loader-synthesised wasm-asset modules so calls into a
             // wat/wasm asset's exports lower through the same TirImport
-            // path as `core:builtin` declarations.
+            // path as `core:builtin` declarations.  Stdlib wasm assets
+            // (e.g. `core:libm.wat`) are already in `snap.state.builtin_registry`.
             for (ms, module) in modules {
-                if matches!(ms, ModuleSource::Wasm { .. }) {
+                if matches!(ms, ModuleSource::Wasm { .. }) && !stdlib_set.contains(ms) {
                     registry.register_wasm_module(module, &type_table);
                 }
             }
@@ -589,7 +627,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // is resolved. This ensures that when resolving module X, it can look up associated
         // types from module Y's impl blocks even if Y hasn't been processed yet in the main
         // second pass (e.g., user module is sorted before prelude modules).
-        Self::register_all_generic_assoc_type_defs(modules, &type_table);
+        Self::register_all_generic_assoc_type_defs(modules, &type_table, &stdlib_set);
 
         // Wrap all_* maps in Rc for cheap sharing across per-module resolvers
         let all_newtypes = Rc::new(all_newtypes);
@@ -655,13 +693,23 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             &global_known_type_names,
             &resource_type_names,
             logger,
+            &stdlib_set,
         )?;
 
         // Pre-build function name → index maps for all loaded modules (O(1) lookup)
-        let all_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>> = modules
-            .iter()
-            .map(|(src, module)| (src.clone(), Self::build_func_index(&module.items)))
-            .collect();
+        let all_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>> = {
+            let mut indices: IndexMap<ModuleSource, IndexMap<String, usize>> = snapshot
+                .map(|s| s.state.all_module_func_indices.clone())
+                .unwrap_or_default();
+            for (src, module) in modules {
+                if stdlib_set.contains(src) {
+                    // Pre-populated from snapshot.
+                    continue;
+                }
+                indices.insert(src.clone(), Self::build_func_index(&module.items));
+            }
+            indices
+        };
 
         // Intern every declaration in the TypeTable so `find_decl_type_by_name`
         // (used by `register_symbol_key_type_indices` below) resolves for every
@@ -674,12 +722,23 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             &all_struct_fields,
             &all_resource_types,
             &type_table,
+            &stdlib_set,
         );
 
         // Populate `TypeTable::type_by_symbol` / `symbol_by_type` so LSP queries
         // can resolve a `SymbolKey` to a decl-backed type without running the
         // lower phase.
         Self::register_symbol_key_type_indices(symbols, &type_table);
+
+        // Seed the use→def reference map and the local-symbol map with the
+        // snapshot's pre-resolved stdlib entries so the LSP edges remain
+        // consistent and user-module body resolution can extend on top.
+        let references = Rc::new(RefCell::new(
+            snapshot.map(|s| s.references.clone()).unwrap_or_default(),
+        ));
+        let local_symbols = Rc::new(RefCell::new(
+            snapshot.map(|s| s.locals.clone()).unwrap_or_default(),
+        ));
 
         Ok(AnnotateState {
             type_table,
@@ -697,8 +756,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             builtin_registry,
             global_known_type_names,
             all_module_func_indices,
-            references: Rc::new(RefCell::new(IndexMap::default())),
-            local_symbols: Rc::new(RefCell::new(IndexMap::default())),
+            references,
+            local_symbols,
             invocations,
             interner,
         })
@@ -714,14 +773,51 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         entry_module_source: ModuleSource,
         logger: &'a Logger<'a, H>,
         included_files: &'a IndexMap<[String; 2], Vec<u8>>,
+        snapshot: Option<&crate::annotate::Annotated>,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
         let mut result = IndexMap::default();
+        // Per-rehydration memo: maps each cached function `Rc`'s pointer
+        // identity to its per-compile clone, so that aliasing between
+        // `functions` and `generic_functions` within a single stdlib
+        // module is preserved.  Lives across the whole loop so aliases
+        // between distinct stdlib modules (e.g. a generic helper shared
+        // between two `core:prelude/*` modules) are preserved too.
+        let mut fn_remap: IndexMap<
+            *const RefCell<crate::tir::TirFunction>,
+            Rc<RefCell<crate::tir::TirFunction>>,
+        > = IndexMap::default();
 
-        // Per-module resolution: build each TirModule using the shared type
-        // table and the annotate-phase decl maps. Errors are emitted to the
-        // logger; we keep going so one broken module doesn't mask others.
+        // Per-module resolution: walk modules in the per-compile
+        // topological order so a `TirModule`'s position in the result map
+        // matches the dependency order downstream phases expect.  For
+        // each module either rehydrate from the snapshot cache (stdlib)
+        // or run the full body-level resolve pass (user code).  Errors
+        // are emitted to the logger; we keep going so one broken module
+        // doesn't mask others.
         let _span = logger.span("resolve/modules");
         for module_source in &state.sorted_sources {
+            // Cache hit: deep-clone the cached `TirModule` into the
+            // per-compile shared type table.  Only `Core` / `Wasi` /
+            // `Wasm` variants are eligible — `ModuleSource::EntryPoint`
+            // values compare equal regardless of filename (one entry
+            // per compile), so `snap.tir_modules.get` would otherwise
+            // match the snapshot's synthetic empty entry against the
+            // user's real entry and silently substitute it.
+            if matches!(
+                module_source,
+                ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
+            ) && let Some(snap_module) = snapshot.and_then(|s| s.tir_modules.get(module_source))
+            {
+                result.insert(
+                    module_source.clone(),
+                    crate::stdlib_snapshot::rehydrate_tir_module(
+                        snap_module,
+                        &state.type_table,
+                        &mut fn_remap,
+                    ),
+                );
+                continue;
+            }
             let module = modules.get(module_source).expect("module should exist");
 
             // Build imported type sources and module-specific flat maps for this module
@@ -910,8 +1006,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         all_struct_fields: &IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,
         all_resource_types: &IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>,
         type_table: &Rc<RefCell<TypeTable>>,
+        stdlib_set: &IndexSet<ModuleSource>,
     ) {
         for (module_source, module) in modules {
+            if stdlib_set.contains(module_source) {
+                // Stdlib decls were interned when the snapshot was built.
+                continue;
+            }
             let mut tt = type_table.borrow_mut();
             for item in &module.items {
                 match item {
@@ -1190,8 +1291,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         known_type_names: &IndexSet<String>,
         resource_type_names: &IndexSet<String>,
         logger: &Logger<'_, H>,
+        stdlib_set: &IndexSet<ModuleSource>,
     ) -> Result<(), Bail> {
         for (module_source, module) in modules {
+            if stdlib_set.contains(module_source) {
+                continue;
+            }
             logger.set_file(module_source.diagnostic_filename());
 
             // Build per-module known names: global names + import aliases + trait names
@@ -2488,8 +2593,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     fn register_all_generic_assoc_type_defs(
         modules: &IndexMap<ModuleSource, Module>,
         type_table: &Rc<RefCell<TypeTable>>,
+        stdlib_set: &IndexSet<ModuleSource>,
     ) {
-        for module in modules.values() {
+        for (module_source, module) in modules {
+            if stdlib_set.contains(module_source) {
+                // Stdlib generic-assoc defs are baked into the seeded
+                // `TypeTable` via the snapshot.
+                continue;
+            }
             for item in &module.items {
                 let Item::Impl(impl_block) = item else {
                     continue;

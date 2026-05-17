@@ -405,6 +405,15 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
         analyzer.into_symbols()
     };
 
+    // Per-thread stdlib `Annotated` snapshot.  When present,
+    // `annotate_modules` seeds its `TypeTable` / decl maps / registries
+    // from this snapshot and `lower_tir_from_state` copies the
+    // pre-lowered stdlib `TirModule`s directly into its result, skipping
+    // the ~28 s of CPU otherwise duplicated across a typical `wado test`
+    // run.  Returns `None` when called from inside the snapshot builder
+    // itself (re-entry guard); a fresh full annotate runs in that case.
+    let snapshot = crate::stdlib_snapshot::get_or_init_snapshot();
+
     let state = {
         let _span = logger.span("resolve/annotate");
         Resolver::annotate_modules(
@@ -414,6 +423,7 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
             logger,
             load_result.invocations.clone(),
             interner.clone(),
+            snapshot.as_deref(),
         )?
     };
 
@@ -431,6 +441,7 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
             load_result.entry_module_source.clone(),
             logger,
             &load_result.included_files,
+            snapshot.as_deref(),
         )?
     };
 
