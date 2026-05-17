@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779050995851,
+  "lastUpdate": 1779056671071,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23069,6 +23069,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/32f476c0a2b7a8c7515a3c766b6e08b226da2e28"
         },
         "date": 1779050995508,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 490666,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b814693a764a4e796d9b3b3b501dd189542fa0d9",
+          "message": "Merge pull request #1111 from wado-lang/claude/fix-template-string-inspect-AdRlM\n\npower-assert: recurse into call arguments + fix cross-module Inspect dispatch",
+          "timestamp": "2026-05-18T07:18:08+09:00",
+          "tree_id": "1f7620cfc7d781572bbf18a56fa6eb370fec2752",
+          "url": "https://github.com/wado-lang/wado/commit/b814693a764a4e796d9b3b3b501dd189542fa0d9"
+        },
+        "date": 1779056670674,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
