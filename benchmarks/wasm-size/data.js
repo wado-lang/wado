@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778999650068,
+  "lastUpdate": 1779000608982,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22805,6 +22805,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2025968085aa30dbee1841f5b48fcdda72b5b594"
         },
         "date": 1778999649680,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 490666,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8d52a4fd1702a27b456eae30f71e5dfb64759d8b",
+          "message": "Merge pull request #1100 from wado-lang/claude/fix-switch-binding-default\n\nfix(lower): reject Binding default in dense-int Switch rewrite",
+          "timestamp": "2026-05-17T15:41:16+09:00",
+          "tree_id": "78d1ad7ab7b4229c8aec7c952d80e3011e5eae52",
+          "url": "https://github.com/wado-lang/wado/commit/8d52a4fd1702a27b456eae30f71e5dfb64759d8b"
+        },
+        "date": 1779000608592,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
