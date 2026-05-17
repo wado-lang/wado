@@ -1,0 +1,24 @@
+// Test: bare Ident arguments to a function call are intentionally NOT
+// extracted as separate intermediates. Extracting them would lose the
+// `fn_name` → `fn(...)` coercion that only applies in argument position
+// (extracted let-binding would type-infer the Ident as `unknown`).
+//
+// The intermediate for the call itself (`double(x)`) is still recorded.
+
+fn double(n: i32) -> i32 {
+    return n * 2;
+}
+
+export fn run() with Stdout {
+    let x = 3;
+    assert double(x) == 100;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "condition: double(x) == 100",
+        "double(x): 6"
+    ]
+}

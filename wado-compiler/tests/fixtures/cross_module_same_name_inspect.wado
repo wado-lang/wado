@@ -1,0 +1,23 @@
+// Regression: auto-derived `Inspect` for two same-named structs declared in
+// different modules must each dispatch to its own module's impl. Before the
+// fix, `TraitEnv::trait_impl_modules` collapsed both impls onto one
+// `(type_name, trait_name)` key and `impl_module_for` returned the first
+// module for every receiver — so `{b:?}` would call module A's
+// `Widget^Inspect::inspect` against a module B `Widget` value and the
+// resulting Wasm validation would fail (or, at -O2, DCE would silently hide
+// the wrong-module dispatch as dead code).
+
+use { new_a } from "./sub/cross_module_same_name_method_a.wado";
+use { new_b } from "./sub/cross_module_same_name_method_b.wado";
+
+test "auto-derived inspect picks the receiver type's own module" {
+    let a = new_a(1);
+    let b = new_b(2);
+    let msg_a = `{a:?}`;
+    let msg_b = `{b:?}`;
+    assert msg_a == "Widget { id: 1 }";
+    assert msg_b == "Widget { id: 2 }";
+}
+
+__DATA__
+{"test": {}}

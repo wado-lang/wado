@@ -58,13 +58,17 @@ impl FuncInstState {
     /// resolved concrete type ("i32", not "Score"). Querying by
     /// `base_struct_name` would miss this case for newtypes whose
     /// `struct_name` has been resolved through the newtype.
-    pub fn impl_module(&self, info: &LocalMethodName) -> Option<ModuleSource> {
+    pub fn impl_module(
+        &self,
+        info: &LocalMethodName,
+        type_module: Option<&ModuleSource>,
+    ) -> Option<ModuleSource> {
         let trait_name = info
             .base_trait_name
             .as_deref()
             .or(info.trait_name.as_deref())?;
         self.trait_env
-            .concrete_impl_module_for(&info.struct_name, trait_name)
+            .concrete_impl_module_for(&info.struct_name, trait_name, type_module)
             .cloned()
     }
 
@@ -74,7 +78,9 @@ impl FuncInstState {
     /// match the legacy `trait_method_locations.contains_key` semantics,
     /// which only catalogued non-generic impl methods.
     pub fn has_impl(&self, info: &LocalMethodName) -> bool {
-        self.impl_module(info).is_some()
+        // Existence-only check; any candidate module suffices so no hint is
+        // needed.
+        self.impl_module(info, None).is_some()
     }
 }
 

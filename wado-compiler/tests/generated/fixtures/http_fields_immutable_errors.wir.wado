@@ -176,7 +176,7 @@ struct tuple//[String, Array<u8>] {  // TypeId(25)
     mut 1: ref "core:prelude//Array<u8>",
 }
 
-struct tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>] {  // TypeId(26)
+struct tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(26)
     mut 0: i32,
     mut 1: i32,
 }
@@ -342,7 +342,7 @@ type "functype//wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/_
 
 type "functype//wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(78)
 
-type "functype//wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";  // TypeId(79)
+type "functype//wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(79)
 
 type "functype//wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_export__handle" = fn(i32);  // TypeId(80)
 
@@ -597,7 +597,7 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/handle"(reque
     let __packed_183: i64;
     let __ptr_184: i32;
     let __len_185: i32;
-    let __pattern_temp_2: ref "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_2: ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let self_190: ref "core:prelude/string.wado//String";
     let self_191: ref "core:prelude/string.wado//StrUtf8ByteIter";
     let __b_192: ref "core:prelude//Array<u8>";
@@ -1705,7 +1705,7 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
     __lifted_result_7 = builtin::load_i32(__outptr + 0);
     __lifted_result_8 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Response, Future<core:prelude/types.wado/Result<unit,wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_7, 1: __lifted_result_8 };
+    return struct.new "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_7, 1: __lifted_result_8 };
 }
 
 fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_export__handle"(request) {

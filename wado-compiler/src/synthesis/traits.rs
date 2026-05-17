@@ -223,19 +223,22 @@ fn make_trait_method(
 pub fn synthesize_traits(project: Package) -> Package {
     let mut project = project;
     let trait_env = project.trait_env.clone();
-    // In-pass dedup: each sub-pass records `(type_name, trait_name)` of
-    // every impl it generates so later sub-passes within this same
-    // `synthesize_traits` run can skip emitting a duplicate. The
+    // In-pass dedup: each sub-pass records `(type_name, module, trait_name)`
+    // of every impl it generates so later sub-passes within this same
+    // `synthesize_traits` run can skip emitting a duplicate. The module
+    // component is required because two distinct types from different
+    // modules can share a simple name (e.g. `struct Widget` in module A
+    // and module B), and each needs its own auto-derived impl. The
     // canonical project-wide synthesis layer is rebuilt afterwards by
     // `collect_synthesised_impls` (see `synthesis.rs`), which scans TIR
-    // and captures concrete-ness from the synthesized function itself —
-    // so this accumulator only needs the existence bit, not module or
-    // concrete-ness.
-    let mut pending: IndexSet<(String, String)> = IndexSet::default();
+    // and captures concrete-ness from the synthesized function itself.
+    let mut pending: IndexSet<(String, ModuleSource, String)> = IndexSet::default();
     for module in project.tir_modules.values_mut() {
+        let module_source = module.module_source.clone();
         let mut ctx = SynthesisCtx {
             trait_env: &trait_env,
             pending: &mut pending,
+            module: module_source,
         };
         generate_enum_trait_impls(module, &mut ctx);
         generate_struct_eq_ord_impls(module, &mut ctx);
@@ -258,28 +261,69 @@ pub fn synthesize_traits(project: Package) -> Package {
 /// without re-scanning TIR per call.
 pub(crate) struct SynthesisCtx<'env, 'pend> {
     pub(crate) trait_env: &'env TraitEnv,
-    pub(crate) pending: &'pend mut IndexSet<(String, String)>,
+    /// In-progress dedup of `(type_name, module, trait_name)` triples. Module
+    /// is part of the key so that two same-name structs from different
+    /// modules each get their own auto-derived impl — without the module
+    /// component, the second derivation would be silently skipped and the
+    /// receiver type from the second module would dispatch to the first
+    /// module's impl.
+    pub(crate) pending: &'pend mut IndexSet<(String, ModuleSource, String)>,
+    /// Module currently being synthesised. Auto-derived impls live in this
+    /// module by convention.
+    pub(crate) module: ModuleSource,
 }
 
 impl SynthesisCtx<'_, '_> {
-    /// `true` when an impl of `trait_name` for `type_name` is already known
-    /// (either from the AST or recorded in this synthesis pass).
+    /// `true` when an impl of `trait_name` for `<type_name>` is already known
+    /// to the project — either user-written (in the AST layer of `TraitEnv`,
+    /// regardless of which module it lives in) or generated earlier in this
+    /// synthesis pass for the *current* module.
+    ///
+    /// The two halves are deliberately scoped differently:
+    ///
+    /// - The AST-layer check is module-agnostic. A user-written
+    ///   `impl Display for String` in `core:prelude/format` must suppress
+    ///   `synthesize_traits`'s Display-delegates-to-Inspect fallback even
+    ///   when this pass is currently synthesising `core:prelude/string`
+    ///   (String's defining module). Restricting the check to
+    ///   `self.module` would silently shadow the user's impl with the
+    ///   auto-derived fallback the synthesised layer later wins via the
+    ///   `type_module` hint at the call site.
+    /// - The in-pass `pending` check stays module-scoped so two same-name
+    ///   receiver types in different modules (e.g. `struct Widget` in
+    ///   module A and module B) each still get their own auto-derived
+    ///   impl. Without the module component the second derivation would
+    ///   be silently skipped.
     pub(crate) fn has_impl(&self, type_name: &str, trait_name: &str) -> bool {
-        self.trait_env
-            .impl_module_for(type_name, trait_name)
+        // Module-agnostic AST-layer check: any user-written impl, anywhere
+        // in the project, counts. During synthesis the synthesised layer of
+        // `TraitEnv` is empty (it is rebuilt by `collect_synthesised_impls`
+        // *after* this pass), so `impl_module_for` with no hint reduces to
+        // the AST layer.
+        if self
+            .trait_env
+            .impl_module_for(type_name, trait_name, None)
             .is_some()
-            || self
-                .pending
-                .contains(&(type_name.to_string(), trait_name.to_string()))
+        {
+            return true;
+        }
+        self.pending.contains(&(
+            type_name.to_string(),
+            self.module.clone(),
+            trait_name.to_string(),
+        ))
     }
 
-    /// Note that this synthesis pass added `impl <trait_name> for <type_name>`.
-    /// Used for in-pass dedup only; the canonical synthesis layer is
-    /// rebuilt by `collect_synthesised_impls` after `synthesize_traits`
-    /// returns.
+    /// Note that this synthesis pass added `impl <trait_name> for <type_name>`
+    /// in the current module. Used for in-pass dedup only; the canonical
+    /// synthesis layer is rebuilt by `collect_synthesised_impls` after
+    /// `synthesize_traits` returns.
     pub(crate) fn record_impl(&mut self, type_name: &str, trait_name: &str) {
-        self.pending
-            .insert((type_name.to_string(), trait_name.to_string()));
+        self.pending.insert((
+            type_name.to_string(),
+            self.module.clone(),
+            trait_name.to_string(),
+        ));
     }
 }
 
@@ -2810,7 +2854,7 @@ fn trait_impl_module(
         .struct_name(crate::compiler_item::CompilerItem::String)
         .to_string();
     match tt.get(type_id).clone() {
-        ResolvedType::Primitive(_) => ModuleSource::primitive(),
+        ResolvedType::Primitive(_) | ResolvedType::Unit => ModuleSource::primitive(),
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => ref_module,
         ResolvedType::Struct { ref name, .. } if name == &string_struct_name => string_module,
         ResolvedType::Struct {

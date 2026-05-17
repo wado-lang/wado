@@ -103,6 +103,31 @@ pub fn monomorphize(flat: &mut FlatPackage) {
     flat.structs = temp_module.structs;
     flat.globals = temp_module.globals;
 
+    // `module_source` is the canonical namespace, so the
+    // `(module_source, name)` pair must be unique across the entire post-mono
+    // function set. Two functions sharing a key would silently overwrite
+    // each other in the `(module, name)`-keyed registries downstream
+    // (`FreeFunctionName`, wasm function naming, `wir_build::func_map`),
+    // and the surviving body / signature would then drive codegen for both
+    // call sites — producing wasm whose validation typically fails several
+    // phases later with a confusing `expected (ref $type), found (ref $type)`
+    // message. Detect the collision here so the responsible synthesis or
+    // monomorphization path surfaces at its first observable point.
+    let mut seen_functions: IndexMap<(ModuleSource, String), ()> = IndexMap::default();
+    for func_rc in &flat.functions {
+        let f = func_rc.borrow();
+        let key = (f.module_source.clone(), f.name.clone());
+        assert!(
+            seen_functions.insert(key, ()).is_none(),
+            "duplicate function `{}` in module `{}` after monomorphization. \
+             `module_source` is the canonical namespace; two functions with \
+             the same mangled name landing in the same module indicate a \
+             synthesis or monomorphization bug.",
+            f.name,
+            f.module_source
+        );
+    }
+
     // Strip effect params from all functions. Effect params have been validated by the
     // effect checker (which runs before monomorphization) and are not needed downstream.
     for func_rc in &flat.functions {

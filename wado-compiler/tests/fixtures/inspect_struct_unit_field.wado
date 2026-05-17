@@ -1,0 +1,19 @@
+// Regression: auto-derived `Inspect` for a struct with a unit-typed field
+// must dispatch to `()`'s prelude impl, not to a missing
+// `<surrounding-module>::unit^Inspect::inspect` (which would only get
+// dead-code-eliminated at -O2 and panic at -O0).
+
+struct WithUnit {
+    x: i32,
+    nothing: (),
+    y: i32,
+}
+
+test "inspect a struct that has a unit field" {
+    let s = WithUnit { x: 10, nothing: (), y: 20 };
+    let rendered = `{s:?}`;
+    assert rendered == "WithUnit { x: 10, nothing: (), y: 20 }";
+}
+
+__DATA__
+{"test": {}}

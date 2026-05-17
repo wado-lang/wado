@@ -1,0 +1,27 @@
+// Test: assert recurses into composite Call arguments.
+// Bare Ident args are intentionally NOT extracted (see `assert_fail_call_arg_ident`):
+// the `fn_name` → `fn(...)` function-reference coercion only applies in argument
+// position, so binding `let __v = fn_name` would type-infer as `unknown`.
+// Composite args (Binary, Index, etc.) are recursed normally.
+
+fn double(n: i32) -> i32 {
+    return n * 2;
+}
+
+export fn run() with Stdout {
+    let x = 3;
+    let y = 4;
+    assert double(x + y) == 100;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "condition: double(x + y) == 100",
+        "x: 3",
+        "y: 4",
+        "x + y: 7",
+        "double(x + y): 14"
+    ]
+}

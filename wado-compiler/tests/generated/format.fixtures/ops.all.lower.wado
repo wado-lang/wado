@@ -478,7 +478,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -488,7 +488,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -516,8 +516,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -526,7 +526,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -554,8 +554,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -566,8 +566,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -618,8 +618,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -630,8 +630,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -1342,7 +1342,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -1352,7 +1352,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -1380,8 +1380,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -1390,7 +1390,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -1418,8 +1418,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -1430,8 +1430,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -1482,8 +1482,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -1494,8 +1494,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -1611,7 +1611,7 @@ pub fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
 }
 
 pub fn drop_cli_write_future(future: Future<Result<(), ErrorCode>>) {
-    future."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>::drop"();
+    future."Future<Result<(),wasi:cli/types.wado/ErrorCode>>::drop"();
 }
 
 pub fn log_stdout(message: String) {
@@ -1799,7 +1799,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -1809,7 +1809,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -1837,8 +1837,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -1847,7 +1847,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -1875,8 +1875,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -1887,8 +1887,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -1939,8 +1939,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -1951,8 +1951,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -2099,7 +2099,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -2109,7 +2109,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -2137,8 +2137,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -2147,7 +2147,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -2175,8 +2175,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -2187,8 +2187,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -2239,8 +2239,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -2251,8 +2251,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -2303,7 +2303,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -2313,7 +2313,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -2341,8 +2341,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -2351,7 +2351,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -2379,8 +2379,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -2391,8 +2391,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -2443,8 +2443,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -2455,8 +2455,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -2515,7 +2515,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -2525,7 +2525,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -2553,8 +2553,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -2563,7 +2563,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -2591,8 +2591,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -2603,8 +2603,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -2655,8 +2655,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -2667,8 +2667,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -3837,7 +3837,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -3847,7 +3847,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -3918,8 +3918,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -3928,7 +3928,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -3972,8 +3972,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -3984,8 +3984,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -4052,8 +4052,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -4064,8 +4064,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -5095,7 +5095,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -5105,7 +5105,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -5133,8 +5133,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -5143,7 +5143,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -5171,8 +5171,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -5183,8 +5183,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -5243,8 +5243,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -5255,8 +5255,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -5626,7 +5626,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -5636,7 +5636,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -5690,8 +5690,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -5700,7 +5700,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -5744,8 +5744,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -5756,8 +5756,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -5824,8 +5824,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -5836,8 +5836,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -6058,7 +6058,7 @@ fn write_u64_base_digits(arr: builtin::array<u8>, offset: i32, val_i64: i64, dig
     }
 }
 
-pub fn unit::to_string(self: &()) -> String {
+pub fn "()::to_string"(self: &()) -> String {
     return "()";
 }
 
@@ -7326,11 +7326,11 @@ pub fn "f64^FromStr::from_str"(s: &String) -> Result<f64, ParseFloatError> {
     return "core::prelude/primitive.wado::f64^FromStr::from_str_range"(s, 0, s.String::len());
 }
 
-pub fn "unit^Display::fmt"(self: &(), f: &mut Formatter) {
+pub fn "()^Display::fmt"(self: &(), f: &mut Formatter) {
     f.Formatter::write_str(&"()");
 }
 
-pub fn "unit^DisplayAlt::fmt_alt"(self: &(), f: &mut Formatter) {
+pub fn "()^DisplayAlt::fmt_alt"(self: &(), f: &mut Formatter) {
     f.Formatter::write_str(&"()");
 }
 
@@ -7388,7 +7388,7 @@ pub fn "f64^Display::fmt"(self: Box<f64>, f: &mut Formatter) {
     self.f64::fmt_into(f);
 }
 
-pub fn "unit^Inspect::inspect"(self: &(), f: &mut Formatter) {
+pub fn "()^Inspect::inspect"(self: &(), f: &mut Formatter) {
     f.Formatter::write_str(&"()");
 }
 
@@ -7468,8 +7468,8 @@ pub fn "f64^Inspect::inspect"(self: Box<f64>, f: &mut Formatter) {
     self.f64::inspect_into(f);
 }
 
-pub fn "unit^InspectAlt::inspect_alt"(self: &(), f: &mut Formatter) {
-    self."unit^Inspect::inspect"(f);
+pub fn "()^InspectAlt::inspect_alt"(self: &(), f: &mut Formatter) {
+    self."()^Inspect::inspect"(f);
 }
 
 pub fn "bool^InspectAlt::inspect_alt"(self: Box<bool>, f: &mut Formatter) {
@@ -8649,7 +8649,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -8659,7 +8659,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -8687,8 +8687,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -8697,7 +8697,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -8725,8 +8725,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -8737,8 +8737,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -8789,8 +8789,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -8801,8 +8801,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -8914,7 +8914,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -8924,7 +8924,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -8952,8 +8952,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -8962,7 +8962,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -8990,8 +8990,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -9002,8 +9002,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -9054,8 +9054,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -9066,8 +9066,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -9801,7 +9801,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 457 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 459 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"negative length");
                 __r.String::push_str(&"\ncondition: byte_len >= 0\n");
@@ -9825,7 +9825,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 458 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 460 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"not on a UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_len)\n");
@@ -10089,25 +10089,23 @@ pub fn String::eq_ignore_ascii_case(self: &String, other: String) -> bool {
 pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
     __assert_2: {
         let __v0: i32 = start;
-        let __v1: bool = (0 <= start);
-        let __v2: i32 = start;
-        let __v3: i32 = end;
-        let __v4: bool = (start <= end);
-        let __v5: bool = ((0 <= start) && (start <= end));
-        let __v6: i32 = end;
-        let __v7: i32 = self.used;
-        let __v8: bool = (end <= self.used);
-        let __cond: bool = (__v5 && __v8);
+        let __v1: bool = (0 <= __v0);
+        let __v2: i32 = end;
+        let __v3: bool = (__v0 <= __v2);
+        let __v4: bool = (__v1 && __v3);
+        let __v5: i32 = self.used;
+        let __v6: bool = (__v2 <= __v5);
+        let __cond: bool = (__v4 && __v6);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(410);
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(364);
                 __r.String::push_str(&"Assertion failed in ");
                 __r.String::push_str(&"String::substr_bytes");
                 __r.String::push_str(&" at ");
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 701 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 703 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"byte range out of bounds");
                 __r.String::push_str(&"\ncondition: 0 <= start && start <= end && end <= self.used\n");
@@ -10119,33 +10117,25 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
                 Box<bool> { value: __v1 }."bool^Inspect::inspect"(&mut __f);
                 __r.String::push_str(&"\n");
-                __r.String::push_str(&"start: ");
+                __r.String::push_str(&"end: ");
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
                 Box<i32> { value: __v2 }."i32^Inspect::inspect"(&mut __f);
                 __r.String::push_str(&"\n");
-                __r.String::push_str(&"end: ");
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: __v3 }."i32^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&"\n");
                 __r.String::push_str(&"start <= end: ");
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<bool> { value: __v4 }."bool^Inspect::inspect"(&mut __f);
+                Box<bool> { value: __v3 }."bool^Inspect::inspect"(&mut __f);
                 __r.String::push_str(&"\n");
                 __r.String::push_str(&"0 <= start && start <= end: ");
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<bool> { value: __v5 }."bool^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&"\n");
-                __r.String::push_str(&"end: ");
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: __v6 }."i32^Inspect::inspect"(&mut __f);
+                Box<bool> { value: __v4 }."bool^Inspect::inspect"(&mut __f);
                 __r.String::push_str(&"\n");
                 __r.String::push_str(&"self.used: ");
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: __v7 }."i32^Inspect::inspect"(&mut __f);
+                Box<i32> { value: __v5 }."i32^Inspect::inspect"(&mut __f);
                 __r.String::push_str(&"\n");
                 __r.String::push_str(&"end <= self.used: ");
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<bool> { value: __v8 }."bool^Inspect::inspect"(&mut __f);
+                Box<bool> { value: __v6 }."bool^Inspect::inspect"(&mut __f);
                 __r.String::push_str(&"\n");
                 break __tmpl: __r;
             });
@@ -10164,7 +10154,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 702 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 704 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"byte range not on UTF-8 character boundaries");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(start) && self.is_char_boundary(end)\n");
@@ -10381,7 +10371,7 @@ pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 839 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 841 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"insert index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -10449,7 +10439,7 @@ pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 887 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 889 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"insert_str index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -10491,21 +10481,20 @@ pub fn String::insert_str_unchecked(self: &mut String, byte_index: i32, s: Strin
 pub fn String::remove(self: &mut String, byte_index: i32) -> char {
     __assert_6: {
         let __v0: i32 = byte_index;
-        let __v1: bool = (byte_index >= 0);
-        let __v2: i32 = byte_index;
-        let __v3: i32 = self.used;
-        let __v4: bool = (byte_index < self.used);
-        let __cond: bool = (__v1 && __v4);
+        let __v1: bool = (__v0 >= 0);
+        let __v2: i32 = self.used;
+        let __v3: bool = (__v0 < __v2);
+        let __cond: bool = (__v1 && __v3);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(306);
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(277);
                 __r.String::push_str(&"Assertion failed in ");
                 __r.String::push_str(&"String::remove");
                 __r.String::push_str(&" at ");
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 922 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 924 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"index out of bounds");
                 __r.String::push_str(&"\ncondition: byte_index >= 0 && byte_index < self.used\n");
@@ -10517,17 +10506,13 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
                 Box<bool> { value: __v1 }."bool^Inspect::inspect"(&mut __f);
                 __r.String::push_str(&"\n");
-                __r.String::push_str(&"byte_index: ");
+                __r.String::push_str(&"self.used: ");
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
                 Box<i32> { value: __v2 }."i32^Inspect::inspect"(&mut __f);
                 __r.String::push_str(&"\n");
-                __r.String::push_str(&"self.used: ");
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: __v3 }."i32^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&"\n");
                 __r.String::push_str(&"byte_index < self.used: ");
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<bool> { value: __v4 }."bool^Inspect::inspect"(&mut __f);
+                Box<bool> { value: __v3 }."bool^Inspect::inspect"(&mut __f);
                 __r.String::push_str(&"\n");
                 break __tmpl: __r;
             });
@@ -10545,7 +10530,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 923 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 925 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"remove index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -11953,65 +11938,50 @@ pub fn "StrCharIndicesIter^Ord::cmp"(self: &StrCharIndicesIter, other: &StrCharI
 
 pub fn "StrUtf8ByteIter^Inspect::inspect"(self: &StrUtf8ByteIter, f: &mut Formatter) {
     f.Formatter::write_str(&"StrUtf8ByteIter { ");
-    f.Formatter::write_str(&"repr: ");
-    self.repr."builtin::array<u8>^Inspect::inspect"(f);
-    f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"index: ");
     Box<i32> { value: self.index }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ..");
     f.Formatter::write_str(&" }");
 }
 
 pub fn "StrCharIter^Inspect::inspect"(self: &StrCharIter, f: &mut Formatter) {
     f.Formatter::write_str(&"StrCharIter { ");
-    f.Formatter::write_str(&"repr: ");
-    self.repr."builtin::array<u8>^Inspect::inspect"(f);
-    f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"byte_index: ");
     Box<i32> { value: self.byte_index }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ..");
     f.Formatter::write_str(&" }");
 }
 
 pub fn "StrSplitIter^Inspect::inspect"(self: &StrSplitIter, f: &mut Formatter) {
     f.Formatter::write_str(&"StrSplitIter { ");
-    f.Formatter::write_str(&"repr: ");
-    self.repr."builtin::array<u8>^Inspect::inspect"(f);
-    f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"pos: ");
     Box<i32> { value: self.pos }."i32^Inspect::inspect"(f);
-    f.Formatter::write_str(&", ");
-    f.Formatter::write_str(&"sep_repr: ");
-    self.sep_repr."builtin::array<u8>^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"sep_len: ");
     Box<i32> { value: self.sep_len }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"finished: ");
     Box<bool> { value: self.finished }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ..");
     f.Formatter::write_str(&" }");
 }
 
 pub fn "StrSplitNIter^Inspect::inspect"(self: &StrSplitNIter, f: &mut Formatter) {
     f.Formatter::write_str(&"StrSplitNIter { ");
-    f.Formatter::write_str(&"repr: ");
-    self.repr."builtin::array<u8>^Inspect::inspect"(f);
-    f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"pos: ");
     Box<i32> { value: self.pos }."i32^Inspect::inspect"(f);
-    f.Formatter::write_str(&", ");
-    f.Formatter::write_str(&"sep_repr: ");
-    self.sep_repr."builtin::array<u8>^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"sep_len: ");
     Box<i32> { value: self.sep_len }."i32^Inspect::inspect"(f);
@@ -12021,27 +11991,23 @@ pub fn "StrSplitNIter^Inspect::inspect"(self: &StrSplitNIter, f: &mut Formatter)
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"finished: ");
     Box<bool> { value: self.finished }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ..");
     f.Formatter::write_str(&" }");
 }
 
 pub fn "StrSplitWhitespaceIter^Inspect::inspect"(self: &StrSplitWhitespaceIter, f: &mut Formatter) {
     f.Formatter::write_str(&"StrSplitWhitespaceIter { ");
-    f.Formatter::write_str(&"repr: ");
-    self.repr."builtin::array<u8>^Inspect::inspect"(f);
-    f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"pos: ");
     Box<i32> { value: self.pos }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ..");
     f.Formatter::write_str(&" }");
 }
 
 pub fn "StrLinesIter^Inspect::inspect"(self: &StrLinesIter, f: &mut Formatter) {
     f.Formatter::write_str(&"StrLinesIter { ");
-    f.Formatter::write_str(&"repr: ");
-    self.repr."builtin::array<u8>^Inspect::inspect"(f);
-    f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
@@ -12050,19 +12016,18 @@ pub fn "StrLinesIter^Inspect::inspect"(self: &StrLinesIter, f: &mut Formatter) {
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"finished: ");
     Box<bool> { value: self.finished }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ..");
     f.Formatter::write_str(&" }");
 }
 
 pub fn "StrCharIndicesIter^Inspect::inspect"(self: &StrCharIndicesIter, f: &mut Formatter) {
     f.Formatter::write_str(&"StrCharIndicesIter { ");
-    f.Formatter::write_str(&"repr: ");
-    self.repr."builtin::array<u8>^Inspect::inspect"(f);
-    f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"byte_index: ");
     Box<i32> { value: self.byte_index }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ..");
     f.Formatter::write_str(&" }");
 }
 
@@ -12070,7 +12035,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -12080,7 +12045,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -12107,10 +12072,6 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: &fn mut([I::Item, J
 pub fn "StrUtf8ByteIter^InspectAlt::inspect_alt"(self: &StrUtf8ByteIter, f: &mut Formatter) {
     f.Formatter::open_brace("StrUtf8ByteIter {");
     f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"repr: ");
-    self.repr."builtin::array<u8>^InspectAlt::inspect_alt"(f);
-    f.Formatter::write_str(&",");
-    f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
@@ -12118,15 +12079,13 @@ pub fn "StrUtf8ByteIter^InspectAlt::inspect_alt"(self: &StrUtf8ByteIter, f: &mut
     f.Formatter::write_str(&"index: ");
     Box<i32> { value: self.index }."i32^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"..");
     f.Formatter::close_brace("}");
 }
 
 pub fn "StrCharIter^InspectAlt::inspect_alt"(self: &StrCharIter, f: &mut Formatter) {
     f.Formatter::open_brace("StrCharIter {");
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"repr: ");
-    self.repr."builtin::array<u8>^InspectAlt::inspect_alt"(f);
-    f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
@@ -12135,15 +12094,13 @@ pub fn "StrCharIter^InspectAlt::inspect_alt"(self: &StrCharIter, f: &mut Formatt
     f.Formatter::write_str(&"byte_index: ");
     Box<i32> { value: self.byte_index }."i32^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"..");
     f.Formatter::close_brace("}");
 }
 
 pub fn "StrSplitIter^InspectAlt::inspect_alt"(self: &StrSplitIter, f: &mut Formatter) {
     f.Formatter::open_brace("StrSplitIter {");
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"repr: ");
-    self.repr."builtin::array<u8>^InspectAlt::inspect_alt"(f);
-    f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
@@ -12151,10 +12108,6 @@ pub fn "StrSplitIter^InspectAlt::inspect_alt"(self: &StrSplitIter, f: &mut Forma
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"pos: ");
     Box<i32> { value: self.pos }."i32^InspectAlt::inspect_alt"(f);
-    f.Formatter::write_str(&",");
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"sep_repr: ");
-    self.sep_repr."builtin::array<u8>^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"sep_len: ");
@@ -12164,15 +12117,13 @@ pub fn "StrSplitIter^InspectAlt::inspect_alt"(self: &StrSplitIter, f: &mut Forma
     f.Formatter::write_str(&"finished: ");
     Box<bool> { value: self.finished }."bool^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"..");
     f.Formatter::close_brace("}");
 }
 
 pub fn "StrSplitNIter^InspectAlt::inspect_alt"(self: &StrSplitNIter, f: &mut Formatter) {
     f.Formatter::open_brace("StrSplitNIter {");
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"repr: ");
-    self.repr."builtin::array<u8>^InspectAlt::inspect_alt"(f);
-    f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
@@ -12180,10 +12131,6 @@ pub fn "StrSplitNIter^InspectAlt::inspect_alt"(self: &StrSplitNIter, f: &mut For
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"pos: ");
     Box<i32> { value: self.pos }."i32^InspectAlt::inspect_alt"(f);
-    f.Formatter::write_str(&",");
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"sep_repr: ");
-    self.sep_repr."builtin::array<u8>^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"sep_len: ");
@@ -12197,15 +12144,13 @@ pub fn "StrSplitNIter^InspectAlt::inspect_alt"(self: &StrSplitNIter, f: &mut For
     f.Formatter::write_str(&"finished: ");
     Box<bool> { value: self.finished }."bool^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"..");
     f.Formatter::close_brace("}");
 }
 
 pub fn "StrSplitWhitespaceIter^InspectAlt::inspect_alt"(self: &StrSplitWhitespaceIter, f: &mut Formatter) {
     f.Formatter::open_brace("StrSplitWhitespaceIter {");
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"repr: ");
-    self.repr."builtin::array<u8>^InspectAlt::inspect_alt"(f);
-    f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
@@ -12214,15 +12159,13 @@ pub fn "StrSplitWhitespaceIter^InspectAlt::inspect_alt"(self: &StrSplitWhitespac
     f.Formatter::write_str(&"pos: ");
     Box<i32> { value: self.pos }."i32^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"..");
     f.Formatter::close_brace("}");
 }
 
 pub fn "StrLinesIter^InspectAlt::inspect_alt"(self: &StrLinesIter, f: &mut Formatter) {
     f.Formatter::open_brace("StrLinesIter {");
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"repr: ");
-    self.repr."builtin::array<u8>^InspectAlt::inspect_alt"(f);
-    f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
@@ -12235,15 +12178,13 @@ pub fn "StrLinesIter^InspectAlt::inspect_alt"(self: &StrLinesIter, f: &mut Forma
     f.Formatter::write_str(&"finished: ");
     Box<bool> { value: self.finished }."bool^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"..");
     f.Formatter::close_brace("}");
 }
 
 pub fn "StrCharIndicesIter^InspectAlt::inspect_alt"(self: &StrCharIndicesIter, f: &mut Formatter) {
     f.Formatter::open_brace("StrCharIndicesIter {");
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"repr: ");
-    self.repr."builtin::array<u8>^InspectAlt::inspect_alt"(f);
-    f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
@@ -12252,6 +12193,8 @@ pub fn "StrCharIndicesIter^InspectAlt::inspect_alt"(self: &StrCharIndicesIter, f
     f.Formatter::write_str(&"byte_index: ");
     Box<i32> { value: self.byte_index }."i32^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"..");
     f.Formatter::close_brace("}");
 }
 
@@ -12259,8 +12202,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -12269,7 +12212,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -12325,8 +12268,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -12337,8 +12280,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -12417,8 +12360,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -12429,8 +12372,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -12481,7 +12424,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -12491,7 +12434,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -12519,8 +12462,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -12529,7 +12472,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -12557,8 +12500,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -12569,8 +12512,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -12621,8 +12564,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -12633,8 +12576,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -12722,7 +12665,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -12732,7 +12675,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -12777,8 +12720,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -12787,7 +12730,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -12819,8 +12762,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -12831,8 +12774,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -12887,8 +12830,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -12899,8 +12842,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -12950,7 +12893,7 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: &fn mut([I::Item
 fn __test_0_arithmetic() {
     __assert_0: {
         let __v0: i32 = (2 * 3);
-        let __v1: i32 = (1 + (2 * 3));
+        let __v1: i32 = (1 + __v0);
         let __cond: bool = (__v1 == 7);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -12977,7 +12920,7 @@ fn __test_0_arithmetic() {
     }
     __assert_1: {
         let __v0: i32 = (1 + 2);
-        let __v1: i32 = ((1 + 2) * 3);
+        let __v1: i32 = (__v0 * 3);
         let __cond: bool = (__v1 == 9);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13004,7 +12947,7 @@ fn __test_0_arithmetic() {
     }
     __assert_2: {
         let __v0: i32 = (3 + 4);
-        let __v1: i32 = (2 * (3 + 4));
+        let __v1: i32 = (2 * __v0);
         let __cond: bool = (__v1 == 14);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13032,7 +12975,7 @@ fn __test_0_arithmetic() {
     __assert_3: {
         let __v0: i32 = (2 * 3);
         let __v1: i32 = (4 * 5);
-        let __v2: i32 = ((2 * 3) + (4 * 5));
+        let __v2: i32 = (__v0 + __v1);
         let __cond: bool = (__v2 == 26);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13063,7 +13006,7 @@ fn __test_0_arithmetic() {
     }
     __assert_4: {
         let __v0: i32 = (10 - 2);
-        let __v1: i32 = ((10 - 2) * 3);
+        let __v1: i32 = (__v0 * 3);
         let __cond: bool = (__v1 == 24);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13090,7 +13033,7 @@ fn __test_0_arithmetic() {
     }
     __assert_5: {
         let __v0: i32 = (2 * 3);
-        let __v1: i32 = (10 - (2 * 3));
+        let __v1: i32 = (10 - __v0);
         let __cond: bool = (__v1 == 4);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13120,7 +13063,7 @@ fn __test_0_arithmetic() {
 fn __test_1_left_assoc() {
     __assert_6: {
         let __v0: i32 = (10 - 3);
-        let __v1: i32 = ((10 - 3) - 2);
+        let __v1: i32 = (__v0 - 2);
         let __cond: bool = (__v1 == 5);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13147,7 +13090,7 @@ fn __test_1_left_assoc() {
     }
     __assert_7: {
         let __v0: i32 = (3 - 2);
-        let __v1: i32 = (10 - (3 - 2));
+        let __v1: i32 = (10 - __v0);
         let __cond: bool = (__v1 == 9);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13174,7 +13117,7 @@ fn __test_1_left_assoc() {
     }
     __assert_8: {
         let __v0: i32 = (8 / 2);
-        let __v1: i32 = ((8 / 2) / 2);
+        let __v1: i32 = (__v0 / 2);
         let __cond: bool = (__v1 == 2);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13201,7 +13144,7 @@ fn __test_1_left_assoc() {
     }
     __assert_9: {
         let __v0: i32 = (2 / 2);
-        let __v1: i32 = (8 / (2 / 2));
+        let __v1: i32 = (8 / __v0);
         let __cond: bool = (__v1 == 8);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13228,7 +13171,7 @@ fn __test_1_left_assoc() {
     }
     __assert_10: {
         let __v0: i32 = (15 % 7);
-        let __v1: i32 = ((15 % 7) % 3);
+        let __v1: i32 = (__v0 % 3);
         let __cond: bool = (__v1 == 1);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13255,7 +13198,7 @@ fn __test_1_left_assoc() {
     }
     __assert_11: {
         let __v0: i32 = (7 % 3);
-        let __v1: i32 = (15 % (7 % 3));
+        let __v1: i32 = (15 % __v0);
         let __cond: bool = (__v1 == 0);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13285,7 +13228,7 @@ fn __test_1_left_assoc() {
 fn __test_2_shift() {
     __assert_12: {
         let __v0: i32 = (1 + 1);
-        let __v1: i32 = ((1 + 1) << 3);
+        let __v1: i32 = (__v0 << 3);
         let __cond: bool = (__v1 == 16);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13312,7 +13255,7 @@ fn __test_2_shift() {
     }
     __assert_13: {
         let __v0: i32 = (1 << 3);
-        let __v1: i32 = ((1 << 3) + 1);
+        let __v1: i32 = (__v0 + 1);
         let __cond: bool = (__v1 == 9);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13339,7 +13282,7 @@ fn __test_2_shift() {
     }
     __assert_14: {
         let __v0: i32 = (2 + 1);
-        let __v1: i32 = (1 << (2 + 1));
+        let __v1: i32 = (1 << __v0);
         let __cond: bool = (__v1 == 8);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13367,7 +13310,7 @@ fn __test_2_shift() {
     __assert_15: {
         let __v0: i32 = (1 << 2);
         let __v1: i32 = (1 << 1);
-        let __v2: i32 = ((1 << 2) + (1 << 1));
+        let __v2: i32 = (__v0 + __v1);
         let __cond: bool = (__v2 == 6);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13398,7 +13341,7 @@ fn __test_2_shift() {
     }
     __assert_16: {
         let __v0: i32 = (16 >> 1);
-        let __v1: i32 = ((16 >> 1) - 1);
+        let __v1: i32 = (__v0 - 1);
         let __cond: bool = (__v1 == 7);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13450,7 +13393,7 @@ fn __test_3_bitwise() {
     }
     __assert_18: {
         let __v0: i32 = (0b1010 & 0b0101);
-        let __v1: i32 = (0b0111 | (0b1010 & 0b0101));
+        let __v1: i32 = (0b0111 | __v0);
         let __cond: bool = (__v1 == 7);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13477,7 +13420,7 @@ fn __test_3_bitwise() {
     }
     __assert_19: {
         let __v0: i32 = (0b1100 | 0b0011);
-        let __v1: i32 = ((0b1100 | 0b0011) & 0b1010);
+        let __v1: i32 = (__v0 & 0b1010);
         let __cond: bool = (__v1 == 10);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13504,7 +13447,7 @@ fn __test_3_bitwise() {
     }
     __assert_20: {
         let __v0: i32 = (0b1100 & 0b1111);
-        let __v1: i32 = (0b1010 ^ (0b1100 & 0b1111));
+        let __v1: i32 = (0b1010 ^ __v0);
         let __cond: bool = (__v1 == 6);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13531,7 +13474,7 @@ fn __test_3_bitwise() {
     }
     __assert_21: {
         let __v0: i32 = (0b1010 ^ 0b1100);
-        let __v1: i32 = ((0b1010 ^ 0b1100) & 0b1111);
+        let __v1: i32 = (__v0 & 0b1111);
         let __cond: bool = (__v1 == 6);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13558,7 +13501,7 @@ fn __test_3_bitwise() {
     }
     __assert_22: {
         let __v0: i32 = (0b1010 | 0b0110);
-        let __v1: i32 = ((0b1010 | 0b0110) ^ 0b0001);
+        let __v1: i32 = (__v0 ^ 0b0001);
         let __cond: bool = (__v1 == 15);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -13684,7 +13627,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -13694,7 +13637,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -13722,8 +13665,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -13732,7 +13675,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -13760,8 +13703,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -13772,8 +13715,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -13824,8 +13767,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -13836,8 +13779,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -13923,7 +13866,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -13933,7 +13876,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -13965,8 +13908,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -13975,7 +13918,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -14007,8 +13950,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -14019,8 +13962,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -14075,8 +14018,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -14087,8 +14030,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -14192,7 +14135,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -14202,7 +14145,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -14243,8 +14186,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -14253,7 +14196,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -14289,8 +14232,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -14301,8 +14244,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -14361,8 +14304,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -14373,8 +14316,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -14804,7 +14747,7 @@ pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut 
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
     f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
 }
 
@@ -14814,7 +14757,7 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^Inspect::inspect"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -14846,8 +14789,8 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -14856,7 +14799,7 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn mut(I::Item) -> bool, f: &mut Formatter);
 
-pub fn "Fn<1,unit>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: &fn mut(&T) -> (), f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter);
 
@@ -14888,8 +14831,8 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -14900,8 +14843,8 @@ pub fn "Fn<1,bool>^Display::fmt"(self: &fn mut(I::Item) -> bool, f: &mut Formatt
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<1,unit>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^Inspect::inspect"(f);
+pub fn "Fn<1,()>^Display::fmt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,T>^Display::fmt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {
@@ -14956,8 +14899,8 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<unit,wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
@@ -14968,8 +14911,8 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn mut(I::Item) -> bool, f: &mut 
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<1,unit>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
-    self."Fn<1,unit>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: &fn mut(&T) -> (), f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn mut(&T, &T) -> &T, f: &mut Formatter) {

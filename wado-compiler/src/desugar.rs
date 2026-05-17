@@ -1258,10 +1258,15 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
         true,
     );
 
-    // Build the list of let statements for intermediates
+    // Build the list of let statements for intermediates.
+    // Each binding's value is reconstructed using only earlier intermediates
+    // so a sub-expression already cached in `__vK` is not re-evaluated
+    // (e.g. `double(get_value())` calls `get_value` exactly once even though
+    // both `get_value()` and `double(get_value())` are captured).
     let mut stmts: Vec<Stmt> = Vec::new();
 
-    for (var_name, _source, expr) in &intermediates {
+    for (i, (var_name, _source, expr)) in intermediates.iter().enumerate() {
+        let value = reconstruct_with_intermediates(expr, &intermediates[..i]);
         let let_id = ctx.synth_id();
         stmts.push(Stmt::Let(LetStmt {
             id: let_id,
@@ -1274,7 +1279,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
             is_mut: false,
             is_reactive: false,
             ty: None,
-            value: Some(expr.clone()),
+            value: Some(value),
             span,
         }));
     }
@@ -1431,6 +1436,42 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
     })
 }
 
+/// Recurse into a Call/MethodCall/StaticMethodCall argument.
+///
+/// Bare-`Ident` arguments are skipped intentionally: in argument position a
+/// bare function name is coerced from `fn` to a function reference, and
+/// extracting it into `let __vK = name;` loses that coercion context (the
+/// inferencer then sees `__vK` as `unknown`, breaking `Inspect` dispatch).
+/// Non-`Ident` arguments are recursed into normally so composite arg
+/// expressions still yield power-assert intermediates.
+fn collect_call_arg(
+    arg: &Expr,
+    intermediates: &mut Vec<(String, String, Expr)>,
+    counter: &mut u32,
+) {
+    if matches!(arg, Expr::Ident(_)) {
+        return;
+    }
+    collect_intermediates(arg, intermediates, counter, false);
+}
+
+/// Push an intermediate entry, skipping if an entry with the same source text
+/// already exists. Deduplication keeps the failure message terse and avoids
+/// re-evaluating identical sub-expressions in their let bindings.
+fn push_intermediate(
+    intermediates: &mut Vec<(String, String, Expr)>,
+    counter: &mut u32,
+    source: String,
+    expr: Expr,
+) {
+    if intermediates.iter().any(|(_, s, _)| s == &source) {
+        return;
+    }
+    let var_name = format!("__v{}", *counter);
+    *counter += 1;
+    intermediates.push((var_name, source, expr));
+}
+
 /// Collect intermediate expressions that should be cached for power-assert display.
 /// Returns (`var_name`, `source_text`, `original_expr`) for each intermediate.
 fn collect_intermediates(
@@ -1447,24 +1488,71 @@ fn collect_intermediates(
 
             // Don't collect the root comparison itself (it's shown as "condition: ...")
             if !is_root {
-                let var_name = format!("__v{}", *counter);
-                *counter += 1;
-                let source = unparse_expr_simple(expr);
-                intermediates.push((var_name, source, expr.clone()));
+                push_intermediate(
+                    intermediates,
+                    counter,
+                    unparse_expr_simple(expr),
+                    expr.clone(),
+                );
             }
         }
         Expr::Ident(ident) => {
             // Always collect identifiers - they're the most useful values
-            let var_name = format!("__v{}", *counter);
-            *counter += 1;
-            intermediates.push((var_name, ident.name.clone(), expr.clone()));
+            push_intermediate(intermediates, counter, ident.name.clone(), expr.clone());
         }
-        Expr::Call(_) | Expr::MethodCall(_) | Expr::FieldAccess(_) | Expr::Index(_) => {
-            // Collect these expression types
-            let var_name = format!("__v{}", *counter);
-            *counter += 1;
-            let source = unparse_expr_simple(expr);
-            intermediates.push((var_name, source, expr.clone()));
+        Expr::Call(call) => {
+            // Recurse into args (inner-first), then collect the call itself.
+            // The callee is intentionally skipped: it is almost always a bare
+            // function identifier whose runtime value (`<function 'foo'>`) is
+            // not interesting and whose extraction would turn a direct call
+            // into an indirect one.
+            for arg in &call.args {
+                collect_call_arg(arg, intermediates, counter);
+            }
+            push_intermediate(
+                intermediates,
+                counter,
+                unparse_expr_simple(expr),
+                expr.clone(),
+            );
+        }
+        Expr::MethodCall(mc) => {
+            // The receiver is intentionally NOT recursed into in step 1.
+            // Extracting `<recv>` as `let __v = <recv>;` forces auto-derived
+            // `Inspect` on the receiver's type, which surfaces unrelated
+            // synthesis gaps (`Fn<...>` and CM resource handles have no
+            // `Inspect`; receiver-module-dispatch keyed by bare mangled
+            // name confuses same-name generics across modules). Step 2
+            // revisits receiver recursion once those gaps close.
+            for arg in &mc.args {
+                collect_call_arg(arg, intermediates, counter);
+            }
+            push_intermediate(
+                intermediates,
+                counter,
+                unparse_expr_simple(expr),
+                expr.clone(),
+            );
+        }
+        Expr::StaticMethodCall(smc) => {
+            for arg in &smc.args {
+                collect_call_arg(arg, intermediates, counter);
+            }
+            push_intermediate(
+                intermediates,
+                counter,
+                unparse_expr_simple(expr),
+                expr.clone(),
+            );
+        }
+        Expr::FieldAccess(_) | Expr::Index(_) => {
+            // Receiver / index recursion deferred to step 2 (see `MethodCall`).
+            push_intermediate(
+                intermediates,
+                counter,
+                unparse_expr_simple(expr),
+                expr.clone(),
+            );
         }
         Expr::Unary(unary) => {
             // Skip negated numeric literals — extracting them into intermediates
@@ -1475,14 +1563,34 @@ fn collect_intermediates(
             {
                 return;
             }
+            // `&Ident` is the function-reference coercion (`&fn_name`).
+            // Extracting it (or its operand) loses the coercion context — the
+            // inferencer then sees both `let __v = fn_name` and
+            // `let __v = &fn_name` as `unknown`. Skip the whole subtree;
+            // the call enclosing `&fn_name` still gets its own intermediate.
+            if unary.op == UnaryOp::Ref && matches!(&unary.expr, Expr::Ident(_)) {
+                return;
+            }
+            // `&mut <expr>` requires a mutable lvalue. Extracting the operand
+            // into a fresh `let __v = <expr>` produces an immutable binding,
+            // so the reconstructed `&mut __v` then fails with "cannot take
+            // &mut of immutable variable". Don't extract the operand at all;
+            // the `&mut <expr>` itself stays as one intermediate when this
+            // node sits inside a Call/MethodCall arg (its outer context
+            // already drives the necessary captures).
+            if unary.op == UnaryOp::MutRef {
+                return;
+            }
             // Recurse into operand
             collect_intermediates(&unary.expr, intermediates, counter, false);
             // Also collect the unary expression itself if not root
             if !is_root {
-                let var_name = format!("__v{}", *counter);
-                *counter += 1;
-                let source = unparse_expr_simple(expr);
-                intermediates.push((var_name, source, expr.clone()));
+                push_intermediate(
+                    intermediates,
+                    counter,
+                    unparse_expr_simple(expr),
+                    expr.clone(),
+                );
             }
         }
         // Literals and other expressions don't need to be cached
@@ -1505,7 +1613,10 @@ fn reconstruct_with_intermediates(expr: &Expr, intermediates: &[(String, String,
         }
     }
 
-    // Otherwise, recursively reconstruct
+    // Otherwise, recursively reconstruct.
+    // Must mirror the shapes recursed into by `collect_intermediates`, otherwise
+    // sub-expressions captured as intermediates would be re-evaluated inside the
+    // outer let binding (defeating the side-effect-once guarantee).
     match expr {
         Expr::Binary(bin) => Expr::Binary(Box::new(BinaryExpr {
             id: bin.id,
@@ -1519,6 +1630,62 @@ fn reconstruct_with_intermediates(expr: &Expr, intermediates: &[(String, String,
             op: unary.op,
             expr: reconstruct_with_intermediates(&unary.expr, intermediates),
             span: unary.span,
+        })),
+        Expr::Call(call) => Expr::Call(Box::new(CallExpr {
+            id: call.id,
+            callee: call.callee.clone(),
+            type_args: call.type_args.clone(),
+            args: call
+                .args
+                .iter()
+                .map(|a| reconstruct_with_intermediates(a, intermediates))
+                .collect(),
+            has_trailing_comma: call.has_trailing_comma,
+            span: call.span,
+        })),
+        Expr::MethodCall(mc) => Expr::MethodCall(Box::new(MethodCallExpr {
+            id: mc.id,
+            receiver: reconstruct_with_intermediates(&mc.receiver, intermediates),
+            method: mc.method.clone(),
+            method_id: mc.method_id,
+            method_span: mc.method_span,
+            type_args: mc.type_args.clone(),
+            args: mc
+                .args
+                .iter()
+                .map(|a| reconstruct_with_intermediates(a, intermediates))
+                .collect(),
+            has_trailing_comma: mc.has_trailing_comma,
+            span: mc.span,
+        })),
+        Expr::StaticMethodCall(smc) => Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
+            id: smc.id,
+            target_type: smc.target_type.clone(),
+            method: smc.method.clone(),
+            method_id: smc.method_id,
+            method_span: smc.method_span,
+            type_args: smc.type_args.clone(),
+            args: smc
+                .args
+                .iter()
+                .map(|a| reconstruct_with_intermediates(a, intermediates))
+                .collect(),
+            has_trailing_comma: smc.has_trailing_comma,
+            span: smc.span,
+        })),
+        Expr::FieldAccess(fa) => Expr::FieldAccess(Box::new(FieldAccessExpr {
+            id: fa.id,
+            expr: reconstruct_with_intermediates(&fa.expr, intermediates),
+            field: fa.field.clone(),
+            field_id: fa.field_id,
+            field_span: fa.field_span,
+            span: fa.span,
+        })),
+        Expr::Index(idx) => Expr::Index(Box::new(IndexExpr {
+            id: idx.id,
+            expr: reconstruct_with_intermediates(&idx.expr, intermediates),
+            index: reconstruct_with_intermediates(&idx.index, intermediates),
+            span: idx.span,
         })),
         // For other expressions, return as-is (they might be intermediates or literals)
         _ => expr.clone(),

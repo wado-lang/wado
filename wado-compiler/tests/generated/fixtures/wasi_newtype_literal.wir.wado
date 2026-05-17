@@ -4,7 +4,7 @@
 
 struct wado-compiler/tests/fixtures/wasi_newtype_literal.wado//__Closure_2 {  // TypeId(0)}
 
-struct core:prelude/types.wado//AsyncCall<unit> {  // TypeId(1)
+struct core:prelude/types.wado//AsyncCall<()> {  // TypeId(1)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
@@ -29,7 +29,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(7)
 
 type "functype//wasi/wasi:clocks/MonotonicClock::wait_for" = fn(i64) -> i32;  // TypeId(8)
 
-type "functype//wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_binding__MonotonicClock_wait_for" = fn(i64) -> ref "core:prelude/types.wado//AsyncCall<unit>";  // TypeId(9)
+type "functype//wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_binding__MonotonicClock_wait_for" = fn(i64) -> ref "core:prelude/types.wado//AsyncCall<()>";  // TypeId(9)
 
 type "functype//wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_lift__MonotonicClock_wait_for" = fn(i32);  // TypeId(10)
 
@@ -37,7 +37,7 @@ type "functype//wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_expo
 
 type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(12)
 
-type "functype//core:prelude/types.wado/AsyncCall<unit>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<unit>");  // TypeId(13)
+type "functype//core:prelude/types.wado/AsyncCall<()>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<()>");  // TypeId(13)
 
 type "functype//wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__Closure_2::__call" = fn(i32);  // TypeId(14)
 
@@ -60,7 +60,7 @@ import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 fn "wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_binding__MonotonicClock_wait_for"(how_long) with MonotonicClock {
     let __subtask_packed: i32;
     __subtask_packed = "wasi/wasi:clocks/MonotonicClock::wait_for"(how_long);
-    return struct.new "core:prelude/types.wado//AsyncCall<unit>" { __cm_packed: __subtask_packed, __cm_outptr: 0, __cm_size: 0, __cm_align: 0, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/wasi_newtype_literal.wado//__Closure_2" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__closure_wrapper_0") } };
+    return struct.new "core:prelude/types.wado//AsyncCall<()>" { __cm_packed: __subtask_packed, __cm_outptr: 0, __cm_size: 0, __cm_align: 0, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/wasi_newtype_literal.wado//__Closure_2" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__closure_wrapper_0") } };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_lift__MonotonicClock_wait_for"(__outptr) {
@@ -68,7 +68,7 @@ fn "wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_lift__MonotonicC
 }
 
 fn "wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_export____test_0_literal_coercion_to_duration_via_effect_fn"() {
-    "core:prelude/types.wado/AsyncCall<unit>::wait"("wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_binding__MonotonicClock_wait_for"(0_i64));
+    "core:prelude/types.wado/AsyncCall<()>::wait"("wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_binding__MonotonicClock_wait_for"(0_i64));
     "wasi/task-return"(0);
 }
 
@@ -85,7 +85,7 @@ fn "core:internal/cm_waitable_set_wait"(ws) {
     return code, evt_handle, payload;
 }
 
-fn "core:prelude/types.wado/AsyncCall<unit>::wait"(self) {
+fn "core:prelude/types.wado/AsyncCall<()>::wait"(self) {
     let handle_1: i32;
     let raw: i32;
     let ws_3: i32;

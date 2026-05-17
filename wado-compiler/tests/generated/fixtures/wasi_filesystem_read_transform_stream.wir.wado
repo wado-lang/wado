@@ -59,7 +59,7 @@ struct tuple//[Descriptor, String] {  // TypeId(4)
     mut 1: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>] {  // TypeId(5)
+struct tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>] {  // TypeId(5)
     mut 0: i32,
     mut 1: i32,
 }
@@ -144,7 +144,7 @@ type "functype//wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stre
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/__cm_binding__Descriptor_open_at" = fn(i32, i32, ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>";  // TypeId(33)
 
-type "functype//wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/__cm_binding__Descriptor_read_via_stream" = fn(i32, i64) -> ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>]";  // TypeId(34)
+type "functype//wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/__cm_binding__Descriptor_read_via_stream" = fn(i32, i64) -> ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";  // TypeId(34)
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/__cm_lift__Descriptor_open_at" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(35)
 
@@ -269,7 +269,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/run"
     let out_tx: i32;
     let subtask: i32;
     let chunk: ref "core:prelude//Array<u8>";
-    let __pattern_temp_1: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>]";
+    let __pattern_temp_1: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         return;
@@ -389,7 +389,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/__cm
     __lifted_result_3 = builtin::load_i32(__outptr + 0);
     __lifted_result_4 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>]" { 0: __lifted_result_3, 1: __lifted_result_4 };
+    return struct.new "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]" { 0: __lifted_result_3, 1: __lifted_result_4 };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/__cm_lift__Descriptor_open_at"(__outptr) {
