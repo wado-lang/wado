@@ -544,8 +544,9 @@ impl TypeTable {
     pub const TUPLE_TYPE_NAME: &'static str = "Tuple";
 
     /// Canonical name for the unit type `()` used in method lookup and impl indexing.
-    /// Must match what `format_type_name(TypeNameInfo::Unit)` returns.
-    pub const UNIT_TYPE_NAME: &'static str = "unit";
+    /// Must match what `format_type_name(TypeNameInfo::Unit)` returns, and matches
+    /// the source-level syntax `()` so error messages and mangled names line up.
+    pub const UNIT_TYPE_NAME: &'static str = "()";
 
     /// Check if a name and `module_source` identify a built-in tuple type.
     pub fn is_tuple_type(name: &str, module_source: &ModuleSource) -> bool {

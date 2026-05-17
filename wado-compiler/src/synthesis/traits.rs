@@ -2722,7 +2722,7 @@ fn trait_impl_module(
         .struct_name(crate::compiler_item::CompilerItem::String)
         .to_string();
     match tt.get(type_id).clone() {
-        ResolvedType::Primitive(_) => ModuleSource::primitive(),
+        ResolvedType::Primitive(_) | ResolvedType::Unit => ModuleSource::primitive(),
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => ref_module,
         ResolvedType::Struct { ref name, .. } if name == &string_struct_name => string_module,
         ResolvedType::Struct {

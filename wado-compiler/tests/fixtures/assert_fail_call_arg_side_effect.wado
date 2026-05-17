@@ -1,0 +1,29 @@
+// Test: side-effectful sub-expressions inside Call args are evaluated only once.
+// `double(get_value())` must call get_value exactly once even though
+// power-assert collects both `get_value()` and `double(get_value())`.
+
+use { println } from "core:cli";
+
+fn get_value() -> i32 with Stdout {
+    println("get_value called");
+    return 5;
+}
+
+fn double(n: i32) -> i32 {
+    return n * 2;
+}
+
+export fn run() with Stdout {
+    assert double(get_value()) == 100;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stdout": "get_value called\n",
+    "stderr_contains": [
+        "condition: double(get_value()) == 100",
+        "get_value(): 5",
+        "double(get_value()): 10"
+    ]
+}

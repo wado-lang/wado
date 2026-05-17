@@ -1014,7 +1014,7 @@ pub enum TypeNameInfo {
 pub fn format_type_name(info: TypeNameInfo) -> String {
     match info {
         TypeNameInfo::Primitive(name) => name,
-        TypeNameInfo::Unit => "unit".to_string(),
+        TypeNameInfo::Unit => "()".to_string(),
         TypeNameInfo::Named(name) => name,
         TypeNameInfo::Generic { name, args } => mangle_generic_name(&name, &args),
         TypeNameInfo::Option(inner) => mangle_option_type(&inner),
