@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778983047798,
+  "lastUpdate": 1778983541196,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22629,6 +22629,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1d6434d44359143d8b009b81c5933aeef42d4bc7"
         },
         "date": 1778983047449,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510826,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0ed904182b716d92066d314bad48a2753c6f8e30",
+          "message": "Merge pull request #1094 from wado-lang/claude/investigate-wado-performance-0DsoC\n\nperf: cache stdlib `Annotated` snapshot across compiles",
+          "timestamp": "2026-05-17T10:58:38+09:00",
+          "tree_id": "c4bbd45847213574598087ab91e4d3b9d17f02f7",
+          "url": "https://github.com/wado-lang/wado/commit/0ed904182b716d92066d314bad48a2753c6f8e30"
+        },
+        "date": 1778983540803,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
