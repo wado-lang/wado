@@ -254,13 +254,13 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(79)
 
 type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(80)
 
-type "functype//core:collections/TreeSet<core:prelude/string.wado/String>::insert" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,unit>", ref "core:prelude/string.wado//String") -> bool;  // TypeId(81)
+type "functype//wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/collect_lits" = fn(ref "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//Elem", ref "core:collections//TreeMap<core:prelude/string.wado/String,unit>", ref "core:prelude//Array<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/LitToken>");  // TypeId(81)
 
-type "functype//wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/collect_lits" = fn(ref "core:prelude/types.wado//Box<Elem>", ref "core:collections//TreeMap<core:prelude/string.wado/String,unit>", ref "core:prelude//Array<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/LitToken>");  // TypeId(82)
+type "functype//wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/collect_lits_from_elements" = fn(ref "core:prelude//Array<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>", ref "core:collections//TreeMap<core:prelude/string.wado/String,unit>", ref "core:prelude//Array<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/LitToken>");  // TypeId(82)
 
-type "functype//wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/collect_lits_from_elements" = fn(ref "core:prelude//Array<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>", ref "core:collections//TreeMap<core:prelude/string.wado/String,unit>", ref "core:prelude//Array<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/LitToken>");  // TypeId(83)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(83)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(84)
+type "functype//core:collections/TreeSet<core:prelude/string.wado/String>::insert" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,unit>", ref "core:prelude/string.wado//String") -> bool;  // TypeId(84)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -283,13 +283,17 @@ fn "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/collect_lits"(elem, s
     let alt: ref "core:prelude//Array<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>";
     let rep: ref "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//RepeatElem";
     let __local_8: ref "core:prelude/string.wado//String";
+    let __pattern_temp_0: ref "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//Elem";
+    let __pattern_temp_1: ref "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//Elem";
     let __pattern_temp_2: ref null "core:prelude//Array<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>";
+    let __pattern_temp_3: ref "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//Elem";
     let value: ref "core:prelude/string.wado//String";
     let v: ref "core:prelude//Array<core:prelude/array.wado/Array<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>>";
     let arr: ref "core:prelude//Array<core:prelude/array.wado/Array<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>>";
     let self_19: ref "core:collections//TreeMap<core:prelude/string.wado/String,unit>";
-    if elem.discriminant == 0 {
-        text = elem;
+    __pattern_temp_0 = elem;
+    if ref.test "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//Elem::Lit"(__pattern_temp_0) {
+        text = ref.cast "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//Elem::Lit"(__pattern_temp_0).payload_0;
         if __inline_TreeSet_core_prelude_string_wado_String___contains_0: block -> bool {
             value = text;
             __inline_TreeMap_core_prelude_string_wado_String_unit___contains_key_0: block -> bool {
@@ -312,9 +316,10 @@ fn "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/collect_lits"(elem, s
             }) });
         }
     }
-    if elem.discriminant == 0 {
+    __pattern_temp_1 = elem;
+    if ref.test "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//Elem::Group"(__pattern_temp_1) {
         alts = __inline__value_copy_T22_2: block -> ref "core:prelude//Array<core:prelude/array.wado/Array<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>>" {
-            v = elem;
+            v = ref.cast "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//Elem::Group"(__pattern_temp_1).payload_0;
             break __inline__value_copy_T22_2: struct.new "core:prelude//Array<core:prelude/array.wado/Array<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude//Array<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>">(/*via $value_copy$T21*/ v.repr)), used: v.used };
             unreachable;
         };
@@ -336,9 +341,10 @@ fn "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/collect_lits"(elem, s
             };
         };
     }
-    if elem.discriminant == 0 {
-        rep = elem;
-        "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/collect_lits"(struct.new "core:prelude/types.wado//Box<Elem>" { value: rep.element }, seen, result);
+    __pattern_temp_3 = elem;
+    if ref.test "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//Elem::Repeat"(__pattern_temp_3) {
+        rep = ref.cast "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//Elem::Repeat"(__pattern_temp_3).payload_0;
+        "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/collect_lits"(rep.element, seen, result);
     }
 }
 
@@ -357,7 +363,7 @@ fn "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/collect_lits_from_ele
             __pattern_temp_0 = "core:prelude/array.wado/ArrayRefIter<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/Elem>^Iterator::next"(__iter_3);
             if ref.is_null(__pattern_temp_0) == 0 {
                 elem = ref.as_non_null(__pattern_temp_0);
-                "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/collect_lits"(elem, seen, result);
+                "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/collect_lits"(elem.value, seen, result);
             } else {
                 break b7;
             }

@@ -706,7 +706,7 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/__test_7_flags_dese
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("[\"Read\",\"Delete\"]"), used: 17 });
     if __sroa_r_discriminant == 1 {
-        e = __sroa_r_case0_payload_0;
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;
         __cond = __inline_String_Eq__eq_0: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unknown flag: Delete"), used: 20 };

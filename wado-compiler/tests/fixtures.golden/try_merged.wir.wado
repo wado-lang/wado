@@ -350,7 +350,7 @@ condition: n == 42
     let __sroa_r2_case1_payload_0: ref null "core:prelude/traits.wado//ConvertError";
     multivalue_bind [__sroa_r2_discriminant, __sroa_r2_case0_payload_0, __sroa_r2_case1_payload_0] = "core:prelude/primitive.wado/i32^TryFrom<i64>::try_from"(3000000000_i64);
     if __sroa_r2_discriminant == 1 {
-        msg = __sroa_r2_case0_payload_0;
+        msg = ref.as_non_null(__sroa_r2_case1_payload_0);
         __v0_8 = msg.message;
         __cond_9 = __inline_String_Eq__eq_7: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("3000000000 out of range for i32"), used: 31 };
@@ -1052,7 +1052,7 @@ condition: high_op(false) matches { Ok(n) && n == 101 }
         unreachable;
     };
     if ref.test "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/try_merged.wado/HighError>::Err"(r2) {
-        e = ref.cast "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/try_merged.wado/HighError>::Ok"(r2).payload_0;
+        e = ref.cast "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/try_merged.wado/HighError>::Err"(r2).payload_0;
         if ref.test "wado-compiler/tests/fixtures/try_merged.wado//HighError::Low"(e) {
             inner = ref.cast "wado-compiler/tests/fixtures/try_merged.wado//HighError::Low"(e).payload_0;
             __v0 = inner.code;
@@ -1235,7 +1235,7 @@ condition: n == 42
     let __sroa_r2_case1_payload_0: ref null "wado-compiler/tests/fixtures/try_merged.wado//AppError";
     multivalue_bind [__sroa_r2_discriminant, __sroa_r2_case0_payload_0, __sroa_r2_case1_payload_0] = "wado-compiler/tests/fixtures/try_merged.wado/process"(0, 1);
     if __sroa_r2_discriminant == 1 {
-        e_5 = __sroa_r2_case0_payload_0;
+        e_5 = ref.as_non_null(__sroa_r2_case1_payload_0);
         if ref.test "wado-compiler/tests/fixtures/try_merged.wado//AppError::Io"(e_5) {
             inner_6 = ref.cast "wado-compiler/tests/fixtures/try_merged.wado//AppError::Io"(e_5).payload_0;
             __v0_7 = inner_6.message;
@@ -1287,9 +1287,9 @@ condition: inner.message == \"disk error\"
     let __sroa_r3_case1_payload_0: ref null "wado-compiler/tests/fixtures/try_merged.wado//AppError";
     multivalue_bind [__sroa_r3_discriminant, __sroa_r3_case0_payload_0, __sroa_r3_case1_payload_0] = "wado-compiler/tests/fixtures/try_merged.wado/process"(1, 0);
     if __sroa_r3_discriminant == 1 {
-        e_10 = __sroa_r3_case0_payload_0;
+        e_10 = ref.as_non_null(__sroa_r3_case1_payload_0);
         if ref.test "wado-compiler/tests/fixtures/try_merged.wado//AppError::Parse"(e_10) {
-            inner_11 = ref.cast "wado-compiler/tests/fixtures/try_merged.wado//AppError::Io"(e_10).payload_0;
+            inner_11 = ref.cast "wado-compiler/tests/fixtures/try_merged.wado//AppError::Parse"(e_10).payload_0;
             __v0_12 = inner_11.input;
             __cond_13 = __inline_String_Eq__eq_17: block -> bool {
                 other_51 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bad"), used: 3 };

@@ -2030,7 +2030,7 @@ condition: error_tag(&dns_err) == \"dns-error\"
     }
     __pattern_temp_0 = dns_err.value;
     if ref.test "wasi:http/types.wado//ErrorCode::DnsError"(__pattern_temp_0) {
-        p_54 = __pattern_temp_0;
+        p_54 = ref.cast "wasi:http/types.wado//ErrorCode::DnsError"(__pattern_temp_0).payload_0;
         __pattern_temp_1 = p_54.rcode;
         if ref.is_null(__pattern_temp_1) == 0 {
             rcode = ref.as_non_null(__pattern_temp_1);
@@ -2212,7 +2212,7 @@ condition: error_tag(&tls_err) == \"tls-alert-received\"
     }
     __pattern_temp_3 = tls_err.value;
     if ref.test "wasi:http/types.wado//ErrorCode::TlsAlertReceived"(__pattern_temp_3) {
-        p_69 = __pattern_temp_3;
+        p_69 = ref.cast "wasi:http/types.wado//ErrorCode::TlsAlertReceived"(__pattern_temp_3).payload_0;
         __pattern_temp_4 = p_69.alert_id;
         if ref.test "core:prelude/types.wado//Option<u8>::Some"(__pattern_temp_4) {
             id = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__pattern_temp_4).payload_0;

@@ -217,26 +217,26 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(elem, 
     }
     __pattern_temp_1 = elem;
     if ref.test "./sub/variant_deref_helper.wado//Elem::Literal"(__pattern_temp_1) {
-        text = ref.cast "./sub/variant_deref_helper.wado//Elem::TokenRef"(__pattern_temp_1).payload_0;
+        text = ref.cast "./sub/variant_deref_helper.wado//Elem::Literal"(__pattern_temp_1).payload_0;
         "core:prelude/string.wado/String::push_str"(out, text);
         return;
     }
     __pattern_temp_2 = elem;
     if ref.test "./sub/variant_deref_helper.wado//Elem::RuleRef"(__pattern_temp_2) {
-        name_4 = ref.cast "./sub/variant_deref_helper.wado//Elem::TokenRef"(__pattern_temp_2).payload_0;
+        name_4 = ref.cast "./sub/variant_deref_helper.wado//Elem::RuleRef"(__pattern_temp_2).payload_0;
         "core:prelude/string.wado/String::push_str"(out, name_4);
         return;
     }
     __pattern_temp_3 = elem;
     if ref.test "./sub/variant_deref_helper.wado//Elem::Repeat"(__pattern_temp_3) {
-        rep = ref.cast "./sub/variant_deref_helper.wado//Elem::TokenRef"(__pattern_temp_3).payload_0;
+        rep = ref.cast "./sub/variant_deref_helper.wado//Elem::Repeat"(__pattern_temp_3).payload_0;
         "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(rep.element, out);
         return;
     }
     __pattern_temp_4 = elem;
     if ref.test "./sub/variant_deref_helper.wado//Elem::Group"(__pattern_temp_4) {
         alts = __inline__value_copy_T22_0: block -> ref "core:prelude//Array<./sub/variant_deref_helper.wado/Alt>" {
-            v = ref.cast "./sub/variant_deref_helper.wado//Elem::TokenRef"(__pattern_temp_4).payload_0;
+            v = ref.cast "./sub/variant_deref_helper.wado//Elem::Group"(__pattern_temp_4).payload_0;
             break __inline__value_copy_T22_0: struct.new "core:prelude//Array<./sub/variant_deref_helper.wado/Alt>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "./sub/variant_deref_helper.wado//Alt">(/*via $value_copy$T21*/ v.repr)), used: v.used };
             unreachable;
         };
@@ -257,7 +257,7 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(elem, 
     }
     __pattern_temp_6 = elem;
     if ref.test "./sub/variant_deref_helper.wado//Elem::Label"(__pattern_temp_6) {
-        lab = ref.cast "./sub/variant_deref_helper.wado//Elem::TokenRef"(__pattern_temp_6).payload_0;
+        lab = ref.cast "./sub/variant_deref_helper.wado//Elem::Label"(__pattern_temp_6).payload_0;
         "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(lab.element, out);
         return;
     }

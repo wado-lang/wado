@@ -455,7 +455,7 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/__test_2_enum_deseri
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\"Yellow\""), used: 8 });
     if __sroa_r_discriminant == 1 {
         e = __inline__value_copy_T48_0: block -> ref "core:serde//DeserializeError" {
-            v_10 = __sroa_r_case0_payload_0;
+            v_10 = ref.as_non_null(__sroa_r_case1_payload_0);
             break __inline__value_copy_T48_0: struct.new "core:serde//DeserializeError" { kind: v_10.kind, message: ref.as_non_null(__inline__value_copy_T20_1: block -> ref "core:prelude/string.wado//String" {
                 v_11 = v_10.message;
                 break __inline__value_copy_T20_1: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_11.repr)), used: v_11.used };

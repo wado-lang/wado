@@ -457,7 +457,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     }
     mkdir_dup = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_create_directory_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 }));
     if ref.is_null(mkdir_dup) == 0 {
-        err = mkdir_dup;
+        err = ref.as_non_null(mkdir_dup);
         let __match_scrut_0: ref "wasi:filesystem/types.wado//ErrorCode";
         __match_scrut_0 = err;
         if __match_scrut_0.discriminant == 6 {

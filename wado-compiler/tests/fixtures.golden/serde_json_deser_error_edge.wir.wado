@@ -615,7 +615,7 @@ fn "wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/__test_2_numbe
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<bool>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("42"), used: 2 });
     if __sroa_r_discriminant == 1 {
-        e = __sroa_r_case0_payload_0;
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;
         __cond = __inline_String_Eq__eq_0: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected bool"), used: 13 };
@@ -672,7 +672,7 @@ fn "wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/__test_3_numbe
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("42"), used: 2 });
     if __sroa_r_discriminant == 1 {
-        e = ref.as_non_null(__sroa_r_case0_payload_0);
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;
         __cond = __inline_String_Eq__eq_0: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected string"), used: 15 };
@@ -729,7 +729,7 @@ fn "wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/__test_9_trunc
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\"hello"), used: 6 });
     if __sroa_r_discriminant == 1 {
-        e = ref.as_non_null(__sroa_r_case0_payload_0);
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;
         __cond = __inline_String_Eq__eq_0: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 };
@@ -786,7 +786,7 @@ fn "wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/__test_10_trai
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<i32>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("42 garbage"), used: 10 });
     if __sroa_r_discriminant == 1 {
-        e = __sroa_r_case0_payload_0;
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;
         __cond = __inline_String_Eq__eq_0: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("trailing data after value"), used: 25 };
@@ -843,7 +843,7 @@ fn "wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/__test_11_mult
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<i32>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("1 2"), used: 3 });
     if __sroa_r_discriminant == 1 {
-        e = __sroa_r_case0_payload_0;
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;
         __cond = __inline_String_Eq__eq_0: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("trailing data after value"), used: 25 };
@@ -900,7 +900,7 @@ fn "wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/__test_13_u32_
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<u32>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("4294967296"), used: 10 });
     if __sroa_r_discriminant == 1 {
-        e = __sroa_r_case0_payload_0;
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;
         __cond = __inline_String_Eq__eq_0: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for u32"), used: 26 };
@@ -957,7 +957,7 @@ fn "wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/__test_14_f64_
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<f64>"(0 / 0);
     if __sroa_r_discriminant == 1 {
-        e = ref.as_non_null(__sroa_r_case0_payload_0);
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;
         __cond = __inline_String_Eq__eq_0: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 };
@@ -1014,7 +1014,7 @@ fn "wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/__test_15_f64_
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<f64>"(inf);
     if __sroa_r_discriminant == 1 {
-        e = ref.as_non_null(__sroa_r_case0_payload_0);
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;
         __cond = __inline_String_Eq__eq_0: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 };
@@ -1071,7 +1071,7 @@ fn "wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/__test_16_f64_
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<f64>"(-inf);
     if __sroa_r_discriminant == 1 {
-        e = ref.as_non_null(__sroa_r_case0_payload_0);
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;
         __cond = __inline_String_Eq__eq_0: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 };
@@ -1128,7 +1128,7 @@ fn "wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/__test_17_f32_
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<f32>"(0_f32 / 0_f32);
     if __sroa_r_discriminant == 1 {
-        e = ref.as_non_null(__sroa_r_case0_payload_0);
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;
         __cond = __inline_String_Eq__eq_0: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 };
@@ -1185,7 +1185,7 @@ fn "wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/__test_18_f32_
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<f32>"(inf_f32);
     if __sroa_r_discriminant == 1 {
-        e = ref.as_non_null(__sroa_r_case0_payload_0);
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;
         __cond = __inline_String_Eq__eq_0: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 };
@@ -1242,7 +1242,7 @@ fn "wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/__test_21_stru
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/Point>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"x\":1}"), used: 7 });
     if __sroa_r_discriminant == 1 {
-        e = ref.as_non_null(__sroa_r_case0_payload_0);
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;
         __cond = __inline_String_Eq__eq_0: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("required field missing"), used: 22 };
@@ -1355,7 +1355,7 @@ fn "wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/__test_27_enum
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/Color>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\"Yellow\""), used: 8 });
     if __sroa_r_discriminant == 1 {
-        e = __sroa_r_case0_payload_0;
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;
         __cond = __inline_String_Eq__eq_0: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unknown variant"), used: 15 };

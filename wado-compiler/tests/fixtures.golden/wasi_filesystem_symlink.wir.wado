@@ -520,7 +520,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
         "core:cli/write_to_stream"(tx_38, message_36, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_39);
     } else if ref.is_null(sym_result) == 0 {
-        err = sym_result;
+        err = ref.as_non_null(sym_result);
         let __match_scrut_0: ref "wasi:filesystem/types.wado//ErrorCode";
         __match_scrut_0 = err;
         if __match_scrut_0.discriminant == 26 {
@@ -792,7 +792,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/test_link_at"(dir)
         }
         drop("core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<unit,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_hardlink"), used: 13 })));
     } else if ref.is_null(link_result) == 0 {
-        err = link_result;
+        err = ref.as_non_null(link_result);
         let __match_scrut_0: ref "wasi:filesystem/types.wado//ErrorCode";
         __match_scrut_0 = err;
         if __match_scrut_0.discriminant == 26 {
