@@ -214,6 +214,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         &variant_decl.attrs,
                         &variant_decl.name,
                         &module_source,
+                        variant_decl.span,
+                        scope.logger,
                     );
 
                     drop(scope);
@@ -237,6 +239,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             self.current_module_source.clone(),
                             cases,
                         ),
+                    );
+                    // Mirror the variant / trait paths: register the enum's
+                    // `#[compiler_item("...")]` annotation here so a future
+                    // enum compiler item declared in a lazily-loaded module
+                    // (i.e. one reached only through `module.rs` and not the
+                    // first-pass walk in `orchestration.rs`) still lands in
+                    // the registry.
+                    super::item::register_enum_compiler_item(
+                        &self.type_table,
+                        &enum_decl.attrs,
+                        &enum_decl.name,
+                        &self.current_module_source,
+                        enum_decl.span,
+                        self.logger,
                     );
                 }
                 Item::Flags(flags_decl) => {
@@ -274,6 +290,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         &trait_decl.attrs,
                         &trait_decl.name,
                         &self.current_module_source,
+                        trait_decl.span,
+                        self.logger,
                     );
                 }
                 _ => {}
@@ -417,27 +435,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // against the impl's owning type. This is the only place
                     // where the method declaration AND its owner type are
                     // simultaneously in scope.
-                    {
-                        use crate::compiler_item::{CompilerItemKind, Resolved};
-                        for method in &impl_block.methods {
-                            let Some(item) = super::item::extract_compiler_item(&method.attrs)
-                            else {
-                                continue;
-                            };
-                            if item.expected_kind() != CompilerItemKind::Method {
-                                continue;
-                            }
-                            let resolved = Resolved::Method {
-                                module_source: scope.current_module_source.clone(),
-                                owner_type: scope.get_type_name(&impl_block.ty),
-                                name: method.name.clone(),
-                            };
-                            let _ = scope
-                                .type_table
-                                .borrow_mut()
-                                .compiler_items_mut()
-                                .register(item, resolved);
-                        }
+                    for method in &impl_block.methods {
+                        super::item::register_method_compiler_item(
+                            &scope.type_table,
+                            &method.attrs,
+                            &method.name,
+                            &scope.get_type_name(&impl_block.ty),
+                            &scope.current_module_source,
+                            method.span,
+                            scope.logger,
+                        );
                     }
 
                     for method in &impl_block.methods {

@@ -1,0 +1,17 @@
+// Error: `#[compiler_item("...")]` may only appear inside `core::*` modules.
+// User-level code that tries to claim a compiler item must be rejected so
+// the registry's invariants stay tied to the stdlib.
+//
+// The attribute below is placed on a trait (the kind `eq` expects) so the
+// scope-violation diagnostic is what the test is locking in — not a kind
+// mismatch that happens to fire first.
+
+#[compiler_item("eq")]
+pub trait MyEq {
+    fn eq(&self, other: &Self) -> bool;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "only valid inside `core::*` modules"}

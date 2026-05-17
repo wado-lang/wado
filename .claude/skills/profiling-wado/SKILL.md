@@ -1,5 +1,5 @@
 ---
-name: profiler
+name: profiling-wado
 description: Profile Wado programs using wasmtime's guest profiler to identify hot functions.
 ---
 

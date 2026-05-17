@@ -361,6 +361,7 @@ pub(super) fn synthesize_adapter(
     owner_module: &ModuleSource,
     entry_source: &ModuleSource,
 ) -> AdapterArtifacts {
+    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
     let name = binding_func_name(&func_info.interface_name, &func_info.method_name);
     let local_name = func_info.local_alias_name();
 
@@ -424,14 +425,14 @@ pub(super) fn synthesize_adapter(
     // Track (start_param_idx, param_count) per WASI param for Pass 2 indexing.
     let mut param_mapping: Vec<(usize, usize)> = Vec::new();
     for (param_name, _, param_type) in &func_info.params {
-        let flat_tys = flatten_param_type(param_type, wasi_registry);
+        let flat_tys = flatten_param_type(param_type, wasi_registry, &names);
         if flat_tys.is_empty() {
             continue; // unit param, skip
         }
         let start = params.len();
         match param_type {
             // String: single placeholder param (binding body lowers to ptr+len)
-            Type::Named(n) if n.name == "String" => {
+            Type::Named(n) if n.name == names.string => {
                 params.push(TirParam {
                     name: param_name.clone(),
                     type_id: TypeTable::I32,
@@ -446,7 +447,7 @@ pub(super) fn synthesize_adapter(
             }
             // Array<u8>: single placeholder param (binding body lowers to ptr+len)
             Type::Generic(g)
-                if g.name == "Array"
+                if g.name == names.array
                     && g.args.len() == 1
                     && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
             {
@@ -463,7 +464,7 @@ pub(super) fn synthesize_adapter(
                 param_mapping.push((start, 1));
             }
             // General Array<T>: single placeholder param (binding body lowers to ptr+len)
-            Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
+            Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
                 params.push(TirParam {
                     name: param_name.clone(),
                     type_id: TypeTable::I32,
@@ -572,7 +573,7 @@ pub(super) fn synthesize_adapter(
     // Intermediate locals (packed i64, etc.) are allocated after all params.
     let mut mapping_idx = 0usize;
     for (param_name, _, param_type) in &func_info.params {
-        let flat_tys = flatten_param_type(param_type, wasi_registry);
+        let flat_tys = flatten_param_type(param_type, wasi_registry, &names);
         if flat_tys.is_empty() {
             continue; // unit param, skip
         }
@@ -582,7 +583,7 @@ pub(super) fn synthesize_adapter(
 
         match param_type {
             // String param: accept Wado String, lower to (ptr, len) pair
-            Type::Named(n) if n.name == "String" => {
+            Type::Named(n) if n.name == names.string => {
                 // Call cm_lower_string → packed i64
                 let packed_local = next_local;
                 let packed = internal_call(
@@ -626,7 +627,7 @@ pub(super) fn synthesize_adapter(
 
             // Array<u8> param: accept Wado Array<u8>, lower to (ptr, len) pair
             Type::Generic(g)
-                if g.name == "Array"
+                if g.name == names.array
                     && g.args.len() == 1
                     && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
             {
@@ -671,7 +672,7 @@ pub(super) fn synthesize_adapter(
             }
 
             // General Array<T> param: lower to (ptr, len) in linear memory
-            Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
+            Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
                 let elem_type = &g.args[0];
                 // Use registry-aware layout so named WASI struct/variant/enum/flags
                 // element types walk at their true CM stride/alignment instead of
@@ -704,7 +705,7 @@ pub(super) fn synthesize_adapter(
                     TypeTable::I32,
                     generic_method_call(
                         local_ref(param_local, param_name, array_type_id),
-                        "Array",
+                        &names.array,
                         "len",
                         ModuleSource::prelude(),
                         vec![],
@@ -781,7 +782,7 @@ pub(super) fn synthesize_adapter(
                 // __elem = param[__i] (IndexValue trait method)
                 let elem_local = alloc_local(&mut next_local, &mut locals, elem_type_id);
                 let iv_info = LocalMethodName::new(
-                    "Array".to_string(),
+                    names.array.clone(),
                     Some("IndexValue<i32>".to_string()),
                     "index_value".to_string(),
                 );
@@ -825,7 +826,14 @@ pub(super) fn synthesize_adapter(
                         type_table,
                     )
                 } else {
-                    synthesize_lower(elem_type, elem_ref, addr_ref, &mut next_local, &mut locals)
+                    synthesize_lower(
+                        elem_type,
+                        elem_ref,
+                        addr_ref,
+                        &mut next_local,
+                        &mut locals,
+                        &names,
+                    )
                 };
                 loop_body.extend(lower_stmts);
                 // __i += 1
@@ -1135,7 +1143,7 @@ pub(super) fn synthesize_adapter(
                     );
                     continue;
                 }
-                let stores = cm_param_store_plan(ty, wasi_registry);
+                let stores = cm_param_store_plan(ty, wasi_registry, &names);
                 for (sub_offset, store_name) in &stores {
                     let offset = base_offset + sub_offset;
                     let addr = if offset == 0 {

@@ -73,17 +73,20 @@ pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
 /// `(ref X) / nullref` mismatch — an invalid Wasm module at compile
 /// time.
 pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
+    let items = type_table.compiler_items();
+    let box_name = items.struct_name(crate::compiler_item::CompilerItem::Box);
+    let array_name = items.struct_name(crate::compiler_item::CompilerItem::Array);
     match type_table.get(type_id) {
         // Concrete structs need a field-by-field deep copy, except for
         // the `Box<T>` shortcut whose semantics intentionally share
         // the underlying cell.
-        ResolvedType::Struct { base_name, .. } => base_name.as_deref() != Some("Box"),
+        ResolvedType::Struct { base_name, .. } => base_name.as_deref() != Some(box_name),
         ResolvedType::GenericInstance {
             name,
             module_source,
             type_args,
         } => {
-            if name == "Box" {
+            if name == box_name {
                 return false;
             }
             if TypeTable::is_tuple_type(name, module_source) {
@@ -91,7 +94,7 @@ pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
                 // element-wise deep copy.
                 return !type_args.is_empty();
             }
-            if name == "Array" {
+            if name == array_name {
                 return true;
             }
             // `Option<T>` / `Result<T, E>` are reference-shaped variants

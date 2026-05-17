@@ -1669,7 +1669,7 @@ fn strip_ns_from_condition(cond: Condition, ctx: &DesugarContext) -> Condition {
                         expr,
                         span,
                     } => ConditionElement::Let {
-                        pattern: strip_ns_from_pattern(pattern, ctx),
+                        pattern: Box::new(strip_ns_from_pattern(*pattern, ctx)),
                         expr: strip_ns_from_expr(expr, ctx),
                         span,
                     },

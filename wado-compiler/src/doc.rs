@@ -262,7 +262,12 @@ fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
 
     DocTrait {
         signature: sig,
-        doc: extract_doc_comment(trivia, t.id, &t.span),
+        // Pass `t.attrs` so the doc comment lookup bridges over any
+        // `#[compiler_item("...")]` (or other) attribute that sits
+        // between the `///` block and the `pub trait` keyword.
+        // Without it the doc tool stops at the attribute line and the
+        // generated stdlib reference loses the trait's description.
+        doc: extract_doc_comment_with_attrs(trivia, t.id, &t.span, &t.attrs),
         associated_types,
         methods,
     }

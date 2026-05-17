@@ -4,6 +4,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, BinaryOp, Expr, Item, Literal, Type, UnaryOp};
 use crate::compiler_host::CompilerHost;
+use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
@@ -159,20 +160,43 @@ impl<H: CompilerHost> Resolver<'_, H> {
         declared
     }
 
-    pub(super) fn operator_trait_method(op: &BinaryOp) -> Option<(&'static str, &'static str)> {
+    /// Map a binary operator to its `(trait_name, method_name)` pair, or
+    /// `None` when the operator does not dispatch through a trait.
+    ///
+    /// For operators that dispatch through a [`CompilerItem`] trait
+    /// (`Eq` for `==` / `!=`), the trait name is resolved through the
+    /// compiler-item registry so a rename on the stdlib side stays
+    /// transparent. For traits that don't yet have a `CompilerItem`
+    /// anchor (`Add`, `Sub`, …, `Ord`), the canonical stdlib name is
+    /// returned as a literal.
+    pub(super) fn operator_trait_method(&self, op: &BinaryOp) -> Option<(String, &'static str)> {
         match op {
-            BinaryOp::Add => Some(("Add", "add")),
-            BinaryOp::Sub => Some(("Sub", "sub")),
-            BinaryOp::Mul => Some(("Mul", "mul")),
-            BinaryOp::Div => Some(("Div", "div")),
-            BinaryOp::Mod => Some(("Rem", "rem")),
-            BinaryOp::BitAnd => Some(("BitAnd", "bitand")),
-            BinaryOp::BitOr => Some(("BitOr", "bitor")),
-            BinaryOp::BitXor => Some(("BitXor", "bitxor")),
-            BinaryOp::Shl => Some(("Shl", "shl")),
-            BinaryOp::Shr => Some(("Shr", "shr")),
-            BinaryOp::Eq | BinaryOp::NotEq => Some(("Eq", "eq")),
-            BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => Some(("Ord", "cmp")),
+            BinaryOp::Add => Some(("Add".to_string(), "add")),
+            BinaryOp::Sub => Some(("Sub".to_string(), "sub")),
+            BinaryOp::Mul => Some(("Mul".to_string(), "mul")),
+            BinaryOp::Div => Some(("Div".to_string(), "div")),
+            BinaryOp::Mod => Some(("Rem".to_string(), "rem")),
+            BinaryOp::BitAnd => Some(("BitAnd".to_string(), "bitand")),
+            BinaryOp::BitOr => Some(("BitOr".to_string(), "bitor")),
+            BinaryOp::BitXor => Some(("BitXor".to_string(), "bitxor")),
+            BinaryOp::Shl => Some(("Shl".to_string(), "shl")),
+            BinaryOp::Shr => Some(("Shr".to_string(), "shr")),
+            BinaryOp::Eq | BinaryOp::NotEq => Some((
+                self.type_table
+                    .borrow()
+                    .compiler_items()
+                    .trait_name(CompilerItem::Eq)
+                    .to_string(),
+                "eq",
+            )),
+            BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => Some((
+                self.type_table
+                    .borrow()
+                    .compiler_items()
+                    .trait_name(CompilerItem::Ord)
+                    .to_string(),
+                "cmp",
+            )),
             _ => None,
         }
     }
@@ -215,9 +239,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         op: &BinaryOp,
     ) -> Option<TypeId> {
         let struct_name = self.struct_name_for_type(self_type_id)?;
-        let (trait_name, method_name) = Self::operator_trait_method(op)?;
+        let (trait_name, method_name) = self.operator_trait_method(op)?;
         let trait_info =
-            self.find_arithmetic_trait_impl(&struct_name, self_type_id, trait_name, method_name)?;
+            self.find_arithmetic_trait_impl(&struct_name, self_type_id, &trait_name, method_name)?;
         // Unwrap the &T reference wrapper if present (e.g., rhs: &Self → return Self)
         trait_info.rhs_type.map(|t| {
             let resolved = self.type_table.borrow().get(t).clone();
@@ -237,9 +261,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         op: &BinaryOp,
     ) -> Option<TypeId> {
         let struct_name = self.struct_name_for_type(rhs_type_id)?;
-        let (trait_name, method_name) = Self::operator_trait_method(op)?;
+        let (trait_name, method_name) = self.operator_trait_method(op)?;
         // Verify the trait impl exists; the self type is the struct type itself
-        self.find_arithmetic_trait_impl(&struct_name, rhs_type_id, trait_name, method_name)?;
+        self.find_arithmetic_trait_impl(&struct_name, rhs_type_id, &trait_name, method_name)?;
         Some(rhs_type_id)
     }
 
@@ -944,9 +968,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let cm_name = method
                 .attrs
                 .iter()
-                .find(|a| a.name == "cm")
-                .and_then(|a| a.args.first())
-                .map(|a| a.as_str().to_string());
+                .find_map(crate::ast::Attribute::cm_identifier);
 
             return Some(MethodInfo {
                 return_type,

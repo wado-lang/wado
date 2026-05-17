@@ -10,7 +10,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use wasm_encoder::ValType;
 
-use crate::ast::{CmImport, GenericType, Type};
+use crate::ast::{Attribute, CmImport, GenericType, Type};
 use crate::tir::{TypeId, TypeTable};
 
 /// A variant case with both CM and Wado names.
@@ -76,16 +76,18 @@ pub fn is_unit_type(ty: &Type) -> bool {
 fn cm_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
     attrs
         .iter()
-        .find(|a| a.name == "cm")
-        .and_then(|a| a.args.first())
-        .map(|arg| {
-            let s = arg.as_str();
-            // Type-level attrs contain a `#` separator; case-level attrs do not
-            if let Some(fragment) = s.split('#').nth(1) {
-                fragment.to_owned()
-            } else {
-                s.to_owned()
+        .find_map(|a| match &a.cm_boundary {
+            // Type-level CM imports use the function fragment (after `#`)
+            // as the CM name. If the path has no function fragment, fall
+            // back to the whole interface path to preserve the previous
+            // behaviour.
+            Some(crate::ast::CmBoundary::Import(cm)) => {
+                Some(cm.function.clone().unwrap_or_else(|| cm.interface_path()))
             }
+            // Case-level CM names (variant cases, fields, ...) carry just
+            // the CM-side identifier.
+            Some(crate::ast::CmBoundary::Name(s)) => Some(s.clone()),
+            Some(crate::ast::CmBoundary::Canonical { .. }) | None => None,
         })
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
@@ -552,13 +554,7 @@ fn collect_interface_decls(modules: &[(&'static str, crate::ast::Module)]) -> In
             // `"wasi:http/handler@0.3.0-rc-2026-03-15"`). Skip anonymous
             // interfaces without a CM attribute — they are not boundary-
             // visible and cannot back a world export.
-            let Some(cm_fq) = iface
-                .attrs
-                .iter()
-                .find(|a| a.name == "cm")
-                .and_then(|a| a.args.first())
-                .map(|arg| arg.as_str().to_string())
-            else {
+            let Some(cm_fq) = iface.attrs.iter().find_map(Attribute::cm_identifier) else {
                 continue;
             };
 
@@ -878,11 +874,8 @@ impl WasiRegistry {
     fn cm_source_interface(attrs: &[crate::ast::Attribute]) -> String {
         attrs
             .iter()
-            .find(|a| a.name == "cm")
-            .and_then(|a| a.args.first())
-            .and_then(|arg| arg.as_str().split('#').next())
-            .unwrap_or("")
-            .to_string()
+            .find_map(|a| a.as_cm_import().map(crate::ast::CmImport::interface_path))
+            .unwrap_or_default()
     }
 
     /// Build the registry from the embedded stdlib
@@ -1123,7 +1116,7 @@ impl WasiRegistry {
         for item in &module.items {
             if let Item::Interface(effect) = item {
                 for method in &effect.methods {
-                    if let Some(wasi) = method.attrs.first().and_then(|a| a.cm_import.as_ref()) {
+                    if let Some(wasi) = method.attrs.first().and_then(|a| a.as_cm_import()) {
                         // Extract CM param names from #[cm_params] attribute
                         let cm_param_names = extract_cm_params_attr(&method.attrs);
                         let params: Vec<(String, String, Type)> = method
@@ -1174,7 +1167,7 @@ impl WasiRegistry {
         for item in &module.items {
             if let Item::Resource(resource) = item {
                 for method in &resource.methods {
-                    if let Some(wasi) = method.attrs.first().and_then(|a| a.cm_import.as_ref()) {
+                    if let Some(wasi) = method.attrs.first().and_then(|a| a.as_cm_import()) {
                         // Extract CM param names from #[cm_params] attribute
                         let cm_param_names = extract_cm_params_attr(&method.attrs);
                         let params: Vec<(String, String, Type)> = method

@@ -781,9 +781,16 @@ fn build_dispatch_wrapper_function(
         // here anyway, panic with a diagnostic identifying the operation
         // — useful when a future refactor introduces a path that bypasses
         // effect-check.
+        let (string_struct_name, string_module) = {
+            let tt = type_table.borrow();
+            let (m, n) = tt
+                .compiler_items()
+                .require_struct(crate::compiler_item::CompilerItem::String);
+            (n.to_string(), m.clone())
+        };
         let string_type_id = type_table
             .borrow()
-            .find_struct_type("String", &ModuleSource::string())
+            .find_struct_type(&string_struct_name, &string_module)
             .unwrap_or_else(|| {
                 panic!(
                     "core:prelude/string.wado String type missing from \

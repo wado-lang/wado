@@ -3078,11 +3078,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let tt = self.type_table.borrow();
         let target_name = tt.type_name(target_type);
         let from_name = tt.type_name(from_type);
+        let from_trait_name = tt
+            .compiler_items()
+            .trait_name(crate::compiler_item::CompilerItem::From)
+            .to_string();
         drop(tt);
 
         // Use "From<SourceType>" as the trait name in mangled names to disambiguate
         // multiple From impls on the same target type.
-        let from_trait = format!("From<{from_name}>");
+        let from_trait = format!("{from_trait_name}<{from_name}>");
         let method_name = MethodName::format_local(&target_name, Some(&from_trait), "from");
 
         // Find the module source that provides the From impl
@@ -3098,7 +3102,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         struct_name: target_name.clone(),
                         base_struct_name: target_name,
                         trait_name: Some(from_trait),
-                        base_trait_name: Some("From".to_string()),
+                        base_trait_name: Some(from_trait_name),
                         trait_type_args: vec![],
                         method_name: "from".to_string(),
                         method_type_args: vec![],
@@ -3117,6 +3121,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Find the module that provides `impl From<FromType> for TargetType`.
     fn find_from_impl_module(&self, target_name: &str, from_name: &str) -> ModuleSource {
+        let from_trait_name = self
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_name(crate::compiler_item::CompilerItem::From)
+            .to_string();
         let check_impl = |impl_block: &ast::ImplBlock| -> bool {
             let impl_target = Self::get_type_name_static(&impl_block.ty);
             if impl_target != target_name {
@@ -3124,7 +3134,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             if let Some(trait_type) = &impl_block.trait_type {
                 let base = Self::get_type_name_static(trait_type);
-                if base != "From" {
+                if base != from_trait_name {
                     return false;
                 }
                 // Check the type arg matches from_name
@@ -3273,11 +3283,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let element_type = start.type_id;
 
         // Check that the element type implements Ord
-        if element_type != TypeTable::ERROR && !self.type_implements_trait(element_type, "Ord") {
+        let ord_trait_name = self
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_name(crate::compiler_item::CompilerItem::Ord)
+            .to_string();
+        if element_type != TypeTable::ERROR
+            && !self.type_implements_trait(element_type, &ord_trait_name)
+        {
             let type_name = self.type_id_to_string(element_type);
             let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                 type_name,
-                trait_name: "Ord".to_string(),
+                trait_name: ord_trait_name,
                 param_name: "T".to_string(),
                 span: range.span,
             });
