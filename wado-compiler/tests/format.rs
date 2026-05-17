@@ -1566,6 +1566,9 @@ fn run() {
 
 #[test]
 fn test_roundtrip_ast_call_on_compound_callee() {
+    // Each statement here uses a callee shape that lives above the
+    // postfix level (or is otherwise call-ambiguous). The formatter must
+    // keep the parens around the callee so the AST round-trips.
     assert_format_preserves_ast(
         r"
 type FnI = fn(i32) -> i32;
@@ -1574,11 +1577,16 @@ fn make() -> FnI {
     return |x: i32| x + 1;
 }
 
-fn run(c: bool) {
+fn flag() -> bool {
+    return true;
+}
+
+fn run() {
     let cast_call = (make() as FnI)(10);
-    let if_call = (if c { make() } else { make() })(10);
-    let match_call = (match c { true => make(), false => make() })(10);
-    let block_call = ({ let f = make(); f })(10);
+    let if_call = (if flag() { make() } else { make() })(10);
+    let match_call = (match flag() { true => make(), false => make() })(10);
+    let unary_call = (-make())(10);
+    let binary_call = (make() + make())(10);
 }
 ",
     );

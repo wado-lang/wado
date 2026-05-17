@@ -1603,12 +1603,37 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_call(&mut self, c: &CallExpr) {
-        // Some callee shapes need parentheses to round-trip:
+        // Parenthesize callee shapes that would re-parse differently
+        // without parens. The rule of thumb: anything whose precedence
+        // sits above the postfix level (call/index/field/method), plus a
+        // couple of postfix-level shapes that are still syntactically
+        // ambiguous with call syntax.
+        //
         // - `FieldAccess`: `self.f(args)` would re-parse as a method call.
-        // - `Closure`: a closure with an expression body greedily consumes
-        //   the rest of the line, so `|x| x + 1(41)` re-parses as
-        //   `|x| (x + 1(41))` rather than calling the closure.
-        let needs_parens = matches!(&c.callee, Expr::FieldAccess(_) | Expr::Closure(_));
+        // - `Closure`: a closure with an expression body greedily
+        //   consumes the rest of the line, so `|x| x + 1(41)` re-parses
+        //   as `|x| (x + 1(41))` rather than calling the closure.
+        // - `Cast`: `f as T(args)` does not re-parse — `T(args)` is not a
+        //   valid type and the trailing `(` becomes a stray token.
+        // - `Unary` / `Binary` / `Assign` / `CompoundAssign` /
+        //   `ComparisonChain` / `Range`: all live above postfix, so the
+        //   call `(args)` would bind tighter on re-parse.
+        //
+        // `If` / `Match` / `Block` / `LabeledBlock` / `WithHandler` are
+        // explicitly excluded: they end with `}` which terminates the
+        // expression cleanly before the call's `(`.
+        let needs_parens = matches!(
+            &c.callee,
+            Expr::FieldAccess(_)
+                | Expr::Closure(_)
+                | Expr::Cast(_)
+                | Expr::Unary(_)
+                | Expr::Binary(_)
+                | Expr::Assign(_)
+                | Expr::CompoundAssign(_)
+                | Expr::ComparisonChain(_)
+                | Expr::Range(_)
+        );
         self.with_parens_if(needs_parens, |s| s.unparse_expr(&c.callee));
         self.unparse_turbofish(&c.type_args);
         self.unparse_call_args(&c.args, c.has_trailing_comma);
