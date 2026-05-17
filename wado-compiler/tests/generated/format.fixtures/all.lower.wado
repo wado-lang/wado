@@ -14499,14 +14499,15 @@ fn destructuring_examples() {
     __for_of_17: {
         let mut __iter_17: ArrayIter<wado-compiler/tests/format.fixtures/all.dirty.wado/Point> = points."Array<wado-compiler/tests/format.fixtures/all.dirty.wado/Point>^IntoIterator::into_iter"();
         loop {
-            match __iter_17."ArrayIter<wado-compiler/tests/format.fixtures/all.dirty.wado/Point>^Iterator::next"() {
-                Some({ x, y }) => {
-                    (x + y);
-                },
-                _ => {
-                    break;
-                },
-            };
+            let __pattern_temp_8: Option<Point> = __iter_17."ArrayIter<wado-compiler/tests/format.fixtures/all.dirty.wado/Point>^Iterator::next"();
+            if __variant_test(__pattern_temp_8, case=0, name=Some) {
+                let __pattern_temp_9: Point = "$value_copy$T26"(__variant_payload(__pattern_temp_8, case=0));
+                let x: i32 = __pattern_temp_9.x;
+                let y: i32 = __pattern_temp_9.y;
+                (x + y);
+            } else {
+                break;
+            }
         }
     }
 }
@@ -20283,6 +20284,10 @@ fn __initialize_modules() {
 
 fn "$value_copy$T19"(v: [f64, f64]) -> [f64, f64] {
     return Tuple<f64,f64> { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$T26"(v: Point) -> Point {
+    return Point { x: v.x, y: v.y };
 }
 
 fn "$value_copy$T301"(v: [i32, char]) -> [i32, char] {

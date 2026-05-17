@@ -127,29 +127,14 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/default_field_variant_payload_ref_match.wado/norm"(e) {
     let f: ref "wado-compiler/tests/fixtures/default_field_variant_payload_ref_match.wado//Foo";
-    let v_4: ref "wado-compiler/tests/fixtures/default_field_variant_payload_ref_match.wado//Foo";
-    let v_5: ref "core:prelude/string.wado//String";
-    let v_6: ref "core:prelude/string.wado//String";
     let self: ref "core:prelude/string.wado//String";
     let __sroa___boxed_param_0_value: ref "wado-compiler/tests/fixtures/default_field_variant_payload_ref_match.wado//Elem";
     __sroa___boxed_param_0_value = e;
     if ref.test "wado-compiler/tests/fixtures/default_field_variant_payload_ref_match.wado//Elem::A"(__sroa___boxed_param_0_value) {
-        f = __inline__value_copy_T19_0: block -> ref "wado-compiler/tests/fixtures/default_field_variant_payload_ref_match.wado//Foo" {
-            v_4 = ref.cast "wado-compiler/tests/fixtures/default_field_variant_payload_ref_match.wado//Elem::A"(__sroa___boxed_param_0_value).payload_0;
-            break __inline__value_copy_T19_0: struct.new "wado-compiler/tests/fixtures/default_field_variant_payload_ref_match.wado//Foo" { name: ref.as_non_null(__inline__value_copy_T20_1: block -> ref "core:prelude/string.wado//String" {
-                v_5 = v_4.name;
-                break __inline__value_copy_T20_1: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_5.repr)), used: v_5.used };
-                unreachable;
-            }), cache: ref.as_non_null(__inline__value_copy_T20_2: block -> ref "core:prelude/string.wado//String" {
-                v_6 = v_4.cache;
-                break __inline__value_copy_T20_2: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v_6.repr)), used: v_6.used };
-                unreachable;
-            }) };
-            unreachable;
-        };
-        if __inline_String__is_empty_3: block -> bool {
+        f = ref.cast "wado-compiler/tests/fixtures/default_field_variant_payload_ref_match.wado//Elem::A"(__sroa___boxed_param_0_value).payload_0;
+        if __inline_String__is_empty_0: block -> bool {
             self = f.cache;
-            break __inline_String__is_empty_3: self.used == 0;
+            break __inline_String__is_empty_0: self.used == 0;
             unreachable;
         } == 0 {
             return __sroa___boxed_param_0_value;
