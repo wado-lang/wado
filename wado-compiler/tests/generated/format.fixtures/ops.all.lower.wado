@@ -3283,7 +3283,7 @@ fn fill_zeros(buf: &mut String, n: i32) {
 pub fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
     let decimal_pos: i32 = (nd + p);
     if (decimal_pos <= 0) {
-        buf.String::push_str("0.");
+        buf.String::push_str(&"0.");
         "core::prelude/fpfmt.wado::fill_zeros"(buf, -decimal_pos);
         let digit_offset: i32 = buf.String::len();
         "core::prelude/fpfmt.wado::fill_zeros"(buf, nd);
@@ -3335,13 +3335,13 @@ pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
         "core::prelude/fpfmt.wado::fill_zeros"(buf, 1);
         "core::prelude/fpfmt.wado::write_digits_at"(buf, start, d, 1);
     }
-    buf.String::push_str(if upper {
+    buf.String::push_str(&if upper {
         "E";
     } else {
         "e";
     });
     if (exp < 0) {
-        buf.String::push_str("-");
+        buf.String::push_str(&"-");
     }
     let abs_exp: i32 = if (exp < 0) {
         -exp;
@@ -3376,7 +3376,7 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
     let decimal_pos: i32 = (nd + p);
     if (decimal_pos <= 0) {
         let leading_zeros: i32 = -decimal_pos;
-        buf.String::push_str("0.");
+        buf.String::push_str(&"0.");
         if (precision <= leading_zeros) {
             "core::prelude/fpfmt.wado::fill_zeros"(buf, precision);
             return;
@@ -3409,7 +3409,7 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
             "core::prelude/fpfmt.wado::write_digits_at"(buf, start, d, nd);
             "core::prelude/fpfmt.wado::fill_zeros"(buf, (decimal_pos - nd));
             if (precision > 0) {
-                buf.String::push_str(".");
+                buf.String::push_str(&".");
                 "core::prelude/fpfmt.wado::fill_zeros"(buf, precision);
             }
         } else {
@@ -3497,13 +3497,13 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
         "core::prelude/fpfmt.wado::write_digits_at"(buf, start, first_d, 1);
     }
     let exp: i32 = ((p + nd) - 1);
-    buf.String::push_str(if upper {
+    buf.String::push_str(&if upper {
         "E";
     } else {
         "e";
     });
     if (exp < 0) {
-        buf.String::push_str("-");
+        buf.String::push_str(&"-");
     }
     let abs_exp: i32 = if (exp < 0) {
         -exp;
@@ -6711,24 +6711,24 @@ fn fmt_float_special(f: &mut Formatter, is_neg: bool, kind: SpecialKind, zero_re
         NaN => true,
         _ => false,
     } {
-        f.buf.String::push_str("NaN");
+        f.buf.String::push_str(&"NaN");
     } else {
         if match kind {
             Inf => true,
             _ => false,
         } {
-            f.buf.String::push_str(if is_neg {
+            f.buf.String::push_str(&if is_neg {
                 "-inf";
             } else {
                 "inf";
             });
         } else {
-            f.buf.String::push_str(if is_neg {
+            f.buf.String::push_str(&if is_neg {
                 "-";
             } else {
                 "";
             });
-            f.buf.String::push_str(zero_repr);
+            f.buf.String::push_str(&zero_repr);
         }
     }
     f.Formatter::apply_padding(mark);
@@ -6736,10 +6736,10 @@ fn fmt_float_special(f: &mut Formatter, is_neg: bool, kind: SpecialKind, zero_re
 
 fn fmt_float_sign(f: &mut Formatter, is_neg: bool) {
     if is_neg {
-        f.buf.String::push_str("-");
+        f.buf.String::push_str(&"-");
     } else {
         if f.sign_plus {
-            f.buf.String::push_str("+");
+            f.buf.String::push_str(&"+");
         }
     }
 }
@@ -6802,7 +6802,7 @@ fn f32::inspect_into(self: Box<f32>, f: &mut Formatter) {
     } else {
         if (p >= 0) {
             "core::prelude/fpfmt.wado::write_decimal"(f.buf, d, p, nd);
-            f.buf.String::push_str(".0");
+            f.buf.String::push_str(&".0");
         } else {
             "core::prelude/fpfmt.wado::write_decimal"(f.buf, d, p, nd);
         }
@@ -7046,7 +7046,7 @@ fn f64::inspect_into(self: Box<f64>, f: &mut Formatter) {
     } else {
         if (p >= 0) {
             "core::prelude/fpfmt.wado::write_decimal"(f.buf, d, p, nd);
-            f.buf.String::push_str(".0");
+            f.buf.String::push_str(&".0");
         } else {
             "core::prelude/fpfmt.wado::write_decimal"(f.buf, d, p, nd);
         }
@@ -7073,9 +7073,9 @@ fn f64::fmt_fixed(self: Box<f64>, precision: i32, f: &mut Formatter) {
         }
         let mark: i32 = f.Formatter::mark();
         "core::prelude/primitive.wado::fmt_float_sign"(f, is_neg);
-        f.buf.String::push_str("0");
+        f.buf.String::push_str(&"0");
         if (precision > 0) {
-            f.buf.String::push_str(".");
+            f.buf.String::push_str(&".");
             f.buf.String::append_byte_filled('0' as u8, precision);
         }
         f.Formatter::apply_padding(mark);
@@ -7116,17 +7116,17 @@ fn f64::fmt_exp(self: Box<f64>, precision: i32, upper: i32, f: &mut Formatter) {
         }
         let mark: i32 = f.Formatter::mark();
         "core::prelude/primitive.wado::fmt_float_sign"(f, is_neg);
-        f.buf.String::push_str("0");
+        f.buf.String::push_str(&"0");
         if (precision > 0) {
-            f.buf.String::push_str(".");
+            f.buf.String::push_str(&".");
             f.buf.String::append_byte_filled('0' as u8, precision);
         }
-        f.buf.String::push_str(if upper_bool {
+        f.buf.String::push_str(&if upper_bool {
             "E";
         } else {
             "e";
         });
-        f.buf.String::push_str("0");
+        f.buf.String::push_str(&"0");
         f.Formatter::apply_padding(mark);
         return;
     }
@@ -14422,7 +14422,7 @@ pub fn Formatter::new(buf: &mut String) -> Formatter with stores[buf] {
 }
 
 pub fn Formatter::write_str(self: &mut Formatter, s: String) {
-    self.buf.String::push_str(s);
+    self.buf.String::push_str(&s);
 }
 
 pub fn Formatter::write_char(self: &mut Formatter, c: char) {
@@ -14447,7 +14447,7 @@ pub fn Formatter::write_char_n(self: &mut Formatter, c: char, n: i32) {
 pub fn Formatter::pad(self: &mut Formatter, content: String) {
     let content_len: i32 = content.String::len();
     if ((self.width <= 0) || (content_len >= self.width)) {
-        self.buf.String::push_str(content);
+        self.buf.String::push_str(&content);
         return;
     }
     let padding: i32 = (self.width - content_len);
@@ -14456,7 +14456,7 @@ pub fn Formatter::pad(self: &mut Formatter, content: String) {
         Left => true,
         _ => false,
     } {
-        self.buf.String::push_str(content);
+        self.buf.String::push_str(&content);
         self.Formatter::write_char_n(self.fill, padding);
     } else {
         if match align {
@@ -14466,11 +14466,11 @@ pub fn Formatter::pad(self: &mut Formatter, content: String) {
             let left_pad: i32 = (padding / 2);
             let right_pad: i32 = (padding - left_pad);
             self.Formatter::write_char_n(self.fill, left_pad);
-            self.buf.String::push_str(content);
+            self.buf.String::push_str(&content);
             self.Formatter::write_char_n(self.fill, right_pad);
         } else {
             self.Formatter::write_char_n(self.fill, padding);
-            self.buf.String::push_str(content);
+            self.buf.String::push_str(&content);
         }
     }
 }
@@ -14583,20 +14583,20 @@ pub fn Formatter::prepare_int_write(self: &mut Formatter, is_negative: bool, pre
     let content_len: i32 = ((sign_len + prefix_len) + digit_count);
     if ((self.width <= 0) || (content_len >= self.width)) {
         if (sign_len > 0) {
-            self.buf.String::push_str(sign);
+            self.buf.String::push_str(&sign);
         }
         if (prefix_len > 0) {
-            self.buf.String::push_str(prefix);
+            self.buf.String::push_str(&prefix);
         }
         return self.buf.String::internal_reserve_uninit(digit_count);
     }
     let padding: i32 = (self.width - content_len);
     if self.zero_pad {
         if (sign_len > 0) {
-            self.buf.String::push_str(sign);
+            self.buf.String::push_str(&sign);
         }
         if (prefix_len > 0) {
-            self.buf.String::push_str(prefix);
+            self.buf.String::push_str(&prefix);
         }
         self.Formatter::write_char_n('0', padding);
         return self.buf.String::internal_reserve_uninit(digit_count);
@@ -14607,10 +14607,10 @@ pub fn Formatter::prepare_int_write(self: &mut Formatter, is_negative: bool, pre
         _ => false,
     } {
         if (sign_len > 0) {
-            self.buf.String::push_str(sign);
+            self.buf.String::push_str(&sign);
         }
         if (prefix_len > 0) {
-            self.buf.String::push_str(prefix);
+            self.buf.String::push_str(&prefix);
         }
         let offset: i32 = self.buf.String::internal_reserve_uninit(digit_count);
         self.Formatter::write_char_n(self.fill, padding);
@@ -14624,10 +14624,10 @@ pub fn Formatter::prepare_int_write(self: &mut Formatter, is_negative: bool, pre
             let right_pad: i32 = (padding - left_pad);
             self.Formatter::write_char_n(self.fill, left_pad);
             if (sign_len > 0) {
-                self.buf.String::push_str(sign);
+                self.buf.String::push_str(&sign);
             }
             if (prefix_len > 0) {
-                self.buf.String::push_str(prefix);
+                self.buf.String::push_str(&prefix);
             }
             let offset: i32 = self.buf.String::internal_reserve_uninit(digit_count);
             self.Formatter::write_char_n(self.fill, right_pad);
@@ -14635,10 +14635,10 @@ pub fn Formatter::prepare_int_write(self: &mut Formatter, is_negative: bool, pre
         } else {
             self.Formatter::write_char_n(self.fill, padding);
             if (sign_len > 0) {
-                self.buf.String::push_str(sign);
+                self.buf.String::push_str(&sign);
             }
             if (prefix_len > 0) {
-                self.buf.String::push_str(prefix);
+                self.buf.String::push_str(&prefix);
             }
             return self.buf.String::internal_reserve_uninit(digit_count);
         }

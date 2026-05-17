@@ -1404,8 +1404,8 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &Array
             kinds: collect_excluded_kinds(&ne.element),
         }),
         Label(lab) => lower_scan_element(&lab.element, ctx, outer_follow, outer_k_prefix, variant_mask, variant_k_prefix_mask, outer_k_prefix_position_mask),
-        Repeat(rep) => lower_scan_repeat(rep, ctx, outer_follow, variant_mask, variant_k_prefix_mask, outer_k_prefix_position_mask),
-        Group(g) => lower_scan_group(g, ctx, outer_follow, variant_mask, variant_k_prefix_mask, outer_k_prefix_position_mask),
+        Repeat(rep) => lower_scan_repeat(&rep, ctx, outer_follow, variant_mask, variant_k_prefix_mask, outer_k_prefix_position_mask),
+        Group(g) => lower_scan_group(&g, ctx, outer_follow, variant_mask, variant_k_prefix_mask, outer_k_prefix_position_mask),
     };
 }
 
@@ -1906,7 +1906,7 @@ fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>, rule_name: &
             });
         },
         Repeat(rep) => lower_repeat_op(
-            rep,
+            &rep,
             name_counts,
             rule_name,
             ctx,
@@ -1918,7 +1918,7 @@ fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>, rule_name: &
             outer_k_prefix_position_mask,
         ),
         Group(g) => lower_group_op(
-            g,
+            &g,
             name_counts,
             rule_name,
             ctx,
@@ -1931,7 +1931,7 @@ fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>, rule_name: &
             outer_k_prefix_position_mask,
         ),
         Label(lab) => lower_label_op(
-            lab,
+            &lab,
             name_counts,
             rule_name,
             ctx,

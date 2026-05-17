@@ -426,7 +426,7 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
         let mut group_first = TreeSet::<String>::new();
         for let alt of g.alternatives {
             let mut visiting: Array<String> = [];
-            let af = ctx.first_of_alt(alt, &mut visiting);
+            let af = ctx.first_of_alt(&alt, &mut visiting);
             str_set_insert_all(&mut group_first, &af);
         }
         if group_first.contains(*token) {

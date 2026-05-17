@@ -22,8 +22,8 @@
 // Shape of the miscompiled caller:
 //
 //   for let mut i = 0; i < N; i += 1 {     ← HFS scope, label __for_1
-//       if i > 0 { w.begin(...); }
-//       w.begin(...);
+//       if i > 0 { w.begin(&...); }
+//       w.begin(&...);
 //       opaque_call(w);       // forces HFS to flush + re-read
 //       w.end();
 //   }
@@ -59,14 +59,14 @@ impl Writer {
     #[inline(always)]
     fn write_indent(&mut self) {
         for let mut i = 0; i < self.indent_level; i += 1 {
-            self.buf.push_str("    ");
+            self.buf.push_str(&"    ");
         }
     }
 
     #[inline(always)]
     pub fn line(&mut self, text: &String) {
         self.write_indent();
-        self.buf.push_str(*text);
+        self.buf.push_str(text);
         self.buf.push('\n');
         self.fresh_line = true;
     }
@@ -74,8 +74,8 @@ impl Writer {
     #[inline(always)]
     pub fn begin(&mut self, opener: &String) {
         self.write_indent();
-        self.buf.push_str(*opener);
-        self.buf.push_str(" {\n");
+        self.buf.push_str(opener);
+        self.buf.push_str(&" {\n");
         self.fresh_line = true;
         self.indent_level += 1;
     }
@@ -84,16 +84,16 @@ impl Writer {
     pub fn end(&mut self) {
         self.indent_level -= 1;
         self.write_indent();
-        self.buf.push_str("}\n");
+        self.buf.push_str(&"}\n");
         self.fresh_line = true;
     }
 }
 
 #[inline(never)]
 fn emit_body(w: &mut Writer, tag: &String) {
-    w.line(`pos = saved_{*tag};`);
-    w.line(`body_{*tag};`);
-    w.line(`ok_{*tag} = true;`);
+    w.line(&`pos = saved_{*tag};`);
+    w.line(&`body_{*tag};`);
+    w.line(&`ok_{*tag} = true;`);
 }
 
 // emit_alts's outer for-loop gets label __for_1 in this module's counter
@@ -104,21 +104,21 @@ fn emit_body(w: &mut Writer, tag: &String) {
 #[inline(never)]
 fn emit_alts(w: &mut Writer, n: i32) {
     let id = w.next_id();
-    w.line(`let saved_{id} = pos;`);
-    w.line(`let mut ok_{id} = false;`);
+    w.line(&`let saved_{id} = pos;`);
+    w.line(&`let mut ok_{id} = false;`);
     for let mut i = 0; i < n; i += 1 {
         if i > 0 {
-            w.begin(`if !ok_{id}`);
+            w.begin(&`if !ok_{id}`);
         }
-        w.begin(`label_{id}:`);
+        w.begin(&`label_{id}:`);
         emit_decorations(&mut w.buf, 1, 0);
-        emit_body(w, `{id}`);
+        emit_body(w, &`{id}`);
         w.end();
     }
     for let mut i = 1; i < n; i += 1 {
         w.end();
     }
-    w.line(`if !ok_{id} \{ return -1; \}`);
+    w.line(&`if !ok_{id} \{ return -1; \}`);
 }
 
 export fn run() {

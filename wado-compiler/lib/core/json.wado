@@ -36,15 +36,15 @@ pub fn write_escaped_string(buf: &mut String, s: &String) {
     buf.push('"');
     for let c of s.chars() {
         match c {
-            '"' => buf.push_str("\\\""),
-            '\\' => buf.push_str("\\\\"),
-            '\n' => buf.push_str("\\n"),
-            '\r' => buf.push_str("\\r"),
-            '\t' => buf.push_str("\\t"),
+            '"' => buf.push_str(&"\\\""),
+            '\\' => buf.push_str(&"\\\\"),
+            '\n' => buf.push_str(&"\\n"),
+            '\r' => buf.push_str(&"\\r"),
+            '\t' => buf.push_str(&"\\t"),
             _ => {
                 if (c as u32) < 0x20 {
                     let code = c as i32;
-                    buf.push_str(`\\u{code:04x}`);
+                    buf.push_str(&`\\u{code:04x}`);
                 } else {
                     buf.push(c);
                 }
@@ -81,14 +81,14 @@ pub struct JsonSerializer {
 fn write_pretty_newline_and_indent(buf: &mut String, indent: &String, depth: i32) {
     buf.push('\n');
     for let mut i = 0; i < depth; i += 1 {
-        buf.push_str(*indent);
+        buf.push_str(indent);
     }
 }
 
 impl SerializeSeq for JsonSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.buf.push_str(",");
+            self.buf.push_str(&",");
         }
         let mut ser = JsonSerializer { buf: self.buf };
         let r = value.serialize::<JsonSerializer>(&mut ser);
@@ -98,7 +98,7 @@ impl SerializeSeq for JsonSeqSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.buf.push_str("]");
+        self.buf.push_str(&"]");
         return Result::Ok(());
     }
 }
@@ -106,12 +106,12 @@ impl SerializeSeq for JsonSeqSerializer {
 impl SerializeMap for JsonMapSerializer {
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.buf.push_str(",");
+            self.buf.push_str(&",");
         }
         let mut ser = JsonSerializer { buf: self.buf };
         let r = key.serialize::<JsonSerializer>(&mut ser);
         self.buf = ser.buf;
-        self.buf.push_str(":");
+        self.buf.push_str(&":");
         self.need_value = true;
         return r;
     }
@@ -126,7 +126,7 @@ impl SerializeMap for JsonMapSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.buf.push_str("}");
+        self.buf.push_str(&"}");
         return Result::Ok(());
     }
 }
@@ -134,10 +134,10 @@ impl SerializeMap for JsonMapSerializer {
 impl SerializeStruct for JsonStructSerializer {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.buf.push_str(",");
+            self.buf.push_str(&",");
         }
         write_escaped_string(self.buf, name);
-        self.buf.push_str(":");
+        self.buf.push_str(&":");
         let mut ser = JsonSerializer { buf: self.buf };
         let r = value.serialize::<JsonSerializer>(&mut ser);
         self.buf = ser.buf;
@@ -146,7 +146,7 @@ impl SerializeStruct for JsonStructSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.buf.push_str("}");
+        self.buf.push_str(&"}");
         return Result::Ok(());
     }
 }
@@ -160,7 +160,7 @@ impl SerializeVariant for JsonVariantSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.buf.push_str("}");
+        self.buf.push_str(&"}");
         return Result::Ok(());
     }
 }
@@ -172,44 +172,44 @@ impl Serializer for JsonSerializer {
     type VariantSerializer = JsonVariantSerializer;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        self.buf.push_str(`{v}`);
+        self.buf.push_str(&`{v}`);
         return Result::Ok(());
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
         // Values outside ±2^53-1 are serialized as strings for JS safety
         if v > 9007199254740991 || v < -9007199254740991 {
-            self.buf.push_str(`"{v}"`);
+            self.buf.push_str(&`"{v}"`);
         } else {
-            self.buf.push_str(`{v}`);
+            self.buf.push_str(&`{v}`);
         }
         return Result::Ok(());
     }
 
     fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
-        self.buf.push_str(`{v}`);
+        self.buf.push_str(&`{v}`);
         return Result::Ok(());
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
         // Values above 2^53-1 are serialized as strings for JS safety
         if v > 9007199254740991 {
-            self.buf.push_str(`"{v}"`);
+            self.buf.push_str(&`"{v}"`);
         } else {
-            self.buf.push_str(`{v}`);
+            self.buf.push_str(&`{v}`);
         }
         return Result::Ok(());
     }
 
     fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
         // i128 always serialized as string (always exceeds JS safe integer range)
-        self.buf.push_str(`"{v}"`);
+        self.buf.push_str(&`"{v}"`);
         return Result::Ok(());
     }
 
     fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
         // u128 always serialized as string (always exceeds JS safe integer range)
-        self.buf.push_str(`"{v}"`);
+        self.buf.push_str(&`"{v}"`);
         return Result::Ok(());
     }
 
@@ -226,7 +226,7 @@ impl Serializer for JsonSerializer {
                 message: "Infinity is not allowed in JSON",
             });
         }
-        self.buf.push_str(`{v as f64}`);
+        self.buf.push_str(&`{v as f64}`);
         return Result::Ok(());
     }
 
@@ -243,15 +243,15 @@ impl Serializer for JsonSerializer {
                 message: "Infinity is not allowed in JSON",
             });
         }
-        self.buf.push_str(`{v}`);
+        self.buf.push_str(&`{v}`);
         return Result::Ok(());
     }
 
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
         if v {
-            self.buf.push_str("true");
+            self.buf.push_str(&"true");
         } else {
-            self.buf.push_str("false");
+            self.buf.push_str(&"false");
         }
         return Result::Ok(());
     }
@@ -268,12 +268,12 @@ impl Serializer for JsonSerializer {
     }
 
     fn serialize_null(&mut self) -> Result<(), SerializeError> {
-        self.buf.push_str("null");
+        self.buf.push_str(&"null");
         return Result::Ok(());
     }
 
     fn begin_seq(&mut self, len: i32) -> Result<JsonSeqSerializer, SerializeError> {
-        self.buf.push_str("[");
+        self.buf.push_str(&"[");
         return Result::Ok(JsonSeqSerializer {
             buf: self.buf,
             count: 0,
@@ -281,7 +281,7 @@ impl Serializer for JsonSerializer {
     }
 
     fn begin_map(&mut self, len: i32) -> Result<JsonMapSerializer, SerializeError> {
-        self.buf.push_str("{");
+        self.buf.push_str(&"{");
         return Result::Ok(JsonMapSerializer {
             buf: self.buf,
             count: 0,
@@ -290,7 +290,7 @@ impl Serializer for JsonSerializer {
     }
 
     fn begin_struct(&mut self, name: &String, fields: i32) -> Result<JsonStructSerializer, SerializeError> {
-        self.buf.push_str("{");
+        self.buf.push_str(&"{");
         return Result::Ok(JsonStructSerializer {
             buf: self.buf,
             count: 0,
@@ -303,9 +303,9 @@ impl Serializer for JsonSerializer {
     }
 
     fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<JsonVariantSerializer, SerializeError> {
-        self.buf.push_str("{");
+        self.buf.push_str(&"{");
         write_escaped_string(self.buf, variant_name);
-        self.buf.push_str(":");
+        self.buf.push_str(&":");
         return Result::Ok(JsonVariantSerializer {
             buf: self.buf,
         });
@@ -349,7 +349,7 @@ pub struct PrettyJsonSerializer {
 impl SerializeSeq for PrettyJsonSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.buf.push_str(",");
+            self.buf.push_str(&",");
         }
         write_pretty_newline_and_indent(self.buf, self.indent, self.depth);
         let mut ser = PrettyJsonSerializer {
@@ -367,7 +367,7 @@ impl SerializeSeq for PrettyJsonSeqSerializer {
         if self.count > 0 {
             write_pretty_newline_and_indent(self.buf, self.indent, self.depth - 1);
         }
-        self.buf.push_str("]");
+        self.buf.push_str(&"]");
         return Result::Ok(());
     }
 }
@@ -375,7 +375,7 @@ impl SerializeSeq for PrettyJsonSeqSerializer {
 impl SerializeMap for PrettyJsonMapSerializer {
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.buf.push_str(",");
+            self.buf.push_str(&",");
         }
         write_pretty_newline_and_indent(self.buf, self.indent, self.depth);
         let mut ser = PrettyJsonSerializer {
@@ -385,7 +385,7 @@ impl SerializeMap for PrettyJsonMapSerializer {
         };
         let r = key.serialize::<PrettyJsonSerializer>(&mut ser);
         self.buf = ser.buf;
-        self.buf.push_str(": ");
+        self.buf.push_str(&": ");
         self.need_value = true;
         return r;
     }
@@ -407,7 +407,7 @@ impl SerializeMap for PrettyJsonMapSerializer {
         if self.count > 0 {
             write_pretty_newline_and_indent(self.buf, self.indent, self.depth - 1);
         }
-        self.buf.push_str("}");
+        self.buf.push_str(&"}");
         return Result::Ok(());
     }
 }
@@ -415,11 +415,11 @@ impl SerializeMap for PrettyJsonMapSerializer {
 impl SerializeStruct for PrettyJsonStructSerializer {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.buf.push_str(",");
+            self.buf.push_str(&",");
         }
         write_pretty_newline_and_indent(self.buf, self.indent, self.depth);
         write_escaped_string(self.buf, name);
-        self.buf.push_str(": ");
+        self.buf.push_str(&": ");
         let mut ser = PrettyJsonSerializer {
             buf: self.buf,
             indent: self.indent,
@@ -435,7 +435,7 @@ impl SerializeStruct for PrettyJsonStructSerializer {
         if self.count > 0 {
             write_pretty_newline_and_indent(self.buf, self.indent, self.depth - 1);
         }
-        self.buf.push_str("}");
+        self.buf.push_str(&"}");
         return Result::Ok(());
     }
 }
@@ -454,7 +454,7 @@ impl SerializeVariant for PrettyJsonVariantSerializer {
 
     fn end(&mut self) -> Result<(), SerializeError> {
         write_pretty_newline_and_indent(self.buf, self.indent, self.depth - 1);
-        self.buf.push_str("}");
+        self.buf.push_str(&"}");
         return Result::Ok(());
     }
 }
@@ -466,40 +466,40 @@ impl Serializer for PrettyJsonSerializer {
     type VariantSerializer = PrettyJsonVariantSerializer;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        self.buf.push_str(`{v}`);
+        self.buf.push_str(&`{v}`);
         return Result::Ok(());
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
         if v > 9007199254740991 || v < -9007199254740991 {
-            self.buf.push_str(`"{v}"`);
+            self.buf.push_str(&`"{v}"`);
         } else {
-            self.buf.push_str(`{v}`);
+            self.buf.push_str(&`{v}`);
         }
         return Result::Ok(());
     }
 
     fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
-        self.buf.push_str(`{v}`);
+        self.buf.push_str(&`{v}`);
         return Result::Ok(());
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
         if v > 9007199254740991 {
-            self.buf.push_str(`"{v}"`);
+            self.buf.push_str(&`"{v}"`);
         } else {
-            self.buf.push_str(`{v}`);
+            self.buf.push_str(&`{v}`);
         }
         return Result::Ok(());
     }
 
     fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
-        self.buf.push_str(`"{v}"`);
+        self.buf.push_str(&`"{v}"`);
         return Result::Ok(());
     }
 
     fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
-        self.buf.push_str(`"{v}"`);
+        self.buf.push_str(&`"{v}"`);
         return Result::Ok(());
     }
 
@@ -516,7 +516,7 @@ impl Serializer for PrettyJsonSerializer {
                 message: "Infinity is not allowed in JSON",
             });
         }
-        self.buf.push_str(`{v as f64}`);
+        self.buf.push_str(&`{v as f64}`);
         return Result::Ok(());
     }
 
@@ -533,15 +533,15 @@ impl Serializer for PrettyJsonSerializer {
                 message: "Infinity is not allowed in JSON",
             });
         }
-        self.buf.push_str(`{v}`);
+        self.buf.push_str(&`{v}`);
         return Result::Ok(());
     }
 
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
         if v {
-            self.buf.push_str("true");
+            self.buf.push_str(&"true");
         } else {
-            self.buf.push_str("false");
+            self.buf.push_str(&"false");
         }
         return Result::Ok(());
     }
@@ -558,12 +558,12 @@ impl Serializer for PrettyJsonSerializer {
     }
 
     fn serialize_null(&mut self) -> Result<(), SerializeError> {
-        self.buf.push_str("null");
+        self.buf.push_str(&"null");
         return Result::Ok(());
     }
 
     fn begin_seq(&mut self, len: i32) -> Result<PrettyJsonSeqSerializer, SerializeError> {
-        self.buf.push_str("[");
+        self.buf.push_str(&"[");
         return Result::Ok(PrettyJsonSeqSerializer {
             buf: self.buf,
             count: 0,
@@ -573,7 +573,7 @@ impl Serializer for PrettyJsonSerializer {
     }
 
     fn begin_map(&mut self, len: i32) -> Result<PrettyJsonMapSerializer, SerializeError> {
-        self.buf.push_str("{");
+        self.buf.push_str(&"{");
         return Result::Ok(PrettyJsonMapSerializer {
             buf: self.buf,
             count: 0,
@@ -584,7 +584,7 @@ impl Serializer for PrettyJsonSerializer {
     }
 
     fn begin_struct(&mut self, name: &String, fields: i32) -> Result<PrettyJsonStructSerializer, SerializeError> {
-        self.buf.push_str("{");
+        self.buf.push_str(&"{");
         return Result::Ok(PrettyJsonStructSerializer {
             buf: self.buf,
             count: 0,
@@ -599,10 +599,10 @@ impl Serializer for PrettyJsonSerializer {
     }
 
     fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<PrettyJsonVariantSerializer, SerializeError> {
-        self.buf.push_str("{");
+        self.buf.push_str(&"{");
         write_pretty_newline_and_indent(self.buf, self.indent, self.depth + 1);
         write_escaped_string(self.buf, variant_name);
-        self.buf.push_str(": ");
+        self.buf.push_str(&": ");
         return Result::Ok(PrettyJsonVariantSerializer {
             buf: self.buf,
             indent: self.indent,

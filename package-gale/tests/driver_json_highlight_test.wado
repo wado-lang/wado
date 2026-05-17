@@ -14,49 +14,49 @@ test "highlight produces HTML" {
 
 test "highlight contains string span" {
     let html = json_hl::highlight(&"{\"key\": 42}");
-    assert str_contains(&html, "class=\"string\""), `missing string class in: {html}`;
+    assert str_contains(&html, &"class=\"string\""), `missing string class in: {html}`;
 }
 
 test "highlight contains number span" {
     let html = json_hl::highlight(&"{\"key\": 42}");
-    assert str_contains(&html, "class=\"number\""), `missing number class in: {html}`;
+    assert str_contains(&html, &"class=\"number\""), `missing number class in: {html}`;
 }
 
 test "highlight contains bracket span" {
     let html = json_hl::highlight(&"[1, 2]");
-    assert str_contains(&html, "class=\"punctuation bracket\""), `missing bracket class in: {html}`;
+    assert str_contains(&html, &"class=\"punctuation bracket\""), `missing bracket class in: {html}`;
 }
 
 test "highlight contains keyword span for true" {
     let html = json_hl::highlight(&"true");
-    assert str_contains(&html, "class=\"constant builtin\""), `missing constant.builtin class in: {html}`;
+    assert str_contains(&html, &"class=\"constant builtin\""), `missing constant.builtin class in: {html}`;
 }
 
 test "highlight contains delimiter span for comma" {
     let html = json_hl::highlight(&"[1, 2]");
-    assert str_contains(&html, "class=\"punctuation delimiter\""), `missing delimiter class in: {html}`;
+    assert str_contains(&html, &"class=\"punctuation delimiter\""), `missing delimiter class in: {html}`;
 }
 
 test "highlight escapes HTML entities" {
     let html = json_hl::highlight(&"\"<script>\"");
-    assert str_contains(&html, "&lt;"), `missing escaped < in: {html}`;
-    assert str_contains(&html, "&gt;"), `missing escaped > in: {html}`;
+    assert str_contains(&html, &"&lt;"), `missing escaped < in: {html}`;
+    assert str_contains(&html, &"&gt;"), `missing escaped > in: {html}`;
 }
 
 test "highlight with unicode string values" {
     let html = json_hl::highlight(&"{\"名前\": \"太郎\"}");
-    assert str_contains(&html, "名前"), `missing unicode key in: {html}`;
-    assert str_contains(&html, "太郎"), `missing unicode value in: {html}`;
+    assert str_contains(&html, &"名前"), `missing unicode key in: {html}`;
+    assert str_contains(&html, &"太郎"), `missing unicode value in: {html}`;
 }
 
 test "highlight with emoji" {
     let html = json_hl::highlight(&"\"🎉\"");
-    assert str_contains(&html, "🎉"), `missing emoji in: {html}`;
+    assert str_contains(&html, &"🎉"), `missing emoji in: {html}`;
 }
 
 test "highlight with multibyte and HTML entities" {
     let html = json_hl::highlight(&"\"<日本語>\"");
-    assert str_contains(&html, "&lt;日本語&gt;"), `missing escaped unicode in: {html}`;
+    assert str_contains(&html, &"&lt;日本語&gt;"), `missing escaped unicode in: {html}`;
 }
 
 fn str_contains(haystack: &String, needle: &String) -> bool {

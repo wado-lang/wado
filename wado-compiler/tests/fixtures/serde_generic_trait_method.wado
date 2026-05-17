@@ -28,7 +28,7 @@ struct Buffer {
 
 impl Writer for Buffer {
     fn write_value<T: Printable>(&mut self, value: &T) {
-        self.data.push_str(value.to_text());
+        self.data.push_str(&value.to_text());
     }
 }
 
@@ -36,7 +36,7 @@ export fn run() with Stdout {
     let mut buf = Buffer { data: "" };
     let n = 42;
     buf.write_value::<i32>(&n);
-    buf.data.push_str(",");
+    buf.data.push_str(&",");
     let s = "hello";
     buf.write_value::<String>(&s);
     println(buf.data);

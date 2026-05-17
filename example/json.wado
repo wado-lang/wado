@@ -1242,22 +1242,22 @@ fn escape_json_string(s: &String) -> String {
     for let c of s.chars() {
         let code = c as u32;
         if c == '"' {
-            result.push_str("\\\"");
+            result.push_str(&"\\\"");
         } else if c == '\\' {
-            result.push_str("\\\\");
+            result.push_str(&"\\\\");
         } else if c == '\n' {
-            result.push_str("\\n");
+            result.push_str(&"\\n");
         } else if c == '\r' {
-            result.push_str("\\r");
+            result.push_str(&"\\r");
         } else if c == '\t' {
-            result.push_str("\\t");
+            result.push_str(&"\\t");
         } else if code == 0x08 {
-            result.push_str("\\b");
+            result.push_str(&"\\b");
         } else if code == 0x0C {
-            result.push_str("\\f");
+            result.push_str(&"\\f");
         } else if code < 0x20 {
             // Other control characters → \u00XX
-            result.push_str("\\u00");
+            result.push_str(&"\\u00");
             let hi = code >> 4 & 0x0F;
             let lo = code & 0x0F;
             if hi < 10 {
@@ -1299,7 +1299,7 @@ pub fn stringify(value: &JsonValue) -> String {
                 if i > 0 {
                     result.push(',');
                 }
-                result.push_str(stringify(&items[i]));
+                result.push_str(&stringify(&items[i]));
             }
             result.push(']');
             result;
@@ -1313,9 +1313,9 @@ pub fn stringify(value: &JsonValue) -> String {
                     result.push(',');
                 }
                 let [key, val] = entries[i];
-                result.push_str(escape_json_string(&key));
+                result.push_str(&escape_json_string(&key));
                 result.push(':');
-                result.push_str(stringify(&val));
+                result.push_str(&stringify(&val));
             }
             result.push('}');
             result;
@@ -1343,16 +1343,16 @@ fn stringify_at_level(value: &JsonValue, level: i32, indent_size: i32) -> String
                 "[]";
             } else {
                 let mut result = String::with_capacity(64);
-                result.push_str("[\n");
+                result.push_str(&"[\n");
                 for let mut i = 0; i < items.len(); i += 1 {
-                    result.push_str(make_indent(level + 1, indent_size));
-                    result.push_str(stringify_at_level(&items[i], level + 1, indent_size));
+                    result.push_str(&make_indent(level + 1, indent_size));
+                    result.push_str(&stringify_at_level(&items[i], level + 1, indent_size));
                     if i < items.len() - 1 {
                         result.push(',');
                     }
                     result.push('\n');
                 }
-                result.push_str(make_indent(level, indent_size));
+                result.push_str(&make_indent(level, indent_size));
                 result.push(']');
                 result;
             }
@@ -1363,19 +1363,19 @@ fn stringify_at_level(value: &JsonValue, level: i32, indent_size: i32) -> String
                 "{}";
             } else {
                 let mut result = String::with_capacity(64);
-                result.push_str("{\n");
+                result.push_str(&"{\n");
                 for let mut i = 0; i < entries.len(); i += 1 {
                     let [key, val] = entries[i];
-                    result.push_str(make_indent(level + 1, indent_size));
-                    result.push_str(escape_json_string(&key));
-                    result.push_str(": ");
-                    result.push_str(stringify_at_level(&val, level + 1, indent_size));
+                    result.push_str(&make_indent(level + 1, indent_size));
+                    result.push_str(&escape_json_string(&key));
+                    result.push_str(&": ");
+                    result.push_str(&stringify_at_level(&val, level + 1, indent_size));
                     if i < entries.len() - 1 {
                         result.push(',');
                     }
                     result.push('\n');
                 }
-                result.push_str(make_indent(level, indent_size));
+                result.push_str(&make_indent(level, indent_size));
                 result.push('}');
                 result;
             }

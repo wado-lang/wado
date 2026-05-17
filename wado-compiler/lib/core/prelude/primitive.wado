@@ -904,12 +904,12 @@ impl FromStr for u64 {
 fn fmt_float_special(f: &mut Formatter, is_neg: bool, kind: SpecialKind, zero_repr: String) {
     let mark = f.mark();
     if kind matches { NaN } {
-        f.buf.push_str("NaN");
+        f.buf.push_str(&"NaN");
     } else if kind matches { Inf } {
-        f.buf.push_str(if is_neg { "-inf" } else { "inf" });
+        f.buf.push_str(&if is_neg { "-inf" } else { "inf" });
     } else {
-        f.buf.push_str(if is_neg { "-" } else { "" });
-        f.buf.push_str(zero_repr);
+        f.buf.push_str(&if is_neg { "-" } else { "" });
+        f.buf.push_str(&zero_repr);
     }
     f.apply_padding(mark);
 }
@@ -917,9 +917,9 @@ fn fmt_float_special(f: &mut Formatter, is_neg: bool, kind: SpecialKind, zero_re
 /// Write sign prefix ("-" or "+").
 fn fmt_float_sign(f: &mut Formatter, is_neg: bool) {
     if is_neg {
-        f.buf.push_str("-");
+        f.buf.push_str(&"-");
     } else if f.sign_plus {
-        f.buf.push_str("+");
+        f.buf.push_str(&"+");
     }
 }
 
@@ -982,7 +982,7 @@ impl f32 {
             write_exp(f.buf, d, p, nd, false);
         } else if p >= 0 {
             write_decimal(f.buf, d, p, nd);
-            f.buf.push_str(".0");
+            f.buf.push_str(&".0");
         } else {
             write_decimal(f.buf, d, p, nd);
         }
@@ -1261,7 +1261,7 @@ impl f64 {
             write_exp(f.buf, d, p, nd, false);
         } else if p >= 0 {
             write_decimal(f.buf, d, p, nd);
-            f.buf.push_str(".0");
+            f.buf.push_str(&".0");
         } else {
             write_decimal(f.buf, d, p, nd);
         }
@@ -1278,9 +1278,9 @@ impl f64 {
             }
             let mark = f.mark();
             fmt_float_sign(f, is_neg);
-            f.buf.push_str("0");
+            f.buf.push_str(&"0");
             if precision > 0 {
-                f.buf.push_str(".");
+                f.buf.push_str(&".");
                 f.buf.append_byte_filled('0' as u8, precision);
             }
             f.apply_padding(mark);
@@ -1308,13 +1308,13 @@ impl f64 {
             }
             let mark = f.mark();
             fmt_float_sign(f, is_neg);
-            f.buf.push_str("0");
+            f.buf.push_str(&"0");
             if precision > 0 {
-                f.buf.push_str(".");
+                f.buf.push_str(&".");
                 f.buf.append_byte_filled('0' as u8, precision);
             }
-            f.buf.push_str(if upper_bool { "E" } else { "e" });
-            f.buf.push_str("0");
+            f.buf.push_str(&if upper_bool { "E" } else { "e" });
+            f.buf.push_str(&"0");
             f.apply_padding(mark);
             return;
         }

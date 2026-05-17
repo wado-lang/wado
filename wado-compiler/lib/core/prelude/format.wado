@@ -62,7 +62,7 @@ impl Formatter {
 
     /// Write a string to the output buffer.
     pub fn write_str(&mut self, s: String) {
-        self.buf.push_str(s);
+        self.buf.push_str(&s);
     }
 
     /// Write a single character to the output buffer.
@@ -82,24 +82,24 @@ impl Formatter {
     pub fn pad(&mut self, content: String) {
         let content_len = content.len();
         if self.width <= 0 || content_len >= self.width {
-            self.buf.push_str(content);
+            self.buf.push_str(&content);
             return;
         }
         let padding = self.width - content_len;
         let align = self.align;
         if align matches { Left } {
-            self.buf.push_str(content);
+            self.buf.push_str(&content);
             self.write_char_n(self.fill, padding);
         } else if align matches { Center } {
             let left_pad = padding / 2;
             let right_pad = padding - left_pad;
             self.write_char_n(self.fill, left_pad);
-            self.buf.push_str(content);
+            self.buf.push_str(&content);
             self.write_char_n(self.fill, right_pad);
         } else {
             // Right (default)
             self.write_char_n(self.fill, padding);
-            self.buf.push_str(content);
+            self.buf.push_str(&content);
         }
     }
 
@@ -190,10 +190,10 @@ impl Formatter {
         if self.width <= 0 || content_len >= self.width {
             // No padding — write sign/prefix, reserve digit area
             if sign_len > 0 {
-                self.buf.push_str(sign);
+                self.buf.push_str(&sign);
             }
             if prefix_len > 0 {
-                self.buf.push_str(prefix);
+                self.buf.push_str(&prefix);
             }
             return self.buf.internal_reserve_uninit(digit_count);
         }
@@ -203,10 +203,10 @@ impl Formatter {
         if self.zero_pad {
             // sign + prefix + zeros + [digits]
             if sign_len > 0 {
-                self.buf.push_str(sign);
+                self.buf.push_str(&sign);
             }
             if prefix_len > 0 {
-                self.buf.push_str(prefix);
+                self.buf.push_str(&prefix);
             }
             self.write_char_n('0', padding);
             return self.buf.internal_reserve_uninit(digit_count);
@@ -216,10 +216,10 @@ impl Formatter {
         if align matches { Left } {
             // [sign prefix digits] [fill...]
             if sign_len > 0 {
-                self.buf.push_str(sign);
+                self.buf.push_str(&sign);
             }
             if prefix_len > 0 {
-                self.buf.push_str(prefix);
+                self.buf.push_str(&prefix);
             }
             let offset = self.buf.internal_reserve_uninit(digit_count);
             self.write_char_n(self.fill, padding);
@@ -230,10 +230,10 @@ impl Formatter {
             let right_pad = padding - left_pad;
             self.write_char_n(self.fill, left_pad);
             if sign_len > 0 {
-                self.buf.push_str(sign);
+                self.buf.push_str(&sign);
             }
             if prefix_len > 0 {
-                self.buf.push_str(prefix);
+                self.buf.push_str(&prefix);
             }
             let offset = self.buf.internal_reserve_uninit(digit_count);
             self.write_char_n(self.fill, right_pad);
@@ -242,10 +242,10 @@ impl Formatter {
             // Right: [fill...] [sign prefix digits]
             self.write_char_n(self.fill, padding);
             if sign_len > 0 {
-                self.buf.push_str(sign);
+                self.buf.push_str(&sign);
             }
             if prefix_len > 0 {
-                self.buf.push_str(prefix);
+                self.buf.push_str(&prefix);
             }
             return self.buf.internal_reserve_uninit(digit_count);
         }

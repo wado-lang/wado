@@ -42,7 +42,7 @@ impl CodeWriter {
     /// Write a complete line (auto-indented, with trailing newline).
     pub fn line(&mut self, text: &String) {
         self.write_indent();
-        self.buf.push_str(*text);
+        self.buf.push_str(text);
         self.buf.push('\n');
         self.fresh_line = true;
     }
@@ -56,8 +56,8 @@ impl CodeWriter {
     /// Begin a block: emits "opener {" and increases indentation.
     pub fn begin(&mut self, opener: &String) {
         self.write_indent();
-        self.buf.push_str(*opener);
-        self.buf.push_str(" {\n");
+        self.buf.push_str(opener);
+        self.buf.push_str(&" {\n");
         self.fresh_line = true;
         self.indent_level += 1;
     }
@@ -66,7 +66,7 @@ impl CodeWriter {
     pub fn end(&mut self) {
         self.indent_level -= 1;
         self.write_indent();
-        self.buf.push_str("}\n");
+        self.buf.push_str(&"}\n");
         self.fresh_line = true;
     }
 
@@ -75,7 +75,7 @@ impl CodeWriter {
         self.indent_level -= 1;
         self.write_indent();
         self.buf.push('}');
-        self.buf.push_str(*suffix);
+        self.buf.push_str(suffix);
         self.buf.push('\n');
         self.fresh_line = true;
     }
@@ -85,9 +85,9 @@ impl CodeWriter {
     pub fn else_begin(&mut self, opener: &String) {
         self.indent_level -= 1;
         self.write_indent();
-        self.buf.push_str("} ");
-        self.buf.push_str(*opener);
-        self.buf.push_str(" {\n");
+        self.buf.push_str(&"} ");
+        self.buf.push_str(opener);
+        self.buf.push_str(&" {\n");
         self.fresh_line = true;
         self.indent_level += 1;
     }
@@ -111,7 +111,7 @@ impl CodeWriter {
 
     /// Append raw text with no indentation handling.
     pub fn raw(&mut self, text: &String) {
-        self.buf.push_str(*text);
+        self.buf.push_str(text);
         if text.len() > 0 {
             let chars: Array<char> = text.chars().collect();
             self.fresh_line = chars[chars.len() - 1] == '\n';
@@ -126,7 +126,7 @@ impl CodeWriter {
 
     fn write_indent(&mut self) {
         for let mut i = 0; i < self.indent_level; i += 1 {
-            self.buf.push_str("    ");
+            self.buf.push_str(&"    ");
         }
     }
 }
@@ -180,10 +180,10 @@ impl StructSpec {
 
     pub fn emit(&self, w: &mut CodeWriter) {
         let prefix = if self.is_pub { "pub " } else { "" };
-        w.begin(`{prefix}struct {self.name}`);
+        w.begin(&`{prefix}struct {self.name}`);
         for let field of &self.fields {
             let vis = if field.is_pub { "pub " } else { "" };
-            w.line(`{vis}{field.name}: {field.type_str},`);
+            w.line(&`{vis}{field.name}: {field.type_str},`);
         }
         w.end();
     }
@@ -225,12 +225,12 @@ impl VariantSpec {
 
     pub fn emit(&self, w: &mut CodeWriter) {
         let prefix = if self.is_pub { "pub " } else { "" };
-        w.begin(`{prefix}variant {self.name}`);
+        w.begin(&`{prefix}variant {self.name}`);
         for let case of &self.cases {
             if let Some(p) = &case.payload {
-                w.line(`{case.name}({*p}),`);
+                w.line(&`{case.name}({*p}),`);
             } else {
-                w.line(`{case.name},`);
+                w.line(&`{case.name},`);
             }
         }
         w.end();
@@ -273,12 +273,12 @@ impl EnumSpec {
 
     pub fn emit(&self, w: &mut CodeWriter) {
         let prefix = if self.is_pub { "pub " } else { "" };
-        w.begin(`{prefix}enum {self.name}`);
+        w.begin(&`{prefix}enum {self.name}`);
         for let member of &self.members {
             if let Some(c) = &member.trailing_comment {
-                w.line(`{member.name},  // {*c}`);
+                w.line(&`{member.name},  // {*c}`);
             } else {
-                w.line(`{member.name},`);
+                w.line(&`{member.name},`);
             }
         }
         w.end();
@@ -308,9 +308,9 @@ impl FlagsSpec {
 
     pub fn emit(&self, w: &mut CodeWriter) {
         let prefix = if self.is_pub { "pub " } else { "" };
-        w.begin(`{prefix}flags {self.name}`);
+        w.begin(&`{prefix}flags {self.name}`);
         for let member of &self.members {
-            w.line(`{*member},`);
+            w.line(&`{*member},`);
         }
         w.end();
     }
@@ -392,30 +392,30 @@ impl FnSpec {
     pub fn signature(&self) -> String {
         let mut sig = String::with_capacity(64);
         if self.is_pub {
-            sig.push_str("pub ");
+            sig.push_str(&"pub ");
         }
-        sig.push_str(`fn {self.name}(`);
+        sig.push_str(&`fn {self.name}(`);
         let mut first = true;
         if let Some(recv) = &self.receiver {
-            sig.push_str(*recv);
+            sig.push_str(recv);
             first = false;
         }
         for let param of &self.params {
             if !first {
-                sig.push_str(", ");
+                sig.push_str(&", ");
             }
             if param.is_mut {
-                sig.push_str("mut ");
+                sig.push_str(&"mut ");
             }
-            sig.push_str(`{param.name}: {param.type_str}`);
+            sig.push_str(&`{param.name}: {param.type_str}`);
             if let Some(d) = &param.default_value {
-                sig.push_str(` = {*d}`);
+                sig.push_str(&` = {*d}`);
             }
             first = false;
         }
-        sig.push_str(")");
+        sig.push_str(&")");
         if let Some(ret) = &self.return_type {
-            sig.push_str(` -> {*ret}`);
+            sig.push_str(&` -> {*ret}`);
         }
         return sig;
     }
@@ -465,7 +465,7 @@ impl GlobalSpec {
         } else {
             "";
         };
-        w.line(`{vis}global {mutability}{self.name}: {self.type_str} = {self.initializer};{trailer}`);
+        w.line(&`{vis}global {mutability}{self.name}: {self.type_str} = {self.initializer};{trailer}`);
     }
 }
 
@@ -503,9 +503,9 @@ impl TraitSpec {
 
     pub fn emit(&self, w: &mut CodeWriter) {
         let prefix = if self.is_pub { "pub " } else { "" };
-        w.begin(`{prefix}trait {self.name}`);
+        w.begin(&`{prefix}trait {self.name}`);
         for let assoc of &self.associated_types {
-            w.line(`type {*assoc};`);
+            w.line(&`type {*assoc};`);
         }
         if self.associated_types.len() > 0 && self.methods.len() > 0 {
             w.blank();
@@ -514,7 +514,7 @@ impl TraitSpec {
             if i > 0 {
                 w.blank();
             }
-            w.line(`{self.methods[i].signature()};`);
+            w.line(&`{self.methods[i].signature()};`);
         }
         w.end();
     }
@@ -539,9 +539,9 @@ impl ImplSpec {
 
     pub fn emit_begin(&self, w: &mut CodeWriter) {
         if let Some(t) = &self.trait_name {
-            w.begin(`impl {*t} for {self.type_name}`);
+            w.begin(&`impl {*t} for {self.type_name}`);
         } else {
-            w.begin(`impl {self.type_name}`);
+            w.begin(&`impl {self.type_name}`);
         }
     }
 }

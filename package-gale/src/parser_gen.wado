@@ -130,9 +130,9 @@ fn join_kinds(kinds: &Array<String>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < kinds.len(); i += 1 {
         if i > 0 {
-            result.push_str(", ");
+            result.push_str(&", ");
         }
-        result.push_str(kinds[i]);
+        result.push_str(&kinds[i]);
     }
     return result;
 }
@@ -183,120 +183,120 @@ fn emit_follow_variant_from_gir(w: &mut CodeWriter, variant_rule: &Rule, ctx: &m
 
 fn gen_parser_struct(w: &mut CodeWriter) {
     let mut s = StructSpec::new("Parser");
-    s.add_field("tokens", "Array<Token>");
-    s.add_field("pos", "i32");
+    s.add_field(&"tokens", &"Array<Token>");
+    s.add_field(&"pos", &"i32");
     s.emit(w);
     w.blank();
 
     ImplSpec::new("Parser").emit_begin(w);
 
     let mut f = FnSpec::new("new");
-    f.add_param("tokens", "Array<Token>");
-    f.set_return_type("Parser");
+    f.add_param(&"tokens", &"Array<Token>");
+    f.set_return_type(&"Parser");
     f.emit_begin(w);
-    w.line("return Parser { tokens, pos: 0 };");
+    w.line(&"return Parser { tokens, pos: 0 };");
     w.end();
     w.blank();
 
     let mut f2 = FnSpec::new("peek");
-    f2.set_receiver("&self");
-    f2.set_return_type("&Token");
+    f2.set_receiver(&"&self");
+    f2.set_return_type(&"&Token");
     f2.emit_begin(w);
-    w.line("return &self.tokens[self.pos];");
+    w.line(&"return &self.tokens[self.pos];");
     w.end();
     w.blank();
 
     let mut f3 = FnSpec::new("peek_kind");
-    f3.set_receiver("&self");
-    f3.set_return_type("i32");
+    f3.set_receiver(&"&self");
+    f3.set_return_type(&"i32");
     f3.emit_begin(w);
-    w.line("return self.tokens[self.pos].kind;");
+    w.line(&"return self.tokens[self.pos].kind;");
     w.end();
     w.blank();
 
     let mut f4 = FnSpec::new("peek_at");
-    f4.set_receiver("&self");
-    f4.add_param("offset", "i32");
-    f4.set_return_type("i32");
+    f4.set_receiver(&"&self");
+    f4.add_param(&"offset", &"i32");
+    f4.set_return_type(&"i32");
     f4.emit_begin(w);
-    w.line("let idx = self.pos + offset;");
-    w.line("if idx >= self.tokens.len() { return TK_EOF; }");
-    w.line("return self.tokens[idx].kind;");
+    w.line(&"let idx = self.pos + offset;");
+    w.line(&"if idx >= self.tokens.len() { return TK_EOF; }");
+    w.line(&"return self.tokens[idx].kind;");
     w.end();
     w.blank();
 
     let mut f5 = FnSpec::new("advance");
-    f5.set_receiver("&mut self");
-    f5.set_return_type("Token");
+    f5.set_receiver(&"&mut self");
+    f5.set_return_type(&"Token");
     f5.emit_begin(w);
-    w.line("let tok = self.tokens[self.pos];");
-    w.line("self.pos += 1;");
-    w.line("return tok;");
+    w.line(&"let tok = self.tokens[self.pos];");
+    w.line(&"self.pos += 1;");
+    w.line(&"return tok;");
     w.end();
     w.blank();
 
     let mut f6 = FnSpec::new("last_end");
-    f6.set_receiver("&self");
-    f6.set_return_type("i32");
+    f6.set_receiver(&"&self");
+    f6.set_return_type(&"i32");
     f6.emit_begin(w);
-    w.line("if self.pos == 0 { return 0; }");
-    w.line("return self.tokens[self.pos - 1].span.end;");
+    w.line(&"if self.pos == 0 { return 0; }");
+    w.line(&"return self.tokens[self.pos - 1].span.end;");
     w.end();
     w.blank();
 
     let mut f7 = FnSpec::new("expect");
-    f7.set_receiver("&mut self");
-    f7.add_param("kind", "i32");
-    f7.set_return_type("Result<Token, ParseError>");
+    f7.set_receiver(&"&mut self");
+    f7.add_param(&"kind", &"i32");
+    f7.set_return_type(&"Result<Token, ParseError>");
     f7.emit_begin(w);
-    w.begin("if self.tokens[self.pos].kind == kind");
-    w.line("return Result::<Token, ParseError>::Ok(self.advance());");
+    w.begin(&"if self.tokens[self.pos].kind == kind");
+    w.line(&"return Result::<Token, ParseError>::Ok(self.advance());");
     w.end();
-    w.line("let tok = &self.tokens[self.pos];");
-    w.line("let name = token_kind_name(kind);");
-    w.line("return Result::<Token, ParseError>::Err(ParseError::new(");
+    w.line(&"let tok = &self.tokens[self.pos];");
+    w.line(&"let name = token_kind_name(kind);");
+    w.line(&"return Result::<Token, ParseError>::Err(ParseError::new(");
     w.indent();
-    w.line("`expected {name}, got \"{tok.text}\"`,");
-    w.line("tok.span,");
-    w.line("[name],");
+    w.line(&"`expected {name}, got \"{tok.text}\"`,");
+    w.line(&"tok.span,");
+    w.line(&"[name],");
     w.dedent();
-    w.line("));");
+    w.line(&"));");
     w.end();
     w.blank();
 
     let mut f8 = FnSpec::new("fail");
-    f8.set_receiver("&self");
-    f8.add_param("name", "String");
-    f8.set_return_type("Result<Token, ParseError>");
+    f8.set_receiver(&"&self");
+    f8.add_param(&"name", &"String");
+    f8.set_return_type(&"Result<Token, ParseError>");
     f8.emit_begin(w);
-    w.line("let tok = &self.tokens[self.pos];");
-    w.line("return Result::<Token, ParseError>::Err(ParseError::new(");
+    w.line(&"let tok = &self.tokens[self.pos];");
+    w.line(&"return Result::<Token, ParseError>::Err(ParseError::new(");
     w.indent();
-    w.line("`expected {name}, got \"{tok.text}\"`,");
-    w.line("tok.span,");
-    w.line("[name],");
+    w.line(&"`expected {name}, got \"{tok.text}\"`,");
+    w.line(&"tok.span,");
+    w.line(&"[name],");
     w.dedent();
-    w.line("));");
+    w.line(&"));");
     w.end();
     w.blank();
 
     // `p.match_any()` — consumes one token of any kind (for `.` wildcard).
     // Fails at EOF.
     let mut f9 = FnSpec::new("match_any");
-    f9.set_receiver("&mut self");
-    f9.set_return_type("Result<Token, ParseError>");
+    f9.set_receiver(&"&mut self");
+    f9.set_return_type(&"Result<Token, ParseError>");
     f9.emit_begin(w);
-    w.begin("if self.tokens[self.pos].kind != TK_EOF");
-    w.line("return Result::<Token, ParseError>::Ok(self.advance());");
+    w.begin(&"if self.tokens[self.pos].kind != TK_EOF");
+    w.line(&"return Result::<Token, ParseError>::Ok(self.advance());");
     w.end();
-    w.line("let tok = &self.tokens[self.pos];");
-    w.line("return Result::<Token, ParseError>::Err(ParseError::new(");
+    w.line(&"let tok = &self.tokens[self.pos];");
+    w.line(&"return Result::<Token, ParseError>::Err(ParseError::new(");
     w.indent();
-    w.line("`expected any token, got \"{tok.text}\"`,");
-    w.line("tok.span,");
-    w.line("[\"any token\"],");
+    w.line(&"`expected any token, got \"{tok.text}\"`,");
+    w.line(&"tok.span,");
+    w.line(&"[\"any token\"],");
     w.dedent();
-    w.line("));");
+    w.line(&"));");
     w.end();
     w.blank();
 
@@ -305,31 +305,31 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     // the current token is in the exclusion set. The exclusion set is passed
     // by value so the caller can use tuple-to-Array coercion on a literal.
     let mut f10 = FnSpec::new("match_not");
-    f10.set_receiver("&mut self");
-    f10.add_param("excluded", "Array<i32>");
-    f10.set_return_type("Result<Token, ParseError>");
+    f10.set_receiver(&"&mut self");
+    f10.add_param(&"excluded", &"Array<i32>");
+    f10.set_return_type(&"Result<Token, ParseError>");
     f10.emit_begin(w);
-    w.line("let k = self.tokens[self.pos].kind;");
-    w.begin("if k != TK_EOF");
-    w.line("let mut blocked = false;");
-    w.begin("for let x of excluded");
-    w.begin("if x == k");
-    w.line("blocked = true;");
-    w.line("break;");
+    w.line(&"let k = self.tokens[self.pos].kind;");
+    w.begin(&"if k != TK_EOF");
+    w.line(&"let mut blocked = false;");
+    w.begin(&"for let x of excluded");
+    w.begin(&"if x == k");
+    w.line(&"blocked = true;");
+    w.line(&"break;");
     w.end();
     w.end();
-    w.begin("if !blocked");
-    w.line("return Result::<Token, ParseError>::Ok(self.advance());");
+    w.begin(&"if !blocked");
+    w.line(&"return Result::<Token, ParseError>::Ok(self.advance());");
     w.end();
     w.end();
-    w.line("let tok = &self.tokens[self.pos];");
-    w.line("return Result::<Token, ParseError>::Err(ParseError::new(");
+    w.line(&"let tok = &self.tokens[self.pos];");
+    w.line(&"return Result::<Token, ParseError>::Err(ParseError::new(");
     w.indent();
-    w.line("`unexpected token \"{tok.text}\"`,");
-    w.line("tok.span,");
-    w.line("[\"set complement\"],");
+    w.line(&"`unexpected token \"{tok.text}\"`,");
+    w.line(&"tok.span,");
+    w.line(&"[\"set complement\"],");
     w.dedent();
-    w.line("));");
+    w.line(&"));");
     w.end();
 
     w.end();  // impl
@@ -373,11 +373,11 @@ fn gen_bt_scan_if_possible(w: &mut CodeWriter, alt: &Alternative, lowered_rule: 
     let scan_name = `{*fn_name}_scan_{alt_idx}`;
 
     let mut f = FnSpec::new(&scan_name);
-    f.add_param("tokens", "&Array<Token>");
-    f.add_param("pos", "i32");
-    f.set_return_type("i32");
+    f.add_param(&"tokens", &"&Array<Token>");
+    f.add_param(&"pos", &"i32");
+    f.set_return_type(&"i32");
     f.emit_begin(w);
-    w.line("let mut pos = pos;");
+    w.line(&"let mut pos = pos;");
 
     // bt-scan should treat the LAST element as atom-only when it is a
     // self-reference to the current rule — that is the prefix-alt case
@@ -387,7 +387,7 @@ fn gen_bt_scan_if_possible(w: &mut CodeWriter, alt: &Alternative, lowered_rule: 
     // K_THEN expr` inside `case_expr`) and need a full scan.
     gen_bt_scan_op_elements(w, &scan_body.elements, prefix_len, rule_name, ctx);
 
-    w.line("return pos;");
+    w.line(&"return pos;");
     w.end();
     w.blank();
 }
@@ -439,8 +439,8 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
     }
 
     let mut f = FnSpec::new(fn_name);
-    f.add_param("tokens", "&Array<Token>");
-    f.add_param("pos", "i32");
+    f.add_param(&"tokens", &"&Array<Token>");
+    f.add_param(&"pos", &"i32");
     // Accept (and ignore) min_prec so call sites pass it uniformly
     // regardless of whether the target rule is left-recursive. See
     // `GenContext.scan_ruleref_min_prec` for the bt-scan use case.
@@ -449,7 +449,7 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
         type_str: "i32",
         default_value: Option::<String>::Some("0"),
     });
-    f.set_return_type("i32");
+    f.set_return_type(&"i32");
     f.emit_begin(w);
 
     if rule.alternatives.len() == 1 {
@@ -464,9 +464,9 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
                 "gen_scan_function_named: single-alt rule but lowered_rule is not Simple — lower_rule invariant violated",
             );
         };
-        w.line("let mut pos = pos;");
+        w.line(&"let mut pos = pos;");
         gen_scan_op_elements(w, &scan_body.elements, 0, scan_body.elements.len(), ctx, &"return -1;");
-        w.line("return pos;");
+        w.line(&"return pos;");
     } else if all_alts_are_single_token(&rule.alternatives) {
         // Compact form: every alt matches exactly one fixed token, so the
         // entire scan reduces to "is the next token in this set?". A naive
@@ -486,11 +486,11 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
                 firsts.push(t);
             }
         }
-        let check = ctx.kind_check_str(&firsts, "tokens[pos].kind");
-        w.begin(`if pos < tokens.len() && {check}`);
-        w.line("return pos + 1;");
+        let check = ctx.kind_check_str(&firsts, &"tokens[pos].kind");
+        w.begin(&`if pos < tokens.len() && {check}`);
+        w.line(&"return pos + 1;");
         w.end();
-        w.line("return -1;");
+        w.line(&"return -1;");
     } else {
         // `gen_scan_multi_alt` walks every alt body via the op-driven
         // `gen_scan_op_elements_in_block`. Fetch the `scan_alts` from
@@ -557,21 +557,21 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<
 
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
     let mut fa = FnSpec::new(&atom_name);
-    fa.add_param("tokens", "&Array<Token>");
-    fa.add_param("pos", "i32");
-    fa.set_return_type("i32");
+    fa.add_param(&"tokens", &"&Array<Token>");
+    fa.add_param(&"pos", &"i32");
+    fa.set_return_type(&"i32");
     fa.emit_begin(w);
     let mut non_lr_alts: Array<Alternative> = [];
     for let idx of non_lr_indices {
         non_lr_alts.push(rule.alternatives[*idx]);
     }
     if non_lr_alts.len() == 0 {
-        w.line("return -1;");
+        w.line(&"return -1;");
     } else if non_lr_alts.len() == 1 {
-        w.line("let mut pos = pos;");
+        w.line(&"let mut pos = pos;");
         let body = &atom_scan_alts[0];
         gen_scan_op_elements(w, &body.elements, 0, body.elements.len(), ctx, &"return -1;");
-        w.line("return pos;");
+        w.line(&"return pos;");
     } else {
         gen_scan_multi_alt(w, &non_lr_alts, atom_scan_alts, ctx);
     }
@@ -583,19 +583,19 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<
 
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
     let mut f2 = FnSpec::new(fn_name);
-    f2.add_param("tokens", "&Array<Token>");
-    f2.add_param("pos", "i32");
+    f2.add_param(&"tokens", &"&Array<Token>");
+    f2.add_param(&"pos", &"i32");
     f2.add_param_spec(ParamSpec {
         name: "min_prec",
         type_str: "i32",
         default_value: Option::<String>::Some("0"),
     });
-    f2.set_return_type("i32");
+    f2.set_return_type(&"i32");
     f2.emit_begin(w);
-    w.line(`let mut pos = {atom_name}(tokens, pos);`);
-    w.line("if pos < 0 { return -1; }");
+    w.line(&`let mut pos = {atom_name}(tokens, pos);`);
+    w.line(&"if pos < 0 { return -1; }");
     gen_scan_lr_suffix_dispatch(w, rule, lr_alts, lr_dispatch, ctx, fn_name);
-    w.line("return pos;");
+    w.line(&"return pos;");
     w.end();
     w.blank();
 }
@@ -615,11 +615,11 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &A
         let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
 
         let mut f = FnSpec::new(&suffix_fn);
-        f.add_param("tokens", "&Array<Token>");
-        f.add_param("pos", "i32");
-        f.set_return_type("i32");
+        f.add_param(&"tokens", &"&Array<Token>");
+        f.add_param(&"pos", &"i32");
+        f.set_return_type(&"i32");
         f.emit_begin(w);
-        w.line("let mut pos = pos;");
+        w.line(&"let mut pos = pos;");
 
         // Walk lr_alt.scan_suffix.elements (which runs in lockstep
         // with alt.elements[1..] and lr_alt.suffix.ops). Every
@@ -632,7 +632,7 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &A
         for let scan_elem of &lr_alt.scan_suffix.elements {
             gen_scan_op_element(w, scan_elem, ctx, &"return -1;");
         }
-        w.line("return pos;");
+        w.line(&"return pos;");
         w.end();
         w.blank();
     }
@@ -649,8 +649,8 @@ fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &
     let lr_precs = projected.1;
     let suffix_first_sets = projected.2;
 
-    w.begin("loop");
-    w.line("let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };");
+    w.begin(&"loop");
+    w.line(&"let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };");
 
     let mut is_first = true;
     for let mut g = 0; g < lr_dispatch.groups.len(); g += 1 {
@@ -661,12 +661,12 @@ fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &
             dedup_append_arr(&mut union_first, &suffix_first_sets[*idx]);
         }
 
-        let cond = ctx.kind_check_str(&union_first, "suffix_kind");
+        let cond = ctx.kind_check_str(&union_first, &"suffix_kind");
         if is_first {
-            w.begin(`if {cond}`);
+            w.begin(&`if {cond}`);
             is_first = false;
         } else {
-            w.else_begin(`else if {cond}`);
+            w.else_begin(&`else if {cond}`);
         }
 
         if group.len() == 1 {
@@ -689,11 +689,11 @@ fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &
     }
 
     if !is_first {
-        w.else_begin("else");
-        w.line("break;");
+        w.else_begin(&"else");
+        w.line(&"break;");
         w.end();
     } else {
-        w.line("break;");
+        w.line(&"break;");
     }
     w.end();  // loop
 }
@@ -707,12 +707,12 @@ fn gen_scan_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32)
     // the failure as the whole scan failing. ANTLR4's LL(*) prediction
     // achieves the same result at decision time; Gale's first-token dispatch
     // makes the same decision lazily after attempting the suffix.
-    w.begin(`if {prec} >= min_prec`);
-    w.line(`let lr_saved_pos = pos;`);
-    w.line(`pos = {*suffix_fn}(tokens, pos);`);
-    w.line("if pos < 0 { pos = lr_saved_pos; break; }");
-    w.else_begin("else");
-    w.line("break;");
+    w.begin(&`if {prec} >= min_prec`);
+    w.line(&`let lr_saved_pos = pos;`);
+    w.line(&`pos = {*suffix_fn}(tokens, pos);`);
+    w.line(&"if pos < 0 { pos = lr_saved_pos; break; }");
+    w.else_begin(&"else");
+    w.line(&"break;");
     w.end();
 }
 
@@ -751,10 +751,10 @@ fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &Par
                 let prec = lr_precs[group[k]];
                 let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
                 if first_branch {
-                    w.begin(`if suffix_kind == {*tk}`);
+                    w.begin(&`if suffix_kind == {*tk}`);
                     first_branch = false;
                 } else {
-                    w.else_begin(`else if suffix_kind == {*tk}`);
+                    w.else_begin(&`else if suffix_kind == {*tk}`);
                 }
                 gen_scan_lr_call_with_prec(w, &suffix_fn, prec);
                 emitted.insert(*tk);
@@ -781,12 +781,12 @@ fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &Par
     for let mut st = 0; st < shared_tokens.len(); st += 1 {
         let shared_tk = &shared_tokens[st];
         if first_branch {
-            w.begin(`if suffix_kind == {*shared_tk}`);
+            w.begin(&`if suffix_kind == {*shared_tk}`);
             first_branch = false;
         } else {
-            w.else_begin(`else if suffix_kind == {*shared_tk}`);
+            w.else_begin(&`else if suffix_kind == {*shared_tk}`);
         }
-        w.line("let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1].kind } else { TK_EOF };");
+        w.line(&"let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1].kind } else { TK_EOF };");
         let mut sub_first = true;
         let mut last_k = -1;
         for let mut k = 0; k < group.len(); k += 1 {
@@ -806,18 +806,18 @@ fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &Par
                 if sub_first {
                     gen_scan_lr_call_with_prec(w, &suffix_fn, prec);
                 } else {
-                    w.else_begin("else");
+                    w.else_begin(&"else");
                     gen_scan_lr_call_with_prec(w, &suffix_fn, prec);
                     w.end();
                 }
             } else {
                 let second = compute_lr_second_token(shared_tk, &alt.elements, ctx);
-                let sub_cond = ctx.kind_check_str(&second, "second_kind");
+                let sub_cond = ctx.kind_check_str(&second, &"second_kind");
                 if sub_first {
-                    w.begin(`if {sub_cond}`);
+                    w.begin(&`if {sub_cond}`);
                     sub_first = false;
                 } else {
-                    w.else_begin(`else if {sub_cond}`);
+                    w.else_begin(&`else if {sub_cond}`);
                 }
                 gen_scan_lr_call_with_prec(w, &suffix_fn, prec);
             }
@@ -933,20 +933,20 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, scan_alts: 
     }
     sort_group_by_element_count(&mut unguarded_idx, alts);
 
-    w.line("let start = pos;");
-    w.line("let mut pos = pos;");
-    w.line("let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };");
+    w.line(&"let start = pos;");
+    w.line(&"let mut pos = pos;");
+    w.line(&"let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };");
 
-    w.begin("scan_alts:");
+    w.begin(&"scan_alts:");
 
     let mut first_branch = true;
     for let mut g = 0; g < groups_alts.len(); g += 1 {
         let cond = ctx.kind_check_str(&groups_tokens[g], &"alt_kind");
         if first_branch {
-            w.begin(`if {cond}`);
+            w.begin(&`if {cond}`);
             first_branch = false;
         } else {
-            w.else_begin(`else if {cond}`);
+            w.else_begin(&`else if {cond}`);
         }
         emit_scan_partition_body(w, &groups_alts[g], &unguarded_idx, scan_alts, ctx);
     }
@@ -956,20 +956,20 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, scan_alts: 
         if first_branch {
             emit_scan_partition_body(w, &empty_alts, &unguarded_idx, scan_alts, ctx);
         } else {
-            w.else_begin("else");
+            w.else_begin(&"else");
             emit_scan_partition_body(w, &empty_alts, &unguarded_idx, scan_alts, ctx);
             w.end();
         }
     } else if !first_branch {
-        w.else_begin("else");
-        w.line("return -1;");
+        w.else_begin(&"else");
+        w.line(&"return -1;");
         w.end();
     } else {
-        w.line("return -1;");
+        w.line(&"return -1;");
     }
 
     w.end();
-    w.line("return pos;");
+    w.line(&"return pos;");
 }
 
 /// Emit the body of a single partition branch: try `guarded_alts` then
@@ -993,34 +993,34 @@ fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &Array<i32>, ungua
     if total == 1 {
         let i = if guarded_alts.len() == 1 { guarded_alts[0] } else { unguarded_alts[0] };
         let label = `try_{i}`;
-        w.line("pos = start;");
-        w.begin(`{label}:`);
+        w.line(&"pos = start;");
+        w.begin(&`{label}:`);
         let body = &scan_alts[i];
         gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &label);
-        w.line("break scan_alts;");
+        w.line(&"break scan_alts;");
         w.end();
-        w.line("return -1;");
+        w.line(&"return -1;");
         return;
     }
     for let i of guarded_alts {
         let label = `try_{*i}`;
-        w.line("pos = start;");
-        w.begin(`{label}:`);
+        w.line(&"pos = start;");
+        w.begin(&`{label}:`);
         let body = &scan_alts[*i];
         gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &label);
-        w.line("break scan_alts;");
+        w.line(&"break scan_alts;");
         w.end();
     }
     for let i of unguarded_alts {
         let label = `try_{*i}`;
-        w.line("pos = start;");
-        w.begin(`{label}:`);
+        w.line(&"pos = start;");
+        w.begin(&`{label}:`);
         let body = &scan_alts[*i];
         gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &label);
-        w.line("break scan_alts;");
+        w.line(&"break scan_alts;");
         w.end();
     }
-    w.line("return -1;");
+    w.line(&"return -1;");
 }
 
 fn i32_arrays_equal(a: &Array<i32>, b: &Array<i32>) -> bool {
@@ -1084,9 +1084,9 @@ fn gen_scan_lookahead_condition(ctx: &mut GenContext, sig: &Array<Array<String>>
     let mut result = String::with_capacity(128);
     for let mut i = 0; i < parts.len(); i += 1 {
         if i > 0 {
-            result.push_str(" && ");
+            result.push_str(&" && ");
         }
-        result.push_str(parts[i]);
+        result.push_str(&parts[i]);
     }
     return result;
 }
@@ -1097,8 +1097,8 @@ fn gen_scan_lookahead_condition(ctx: &mut GenContext, sig: &Array<Array<String>>
 /// emit reads them verbatim.
 fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContext, fail_stmt: &String, min_prec_override: i32 = 0) {
     if let Token(t) = se {
-        w.line(`if pos >= tokens.len() || tokens[pos].kind != {t.kind} \{ {*fail_stmt} \}`);
-        w.line("pos += 1;");
+        w.line(&`if pos >= tokens.len() || tokens[pos].kind != {t.kind} \{ {*fail_stmt} \}`);
+        w.line(&"pos += 1;");
         return;
     }
     if let RuleCall(rc) = se {
@@ -1119,13 +1119,13 @@ fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContex
         } else {
             min_prec_override;
         };
-        w.line(`pos = {fn_name}(tokens, pos, {min_prec});`);
-        w.line(`if pos < 0 \{ {*fail_stmt} \}`);
+        w.line(&`pos = {fn_name}(tokens, pos, {min_prec});`);
+        w.line(&`if pos < 0 \{ {*fail_stmt} \}`);
         return;
     }
     if let Wildcard = se {
-        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF \{ {*fail_stmt} \}`);
-        w.line("pos += 1;");
+        w.line(&`if pos >= tokens.len() || tokens[pos].kind == TK_EOF \{ {*fail_stmt} \}`);
+        w.line(&"pos += 1;");
         return;
     }
     if let Excluded(e) = se {
@@ -1136,12 +1136,12 @@ fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContex
         let mut check = String::with_capacity(64);
         for let mut i = 0; i < check_parts.len(); i += 1 {
             if i > 0 {
-                check.push_str(" || ");
+                check.push_str(&" || ");
             }
-            check.push_str(check_parts[i]);
+            check.push_str(&check_parts[i]);
         }
-        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ {*fail_stmt} \}`);
-        w.line("pos += 1;");
+        w.line(&`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ {*fail_stmt} \}`);
+        w.line(&"pos += 1;");
         return;
     }
     if let Repeat(re) = se {
@@ -1163,7 +1163,7 @@ fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContex
 /// failed iteration means "skip", not abort.
 fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContext) {
     if let Token(t) = se {
-        w.line(`if pos >= tokens.len() || tokens[pos].kind != {t.kind} \{ pos = -1; \} else \{ pos += 1; \}`);
+        w.line(&`if pos >= tokens.len() || tokens[pos].kind != {t.kind} \{ pos = -1; \} else \{ pos += 1; \}`);
         return;
     }
     if let RuleCall(rc) = se {
@@ -1181,11 +1181,11 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         } else {
             0;
         };
-        w.line(`pos = {fn_name}(tokens, pos, {min_prec});`);
+        w.line(&`pos = {fn_name}(tokens, pos, {min_prec});`);
         return;
     }
     if let Wildcard = se {
-        w.line("if pos >= tokens.len() || tokens[pos].kind == TK_EOF { pos = -1; } else { pos += 1; }");
+        w.line(&"if pos >= tokens.len() || tokens[pos].kind == TK_EOF { pos = -1; } else { pos += 1; }");
         return;
     }
     if let Excluded(e) = se {
@@ -1196,11 +1196,11 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         let mut check = String::with_capacity(64);
         for let mut i = 0; i < check_parts.len(); i += 1 {
             if i > 0 {
-                check.push_str(" || ");
+                check.push_str(&" || ");
             }
-            check.push_str(check_parts[i]);
+            check.push_str(&check_parts[i]);
         }
-        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ pos = -1; \} else \{ pos += 1; \}`);
+        w.line(&`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ pos = -1; \} else \{ pos += 1; \}`);
         return;
     }
     if let Group(ge) = se {
@@ -1252,10 +1252,10 @@ fn k_prefix_match_expr_scan(mask: &Array<Array<String>>, ctx: &mut GenContext) -
     let mut first = true;
     for let p of &parts {
         if !first {
-            condition.push_str(" && ");
+            condition.push_str(&" && ");
         }
         first = false;
-        condition.push_str(*p);
+        condition.push_str(p);
     }
     return condition;
 }
@@ -1310,7 +1310,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
         if effective_first.is_empty() {
             return;
         }
-        let check = ctx.kind_check_str(&effective_first, "tokens[pos].kind");
+        let check = ctx.kind_check_str(&effective_first, &"tokens[pos].kind");
         // K-prefix mask wins: `if pos < len && peek matches first AND
         // NOT k_prefix_match { try iter }`. When `k_match_scan` is
         // empty (no mask), the guard collapses to the regular shape.
@@ -1319,10 +1319,10 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
         } else {
             `pos < tokens.len() && {check} && !({k_match_scan})`;
         };
-        w.begin(`if {guard}`);
-        w.line("let sp = pos;");
+        w.begin(&`if {guard}`);
+        w.line(&"let sp = pos;");
         gen_scan_op_element_assign(w, &re.body, ctx);
-        w.line("if pos < 0 { pos = sp; }");
+        w.line(&"if pos < 0 { pos = sp; }");
         w.end();
         return;
     }
@@ -1330,17 +1330,17 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
         if loop_first.is_empty() {
             return;
         }
-        let check = ctx.kind_check_str(&loop_first, "tokens[pos].kind");
+        let check = ctx.kind_check_str(&loop_first, &"tokens[pos].kind");
         let guard = if k_match_scan.is_empty() {
             `pos < tokens.len() && {check}`;
         } else {
             `pos < tokens.len() && {check} && !({k_match_scan})`;
         };
-        w.begin(`while {guard}`);
-        w.line("let sp = pos;");
+        w.begin(&`while {guard}`);
+        w.line(&"let sp = pos;");
         gen_scan_op_element_assign(w, &re.body, ctx);
-        w.line("if pos < 0 { pos = sp; break; }");
-        w.line("if pos == sp { break; }");
+        w.line(&"if pos < 0 { pos = sp; break; }");
+        w.line(&"if pos == sp { break; }");
         w.end();
         return;
     }
@@ -1350,7 +1350,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
         if loop_first.is_empty() {
             return;
         }
-        let check = ctx.kind_check_str(&loop_first, "tokens[pos].kind");
+        let check = ctx.kind_check_str(&loop_first, &"tokens[pos].kind");
         // Plus's subsequent iters get the K-prefix gate; the mandatory
         // first iter ran above.
         let guard = if k_match_scan.is_empty() {
@@ -1358,11 +1358,11 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
         } else {
             `pos < tokens.len() && {check} && !({k_match_scan})`;
         };
-        w.begin(`while {guard}`);
-        w.line("let sp = pos;");
+        w.begin(&`while {guard}`);
+        w.line(&"let sp = pos;");
         gen_scan_op_element_assign(w, &re.body, ctx);
-        w.line("if pos < 0 { pos = sp; break; }");
-        w.line("if pos == sp { break; }");
+        w.line(&"if pos < 0 { pos = sp; break; }");
+        w.line(&"if pos == sp { break; }");
         w.end();
         return;
     }
@@ -1384,17 +1384,17 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
         let done = `sg_{gc}_done`;
         let save_var = `sg_{gc}_save`;
         if lenient {
-            w.line(`let {save_var} = pos;`);
+            w.line(&`let {save_var} = pos;`);
         }
-        w.begin(`{done}:`);
-        w.begin(`{body}:`);
+        w.begin(&`{done}:`);
+        w.begin(&`{body}:`);
         gen_scan_op_elements_in_block(w, &ge.alts[0].elements, 0, ge.alts[0].elements.len(), ctx, &body);
-        w.line(`break {done};`);
+        w.line(&`break {done};`);
         w.end();
         if lenient {
-            w.line(`pos = {save_var};`);
+            w.line(&`pos = {save_var};`);
         } else {
-            w.line(*fail_stmt);
+            w.line(fail_stmt);
         }
         w.end();
         return;
@@ -1405,7 +1405,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
     let outer = `sg_{gc}`;
     let gp_var = `gp_{gc}`;
     let best_var = `sg_{gc}_best`;
-    w.line(`let {gp_var} = pos;`);
+    w.line(&`let {gp_var} = pos;`);
 
     let n = ge.alts.len();
     let first_sets = &ge.alt_first_sets;
@@ -1441,35 +1441,35 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
     let gate_emitted = lenient && union_first.len() > 0;
     if gate_emitted {
         let sgk_var = `sgk_{gc}`;
-        w.line(`let {sgk_var} = if pos < tokens.len() \{ tokens[pos].kind \} else \{ TK_EOF \};`);
+        w.line(&`let {sgk_var} = if pos < tokens.len() \{ tokens[pos].kind \} else \{ TK_EOF \};`);
         let gate = ctx.kind_check_str(&union_first, &sgk_var);
-        w.begin(`if {gate}`);
+        w.begin(&`if {gate}`);
     }
 
     if any_ambiguous {
-        w.line(`let mut {best_var} = -1;`);
+        w.line(&`let mut {best_var} = -1;`);
     }
 
-    w.begin(`{outer}:`);
+    w.begin(&`{outer}:`);
     for let mut i = 0; i < n; i += 1 {
         let inner = `sg_{gc}_{i}`;
-        w.line(`pos = {gp_var};`);
-        w.begin(`{inner}:`);
+        w.line(&`pos = {gp_var};`);
+        w.begin(&`{inner}:`);
         gen_scan_op_elements_in_block(w, &ge.alts[i].elements, 0, ge.alts[i].elements.len(), ctx, &inner);
         if is_ambiguous[i] {
-            w.line(`if pos > {best_var} \{ {best_var} = pos; \}`);
+            w.line(&`if pos > {best_var} \{ {best_var} = pos; \}`);
         } else {
-            w.line(`break {outer};`);
+            w.line(&`break {outer};`);
         }
         w.end();
     }
     if any_ambiguous {
-        w.line(`if {best_var} >= 0 \{ pos = {best_var}; break {outer}; \}`);
+        w.line(&`if {best_var} >= 0 \{ pos = {best_var}; break {outer}; \}`);
     }
     if lenient {
-        w.line(`pos = {gp_var};`);
+        w.line(&`pos = {gp_var};`);
     } else {
-        w.line(*fail_stmt);
+        w.line(fail_stmt);
     }
     w.end();  // close outer labeled block
 
@@ -1489,16 +1489,16 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
         }
         let cond = gen_scan_lookahead_condition(ctx, sig);
         if is_first {
-            w.begin(`if {cond}`);
+            w.begin(&`if {cond}`);
             is_first = false;
         } else {
-            w.else_begin(`else if {cond}`);
+            w.else_begin(&`else if {cond}`);
         }
         let gc = SCAN_GROUP_COUNTER;
         SCAN_GROUP_COUNTER += 1;
         let shape_label = `sol_{gc}`;
         let fail = `break {shape_label};`;
-        w.begin(`{shape_label}:`);
+        w.begin(&`{shape_label}:`);
         for let elem_se of &ole.bodies[si].elements {
             gen_scan_op_element(w, elem_se, ctx, &fail);
         }
@@ -1570,10 +1570,10 @@ fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule
     }
 
     let mut f = FnSpec::new(fn_name);
-    f.add_param("p", "&mut Parser");
-    f.set_return_type(`Result<{type_name}, ParseError>`);
+    f.add_param(&"p", &"&mut Parser");
+    f.set_return_type(&`Result<{type_name}, ParseError>`);
     f.emit_begin(w);
-    w.line("let start = p.peek().span.start;");
+    w.line(&"let start = p.peek().span.start;");
     let body = rule_alt_body(lowered_rule, 0).unwrap();
     gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], body, ctx);
     w.end();
@@ -1669,10 +1669,10 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
                     let helper_name = `{*fn_name}_bt_{alt_idx}`;
 
                     let mut f = FnSpec::new(&helper_name);
-                    f.add_param("p", "&mut Parser");
-                    f.set_return_type(`Result<{type_name}, ParseError>`);
+                    f.add_param(&"p", &"&mut Parser");
+                    f.set_return_type(&`Result<{type_name}, ParseError>`);
                     f.emit_begin(w);
-                    w.line("let start = p.peek().span.start;");
+                    w.line(&"let start = p.peek().span.start;");
                     let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
                     gen_alt_body(
                         w,
@@ -1703,10 +1703,10 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
     if has_lr {
         let atom_name = `{*fn_name}_atom`;
         let mut f = FnSpec::new(&atom_name);
-        f.add_param("p", "&mut Parser");
-        f.set_return_type(`Result<{type_name}, ParseError>`);
+        f.add_param(&"p", &"&mut Parser");
+        f.set_return_type(&`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
-        w.line("let start = p.peek().span.start;");
+        w.line(&"let start = p.peek().span.start;");
         if has_overlaps {
             gen_multi_alt_body_bt(w, rule, lowered_rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices);
         } else {
@@ -1727,26 +1727,26 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         // Generate parse_rule(p, min_prec = 0) — precedence-aware parser.
         // Callers without a precedence context omit min_prec and get 0.
         let mut f2 = FnSpec::new(fn_name);
-        f2.add_param("p", "&mut Parser");
+        f2.add_param(&"p", &"&mut Parser");
         f2.add_param_spec(ParamSpec {
             name: "min_prec",
             type_str: "i32",
             default_value: Option::<String>::Some("0"),
         });
-        f2.set_return_type(`Result<{type_name}, ParseError>`);
+        f2.set_return_type(&`Result<{type_name}, ParseError>`);
         f2.emit_begin(w);
-        w.line("let start = p.peek().span.start;");
-        w.line(`let mut result = {*fn_name}_atom(p)?;`);
+        w.line(&"let start = p.peek().span.start;");
+        w.line(&`let mut result = {*fn_name}_atom(p)?;`);
         gen_lr_suffix_dispatch(w, rule, &type_name, lr_alts, lr_dispatch, ctx, true, fn_name, scan_fn_name);
-        w.line(`return Result::<{type_name}, ParseError>::Ok(result);`);
+        w.line(&`return Result::<{type_name}, ParseError>::Ok(result);`);
         w.end();
         w.blank();
     } else {
         let mut f = FnSpec::new(fn_name);
-        f.add_param("p", "&mut Parser");
-        f.set_return_type(`Result<{type_name}, ParseError>`);
+        f.add_param(&"p", &"&mut Parser");
+        f.set_return_type(&`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
-        w.line("let start = p.peek().span.start;");
+        w.line(&"let start = p.peek().span.start;");
         if has_overlaps {
             gen_multi_alt_body_bt(w, rule, lowered_rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices);
         } else {
@@ -1763,7 +1763,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
 /// reflects the previous token. Used at every parse-side
 /// rule/variant emit site.
 fn emit_clamped_span_field(w: &mut CodeWriter) {
-    w.line("span: Span::new(start, i32::max(start, p.last_end())),");
+    w.line(&"span: Span::new(start, i32::max(start, p.last_end())),");
 }
 
 fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<String>, struct_name: Option<String>, alt: &Alternative, body: &AltBody, ctx: &mut GenContext) {
@@ -1771,19 +1771,19 @@ fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<Str
 
     if let Some(case) = variant_case {
         let sname = struct_name.unwrap();
-        w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
+        w.line(&`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
         w.indent();
         emit_clamped_span_field(w);
         emit_field_assignments_from_fields(w, &body.fields);
         w.dedent();
-        w.line("}));");
+        w.line(&"}));");
     } else {
-        w.line(`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
+        w.line(&`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
         w.indent();
         emit_clamped_span_field(w);
         emit_field_assignments_from_fields(w, &body.fields);
         w.dedent();
-        w.line("});");
+        w.line(&"});");
     }
 }
 
@@ -1798,7 +1798,7 @@ fn emit_field_assignments_from_fields(w: &mut CodeWriter, fields: &Array<FieldDe
         if let Span = &fields[i].kind {
             continue;
         }
-        w.line(`{fields[i].name},`);
+        w.line(&`{fields[i].name},`);
     }
 }
 
@@ -1842,19 +1842,19 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
 
     if let Some(case) = variant_case {
         let sname = struct_name.unwrap();
-        w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
+        w.line(&`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
         w.indent();
         emit_clamped_span_field(w);
         emit_field_assignments_from_fields(w, &body.fields);
         w.dedent();
-        w.line("}));");
+        w.line(&"}));");
     } else {
-        w.line(`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
+        w.line(&`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
         w.indent();
         emit_clamped_span_field(w);
         emit_field_assignments_from_fields(w, &body.fields);
         w.dedent();
-        w.line("});");
+        w.line(&"});");
     }
 }
 
@@ -1867,7 +1867,7 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
     }
     let depth = find_needed_depth(&all_pos_sets);
 
-    w.line("let kind = p.peek_kind();");
+    w.line(&"let kind = p.peek_kind();");
 
     for let mut i = 0; i < non_lr_indices.len(); i += 1 {
         let alt_idx = non_lr_indices[i];
@@ -1878,9 +1878,9 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
 
         if cond_depth > 0 {
             let cond = build_lookahead_condition(ctx, pos_sets, cond_depth);
-            w.begin(`if {cond}`);
+            w.begin(&`if {cond}`);
         } else {
-            w.begin("scope:");
+            w.begin(&"scope:");
         }
 
         let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
@@ -2054,8 +2054,8 @@ fn op_is_rulecall(op: &Op) -> bool {
 fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     sync_name_counts_for_op_leaf(op, name_counts);
     return match *op {
-        Token(t) => w.line(`let {t.field} = p.expect({t.kind})?;`),
-        Literal(l) => w.line(`let {l.field} = p.expect({l.kind})?;`),
+        Token(t) => w.line(&`let {t.field} = p.expect({t.kind})?;`),
+        Literal(l) => w.line(&`let {l.field} = p.expect({l.kind})?;`),
         RuleCall(r) => {
             let fn_name = if let Some(id) = r.variant_id {
                 `parse_{r.target_snake}__follow_{id}`;
@@ -2069,13 +2069,13 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &
             // trailing self-ref of a prefix LR alt (e.g. `'-' e`) so emit
             // reads a single source.
             if let Some(min_prec) = r.min_prec_arg {
-                w.line(`let {r.field} = {fn_name}(p, {min_prec})?;`);
+                w.line(&`let {r.field} = {fn_name}(p, {min_prec})?;`);
             } else {
-                w.line(`let {r.field} = {fn_name}(p)?;`);
+                w.line(&`let {r.field} = {fn_name}(p)?;`);
             }
         },
-        Wildcard(wop) => w.line(`let {wop.field} = p.match_any()?;`),
-        Excluded(eop) => w.line(`let {eop.field} = {emit_op_excluded_call(eop)}?;`),
+        Wildcard(wop) => w.line(&`let {wop.field} = p.match_any()?;`),
+        Excluded(eop) => w.line(&`let {eop.field} = {emit_op_excluded_call(&eop)}?;`),
         // Non-leaf ops (Repeat / Group / ListLabel) are routed to
         // their own dispatchers by the caller; reaching here means
         // the caller's `op_is_leaf` gate was bypassed.
@@ -2216,15 +2216,15 @@ fn gen_op_absent_optional_field(w: &mut CodeWriter, op: &Op, name_counts: &mut A
         let inner_type = op_field_type(&rep_op.body);
         let _ = dedup_name(&rep_op.field, name_counts);
         match rep_op.kind {
-            Optional => w.line(`let {rep_op.field}: Option<{inner_type}> = null;`),
-            Star | Plus => w.line(`let mut {rep_op.field}: Array<{inner_type}> = [];`),
+            Optional => w.line(&`let {rep_op.field}: Option<{inner_type}> = null;`),
+            Star | Plus => w.line(&`let mut {rep_op.field}: Array<{inner_type}> = [];`),
         }
         return;
     }
     if let ListLabel(ll) = op {
         let inner_type = op_field_type(&ll.inner);
         let _ = dedup_name(&ll.field, name_counts);
-        w.line(`let mut {ll.field}: Array<{inner_type}> = [];`);
+        w.line(&`let mut {ll.field}: Array<{inner_type}> = [];`);
     }
     // Leaves never appear absent — they're always required.
 }
@@ -2257,10 +2257,10 @@ fn unwrap_optional_op(op: &Op) -> &Op with stores[op] {
 fn emit_op_opt_scan_guard_for_group(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) -> String {
     let scan_pos_var = dedup_name(&"opt_scan_pos", name_counts);
     let scan_label = dedup_name(&"opt_scan", name_counts);
-    w.line(`let mut {scan_pos_var}: i32 = -1;`);
-    w.begin(`{scan_label}:`);
-    w.line("let tokens = &p.tokens;");
-    w.line("let mut pos: i32 = p.pos;");
+    w.line(&`let mut {scan_pos_var}: i32 = -1;`);
+    w.begin(&`{scan_label}:`);
+    w.line(&"let tokens = &p.tokens;");
+    w.line(&"let mut pos: i32 = p.pos;");
     let fail = `break {scan_label};`;
     if g_op.scan_alts.len() == 1 {
         let body = &g_op.scan_alts[0];
@@ -2279,7 +2279,7 @@ fn emit_op_opt_scan_guard_for_group(w: &mut CodeWriter, g_op: &GroupOp, g_elem: 
         };
         gen_scan_op_group(w, &scan_elem, ctx, &fail, false);
     }
-    w.line(`{scan_pos_var} = pos;`);
+    w.line(&`{scan_pos_var} = pos;`);
     w.end();
     return scan_pos_var;
 }
@@ -2392,13 +2392,13 @@ fn gate_cond_with_k_prefix(cond: &String, mask: &Array<Array<String>>, ctx: &mut
 /// { null };`. Caller computes the gate condition (`gen_lookahead_condition`,
 /// `body_first_set`, scan-pos check, etc.).
 fn emit_op_storable_optional_with_first(w: &mut CodeWriter, rep_op: &RepeatOp, inner_elem: &Element, ctx: &mut GenContext, opt_field: &String, inner_type: &String, inner_field: &String, cond: &String) {
-    w.begin(`let {*opt_field}: Option<{*inner_type}> = if {*cond}`);
+    w.begin(&`let {*opt_field}: Option<{*inner_type}> = if {*cond}`);
     let mut nc: Array<[String, i32]> = [];
     gen_op_inner_for_storable_repeat(w, rep_op, inner_elem, ctx, &mut nc, &([] as Array<String>));
-    w.line(`Option::<{*inner_type}>::Some({*inner_field})`);
-    w.else_begin("else");
-    w.line("null");
-    w.end_with(";");
+    w.line(&`Option::<{*inner_type}>::Some({*inner_field})`);
+    w.else_begin(&"else");
+    w.line(&"null");
+    w.end_with(&";");
 }
 
 /// Op-driven emit for Optional + non-storable (Transparent) Group.
@@ -2453,7 +2453,7 @@ fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
 /// `if {cond} { /* inline inner alt's elements */ }`. Caller computes
 /// the gate condition.
 fn emit_op_transparent_optional_with_cond(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, cond: &String) {
-    w.begin(`if {*cond}`);
+    w.begin(&`if {*cond}`);
     let mut nc: Array<[String, i32]> = [];
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
@@ -2486,10 +2486,10 @@ fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &Gro
         let cond = gate_cond_with_k_prefix(&gen_lookahead_condition(ctx, &entry.sig), k_prefix_mask, ctx);
 
         if is_first {
-            w.begin(`let {*opt_field}: Option<{*inner_type}> = if {cond}`);
+            w.begin(&`let {*opt_field}: Option<{*inner_type}> = if {cond}`);
             is_first = false;
         } else {
-            w.else_begin(`else if {cond}`);
+            w.else_begin(&`else if {cond}`);
         }
 
         let mut nc: Array<[String, i32]> = [];
@@ -2507,17 +2507,17 @@ fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &Gro
             }
         }
 
-        w.line(`let {sa.field} = {sa.struct_name} \{`);
+        w.line(&`let {sa.field} = {sa.struct_name} \{`);
         w.indent();
         emit_field_assignments_from_fields(w, &body.fields);
         w.dedent();
-        w.line("};");
-        w.line(`Option::<{*inner_type}>::Some({*inner_field})`);
+        w.line(&"};");
+        w.line(&`Option::<{*inner_type}>::Some({*inner_field})`);
     }
     if !is_first {
-        w.else_begin("else");
-        w.line("null");
-        w.end_with(";");
+        w.else_begin(&"else");
+        w.line(&"null");
+        w.end_with(&";");
     }
 }
 
@@ -2540,10 +2540,10 @@ fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &
         let cond = gate_cond_with_k_prefix(&gen_lookahead_condition(ctx, &entry.sig), k_prefix_mask, ctx);
 
         if is_first {
-            w.begin(`if {cond}`);
+            w.begin(&`if {cond}`);
             is_first = false;
         } else {
-            w.else_begin(`else if {cond}`);
+            w.else_begin(&`else if {cond}`);
         }
 
         let mut nc: Array<[String, i32]> = [];
@@ -2680,7 +2680,7 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
 /// surface-side `dedup_name` side-effect.
 fn gen_consume_token_group_op(w: &mut CodeWriter, to: &TokenOnlyShape, alts: &Array<Alternative>, name_counts: &mut Array<[String, i32]>) {
     let _ = dedup_name(&token_group_field_name(alts), name_counts);
-    w.line(`let {to.field} = p.advance();`);
+    w.line(&`let {to.field} = p.advance();`);
 }
 
 /// Single-alt group emit `(e1 e2 …)`: parses each inner element and
@@ -2697,11 +2697,11 @@ fn gen_consume_single_alt_group_op(w: &mut CodeWriter, sa: &SingleAltShape, body
     // / `alt_struct_names` baked by `lower_single_alt_group` under
     // `sa.owner_rule`, so no walker-field swap is needed here.
     gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, outer_follow);
-    w.line(`let {sa.field} = {sa.struct_name} \{`);
+    w.line(&`let {sa.field} = {sa.struct_name} \{`);
     w.indent();
     emit_field_assignments_from_fields(w, &body.fields);
     w.dedent();
-    w.line("};");
+    w.line(&"};");
 }
 
 /// Emit `name+=elem` outside a Repeat: allocate the array, parse the
@@ -2727,10 +2727,10 @@ fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: 
         // through GIR rather than surface `gen_element`.
         sync_name_counts_for_op_list_label(ll, name_counts);
         let inner_type = op_field_type(&ll.inner);
-        w.line(`let mut {ll.field}: Array<{inner_type}> = [];`);
+        w.line(&`let mut {ll.field}: Array<{inner_type}> = [];`);
         let inner_field = op_field(&ll.inner);
         gen_op_group(w, g_op, &lab.element, ctx, name_counts);
-        w.line(`{ll.field}.push({inner_field});`);
+        w.line(&`{ll.field}.push({inner_field});`);
         return;
     }
     if !op_is_leaf(&ll.inner) {
@@ -2742,10 +2742,10 @@ fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: 
     }
     sync_name_counts_for_op_list_label(ll, name_counts);
     let inner_type = op_field_type(&ll.inner);
-    w.line(`let mut {ll.field}: Array<{inner_type}> = [];`);
+    w.line(&`let mut {ll.field}: Array<{inner_type}> = [];`);
     let inner_field = op_field(&ll.inner);
     gen_op_leaf(w, &ll.inner, ctx, name_counts);
-    w.line(`{ll.field}.push({inner_field});`);
+    w.line(&`{ll.field}.push({inner_field});`);
 }
 
 /// Mirror `gen_element`'s Label arm side-effects on `name_counts`:
@@ -2809,9 +2809,9 @@ fn emit_op_excluded_call(e: &ExcludedOp) -> String {
     let mut list = String::with_capacity(32);
     for let mut i = 0; i < e.kinds.len(); i += 1 {
         if i > 0 {
-            list.push_str(", ");
+            list.push_str(&", ");
         }
-        list.push_str(e.kinds[i]);
+        list.push_str(&e.kinds[i]);
     }
     return `p.match_not([{list}])`;
 }
@@ -2820,14 +2820,14 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     if let TokenRef(t) = elem {
         let const_name = `TK_{t.name}`;
         let field_name = dedup_name(&t.field_name, name_counts);
-        w.line(`let {field_name} = p.expect({const_name})?;`);
+        w.line(&`let {field_name} = p.expect({const_name})?;`);
         return;
     }
     if let Literal(l) = elem {
         let const_name = literal_const_name(&l.text);
         let display = `'{l.text}'`;
         let field_name = dedup_name(&literal_field_name(&l.text), name_counts);
-        w.line(`let {field_name} = p.expect({const_name})?;`);
+        w.line(&`let {field_name} = p.expect({const_name})?;`);
         return;
     }
     if let RuleRef(r) = elem {
@@ -2840,18 +2840,18 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         // alts' trailing self-ref is reached via `gen_op_leaf` on
         // `RuleCallOp.min_prec_arg`, so `gen_element` never threads
         // precedence here either.
-        w.line(`let {field_name} = parse_{r.snake_name}(p)?;`);
+        w.line(&`let {field_name} = parse_{r.snake_name}(p)?;`);
         return;
     }
     if let Wildcard(_) = elem {
         let field_name = dedup_name(&"wildcard", name_counts);
-        w.line(`let {field_name} = p.match_any()?;`);
+        w.line(&`let {field_name} = p.match_any()?;`);
         return;
     }
     if let Not(ne) = elem {
         let field_name = dedup_name(&not_element_field_name(&ne.element), name_counts);
         let check = not_match_call(&ne.element);
-        w.line(`let {field_name} = {check}?;`);
+        w.line(&`let {field_name} = {check}?;`);
         return;
     }
     if let Repeat(_) = elem {
@@ -2881,10 +2881,10 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
             // once, and push. Repeats wrap this via gen_repeat below.
             let inner_info = element_field_info(&lab.element);
             let lab_name = dedup_name(&lab.field_name, name_counts);
-            w.line(`let mut {lab_name}: Array<{inner_info.1}> = [];`);
+            w.line(&`let mut {lab_name}: Array<{inner_info.1}> = [];`);
             let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
             gen_element(w, &lab.element, ctx, name_counts);
-            w.line(`{lab_name}.push({predicted_inner});`);
+            w.line(&`{lab_name}.push({predicted_inner});`);
             return;
         }
         // Scalar label `name = element`: parse the inner element with the
@@ -2901,7 +2901,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         let inner_info = element_field_info(&lab.element);
         let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
         gen_element(w, &lab.element, ctx, name_counts);
-        w.line(`let {lab_name} = {predicted_inner};`);
+        w.line(&`let {lab_name} = {predicted_inner};`);
         return;
     }
 }
@@ -2962,11 +2962,11 @@ fn gen_op_repeat_suppressed(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
     let inner_type = op_field_type(&rep_op.body);
     let _ = dedup_name(&rep_op.field, name_counts);
     if let Optional = rep.kind {
-        w.line(`let {rep_op.field}: Option<{inner_type}> = null;`);
+        w.line(&`let {rep_op.field}: Option<{inner_type}> = null;`);
         return;
     }
     if let Star = rep.kind {
-        w.line(`let mut {rep_op.field}: Array<{inner_type}> = [];`);
+        w.line(&`let mut {rep_op.field}: Array<{inner_type}> = [];`);
         return;
     }
 }
@@ -3013,21 +3013,21 @@ fn gen_op_repeat_non_greedy_storable(w: &mut CodeWriter, rep: &RepeatElement, re
     if is_plus {
         let mut nc: Array<[String, i32]> = [];
         gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow_unused);
-        w.line(`let mut {list_field}: Array<{inner_type}> = [{inner_field}];`);
+        w.line(&`let mut {list_field}: Array<{inner_type}> = [{inner_field}];`);
         if *while_cond != "false" {
-            w.begin(`while {*while_cond}`);
+            w.begin(&`while {*while_cond}`);
             let mut nc2: Array<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc2, &iter_follow_unused);
-            w.line(`{list_field}.push({inner_field});`);
+            w.line(&`{list_field}.push({inner_field});`);
             w.end();
         }
     } else {
-        w.line(`let mut {list_field}: Array<{inner_type}> = [];`);
+        w.line(&`let mut {list_field}: Array<{inner_type}> = [];`);
         if *while_cond != "false" {
-            w.begin(`while {*while_cond}`);
+            w.begin(&`while {*while_cond}`);
             let mut nc: Array<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow_unused);
-            w.line(`{list_field}.push({inner_field});`);
+            w.line(&`{list_field}.push({inner_field});`);
             w.end();
         }
     }
@@ -3062,7 +3062,7 @@ fn gen_op_repeat_non_greedy_transparent(w: &mut CodeWriter, rep: &RepeatElement,
         gen_op_group(w, g_op, inner, ctx, &mut nc);
     }
     if *while_cond != "false" {
-        w.begin(`while {*while_cond}`);
+        w.begin(&`while {*while_cond}`);
         let mut nc: Array<[String, i32]> = [];
         gen_op_group(w, g_op, inner, ctx, &mut nc);
         w.end();
@@ -3141,7 +3141,7 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
         // implies `body_has_field == true`, so the defensive
         // `if body_has_field` guard the cascade-dispatch version
         // carried is now redundant; always emit the null binding.
-        w.line(`let {opt_field}: Option<{inner_type}> = null;`);
+        w.line(&`let {opt_field}: Option<{inner_type}> = null;`);
         return;
     }
 
@@ -3152,24 +3152,24 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
     // mask falls through to the regular `first_check` shape.
     let k_prefix_match = k_prefix_match_expr(&rep_op.k_prefix_mask, ctx);
     if !k_prefix_match.is_empty() {
-        w.begin(`let {opt_field}: Option<{inner_type}> = if {k_prefix_match}`);
-        w.line("null");
-        w.else_begin(`else if {ctx.first_check_str(&first)}`);
+        w.begin(&`let {opt_field}: Option<{inner_type}> = if {k_prefix_match}`);
+        w.line(&"null");
+        w.else_begin(&`else if {ctx.first_check_str(&first)}`);
         let mut nc: Array<[String, i32]> = [];
         gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
-        w.line(`Option::<{inner_type}>::Some({inner_field})`);
-        w.else_begin("else");
-        w.line("null");
-        w.end_with(";");
+        w.line(&`Option::<{inner_type}>::Some({inner_field})`);
+        w.else_begin(&"else");
+        w.line(&"null");
+        w.end_with(&";");
         return;
     }
-    w.begin(`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&first)}`);
+    w.begin(&`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&first)}`);
     let mut nc: Array<[String, i32]> = [];
     gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
-    w.line(`Option::<{inner_type}>::Some({inner_field})`);
-    w.else_begin("else");
-    w.line("null");
-    w.end_with(";");
+    w.line(&`Option::<{inner_type}>::Some({inner_field})`);
+    w.else_begin(&"else");
+    w.line(&"null");
+    w.end_with(&";");
 }
 
 /// Greedy Optional whose body is a non-RuleCall leaf (Token / Literal /
@@ -3194,24 +3194,24 @@ fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
     // `gen_op_repeat_optional_rulecall` for the rationale.
     let k_prefix_match = k_prefix_match_expr(&rep_op.k_prefix_mask, ctx);
     if !k_prefix_match.is_empty() {
-        w.begin(`let {opt_field}: Option<{inner_type}> = if {k_prefix_match}`);
-        w.line("null");
-        w.else_begin(`else if {ctx.first_check_str(&loop_first)}`);
+        w.begin(&`let {opt_field}: Option<{inner_type}> = if {k_prefix_match}`);
+        w.line(&"null");
+        w.else_begin(&`else if {ctx.first_check_str(&loop_first)}`);
         let mut nc: Array<[String, i32]> = [];
         gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
-        w.line(`Option::<{inner_type}>::Some({inner_field})`);
-        w.else_begin("else");
-        w.line("null");
-        w.end_with(";");
+        w.line(&`Option::<{inner_type}>::Some({inner_field})`);
+        w.else_begin(&"else");
+        w.line(&"null");
+        w.end_with(&";");
         return;
     }
-    w.begin(`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&loop_first)}`);
+    w.begin(&`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&loop_first)}`);
     let mut nc: Array<[String, i32]> = [];
     gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
-    w.line(`Option::<{inner_type}>::Some({inner_field})`);
-    w.else_begin("else");
-    w.line("null");
-    w.end_with(";");
+    w.line(&`Option::<{inner_type}>::Some({inner_field})`);
+    w.else_begin(&"else");
+    w.line(&"null");
+    w.end_with(&";");
 }
 
 /// Build the boolean expression for the K-token-peek "yield to caller"
@@ -3246,10 +3246,10 @@ fn k_prefix_match_expr(mask: &Array<Array<String>>, ctx: &mut GenContext) -> Str
     let mut first = true;
     for let p of &parts {
         if !first {
-            condition.push_str(" && ");
+            condition.push_str(&" && ");
         }
         first = false;
-        condition.push_str(*p);
+        condition.push_str(p);
     }
     return condition;
 }
@@ -3271,7 +3271,7 @@ fn emit_k_prefix_yield_gate(w: &mut CodeWriter, mask: &Array<Array<String>>, ctx
     if condition.is_empty() {
         return;
     }
-    w.line(`if {condition} \{ break; \}`);
+    w.line(&`if {condition} \{ break; \}`);
 }
 
 /// Greedy `*` / `+` Repeat dispatcher. Splits on `body_shape`:
@@ -3317,18 +3317,18 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
 
     if let Star = rep.kind {
         if rep_op.body_scannable {
-            w.begin("loop");
+            w.begin(&"loop");
             // Mirror `gen_op_repeat_star_plus_storable`'s Star arm: yield
             // to the caller on K-prefix match before the scan guard.
             // No-op for empty mask.
             emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-            w.line(`if {scan_pos} < 0 \{ break; \}`);
+            w.line(&`if {scan_pos} < 0 \{ break; \}`);
             let mut nc: Array<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
             w.end();
         } else {
-            w.begin(`while {ctx.first_check_str(&loop_first)}`);
+            w.begin(&`while {ctx.first_check_str(&loop_first)}`);
             emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let mut nc: Array<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
@@ -3339,16 +3339,16 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
     if let Plus = rep.kind {
         if rep_op.body_scannable {
             let plus_flag = dedup_name(&"_plus_first", name_counts);
-            w.line(`let mut {plus_flag} = true;`);
-            w.begin("loop");
-            w.begin(`if !{plus_flag}`);
+            w.line(&`let mut {plus_flag} = true;`);
+            w.begin(&"loop");
+            w.begin(&`if !{plus_flag}`);
             // Mandatory first iter is unconditional; subsequent iters
             // get the K-prefix yield gate before the scan guard.
             emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-            w.line(`if {scan_pos} < 0 \{ break; \}`);
+            w.line(&`if {scan_pos} < 0 \{ break; \}`);
             w.end();
-            w.line(`{plus_flag} = false;`);
+            w.line(&`{plus_flag} = false;`);
             let mut nc: Array<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
             w.end();
@@ -3358,7 +3358,7 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             // loop. The K-prefix gate goes inside the while loop (after
             // the mandatory first iter ran above).
             gen_op_group(w, g_op, inner, ctx, name_counts);
-            w.begin(`while {ctx.first_check_str(&inner_first)}`);
+            w.begin(&`while {ctx.first_check_str(&inner_first)}`);
             if !rep_op.k_prefix_mask.is_empty() {
                 emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             }
@@ -3393,69 +3393,69 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
     let _ = dedup_name(&list_field, name_counts);
 
     if let Star = rep.kind {
-        w.line(`let mut {list_field}: Array<{inner_type}> = [];`);
+        w.line(&`let mut {list_field}: Array<{inner_type}> = [];`);
         if rep_op.body_scannable {
-            w.begin("loop");
+            w.begin(&"loop");
             // K-prefix yield gate: when the caller's deterministic
             // K-prefix matches at iter entry, exit the loop so the
             // caller can consume those tokens. No-op for empty mask
             // (non-variant body or no K-prefix at this position).
             emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-            w.line(`if {scan_pos} < 0 \{ break; \}`);
+            w.line(&`if {scan_pos} < 0 \{ break; \}`);
             let mut nc: Array<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
-            w.line(`{list_field}.push({inner_field});`);
+            w.line(&`{list_field}.push({inner_field});`);
             w.end();
         } else {
-            w.begin(`while {ctx.first_check_str(&loop_first)}`);
+            w.begin(&`while {ctx.first_check_str(&loop_first)}`);
             // Same K-prefix gate for the non-scannable while loop.
             emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let mut nc: Array<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
-            w.line(`{list_field}.push({inner_field});`);
+            w.line(&`{list_field}.push({inner_field});`);
             w.end();
         }
         return;
     }
 
     if let Plus = rep.kind {
-        w.line(`let mut {list_field}: Array<{inner_type}> = [];`);
+        w.line(&`let mut {list_field}: Array<{inner_type}> = [];`);
         if rep_op.body_scannable {
             let plus_flag = dedup_name(&"_plus_first", name_counts);
-            w.line(`let mut {plus_flag} = true;`);
-            w.begin("loop");
-            w.begin(`if !{plus_flag}`);
+            w.line(&`let mut {plus_flag} = true;`);
+            w.begin(&"loop");
+            w.begin(&`if !{plus_flag}`);
             // Yield to caller if the next K tokens match the caller's
             // deterministic K-prefix (multi-token follow-mask path).
             // No-op when `k_prefix_mask` is empty (non-variant body or
             // caller without a K-prefix at this position).
             emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-            w.line(`if {scan_pos} < 0 \{ break; \}`);
+            w.line(&`if {scan_pos} < 0 \{ break; \}`);
             w.end();
-            w.line(`{plus_flag} = false;`);
+            w.line(&`{plus_flag} = false;`);
             let mut nc: Array<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
-            w.line(`{list_field}.push({inner_field});`);
+            w.line(&`{list_field}.push({inner_field});`);
             w.end();
         } else {
             let plus_flag = dedup_name(&"_plus_first", name_counts);
-            w.line(`let mut {plus_flag} = true;`);
-            w.begin(`while {plus_flag} || {ctx.first_check_str(&inner_first)}`);
+            w.line(&`let mut {plus_flag} = true;`);
+            w.begin(&`while {plus_flag} || {ctx.first_check_str(&inner_first)}`);
             // K-prefix yield gate fires AFTER the mandatory first iter:
             // skip emission while `plus_flag` is still true so the
             // mandatory iter cannot be suppressed. Empty mask emits
             // nothing (the if-block is dead-stripped at codegen).
             if !rep_op.k_prefix_mask.is_empty() {
-                w.begin(`if !{plus_flag}`);
+                w.begin(&`if !{plus_flag}`);
                 emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
                 w.end();
             }
-            w.line(`{plus_flag} = false;`);
+            w.line(&`{plus_flag} = false;`);
             let mut nc: Array<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
-            w.line(`{list_field}.push({inner_field});`);
+            w.line(&`{list_field}.push({inner_field});`);
             w.end();
         }
     }
@@ -3518,7 +3518,7 @@ fn compute_non_greedy_condition(rep_op: &RepeatOp, follow_first: &Array<String>,
         let second_continue = subtract_sets(inner_second_first, follow_second);
         if second_continue.len() > 0 {
             let peek0_cond = ctx.first_check_str(raw_first);
-            let peek1_cond = ctx.kind_check_str(&second_continue, "p.peek_at(1)");
+            let peek1_cond = ctx.kind_check_str(&second_continue, &"p.peek_at(1)");
             return `({peek0_cond}) && ({peek1_cond})`;
         }
     }
@@ -3548,9 +3548,9 @@ fn gen_lookahead_condition(ctx: &mut GenContext, sig: &Array<Array<String>>) -> 
     let mut result = String::with_capacity(128);
     for let mut i = 0; i < parts.len(); i += 1 {
         if i > 0 {
-            result.push_str(" && ");
+            result.push_str(&" && ");
         }
-        result.push_str(parts[i]);
+        result.push_str(&parts[i]);
     }
     return result;
 }
@@ -3593,16 +3593,16 @@ fn emit_rep_scan_guard(w: &mut CodeWriter, scan_inner: &ScanElement, ctx: &mut G
 fn emit_scan_guard_with_prefix(w: &mut CodeWriter, scan_inner: &ScanElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, pos_prefix: &String, label_prefix: &String, require_advance: bool) -> String {
     let scan_pos_var = dedup_name(pos_prefix, name_counts);
     let scan_label = dedup_name(label_prefix, name_counts);
-    w.line(`let mut {scan_pos_var}: i32 = -1;`);
-    w.begin(`{scan_label}:`);
-    w.line("let tokens = &p.tokens;");
-    w.line("let mut pos: i32 = p.pos;");
+    w.line(&`let mut {scan_pos_var}: i32 = -1;`);
+    w.begin(&`{scan_label}:`);
+    w.line(&"let tokens = &p.tokens;");
+    w.line(&"let mut pos: i32 = p.pos;");
     let fail = `break {scan_label};`;
     gen_scan_op_element(w, scan_inner, ctx, &fail);
     if require_advance {
-        w.line(`if pos <= p.pos \{ break {scan_label}; \}`);
+        w.line(&`if pos <= p.pos \{ break {scan_label}; \}`);
     }
-    w.line(`{scan_pos_var} = pos;`);
+    w.line(&`{scan_pos_var} = pos;`);
     w.end();
     return scan_pos_var;
 }
@@ -3623,9 +3623,9 @@ fn not_match_call(inner: &Element) -> String {
             let mut list = String::with_capacity(32);
             for let mut i = 0; i < kinds.len(); i += 1 {
                 if i > 0 {
-                    list.push_str(", ");
+                    list.push_str(&", ");
                 }
-                list.push_str(kinds[i]);
+                list.push_str(&kinds[i]);
             }
             return `p.match_not([{list}])`;
         }
@@ -3687,8 +3687,8 @@ fn rule_ref_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternat
 fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32>, alts: &Array<Alternative>, scan_alts: &Array<ScanBody>, opt_var: &String, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let winner_var = dedup_name(&"gd_winner", name_counts);
     let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
-    w.line(`let mut {winner_var}: i32 = -1;`);
-    w.begin(`{dispatch_label}:`);
+    w.line(&`let mut {winner_var}: i32 = -1;`);
+    w.begin(&`{dispatch_label}:`);
     let last = sorted_group.len() - 1;
     for let mut k = 0; k < sorted_group.len(); k += 1 {
         if k == last {
@@ -3696,13 +3696,13 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32
         }
         let alt_idx = sorted_group[k];
         let scan_label = dedup_name(&"gd_scan", name_counts);
-        w.begin(`{scan_label}:`);
-        w.line("let tokens = &p.tokens;");
-        w.line("let mut pos: i32 = p.pos;");
+        w.begin(&`{scan_label}:`);
+        w.line(&"let tokens = &p.tokens;");
+        w.line(&"let mut pos: i32 = p.pos;");
         let sb = &scan_alts[alt_idx];
         gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
-        w.line(`{winner_var} = {k};`);
-        w.line(`break {dispatch_label};`);
+        w.line(&`{winner_var} = {k};`);
+        w.line(&`break {dispatch_label};`);
         w.end();
     }
     w.end();
@@ -3716,14 +3716,14 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32
             let local_var = r.snake_name;
 
             if k == 0 && !is_last {
-                w.begin(`if {winner_var} == {k}`);
+                w.begin(&`if {winner_var} == {k}`);
             } else if is_last {
-                w.else_begin("else");
+                w.else_begin(&"else");
             } else {
-                w.else_begin(`else if {winner_var} == {k}`);
+                w.else_begin(&`else if {winner_var} == {k}`);
             }
-            w.line(`let {local_var} = {fn_name}(p)?;`);
-            w.line(`{*opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
+            w.line(&`let {local_var} = {fn_name}(p)?;`);
+            w.line(&`{*opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
         }
     }
     w.end();
@@ -3747,11 +3747,11 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
         for let mut g = 0; g < groups.len(); g += 1 {
             let alt_idx = groups[g][0];
             if g == 0 {
-                w.begin(`let {var_name}: {type_name} = if {ctx.first_check_str(&first_sets[alt_idx])}`);
+                w.begin(&`let {var_name}: {type_name} = if {ctx.first_check_str(&first_sets[alt_idx])}`);
             } else if g < groups.len() - 1 {
-                w.else_begin(`else if {ctx.first_check_str(&first_sets[alt_idx])}`);
+                w.else_begin(&`else if {ctx.first_check_str(&first_sets[alt_idx])}`);
             } else {
-                w.else_begin("else");
+                w.else_begin(&"else");
             }
             let body = &g_op_alts[alt_idx];
             if let RuleCall(rc) = &body.ops[0] {
@@ -3761,19 +3761,19 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
                     `parse_{rc.target_snake}`;
                 };
                 let local_var = rc.target_snake;
-                w.line(`let {local_var} = {fn_name}(p)?;`);
-                w.line(`{type_name}::{body.case_name}({local_var})`);
+                w.line(&`let {local_var} = {fn_name}(p)?;`);
+                w.line(&`{type_name}::{body.case_name}({local_var})`);
             } else {
                 panic("gen_consume_group_store_op: SimpleCst alt op is not RuleCall");
             }
         }
-        w.end_with(";");
+        w.end_with(&";");
     } else {
         let opt_var = dedup_name(&`{var_name}_opt`, name_counts);
-        w.line(`let mut {opt_var}: Option<{type_name}> = null;`);
+        w.line(&`let mut {opt_var}: Option<{type_name}> = null;`);
 
         let grp_var = dedup_name(&"grp_kind", name_counts);
-        w.line(`let {grp_var} = p.peek_kind();`);
+        w.line(&`let {grp_var} = p.peek_kind();`);
 
         for let mut g = 0; g < groups.len(); g += 1 {
             let group = &groups[g];
@@ -3785,9 +3785,9 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
 
             let cond = ctx.kind_check_str(&union_first, &grp_var);
             if g == 0 {
-                w.begin(`if {cond}`);
+                w.begin(&`if {cond}`);
             } else {
-                w.else_begin(`else if {cond}`);
+                w.else_begin(&`else if {cond}`);
             }
 
             if group.len() == 1 {
@@ -3800,8 +3800,8 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
                         `parse_{rc.target_snake}`;
                     };
                     let local_var = rc.target_snake;
-                    w.line(`let {local_var} = {fn_name}(p)?;`);
-                    w.line(`{opt_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
+                    w.line(&`let {local_var} = {fn_name}(p)?;`);
+                    w.line(&`{opt_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
                 } else {
                     panic("gen_consume_group_store_op: SimpleCst alt op is not RuleCall");
                 }
@@ -3816,7 +3816,7 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
                     alts,
                     g_op_scan_alts,
                     &opt_var,
-                    type_name,
+                    &type_name,
                     ctx,
                     name_counts,
                 );
@@ -3824,11 +3824,11 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
         }
         w.end();
 
-        w.begin(`if let None = {opt_var}`);
+        w.begin(&`if let None = {opt_var}`);
         let first_alt_name = group_case_name(&alts[0]);
-        w.line(`p.fail("{first_alt_name}")?;`);
+        w.line(&`p.fail("{first_alt_name}")?;`);
         w.end();
-        w.line(`let {var_name} = {opt_var}.unwrap();`);
+        w.line(&`let {var_name} = {opt_var}.unwrap();`);
     }
 }
 
@@ -3853,10 +3853,10 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape
 
     // Use Option wrapper — None when no branch matches (standalone Group).
     let inner_var = dedup_name(&`{var_name}_inner`, name_counts);
-    w.line(`let mut {inner_var}: Option<{type_name}> = null;`);
+    w.line(&`let mut {inner_var}: Option<{type_name}> = null;`);
 
     let grp_var = dedup_name(&"grp_kind", name_counts);
-    w.line(`let {grp_var} = p.peek_kind();`);
+    w.line(&`let {grp_var} = p.peek_kind();`);
 
     for let mut g = 0; g < groups.len(); g += 1 {
         let group = &groups[g];
@@ -3868,9 +3868,9 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape
 
         let cond = ctx.kind_check_str(&union_first, &grp_var);
         if g == 0 {
-            w.begin(`if {cond}`);
+            w.begin(&`if {cond}`);
         } else {
-            w.else_begin(`else if {cond}`);
+            w.else_begin(&`else if {cond}`);
         }
 
         if group.len() == 1 {
@@ -3883,8 +3883,8 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape
                     `parse_{rc.target_snake}`;
                 };
                 let local_var = rc.target_snake;
-                w.line(`let {local_var} = {fn_name}(p)?;`);
-                w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
+                w.line(&`let {local_var} = {fn_name}(p)?;`);
+                w.line(&`{inner_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
             }
         } else {
             let mut sorted_group = group.sorted();
@@ -3897,7 +3897,7 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape
                 alts,
                 g_op_scan_alts,
                 &inner_var,
-                type_name,
+                &type_name,
                 ctx,
                 name_counts,
             );
@@ -3905,13 +3905,13 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape
     }
     w.end();  // if/else if chain
 
-    w.line(`let {var_name} = {inner_var};`);
+    w.line(&`let {var_name} = {inner_var};`);
 }
 
 
 fn gen_consume_token_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let var_name = dedup_name(&token_group_field_name(alts), name_counts);
-    w.line(`let {var_name} = p.advance();`);
+    w.line(&`let {var_name} = p.advance();`);
 }
 
 /// Generate a general group store with Option wrapper (standalone Group in an alternative).
@@ -3940,11 +3940,11 @@ fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: 
         for let mut g = 0; g < groups.len(); g += 1 {
             let alt_idx = groups[g][0];
             if g == 0 {
-                w.begin(`let {var_name}: {type_name} = if {ctx.first_check_str(&first_sets[alt_idx])}`);
+                w.begin(&`let {var_name}: {type_name} = if {ctx.first_check_str(&first_sets[alt_idx])}`);
             } else if g < groups.len() - 1 {
-                w.else_begin(`else if {ctx.first_check_str(&first_sets[alt_idx])}`);
+                w.else_begin(&`else if {ctx.first_check_str(&first_sets[alt_idx])}`);
             } else {
-                w.else_begin("else");
+                w.else_begin(&"else");
             }
             gen_general_alt_construct(
                 w,
@@ -3957,13 +3957,13 @@ fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: 
                 name_counts,
             );
         }
-        w.end_with(";");
+        w.end_with(&";");
     } else {
         let opt_var = dedup_name(&`{var_name}_opt`, name_counts);
-        w.line(`let mut {opt_var}: Option<{type_name}> = null;`);
+        w.line(&`let mut {opt_var}: Option<{type_name}> = null;`);
 
         let grp_var = dedup_name(&"grp_kind", name_counts);
-        w.line(`let {grp_var} = p.peek_kind();`);
+        w.line(&`let {grp_var} = p.peek_kind();`);
 
         for let mut g = 0; g < groups.len(); g += 1 {
             let group = &groups[g];
@@ -3975,9 +3975,9 @@ fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: 
 
             let cond = ctx.kind_check_str(&union_first, &grp_var);
             if g == 0 {
-                w.begin(`if {cond}`);
+                w.begin(&`if {cond}`);
             } else {
-                w.else_begin(`else if {cond}`);
+                w.else_begin(&`else if {cond}`);
             }
 
             if group.len() == 1 {
@@ -4012,10 +4012,10 @@ fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: 
         }
         w.end();
 
-        w.begin(`if let None = {opt_var}`);
-        w.line(`p.fail("group alternative")?;`);
+        w.begin(&`if let None = {opt_var}`);
+        w.line(&`p.fail("group alternative")?;`);
         w.end();
-        w.line(`let {var_name} = {opt_var}.unwrap();`);
+        w.line(&`let {var_name} = {opt_var}.unwrap();`);
     }
 }
 
@@ -4042,10 +4042,10 @@ fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: &GeneralShape, g_
     let groups = compute_overlap_groups(&first_sets);
 
     let inner_var = dedup_name(&`{var_name}_inner`, name_counts);
-    w.line(`let mut {inner_var}: Option<{type_name}> = null;`);
+    w.line(&`let mut {inner_var}: Option<{type_name}> = null;`);
 
     let grp_var = dedup_name(&"grp_kind", name_counts);
-    w.line(`let {grp_var} = p.peek_kind();`);
+    w.line(&`let {grp_var} = p.peek_kind();`);
 
     for let mut g = 0; g < groups.len(); g += 1 {
         let group = &groups[g];
@@ -4057,9 +4057,9 @@ fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: &GeneralShape, g_
 
         let cond = ctx.kind_check_str(&union_first, &grp_var);
         if g == 0 {
-            w.begin(`if {cond}`);
+            w.begin(&`if {cond}`);
         } else {
-            w.else_begin(`else if {cond}`);
+            w.else_begin(&`else if {cond}`);
         }
 
         if group.len() == 1 {
@@ -4094,7 +4094,7 @@ fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: &GeneralShape, g_
     }
     w.end();
 
-    w.line(`let {var_name} = {inner_var};`);
+    w.line(&`let {var_name} = {inner_var};`);
 }
 
 /// Generate a general group store without Option wrapper (required, inside Repeat).
@@ -4104,11 +4104,11 @@ fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &Array<Alternative>
 
     let mut nc: Array<[String, i32]> = [];
     gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as Array<String>));
-    w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
+    w.line(&`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
     w.indent();
     emit_field_assignments_from_fields(w, &body.fields);
     w.dedent();
-    w.line("}));");
+    w.line(&"}));");
 }
 
 /// Parse one alt's elements and return as variant value (for if/else expression).
@@ -4118,11 +4118,11 @@ fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, body
 
     let mut nc: Array<[String, i32]> = [];
     gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as Array<String>));
-    w.line(`{type_name}::Alt{alt_idx}({struct_name} \{`);
+    w.line(&`{type_name}::Alt{alt_idx}({struct_name} \{`);
     w.indent();
     emit_field_assignments_from_fields(w, &body.fields);
     w.dedent();
-    w.line("})");
+    w.line(&"})");
 }
 
 /// First-success-wins scan dispatch wrapper for overlapping general-group
@@ -4177,8 +4177,8 @@ fn general_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternati
 fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, sorted_group: &Array<i32>, type_name: &String, alt_struct_names: &Array<String>, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let winner_var = dedup_name(&"gd_winner", name_counts);
     let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
-    w.line(`let mut {winner_var}: i32 = -1;`);
-    w.begin(`{dispatch_label}:`);
+    w.line(&`let mut {winner_var}: i32 = -1;`);
+    w.begin(&`{dispatch_label}:`);
     let last = sorted_group.len() - 1;
     for let mut k = 0; k < sorted_group.len(); k += 1 {
         if k == last {
@@ -4186,13 +4186,13 @@ fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>
         }
         let alt_idx = sorted_group[k];
         let scan_label = dedup_name(&"gd_scan", name_counts);
-        w.begin(`{scan_label}:`);
-        w.line("let tokens = &p.tokens;");
-        w.line("let mut pos: i32 = p.pos;");
+        w.begin(&`{scan_label}:`);
+        w.line(&"let tokens = &p.tokens;");
+        w.line(&"let mut pos: i32 = p.pos;");
         let sb = &g_op_scan_alts[alt_idx];
         gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
-        w.line(`{winner_var} = {k};`);
-        w.line(`break {dispatch_label};`);
+        w.line(&`{winner_var} = {k};`);
+        w.line(&`break {dispatch_label};`);
         w.end();
     }
     w.end();
@@ -4205,11 +4205,11 @@ fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>
         let is_last = k == last;
 
         if k == 0 && !is_last {
-            w.begin(`if {winner_var} == {k}`);
+            w.begin(&`if {winner_var} == {k}`);
         } else if is_last {
-            w.else_begin("else");
+            w.else_begin(&"else");
         } else {
-            w.else_begin(`else if {winner_var} == {k}`);
+            w.else_begin(&`else if {winner_var} == {k}`);
         }
 
         gen_general_alt_parse_and_store(
@@ -4239,10 +4239,10 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
 
         let mut f = FnSpec::new(&suffix_fn);
-        f.add_param("p", "&mut Parser");
-        f.add_param("left", type_name);
-        f.add_param("start", "i32");
-        f.set_return_type(`Result<{type_name}, ParseError>`);
+        f.add_param(&"p", &"&mut Parser");
+        f.add_param(&"left", type_name);
+        f.add_param(&"start", &"i32");
+        f.set_return_type(&`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
 
         let mut name_counts: Array<[String, i32]> = [];
@@ -4267,11 +4267,11 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                 if rr.name == rule.name {
                     let field_name = dedup_name(&rr.field_name, &mut name_counts);
                     let prec = lookup_baked_min_prec(suffix_op);
-                    w.line(`let {field_name} = {*fn_name}(p, {prec})?;`);
+                    w.line(&`let {field_name} = {*fn_name}(p, {prec})?;`);
                 } else {
                     let elem_fn = `parse_{rr.snake_name}`;
                     let field_name = dedup_name(&rr.field_name, &mut name_counts);
-                    w.line(`let {field_name} = {elem_fn}(p)?;`);
+                    w.line(&`let {field_name} = {elem_fn}(p)?;`);
                 }
             } else if let Label(lab) = elem {
                 // Labeled self-recursive call: use precedence the same way
@@ -4283,13 +4283,13 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                         let lab_name = dedup_name(&lab.field_name, &mut name_counts);
                         let inner_name = dedup_name(&rr.field_name, &mut name_counts);
                         let prec = lookup_baked_min_prec(suffix_op);
-                        w.line(`let {inner_name} = {*fn_name}(p, {prec})?;`);
+                        w.line(&`let {inner_name} = {*fn_name}(p, {prec})?;`);
                         if lab.list {
                             // Type-annotate the local so `[inner]` parses as
                             // `Array<T>` rather than a 1-tuple `[T]`.
-                            w.line(`let {lab_name}: Array<{type_name}> = [{inner_name}];`);
+                            w.line(&`let {lab_name}: Array<{type_name}> = [{inner_name}];`);
                         } else {
-                            w.line(`let {lab_name} = {inner_name};`);
+                            w.line(&`let {lab_name} = {inner_name};`);
                         }
                         continue;
                     }
@@ -4301,7 +4301,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                     gen_consume_token_group(w, alts, ctx, &mut name_counts);
                 } else if is_simple_token_group(alts) {
                     let discard = dedup_name(&"op_tok", &mut name_counts);
-                    w.line(`let {discard} = p.advance();`);
+                    w.line(&`let {discard} = p.advance();`);
                 } else if let Group(g_op) = suffix_op {
                     // Route the LR suffix's nested Group through the
                     // op-driven dispatcher so emit no longer falls
@@ -4340,15 +4340,15 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         }
 
         let first_field = first_binding;
-        w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{lr_alt.case_name}({sname} \{`);
+        w.line(&`return Result::<{type_name}, ParseError>::Ok({type_name}::{lr_alt.case_name}({sname} \{`);
         w.indent();
         emit_clamped_span_field(w);
         if first_is_list_label {
             // Cast so `[left]` matches the `Array<T>` field type rather
             // than the inferred 1-tuple `[T]`.
-            w.line(`{first_field}: [left] as Array<{type_name}>,`);
+            w.line(&`{first_field}: [left] as Array<{type_name}>,`);
         } else {
-            w.line(`{first_field}: left,`);
+            w.line(&`{first_field}: left,`);
         }
         // Suffix field names are baked under the same `name_counts` seed
         // that lower's `lower_lr_alt_suffix` used (the prefix self-ref's
@@ -4356,7 +4356,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         // suffix without re-walking surface IR.
         emit_field_assignments_from_fields(w, &lr_alt.suffix.fields);
         w.dedent();
-        w.line("}));");
+        w.line(&"}));");
 
         w.end();  // fn
         w.blank();
@@ -4436,19 +4436,19 @@ fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, scan_suffix_fn:
     // scan twin first — it has no side effects — and only commit to the
     // (mutating) parse when the scan confirms the suffix would succeed.
     if use_prec {
-        w.begin(`if {prec} >= min_prec`);
-        w.begin(`if {*scan_suffix_fn}(&p.tokens, p.pos) < 0`);
-        w.line("break;");
+        w.begin(&`if {prec} >= min_prec`);
+        w.begin(&`if {*scan_suffix_fn}(&p.tokens, p.pos) < 0`);
+        w.line(&"break;");
         w.end();
-        w.line(`result = {*suffix_fn}(p, result, start)?;`);
-        w.else_begin("else");
-        w.line("break;");
+        w.line(&`result = {*suffix_fn}(p, result, start)?;`);
+        w.else_begin(&"else");
+        w.line(&"break;");
         w.end();
     } else {
-        w.begin(`if {*scan_suffix_fn}(&p.tokens, p.pos) < 0`);
-        w.line("break;");
+        w.begin(&`if {*scan_suffix_fn}(&p.tokens, p.pos) < 0`);
+        w.line(&"break;");
         w.end();
-        w.line(`result = {*suffix_fn}(p, result, start)?;`);
+        w.line(&`result = {*suffix_fn}(p, result, start)?;`);
     }
 }
 
@@ -4487,10 +4487,10 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &
                 let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
                 let scan_suffix_fn = `{*scan_fn_name}_lr_{lr_idx}`;
                 if first_branch {
-                    w.begin(`if suffix_kind == {*tk}`);
+                    w.begin(&`if suffix_kind == {*tk}`);
                     first_branch = false;
                 } else {
-                    w.else_begin(`else if suffix_kind == {*tk}`);
+                    w.else_begin(&`else if suffix_kind == {*tk}`);
                 }
                 gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec);
                 emitted.insert(*tk);
@@ -4517,10 +4517,10 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &
     for let mut st = 0; st < shared_tokens.len(); st += 1 {
         let shared_tk = &shared_tokens[st];
         if first_branch {
-            w.begin(`if suffix_kind == {*shared_tk}`);
+            w.begin(&`if suffix_kind == {*shared_tk}`);
             first_branch = false;
         } else {
-            w.else_begin(`else if suffix_kind == {*shared_tk}`);
+            w.else_begin(&`else if suffix_kind == {*shared_tk}`);
         }
         let mut sub_first = true;
         let mut last_k = -1;
@@ -4542,18 +4542,18 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &
                 if sub_first {
                     gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec);
                 } else {
-                    w.else_begin("else");
+                    w.else_begin(&"else");
                     gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec);
                     w.end();
                 }
             } else {
                 let second = compute_lr_second_token(shared_tk, &alt.elements, ctx);
-                let sub_cond = ctx.kind_check_str(&second, "p.peek_at(1)");
+                let sub_cond = ctx.kind_check_str(&second, &"p.peek_at(1)");
                 if sub_first {
-                    w.begin(`if {sub_cond}`);
+                    w.begin(&`if {sub_cond}`);
                     sub_first = false;
                 } else {
-                    w.else_begin(`else if {sub_cond}`);
+                    w.else_begin(&`else if {sub_cond}`);
                 }
                 gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec);
             }
@@ -4589,8 +4589,8 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
     let lr_precs = projected.1;
     let suffix_first_sets = projected.2;
 
-    w.begin("loop");
-    w.line("let suffix_kind = p.peek_kind();");
+    w.begin(&"loop");
+    w.line(&"let suffix_kind = p.peek_kind();");
 
     let mut is_first = true;
     for let mut g = 0; g < lr_dispatch.groups.len(); g += 1 {
@@ -4601,12 +4601,12 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
             dedup_append_arr(&mut union_first, &suffix_first_sets[*idx]);
         }
 
-        let cond = ctx.kind_check_str(&union_first, "suffix_kind");
+        let cond = ctx.kind_check_str(&union_first, &"suffix_kind");
         if is_first {
-            w.begin(`if {cond}`);
+            w.begin(&`if {cond}`);
             is_first = false;
         } else {
-            w.else_begin(`else if {cond}`);
+            w.else_begin(&`else if {cond}`);
         }
 
         if group.len() == 1 {
@@ -4632,11 +4632,11 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
     }
 
     if !is_first {
-        w.else_begin("else");
-        w.line("break;");
+        w.else_begin(&"else");
+        w.line(&"break;");
         w.end();
     } else {
-        w.line("break;");
+        w.line(&"break;");
     }
     w.end();  // loop
 }
@@ -4649,7 +4649,7 @@ fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &Stri
 fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &Array<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, skip: i32, name_counts: &mut Array<[String, i32]>) {
     if let Leaf(idx) = node {
         if skip == 0 {
-            w.line(`return {*fn_name}_bt_{idx}(p);`);
+            w.line(&`return {*fn_name}_bt_{idx}(p);`);
         } else {
             // Consumed prefix tokens already — inline the remaining alt body.
             let alt = &alts[*idx];
@@ -4722,66 +4722,66 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                     // (ANTLR4-compatible): scan each alt, pick the one
                     // advancing pos the furthest; ties go to the first alt
                     // in grammar order.
-                    w.line("let _sd_tokens = &p.tokens;");
-                    w.line("let _sd_pos = p.pos;");
+                    w.line(&"let _sd_tokens = &p.tokens;");
+                    w.line(&"let _sd_pos = p.pos;");
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
-                        w.line(`let _sd_p_{idx} = {*fn_name}_scan_{idx}(_sd_tokens, _sd_pos);`);
+                        w.line(&`let _sd_p_{idx} = {*fn_name}_scan_{idx}(_sd_tokens, _sd_pos);`);
                     }
-                    w.line("let mut _sd_best_i: i32 = -1;");
-                    w.line("let mut _sd_best_p: i32 = -1;");
+                    w.line(&"let mut _sd_best_i: i32 = -1;");
+                    w.line(&"let mut _sd_best_p: i32 = -1;");
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
-                        w.begin(`if _sd_p_{idx} > _sd_best_p`);
-                        w.line(`_sd_best_p = _sd_p_{idx};`);
-                        w.line(`_sd_best_i = {idx};`);
+                        w.begin(&`if _sd_p_{idx} > _sd_best_p`);
+                        w.line(&`_sd_best_p = _sd_p_{idx};`);
+                        w.line(&`_sd_best_i = {idx};`);
                         w.end();
                     }
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
-                        w.begin(`if _sd_best_i == {idx}`);
-                        w.line(`return {*fn_name}_bt_{idx}(p);`);
+                        w.begin(&`if _sd_best_i == {idx}`);
+                        w.line(&`return {*fn_name}_bt_{idx}(p);`);
                         w.end();
                     }
                     // Fall through: no alt's scan succeeded. Emit error via
                     // the last alt's parse path (which produces a useful
                     // diagnostic).
                     let last_idx = sorted_indices[sorted_indices.len() - 1];
-                    w.line(`return {*fn_name}_bt_{last_idx}(p);`);
+                    w.line(&`return {*fn_name}_bt_{last_idx}(p);`);
                 } else {
                     // Some scans are partial — scan success is a hint,
                     // not a guarantee. Use save/restore with scan guards.
-                    w.line("let saved = p.pos;");
+                    w.line(&"let saved = p.pos;");
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
                         let is_last = i == sorted_indices.len() - 1;
                         if is_last {
-                            w.line(`return {*fn_name}_bt_{idx}(p);`);
+                            w.line(&`return {*fn_name}_bt_{idx}(p);`);
                         } else {
                             let has_scan = alt_has_scan(&alts[idx].elements, ctx);
                             let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
                             if is_full {
                                 // Full scan: success guarantees parse success.
-                                w.begin(`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
-                                w.line(`return {*fn_name}_bt_{idx}(p);`);
+                                w.begin(&`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
+                                w.line(&`return {*fn_name}_bt_{idx}(p);`);
                                 w.end();
                             } else if has_scan {
                                 // Partial scan: try parse, fall through on failure.
-                                w.begin(`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
-                                w.line(`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
-                                w.begin(`if let Err(_) = r_{idx}`);
-                                w.line("p.pos = saved;");
-                                w.else_begin("else");
-                                w.line(`return r_{idx};`);
+                                w.begin(&`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
+                                w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
+                                w.begin(&`if let Err(_) = r_{idx}`);
+                                w.line(&"p.pos = saved;");
+                                w.else_begin(&"else");
+                                w.line(&`return r_{idx};`);
                                 w.end();
                                 w.end();
                             } else {
                                 // No scan: save-and-rewind speculative parse.
-                                w.line(`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
-                                w.begin(`if let Err(_) = r_{idx}`);
-                                w.line("p.pos = saved;");
-                                w.else_begin("else");
-                                w.line(`return r_{idx};`);
+                                w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
+                                w.begin(&`if let Err(_) = r_{idx}`);
+                                w.line(&"p.pos = saved;");
+                                w.else_begin(&"else");
+                                w.line(&`return r_{idx};`);
                                 w.end();
                             }
                         }
@@ -4789,18 +4789,18 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                 }
             } else {
                 // Fallback: save-and-rewind speculative parse pattern.
-                w.line("let saved = p.pos;");
+                w.line(&"let saved = p.pos;");
                 for let mut i = 0; i < sorted_indices.len(); i += 1 {
                     let idx = sorted_indices[i];
                     let is_last = i == sorted_indices.len() - 1;
                     if is_last {
-                        w.line(`return {*fn_name}_bt_{idx}(p);`);
+                        w.line(&`return {*fn_name}_bt_{idx}(p);`);
                     } else {
-                        w.line(`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
-                        w.begin(`if let Err(_) = r_{idx}`);
-                        w.line("p.pos = saved;");
-                        w.else_begin("else");
-                        w.line(`return r_{idx};`);
+                        w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
+                        w.begin(&`if let Err(_) = r_{idx}`);
+                        w.line(&"p.pos = saved;");
+                        w.else_begin(&"else");
+                        w.line(&`return r_{idx};`);
                         w.end();
                     }
                 }
@@ -4818,9 +4818,9 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
             let branch = &d.branches[i];
             let cond = ctx.kind_check_str(&branch.tokens, &check_var);
             if i == 0 {
-                w.begin(`if {cond}`);
+                w.begin(&`if {cond}`);
             } else {
-                w.else_begin(`else if {cond}`);
+                w.else_begin(&`else if {cond}`);
             }
             gen_prediction_code_inner(
                 w,
@@ -4858,7 +4858,7 @@ fn elements_match(consumed: &Element, expected: &Element) -> bool {
 
 fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>) {
     let fn_name = `parse_{rule.snake_name}`;
-    w.line("let kind = p.peek_kind();");
+    w.line(&"let kind = p.peek_kind();");
 
     for let mut g = 0; g < groups.len(); g += 1 {
         let group = &groups[g];
@@ -4867,8 +4867,8 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
             dedup_append_arr(&mut union_first, &first_sets[*idx]);
         }
 
-        let cond = ctx.kind_check_str(&union_first, "kind");
-        w.begin(`if {cond}`);
+        let cond = ctx.kind_check_str(&union_first, &"kind");
+        w.begin(&`if {cond}`);
 
         if group.len() == 1 {
             let alt_idx = non_lr_indices[group[0]];
@@ -4921,12 +4921,12 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar) {
     let fn_name = `parse_{header.snake_name}`;
     let mut f = FnSpec::new("parse");
     f.set_pub();
-    f.add_param("input", "&String");
-    f.set_return_type(`Result<{header.type_name}, ParseError>`);
+    f.add_param(&"input", &"&String");
+    f.set_return_type(&`Result<{header.type_name}, ParseError>`);
     f.emit_begin(w);
-    w.line("let tokens = tokenize(input);");
-    w.line("let mut parser = Parser::new(tokens);");
-    w.line(`return {fn_name}(&mut parser);`);
+    w.line(&"let tokens = tokenize(input);");
+    w.line(&"let mut parser = Parser::new(tokens);");
+    w.line(&`return {fn_name}(&mut parser);`);
     w.end();
     w.blank();
 }
@@ -4967,18 +4967,18 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &
 
 fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &Array<String>) {
     let mut f = FnSpec::new(&`_gale_kind_set_{id}`);
-    f.add_param("k", "i32");
-    f.set_return_type("bool");
+    f.add_param(&"k", &"i32");
+    f.set_return_type(&"bool");
     f.emit_begin(w);
     let mut body = String::with_capacity(64);
-    body.push_str("return k matches { ");
+    body.push_str(&"return k matches { ");
     for let mut i = 0; i < tokens.len(); i += 1 {
         if i > 0 {
-            body.push_str(" | ");
+            body.push_str(&" | ");
         }
-        body.push_str(tokens[i]);
+        body.push_str(&tokens[i]);
     }
-    body.push_str(" };");
+    body.push_str(&" };");
     w.line(&body);
     w.end();
     w.blank();
@@ -4988,11 +4988,11 @@ fn build_lookahead_condition(ctx: &mut GenContext, pos_sets: &Array<Array<String
     let mut cond = String::with_capacity(128);
     for let mut d = 0; d < depth; d += 1 {
         if d > 0 {
-            cond.push_str(" && ");
+            cond.push_str(&" && ");
         }
         let tokens = &pos_sets[d];
         let check_expr = if d == 0 { "kind" } else { `p.peek_at({d})` };
-        cond.push_str(ctx.kind_check_str(tokens, &check_expr));
+        cond.push_str(&ctx.kind_check_str(tokens, &check_expr));
     }
     return cond;
 }
@@ -5005,21 +5005,21 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         dedup_append_arr(&mut expected, &first);
     }
     let msg = escape_string(&`expected {rule.name}`);
-    w.line(`return Result::<{type_name}, ParseError>::Err(ParseError::new(`);
+    w.line(&`return Result::<{type_name}, ParseError>::Err(ParseError::new(`);
     w.indent();
-    w.line(`{msg},`);
-    w.line("p.peek().span,");
-    w.write("[");
+    w.line(&`{msg},`);
+    w.line(&"p.peek().span,");
+    w.write(&"[");
     for let mut i = 0; i < expected.len(); i += 1 {
         if i > 0 {
-            w.write(", ");
+            w.write(&", ");
         }
         let s = escape_string(&expected[i]);
-        w.write(s);
+        w.write(&s);
     }
-    w.write("],\n");
+    w.write(&"],\n");
     w.dedent();
-    w.line("));");
+    w.line(&"));");
 }
 
 fn find_needed_depth(all_position_sets: &Array<Array<Array<String>>>) -> i32 {

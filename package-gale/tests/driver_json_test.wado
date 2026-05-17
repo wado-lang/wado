@@ -21,21 +21,21 @@ fn assert_tree(input: &String, expected: &String) {
 /// Trivia (whitespace, comments) in leading_trivia is emitted as-is.
 fn unparse_xml(node: &CstNode) -> String {
     let mut out = String::with_capacity(256);
-    out.push_str(`<{node.name}>`);
+    out.push_str(&`<{node.name}>`);
     for let child of &node.children {
         if let Token(t) = *child {
             for let trivia of &t.leading_trivia {
                 trivia.text.push_to(&mut out);
             }
             let kind_name = json::token_kind_name(t.kind);
-            out.push_str(`<{kind_name}>`);
+            out.push_str(&`<{kind_name}>`);
             t.text.push_to(&mut out);
-            out.push_str(`</{kind_name}>`);
+            out.push_str(&`</{kind_name}>`);
         } else if let Node(n) = *child {
-            out.push_str(unparse_xml(n));
+            out.push_str(&unparse_xml(&n));
         }
     }
-    out.push_str(`</{node.name}>`);
+    out.push_str(&`</{node.name}>`);
     return out;
 }
 
