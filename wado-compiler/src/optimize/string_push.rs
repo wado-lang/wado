@@ -116,7 +116,18 @@ fn try_split_stmt(expr: &NirExpr, ctx: &Ctx) -> Option<Vec<NirStmt>> {
     if !is_duplicable_receiver(receiver) {
         return None;
     }
-    let NirExprKind::StringLiteral(s) = &args[0].expr.kind else {
+    // After the &String migration, push_str's argument is `&String`. Template
+    // lowering wraps the literal in an explicit `Ref`; source-level
+    // `push_str("...")` relies on the type system's implicit ref to satisfy the
+    // `&String` parameter, so the literal arrives bare. Accept both shapes.
+    let literal_kind = match &args[0].expr.kind {
+        NirExprKind::Unary {
+            op: NirUnaryOp::Ref,
+            expr: inner,
+        } => &inner.kind,
+        other => other,
+    };
+    let NirExprKind::StringLiteral(s) = literal_kind else {
         return None;
     };
     if s.is_empty() || s.len() > MAX_SHORT_PUSH_STR_LEN || !s.is_ascii() {

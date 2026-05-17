@@ -3076,7 +3076,7 @@ a single `array_copy` and do not require the caller to maintain a write offset.
 Append `n` copies of `byte` to this string using array.fill.
 Much faster than a loop for large n (e.g., trailing zeros in large integers).
 
-#### `pub fn push_str(&mut self, other: String)`
+#### `pub fn push_str(&mut self, other: &String)`
 
 Appends another string to this string.
 Grows the string if necessary (O(1) amortized).

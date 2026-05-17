@@ -474,6 +474,17 @@ test "String::push_str" {
     assert builder == "Hello, World!";
 }
 
+// Issue #1105: push_str accepts &String to align with Rust's `&str` borrow
+// and avoid the per-call deep copy of a `String` argument.
+test "String::push_str accepts &String" {
+    let mut builder = String::with_capacity(20);
+    let greeting: String = "Hello, ";
+    let target: String = "World!";
+    builder.push_str(&greeting);
+    builder.push_str(&target);
+    assert builder == "Hello, World!";
+}
+
 test "String::with_capacity starts empty" {
     let s = String::with_capacity(10);
     assert s.len() == 0;
