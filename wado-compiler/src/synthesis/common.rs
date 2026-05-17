@@ -457,13 +457,26 @@ pub fn make_synthetic_method(
     }
 }
 
-/// Build a `f.write_str("text")` statement using Formatter's `write_str` method.
+/// Build a `f.write_str(&"text")` statement using Formatter's `write_str`
+/// method. `Formatter::write_str` takes `&String`, so the literal is
+/// wrapped in an explicit `Ref`; `ref_string_type` is the cached `&String`
+/// type id the caller already produced from `string_type`.
 pub fn write_str_stmt(
     text: impl Into<String>,
     fmt: TirExpr,
     string_type: TypeId,
+    ref_string_type: TypeId,
     span: Span,
 ) -> TirStmt {
+    let literal = TirExpr::new(TirExprKind::StringLiteral(text.into()), string_type, span);
+    let arg = TirExpr::new(
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref,
+            expr: Box::new(literal),
+        },
+        ref_string_type,
+        span,
+    );
     let call = TirExpr::new(
         TirExprKind::method_call(
             Box::new(fmt),
@@ -478,10 +491,7 @@ pub fn write_str_stmt(
                 )),
             },
             vec![],
-            vec![CallArg::new(
-                TirExpr::new(TirExprKind::StringLiteral(text.into()), string_type, span),
-                false,
-            )],
+            vec![CallArg::new(arg, false)],
         ),
         TypeTable::UNIT,
         span,
