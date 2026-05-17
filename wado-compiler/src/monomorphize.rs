@@ -245,10 +245,17 @@ impl Monomorphizer {
         loop {
             let mut made_progress = false;
 
-            // Process one pending function instantiation at a time, and between
-            // each function, drain any struct instantiations its substituted
-            // body just introduced. This ordering is the load-bearing piece of
-            // `function_id_for` injectivity over `project.functions`:
+            // Batch one round of function instantiations before draining the
+            // struct pending. The ordering inside each outer iteration is
+            //
+            //     instantiate all pending functions
+            //     → drain struct pending to fixpoint (once)
+            //     → rewrite each new function's body through the now-stable
+            //       `GenericInstance → Struct` substitutions
+            //     → collect each new function's call sites
+            //
+            // and is the load-bearing piece of `function_id_for` injectivity
+            // over `project.functions`:
             //
             // 1. `instantiate_function` substitutes the function body; for any
             //    `GenericInstance` whose monomorphised `Struct` is not yet
@@ -257,16 +264,17 @@ impl Monomorphizer {
             //    fallback). The body therefore points at `GenericInstance`
             //    `TypeId`s for not-yet-monomorphised types.
             //
-            // 2. We then drain `self.structs.pending` to fixpoint (struct
-            //    monomorphisation of the new `GenericInstance`s, plus any
-            //    recursively triggered structs). After this step
-            //    `self.structs.type_substitutions` covers every
-            //    `GenericInstance → Struct` pair reachable from the body.
+            // 2. Drain `self.structs.pending` (after instantiating the whole
+            //    batch of functions) to fixpoint — struct monomorphisation
+            //    of the new `GenericInstance`s plus any recursively triggered
+            //    structs. After this step `self.structs.type_substitutions`
+            //    covers every `GenericInstance → Struct` pair reachable from
+            //    any body in the batch.
             //
-            // 3. `rewrite_types_in_function` rewrites every `TypeId` in the
-            //    body — including `Call`/`MethodCall::type_args` — through
-            //    `type_substitutions`, so the body is in canonical `Struct`
-            //    form.
+            // 3. `rewrite_types_in_function` rewrites every `TypeId` in each
+            //    new body — including `Call`/`MethodCall::type_args` —
+            //    through `type_substitutions`, so the body is in canonical
+            //    `Struct` form.
             //
             // 4. `collect_function_instantiation_sites` finally walks the
             //    canonicalised body. Every queued `InstantiationKey` carries
@@ -275,13 +283,22 @@ impl Monomorphizer {
             //    `Hash`/`Eq` keys, so `try_queue_function`'s dedupe folds
             //    them by construction and `function_id_for` is injective.
             //
-            // The previous interleaving (drain all functions, then all
-            // structs) ran step 4 before step 2, so any function call
-            // whose argument types referenced a not-yet-monomorphised
-            // `GenericInstance` queued under the `GenericInstance` form;
-            // later siblings of the same call (after struct mono caught up)
-            // queued under the `Struct` form, producing two `TirFunction`s
-            // with the same `function_id_for`.
+            // The previous interleaving (drain all functions while also
+            // collecting their calls, then all structs) ran step 4 before
+            // step 2, so any function call whose argument types referenced a
+            // not-yet-monomorphised `GenericInstance` queued under the
+            // `GenericInstance` form; later siblings of the same call (after
+            // struct mono caught up) queued under the `Struct` form,
+            // producing two `TirFunction`s with the same `function_id_for`.
+            //
+            // Batching (instead of running the struct drain per function)
+            // keeps `collect_instantiation_sites` — an `O(|type_table|)` scan
+            // — at one call per outer iteration rather than one per function,
+            // which is what the previous design's cost profile relied on.
+
+            // Step 1: instantiate every pending function. Defer
+            // rewrite/collect to steps 3/4 once the struct drain has run.
+            let mut batch: Vec<TirFunction> = Vec::new();
             while let Some(key) = self.functions.pending.pop() {
                 let concrete = {
                     let generic_func = generic_functions.get(&key.name);
@@ -297,55 +314,57 @@ impl Monomorphizer {
                     }
                 };
 
-                if let Some(mut concrete) = concrete {
-                    // Step 2: drain newly-discovered struct instantiations
-                    // to fixpoint so every `GenericInstance` in the body
-                    // has a corresponding `Struct` form available.
-                    loop {
-                        self.collect_instantiation_sites(
-                            &module.type_table.borrow(),
-                            &valid_struct_names,
-                        );
-                        if self.structs.pending.is_empty() {
-                            break;
-                        }
-                        while let Some(struct_key) = self.structs.pending.pop() {
-                            let key_pair =
-                                (struct_key.name.clone(), struct_key.module_source.clone());
-                            if let Some(generic_struct) = generic_structs.get(&key_pair)
-                                && let Some(s) = self.instantiate_struct(
-                                    generic_struct,
-                                    &struct_key,
-                                    &mut module.type_table.borrow_mut(),
-                                )
-                            {
-                                module.structs.push(s);
-                            }
-                        }
-                    }
-
-                    // Step 3: rewrite body `TypeId`s through the now-stable
-                    // `GenericInstance → Struct` map.
-                    self.rewrite_types_in_function(
-                        &mut concrete,
-                        &mut module.type_table.borrow_mut(),
-                    );
-
-                    // Step 4: collect function-instantiation sites from the
-                    // canonicalised body.
-                    if let Some(body) = &concrete.body {
-                        let type_table = module.type_table.borrow();
-                        let mut collector = func_inst::InstantiationCollector {
-                            mono: self,
-                            generic_functions: &scannable_generic_functions,
-                            type_table: &type_table,
-                        };
-                        use crate::tir_visitor::TirRefVisitor;
-                        collector.visit_block(body);
-                    }
-                    new_functions.push(Rc::new(RefCell::new(concrete)));
+                if let Some(concrete) = concrete {
+                    batch.push(concrete);
                     made_progress = true;
                 }
+            }
+
+            // Step 2: drain struct pending to fixpoint, once for the whole
+            // batch. `collect_instantiation_sites` scans the type table —
+            // doing it per-function would be `O(N · |type_table|)` and is
+            // the source of the historical compiler-time regression.
+            loop {
+                self.collect_instantiation_sites(
+                    &module.type_table.borrow(),
+                    &valid_struct_names,
+                );
+                if self.structs.pending.is_empty() {
+                    break;
+                }
+                while let Some(struct_key) = self.structs.pending.pop() {
+                    let key_pair =
+                        (struct_key.name.clone(), struct_key.module_source.clone());
+                    if let Some(generic_struct) = generic_structs.get(&key_pair)
+                        && let Some(s) = self.instantiate_struct(
+                            generic_struct,
+                            &struct_key,
+                            &mut module.type_table.borrow_mut(),
+                        )
+                    {
+                        module.structs.push(s);
+                        made_progress = true;
+                    }
+                }
+            }
+
+            // Steps 3 + 4: rewrite each new body, then collect its call sites.
+            for mut concrete in batch {
+                self.rewrite_types_in_function(
+                    &mut concrete,
+                    &mut module.type_table.borrow_mut(),
+                );
+                if let Some(body) = &concrete.body {
+                    let type_table = module.type_table.borrow();
+                    let mut collector = func_inst::InstantiationCollector {
+                        mono: self,
+                        generic_functions: &scannable_generic_functions,
+                        type_table: &type_table,
+                    };
+                    use crate::tir_visitor::TirRefVisitor;
+                    collector.visit_block(body);
+                }
+                new_functions.push(Rc::new(RefCell::new(concrete)));
             }
 
             if !made_progress {
