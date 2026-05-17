@@ -1558,6 +1558,7 @@ fn run() {
         let doubled = x * 2;
         return doubled + x;
     };
+    let direct = (|x: i32| x + 1)(41);
 }
 ",
     );

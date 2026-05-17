@@ -1603,9 +1603,12 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_call(&mut self, c: &CallExpr) {
-        // `self.f(args)` would re-parse as a method call, so a field-access
-        // callee must be parenthesized.
-        let needs_parens = matches!(&c.callee, Expr::FieldAccess(_));
+        // Some callee shapes need parentheses to round-trip:
+        // - `FieldAccess`: `self.f(args)` would re-parse as a method call.
+        // - `Closure`: a closure with an expression body greedily consumes
+        //   the rest of the line, so `|x| x + 1(41)` re-parses as
+        //   `|x| (x + 1(41))` rather than calling the closure.
+        let needs_parens = matches!(&c.callee, Expr::FieldAccess(_) | Expr::Closure(_));
         self.with_parens_if(needs_parens, |s| s.unparse_expr(&c.callee));
         self.unparse_turbofish(&c.type_args);
         self.unparse_call_args(&c.args, c.has_trailing_comma);
