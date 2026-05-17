@@ -760,40 +760,46 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         snapshot: Option<&crate::annotate::Annotated>,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
         let mut result = IndexMap::default();
-        let stdlib_set: IndexSet<ModuleSource> = snapshot
-            .map(crate::stdlib_snapshot::stdlib_sources)
-            .unwrap_or_default();
+        // Per-rehydration memo: maps each cached function `Rc`'s pointer
+        // identity to its per-compile clone, so that aliasing between
+        // `functions` and `generic_functions` within a single stdlib
+        // module is preserved.  Lives across the whole loop so aliases
+        // between distinct stdlib modules (e.g. a generic helper shared
+        // between two `core:prelude/*` modules) are preserved too.
+        let mut fn_remap: IndexMap<
+            *const RefCell<crate::tir::TirFunction>,
+            Rc<RefCell<crate::tir::TirFunction>>,
+        > = IndexMap::default();
 
-        // Insert deep-cloned cached stdlib `TirModule`s first so their
-        // entries appear before per-compile user modules in the result —
-        // matching the iteration order downstream phases relied on
-        // historically (stdlib first, user after).
-        if let Some(snap) = snapshot {
-            let mut fn_remap: IndexMap<
-                *const RefCell<crate::tir::TirFunction>,
-                Rc<RefCell<crate::tir::TirFunction>>,
-            > = IndexMap::default();
-            for (ms, snap_module) in &snap.tir_modules {
-                if stdlib_set.contains(ms) {
-                    result.insert(
-                        ms.clone(),
-                        crate::stdlib_snapshot::rehydrate_tir_module(
-                            snap_module,
-                            &state.type_table,
-                            &mut fn_remap,
-                        ),
-                    );
-                }
-            }
-        }
-
-        // Per-module resolution: build each TirModule using the shared type
-        // table and the annotate-phase decl maps. Errors are emitted to the
-        // logger; we keep going so one broken module doesn't mask others.
+        // Per-module resolution: walk modules in the per-compile
+        // topological order so a `TirModule`'s position in the result map
+        // matches the dependency order downstream phases expect.  For
+        // each module either rehydrate from the snapshot cache (stdlib)
+        // or run the full body-level resolve pass (user code).  Errors
+        // are emitted to the logger; we keep going so one broken module
+        // doesn't mask others.
         let _span = logger.span("resolve/modules");
         for module_source in &state.sorted_sources {
-            if stdlib_set.contains(module_source) {
-                // Served from the snapshot cache above.
+            // Cache hit: deep-clone the cached `TirModule` into the
+            // per-compile shared type table.  Only `Core` / `Wasi` /
+            // `Wasm` variants are eligible — `ModuleSource::EntryPoint`
+            // values compare equal regardless of filename (one entry
+            // per compile), so `snap.tir_modules.get` would otherwise
+            // match the snapshot's synthetic empty entry against the
+            // user's real entry and silently substitute it.
+            if matches!(
+                module_source,
+                ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
+            ) && let Some(snap_module) = snapshot.and_then(|s| s.tir_modules.get(module_source))
+            {
+                result.insert(
+                    module_source.clone(),
+                    crate::stdlib_snapshot::rehydrate_tir_module(
+                        snap_module,
+                        &state.type_table,
+                        &mut fn_remap,
+                    ),
+                );
                 continue;
             }
             let module = modules.get(module_source).expect("module should exist");
