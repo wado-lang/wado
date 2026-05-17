@@ -1,5 +1,7 @@
 # Gale Development Guide
 
+Immutable knowledge and standing rules for developing Gale. Volatile state (current pass/fail numbers, test inventory) lives in CI and the source tree; open work is tracked in [`TODO.md`](./TODO.md); the antlr4 compatibility contract, descriptor-test pipeline, and regeneration commands live in [`antlr4-compatibility.md`](./antlr4-compatibility.md).
+
 ## Overview
 
 Gale is a Wado-native parser generator. See [README.md](./README.md) and [WEP: Gale](../docs/wep-2026-03-02-gale.md) for design context.
@@ -41,7 +43,17 @@ git -C vendor/antlr4 checkout FETCH_HEAD
 git add vendor/antlr4
 ```
 
-### Curated doc index for Gale development
+### Syncing the antlr4 test corpus
+
+The upstream `runtime-testsuite/` ships ~345 descriptors that double as Gale's Stage A / Stage B regression suite. Re-extract them whenever you bump `vendor/antlr4` or edit triage state:
+
+```sh
+package-gale/scripts/extract-antlr4-descriptors.sh
+```
+
+See [`antlr4-compatibility.md`](./antlr4-compatibility.md) for the pipeline mechanics, triage workflow, and how to interpret results.
+
+### Curated doc index
 
 These are the upstream pages that matter most when working on the g4 parser, the lexer/parser code generator, or the runtime. Read them in roughly this order when ramping up.
 
@@ -89,9 +101,22 @@ wado test package-gale/src/codegen_test.wado
 
 ## E2E Test Architecture
 
-Gale has two layers of e2e testing, both driven by `.g4` files in `tests/grammars/`.
+Gale has three test layers, all driven by `.g4` files in `tests/grammars/` plus the upstream descriptor corpus.
 
-### Driver Tests: S-expression Tree Assertions
+### Layer 1: g4 parse tests (`src/g4/integration_test.wado`)
+
+Verify that the g4 parser can parse real-world `.g4` files into `Grammar` IR without errors. Each test uses `#include_str` to load the `.g4` file and calls `parse()`.
+
+```wado
+test "parse JSON.g4" {
+    let input = #include_str("../../tests/grammars/JSON.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "JSON";
+    assert g.parser_rules.len() == 5;
+}
+```
+
+### Layer 2: driver tests (`tests/driver_*_test.wado`)
 
 Driver tests verify generated parsers by parsing real input and checking the CST structure. Each test invokes the generator at compile time via `use ... with { generator: ... }` (Kiln inline invocation), then parses real input and uses `to_string_tree()` for ANTLR4-style S-expression output and `normalize_tree()` to write readable multi-line expected values:
 
@@ -130,62 +155,15 @@ test "tree: nested object with array" {
 - `normalize_tree()` collapses whitespace (preserving quoted strings) so multi-line indented expected values compare correctly with compact single-line output.
 - Both functions are defined in `runtime.wado` and available in all generated parsers.
 
-### Layer 1: G4 Parse Tests (`g4/integration_test.wado`)
+#### Adding a new e2e test grammar
 
-Verify that the g4 parser can parse real-world `.g4` files into `Grammar` IR without errors. Each test uses `#include_str` to load the `.g4` file and calls `parse()`.
-
-```wado
-test "parse JSON.g4" {
-    let input = #include_str("../../tests/grammars/JSON.g4");
-    let g = parse(input).unwrap();
-    assert g.name == "JSON";
-    assert g.parser_rules.len() == 5;
-}
-```
-
-### Test Grammars (`tests/grammars/`)
-
-| File                    | Language     | Notes                                                                     |
-| ----------------------- | ------------ | ------------------------------------------------------------------------- |
-| `JSON.g4`               | JSON         | Combined grammar. Clean (no actions).                                     |
-| `sexpression.g4`        | S-expression | Combined grammar. Clean.                                                  |
-| `calculator.g4`         | Calculator   | Combined grammar. Clean.                                                  |
-| `SQLite.g4`             | SQLite       | Combined grammar. Large, clean.                                           |
-| `css3Lexer.g4`          | CSS3         | Split lexer. Clean.                                                       |
-| `css3Parser.g4`         | CSS3         | Split parser. Clean.                                                      |
-| `HTMLLexer.g4`          | HTML         | Split lexer. Clean.                                                       |
-| `HTMLParser.g4`         | HTML         | Split parser. Clean.                                                      |
-| `ANTLRv4Lexer.g4`       | ANTLR4       | Split lexer. Has action blocks and `superClass`.                          |
-| `ANTLRv4Parser.g4`      | ANTLR4       | Split parser. Clean.                                                      |
-| `RustLexer.g4`          | Rust         | Split lexer. Has semantic predicates and `superClass`.                    |
-| `RustParser.g4`         | Rust         | Split parser. Has semantic predicates and `superClass`.                   |
-| `TypeScriptLexer.g4`    | TypeScript   | Split lexer. Has semantic predicates and `superClass`.                    |
-| `TypeScriptParser.g4`   | TypeScript   | Split parser. Has many semantic predicates and `superClass`.              |
-| `ll_basic.g4`           | LL fixture   | Combined. Tail-greedy `Y?` with required follow `b : Y` — passes (v1 LL). |
-| `ll_nullable_suffix.g4` | LL fixture   | Combined. Like `ll_basic` but next sibling is nullable — `#[TODO]`.       |
-| `ll_multi_alt.g4`       | LL fixture   | Combined. Tail-greedy callee is multi-alt — `#[TODO]`.                    |
-| `ll_lr_atom.g4`         | LL fixture   | Combined. Tail-greedy callee is left-recursive — `#[TODO]`.               |
-| `ll_ctx_follow.g4`      | LL fixture   | Combined. Follow propagation through a passthrough rule — `#[TODO]`.      |
-
-Clean grammars (JSON, sexpression, calculator, SQLite, CSS3, HTML) contain no target-language-dependent elements and should be fully parseable and code-generatable.
-
-Grammars with actions/predicates (ANTLR4, Rust, TypeScript) contain `{...}` action blocks and/or `{...}?` semantic predicates. These must be warned and skipped during parsing. They serve as e2e tests for Gale's ability to consume real-world grammars without manual cleanup.
-
-### Adding a New E2E Test Grammar
-
-1. Add the `.g4` file to `tests/grammars/` (include `// Source:` and `// License:` headers)
-2. Add a parse test in `g4/integration_test.wado`
+1. Add the `.g4` file to `tests/grammars/` (include `// Source:` and `// License:` headers).
+2. Add a parse test in `src/g4/integration_test.wado`.
 3. Add a driver test under `tests/` that imports the grammar via `use ... with { generator: { module: "../src/generator.wado", options: { ... } } }`. The compiler runs Gale on the `.g4` at build time and resolves the `use` against the freshly generated parser.
 
-### Layer 3: ANTLR4 Descriptor Compatibility Tests (`tests/antlr4-compat/`)
+### Layer 3: ANTLR4 descriptor compatibility (`tests/antlr4-compat/`)
 
-A separate, long-lived effort that imports ANTLR4's upstream
-runtime-testsuite descriptors as parse-only Wado tests. Tracked in
-[`antlr4-compatibility.md`](./antlr4-compatibility.md) — read that
-for the stages, the descriptor pipeline, the regeneration commands,
-and the triage workflow. The doc remains the single source of truth
-even after the contract is fully met; the entry here is just a
-pointer.
+The upstream `runtime-testsuite/` is extracted into per-category Wado tests as a long-lived parse / parse-tree regression suite. Tracked in [`antlr4-compatibility.md`](./antlr4-compatibility.md) — read that for the stages, the descriptor pipeline, the regeneration commands, and the triage workflow.
 
 ## Inlined Runtime
 
@@ -202,19 +180,100 @@ pointer.
   save-and-rewind pattern as a structural fallback when scan helpers are
   unavailable; no committed grammar exercises it, but the code is kept
   for malformed-grammar diagnostics.)
+- **Stage C dispatch sites use scan-side first-success-wins** on
+  `sort_group_by_element_count` (longest-first) order. `gen_scan_multi_alt`
+  partitions atom alts by their depth-0 first token before applying
+  first-success-wins inside each partition — that combination is
+  correctness-equivalent to the longest-match tournament for the cases
+  that actually arise (e.g. `expr`'s `column_ref` IDENT vs `function_call`
+  IDENT '(' … ')').
 
-### Migration status (2026-04)
+## LL Prediction
 
-The bt → scan-dispatch migration is complete. `bt_try` and `opt_bt` count
-is 0 across every committed grammar (`sqlite`, `sqlite_highlight`, `rust`,
-`type_script`, `antlrv4`, plus the smaller fixture grammars). Stage C
-dispatch sites use scan-side first-success-wins on
-`sort_group_by_element_count` (longest-first) order, and
-`gen_scan_multi_alt` partitions atom alts by their depth-0 first token
-before applying first-success-wins inside each partition — that
-combination is correctness-equivalent to the longest-match tournament for
-the cases that actually arise (e.g. `expr`'s `column_ref` IDENT vs
-`function_call` IDENT '(' … ')').
+Gale's parser-side prediction is a static FOLLOW-based repair on top
+of SLL: when a `RuleRef R` call site's caller-local FOLLOW set
+intersects `R`'s tail-greedy first set, Gale emits a
+`scan_R__follow_<id>` / `parse_R__follow_<id>` variant whose body
+suppresses the colliding tail-greedy iterations. Variants are emitted
+through the same `gen_parse_fn_named` / `gen_scan_function_named` paths
+the regular rules go through, so multi-alt and left-recursive rules
+get variant emit "for free" under the unified naming scheme
+`__follow_<id>{,_atom,_lr_N,_bt_N}`.
+
+Two complementary mask shapes:
+
+- **1-token mask** (`Array<String>`) — the canonical intersection
+  `tail_greedy_first(rule) ∩ caller_follow`. The variant body's iter
+  dispatch subtracts the mask from `body_first_set`.
+- **K-prefix mask** (`Array<Array<String>>`) — `mask[d]` is the set of
+  caller tokens at input depth `d`. At iter entry, the variant body
+  checks `peek_at(d) ∈ mask[d]` for every depth; on full match it
+  yields to the caller. Admits multi-token-inner `Repeat`s (`(X Y)+`,
+  `(X Y)?`, …) that the 1-token analysis rejects under soundness
+  invariant 1 below. Registered only when the 1-token mask is empty
+  (so the K-prefix path doesn't duplicate variants the 1-token path
+  already covers).
+
+Implementation references:
+
+- `package-gale/src/follow_env.wado` — pure analysis. `FollowEnv`
+  carries the per-rule `tail_greedy` snapshot and the call-graph
+  fixed-point `rule_follow`. No codegen state; consumed read-only.
+- `package-gale/src/gen_context.wado` —
+  `tail_greedy_first_of_rule` / `tail_greedy_k_prefix_of_rule`,
+  `element_is_first_exact`, `deep_suffix_is_first_exact`,
+  `deep_position_first_sets_from`,
+  `compute_call_site_follow_and_mask` /
+  `compute_call_site_k_prefix_mask`,
+  `compute_k_prefix_position_mask`,
+  `intern_follow_variant`, `FollowVariantEntry`.
+- `package-gale/src/parser_gen.wado` — `emit_follow_variant` (single
+  dispatcher behind the fixed-point variant emit loop),
+  `gen_parse_fn_named` / `gen_scan_function_named` (mask-aware
+  body emitters), the LR helpers (`gen_lr_*` / `gen_scan_lr_*`)
+  parameterised by `fn_name`, `ll_match_length`,
+  `k_prefix_match_expr` / `k_prefix_match_expr_scan`,
+  `emit_k_prefix_yield_gate`.
+
+### Soundness invariants
+
+Three invariants must be respected by any future LL-related change.
+Violating them broke real grammars in the past, and the corresponding
+guards are present as inline conservatism with explicit comments at
+each site.
+
+1. **Single-token tail-greedy inner.** Only `Repeat`s whose inner
+   consumes exactly one token per iteration contribute to a rule's
+   1-token `tail_greedy_first` set. Multi-token-inner Repeats can
+   re-enter on the same first token at a deeper position (HTMLParser's
+   `htmlContent` is the canonical example: `((htmlElement | CDATA |
+   htmlComment) htmlChardata?)*` re-enters on TAG_OPEN), so
+   suppressing them by a 1-token follow mask would break legitimate
+   parses. The K-prefix path admits these Repeats because its
+   per-depth gate distinguishes the closing-tag prefix
+   `[TAG_OPEN, '/', TagName]` from the iter prefix
+   `[TAG_OPEN, TagName, …]` structurally.
+
+2. **First-exact deep-nullable suffix.** When a `RuleRef` site's
+   suffix is deep-nullable, its first set may be unioned into the
+   site's caller-follow only if every walked element is
+   `element_is_first_exact` (single-token derived). Multi-element
+   alts (CSS3's `(combinator simpleSelectorSequence ws)*` Star
+   group) over-count: `combinator`'s first includes Space, but
+   suppressing Space at the preceding `ws` strands the runtime on a
+   lone Space.
+
+3. **Variant emit reproduces the callee body faithfully.** All
+   variant emit paths route through `gen_parse_fn_named` /
+   `gen_scan_function_named` with `fn_name` set to
+   `parse_<rule>__follow_<id>` (and analogous helper-name
+   templates). No shrunken-duplicate body emitters; whatever shape
+   the regular path can emit, the variant path emits as well.
+
+Beyond what static FOLLOW + K-prefix can decide, runtime ATN
+simulation is the only complete answer
+(`vendor/antlr4/runtime/Java/src/org/antlr/v4/runtime/atn/ParserATNSimulator.java`).
+Remaining gaps are tracked in [`TODO.md`](./TODO.md).
 
 ## Failed Approaches (Do Not Repeat)
 
@@ -236,23 +295,21 @@ the cases that actually arise (e.g. `expr`'s `column_ref` IDENT vs
 
 **Lessons:**
 
-- Tokens from inside expanded sub-rules cannot be used for prediction at the decision point level
-- To use expansion correctly, the prediction must map expanded tokens back to the decision point's lookahead depth (essentially an ATN simulator)
-- `sll_dedup_by_alt` is too aggressive for expanded configs — alternatives sharing sub-rules get merged
+- Tokens from inside expanded sub-rules cannot be used for prediction at the decision point level.
+- To use expansion correctly, the prediction must map expanded tokens back to the decision point's lookahead depth (essentially an ATN simulator).
+- `sll_dedup_by_alt` is too aggressive for expanded configs — alternatives sharing sub-rules get merged.
 
 ### LL(\*) variant emit — three over-broad attempts (2026-05)
 
-**Goal:** Static-analysis-based one-level LL(\*) repair via per-(rule, follow-mask) `__follow_<id>` variants. See [`antlr4-compatibility.md`'s "Phase 4 (landed)" section](./antlr4-compatibility.md#phase-4-landed--static-analysis-llrepair-via-__follow_id-variants) for the design and `tests/grammars/ll_*.g4` for the regression suite.
+**Goal:** Static-analysis-based one-level LL(\*) repair via per-(rule, follow-mask) `__follow_<id>` variants. Regression suite at `tests/grammars/ll_*.g4`.
 
 **Three attempts that broke real grammars and had to be narrowed back:**
 
 1. **Swapping `alt_sort_priority` 2 ↔ 3 globally** (so multi-element-RuleRef alts beat single-RuleRef alts everywhere). This made `(a b | a) EOF` pick `a b` correctly but broke `LeftRecursion/PrefixAndOtherAlt_*` — `expr : literal | op expr | expr op expr` would try `op expr` before `literal` for input `-1`, committing to a non-LL alt. Fix: keep priority unchanged at the rule level; introduce `sort_group_by_mandatory_count_desc` and use it ONLY at group-level dispatch sites (`gen_consume_group*`, `gen_general_group_store*`, `gen_group_prediction_code_skip` Ambiguous).
 
-2. **Adopting any tail-position Repeat into `tail_greedy_first`** regardless of the inner element shape. This treated HTMLParser's `htmlContent` rule (`htmlChardata? ((htmlElement | CDATA | htmlComment) htmlChardata?)*`) as having tail-greedy = first set of the inner Group, including `TAG_OPEN`. The inner Group's `htmlElement` alt **legitimately** re-enters on `TAG_OPEN`, but the variant's mask suppressed all TAG_OPEN-led iterations, breaking nested-tag parses. Fix: restrict `tail_greedy_first_of_element`'s `Repeat` arm to `Repeat`s whose inner is `element_is_single_token` (single TokenRef / Literal / Wildcard / Not / single-token RuleRef).
+2. **Adopting any tail-position Repeat into `tail_greedy_first`** regardless of the inner element shape. This treated HTMLParser's `htmlContent` rule (`htmlChardata? ((htmlElement | CDATA | htmlComment) htmlChardata?)*`) as having tail-greedy = first set of the inner Group, including `TAG_OPEN`. The inner Group's `htmlElement` alt **legitimately** re-enters on `TAG_OPEN`, but the variant's mask suppressed all TAG_OPEN-led iterations, breaking nested-tag parses. Fix: restrict `tail_greedy_first_of_element`'s `Repeat` arm to `Repeat`s whose inner is `element_is_single_token` (soundness invariant 1 above). The K-prefix mask path admits these Repeats safely via per-depth gating.
 
-3. **Registering variants for any `RuleRef` call site with a non-empty caller-side follow** — including suffix-nullable positions where the local follow propagates the outer rule's follow. This fired on CSS3's `selector : simpleSelectorSequence ws (combinator simpleSelectorSequence ws)*`, where `ws`'s follow at position 1 is `first(combinator) = {Plus, Greater, Tilde, Space}`. The variant suppressed `ws` from consuming Space, leaving Space for the (often-empty) combinator loop and breaking `* { … }` selectors. Fix: `compute_call_site_follow` (the per-position helper baked into `RuleCallOp.variant_id` / `ScanRuleCallElem.variant_id` at lower time) drops the suffix's first set when the tail at `i + 1` is deep-nullable but NOT first-exact, returning only the variant's outer follow. Non-variant bodies pass `outer_follow = []`, so the deep-nullable suffix yields `[]` and no variant fires; variant bodies legitimately propagate the threaded mask through the suffix.
-
-**What remains:** All three guards are committed as inline conservatism with explicit comments at the relevant call sites. The corresponding gaps are catalogued in `TODO.md` and exercised by `tests/grammars/ll_{nullable_suffix,multi_alt,lr_atom,ctx_follow}.g4`.
+3. **Registering variants for any `RuleRef` call site with a non-empty caller-side follow** — including suffix-nullable positions where the local follow propagates the outer rule's follow. This fired on CSS3's `selector : simpleSelectorSequence ws (combinator simpleSelectorSequence ws)*`, where `ws`'s follow at position 1 is `first(combinator) = {Plus, Greater, Tilde, Space}`. The variant suppressed `ws` from consuming Space, leaving Space for the (often-empty) combinator loop and breaking `* { … }` selectors. Fix: `compute_call_site_follow` drops the suffix's first set when the tail at `i + 1` is deep-nullable but NOT first-exact, returning only the variant's outer follow (soundness invariant 2 above).
 
 **Lessons:**
 

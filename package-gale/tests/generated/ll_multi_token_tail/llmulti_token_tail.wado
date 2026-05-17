@@ -1,5 +1,5 @@
-#![generated(by = "local:src/generator.wado", sources = ["../../grammars/SemPredEvalParser/PredFromAltTestedInLoopBack_1.g4"])]
-#![generated(by = "gale", sources = ["T.g4"])]
+#![generated(by = "local:src/generator.wado", sources = ["grammars/ll_multi_token_tail.g4"])]
+#![generated(by = "gale", sources = ["LLMultiTokenTail.g4"])]
 
 /// Span represents a byte range in source text.
 pub struct Span {
@@ -470,42 +470,47 @@ fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
 }
 
 pub enum TokenKind {
-    NL,
+    N,
     X,
+    Y,
+    Z,
+    WS,
     Eof,
     Error,
 }
 
-pub struct FileNode {
+pub struct RNode {
     pub span: Span,
-    pub para: ParaNode,
-    pub para_2: ParaNode,
+    pub a: ANode,
+    pub c: CNode,
     pub eof: Token,
 }
 
-pub struct ParaNode {
-    pub span: Span,
-    pub para_content: ParaContentNode,
-    pub nl: Token,
-    pub nl_2: Token,
+pub struct XYItem {
+    pub x: Token,
+    pub y: Token,
 }
 
-pub struct ParaContentNode {
+pub struct ANode {
     pub span: Span,
-    pub lit_s_or_lit_x_or_nl_list: Array<Token>,
+    pub n: Token,
+    pub x_y_list: Array<XYItem>,
 }
 
-pub struct SNode {
+pub struct CNode {
     pub span: Span,
-    pub lit_s: Token,
+    pub x: Token,
+    pub y: Token,
+    pub z: Token,
 }
 
-global TK_NL: i32 = 0;
+global TK_N: i32 = 0;
 global TK_X: i32 = 1;
-global TK_EOF: i32 = 2;
-global TK_ERROR: i32 = 3;
-global TK_LIT_S: i32 = 4;
-global TK_LIT_X: i32 = 5;
+global TK_Y: i32 = 2;
+global TK_Z: i32 = 3;
+global TK_WS: i32 = 4;
+global TK_EOF: i32 = 5;
+global TK_ERROR: i32 = 6;
 
 struct Lexer {
     chars: Array<char>,
@@ -526,23 +531,51 @@ impl Lexer {
     }
 }
 
-fn try_nl(chars: &Array<char>, start: i32) -> i32 {
+fn try_n(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '\n' { return -1; }
+    if pos >= chars.len() || chars[pos] != 'N' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_lit_s(chars: &Array<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != 's' { return -1; }
-    return pos + 1;
+fn try_x(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'X' { return -1; }
+    pos += 1;
+    return pos;
 }
 
-fn try_lit_x(chars: &Array<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != 'x' { return -1; }
-    return pos + 1;
+fn try_y(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'Y' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_z(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'Z' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_ws(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() { return -1; }
+    if !(false || chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_0 = pos;
+        rep_0: {
+            if pos >= chars.len() { break rep_0; }
+            if !(false || chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { break rep_0; }
+            pos += 1;
+            continue;
+        }
+        pos = rep_saved_0;
+        break;
+    }
+    return pos;
 }
 
 pub fn tokenize(input: &String) -> Array<Token> {
@@ -555,13 +588,21 @@ pub fn tokenize(input: &String) -> Array<Token> {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\n' {
-            end = try_nl(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NL; }
-        } else if first_char == 's' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_S; }
-        } else if first_char == 'x' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_X; }
+        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+            end = try_ws(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WS; }
+        } else if first_char == 'N' {
+            end = try_n(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_N; }
+        } else if first_char == 'X' {
+            end = try_x(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_X; }
+        } else if first_char == 'Y' {
+            end = try_y(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Y; }
+        } else if first_char == 'Z' {
+            end = try_z(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Z; }
         }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
@@ -570,7 +611,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             lexer.pos = start + 1;
         } else {
             let tok_start = start;
-            let is_skip = false;
+            let is_skip = best_kind matches { TK_WS };
             if is_skip {
                 trivia.push(Token::new(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end)));
             } else {
@@ -587,12 +628,13 @@ pub fn tokenize(input: &String) -> Array<Token> {
 
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
-        TK_NL => "NL",
+        TK_N => "N",
         TK_X => "X",
+        TK_Y => "Y",
+        TK_Z => "Z",
+        TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_S => "TK_LIT_S",
-        TK_LIT_X => "TK_LIT_X",
         _ => "Unknown",
     };
 }
@@ -689,73 +731,40 @@ impl Parser {
     }
 }
 
-fn scan_file_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_r(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_para(tokens, pos, 0);
+    pos = scan_a__follow_0(tokens, pos, 0);
     if pos < 0 { return -1; }
-    pos = scan_para(tokens, pos, 0);
+    pos = scan_c(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_para(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_a(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_para_content__follow_0(tokens, pos, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos].kind != TK_NL { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_N { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_NL { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_para_content(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let mut pos = pos;
-    let gp_0 = pos;
-    sg_0: {
-        pos = gp_0;
-        sg_0_0: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { break sg_0_0; }
+    sg_0_done: {
+        sg_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_X { break sg_0; }
             pos += 1;
-            break sg_0;
-        }
-        pos = gp_0;
-        sg_0_1: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_0_1; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_Y { break sg_0; }
             pos += 1;
-            break sg_0;
-        }
-        pos = gp_0;
-        sg_0_2: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_NL { break sg_0_2; }
-            pos += 1;
-            break sg_0;
+            break sg_0_done;
         }
         return -1;
     }
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+    while pos < tokens.len() && tokens[pos].kind == TK_X {
         let sp = pos;
-        let gp_1 = pos;
-        sg_1: {
-            pos = gp_1;
-            sg_1_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { break sg_1_0; }
+        sg_1_done: {
+            sg_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_X { break sg_1; }
                 pos += 1;
-                break sg_1;
-            }
-            pos = gp_1;
-            sg_1_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_1_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_Y { break sg_1; }
                 pos += 1;
-                break sg_1;
-            }
-            pos = gp_1;
-            sg_1_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_NL { break sg_1_2; }
-                pos += 1;
-                break sg_1;
+                break sg_1_done;
             }
             pos = -1;
         }
@@ -765,42 +774,34 @@ fn scan_para_content(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn scan_s(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_c(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_X { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Y { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Z { return -1; }
     pos += 1;
     return pos;
 }
 
-fn parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
+fn parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
     let start = p.peek().span.start;
-    let para = parse_para(p)?;
-    let para_2 = parse_para(p)?;
+    let a = parse_a__follow_0(p)?;
+    let c = parse_c(p)?;
     let eof = p.expect(TK_EOF)?;
-    return Result::<FileNode, ParseError>::Ok(FileNode {
+    return Result::<RNode, ParseError>::Ok(RNode {
         span: Span::new(start, i32::max(start, p.last_end())),
-        para,
-        para_2,
+        a,
+        c,
         eof,
     });
 }
 
-fn parse_para(p: &mut Parser) -> Result<ParaNode, ParseError> {
+fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
-    let para_content = parse_para_content__follow_0(p)?;
-    let nl = p.expect(TK_NL)?;
-    let nl_2 = p.expect(TK_NL)?;
-    return Result::<ParaNode, ParseError>::Ok(ParaNode {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        para_content,
-        nl,
-        nl_2,
-    });
-}
-
-fn parse_para_content(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
-    let start = p.peek().span.start;
-    let mut lit_s_or_lit_x_or_nl_list: Array<Token> = [];
+    let n = p.expect(TK_N)?;
+    let mut x_y_list: Array<XYItem> = [];
     let mut _plus_first = true;
     loop {
         if !_plus_first {
@@ -808,25 +809,13 @@ fn parse_para_content(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
             rep_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                let gp_2 = pos;
-                sg_2: {
-                    pos = gp_2;
-                    sg_2_0: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { break sg_2_0; }
+                sg_2_done: {
+                    sg_2: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_X { break sg_2; }
                         pos += 1;
-                        break sg_2;
-                    }
-                    pos = gp_2;
-                    sg_2_1: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_2_1; }
+                        if pos >= tokens.len() || tokens[pos].kind != TK_Y { break sg_2; }
                         pos += 1;
-                        break sg_2;
-                    }
-                    pos = gp_2;
-                    sg_2_2: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_NL { break sg_2_2; }
-                        pos += 1;
-                        break sg_2;
+                        break sg_2_done;
                     }
                     break rep_scan;
                 }
@@ -836,69 +825,57 @@ fn parse_para_content(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let lit_s_or_lit_x_or_nl = p.advance();
-        lit_s_or_lit_x_or_nl_list.push(lit_s_or_lit_x_or_nl);
+        let x = p.expect(TK_X)?;
+        let y = p.expect(TK_Y)?;
+        let x_y = XYItem {
+            x,
+            y,
+        };
+        x_y_list.push(x_y);
     }
-    return Result::<ParaContentNode, ParseError>::Ok(ParaContentNode {
+    return Result::<ANode, ParseError>::Ok(ANode {
         span: Span::new(start, i32::max(start, p.last_end())),
-        lit_s_or_lit_x_or_nl_list,
+        n,
+        x_y_list,
     });
 }
 
-fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
+fn parse_c(p: &mut Parser) -> Result<CNode, ParseError> {
     let start = p.peek().span.start;
-    let lit_s = p.expect(TK_LIT_S)?;
-    return Result::<SNode, ParseError>::Ok(SNode {
+    let x = p.expect(TK_X)?;
+    let y = p.expect(TK_Y)?;
+    let z = p.expect(TK_Z)?;
+    return Result::<CNode, ParseError>::Ok(CNode {
         span: Span::new(start, i32::max(start, p.last_end())),
-        lit_s,
+        x,
+        y,
+        z,
     });
 }
 
-fn scan_para_content__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_a__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    let gp_3 = pos;
-    sg_3: {
-        pos = gp_3;
-        sg_3_0: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { break sg_3_0; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_N { return -1; }
+    pos += 1;
+    sg_3_done: {
+        sg_3: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_X { break sg_3; }
             pos += 1;
-            break sg_3;
-        }
-        pos = gp_3;
-        sg_3_1: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_3_1; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_Y { break sg_3; }
             pos += 1;
-            break sg_3;
-        }
-        pos = gp_3;
-        sg_3_2: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_NL { break sg_3_2; }
-            pos += 1;
-            break sg_3;
+            break sg_3_done;
         }
         return -1;
     }
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !((pos + 0 < tokens.len() && tokens[pos + 0].kind == TK_NL) && (pos + 1 < tokens.len() && tokens[pos + 1].kind == TK_NL)) {
+    while pos < tokens.len() && tokens[pos].kind == TK_X && !((pos + 0 < tokens.len() && tokens[pos + 0].kind == TK_X) && (pos + 1 < tokens.len() && tokens[pos + 1].kind == TK_Y) && (pos + 2 < tokens.len() && tokens[pos + 2].kind == TK_Z) && (pos + 3 < tokens.len() && tokens[pos + 3].kind == TK_EOF)) {
         let sp = pos;
-        let gp_4 = pos;
-        sg_4: {
-            pos = gp_4;
-            sg_4_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { break sg_4_0; }
+        sg_4_done: {
+            sg_4: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_X { break sg_4; }
                 pos += 1;
-                break sg_4;
-            }
-            pos = gp_4;
-            sg_4_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_4_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_Y { break sg_4; }
                 pos += 1;
-                break sg_4;
-            }
-            pos = gp_4;
-            sg_4_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_NL { break sg_4_2; }
-                pos += 1;
-                break sg_4;
+                break sg_4_done;
             }
             pos = -1;
         }
@@ -908,36 +885,25 @@ fn scan_para_content__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 
     return pos;
 }
 
-fn parse_para_content__follow_0(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
+fn parse_a__follow_0(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
-    let mut lit_s_or_lit_x_or_nl_list: Array<Token> = [];
+    let n = p.expect(TK_N)?;
+    let mut x_y_list: Array<XYItem> = [];
     let mut _plus_first = true;
     loop {
         if !_plus_first {
-            if p.peek_kind() == TK_NL && p.peek_at(1) == TK_NL { break; }
+            if p.peek_kind() == TK_X && p.peek_at(1) == TK_Y && p.peek_at(2) == TK_Z && p.peek_at(3) == TK_EOF { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                let gp_5 = pos;
-                sg_5: {
-                    pos = gp_5;
-                    sg_5_0: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { break sg_5_0; }
+                sg_5_done: {
+                    sg_5: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_X { break sg_5; }
                         pos += 1;
-                        break sg_5;
-                    }
-                    pos = gp_5;
-                    sg_5_1: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_5_1; }
+                        if pos >= tokens.len() || tokens[pos].kind != TK_Y { break sg_5; }
                         pos += 1;
-                        break sg_5;
-                    }
-                    pos = gp_5;
-                    sg_5_2: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_NL { break sg_5_2; }
-                        pos += 1;
-                        break sg_5;
+                        break sg_5_done;
                     }
                     break rep_scan;
                 }
@@ -947,58 +913,56 @@ fn parse_para_content__follow_0(p: &mut Parser) -> Result<ParaContentNode, Parse
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let lit_s_or_lit_x_or_nl = p.advance();
-        lit_s_or_lit_x_or_nl_list.push(lit_s_or_lit_x_or_nl);
+        let x = p.expect(TK_X)?;
+        let y = p.expect(TK_Y)?;
+        let x_y = XYItem {
+            x,
+            y,
+        };
+        x_y_list.push(x_y);
     }
-    return Result::<ParaContentNode, ParseError>::Ok(ParaContentNode {
+    return Result::<ANode, ParseError>::Ok(ANode {
         span: Span::new(start, i32::max(start, p.last_end())),
-        lit_s_or_lit_x_or_nl_list,
+        n,
+        x_y_list,
     });
 }
 
-pub fn parse(input: &String) -> Result<FileNode, ParseError> {
+pub fn parse(input: &String) -> Result<RNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_file_(&mut parser);
+    return parse_r(&mut parser);
 }
 
-pub fn walk_file_<V: Visitor>(v: &mut V, node: &FileNode) {
-    v.enter_rule(&"file_", &node.span);
-    walk_para(v, &node.para);
-    walk_para(v, &node.para_2);
+pub fn walk_r<V: Visitor>(v: &mut V, node: &RNode) {
+    v.enter_rule(&"r", &node.span);
+    walk_a(v, &node.a);
+    walk_c(v, &node.c);
     v.visit_token(&node.eof);
-    v.exit_rule(&"file_", &node.span);
+    v.exit_rule(&"r", &node.span);
 }
 
-pub fn walk_para<V: Visitor>(v: &mut V, node: &ParaNode) {
-    v.enter_rule(&"para", &node.span);
-    walk_paraContent(v, &node.para_content);
-    v.visit_token(&node.nl);
-    v.visit_token(&node.nl_2);
-    v.exit_rule(&"para", &node.span);
-}
-
-pub fn walk_paraContent<V: Visitor>(v: &mut V, node: &ParaContentNode) {
-    v.enter_rule(&"paraContent", &node.span);
-    for let item of &node.lit_s_or_lit_x_or_nl_list {
-        v.visit_token(item);
+pub fn walk_a<V: Visitor>(v: &mut V, node: &ANode) {
+    v.enter_rule(&"a", &node.span);
+    v.visit_token(&node.n);
+    for let item of &node.x_y_list {
+        v.visit_token(&item.x);
+        v.visit_token(&item.y);
     }
-    v.exit_rule(&"paraContent", &node.span);
+    v.exit_rule(&"a", &node.span);
 }
 
-pub fn walk_s<V: Visitor>(v: &mut V, node: &SNode) {
-    v.enter_rule(&"s", &node.span);
-    v.visit_token(&node.lit_s);
-    v.exit_rule(&"s", &node.span);
+pub fn walk_c<V: Visitor>(v: &mut V, node: &CNode) {
+    v.enter_rule(&"c", &node.span);
+    v.visit_token(&node.x);
+    v.visit_token(&node.y);
+    v.visit_token(&node.z);
+    v.exit_rule(&"c", &node.span);
 }
 
-pub fn to_tree(node: &FileNode) -> CstNode {
+pub fn to_tree(node: &RNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
-    walk_file_(&mut recorder, node);
+    walk_r(&mut recorder, node);
     return recorder.build();
-}
-
-fn _gale_kind_set_0(k: i32) -> bool {
-    return k matches { TK_LIT_S | TK_LIT_X | TK_NL };
 }
 

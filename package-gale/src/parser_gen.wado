@@ -1223,6 +1223,43 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
 /// Per-call-site `variant_id` comes from the lower-baked
 /// `ScanRuleCallElem`, so the dispatcher does not need to thread an
 /// outer call-follow through the body.
+/// Scan-side mirror of [`k_prefix_match_expr`]: builds the K-token
+/// peek expression in the `tokens[pos…]` form scan helpers use.
+/// Returns `""` when the mask is empty so callers skip emission.
+fn k_prefix_match_expr_scan(mask: &Array<Array<String>>, ctx: &mut GenContext) -> String {
+    if mask.is_empty() {
+        return "";
+    }
+    let mut parts: Array<String> = [];
+    for let mut d = 0; d < mask.len(); d += 1 {
+        let depth_set = &mask[d];
+        if depth_set.is_empty() {
+            continue;
+        }
+        // Bounds check at every depth: the variant body's gate ran in a
+        // parse context where `peek_at(d)` returns `TK_EOF` past the
+        // end; the scan form has no such fall-through, so we require
+        // `pos + d < tokens.len()`.
+        let bounds = `pos + {d} < tokens.len()`;
+        let peek_expr = `tokens[pos + {d}].kind`;
+        let depth_check = ctx.kind_check_str(depth_set, &peek_expr);
+        parts.push(`({bounds} && {depth_check})`);
+    }
+    if parts.is_empty() {
+        return "";
+    }
+    let mut condition = String::with_capacity(64);
+    let mut first = true;
+    for let p of &parts {
+        if !first {
+            condition.push_str(" && ");
+        }
+        first = false;
+        condition.push_str(*p);
+    }
+    return condition;
+}
+
 fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenContext, fail_stmt: &String) {
     // Suppressed: mask covers all of the inner's first set — no
     // iterations possible.
@@ -1240,6 +1277,14 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
     } else {
         re.inner_first;
     };
+
+    // K-prefix yield gate: when the caller's deterministic K-prefix
+    // matches at this scan position, the scan must stop (mirroring
+    // parse-side `gen_op_repeat_optional_*` / `gen_op_repeat_star_plus_storable`),
+    // otherwise the scan tournament that picks the calling rule's alt
+    // would over-count this Repeat and reject the alt that actually
+    // matches.
+    let k_match_scan = k_prefix_match_expr_scan(&re.k_prefix_mask, ctx);
 
     if let Optional = re.kind {
         // OptionalLookahead doesn't reach this path (it's a
@@ -1266,7 +1311,15 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
             return;
         }
         let check = ctx.kind_check_str(&effective_first, "tokens[pos].kind");
-        w.begin(`if pos < tokens.len() && {check}`);
+        // K-prefix mask wins: `if pos < len && peek matches first AND
+        // NOT k_prefix_match { try iter }`. When `k_match_scan` is
+        // empty (no mask), the guard collapses to the regular shape.
+        let guard = if k_match_scan.is_empty() {
+            `pos < tokens.len() && {check}`;
+        } else {
+            `pos < tokens.len() && {check} && !({k_match_scan})`;
+        };
+        w.begin(`if {guard}`);
         w.line("let sp = pos;");
         gen_scan_op_element_assign(w, &re.body, ctx);
         w.line("if pos < 0 { pos = sp; }");
@@ -1278,7 +1331,12 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
             return;
         }
         let check = ctx.kind_check_str(&loop_first, "tokens[pos].kind");
-        w.begin(`while pos < tokens.len() && {check}`);
+        let guard = if k_match_scan.is_empty() {
+            `pos < tokens.len() && {check}`;
+        } else {
+            `pos < tokens.len() && {check} && !({k_match_scan})`;
+        };
+        w.begin(`while {guard}`);
         w.line("let sp = pos;");
         gen_scan_op_element_assign(w, &re.body, ctx);
         w.line("if pos < 0 { pos = sp; break; }");
@@ -1293,7 +1351,14 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
             return;
         }
         let check = ctx.kind_check_str(&loop_first, "tokens[pos].kind");
-        w.begin(`while pos < tokens.len() && {check}`);
+        // Plus's subsequent iters get the K-prefix gate; the mandatory
+        // first iter ran above.
+        let guard = if k_match_scan.is_empty() {
+            `pos < tokens.len() && {check}`;
+        } else {
+            `pos < tokens.len() && {check} && !({k_match_scan})`;
+        };
+        w.begin(`while {guard}`);
         w.line("let sp = pos;");
         gen_scan_op_element_assign(w, &re.body, ctx);
         w.line("if pos < 0 { pos = sp; break; }");
@@ -2249,7 +2314,7 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
             &opt_field,
             &inner_type,
             &inner_field,
-            &gen_lookahead_condition(ctx, &s.sig),
+            &gate_cond_with_k_prefix(&gen_lookahead_condition(ctx, &s.sig), &rep_op.k_prefix_mask, ctx),
         ),
         OptionalShapeLookahead(s) => emit_op_optional_with_shape_lookahead_storable(
             w,
@@ -2261,6 +2326,7 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
             &opt_field,
             &inner_type,
             &inner_field,
+            &rep_op.k_prefix_mask,
         ),
         OptionalScanGuard => {
             let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
@@ -2272,7 +2338,7 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
                 &opt_field,
                 &inner_type,
                 &inner_field,
-                &`{scan_pos_var} >= 0`,
+                &gate_cond_with_k_prefix(&`{scan_pos_var} >= 0`, &rep_op.k_prefix_mask, ctx),
             );
         },
         // `pick_optional_specialised` returned `null` and lower fell
@@ -2287,7 +2353,7 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
             &opt_field,
             &inner_type,
             &inner_field,
-            &ctx.first_check_str(&rep_op.body_first_set),
+            &gate_cond_with_k_prefix(&ctx.first_check_str(&rep_op.body_first_set), &rep_op.k_prefix_mask, ctx),
         ),
         WithFollowSubtraction(s) => emit_op_storable_optional_with_first(
             w,
@@ -2297,7 +2363,7 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
             &opt_field,
             &inner_type,
             &inner_field,
-            &ctx.first_check_str(&s.effective_first),
+            &gate_cond_with_k_prefix(&ctx.first_check_str(&s.effective_first), &rep_op.k_prefix_mask, ctx),
         ),
         // Suppressed / NonGreedy / Suppressed are caught upstream;
         // reaching here is a lower-side bug.
@@ -2305,6 +2371,20 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
             "gen_op_storable_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
         ),
     };
+}
+
+/// Wrap a raw entry condition with the K-prefix yield gate. The result
+/// is `!(K_match) && (cond)` when the mask is non-empty (so the
+/// Optional only fires when the caller's deterministic K-prefix does
+/// NOT match at this position), or the unchanged `cond` otherwise.
+/// Mirrors the parse-side `gen_op_repeat_optional_*` wrapping used for
+/// leaf bodies but for the Group-bodied Optional emit paths.
+fn gate_cond_with_k_prefix(cond: &String, mask: &Array<Array<String>>, ctx: &mut GenContext) -> String {
+    let k_match = k_prefix_match_expr(mask, ctx);
+    if k_match.is_empty() {
+        return *cond;
+    }
+    return `!({k_match}) && ({*cond})`;
 }
 
 /// Shared body of every storable-Optional + Group arm: emit a single
@@ -2338,20 +2418,30 @@ fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
             s,
             ctx,
             name_counts,
+            &rep_op.k_prefix_mask,
         ),
-        OptionalLookahead(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gen_lookahead_condition(
+        OptionalLookahead(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_k_prefix(
+            &gen_lookahead_condition(ctx, &s.sig),
+            &rep_op.k_prefix_mask,
             ctx,
-            &s.sig,
         )),
         OptionalScanGuard => {
             let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
-            emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &`{scan_pos_var} >= 0`);
+            emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_k_prefix(
+                &`{scan_pos_var} >= 0`,
+                &rep_op.k_prefix_mask,
+                ctx,
+            ));
         },
-        Plain => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &ctx.first_check_str(
-            &rep_op.body_first_set,
+        Plain => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_k_prefix(
+            &ctx.first_check_str(&rep_op.body_first_set),
+            &rep_op.k_prefix_mask,
+            ctx,
         )),
-        WithFollowSubtraction(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &ctx.first_check_str(
-            &s.effective_first,
+        WithFollowSubtraction(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_k_prefix(
+            &ctx.first_check_str(&s.effective_first),
+            &rep_op.k_prefix_mask,
+            ctx,
         )),
         Suppressed | NonGreedy(_) => panic(
             "gen_op_transparent_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
@@ -2379,7 +2469,7 @@ fn emit_op_transparent_optional_with_cond(w: &mut CodeWriter, g_op: &GroupOp, g_
 /// (`gen_op_dispatch_element` / `gen_op_absent_optional_field`), and
 /// the struct construction reads `body.fields` (lower's canonical
 /// field list).
-fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, opt_field: &String, inner_type: &String, inner_field: &String) {
+fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, opt_field: &String, inner_type: &String, inner_field: &String, k_prefix_mask: &Array<Array<String>>) {
     let sa = if let SingleAlt(sas) = &g_op.shape {
         sas;
     } else {
@@ -2390,7 +2480,10 @@ fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &Gro
     let elements = &alt.elements;
     let mut is_first = true;
     for let entry of &s.shapes {
-        let cond = gen_lookahead_condition(ctx, &entry.sig);
+        // K-prefix gate: every shape's entry condition must yield to
+        // the caller when the deterministic K-prefix matches, so wrap
+        // each entry's condition with `!(K_match) && (cond)`.
+        let cond = gate_cond_with_k_prefix(&gen_lookahead_condition(ctx, &entry.sig), k_prefix_mask, ctx);
 
         if is_first {
             w.begin(`let {*opt_field}: Option<{*inner_type}> = if {cond}`);
@@ -2434,14 +2527,17 @@ fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &Gro
 /// `unwrap_optional` / `unwrap_optional_op` so the inner parse is
 /// dispatched directly at the unwrapped op shape (the shape already
 /// promised the optional fires). No struct construction.
-fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, k_prefix_mask: &Array<Array<String>>) {
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
     let elements = &alt.elements;
 
     let mut is_first = true;
     for let entry of &s.shapes {
-        let cond = gen_lookahead_condition(ctx, &entry.sig);
+        // K-prefix gate: every shape entry's condition must yield to
+        // the caller when the deterministic K-prefix matches, so wrap
+        // each entry's condition with `!(K_match) && (cond)`.
+        let cond = gate_cond_with_k_prefix(&gen_lookahead_condition(ctx, &entry.sig), k_prefix_mask, ctx);
 
         if is_first {
             w.begin(`if {cond}`);
@@ -3050,6 +3146,23 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
     }
 
     let inner_field = op_field(&rep_op.body);
+    // Multi-token follow-mask gate: when the caller's deterministic
+    // K-prefix matches at this position, yield to caller (null) so the
+    // Optional body doesn't swallow tokens the caller needs. Empty
+    // mask falls through to the regular `first_check` shape.
+    let k_prefix_match = k_prefix_match_expr(&rep_op.k_prefix_mask, ctx);
+    if !k_prefix_match.is_empty() {
+        w.begin(`let {opt_field}: Option<{inner_type}> = if {k_prefix_match}`);
+        w.line("null");
+        w.else_begin(`else if {ctx.first_check_str(&first)}`);
+        let mut nc: Array<[String, i32]> = [];
+        gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
+        w.line(`Option::<{inner_type}>::Some({inner_field})`);
+        w.else_begin("else");
+        w.line("null");
+        w.end_with(";");
+        return;
+    }
     w.begin(`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&first)}`);
     let mut nc: Array<[String, i32]> = [];
     gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
@@ -3077,6 +3190,21 @@ fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
     let _ = dedup_name(&opt_field, name_counts);
     let inner_field = op_field(&rep_op.body);
 
+    // Same K-prefix gate as the RuleCall arm — see
+    // `gen_op_repeat_optional_rulecall` for the rationale.
+    let k_prefix_match = k_prefix_match_expr(&rep_op.k_prefix_mask, ctx);
+    if !k_prefix_match.is_empty() {
+        w.begin(`let {opt_field}: Option<{inner_type}> = if {k_prefix_match}`);
+        w.line("null");
+        w.else_begin(`else if {ctx.first_check_str(&loop_first)}`);
+        let mut nc: Array<[String, i32]> = [];
+        gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
+        w.line(`Option::<{inner_type}>::Some({inner_field})`);
+        w.else_begin("else");
+        w.line("null");
+        w.end_with(";");
+        return;
+    }
     w.begin(`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&loop_first)}`);
     let mut nc: Array<[String, i32]> = [];
     gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
@@ -3084,6 +3212,66 @@ fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
     w.else_begin("else");
     w.line("null");
     w.end_with(";");
+}
+
+/// Build the boolean expression for the K-token-peek "yield to caller"
+/// gate. `mask[d]` is the set of valid caller tokens at depth `d`;
+/// the resulting expression is the AND of per-depth set-membership
+/// checks. Returns `""` when the mask is empty (so callers can skip
+/// the gate entirely).
+///
+/// Used by both the loop-style emit (`emit_k_prefix_yield_gate`,
+/// which wraps this in `if {expr} { break; }`) and the Optional
+/// emit (`gen_op_repeat_optional_*`, which threads this into the
+/// `if … { Some(...) } else { null }` conditional).
+fn k_prefix_match_expr(mask: &Array<Array<String>>, ctx: &mut GenContext) -> String {
+    if mask.is_empty() {
+        return "";
+    }
+    let mut parts: Array<String> = [];
+    for let mut d = 0; d < mask.len(); d += 1 {
+        let depth_set = &mask[d];
+        if depth_set.is_empty() {
+            // An empty depth set means "no constraint at this depth";
+            // skipping it keeps the conjunction sound.
+            continue;
+        }
+        let peek_str = if d == 0 { "p.peek_kind()" } else { `p.peek_at({d})` };
+        parts.push(ctx.kind_check_str(depth_set, &peek_str));
+    }
+    if parts.is_empty() {
+        return "";
+    }
+    let mut condition = String::with_capacity(64);
+    let mut first = true;
+    for let p of &parts {
+        if !first {
+            condition.push_str(" && ");
+        }
+        first = false;
+        condition.push_str(*p);
+    }
+    return condition;
+}
+
+/// Emit a K-token-peek "yield to caller" gate at a Repeat's per-iter
+/// dispatch site. When non-empty, `mask[d]` is the set of valid caller
+/// tokens at depth `d`; the variant body breaks the loop when the next
+/// `mask.len()` tokens all match (per-depth set membership), letting
+/// the caller's deterministic K-prefix consume them instead.
+///
+/// Generalises the existing single-token mask subtraction
+/// (`subtract_sets(body_first_set, position_mask)`) to multi-token
+/// continuations — closes the multi-token tail-greedy gap (TODO.md)
+/// without disturbing the K=1 path: a `mask` of `[]` skips emission
+/// entirely, and a single-depth mask reduces to the same `peek_kind`
+/// check the existing subtraction encodes implicitly via `if first`.
+fn emit_k_prefix_yield_gate(w: &mut CodeWriter, mask: &Array<Array<String>>, ctx: &mut GenContext) {
+    let condition = k_prefix_match_expr(mask, ctx);
+    if condition.is_empty() {
+        return;
+    }
+    w.line(`if {condition} \{ break; \}`);
 }
 
 /// Greedy `*` / `+` Repeat dispatcher. Splits on `body_shape`:
@@ -3130,6 +3318,10 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
     if let Star = rep.kind {
         if rep_op.body_scannable {
             w.begin("loop");
+            // Mirror `gen_op_repeat_star_plus_storable`'s Star arm: yield
+            // to the caller on K-prefix match before the scan guard.
+            // No-op for empty mask.
+            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(`if {scan_pos} < 0 \{ break; \}`);
             let mut nc: Array<[String, i32]> = [];
@@ -3137,6 +3329,7 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             w.end();
         } else {
             w.begin(`while {ctx.first_check_str(&loop_first)}`);
+            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let mut nc: Array<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
             w.end();
@@ -3149,6 +3342,9 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             w.line(`let mut {plus_flag} = true;`);
             w.begin("loop");
             w.begin(`if !{plus_flag}`);
+            // Mandatory first iter is unconditional; subsequent iters
+            // get the K-prefix yield gate before the scan guard.
+            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(`if {scan_pos} < 0 \{ break; \}`);
             w.end();
@@ -3159,9 +3355,13 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
         } else {
             // Plus + non-scannable + no-field: emit the first iteration
             // explicitly (no `_plus_first` flag) and then a `while first`
-            // loop.
+            // loop. The K-prefix gate goes inside the while loop (after
+            // the mandatory first iter ran above).
             gen_op_group(w, g_op, inner, ctx, name_counts);
             w.begin(`while {ctx.first_check_str(&inner_first)}`);
+            if !rep_op.k_prefix_mask.is_empty() {
+                emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+            }
             let mut nc: Array<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
             w.end();
@@ -3196,6 +3396,11 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
         w.line(`let mut {list_field}: Array<{inner_type}> = [];`);
         if rep_op.body_scannable {
             w.begin("loop");
+            // K-prefix yield gate: when the caller's deterministic
+            // K-prefix matches at iter entry, exit the loop so the
+            // caller can consume those tokens. No-op for empty mask
+            // (non-variant body or no K-prefix at this position).
+            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(`if {scan_pos} < 0 \{ break; \}`);
             let mut nc: Array<[String, i32]> = [];
@@ -3204,6 +3409,8 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             w.end();
         } else {
             w.begin(`while {ctx.first_check_str(&loop_first)}`);
+            // Same K-prefix gate for the non-scannable while loop.
+            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let mut nc: Array<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.line(`{list_field}.push({inner_field});`);
@@ -3219,6 +3426,11 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             w.line(`let mut {plus_flag} = true;`);
             w.begin("loop");
             w.begin(`if !{plus_flag}`);
+            // Yield to caller if the next K tokens match the caller's
+            // deterministic K-prefix (multi-token follow-mask path).
+            // No-op when `k_prefix_mask` is empty (non-variant body or
+            // caller without a K-prefix at this position).
+            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(`if {scan_pos} < 0 \{ break; \}`);
             w.end();
@@ -3231,6 +3443,15 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             let plus_flag = dedup_name(&"_plus_first", name_counts);
             w.line(`let mut {plus_flag} = true;`);
             w.begin(`while {plus_flag} || {ctx.first_check_str(&inner_first)}`);
+            // K-prefix yield gate fires AFTER the mandatory first iter:
+            // skip emission while `plus_flag` is still true so the
+            // mandatory iter cannot be suppressed. Empty mask emits
+            // nothing (the if-block is dead-stripped at codegen).
+            if !rep_op.k_prefix_mask.is_empty() {
+                w.begin(`if !{plus_flag}`);
+                emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+                w.end();
+            }
             w.line(`{plus_flag} = false;`);
             let mut nc: Array<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
