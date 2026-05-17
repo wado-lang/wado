@@ -33159,7 +33159,9 @@ fn parse_expression__follow_11_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
     }
     if kind == TK_DOTDOT {
         let dotdot = p.expect(TK_DOTDOT)?;
-        let expression: Option<ExpressionNode> = if _gale_kind_set_47(p.peek_kind()) {
+        let expression: Option<ExpressionNode> = if p.peek_kind() == TK_LCURLYBRACE {
+            null
+        } else if _gale_kind_set_47(p.peek_kind()) {
             let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
         } else {
@@ -33182,13 +33184,17 @@ fn parse_expression__follow_11_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
     }
     if kind == TK_KW_CONTINUE {
         let kw_continue = p.expect(TK_KW_CONTINUE)?;
-        let lifetime_or_label: Option<Token> = if p.peek_kind() == TK_LIFETIME_OR_LABEL {
+        let lifetime_or_label: Option<Token> = if p.peek_kind() == TK_LCURLYBRACE {
+            null
+        } else if p.peek_kind() == TK_LIFETIME_OR_LABEL {
             let lifetime_or_label = p.expect(TK_LIFETIME_OR_LABEL)?;
             Option::<Token>::Some(lifetime_or_label)
         } else {
             null
         };
-        let expression: Option<ExpressionNode> = if _gale_kind_set_47(p.peek_kind()) {
+        let expression: Option<ExpressionNode> = if p.peek_kind() == TK_LCURLYBRACE {
+            null
+        } else if _gale_kind_set_47(p.peek_kind()) {
             let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
         } else {
@@ -33203,13 +33209,17 @@ fn parse_expression__follow_11_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
     }
     if kind == TK_KW_BREAK {
         let kw_break = p.expect(TK_KW_BREAK)?;
-        let lifetime_or_label: Option<Token> = if p.peek_kind() == TK_LIFETIME_OR_LABEL {
+        let lifetime_or_label: Option<Token> = if p.peek_kind() == TK_LCURLYBRACE {
+            null
+        } else if p.peek_kind() == TK_LIFETIME_OR_LABEL {
             let lifetime_or_label = p.expect(TK_LIFETIME_OR_LABEL)?;
             Option::<Token>::Some(lifetime_or_label)
         } else {
             null
         };
-        let expression: Option<ExpressionNode> = if _gale_kind_set_47(p.peek_kind()) {
+        let expression: Option<ExpressionNode> = if p.peek_kind() == TK_LCURLYBRACE {
+            null
+        } else if _gale_kind_set_47(p.peek_kind()) {
             let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
         } else {
@@ -33224,7 +33234,9 @@ fn parse_expression__follow_11_atom(p: &mut Parser) -> Result<ExpressionNode, Pa
     }
     if kind == TK_KW_RETURN {
         let kw_return = p.expect(TK_KW_RETURN)?;
-        let expression: Option<ExpressionNode> = if _gale_kind_set_47(p.peek_kind()) {
+        let expression: Option<ExpressionNode> = if p.peek_kind() == TK_LCURLYBRACE {
+            null
+        } else if _gale_kind_set_47(p.peek_kind()) {
             let expression = parse_expression__follow_6(p)?;
             Option::<ExpressionNode>::Some(expression)
         } else {
@@ -33521,7 +33533,9 @@ fn parse_expression__follow_11_lr_22(p: &mut Parser, left: ExpressionNode, start
 
 fn parse_expression__follow_11_lr_23(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let dotdot = p.expect(TK_DOTDOT)?;
-    let expression_2: Option<ExpressionNode> = if _gale_kind_set_47(p.peek_kind()) {
+    let expression_2: Option<ExpressionNode> = if p.peek_kind() == TK_LCURLYBRACE {
+        null
+    } else if _gale_kind_set_47(p.peek_kind()) {
         let expression = parse_expression__follow_6(p)?;
         Option::<ExpressionNode>::Some(expression)
     } else {

@@ -2874,7 +2874,9 @@ fn scan_html_content__follow_1(tokens: &Array<Token>, pos: i32, min_prec: i32 = 
 
 fn parse_html_content__follow_1(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
     let start = p.peek().span.start;
-    let html_chardata: Option<HtmlChardataNode> = if _gale_kind_set_7(p.peek_kind()) {
+    let html_chardata: Option<HtmlChardataNode> = if p.peek_kind() == TK_TAG_OPEN && p.peek_at(1) == TK_TAG_SLASH && p.peek_at(2) == TK_TAG_NAME && p.peek_at(3) == TK_TAG_CLOSE {
+        null
+    } else if _gale_kind_set_7(p.peek_kind()) {
         let html_chardata = parse_html_chardata(p)?;
         Option::<HtmlChardataNode>::Some(html_chardata)
     } else {

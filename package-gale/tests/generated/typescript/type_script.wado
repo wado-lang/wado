@@ -29734,7 +29734,9 @@ fn parse_single_expression__follow_1_bt_7(p: &mut Parser) -> Result<SingleExpres
     let start = p.peek().span.start;
     let new = p.expect(TK_New)?;
     let single_expression = parse_single_expression__follow_1(p)?;
-    let type_arguments: Option<TypeArgumentsNode> = if p.peek_kind() == TK_LIT_LT {
+    let type_arguments: Option<TypeArgumentsNode> = if p.peek_kind() == TK_In && p.peek_at(1) == TK_LIT_RPAREN {
+        null
+    } else if p.peek_kind() == TK_LIT_LT {
         let type_arguments = parse_type_arguments(p)?;
         Option::<TypeArgumentsNode>::Some(type_arguments)
     } else {
@@ -29949,7 +29951,9 @@ fn parse_single_expression__follow_1_scan_0(tokens: &Array<Token>, pos: i32) -> 
 fn parse_single_expression__follow_1_bt_44(p: &mut Parser) -> Result<SingleExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let identifier_name = parse_identifier_name(p)?;
-    let single_expression: Option<SingleExpressionNode> = if _gale_kind_set_30(p.peek_kind()) {
+    let single_expression: Option<SingleExpressionNode> = if p.peek_kind() == TK_In && p.peek_at(1) == TK_LIT_RPAREN {
+        null
+    } else if _gale_kind_set_30(p.peek_kind()) {
         let single_expression = parse_single_expression(p)?;
         Option::<SingleExpressionNode>::Some(single_expression)
     } else {
@@ -30579,7 +30583,9 @@ fn parse_single_expression__follow_1_atom(p: &mut Parser) -> Result<SingleExpres
     }
     if kind == TK_LIT_LT {
         let type_arguments = parse_type_arguments(p)?;
-        let expression_sequence: Option<ExpressionSequenceNode> = if _gale_kind_set_30(p.peek_kind()) {
+        let expression_sequence: Option<ExpressionSequenceNode> = if p.peek_kind() == TK_In && p.peek_at(1) == TK_LIT_RPAREN {
+            null
+        } else if _gale_kind_set_30(p.peek_kind()) {
             let expression_sequence = parse_expression_sequence(p)?;
             Option::<ExpressionSequenceNode>::Some(expression_sequence)
         } else {
@@ -30644,7 +30650,9 @@ fn parse_single_expression__follow_1_lr_4(p: &mut Parser, left: SingleExpression
         null
     };
     let identifier_name = parse_identifier_name(p)?;
-    let type_generic: Option<TypeGenericNode> = if p.peek_kind() == TK_LIT_LT {
+    let type_generic: Option<TypeGenericNode> = if p.peek_kind() == TK_In && p.peek_at(1) == TK_LIT_RPAREN {
+        null
+    } else if p.peek_kind() == TK_LIT_LT {
         let type_generic = parse_type_generic(p)?;
         Option::<TypeGenericNode>::Some(type_generic)
     } else {
@@ -30676,7 +30684,9 @@ fn parse_single_expression__follow_1_lr_5(p: &mut Parser, left: SingleExpression
         null
     };
     let identifier_name = parse_identifier_name(p)?;
-    let type_generic: Option<TypeGenericNode> = if p.peek_kind() == TK_LIT_LT {
+    let type_generic: Option<TypeGenericNode> = if p.peek_kind() == TK_In && p.peek_at(1) == TK_LIT_RPAREN {
+        null
+    } else if p.peek_kind() == TK_LIT_LT {
         let type_generic = parse_type_generic(p)?;
         Option::<TypeGenericNode>::Some(type_generic)
     } else {
@@ -31387,13 +31397,17 @@ fn parse_variable_declaration__follow_2(p: &mut Parser) -> Result<VariableDeclar
         identifier_or_key_word_or_array_literal_or_object_literal_inner = Option::<IdentifierOrKeyWordOrArrayLiteralOrObjectLiteralGroup>::Some(IdentifierOrKeyWordOrArrayLiteralOrObjectLiteralGroup::ObjectLiteral(object_literal));
     }
     let identifier_or_key_word_or_array_literal_or_object_literal = identifier_or_key_word_or_array_literal_or_object_literal_inner;
-    let type_annotation: Option<TypeAnnotationNode> = if p.peek_kind() == TK_LIT_COLON {
+    let type_annotation: Option<TypeAnnotationNode> = if p.peek_kind() == TK_In && p.peek_at(1) == TK_LIT_RPAREN {
+        null
+    } else if p.peek_kind() == TK_LIT_COLON {
         let type_annotation = parse_type_annotation(p)?;
         Option::<TypeAnnotationNode>::Some(type_annotation)
     } else {
         null
     };
-    let single_expression: Option<SingleExpressionNode> = if _gale_kind_set_30(p.peek_kind()) {
+    let single_expression: Option<SingleExpressionNode> = if p.peek_kind() == TK_In && p.peek_at(1) == TK_LIT_RPAREN {
+        null
+    } else if _gale_kind_set_30(p.peek_kind()) {
         let single_expression = parse_single_expression(p)?;
         Option::<SingleExpressionNode>::Some(single_expression)
     } else {

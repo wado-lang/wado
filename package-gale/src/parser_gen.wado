@@ -3050,6 +3050,23 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
     }
 
     let inner_field = op_field(&rep_op.body);
+    // Multi-token follow-mask gate: when the caller's deterministic
+    // K-prefix matches at this position, yield to caller (null) so the
+    // Optional body doesn't swallow tokens the caller needs. Empty
+    // mask falls through to the regular `first_check` shape.
+    let k_prefix_match = k_prefix_match_expr(&rep_op.k_prefix_mask, ctx);
+    if !k_prefix_match.is_empty() {
+        w.begin(`let {opt_field}: Option<{inner_type}> = if {k_prefix_match}`);
+        w.line("null");
+        w.else_begin(`else if {ctx.first_check_str(&first)}`);
+        let mut nc: Array<[String, i32]> = [];
+        gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
+        w.line(`Option::<{inner_type}>::Some({inner_field})`);
+        w.else_begin("else");
+        w.line("null");
+        w.end_with(";");
+        return;
+    }
     w.begin(`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&first)}`);
     let mut nc: Array<[String, i32]> = [];
     gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
@@ -3077,6 +3094,21 @@ fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
     let _ = dedup_name(&opt_field, name_counts);
     let inner_field = op_field(&rep_op.body);
 
+    // Same K-prefix gate as the RuleCall arm — see
+    // `gen_op_repeat_optional_rulecall` for the rationale.
+    let k_prefix_match = k_prefix_match_expr(&rep_op.k_prefix_mask, ctx);
+    if !k_prefix_match.is_empty() {
+        w.begin(`let {opt_field}: Option<{inner_type}> = if {k_prefix_match}`);
+        w.line("null");
+        w.else_begin(`else if {ctx.first_check_str(&loop_first)}`);
+        let mut nc: Array<[String, i32]> = [];
+        gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
+        w.line(`Option::<{inner_type}>::Some({inner_field})`);
+        w.else_begin("else");
+        w.line("null");
+        w.end_with(";");
+        return;
+    }
     w.begin(`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&loop_first)}`);
     let mut nc: Array<[String, i32]> = [];
     gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
@@ -3089,21 +3121,19 @@ fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
 /// Greedy `*` / `+` Repeat dispatcher. Splits on `body_shape`:
 /// `TransparentGroup` walks the loop without a list (each iteration
 /// inlines the inner alt); the storable shapes (`LeafRuleCall`,
-/// Emit a K-token-peek "yield to caller" gate at a Repeat's per-iter
-/// dispatch site. When non-empty, `mask[d]` is the set of valid caller
-/// tokens at depth `d`; the variant body breaks the loop when the next
-/// `mask.len()` tokens all match (per-depth set membership), letting
-/// the caller's deterministic K-prefix consume them instead.
+/// Build the boolean expression for the K-token-peek "yield to caller"
+/// gate. `mask[d]` is the set of valid caller tokens at depth `d`;
+/// the resulting expression is the AND of per-depth set-membership
+/// checks. Returns `""` when the mask is empty (so callers can skip
+/// the gate entirely).
 ///
-/// Generalises the existing single-token mask subtraction
-/// (`subtract_sets(body_first_set, position_mask)`) to multi-token
-/// continuations — closes the multi-token tail-greedy gap (TODO.md)
-/// without disturbing the K=1 path: a `mask` of `[]` skips emission
-/// entirely, and a single-depth mask reduces to the same `peek_kind`
-/// check the existing subtraction encodes implicitly via `if first`.
-fn emit_k_prefix_yield_gate(w: &mut CodeWriter, mask: &Array<Array<String>>, ctx: &mut GenContext) {
+/// Used by both the loop-style emit (`emit_k_prefix_yield_gate`,
+/// which wraps this in `if {expr} { break; }`) and the Optional
+/// emit (`gen_op_repeat_optional_*`, which threads this into the
+/// `if … { Some(...) } else { null }` conditional).
+fn k_prefix_match_expr(mask: &Array<Array<String>>, ctx: &mut GenContext) -> String {
     if mask.is_empty() {
-        return;
+        return "";
     }
     let mut parts: Array<String> = [];
     for let mut d = 0; d < mask.len(); d += 1 {
@@ -3117,7 +3147,7 @@ fn emit_k_prefix_yield_gate(w: &mut CodeWriter, mask: &Array<Array<String>>, ctx
         parts.push(ctx.kind_check_str(depth_set, &peek_str));
     }
     if parts.is_empty() {
-        return;
+        return "";
     }
     let mut condition = String::with_capacity(64);
     let mut first = true;
@@ -3127,6 +3157,26 @@ fn emit_k_prefix_yield_gate(w: &mut CodeWriter, mask: &Array<Array<String>>, ctx
         }
         first = false;
         condition.push_str(*p);
+    }
+    return condition;
+}
+
+/// Emit a K-token-peek "yield to caller" gate at a Repeat's per-iter
+/// dispatch site. When non-empty, `mask[d]` is the set of valid caller
+/// tokens at depth `d`; the variant body breaks the loop when the next
+/// `mask.len()` tokens all match (per-depth set membership), letting
+/// the caller's deterministic K-prefix consume them instead.
+///
+/// Generalises the existing single-token mask subtraction
+/// (`subtract_sets(body_first_set, position_mask)`) to multi-token
+/// continuations — closes the multi-token tail-greedy gap (TODO.md)
+/// without disturbing the K=1 path: a `mask` of `[]` skips emission
+/// entirely, and a single-depth mask reduces to the same `peek_kind`
+/// check the existing subtraction encodes implicitly via `if first`.
+fn emit_k_prefix_yield_gate(w: &mut CodeWriter, mask: &Array<Array<String>>, ctx: &mut GenContext) {
+    let condition = k_prefix_match_expr(mask, ctx);
+    if condition.is_empty() {
+        return;
     }
     w.line(`if {condition} \{ break; \}`);
 }
