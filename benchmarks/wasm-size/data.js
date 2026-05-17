@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779008653565,
+  "lastUpdate": 1779013280471,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22937,6 +22937,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f66e47ba94bab0c3a1a9ad5feb8ce7c3ac23782c"
         },
         "date": 1779008653281,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 490666,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "80f9328679a8b8c0472a88e308347eb563187862",
+          "message": "Merge pull request #1107 from wado-lang/claude/add-string-new-leOHH\n\nfeat(stdlib): add `String::new()`",
+          "timestamp": "2026-05-17T19:15:11+09:00",
+          "tree_id": "0dc1ef168d1f9dab3331fc13577c18a476f3904c",
+          "url": "https://github.com/wado-lang/wado/commit/80f9328679a8b8c0472a88e308347eb563187862"
+        },
+        "date": 1779013280224,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
