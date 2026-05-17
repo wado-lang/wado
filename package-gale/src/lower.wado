@@ -1002,7 +1002,7 @@ fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_idx: i32, ctx: &mut GenContex
     // mechanism analogous to the non-LR follow variants, which no
     // committed grammar yet exercises.
     for let mut i = 1; i < alt.elements.len(); i += 1 {
-        elements.push(lower_alt_scan_element(&alt.elements, i, ctx, variant_mask, variant_k_prefix_mask));
+        elements.push(lower_alt_scan_element(&alt.elements, i, ctx, variant_mask, variant_k_prefix_mask, &empty_k_prefix()));
     }
     return ScanBody { elements };
 }
@@ -1383,12 +1383,12 @@ fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
 fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) -> ScanBody {
     let mut elements: Array<ScanElement> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
-        elements.push(lower_alt_scan_element(&alt.elements, i, ctx, variant_mask, variant_k_prefix_mask));
+        elements.push(lower_alt_scan_element(&alt.elements, i, ctx, variant_mask, variant_k_prefix_mask, &empty_k_prefix()));
     }
     return ScanBody { elements };
 }
 
-fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &Array<String>, outer_k_prefix: &Array<Array<String>>, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) -> ScanElement {
+fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &Array<String>, outer_k_prefix: &Array<Array<String>>, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>, outer_k_prefix_position_mask: &Array<Array<String>>) -> ScanElement {
     return match *elem {
         TokenRef(t) => ScanElement::Token(ScanTokenElem { kind: `TK_{t.name}` }),
         Literal(l) => ScanElement::Token(ScanTokenElem {
@@ -1403,9 +1403,9 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &Array
         Not(ne) => ScanElement::Excluded(ScanExcludedElem {
             kinds: collect_excluded_kinds(&ne.element),
         }),
-        Label(lab) => lower_scan_element(&lab.element, ctx, outer_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask),
-        Repeat(rep) => lower_scan_repeat(rep, ctx, outer_follow, variant_mask, variant_k_prefix_mask),
-        Group(g) => lower_scan_group(g, ctx, outer_follow, variant_mask, variant_k_prefix_mask),
+        Label(lab) => lower_scan_element(&lab.element, ctx, outer_follow, outer_k_prefix, variant_mask, variant_k_prefix_mask, outer_k_prefix_position_mask),
+        Repeat(rep) => lower_scan_repeat(rep, ctx, outer_follow, variant_mask, variant_k_prefix_mask, outer_k_prefix_position_mask),
+        Group(g) => lower_scan_group(g, ctx, outer_follow, variant_mask, variant_k_prefix_mask, outer_k_prefix_position_mask),
     };
 }
 
@@ -1414,7 +1414,7 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &Array
 /// dispatch step: single-alt groups have no dispatch (one body run
 /// unconditionally / wrapped in a one-alt `ScanGroupElem`), while
 /// multi-alt token-only groups dispatch on token kind.
-fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &Array<String>, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) -> ScanElement {
+fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &Array<String>, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>, outer_k_prefix_position_mask: &Array<Array<String>>) -> ScanElement {
     let alts = &g.alternatives;
     assert alts.len() > 0, "Group with no alts is not a valid scan-lowering input";
     if alts.len() == 1 {
@@ -1423,13 +1423,13 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &Array
         if alt.elements.len() == 1 {
             // Transparent (scan side) — nested inner allowed. The
             // group's only element inherits the surrounding follow.
-            return lower_scan_element(&alt.elements[0], ctx, outer_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask);
+            return lower_scan_element(&alt.elements[0], ctx, outer_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask, &empty_k_prefix());
         }
         // Single-alt (scan side) — nested elements allowed; each
         // is lowered through the standard scan-element recursion.
         let mut elements: Array<ScanElement> = [];
         for let mut i = 0; i < alt.elements.len(); i += 1 {
-            elements.push(lower_alt_scan_element(&alt.elements, i, ctx, variant_mask, variant_k_prefix_mask));
+            elements.push(lower_alt_scan_element(&alt.elements, i, ctx, variant_mask, variant_k_prefix_mask, &empty_k_prefix()));
         }
         let mut visiting: Array<String> = [];
         let alt_first = ctx.first_of_alt(alt, &mut visiting);
@@ -1445,7 +1445,7 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &Array
         let mut first_sets: Array<Array<String>> = [];
         for let alt of alts {
             let elem = &alt.elements[0];
-            bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, outer_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask)] });
+            bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, outer_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask, &empty_k_prefix())] });
             first_sets.push([token_only_kind(elem)]);
         }
         return ScanElement::Group(ScanGroupElem {
@@ -1459,12 +1459,12 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &Array
         return lower_simple_cst_scan_group(alts, ctx, outer_follow, variant_mask, variant_k_prefix_mask);
     }
     if is_general_group(alts) {
-        return lower_general_scan_group(alts, ctx, outer_follow, variant_mask, variant_k_prefix_mask);
+        return lower_general_scan_group(alts, ctx, outer_follow, variant_mask, variant_k_prefix_mask, &empty_k_prefix());
     }
     panic("Group shape (scan side) unrecognised by classifier");
 }
 
-fn lower_general_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, outer_follow: &Array<String>, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) -> ScanElement {
+fn lower_general_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, outer_follow: &Array<String>, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>, outer_k_prefix_position_mask: &Array<Array<String>>) -> ScanElement {
     let mut bodies: Array<ScanBody> = [];
     let mut first_sets: Array<Array<String>> = [];
     let mut all_indices: Array<i32> = [];
@@ -1472,7 +1472,7 @@ fn lower_general_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, out
         let alt = &alts[ai];
         let mut elements: Array<ScanElement> = [];
         for let mut i = 0; i < alt.elements.len(); i += 1 {
-            elements.push(lower_alt_scan_element(&alt.elements, i, ctx, variant_mask, variant_k_prefix_mask));
+            elements.push(lower_alt_scan_element(&alt.elements, i, ctx, variant_mask, variant_k_prefix_mask, &empty_k_prefix()));
         }
         bodies.push(ScanBody { elements });
         let mut visiting: Array<String> = [];
@@ -1490,7 +1490,7 @@ fn lower_general_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, out
 
 /// Scan-side twin of `lower_repeat_op`. Same restrictions: greedy
 /// `Star` / `Plus` with a leaf inner only.
-fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &Array<String>, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) -> ScanElement {
+fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &Array<String>, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>, outer_k_prefix_position_mask: &Array<Array<String>>) -> ScanElement {
     // Greedy Optional + Group inner with nested optional sub-elements
     // is the shape-based-lookahead case: lower produces
     // `ScanElement::OptionalLookahead` so emit reads per-shape sigs
@@ -1525,14 +1525,14 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &A
 
     let iter_follow = union_kind_arrays(&inner_first, outer_follow);
 
-    let body = lower_scan_element(&rep.element, ctx, &iter_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask);
+    let body = lower_scan_element(&rep.element, ctx, &iter_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask, &empty_k_prefix());
     return ScanElement::Repeat(ScanRepeatElem {
         kind: rep.kind,
         body,
         strategy: strategy,
         inner_first: inner_first,
         caller_follow_first: *outer_follow,
-        k_prefix_mask: [],
+        k_prefix_mask: *outer_k_prefix_position_mask,
     });
 }
 
@@ -1566,7 +1566,7 @@ fn rebind_scan_repeat_caller_follow(se: ScanElement, caller_follow_first: Array<
 /// that emit parse-side ops alongside scan elements (`lower_single_alt_group`,
 /// `lower_general_group`) inline the post-pass so they can share
 /// `basic_follow` with the parse-side rebind.
-fn lower_alt_scan_element(alt_elements: &Array<Element>, i: i32, ctx: &mut GenContext, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) -> ScanElement {
+fn lower_alt_scan_element(alt_elements: &Array<Element>, i: i32, ctx: &mut GenContext, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>, outer_k_prefix_position_mask: &Array<Array<String>>) -> ScanElement {
     let elem_follow = ctx.compute_call_site_follow(alt_elements, i, variant_mask);
     // Compute the same per-position K-prefix the parse-side uses so
     // both sides register the same variant key — without this the
@@ -1574,7 +1574,15 @@ fn lower_alt_scan_element(alt_elements: &Array<Element>, i: i32, ctx: &mut GenCo
     // K-prefix mask and the parse-side variant body's references to
     // `scan_X__follow_<id>_*` would dangle.
     let elem_k_prefix = ctx.compute_call_site_k_prefix_mask(alt_elements, i, FOLLOW_VARIANT_MAX_K, variant_k_prefix_mask);
-    let mut se = lower_scan_element(&alt_elements[i], ctx, &elem_follow, &elem_k_prefix, variant_mask, variant_k_prefix_mask);
+    // K-prefix position mask: variant's k_prefix_mask propagates into
+    // this element when the suffix at i+1 is deep-nullable, mirroring
+    // the parse-side `compute_k_prefix_position_mask`. Without this,
+    // `ScanRepeatElem.k_prefix_mask` stays empty and the scan-side
+    // K-prefix gate at `gen_scan_op_repeat` is never emitted — the
+    // scan tournament then over-counts the iter and rejects the alt
+    // that parse-side's gated variant body would have accepted.
+    let elem_k_prefix_position_mask = ctx.compute_k_prefix_position_mask(alt_elements, i, variant_k_prefix_mask);
+    let mut se = lower_scan_element(&alt_elements[i], ctx, &elem_follow, &elem_k_prefix, variant_mask, variant_k_prefix_mask, &elem_k_prefix_position_mask);
     if let Repeat(_) = &se {
         let basic_follow = ctx.first_of_elements_from(alt_elements, i + 1);
         se = rebind_scan_repeat_caller_follow(se, basic_follow);
@@ -1646,13 +1654,13 @@ fn lower_scan_shape_body(shape: &Array<i32>, elements: &Array<Element>, ctx: &mu
             if g.alternatives.len() == 1 {
                 for let mut j = 0; j < g.alternatives[0].elements.len(); j += 1 {
                     body_elems.push(
-                        lower_scan_element(&g.alternatives[0].elements[j], ctx, &empty_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask),
+                        lower_scan_element(&g.alternatives[0].elements[j], ctx, &empty_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask, &empty_k_prefix()),
                     );
                 }
                 continue;
             }
         }
-        body_elems.push(lower_scan_element(actual, ctx, &empty_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask));
+        body_elems.push(lower_scan_element(actual, ctx, &empty_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask, &empty_k_prefix()));
     }
     return ScanBody { elements: body_elems };
 }
@@ -2047,7 +2055,7 @@ fn lower_transparent_group(inner: &Element, name_counts: &mut Array<[String, i32
         prefix_self_ref_min_prec: 0,
     };
     let scan_body = ScanBody {
-        elements: [lower_scan_element(inner, ctx, outer_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask)],
+        elements: [lower_scan_element(inner, ctx, outer_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask, &empty_k_prefix())],
     };
     // `dispatch` is meaningless for a one-alt Transparent group:
     // emit recognises `GroupShape::Transparent` and skips the
@@ -2123,7 +2131,7 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut Array<[String, i3
             outer_position_mask,
             outer_k_prefix_position_mask,
         );
-        let mut se = lower_scan_element(elem, ctx, &elem_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask);
+        let mut se = lower_scan_element(elem, ctx, &elem_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask, &empty_k_prefix());
         // Gate `basic_follow` on either side actually being a Repeat —
         // `first_of_elements_from` walks the suffix and isn't free.
         // Scalar `Label(Repeat(_))` collapses to `Op::Repeat` on the
@@ -2208,7 +2216,7 @@ fn lower_token_only_group(alts: &Array<Alternative>, name_counts: &mut Array<[St
         // Token-only alts are by construction leaves with no inner
         // Repeats — outer_follow is irrelevant, pass empty.
         let empty_follow: Array<String> = [];
-        scan_bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, &empty_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask)] });
+        scan_bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, &empty_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask, &empty_k_prefix())] });
         first_sets.push([token_only_kind(elem)]);
     }
     let dispatch = build_direct_dispatch(&first_sets);
@@ -2289,7 +2297,7 @@ fn lower_simple_cst_group(alts: &Array<Alternative>, name_counts: &mut Array<[St
         // not propagate into the callee (whole-rule follow is the
         // callee's concern via Phase 2.6 variants).
         let empty_follow: Array<String> = [];
-        scan_bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, &empty_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask)] });
+        scan_bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, &empty_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask, &empty_k_prefix())] });
         all_indices.push(i);
     }
     let dispatch = build_overlap_dispatch(&"SimpleCst group", alts, &all_indices, &first_sets, ctx);
@@ -2327,7 +2335,7 @@ fn lower_simple_cst_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, 
         // (`is_simple_cst_group`), so `lower_scan_element` produces a
         // `ScanRuleCall` here, never a Repeat — no caller-follow
         // rebind is needed.
-        bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, outer_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask)] });
+        bodies.push(ScanBody { elements: [lower_scan_element(elem, ctx, outer_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask, &empty_k_prefix())] });
         let mut visiting: Array<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
         all_indices.push(i);
@@ -2431,7 +2439,7 @@ fn lower_general_group(alts: &Array<Alternative>, name_counts: &mut Array<[Strin
                 outer_position_mask,
                 outer_k_prefix_position_mask,
             );
-            let mut se = lower_scan_element(elem, ctx, &elem_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask);
+            let mut se = lower_scan_element(elem, ctx, &elem_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask, &empty_k_prefix());
             let op_is_repeat = op matches { Repeat(_) };
             let se_is_repeat = se matches { Repeat(_) };
             if op_is_repeat || se_is_repeat {
@@ -2635,7 +2643,7 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     // `gen_scan_*` walker graph. Uses the same `iter_follow` as the
     // parse side so per-position context (`caller_follow_first`
     // baked on nested `ScanRepeatElem`s) lines up.
-    let scan_body = lower_scan_element(&rep.element, ctx, &iter_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask);
+    let scan_body = lower_scan_element(&rep.element, ctx, &iter_follow, &empty_k_prefix(), variant_mask, variant_k_prefix_mask, &empty_k_prefix());
     let body_is_single_alt_group = if let Group(g) = &rep.element {
         g.alternatives.len() == 1;
     } else {

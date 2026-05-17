@@ -1223,6 +1223,43 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
 /// Per-call-site `variant_id` comes from the lower-baked
 /// `ScanRuleCallElem`, so the dispatcher does not need to thread an
 /// outer call-follow through the body.
+/// Scan-side mirror of [`k_prefix_match_expr`]: builds the K-token
+/// peek expression in the `tokens[pos…]` form scan helpers use.
+/// Returns `""` when the mask is empty so callers skip emission.
+fn k_prefix_match_expr_scan(mask: &Array<Array<String>>, ctx: &mut GenContext) -> String {
+    if mask.is_empty() {
+        return "";
+    }
+    let mut parts: Array<String> = [];
+    for let mut d = 0; d < mask.len(); d += 1 {
+        let depth_set = &mask[d];
+        if depth_set.is_empty() {
+            continue;
+        }
+        // Bounds check at every depth: the variant body's gate ran in a
+        // parse context where `peek_at(d)` returns `TK_EOF` past the
+        // end; the scan form has no such fall-through, so we require
+        // `pos + d < tokens.len()`.
+        let bounds = `pos + {d} < tokens.len()`;
+        let peek_expr = `tokens[pos + {d}].kind`;
+        let depth_check = ctx.kind_check_str(depth_set, &peek_expr);
+        parts.push(`({bounds} && {depth_check})`);
+    }
+    if parts.is_empty() {
+        return "";
+    }
+    let mut condition = String::with_capacity(64);
+    let mut first = true;
+    for let p of &parts {
+        if !first {
+            condition.push_str(" && ");
+        }
+        first = false;
+        condition.push_str(*p);
+    }
+    return condition;
+}
+
 fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenContext, fail_stmt: &String) {
     // Suppressed: mask covers all of the inner's first set — no
     // iterations possible.
@@ -1240,6 +1277,14 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
     } else {
         re.inner_first;
     };
+
+    // K-prefix yield gate: when the caller's deterministic K-prefix
+    // matches at this scan position, the scan must stop (mirroring
+    // parse-side `gen_op_repeat_optional_*` / `gen_op_repeat_star_plus_storable`),
+    // otherwise the scan tournament that picks the calling rule's alt
+    // would over-count this Repeat and reject the alt that actually
+    // matches.
+    let k_match_scan = k_prefix_match_expr_scan(&re.k_prefix_mask, ctx);
 
     if let Optional = re.kind {
         // OptionalLookahead doesn't reach this path (it's a
@@ -1266,7 +1311,15 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
             return;
         }
         let check = ctx.kind_check_str(&effective_first, "tokens[pos].kind");
-        w.begin(`if pos < tokens.len() && {check}`);
+        // K-prefix mask wins: `if pos < len && peek matches first AND
+        // NOT k_prefix_match { try iter }`. When `k_match_scan` is
+        // empty (no mask), the guard collapses to the regular shape.
+        let guard = if k_match_scan.is_empty() {
+            `pos < tokens.len() && {check}`;
+        } else {
+            `pos < tokens.len() && {check} && !({k_match_scan})`;
+        };
+        w.begin(`if {guard}`);
         w.line("let sp = pos;");
         gen_scan_op_element_assign(w, &re.body, ctx);
         w.line("if pos < 0 { pos = sp; }");
@@ -1278,7 +1331,12 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
             return;
         }
         let check = ctx.kind_check_str(&loop_first, "tokens[pos].kind");
-        w.begin(`while pos < tokens.len() && {check}`);
+        let guard = if k_match_scan.is_empty() {
+            `pos < tokens.len() && {check}`;
+        } else {
+            `pos < tokens.len() && {check} && !({k_match_scan})`;
+        };
+        w.begin(`while {guard}`);
         w.line("let sp = pos;");
         gen_scan_op_element_assign(w, &re.body, ctx);
         w.line("if pos < 0 { pos = sp; break; }");
@@ -1293,7 +1351,14 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
             return;
         }
         let check = ctx.kind_check_str(&loop_first, "tokens[pos].kind");
-        w.begin(`while pos < tokens.len() && {check}`);
+        // Plus's subsequent iters get the K-prefix gate; the mandatory
+        // first iter ran above.
+        let guard = if k_match_scan.is_empty() {
+            `pos < tokens.len() && {check}`;
+        } else {
+            `pos < tokens.len() && {check} && !({k_match_scan})`;
+        };
+        w.begin(`while {guard}`);
         w.line("let sp = pos;");
         gen_scan_op_element_assign(w, &re.body, ctx);
         w.line("if pos < 0 { pos = sp; break; }");
