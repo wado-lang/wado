@@ -160,7 +160,7 @@ impl Inspect for Value {
     pub fn inspect(&self, f: &mut Formatter) {
         match self {
             Null => f.write_str(&"null"),
-            Bool(b) => f.write_str(if *b { "true" } else { "false" }),
+            Bool(b) => f.write_str(&if *b { "true" } else { "false" }),
             Number(n) => (*n).inspect(f),
             String(s) => (*s).inspect(f),
             Array(arr) => {
@@ -195,7 +195,7 @@ impl InspectAlt for Value {
     pub fn inspect_alt(&self, f: &mut Formatter) {
         match self {
             Null => f.write_str(&"null"),
-            Bool(b) => f.write_str(if *b { "true" } else { "false" }),
+            Bool(b) => f.write_str(&if *b { "true" } else { "false" }),
             Number(n) => (*n).inspect_alt(f),
             String(s) => (*s).inspect_alt(f),
             Array(arr) => {
