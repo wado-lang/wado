@@ -44,7 +44,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let local_index = local.index;
                     let local_type_id = local.type_id;
                     let local_is_mut = local.is_mut;
-                    let fn_return_type = return_type;
 
                     // `fn mut` closures need a `mut` callee binding — mirrors
                     // Rust's FnMut rule.
@@ -55,53 +54,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         });
                     }
 
-                    // Resolve arguments with coercion awareness based on closure param types
-                    let mut args: Vec<TirExpr> = call
-                        .args
-                        .iter()
-                        .enumerate()
-                        .map(|(i, arg)| {
-                            let expected_type = fn_params.get(i).copied();
-                            self.resolve_expr(arg, ctx, expected_type)
-                        })
-                        .collect();
-
-                    // Pad missing trailing args with closure defaults declared at `let` site.
-                    if args.len() < fn_params.len() {
-                        self.pad_args_with_defaults(
-                            &call.callee,
-                            &call.args,
-                            &mut args,
-                            &fn_params,
-                            ctx,
-                        );
-                    }
-
-                    // Arity check: function-typed variables have their defaults
-                    // erased (WEP 2026-04-11), so an under-saturated indirect
-                    // call is an error even if the underlying function had
-                    // defaults at its definition site.
-                    if args.len() != fn_params.len() {
-                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
-                            expected: fn_params.len(),
-                            found: args.len(),
-                            span: call.span,
-                        });
-                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
-                    }
-
-                    // Check each argument type against expected parameter type
-                    for (i, arg) in args.iter().enumerate() {
-                        if let Some(&expected) = fn_params.get(i) {
-                            self.typecheck(
-                                arg.type_id,
-                                expected,
-                                call.args.get(i).map_or(call.span, ast::Expr::span),
-                            );
-                        }
-                    }
-
-                    // Create callee expression, auto-dereferencing if needed
                     let local_expr = TirExpr::new(
                         TirExprKind::Local {
                             index: local_index,
@@ -110,15 +62,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         local_type_id,
                         ident.span,
                     );
-                    let callee_expr = self.deref_to_value(local_expr, ident.span);
 
-                    return TirExpr::new(
-                        TirExprKind::IndirectCall {
-                            callee: Box::new(callee_expr),
-                            args,
-                        },
-                        fn_return_type,
-                        call.span,
+                    return self.build_indirect_call(
+                        call,
+                        ctx,
+                        local_expr,
+                        &fn_params,
+                        return_type,
+                        /* pad_with_defaults */ true,
                     );
                 }
             }
@@ -144,53 +95,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ..
             } = peeled_type
             {
-                let fn_return_type = return_type;
-
-                // Resolve arguments with coercion awareness based on function param types
-                let args: Vec<TirExpr> = call
-                    .args
-                    .iter()
-                    .enumerate()
-                    .map(|(i, arg)| {
-                        let expected_type = fn_params.get(i).copied();
-                        self.resolve_expr(arg, ctx, expected_type)
-                    })
-                    .collect();
-
-                // Arity check: function-typed values carry no default-argument
-                // information at the call site.
-                if args.len() != fn_params.len() {
-                    let _ = self.logger.error(TypeError::ArgumentCountMismatch {
-                        expected: fn_params.len(),
-                        found: args.len(),
-                        span: call.span,
-                    });
-                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
-                }
-
-                // Check each argument type against expected parameter type
-                for (i, arg) in args.iter().enumerate() {
-                    if let Some(&expected) = fn_params.get(i) {
-                        self.typecheck(
-                            arg.type_id,
-                            expected,
-                            call.args.get(i).map_or(call.span, ast::Expr::span),
-                        );
-                    }
-                }
-
-                // Auto-dereference if the callee is a reference to a function
-                let callee_expr = self.deref_to_value(callee_expr, call.span);
-
-                return TirExpr::new(
-                    TirExprKind::IndirectCall {
-                        callee: Box::new(callee_expr),
-                        args,
-                    },
-                    fn_return_type,
-                    call.span,
+                return self.build_indirect_call(
+                    call,
+                    ctx,
+                    callee_expr,
+                    &fn_params,
+                    return_type,
+                    /* pad_with_defaults */ false,
                 );
             }
+
+            // The callee resolved successfully but its type is not a
+            // function. Emit a clear diagnostic instead of falling through
+            // to the named-function lookup, which would surface a
+            // confusing "unknown function" error. Suppress the message
+            // when the callee already resolved to the error type so we
+            // don't pile a second diagnostic on top of the first.
+            if callee_expr.type_id != TypeTable::ERROR {
+                let type_name = self.type_table.borrow().type_name(callee_expr.type_id);
+                let _ = self.logger.error(TypeError::CalleeNotCallable {
+                    type_name,
+                    span: call.callee.span(),
+                });
+            }
+            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
         }
 
         // First, determine expected parameter types to handle coercion
@@ -1013,6 +941,68 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 },
                 type_args,
                 args: call_args,
+            },
+            return_type,
+            call.span,
+        )
+    }
+
+    /// Lower `call` into a `TirExprKind::IndirectCall` using `callee_expr`
+    /// as the resolved callee. Shared by the local-fn-typed-variable path
+    /// and the general non-identifier path.
+    ///
+    /// `pad_with_defaults` is true only for the local-variable path, where
+    /// closure defaults declared at the `let` site can fill missing
+    /// trailing arguments. Function-typed values stored elsewhere (fields,
+    /// array elements, call results) carry no default information.
+    fn build_indirect_call(
+        &mut self,
+        call: &ast::CallExpr,
+        ctx: &mut FunctionContext,
+        callee_expr: TirExpr,
+        fn_params: &[TypeId],
+        return_type: TypeId,
+        pad_with_defaults: bool,
+    ) -> TirExpr {
+        let mut args: Vec<TirExpr> = call
+            .args
+            .iter()
+            .enumerate()
+            .map(|(i, arg)| {
+                let expected_type = fn_params.get(i).copied();
+                self.resolve_expr(arg, ctx, expected_type)
+            })
+            .collect();
+
+        if pad_with_defaults && args.len() < fn_params.len() {
+            self.pad_args_with_defaults(&call.callee, &call.args, &mut args, fn_params, ctx);
+        }
+
+        if args.len() != fn_params.len() {
+            let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                expected: fn_params.len(),
+                found: args.len(),
+                span: call.span,
+            });
+            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+        }
+
+        for (i, arg) in args.iter().enumerate() {
+            if let Some(&expected) = fn_params.get(i) {
+                self.typecheck(
+                    arg.type_id,
+                    expected,
+                    call.args.get(i).map_or(call.span, ast::Expr::span),
+                );
+            }
+        }
+
+        let callee_expr = self.deref_to_value(callee_expr, call.span);
+
+        TirExpr::new(
+            TirExprKind::IndirectCall {
+                callee: Box::new(callee_expr),
+                args,
             },
             return_type,
             call.span,

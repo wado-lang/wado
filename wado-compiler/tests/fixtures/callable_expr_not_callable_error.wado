@@ -1,0 +1,10 @@
+// Calling a non-callable expression must produce a clear error
+// pointing at the type, not the misleading "unknown function 'unknown'".
+
+export fn run() {
+    let arr = [1, 2, 3];
+    let _ = arr[0](5);
+}
+
+__DATA__
+{"compile_error": "expression is not callable: type 'i32' is not a function"}
