@@ -973,7 +973,9 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
         ctx.record_impl(&nt.name, "Inspect");
     }
 
-    // Parameterized types (tuples, function types)
+    // Parameterized types (tuples, generic resources). `Fn` signatures are
+    // handled separately below via `collect_canonical_fn_signatures` because
+    // their dispatch stubs are keyed by `(arity, return_type)`, not `TypeId`.
     let span = synth_span();
     for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
         let mangled = format_parameterized_name(&base_name, &type_arg_names);
@@ -990,24 +992,6 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             } if TypeTable::is_tuple_type(name, module_source) => {
                 // Tuple Inspect is provided by variadic impl in core:prelude/tuple.wado
             }
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                generated.push(Rc::new(RefCell::new(generate_fn_inspect_fn(
-                    &type_arg_names,
-                    params.len(),
-                    return_type,
-                    ref_type,
-                    fmt_type,
-                    span,
-                ))));
-                // Intentionally do NOT `ctx.record_impl` — Function-type
-                // stubs are per-module (every module that uses this
-                // closure shape needs its own copy so call sites resolve
-                // to a stub in the caller's module).
-            }
             _ => {
                 // Opaque/resource types (Future, Stream, etc.): write type name as string
                 let type_name = tt.type_name(type_id);
@@ -1020,9 +1004,29 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
                     string_type,
                     span,
                 ))));
-                // Same per-module rationale as the Function arm above.
+                // Intentionally do NOT `ctx.record_impl` — these per-module
+                // stubs are emitted into every module that uses the shape,
+                // so call sites resolve to a stub in the caller's module.
             }
         }
+    }
+
+    // `Fn` dispatch stubs — one per canonical `(arity, return_type)`.
+    for sig in collect_canonical_fn_signatures(&tt) {
+        let mangled = format_parameterized_name("Fn", &sig.type_arg_names);
+        if ctx.has_impl(&mangled, "Inspect") {
+            continue;
+        }
+        let ref_type = tt.make_ref(sig.repr_type_id);
+        generated.push(Rc::new(RefCell::new(generate_fn_inspect_fn(
+            &sig.type_arg_names,
+            sig.arity,
+            sig.return_type,
+            ref_type,
+            fmt_type,
+            span,
+        ))));
+        // Per-module: do not `ctx.record_impl`.
     }
 
     drop(tt);
@@ -1893,8 +1897,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     }
 
     // Tuples are skipped — their `InspectAlt` is provided by the variadic impl
-    // in `core:prelude/tuple.wado`. Function types and opaque types delegate
-    // to their `Inspect` counterpart.
+    // in `core:prelude/tuple.wado`. Opaque resource types delegate to their
+    // `Inspect` counterpart. `Fn` signatures are handled separately below.
     for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
         let mangled = format_parameterized_name(&base_name, &type_arg_names);
         if ctx.has_impl(&mangled, "InspectAlt") || !has_inspect(&mangled, ctx) {
@@ -1904,32 +1908,6 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         if matches!(resolved, ResolvedType::GenericInstance { ref name, ref module_source, .. } if TypeTable::is_tuple_type(name, module_source))
         {
             // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
-            continue;
-        }
-        if let ResolvedType::Function {
-            params,
-            return_type,
-            ..
-        } = &resolved
-        {
-            // Function: emit a stand-alone InspectAlt dispatch stub.
-            // Crucially, do NOT use the `display_fallback` Inspect-
-            // delegate: WIR build supplies the real body — `call_ref
-            // (self.inspect_alt)` for InspectAlt, `call_ref
-            // (self.inspect)` for Inspect — and a delegate would let
-            // the optimizer collapse InspectAlt to Inspect before WIR
-            // build runs, defeating the per-literal source dispatch.
-            let ref_type = tt.make_ref(type_id);
-            generated.push(Rc::new(RefCell::new(generate_fn_inspect_alt_fn(
-                &type_arg_names,
-                params.len(),
-                *return_type,
-                ref_type,
-                fmt_type,
-                span,
-            ))));
-            // Intentionally no `ctx.record_impl` — see the Inspect twin
-            // in `generate_inspect_impls` for the per-module rationale.
             continue;
         }
         let ref_type = tt.make_ref(type_id);
@@ -1946,7 +1924,30 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             vec![],
             span,
         ))));
-        // Same per-module rationale as the Function arm above.
+        // Per-module: do not `ctx.record_impl`.
+    }
+
+    // `Fn` dispatch stubs — one per canonical `(arity, return_type)`.
+    // Crucially, do NOT use the `display_fallback` Inspect-delegate:
+    // WIR build supplies the real body — `call_ref (self.inspect_alt)`
+    // for InspectAlt, `call_ref (self.inspect)` for Inspect — and a
+    // delegate would let the optimizer collapse InspectAlt to Inspect
+    // before WIR build runs, defeating the per-literal source dispatch.
+    for sig in collect_canonical_fn_signatures(&tt) {
+        let mangled = format_parameterized_name("Fn", &sig.type_arg_names);
+        if ctx.has_impl(&mangled, "InspectAlt") || !has_inspect(&mangled, ctx) {
+            continue;
+        }
+        let ref_type = tt.make_ref(sig.repr_type_id);
+        generated.push(Rc::new(RefCell::new(generate_fn_inspect_alt_fn(
+            &sig.type_arg_names,
+            sig.arity,
+            sig.return_type,
+            ref_type,
+            fmt_type,
+            span,
+        ))));
+        // Per-module: do not `ctx.record_impl`.
     }
 
     drop(tt);
@@ -2576,8 +2577,9 @@ fn generate_fallback_impls(
         ctx.record_impl(&nt.name, pair.target_trait);
     }
 
-    // Parameterized types (function types, opaque types). Tuples are skipped
-    // because their fallback is provided by a variadic impl in `core:prelude/tuple.wado`.
+    // Parameterized types (opaque types). Tuples are skipped because their
+    // fallback is provided by a variadic impl in `core:prelude/tuple.wado`.
+    // `Fn` signatures are handled separately below.
     for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
         // `collect_parameterized_types` returns only the base name without a
         // module source, so `TypeTable::is_tuple_type` is unavailable here. The
@@ -2615,9 +2617,40 @@ fn generate_fallback_impls(
             vec![],
             span,
         ))));
-        // Per-module fallback stub for Function/opaque types — see
-        // `generate_inspect_impls` for the rationale of skipping
-        // `ctx.record_impl` here.
+        // Per-module: do not `ctx.record_impl`.
+    }
+
+    // `Fn` dispatch-stub fallbacks — one per canonical `(arity, return_type)`.
+    for sig in collect_canonical_fn_signatures(&tt) {
+        let mangled = format_parameterized_name("Fn", &sig.type_arg_names);
+        if ctx.has_impl(&mangled, pair.target_trait) {
+            continue;
+        }
+        let delegate_present = ctx.has_impl(&mangled, pair.delegate_trait) || {
+            let delegate_key = format!(
+                "{mangled}^{}::{}",
+                pair.delegate_trait, pair.delegate_method
+            );
+            all_fn_names.contains(&delegate_key)
+        };
+        if !delegate_present {
+            continue;
+        }
+        let ref_type = tt.make_ref(sig.repr_type_id);
+        let target_info = trait_method_info("Fn", pair.target_trait, pair.target_method)
+            .with_struct_type_args(&sig.type_arg_names);
+        let delegate_info = trait_method_info("Fn", pair.delegate_trait, pair.delegate_method)
+            .with_struct_type_args(&sig.type_arg_names);
+        generated.push(Rc::new(RefCell::new(generate_display_fallback(
+            target_info,
+            delegate_info,
+            ref_type,
+            fmt_type,
+            &module_source,
+            vec![],
+            span,
+        ))));
+        // Per-module: do not `ctx.record_impl`.
     }
 
     drop(tt);
@@ -2751,23 +2784,24 @@ fn inspect_impl_module(type_id: TypeId, tt: &TypeTable, default: &ModuleSource) 
     )
 }
 
-/// Collect parameterized types that need Inspect/Display impls.
+/// Collect parameterized types that need Inspect/Display impls — per-`TypeId`
+/// kinds whose codegen genuinely depends on the distinct `TypeId`.
 ///
-/// Returns `(type_id, base_name, type_arg_names)` for each concrete parameterized type.
-/// Includes tuples, function types, and resource handle types (Future, Stream, etc.).
+/// Returns `(type_id, base_name, type_arg_names)` for each concrete
+/// parameterized type. Includes tuples and resource handle types (Future,
+/// Stream, etc.).
+///
+/// `ResolvedType::Function` is intentionally **not** enumerated here.
+/// `Fn` dispatch stubs depend only on `(arity, return_type)` because
+/// `wir_build::build_fn_canonical_dispatch_body` casts `self` to the shared
+/// `canonical_inspectable_base` before reading the vtable, so the per-
+/// parameter `TypeId`s are irrelevant at codegen. Enumerating Function
+/// types per `TypeId` here would emit one identical stub per `TypeId` and
+/// collide on `function_id_for`, which is required to be injective over
+/// `project.functions` (asserted in `optimize/dce`). Use
+/// [`collect_canonical_fn_signatures`] for the `(arity, return_type)` view.
 fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<String>)> {
     let is_concrete = |t: TypeId| !matches!(tt.get(t), ResolvedType::TypeParam { .. });
-
-    // `ResolvedType::Function` collapses to `(arity, return_type)` for the
-    // mangled stub name — its parameter TypeIds are irrelevant because the
-    // `FnCanonicalDispatch` body in `wir_build` casts `self` to the shared
-    // canonical-inspectable base before reading the vtable. Multiple
-    // distinct `Function` TypeIds with the same `(arity, return_type)`
-    // would otherwise each emit an identical stub and collide on
-    // `function_id_for`, which is required to be injective over
-    // `project.functions` (asserted in `optimize/dce`). Dedupe here so
-    // we emit a single representative stub per signature.
-    let mut seen_fn: IndexSet<Vec<String>> = IndexSet::default();
 
     tt.all_types()
         .filter_map(|(id, resolved)| match resolved {
@@ -2782,20 +2816,6 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<Strin
                 let args = type_args.iter().map(|e| tt.mangle_type_name(*e)).collect();
                 Some((*id, TypeTable::TUPLE_TYPE_NAME.to_string(), args))
             }
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                if !params.iter().all(|p| is_concrete(*p)) || !is_concrete(*return_type) {
-                    return None;
-                }
-                let args = vec![params.len().to_string(), tt.mangle_type_name(*return_type)];
-                if !seen_fn.insert(args.clone()) {
-                    return None;
-                }
-                Some((*id, "Fn".to_string(), args))
-            }
             ResolvedType::GenericResource {
                 name, type_args, ..
             } => {
@@ -2808,6 +2828,57 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<Strin
             _ => None,
         })
         .collect()
+}
+
+/// Canonical `Fn` signature for dispatch-stub synthesis.
+///
+/// `Fn` dispatch stubs (`Fn<arity, ret>^Inspect::inspect`,
+/// `Fn<arity, ret>^InspectAlt::inspect_alt`, and fallbacks) are keyed by
+/// `(arity, return_type)` alone — see `collect_parameterized_types` for the
+/// rationale. `repr_type_id` is the first encountered `ResolvedType::Function`
+/// `TypeId` with this signature; synthesis uses it to build the stub's `&self`
+/// type via `tt.make_ref(repr_type_id)`. Any `TypeId` with the same signature
+/// would work — the choice is deterministic-by-iteration-order so two
+/// compiles produce byte-identical output.
+struct FnSignature {
+    repr_type_id: TypeId,
+    arity: usize,
+    return_type: TypeId,
+    /// `[arity.to_string(), mangle_type_name(return_type)]` — the form
+    /// consumed by `format_parameterized_name` and the dispatch-stub
+    /// emitters.
+    type_arg_names: Vec<String>,
+}
+
+fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
+    let is_concrete = |t: TypeId| !matches!(tt.get(t), ResolvedType::TypeParam { .. });
+    let mut seen: IndexSet<(usize, TypeId)> = IndexSet::default();
+    let mut result = Vec::new();
+
+    for (id, resolved) in tt.all_types() {
+        let ResolvedType::Function {
+            params,
+            return_type,
+            ..
+        } = resolved
+        else {
+            continue;
+        };
+        if !params.iter().all(|p| is_concrete(*p)) || !is_concrete(*return_type) {
+            continue;
+        }
+        let arity = params.len();
+        if !seen.insert((arity, *return_type)) {
+            continue;
+        }
+        result.push(FnSignature {
+            repr_type_id: *id,
+            arity,
+            return_type: *return_type,
+            type_arg_names: vec![arity.to_string(), tt.mangle_type_name(*return_type)],
+        });
+    }
+    result
 }
 
 /// Format a parameterized type's mangled name from base name and type arg names.
