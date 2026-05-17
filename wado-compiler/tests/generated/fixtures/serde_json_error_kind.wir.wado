@@ -157,9 +157,7 @@ fn "wado-compiler/tests/fixtures/serde_json_error_kind.wado/__test_0_enum_field_
     let __match_scrut_0: ref "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>";
     __match_scrut_0 = r;
     __cond = (if ref.test "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err"(__match_scrut_0) -> bool {
-        let __cast_1: ref "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err"(__match_scrut_0);
-        e = __cast_1.payload_0;
+        e = ref.cast "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err"(__match_scrut_0).payload_0;
         e.kind == 7;
     } else {
         0;
@@ -761,14 +759,10 @@ fn "core:json/core/json/from_string<i32>"(input) {
     let __match_scrut_0: ref "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>";
     __match_scrut_0 = "wado-compiler/tests/fixtures/serde_json_error_kind.wado/i32^Deserialize::deserialize<core:json/JsonDeserializer>"(de);
     v = (if ref.test "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> i32 {
-        let __cast_2: ref "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Ok";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Ok"(__match_scrut_0);
-        __qm_v = __cast_2.payload_0;
+        __qm_v = ref.cast "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Ok"(__match_scrut_0).payload_0;
         __qm_v;
     } else {
-        let __cast_1: ref "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err"(__match_scrut_0);
-        __qm_e = __cast_1.payload_0;
+        __qm_e = ref.cast "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err"(__match_scrut_0).payload_0;
         return struct.new "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __qm_e };
     });
     "core:json/JsonDeserializer::skip_whitespace"(de);

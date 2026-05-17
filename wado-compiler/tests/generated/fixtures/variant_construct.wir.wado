@@ -488,9 +488,7 @@ condition: arr.len() == 0
     let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
     __match_scrut_0 = opt_i32;
     __cond_20 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) -> bool {
-        let __cast_1: ref "core:prelude/types.wado//Option<i32>::Some";
-        __cast_1 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0);
-        n = __cast_1.payload_0;
+        n = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0).payload_0;
         n == 42;
     } else {
         0;
@@ -519,9 +517,7 @@ condition: opt_i32 matches { Some(n) && n == 42 }
     let __match_scrut_1: ref null "core:prelude//Array<u8>";
     __match_scrut_1 = opt_arr;
     __cond_22 = (if ref.is_null(__match_scrut_1) == 0 -> bool {
-        let __cast_2: ref null "core:prelude//Array<u8>";
-        __cast_2 = ref.as_non_null(__match_scrut_1);
-        a = ref.as_non_null(__cast_2);
+        a = ref.as_non_null(__match_scrut_1);
         a.used == 2;
     } else {
         0;
@@ -548,13 +544,13 @@ condition: opt_arr matches { Some(a) && a.len() == 2 }
         unreachable;
     }
     message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
-    let __pair_temp_3: i64;
-    __pair_temp_3 = "wasi/stream-new"();
-    let __mv_lo_3: i32;
-    let __mv_hi_3: i32;
-    multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
-    rx = __mv_lo_3;
-    tx = __mv_hi_3;
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    let __mv_lo_1: i32;
+    let __mv_hi_1: i32;
+    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
+    rx = __mv_lo_1;
+    tx = __mv_hi_1;
     handle = "wado-compiler/tests/fixtures/variant_construct.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);

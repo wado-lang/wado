@@ -1,0 +1,40 @@
+// REGRESSION: serde-driven copy of a struct chain that contains
+// `Array<Array<Array<f64>>>` loses one of the value_copy helpers
+// to DCE under optimization. Codegen panics:
+//   "WirInstr::ArrayClone references unknown helper $value_copy$T<id>"
+//
+// Mirrors the json_canada FeatureCollection → Array<Feature> →
+// Geometry → Array<Array<Array<f64>>> shape that benchmark/CI hits.
+
+use { Deserialize } from "core:serde";
+use { from_string } from "core:json";
+
+struct Geom {
+    coords: Array<Array<Array<f64>>>,
+}
+impl Deserialize for Geom;
+
+struct Item {
+    name: String,
+    geom: Geom,
+}
+impl Deserialize for Item;
+
+struct Collection {
+    items: Array<Item>,
+}
+impl Deserialize for Collection;
+
+export fn run() {
+    let data = "{\"items\":[{\"name\":\"x\",\"geom\":{\"coords\":[[[1.0]]]}}]}";
+    let c = match from_string::<Collection>(data) {
+        Ok(c) => c,
+        Err(e) => panic(`parse failed: {e.message}`),
+    };
+    assert c.items.len() == 1;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

@@ -185,22 +185,42 @@ fn extend_reachable_for_optimizer_passes(
             }
         })
         .collect();
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        let func_id = function_id_for(&func);
-        if !reachable.contains(&func_id) {
-            continue;
-        }
-        if let Some(body) = &func.body {
-            let mut needed: IndexSet<crate::tir::TypeId> = IndexSet::default();
-            collect_array_clone_element_types(body, &mut needed);
-            for type_id in needed {
-                if let Some(helper_id) = helpers_by_type_id.get(&type_id)
-                    && !reachable.contains(helper_id)
-                {
-                    reachable.extend(compute_reachable(call_graph, helper_id));
+    // Iterate to a fixpoint. The single-pass iteration this loop used
+    // to do was order-sensitive: when a `$value_copy$T<id>` helper's
+    // own body contained an `array_clone::<T'>(...)` (which itself
+    // pointed at another helper), marking the outer helper reachable
+    // mid-loop did not retroactively rescan it. With chains like
+    // `Array<Array<Array<T>>>` (json-canada's
+    // `Geometry::coordinates`), the inner helper was dropped by the
+    // post-`compute_reachable` `remove_unreachable_functions`, and
+    // codegen panicked with `WirInstr::ArrayClone references unknown
+    // helper $value_copy$T<inner-id>` later in the pipeline.
+    // `compute_reachable(call_graph, helper_id)` only follows direct
+    // call edges, so the inner virtual edge would never be added by
+    // that single step.
+    loop {
+        let mut added_this_round = false;
+        for func_rc in &project.functions {
+            let func = func_rc.borrow();
+            let func_id = function_id_for(&func);
+            if !reachable.contains(&func_id) {
+                continue;
+            }
+            if let Some(body) = &func.body {
+                let mut needed: IndexSet<crate::tir::TypeId> = IndexSet::default();
+                collect_array_clone_element_types(body, &mut needed);
+                for type_id in needed {
+                    if let Some(helper_id) = helpers_by_type_id.get(&type_id)
+                        && !reachable.contains(helper_id)
+                    {
+                        reachable.extend(compute_reachable(call_graph, helper_id));
+                        added_this_round = true;
+                    }
                 }
             }
+        }
+        if !added_this_round {
+            break;
         }
     }
 }

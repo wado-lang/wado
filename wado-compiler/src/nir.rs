@@ -607,10 +607,10 @@ pub enum NirStmtKind {
     },
     /// Tuple destructuring let statement: `let [a, b] = tuple_expr;`
     ///
-    /// Preserved post-lower only when `lower::plan::pattern` detects a tuple-shaped
+    /// Preserved post-lower only when `lower::translate::pattern` detects a tuple-shaped
     /// pattern whose value is a core-builtin Call (multi-value return).
     /// Codegen has a special optimization for that case; all other shapes are
-    /// rewritten by `lower::plan::pattern` before reaching NIR.
+    /// rewritten by `lower::translate::pattern` before reaching NIR.
     LetDestructure {
         /// The pattern to bind (e.g., [a, b, c] or [x, [y, z]])
         pattern: NirPattern,

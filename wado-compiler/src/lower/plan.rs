@@ -7,10 +7,14 @@
 //! `&primitive` / `IfLet` nodes in place). The translator is purely a
 //! fold over TIR; everything that needs global analysis happens here.
 //!
-//! Sub-pass order, mirroring the previous in-place pipeline:
+//! Sub-pass order:
 //!
-//! 1. `pattern` — `IfLet` / `LetDestructure` → explicit `Let` + `If`;
-//!    dense integer `Match` → `Switch`.
+//! 1. `translate::pattern` — `IfLet` / `LetDestructure` → explicit
+//!    `Let` + `If`; or-pattern expansion in `Match`. The
+//!    implementation lives in the translator module because it
+//!    builds the TIR shapes the translator consumes; it must run
+//!    first so that downstream passes (boxing rewrites `&Variant`
+//!    types) don't obscure the `Ref` peeling pattern lowering needs.
 //! 2. `globals::extract` — extract non-constant initializers into a
 //!    per-module `__initialize_module` function (one per source
 //!    module; disambiguated by `module_source`).
@@ -35,7 +39,6 @@ use crate::flat_package::FlatPackage;
 pub mod boxing;
 pub mod closure;
 pub mod globals;
-pub mod pattern;
 pub mod string;
 pub mod value_copy;
 
@@ -46,7 +49,7 @@ pub struct LowerPlan {
 }
 
 pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
-    pattern::plan(flat);
+    super::translate::pattern::lower(flat);
     globals::extract(flat);
     boxing::plan(flat);
     let closure = closure::plan(flat);

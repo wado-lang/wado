@@ -149,14 +149,10 @@ fn "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/make_oute
     let __match_scrut_0: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/Inner,core:prelude/string.wado/String>";
     __match_scrut_0 = "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/make_inner"(v);
     inner = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/Inner,core:prelude/string.wado/String>::Ok"(__match_scrut_0) -> ref "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Inner" {
-        let __cast_2: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/Inner,core:prelude/string.wado/String>::Ok";
-        __cast_2 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/Inner,core:prelude/string.wado/String>::Ok"(__match_scrut_0);
-        i = __cast_2.payload_0;
+        i = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/Inner,core:prelude/string.wado/String>::Ok"(__match_scrut_0).payload_0;
         i;
     } else {
-        let __cast_1: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/Inner,core:prelude/string.wado/String>::Err";
-        __cast_1 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/Inner,core:prelude/string.wado/String>::Err"(__match_scrut_0);
-        e = __cast_1.payload_0;
+        e = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado/Inner,core:prelude/string.wado/String>::Err"(__match_scrut_0).payload_0;
         return 1, ref.null none, e;
     });
     return 0, struct.new "wado-compiler/tests/fixtures/wir_optimize_vcopy_return_struct.wado//Outer" { inner: inner, tag: v * 10 }, ref.null none;

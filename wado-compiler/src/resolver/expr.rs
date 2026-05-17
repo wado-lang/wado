@@ -1200,57 +1200,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span)
     }
 
-    /// Extract the result type from a block (the type of its last expression, or Unit)
+    /// Extract the result type from a block (the type of its last
+    /// expression, or Unit). Thin wrapper around the shared
+    /// [`crate::tir::block_result_type`] free function.
     pub(super) fn block_result_type(block: &TirBlock) -> TypeId {
-        block
-            .stmts
-            .last()
-            .and_then(|s| match &s.kind {
-                TirStmtKind::Expr(e) => Some(e.type_id),
-                // If statement can produce a value if both branches exist and have the same type
-                TirStmtKind::If {
-                    then_block,
-                    else_block: Some(else_block),
-                    ..
-                } => {
-                    let then_type = Self::block_result_type(then_block);
-                    let else_type = Self::block_result_type(else_block);
-                    // `never` is the bottom type: compatible with any other type.
-                    if then_type == else_type {
-                        Some(then_type)
-                    } else if then_type == TypeTable::NEVER {
-                        Some(else_type)
-                    } else if else_type == TypeTable::NEVER {
-                        Some(then_type)
-                    } else {
-                        None
-                    }
-                }
-                // IfLet can also produce a value if both branches exist and have the same type
-                TirStmtKind::IfLet {
-                    then_block,
-                    else_block: Some(else_block),
-                    ..
-                } => {
-                    let then_type = Self::block_result_type(then_block);
-                    let else_type = Self::block_result_type(else_block);
-                    // `never` is the bottom type: compatible with any other type.
-                    if then_type == else_type {
-                        Some(then_type)
-                    } else if then_type == TypeTable::NEVER {
-                        Some(else_type)
-                    } else if else_type == TypeTable::NEVER {
-                        Some(then_type)
-                    } else {
-                        None
-                    }
-                }
-                TirStmtKind::Return { .. } | TirStmtKind::Break { .. } | TirStmtKind::Continue => {
-                    Some(TypeTable::NEVER)
-                }
-                _ => None,
-            })
-            .unwrap_or(TypeTable::UNIT)
+        crate::tir::block_result_type(block)
     }
 
     /// Resolve an if expression

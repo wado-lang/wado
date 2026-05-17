@@ -286,9 +286,7 @@ fn "wado-compiler/tests/fixtures/newtype_option_pattern.wado/run"() with Stdout 
     let __match_scrut_0: ref "core:prelude/types.wado//Option<f64>";
     __match_scrut_0 = angle;
     result = (if ref.test "core:prelude/types.wado//Option<f64>::Some"(__match_scrut_0) -> f64 {
-        let __cast_5: ref "core:prelude/types.wado//Option<f64>::Some";
-        __cast_5 = ref.cast "core:prelude/types.wado//Option<f64>::Some"(__match_scrut_0);
-        v = __cast_5.payload_0;
+        v = ref.cast "core:prelude/types.wado//Option<f64>::Some"(__match_scrut_0).payload_0;
         v * 2;
     } else {
         0;
@@ -305,13 +303,13 @@ fn "wado-compiler/tests/fixtures/newtype_option_pattern.wado/run"() with Stdout 
         break __tmpl: __local_10;
         unreachable;
     };
-    let __pair_temp_6: i64;
-    __pair_temp_6 = "wasi/stream-new"();
-    let __mv_lo_6: i32;
-    let __mv_hi_6: i32;
-    multivalue_bind [__mv_lo_6, __mv_hi_6] = (builtin::i32_wrap_i64(__pair_temp_6); builtin::i32_wrap_i64(__pair_temp_6 >>u 32_i64));
-    rx_59 = __mv_lo_6;
-    tx_60 = __mv_hi_6;
+    let __pair_temp_5: i64;
+    __pair_temp_5 = "wasi/stream-new"();
+    let __mv_lo_5: i32;
+    let __mv_hi_5: i32;
+    multivalue_bind [__mv_lo_5, __mv_hi_5] = (builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64));
+    rx_59 = __mv_lo_5;
+    tx_60 = __mv_hi_5;
     handle_61 = "wado-compiler/tests/fixtures/newtype_option_pattern.wado/__cm_binding__Stdout_write_via_stream"(rx_59);
     "core:cli/write_to_stream"(tx_60, message_58, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_61);

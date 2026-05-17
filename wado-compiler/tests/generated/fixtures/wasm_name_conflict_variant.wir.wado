@@ -153,9 +153,7 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_variant.wado/run"() with Std
         "core:prelude/string.wado/String::push"(__local_4, 32);
         __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(let __match_scrut_1: ref "./sub/wasm_name_conflict_variant_mod_b.wado//Status"; __match_scrut_1 = b; (if ref.test "./sub/wasm_name_conflict_variant_mod_b.wado//Status::Ok"(__match_scrut_1) -> i32 {
-            let __cast_2: ref "./sub/wasm_name_conflict_variant_mod_b.wado//Status::Ok";
-            __cast_2 = ref.cast "./sub/wasm_name_conflict_variant_mod_b.wado//Status::Ok"(__match_scrut_1);
-            v_31 = __cast_2.payload_0;
+            v_31 = ref.cast "./sub/wasm_name_conflict_variant_mod_b.wado//Status::Ok"(__match_scrut_1).payload_0;
             v_31;
         } else {
             -1;
@@ -163,13 +161,13 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_variant.wado/run"() with Std
         break __tmpl: __local_4;
         unreachable;
     };
-    let __pair_temp_3: i64;
-    __pair_temp_3 = "wasi/stream-new"();
-    let __mv_lo_3: i32;
-    let __mv_hi_3: i32;
-    multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
-    rx_22 = __mv_lo_3;
-    tx_23 = __mv_hi_3;
+    let __pair_temp_2: i64;
+    __pair_temp_2 = "wasi/stream-new"();
+    let __mv_lo_2: i32;
+    let __mv_hi_2: i32;
+    multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
+    rx_22 = __mv_lo_2;
+    tx_23 = __mv_hi_2;
     handle_24 = "wado-compiler/tests/fixtures/wasm_name_conflict_variant.wado/__cm_binding__Stdout_write_via_stream"(rx_22);
     "core:cli/write_to_stream"(tx_23, message_21, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_24);
