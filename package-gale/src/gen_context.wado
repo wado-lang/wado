@@ -232,19 +232,35 @@ impl GenContext {
     /// `RuleRef`s halt accumulation (per-depth union of multi-alt
     /// prefixes would over-yield by matching cross-alt sequences that
     /// no real alt admits).
-    pub fn deep_position_first_sets_from(&mut self, elements: &Array<Element>, start: i32, max_depth: i32, visiting: &mut Array<String>) -> Array<Array<String>> {
+    ///
+    /// Returns `(prefix, consumed_elements)`. `consumed_elements` is the
+    /// number of surface elements from `elements[start..]` that the
+    /// walk fully traversed (not the same as `prefix.len()` — a
+    /// single-alt `RuleRef` consumes one surface element but its
+    /// expanded body may contribute multiple depths). Callers needing
+    /// to follow the suffix past the walk (e.g.
+    /// [`compute_call_site_k_prefix_mask`]'s tail-nullable check)
+    /// must use the element count, not the depth count.
+    pub fn deep_position_first_sets_from(&mut self, elements: &Array<Element>, start: i32, max_depth: i32, visiting: &mut Array<String>) -> [Array<Array<String>>, i32] {
         let mut result: Array<Array<String>> = [];
-        self.deep_position_walk(elements, start, max_depth, &mut result, visiting);
-        return result;
+        let final_cursor = self.deep_position_walk(elements, start, max_depth, &mut result, visiting);
+        return [result, final_cursor - start];
     }
 
-    fn deep_position_walk(&mut self, elements: &Array<Element>, start: i32, max_depth: i32, result: &mut Array<Array<String>>, visiting: &mut Array<String>) {
+    /// Internal walker. Returns the cursor index reached when the walk
+    /// finished — equal to `elements.len()` when fully consumed, less
+    /// when the walk halted (early return after a multi-alt RuleRef,
+    /// nullable suffix, `Group` / `Repeat` / `Wildcard`, etc.). The
+    /// return value tells callers whether subsequent elements can be
+    /// safely indexed (when fully consumed) or whether the walk hit a
+    /// non-deterministic position (halted).
+    fn deep_position_walk(&mut self, elements: &Array<Element>, start: i32, max_depth: i32, result: &mut Array<Array<String>>, visiting: &mut Array<String>) -> i32 {
         let mut cursor = start;
         while result.len() < max_depth && cursor < elements.len() {
             // Suffix from `cursor` must consume ≥1 token — otherwise the
             // alignment from position-d-set to input-offset-d breaks.
             if self.tail_is_nullable_deep(elements, cursor) {
-                return;
+                return cursor;
             }
             let elem = &elements[cursor];
             match elem {
@@ -252,32 +268,51 @@ impl GenContext {
                     let mut fv: Array<String> = [];
                     let first = self.first_of_element(elem, &mut fv);
                     if first.is_empty() {
-                        return;
+                        return cursor;
                     }
                     result.push(first);
                     cursor += 1;
                 },
                 Label(lab) => {
+                    // A label is positionally identical to its inner;
+                    // recurse on a single-element sequence wrapping the
+                    // labelled element. If that recursion halts (didn't
+                    // walk the whole `[lab.element]`), this outer walk
+                    // must halt too — otherwise we'd keep consuming
+                    // subsequent surface elements at depths that no
+                    // longer align with the un-fully-walked label.
                     let single: Array<Element> = [lab.element];
-                    self.deep_position_walk(&single, 0, max_depth, result, visiting);
+                    let inner_final = self.deep_position_walk(&single, 0, max_depth, result, visiting);
+                    if inner_final < single.len() {
+                        return cursor;
+                    }
                     cursor += 1;
                 },
                 RuleRef(r) => {
                     let visiting_set = str_set_from(visiting);
                     if visiting_set.contains(r.name) {
-                        return;
+                        return cursor;
                     }
                     let rule = self.find_rule(&r.name);
                     if let Some(rule) = rule {
                         if rule.alternatives.len() != 1 {
                             // Multi-alt: per-depth union would over-yield. Halt.
-                            return;
+                            return cursor;
                         }
                         visiting.push(r.name);
-                        self.deep_position_walk(&rule.alternatives[0].elements, 0, max_depth, result, visiting);
+                        let inner_elements = &rule.alternatives[0].elements;
+                        let inner_final = self.deep_position_walk(inner_elements, 0, max_depth, result, visiting);
                         remove_from_visiting(visiting, &r.name);
+                        // If the expansion halted inside the rule body
+                        // (didn't reach `inner_elements.len()`), the
+                        // surface element index of subsequent elements
+                        // no longer corresponds to a contiguous input
+                        // depth — halt the outer walk too.
+                        if inner_final < inner_elements.len() {
+                            return cursor;
+                        }
                     } else {
-                        return;
+                        return cursor;
                     }
                     cursor += 1;
                 },
@@ -285,10 +320,11 @@ impl GenContext {
                     // Conservative halt: per-depth union across alts /
                     // optional iterations would over-yield; static
                     // wildcards can't be enumerated.
-                    return;
+                    return cursor;
                 },
             }
         }
+        return cursor;
     }
 
     /// Returns FIRST sets indexed by INPUT TOKEN position relative to the
@@ -558,7 +594,7 @@ impl GenContext {
     /// pays for each depth checked).
     pub fn compute_call_site_k_prefix_mask(&mut self, elements: &Array<Element>, i: i32, max_k: i32, variant_k_prefix_mask: &Array<Array<String>>) -> Array<Array<String>> {
         let mut visiting: Array<String> = [];
-        let local = self.deep_position_first_sets_from(elements, i + 1, max_k, &mut visiting);
+        let [local, consumed_elements] = self.deep_position_first_sets_from(elements, i + 1, max_k, &mut visiting);
         // If the local walk filled the whole budget, the variant's
         // mask is dead beyond what we already have.
         if local.len() >= max_k {
@@ -572,7 +608,15 @@ impl GenContext {
         // The variant's mask only applies past the local prefix when
         // the tail at that point is deep-nullable (so the surrounding
         // variant's caller-continuation reaches this position).
-        if !self.tail_is_nullable_deep(elements, i + 1 + local.len()) {
+        //
+        // Index the tail by `consumed_elements`, not `local.len()`: a
+        // single-alt RuleRef in the suffix consumes one surface
+        // element but its body may contribute multiple depths to
+        // `local`, so using the depth count as a surface index would
+        // overshoot past unconsumed elements and trigger a vacuous
+        // `tail_is_nullable_deep` true (`elements.len()` reached, loop
+        // empty) for non-nullable suffix tails.
+        if !self.tail_is_nullable_deep(elements, i + 1 + consumed_elements) {
             return local;
         }
         let mut combined = local;

@@ -32106,7 +32106,7 @@ fn scan_supports_conjunction(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
     if pos < 0 { return -1; }
     sg_52_done: {
         sg_52: {
-            pos = scan_ws__follow_1(tokens, pos, 0);
+            pos = scan_ws__follow_0(tokens, pos, 0);
             if pos < 0 { break sg_52; }
             if pos >= tokens.len() || tokens[pos].kind != TK_Space { break sg_52; }
             pos += 1;
@@ -32130,7 +32130,7 @@ fn scan_supports_conjunction(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
         let sp = pos;
         sg_53_done: {
             sg_53: {
-                pos = scan_ws__follow_1(tokens, pos, 0);
+                pos = scan_ws__follow_0(tokens, pos, 0);
                 if pos < 0 { break sg_53; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_Space { break sg_53; }
                 pos += 1;
@@ -32162,7 +32162,7 @@ fn scan_supports_disjunction(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
     if pos < 0 { return -1; }
     sg_54_done: {
         sg_54: {
-            pos = scan_ws__follow_2(tokens, pos, 0);
+            pos = scan_ws__follow_0(tokens, pos, 0);
             if pos < 0 { break sg_54; }
             if pos >= tokens.len() || tokens[pos].kind != TK_Space { break sg_54; }
             pos += 1;
@@ -32186,7 +32186,7 @@ fn scan_supports_disjunction(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
         let sp = pos;
         sg_55_done: {
             sg_55: {
-                pos = scan_ws__follow_2(tokens, pos, 0);
+                pos = scan_ws__follow_0(tokens, pos, 0);
                 if pos < 0 { break sg_55; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_Space { break sg_55; }
                 pos += 1;
@@ -37171,7 +37171,7 @@ fn parse_supports_conjunction(p: &mut Parser) -> Result<SupportsConjunctionNode,
                 let mut pos: i32 = p.pos;
                 sg_118_done: {
                     sg_118: {
-                        pos = scan_ws__follow_1(tokens, pos, 0);
+                        pos = scan_ws__follow_0(tokens, pos, 0);
                         if pos < 0 { break sg_118; }
                         if pos >= tokens.len() || tokens[pos].kind != TK_Space { break sg_118; }
                         pos += 1;
@@ -37197,7 +37197,7 @@ fn parse_supports_conjunction(p: &mut Parser) -> Result<SupportsConjunctionNode,
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let ws = parse_ws__follow_1(p)?;
+        let ws = parse_ws__follow_0(p)?;
         let space = p.expect(TK_Space)?;
         let ws_2 = parse_ws(p)?;
         let and = p.expect(TK_And)?;
@@ -37237,7 +37237,7 @@ fn parse_supports_disjunction(p: &mut Parser) -> Result<SupportsDisjunctionNode,
                 let mut pos: i32 = p.pos;
                 sg_119_done: {
                     sg_119: {
-                        pos = scan_ws__follow_2(tokens, pos, 0);
+                        pos = scan_ws__follow_0(tokens, pos, 0);
                         if pos < 0 { break sg_119; }
                         if pos >= tokens.len() || tokens[pos].kind != TK_Space { break sg_119; }
                         pos += 1;
@@ -37263,7 +37263,7 @@ fn parse_supports_disjunction(p: &mut Parser) -> Result<SupportsDisjunctionNode,
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let ws = parse_ws__follow_2(p)?;
+        let ws = parse_ws__follow_0(p)?;
         let space = p.expect(TK_Space)?;
         let ws_2 = parse_ws(p)?;
         let or = p.expect(TK_Or)?;
@@ -38463,134 +38463,6 @@ fn parse_ws__follow_0(p: &mut Parser) -> Result<WsNode, ParseError> {
                     if pos >= tokens.len() || tokens[pos].kind != TK_Space { break sg_133_1; }
                     pos += 1;
                     break sg_133;
-                }
-                break rep_scan;
-            }
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
-        }
-        if rep_scan_pos < 0 { break; }
-        let comment_or_space = p.advance();
-        comment_or_space_list.push(comment_or_space);
-    }
-    return Result::<WsNode, ParseError>::Ok(WsNode {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        comment_or_space_list,
-    });
-}
-
-fn scan_ws__follow_1(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) && !((pos + 0 < tokens.len() && tokens[pos + 0].kind == TK_Space) && (pos + 1 < tokens.len() && tokens[pos + 1].kind == TK_And)) {
-        let sp = pos;
-        let gp_134 = pos;
-        sg_134: {
-            pos = gp_134;
-            sg_134_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_Comment { break sg_134_0; }
-                pos += 1;
-                break sg_134;
-            }
-            pos = gp_134;
-            sg_134_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_Space { break sg_134_1; }
-                pos += 1;
-                break sg_134;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    return pos;
-}
-
-fn parse_ws__follow_1(p: &mut Parser) -> Result<WsNode, ParseError> {
-    let start = p.peek().span.start;
-    let mut comment_or_space_list: Array<Token> = [];
-    loop {
-        if p.peek_kind() == TK_Space && p.peek_at(1) == TK_And { break; }
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.tokens;
-            let mut pos: i32 = p.pos;
-            let gp_135 = pos;
-            sg_135: {
-                pos = gp_135;
-                sg_135_0: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_Comment { break sg_135_0; }
-                    pos += 1;
-                    break sg_135;
-                }
-                pos = gp_135;
-                sg_135_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_Space { break sg_135_1; }
-                    pos += 1;
-                    break sg_135;
-                }
-                break rep_scan;
-            }
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
-        }
-        if rep_scan_pos < 0 { break; }
-        let comment_or_space = p.advance();
-        comment_or_space_list.push(comment_or_space);
-    }
-    return Result::<WsNode, ParseError>::Ok(WsNode {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        comment_or_space_list,
-    });
-}
-
-fn scan_ws__follow_2(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) && !((pos + 0 < tokens.len() && tokens[pos + 0].kind == TK_Space) && (pos + 1 < tokens.len() && tokens[pos + 1].kind == TK_Or)) {
-        let sp = pos;
-        let gp_136 = pos;
-        sg_136: {
-            pos = gp_136;
-            sg_136_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_Comment { break sg_136_0; }
-                pos += 1;
-                break sg_136;
-            }
-            pos = gp_136;
-            sg_136_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_Space { break sg_136_1; }
-                pos += 1;
-                break sg_136;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    return pos;
-}
-
-fn parse_ws__follow_2(p: &mut Parser) -> Result<WsNode, ParseError> {
-    let start = p.peek().span.start;
-    let mut comment_or_space_list: Array<Token> = [];
-    loop {
-        if p.peek_kind() == TK_Space && p.peek_at(1) == TK_Or { break; }
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.tokens;
-            let mut pos: i32 = p.pos;
-            let gp_137 = pos;
-            sg_137: {
-                pos = gp_137;
-                sg_137_0: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_Comment { break sg_137_0; }
-                    pos += 1;
-                    break sg_137;
-                }
-                pos = gp_137;
-                sg_137_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_Space { break sg_137_1; }
-                    pos += 1;
-                    break sg_137;
                 }
                 break rep_scan;
             }

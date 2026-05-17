@@ -3099,7 +3099,7 @@ fn parse_html_element__follow_2(p: &mut Parser) -> Result<HtmlElementNode, Parse
                 pos += 1;
                 opt_scan_pos = pos;
             }
-            let html_content_tag_open_tag_slash_tag_name_tag_close: Option<HtmlContentTagOpenTagSlashTagNameTagCloseItem> = if opt_scan_pos >= 0 {
+            let html_content_tag_open_tag_slash_tag_name_tag_close: Option<HtmlContentTagOpenTagSlashTagNameTagCloseItem> = if !(p.peek_kind() == TK_TAG_OPEN && p.peek_at(1) == TK_TAG_SLASH && p.peek_at(2) == TK_TAG_NAME && p.peek_at(3) == TK_TAG_CLOSE) && (opt_scan_pos >= 0) {
                 let html_content = parse_html_content__follow_1(p)?;
                 let tag_open = p.expect(TK_TAG_OPEN)?;
                 let tag_slash = p.expect(TK_TAG_SLASH)?;

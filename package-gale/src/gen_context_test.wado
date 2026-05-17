@@ -7,6 +7,7 @@ use {
     RepeatElement,
     RepeatKind,
     GroupElement,
+    LabelElement,
     Visibility,
 } from "./ir.wado";
 use { GenContext } from "./gen_context.wado";
@@ -679,7 +680,7 @@ test "deep_position_first_sets_from: recurses into single-alt RuleRef" {
     let mut ctx = mk_ctx_with([r_rule, c_rule]);
     let elements: Array<Element> = [rr("a"), rr("c")];
     let mut visiting: Array<String> = [];
-    let r = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
+    let [r, consumed] = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
     let expected_x: Array<String> = ["TK_X"];
     let expected_y: Array<String> = ["TK_Y"];
     let expected_z: Array<String> = ["TK_Z"];
@@ -687,6 +688,7 @@ test "deep_position_first_sets_from: recurses into single-alt RuleRef" {
     assert r[0] == expected_x;
     assert r[1] == expected_y;
     assert r[2] == expected_z;
+    assert consumed == 1, `expected one surface element (c) consumed, got {consumed}`;
 }
 
 test "deep_position_first_sets_from: halts on multi-alt RuleRef" {
@@ -703,8 +705,9 @@ test "deep_position_first_sets_from: halts on multi-alt RuleRef" {
     let mut ctx = mk_ctx_with([r_rule, c_rule]);
     let elements: Array<Element> = [rr("a"), rr("c")];
     let mut visiting: Array<String> = [];
-    let r = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
+    let [r, consumed] = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
     assert r.is_empty(), `expected empty (multi-alt halts), got {r.len()}`;
+    assert consumed == 0, `multi-alt halt must not advance the cursor, got {consumed}`;
 }
 
 test "deep_position_first_sets_from: cycles bail to keep the analysis terminating" {
@@ -713,8 +716,9 @@ test "deep_position_first_sets_from: cycles bail to keep the analysis terminatin
     let mut ctx = mk_ctx_with([r_rule]);
     let elements: Array<Element> = [rr("a"), rr("r")];
     let mut visiting: Array<String> = ["r"];  // simulate being inside r's expansion
-    let prefixes = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
+    let [prefixes, consumed] = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
     assert prefixes.is_empty(), `expected empty (cycle), got {prefixes.len()}`;
+    assert consumed == 0, `cycle halt must not advance the cursor, got {consumed}`;
 }
 
 test "deep_position_first_sets_from: tokens before RuleRef accumulate normally" {
@@ -723,7 +727,7 @@ test "deep_position_first_sets_from: tokens before RuleRef accumulate normally" 
     let mut ctx = mk_ctx_with([c_rule]);
     let elements: Array<Element> = [tk("X"), rr("c")];
     let mut visiting: Array<String> = [];
-    let r = ctx.deep_position_first_sets_from(&elements, 0, 3, &mut visiting);
+    let [r, consumed] = ctx.deep_position_first_sets_from(&elements, 0, 3, &mut visiting);
     let expected_x: Array<String> = ["TK_X"];
     let expected_y: Array<String> = ["TK_Y"];
     let expected_z: Array<String> = ["TK_Z"];
@@ -731,6 +735,7 @@ test "deep_position_first_sets_from: tokens before RuleRef accumulate normally" 
     assert r[0] == expected_x;
     assert r[1] == expected_y;
     assert r[2] == expected_z;
+    assert consumed == 2, `both surface elements consumed, got {consumed}`;
 }
 
 test "deep_position_first_sets_from: matches shallow walk for single-token-only sequence" {
@@ -738,7 +743,7 @@ test "deep_position_first_sets_from: matches shallow walk for single-token-only 
     let mut ctx = mk_ctx();
     let elements: Array<Element> = [tk("X"), tk("Y"), tk("Z")];
     let mut visiting: Array<String> = [];
-    let deep = ctx.deep_position_first_sets_from(&elements, 0, 3, &mut visiting);
+    let [deep, _] = ctx.deep_position_first_sets_from(&elements, 0, 3, &mut visiting);
     let shallow = ctx.position_first_sets_from(&elements, 0, 3);
     assert deep.len() == shallow.len(), `length mismatch: deep={deep.len()}, shallow={shallow.len()}`;
     for let mut d = 0; d < deep.len(); d += 1 {
@@ -748,6 +753,63 @@ test "deep_position_first_sets_from: matches shallow walk for single-token-only 
         b_set.sort();
         assert a_set == b_set, `mismatch at depth {d}: {a_set} vs {b_set}`;
     }
+}
+
+test "deep_position_first_sets_from: halt inside expanded RuleRef stops outer walk" {
+    // Regression: if a single-alt RuleRef's body halts mid-walk (e.g.
+    // its body contains a multi-alt RuleRef or Group), the outer walk
+    // must NOT advance past the halted RuleRef onto subsequent surface
+    // elements at misaligned depths.
+    //
+    // Setup: r : c Z ;  c : X (A | B) ;
+    //  - `c`'s body walks `X` (push {X}) then halts at the multi-alt
+    //    Group `(A | B)`.
+    //  - If the outer walk naïvely incremented cursor past `c`, it
+    //    would push {Z} at depth 1, but actual input depth 1 inside
+    //    the expanded `c` is `{A, B}` (or further depending on the
+    //    Group's first set). The result would mis-claim `Z` at depth 1.
+    //
+    // Expected: walk halts after pushing {X}; subsequent {Z} must NOT
+    // appear in the result, and `consumed` reflects "halted inside c".
+    let c_rule = mk_rule("c", [alt([tk("X"), group([alt([tk("A")]), alt([tk("B")])])])]);
+    let mut ctx = mk_ctx_with([c_rule]);
+    let elements: Array<Element> = [rr("c"), tk("Z")];
+    let mut visiting: Array<String> = [];
+    let [prefixes, consumed] = ctx.deep_position_first_sets_from(&elements, 0, 4, &mut visiting);
+    let expected_x: Array<String> = ["TK_X"];
+    assert prefixes.len() == 1, `expected K=1 (halt after X), got {prefixes.len()}: {prefixes}`;
+    assert prefixes[0] == expected_x;
+    assert consumed == 0, `expansion of 'c' must NOT advance cursor when its body halts, got {consumed}`;
+}
+
+test "deep_position_first_sets_from: halt inside Label stops outer walk" {
+    // Same misalignment shape as the RuleRef arm, but the halting
+    // recursion is for a labelled element whose inner is a multi-alt
+    // Group. The Label arm must propagate the halt up.
+    let mut ctx = mk_ctx();
+    // [label=(A|B), Z] — Label wraps a multi-alt Group that halts.
+    let multi = group([alt([tk("A")]), alt([tk("B")])]);
+    let labelled = Element::Label(LabelElement {
+        name: "lab",
+        list: false,
+        element: multi,
+    });
+    let elements: Array<Element> = [labelled, tk("Z")];
+    let mut visiting: Array<String> = [];
+    let [prefixes, consumed] = ctx.deep_position_first_sets_from(&elements, 0, 4, &mut visiting);
+    // The Label arm halts because its inner element is a Group; we
+    // accept either "no depths pushed" or "Group's first pushed" but
+    // the {Z} at depth 1 must not appear because the outer walk
+    // cannot align past the halted Label.
+    let expected_z: Array<String> = ["TK_Z"];
+    let mut z_at_misaligned_depth = false;
+    for let depth_set of &prefixes {
+        if *depth_set == expected_z {
+            z_at_misaligned_depth = true;
+        }
+    }
+    assert !z_at_misaligned_depth, `Z must not bleed past a halted Label, got {prefixes}`;
+    assert consumed == 0, `Label halt must not advance the surface cursor, got {consumed}`;
 }
 
 test "position_first_sets_from: matches alt_position_first_sets at start=0" {

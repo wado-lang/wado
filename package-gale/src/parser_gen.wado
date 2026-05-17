@@ -2314,7 +2314,7 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
             &opt_field,
             &inner_type,
             &inner_field,
-            &gen_lookahead_condition(ctx, &s.sig),
+            &gate_cond_with_k_prefix(&gen_lookahead_condition(ctx, &s.sig), &rep_op.k_prefix_mask, ctx),
         ),
         OptionalShapeLookahead(s) => emit_op_optional_with_shape_lookahead_storable(
             w,
@@ -2326,6 +2326,7 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
             &opt_field,
             &inner_type,
             &inner_field,
+            &rep_op.k_prefix_mask,
         ),
         OptionalScanGuard => {
             let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
@@ -2337,7 +2338,7 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
                 &opt_field,
                 &inner_type,
                 &inner_field,
-                &`{scan_pos_var} >= 0`,
+                &gate_cond_with_k_prefix(&`{scan_pos_var} >= 0`, &rep_op.k_prefix_mask, ctx),
             );
         },
         // `pick_optional_specialised` returned `null` and lower fell
@@ -2352,7 +2353,7 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
             &opt_field,
             &inner_type,
             &inner_field,
-            &ctx.first_check_str(&rep_op.body_first_set),
+            &gate_cond_with_k_prefix(&ctx.first_check_str(&rep_op.body_first_set), &rep_op.k_prefix_mask, ctx),
         ),
         WithFollowSubtraction(s) => emit_op_storable_optional_with_first(
             w,
@@ -2362,7 +2363,7 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
             &opt_field,
             &inner_type,
             &inner_field,
-            &ctx.first_check_str(&s.effective_first),
+            &gate_cond_with_k_prefix(&ctx.first_check_str(&s.effective_first), &rep_op.k_prefix_mask, ctx),
         ),
         // Suppressed / NonGreedy / Suppressed are caught upstream;
         // reaching here is a lower-side bug.
@@ -2370,6 +2371,20 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
             "gen_op_storable_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
         ),
     };
+}
+
+/// Wrap a raw entry condition with the K-prefix yield gate. The result
+/// is `!(K_match) && (cond)` when the mask is non-empty (so the
+/// Optional only fires when the caller's deterministic K-prefix does
+/// NOT match at this position), or the unchanged `cond` otherwise.
+/// Mirrors the parse-side `gen_op_repeat_optional_*` wrapping used for
+/// leaf bodies but for the Group-bodied Optional emit paths.
+fn gate_cond_with_k_prefix(cond: &String, mask: &Array<Array<String>>, ctx: &mut GenContext) -> String {
+    let k_match = k_prefix_match_expr(mask, ctx);
+    if k_match.is_empty() {
+        return *cond;
+    }
+    return `!({k_match}) && ({*cond})`;
 }
 
 /// Shared body of every storable-Optional + Group arm: emit a single
@@ -2403,20 +2418,30 @@ fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
             s,
             ctx,
             name_counts,
+            &rep_op.k_prefix_mask,
         ),
-        OptionalLookahead(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gen_lookahead_condition(
+        OptionalLookahead(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_k_prefix(
+            &gen_lookahead_condition(ctx, &s.sig),
+            &rep_op.k_prefix_mask,
             ctx,
-            &s.sig,
         )),
         OptionalScanGuard => {
             let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
-            emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &`{scan_pos_var} >= 0`);
+            emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_k_prefix(
+                &`{scan_pos_var} >= 0`,
+                &rep_op.k_prefix_mask,
+                ctx,
+            ));
         },
-        Plain => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &ctx.first_check_str(
-            &rep_op.body_first_set,
+        Plain => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_k_prefix(
+            &ctx.first_check_str(&rep_op.body_first_set),
+            &rep_op.k_prefix_mask,
+            ctx,
         )),
-        WithFollowSubtraction(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &ctx.first_check_str(
-            &s.effective_first,
+        WithFollowSubtraction(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_k_prefix(
+            &ctx.first_check_str(&s.effective_first),
+            &rep_op.k_prefix_mask,
+            ctx,
         )),
         Suppressed | NonGreedy(_) => panic(
             "gen_op_transparent_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
@@ -2444,7 +2469,7 @@ fn emit_op_transparent_optional_with_cond(w: &mut CodeWriter, g_op: &GroupOp, g_
 /// (`gen_op_dispatch_element` / `gen_op_absent_optional_field`), and
 /// the struct construction reads `body.fields` (lower's canonical
 /// field list).
-fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, opt_field: &String, inner_type: &String, inner_field: &String) {
+fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, opt_field: &String, inner_type: &String, inner_field: &String, k_prefix_mask: &Array<Array<String>>) {
     let sa = if let SingleAlt(sas) = &g_op.shape {
         sas;
     } else {
@@ -2455,7 +2480,10 @@ fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &Gro
     let elements = &alt.elements;
     let mut is_first = true;
     for let entry of &s.shapes {
-        let cond = gen_lookahead_condition(ctx, &entry.sig);
+        // K-prefix gate: every shape's entry condition must yield to
+        // the caller when the deterministic K-prefix matches, so wrap
+        // each entry's condition with `!(K_match) && (cond)`.
+        let cond = gate_cond_with_k_prefix(&gen_lookahead_condition(ctx, &entry.sig), k_prefix_mask, ctx);
 
         if is_first {
             w.begin(`let {*opt_field}: Option<{*inner_type}> = if {cond}`);
@@ -2499,14 +2527,17 @@ fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &Gro
 /// `unwrap_optional` / `unwrap_optional_op` so the inner parse is
 /// dispatched directly at the unwrapped op shape (the shape already
 /// promised the optional fires). No struct construction.
-fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, k_prefix_mask: &Array<Array<String>>) {
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
     let elements = &alt.elements;
 
     let mut is_first = true;
     for let entry of &s.shapes {
-        let cond = gen_lookahead_condition(ctx, &entry.sig);
+        // K-prefix gate: every shape entry's condition must yield to
+        // the caller when the deterministic K-prefix matches, so wrap
+        // each entry's condition with `!(K_match) && (cond)`.
+        let cond = gate_cond_with_k_prefix(&gen_lookahead_condition(ctx, &entry.sig), k_prefix_mask, ctx);
 
         if is_first {
             w.begin(`if {cond}`);
@@ -3183,9 +3214,6 @@ fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
     w.end_with(";");
 }
 
-/// Greedy `*` / `+` Repeat dispatcher. Splits on `body_shape`:
-/// `TransparentGroup` walks the loop without a list (each iteration
-/// inlines the inner alt); the storable shapes (`LeafRuleCall`,
 /// Build the boolean expression for the K-token-peek "yield to caller"
 /// gate. `mask[d]` is the set of valid caller tokens at depth `d`;
 /// the resulting expression is the AND of per-depth set-membership
@@ -3246,6 +3274,9 @@ fn emit_k_prefix_yield_gate(w: &mut CodeWriter, mask: &Array<Array<String>>, ctx
     w.line(`if {condition} \{ break; \}`);
 }
 
+/// Greedy `*` / `+` Repeat dispatcher. Splits on `body_shape`:
+/// `TransparentGroup` walks the loop without a list (each iteration
+/// inlines the inner alt); the storable shapes (`LeafRuleCall`,
 /// `LeafOther`, `StorableGroup`) push every iteration's inner
 /// binding into a list field. Match is exhaustive.
 fn gen_op_repeat_star_plus_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
@@ -3287,6 +3318,10 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
     if let Star = rep.kind {
         if rep_op.body_scannable {
             w.begin("loop");
+            // Mirror `gen_op_repeat_star_plus_storable`'s Star arm: yield
+            // to the caller on K-prefix match before the scan guard.
+            // No-op for empty mask.
+            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(`if {scan_pos} < 0 \{ break; \}`);
             let mut nc: Array<[String, i32]> = [];
@@ -3294,6 +3329,7 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             w.end();
         } else {
             w.begin(`while {ctx.first_check_str(&loop_first)}`);
+            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let mut nc: Array<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
             w.end();
@@ -3306,6 +3342,9 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             w.line(`let mut {plus_flag} = true;`);
             w.begin("loop");
             w.begin(`if !{plus_flag}`);
+            // Mandatory first iter is unconditional; subsequent iters
+            // get the K-prefix yield gate before the scan guard.
+            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(`if {scan_pos} < 0 \{ break; \}`);
             w.end();
@@ -3316,9 +3355,13 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
         } else {
             // Plus + non-scannable + no-field: emit the first iteration
             // explicitly (no `_plus_first` flag) and then a `while first`
-            // loop.
+            // loop. The K-prefix gate goes inside the while loop (after
+            // the mandatory first iter ran above).
             gen_op_group(w, g_op, inner, ctx, name_counts);
             w.begin(`while {ctx.first_check_str(&inner_first)}`);
+            if !rep_op.k_prefix_mask.is_empty() {
+                emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+            }
             let mut nc: Array<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
             w.end();
