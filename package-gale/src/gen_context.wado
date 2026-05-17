@@ -38,6 +38,14 @@ pub struct FollowVariantEntry {
     /// across runs and to share variants across call sites that produce
     /// the same intersection.
     pub mask: Array<String>,
+    /// Caller's K-token prefix at the call site. `k_prefix_mask[d]` is
+    /// the set of valid tokens at depth `d`. Used by the variant body
+    /// to gate iter dispatch on a multi-token peek — the multi-token
+    /// generalization of the 1-token `mask` field above. Empty when the
+    /// variant was registered through the single-token path only (the
+    /// caller's K-prefix degenerated to K=1 or the caller's
+    /// continuation could not be statically resolved past depth 0).
+    pub k_prefix_mask: Array<Array<String>>,
     /// Set when at least one scan-side call site uses the variant.
     pub scan_used: bool,
     /// Set when at least one parse-side call site uses the variant.
@@ -205,33 +213,121 @@ impl GenContext {
     /// element if it is guaranteed to consume exactly 1 input token (non-nullable,
     /// single-token). Nullable or multi-token elements halt accumulation — the
     /// caller gets a shorter (but always sound) sequence.
+    ///
+    /// Thin wrapper around [`position_first_sets_from`] with `start = 0` —
+    /// the generic form supports computing FIRST sets at an arbitrary
+    /// suffix offset (the multi-token follow-mask path).
     pub fn alt_position_first_sets(&mut self, alt: &Alternative, max_depth: i32) -> Array<Array<String>> {
+        return self.position_first_sets_from(&alt.elements, 0, max_depth);
+    }
+
+    /// K-prefix variant of [`position_first_sets_from`] that expands
+    /// `RuleRef` elements into the referenced rule's body. Used by the
+    /// multi-token follow-mask path to compute a caller's deep
+    /// continuation prefix — `position_first_sets_from` halts at a
+    /// `RuleRef` to a multi-token rule, hiding the bytes the variant
+    /// body's gate needs to disambiguate iter vs. exit.
+    ///
+    /// Only single-alt non-cyclic `RuleRef`s are expanded; multi-alt
+    /// `RuleRef`s halt accumulation (per-depth union of multi-alt
+    /// prefixes would over-yield by matching cross-alt sequences that
+    /// no real alt admits).
+    pub fn deep_position_first_sets_from(&mut self, elements: &Array<Element>, start: i32, max_depth: i32, visiting: &mut Array<String>) -> Array<Array<String>> {
         let mut result: Array<Array<String>> = [];
-        let mut start = 0;
-        while result.len() < max_depth && start < alt.elements.len() {
-            // If the tail from `start` onwards is entirely nullable, the alt
-            // can match 0 tokens from this offset — input[result.len()] is in
-            // the follow-set, which `first` doesn't include. Guard would be
-            // unsound. Halt.
-            if self.tail_is_nullable_deep(&alt.elements, start) {
+        self.deep_position_walk(elements, start, max_depth, &mut result, visiting);
+        return result;
+    }
+
+    fn deep_position_walk(&mut self, elements: &Array<Element>, start: i32, max_depth: i32, result: &mut Array<Array<String>>, visiting: &mut Array<String>) {
+        let mut cursor = start;
+        while result.len() < max_depth && cursor < elements.len() {
+            // Suffix from `cursor` must consume ≥1 token — otherwise the
+            // alignment from position-d-set to input-offset-d breaks.
+            if self.tail_is_nullable_deep(elements, cursor) {
+                return;
+            }
+            let elem = &elements[cursor];
+            match elem {
+                TokenRef(_) | Literal(_) => {
+                    let mut fv: Array<String> = [];
+                    let first = self.first_of_element(elem, &mut fv);
+                    if first.is_empty() {
+                        return;
+                    }
+                    result.push(first);
+                    cursor += 1;
+                },
+                Label(lab) => {
+                    let single: Array<Element> = [lab.element];
+                    self.deep_position_walk(&single, 0, max_depth, result, visiting);
+                    cursor += 1;
+                },
+                RuleRef(r) => {
+                    let visiting_set = str_set_from(visiting);
+                    if visiting_set.contains(r.name) {
+                        return;
+                    }
+                    let rule = self.find_rule(&r.name);
+                    if let Some(rule) = rule {
+                        if rule.alternatives.len() != 1 {
+                            // Multi-alt: per-depth union would over-yield. Halt.
+                            return;
+                        }
+                        visiting.push(r.name);
+                        self.deep_position_walk(&rule.alternatives[0].elements, 0, max_depth, result, visiting);
+                        remove_from_visiting(visiting, &r.name);
+                    } else {
+                        return;
+                    }
+                    cursor += 1;
+                },
+                Group(_) | Repeat(_) | Wildcard(_) | Not(_) => {
+                    // Conservative halt: per-depth union across alts /
+                    // optional iterations would over-yield; static
+                    // wildcards can't be enumerated.
+                    return;
+                },
+            }
+        }
+    }
+
+    /// Returns FIRST sets indexed by INPUT TOKEN position relative to the
+    /// suffix starting at `elements[start..]`. Generalises
+    /// [`alt_position_first_sets`] by accepting an arbitrary `start`
+    /// offset — used by the multi-token follow-mask path to read out a
+    /// caller's K-token continuation prefix at a `RuleRef` call site.
+    ///
+    /// Halts (returns a shorter sequence) at the first nullable or
+    /// multi-token element — preserving the input-offset alignment that
+    /// makes the result a sound lookahead predictor. See
+    /// [`alt_position_first_sets`] for the invariant details.
+    pub fn position_first_sets_from(&mut self, elements: &Array<Element>, start: i32, max_depth: i32) -> Array<Array<String>> {
+        let mut result: Array<Array<String>> = [];
+        let mut cursor = start;
+        while result.len() < max_depth && cursor < elements.len() {
+            // If the tail from `cursor` onwards is entirely nullable, the
+            // alt can match 0 tokens from this offset — input[result.len()]
+            // is in the follow-set, which `first` doesn't include. Guard
+            // would be unsound. Halt.
+            if self.tail_is_nullable_deep(elements, cursor) {
                 break;
             }
             // Deep first-set: accumulate across deeply-nullable elements so the
             // set covers every token that can legitimately appear at this offset
             // when the alt matches.
-            let first = self.deep_first_of_elements_from(&alt.elements, start);
+            let first = self.deep_first_of_elements_from(elements, cursor);
             if first.len() == 0 {
                 break;
             }
             result.push(first);
 
-            // Advance past element[start] only if it consumes exactly 1 token;
+            // Advance past element[cursor] only if it consumes exactly 1 token;
             // otherwise result[d+1] would not align with input offset d+1.
             let mut visiting: Array<String> = [];
-            if !self.element_is_single_token(&alt.elements[start], &mut visiting) {
+            if !self.element_is_single_token(&elements[cursor], &mut visiting) {
                 break;
             }
-            start += 1;
+            cursor += 1;
         }
         return result;
     }
@@ -439,6 +535,71 @@ impl GenContext {
     /// rather than read from walker state.
     pub fn compute_call_site_follow(&mut self, elements: &Array<Element>, i: i32, outer_follow: &Array<String>) -> Array<String> {
         return self.compute_call_site_follow_and_mask(elements, i, outer_follow).0;
+    }
+
+    /// Multi-token caller K-prefix at a `RuleRef` call site. Walks the
+    /// suffix `elements[i+1..]` via [`deep_position_first_sets_from`]
+    /// (which recurses through single-alt non-cyclic `RuleRef`s) so the
+    /// resulting mask captures the caller's deterministic continuation
+    /// past the callee — enough for the variant body's iter-entry gate
+    /// to disambiguate "another iter" from "exit and let caller match".
+    ///
+    /// When the local suffix terminates without exhausting `max_k`
+    /// AND the surrounding variant carries a K-prefix mask, the
+    /// variant's mask is appended past the local prefix — mirroring
+    /// the 1-token `compute_call_site_follow_and_mask` rule
+    /// (deep-nullable suffix extends with `outer_follow`). Without
+    /// this propagation a self-recursive `RuleRef` at the tail of an
+    /// LR alt would register a SECOND variant with empty K-prefix and
+    /// produce dangling `scan_X__follow_<id>_lr_N` references.
+    ///
+    /// Returns `[]` when neither source contributes a prefix.
+    /// Bounded by `max_k` (small constant; the variant's runtime peek
+    /// pays for each depth checked).
+    pub fn compute_call_site_k_prefix_mask(&mut self, elements: &Array<Element>, i: i32, max_k: i32, variant_k_prefix_mask: &Array<Array<String>>) -> Array<Array<String>> {
+        let mut visiting: Array<String> = [];
+        let local = self.deep_position_first_sets_from(elements, i + 1, max_k, &mut visiting);
+        // If the local walk filled the whole budget, the variant's
+        // mask is dead beyond what we already have.
+        if local.len() >= max_k {
+            return local;
+        }
+        // No variant context to extend with — return whatever the
+        // local walk found.
+        if variant_k_prefix_mask.is_empty() {
+            return local;
+        }
+        // The variant's mask only applies past the local prefix when
+        // the tail at that point is deep-nullable (so the surrounding
+        // variant's caller-continuation reaches this position).
+        if !self.tail_is_nullable_deep(elements, i + 1 + local.len()) {
+            return local;
+        }
+        let mut combined = local;
+        for let depth of variant_k_prefix_mask {
+            if combined.len() >= max_k {
+                break;
+            }
+            combined.push(*depth);
+        }
+        return combined;
+    }
+
+    /// K-prefix analog of `compute_call_site_follow_and_mask`'s
+    /// position-mask half. Returns the surrounding variant's K-prefix
+    /// mask when the suffix at `i + 1` is deep-nullable (so the
+    /// variant's mask "leaks" into this Repeat's position) and `[]`
+    /// otherwise. Used by lower's per-position loop to populate
+    /// `RepeatOp.k_prefix_mask` at tail-greedy Repeats inside a
+    /// variant body.
+    pub fn compute_k_prefix_position_mask(&mut self, elements: &Array<Element>, i: i32, variant_k_prefix_mask: &Array<Array<String>>) -> Array<Array<String>> {
+        if variant_k_prefix_mask.is_empty() {
+            return [];
+        }
+        if !self.tail_is_nullable_deep(elements, i + 1) {
+            return [];
+        }
+        return *variant_k_prefix_mask;
     }
 
     /// Fused `(elem_follow, position_mask)` for the element at index
@@ -767,6 +928,111 @@ impl GenContext {
         };
     }
 
+    /// K-prefix variant of [`tail_greedy_first_of_rule`]. Returns the
+    /// per-depth FIRST sets of tokens the rule's tail-greedy Repeat may
+    /// consume in a single iteration (or sequence of stacked iters).
+    ///
+    /// Unlike the single-token version, this admits multi-token-inner
+    /// Repeats: the inner's per-iteration prefix can have depth > 1.
+    /// `result[d]` is the set of tokens possible at iter input offset
+    /// `d`; `result.len()` ≤ `max_k`. Empty when the rule has no
+    /// tail-greedy iter contribution.
+    ///
+    /// The soundness invariant from the single-token path (HTMLParser's
+    /// `htmlContent` re-entering on TAG_OPEN) is preserved structurally:
+    /// the K-prefix gate at variant emit checks every depth, so a
+    /// caller whose K-prefix differs at depth ≥ 1 (the closing `</`
+    /// case) doesn't trigger spurious yields. Multi-alt Group inners
+    /// halt at depth 0 (per-depth alignment unknown across alts) —
+    /// conservative but sound.
+    pub fn tail_greedy_k_prefix_of_rule(&mut self, name: &String, max_k: i32, visiting: &mut Array<String>) -> Array<Array<String>> {
+        let visiting_set = str_set_from(visiting);
+        if visiting_set.contains(*name) {
+            return [];
+        }
+
+        visiting.push(*name);
+
+        let mut result: Array<Array<String>> = [];
+        let rule = self.find_rule(name);
+        if let Some(rule) = rule {
+            for let alt of &rule.alternatives {
+                let af = self.tail_greedy_k_prefix_of_elements(&alt.elements, max_k, visiting);
+                result = union_k_prefix(&result, &af);
+            }
+        }
+
+        remove_from_visiting(visiting, name);
+
+        return result;
+    }
+
+    /// Walk an alt element list from the tail, collecting K-prefix
+    /// contributions from tail-position Repeats. Stops at the first
+    /// non-deeply-nullable element. Mirrors `tail_greedy_first_of_elements`
+    /// but returns multi-depth prefix sets.
+    fn tail_greedy_k_prefix_of_elements(&mut self, elements: &Array<Element>, max_k: i32, visiting: &mut Array<String>) -> Array<Array<String>> {
+        let mut result: Array<Array<String>> = [];
+        let mut i = elements.len() - 1;
+        while i >= 0 {
+            let elem = &elements[i];
+            let tg = self.tail_greedy_k_prefix_of_element(elem, max_k, visiting);
+            result = union_k_prefix(&result, &tg);
+            let mut nv: Array<String> = [];
+            if !self.element_is_nullable_deep(elem, &mut nv) {
+                break;
+            }
+            i -= 1;
+        }
+        return result;
+    }
+
+    fn tail_greedy_k_prefix_of_element(&mut self, elem: &Element, max_k: i32, visiting: &mut Array<String>) -> Array<Array<String>> {
+        return match elem {
+            Repeat(rep) => self.iter_k_prefix(&rep.element, max_k),
+            Group(g) => {
+                let mut acc: Array<Array<String>> = [];
+                for let alt of &g.alternatives {
+                    let inner = self.tail_greedy_k_prefix_of_elements(&alt.elements, max_k, visiting);
+                    acc = union_k_prefix(&acc, &inner);
+                }
+                acc;
+            },
+            Label(lab) => self.tail_greedy_k_prefix_of_element(&lab.element, max_k, visiting),
+            RuleRef(r) => self.tail_greedy_k_prefix_of_rule(&r.name, max_k, visiting),
+            TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => [],
+        };
+    }
+
+    /// K-prefix of one iteration of a `Repeat`'s inner. Single-alt Group
+    /// inners are walked element-by-element via [`position_first_sets_from`]
+    /// so a `(X Y)` body yields `[{X}, {Y}]`. Multi-alt Groups and other
+    /// shapes fall back to the single-element walk (K=1 in the common
+    /// case).
+    fn iter_k_prefix(&mut self, repeat_inner: &Element, max_k: i32) -> Array<Array<String>> {
+        return match repeat_inner {
+            Group(g) => if g.alternatives.len() == 1 {
+                self.position_first_sets_from(&g.alternatives[0].elements, 0, max_k);
+            } else {
+                // Multi-alt Group: each alt is a candidate iter body.
+                // Walk each alt separately and union per depth. For most
+                // grammars the alts diverge past depth 0, so this yields
+                // K=1 (a depth-0 union of each alt's first token).
+                let mut acc: Array<Array<String>> = [];
+                for let alt of &g.alternatives {
+                    let a_pre = self.position_first_sets_from(&alt.elements, 0, max_k);
+                    acc = union_k_prefix(&acc, &a_pre);
+                }
+                acc;
+            },
+            Label(lab) => self.iter_k_prefix(&lab.element, max_k),
+            _ => {
+                let single: Array<Element> = [*repeat_inner];
+                self.position_first_sets_from(&single, 0, max_k);
+            },
+        };
+    }
+
     /// Intern a follow-aware variant for `rule_name` given a caller-side
     /// `caller_follow` set. The mask stored in the registry is the
     /// intersection with the rule's `tail_greedy_first`, so call sites
@@ -777,7 +1043,15 @@ impl GenContext {
     /// site triggered the registration; the variant emit pass uses the
     /// flags to decide whether to emit a scan-side body, parse-side
     /// body, or both.
-    pub fn intern_follow_variant(&mut self, rule_name: &String, caller_follow: &Array<String>, is_scan: bool) -> Option<i32> {
+    ///
+    /// `caller_k_prefix` is the OPTIONAL multi-token K-prefix mask used
+    /// by the variant's iter-entry gate. Empty (`[]`) keeps the existing
+    /// single-token-mask behavior. Non-empty triggers the multi-token
+    /// gate emit so the variant body suppresses iter entries when the
+    /// next K tokens match the caller's deterministic continuation —
+    /// closes the multi-token tail-greedy gap (TODO.md) for shapes like
+    /// `a : N (X Y)+ ;` with caller `c : X Y Z`.
+    pub fn intern_follow_variant(&mut self, rule_name: &String, caller_follow: &Array<String>, caller_k_prefix: &Array<Array<String>>, is_scan: bool) -> Option<i32> {
         // Phase 5 step 6: every rule shape — single-alt, multi-alt, and
         // left-recursive — now routes variant emit through the unified
         // `gen_parse_fn_named` / `gen_scan_function_named` path. The
@@ -790,21 +1064,44 @@ impl GenContext {
         }
         let mut visiting: Array<String> = [];
         let tg = self.tail_greedy_first_of_rule(rule_name, &mut visiting);
-        if tg.is_empty() || caller_follow.is_empty() {
-            return null;
-        }
         let mut intersection: Array<String> = [];
-        let follow_set = str_set_from(caller_follow);
-        for let tk of &tg {
-            if follow_set.contains(*tk) {
-                intersection.push(*tk);
+        if !tg.is_empty() && !caller_follow.is_empty() {
+            let follow_set = str_set_from(caller_follow);
+            for let tk of &tg {
+                if follow_set.contains(*tk) {
+                    intersection.push(*tk);
+                }
             }
         }
-        if intersection.is_empty() {
+        // K-prefix activation: register a multi-token variant when the
+        // caller's deterministic K-prefix overlaps the rule's
+        // tail-greedy K-prefix at depth 0. This admits multi-token
+        // inner Repeats that the single-token analysis (and its
+        // soundness invariant 1) rejects.
+        let mut k_prefix_canonical: Array<Array<String>> = [];
+        if !caller_k_prefix.is_empty() {
+            let mut k_visiting: Array<String> = [];
+            let max_k_for_iter = caller_k_prefix.len();
+            let iter_kp = self.tail_greedy_k_prefix_of_rule(rule_name, max_k_for_iter, &mut k_visiting);
+            if !iter_kp.is_empty() && !caller_k_prefix[0].is_empty() {
+                let iter_d0 = str_set_from(&iter_kp[0]);
+                let mut overlaps = false;
+                for let tk of &caller_k_prefix[0] {
+                    if iter_d0.contains(*tk) {
+                        overlaps = true;
+                        break;
+                    }
+                }
+                if overlaps {
+                    k_prefix_canonical = canonicalize_k_prefix(caller_k_prefix);
+                }
+            }
+        }
+        if intersection.is_empty() && k_prefix_canonical.is_empty() {
             return null;
         }
         let canonical = canonical_kind_set(&intersection);
-        let key = `{*rule_name}:{join_pipe(&canonical)}`;
+        let key = `{*rule_name}:{join_pipe(&canonical)}|k:{canonical_k_prefix_key(&k_prefix_canonical)}`;
         let existing_id: Option<i32> = if let Some(entry) = self.follow_variant_registry.get(key) {
             Option::<i32>::Some(entry.id);
         } else {
@@ -825,6 +1122,7 @@ impl GenContext {
             id,
             rule_name: *rule_name,
             mask: canonical,
+            k_prefix_mask: k_prefix_canonical,
             scan_used: is_scan,
             parse_used: !is_scan,
         };
@@ -988,6 +1286,57 @@ fn extend_dedup(target: &mut Array<String>, source: &Array<String>) {
             target.push(*item);
         }
     }
+}
+
+/// Canonicalise a K-prefix mask: sort each depth's token list so two
+/// otherwise-identical masks share the same registry key regardless of
+/// the order in which the underlying analysis discovered the tokens.
+fn canonicalize_k_prefix(prefix: &Array<Array<String>>) -> Array<Array<String>> {
+    let mut result: Array<Array<String>> = [];
+    for let depth_set of prefix {
+        result.push(canonical_kind_set(depth_set));
+    }
+    return result;
+}
+
+/// String form of a K-prefix mask for use as a registry key.
+/// Depths joined with `;`; tokens within a depth joined with `|`.
+/// Empty mask → empty string (no key fragment).
+fn canonical_k_prefix_key(prefix: &Array<Array<String>>) -> String {
+    if prefix.is_empty() {
+        return "";
+    }
+    let mut s = String::with_capacity(64);
+    let mut first_depth = true;
+    for let depth_set of prefix {
+        if !first_depth {
+            s.push_str(";");
+        }
+        first_depth = false;
+        s.push_str(join_pipe(depth_set));
+    }
+    return s;
+}
+
+/// Per-depth union of two K-prefix mask sets. The result's length is
+/// the maximum of `a.len()` and `b.len()`; at depths past one side's
+/// length, the other side's set is taken as-is. Used by the
+/// `tail_greedy_k_prefix_of_*` family to combine contributions across
+/// alts, groups, and stacked tail-position Repeats.
+pub fn union_k_prefix(a: &Array<Array<String>>, b: &Array<Array<String>>) -> Array<Array<String>> {
+    let max_len = if a.len() > b.len() { a.len() } else { b.len() };
+    let mut result: Array<Array<String>> = [];
+    for let mut d = 0; d < max_len; d += 1 {
+        let mut depth_set: Array<String> = [];
+        if d < a.len() {
+            extend_dedup(&mut depth_set, &a[d]);
+        }
+        if d < b.len() {
+            extend_dedup(&mut depth_set, &b[d]);
+        }
+        result.push(depth_set);
+    }
+    return result;
 }
 
 /// Append-and-dedup union of two token-kind arrays, preserving the

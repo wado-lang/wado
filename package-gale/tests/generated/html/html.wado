@@ -2118,7 +2118,7 @@ fn scan_html_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
                                 let sp = pos;
                                 sg_1_done: {
                                     sg_1: {
-                                        pos = scan_html_content(tokens, pos, 0);
+                                        pos = scan_html_content__follow_1(tokens, pos, 0);
                                         if pos < 0 { break sg_1; }
                                         if pos >= tokens.len() || tokens[pos].kind != TK_TAG_OPEN { break sg_1; }
                                         pos += 1;
@@ -2531,7 +2531,7 @@ fn parse_html_element(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
                 opt_scan_pos = pos;
             }
             let html_content_tag_open_tag_slash_tag_name_tag_close: Option<HtmlContentTagOpenTagSlashTagNameTagCloseItem> = if opt_scan_pos >= 0 {
-                let html_content = parse_html_content(p)?;
+                let html_content = parse_html_content__follow_1(p)?;
                 let tag_open = p.expect(TK_TAG_OPEN)?;
                 let tag_slash = p.expect(TK_TAG_SLASH)?;
                 let tag_name = p.expect(TK_TAG_NAME)?;
@@ -2819,6 +2819,346 @@ fn parse_html_elements__follow_0(p: &mut Parser) -> Result<HtmlElementsNode, Par
         html_element,
         html_misc_list_2,
     });
+}
+
+fn scan_html_content__follow_1(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && _gale_kind_set_7(tokens[pos].kind) {
+        let sp = pos;
+        pos = scan_html_chardata(tokens, pos, 0);
+        if pos < 0 { pos = sp; }
+    }
+    while pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) {
+        let sp = pos;
+        sg_9_done: {
+            sg_9: {
+                let gp_10 = pos;
+                let sgk_10 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+                if _gale_kind_set_8(sgk_10) {
+                    sg_10: {
+                        pos = gp_10;
+                        sg_10_0: {
+                            pos = scan_html_element__follow_2(tokens, pos, 0);
+                            if pos < 0 { break sg_10_0; }
+                            break sg_10;
+                        }
+                        pos = gp_10;
+                        sg_10_1: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_CDATA { break sg_10_1; }
+                            pos += 1;
+                            break sg_10;
+                        }
+                        pos = gp_10;
+                        sg_10_2: {
+                            pos = scan_html_comment(tokens, pos, 0);
+                            if pos < 0 { break sg_10_2; }
+                            break sg_10;
+                        }
+                        pos = gp_10;
+                    }
+                }
+                if pos < tokens.len() && _gale_kind_set_7(tokens[pos].kind) {
+                    let sp = pos;
+                    pos = scan_html_chardata(tokens, pos, 0);
+                    if pos < 0 { pos = sp; }
+                }
+                break sg_9_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    return pos;
+}
+
+fn parse_html_content__follow_1(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
+    let start = p.peek().span.start;
+    let html_chardata: Option<HtmlChardataNode> = if _gale_kind_set_7(p.peek_kind()) {
+        let html_chardata = parse_html_chardata(p)?;
+        Option::<HtmlChardataNode>::Some(html_chardata)
+    } else {
+        null
+    };
+    let mut item_html_chardata_list: Array<ItemHtmlChardataOptItem> = [];
+    loop {
+        if p.peek_kind() == TK_TAG_OPEN && p.peek_at(1) == TK_TAG_SLASH && p.peek_at(2) == TK_TAG_NAME && p.peek_at(3) == TK_TAG_CLOSE { break; }
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            sg_11_done: {
+                sg_11: {
+                    let gp_12 = pos;
+                    let sgk_12 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+                    if _gale_kind_set_8(sgk_12) {
+                        sg_12: {
+                            pos = gp_12;
+                            sg_12_0: {
+                                pos = scan_html_element__follow_2(tokens, pos, 0);
+                                if pos < 0 { break sg_12_0; }
+                                break sg_12;
+                            }
+                            pos = gp_12;
+                            sg_12_1: {
+                                if pos >= tokens.len() || tokens[pos].kind != TK_CDATA { break sg_12_1; }
+                                pos += 1;
+                                break sg_12;
+                            }
+                            pos = gp_12;
+                            sg_12_2: {
+                                pos = scan_html_comment(tokens, pos, 0);
+                                if pos < 0 { break sg_12_2; }
+                                break sg_12;
+                            }
+                            pos = gp_12;
+                        }
+                    }
+                    if pos < tokens.len() && _gale_kind_set_7(tokens[pos].kind) {
+                        let sp = pos;
+                        pos = scan_html_chardata(tokens, pos, 0);
+                        if pos < 0 { pos = sp; }
+                    }
+                    break sg_11_done;
+                }
+                break rep_scan;
+            }
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
+        let mut group_0_inner: Option<HtmlContentGroup0> = null;
+        let grp_kind = p.peek_kind();
+        if _gale_kind_set_5(grp_kind) {
+            let html_element = parse_html_element__follow_2(p)?;
+            group_0_inner = Option::<HtmlContentGroup0>::Some(HtmlContentGroup0::Alt0(HtmlContentGroup0Alt0 {
+                html_element,
+            }));
+        } else if grp_kind == TK_CDATA {
+            let cdata = p.expect(TK_CDATA)?;
+            group_0_inner = Option::<HtmlContentGroup0>::Some(HtmlContentGroup0::Alt1(HtmlContentGroup0Alt1 {
+                cdata,
+            }));
+        } else if _gale_kind_set_6(grp_kind) {
+            let html_comment = parse_html_comment(p)?;
+            group_0_inner = Option::<HtmlContentGroup0>::Some(HtmlContentGroup0::Alt2(HtmlContentGroup0Alt2 {
+                html_comment,
+            }));
+        }
+        let group_0 = group_0_inner;
+        let html_chardata: Option<HtmlChardataNode> = if _gale_kind_set_7(p.peek_kind()) {
+            let html_chardata = parse_html_chardata(p)?;
+            Option::<HtmlChardataNode>::Some(html_chardata)
+        } else {
+            null
+        };
+        let item_html_chardata = ItemHtmlChardataOptItem {
+            group_0,
+            html_chardata,
+        };
+        item_html_chardata_list.push(item_html_chardata);
+    }
+    return Result::<HtmlContentNode, ParseError>::Ok(HtmlContentNode {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        html_chardata,
+        item_html_chardata_list,
+    });
+}
+
+fn scan_html_element__follow_2(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let start = pos;
+    let mut pos = pos;
+    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    scan_alts: {
+        if alt_kind == TK_TAG_OPEN {
+            pos = start;
+            try_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_OPEN { break try_0; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_NAME { break try_0; }
+                pos += 1;
+                while pos < tokens.len() && tokens[pos].kind == TK_TAG_NAME {
+                    let sp = pos;
+                    pos = scan_html_attribute(tokens, pos, 0);
+                    if pos < 0 { pos = sp; break; }
+                    if pos == sp { break; }
+                }
+                let gp_13 = pos;
+                let sgk_13 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+                if _gale_kind_set_3(sgk_13) {
+                    sg_13: {
+                        pos = gp_13;
+                        sg_13_0: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_TAG_CLOSE { break sg_13_0; }
+                            pos += 1;
+                            if pos < tokens.len() && _gale_kind_set_4(tokens[pos].kind) {
+                                let sp = pos;
+                                sg_14_done: {
+                                    sg_14: {
+                                        pos = scan_html_content__follow_1(tokens, pos, 0);
+                                        if pos < 0 { break sg_14; }
+                                        if pos >= tokens.len() || tokens[pos].kind != TK_TAG_OPEN { break sg_14; }
+                                        pos += 1;
+                                        if pos >= tokens.len() || tokens[pos].kind != TK_TAG_SLASH { break sg_14; }
+                                        pos += 1;
+                                        if pos >= tokens.len() || tokens[pos].kind != TK_TAG_NAME { break sg_14; }
+                                        pos += 1;
+                                        if pos >= tokens.len() || tokens[pos].kind != TK_TAG_CLOSE { break sg_14; }
+                                        pos += 1;
+                                        break sg_14_done;
+                                    }
+                                    pos = -1;
+                                }
+                                if pos < 0 { pos = sp; }
+                            }
+                            break sg_13;
+                        }
+                        pos = gp_13;
+                        sg_13_1: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_TAG_SLASH_CLOSE { break sg_13_1; }
+                            pos += 1;
+                            break sg_13;
+                        }
+                        pos = gp_13;
+                    }
+                }
+                break scan_alts;
+            }
+            return -1;
+        } else if alt_kind == TK_SCRIPTLET {
+            pos = start;
+            try_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_SCRIPTLET { break try_1; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
+        } else if alt_kind == TK_SCRIPT_OPEN {
+            pos = start;
+            try_2: {
+                pos = scan_script(tokens, pos, 0);
+                if pos < 0 { break try_2; }
+                break scan_alts;
+            }
+            return -1;
+        } else if alt_kind == TK_STYLE_OPEN {
+            pos = start;
+            try_3: {
+                pos = scan_style(tokens, pos, 0);
+                if pos < 0 { break try_3; }
+                break scan_alts;
+            }
+            return -1;
+        } else {
+            return -1;
+        }
+    }
+    return pos;
+}
+
+fn parse_html_element__follow_2(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
+    let start = p.peek().span.start;
+    let kind = p.peek_kind();
+    if kind == TK_TAG_OPEN {
+        let tag_open = p.expect(TK_TAG_OPEN)?;
+        let tag_name = p.expect(TK_TAG_NAME)?;
+        let mut html_attribute_list: Array<HtmlAttributeNode> = [];
+        loop {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_html_attribute(tokens, pos, 0);
+                if pos < 0 { break rep_scan; }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+            let html_attribute = parse_html_attribute(p)?;
+            html_attribute_list.push(html_attribute);
+        }
+        let mut group_0_inner: Option<HtmlElementGroup0> = null;
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_TAG_CLOSE {
+            let tag_close = p.expect(TK_TAG_CLOSE)?;
+            let mut opt_scan_pos: i32 = -1;
+            opt_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_html_content(tokens, pos, 0);
+                if pos < 0 { break opt_scan; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_OPEN { break opt_scan; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_SLASH { break opt_scan; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_NAME { break opt_scan; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_CLOSE { break opt_scan; }
+                pos += 1;
+                opt_scan_pos = pos;
+            }
+            let html_content_tag_open_tag_slash_tag_name_tag_close: Option<HtmlContentTagOpenTagSlashTagNameTagCloseItem> = if opt_scan_pos >= 0 {
+                let html_content = parse_html_content__follow_1(p)?;
+                let tag_open = p.expect(TK_TAG_OPEN)?;
+                let tag_slash = p.expect(TK_TAG_SLASH)?;
+                let tag_name = p.expect(TK_TAG_NAME)?;
+                let tag_close = p.expect(TK_TAG_CLOSE)?;
+                let html_content_tag_open_tag_slash_tag_name_tag_close = HtmlContentTagOpenTagSlashTagNameTagCloseItem {
+                    html_content,
+                    tag_open,
+                    tag_slash,
+                    tag_name,
+                    tag_close,
+                };
+                Option::<HtmlContentTagOpenTagSlashTagNameTagCloseItem>::Some(html_content_tag_open_tag_slash_tag_name_tag_close)
+            } else {
+                null
+            };
+            group_0_inner = Option::<HtmlElementGroup0>::Some(HtmlElementGroup0::Alt0(HtmlElementGroup0Alt0 {
+                tag_close,
+                html_content_tag_open_tag_slash_tag_name_tag_close,
+            }));
+        } else if grp_kind == TK_TAG_SLASH_CLOSE {
+            let tag_slash_close = p.expect(TK_TAG_SLASH_CLOSE)?;
+            group_0_inner = Option::<HtmlElementGroup0>::Some(HtmlElementGroup0::Alt1(HtmlElementGroup0Alt1 {
+                tag_slash_close,
+            }));
+        }
+        let group_0 = group_0_inner;
+        return Result::<HtmlElementNode, ParseError>::Ok(HtmlElementNode::Alt0(HtmlElementAlt0 {
+            span: Span::new(start, i32::max(start, p.last_end())),
+            tag_open,
+            tag_name,
+            html_attribute_list,
+            group_0,
+        }));
+    }
+    if kind == TK_SCRIPTLET {
+        let scriptlet = p.expect(TK_SCRIPTLET)?;
+        return Result::<HtmlElementNode, ParseError>::Ok(HtmlElementNode::Alt1(HtmlElementAlt1 {
+            span: Span::new(start, i32::max(start, p.last_end())),
+            scriptlet,
+        }));
+    }
+    if kind == TK_SCRIPT_OPEN {
+        let script = parse_script(p)?;
+        return Result::<HtmlElementNode, ParseError>::Ok(HtmlElementNode::Alt2(HtmlElementAlt2 {
+            span: Span::new(start, i32::max(start, p.last_end())),
+            script,
+        }));
+    }
+    if kind == TK_STYLE_OPEN {
+        let style = parse_style(p)?;
+        return Result::<HtmlElementNode, ParseError>::Ok(HtmlElementNode::Alt3(HtmlElementAlt3 {
+            span: Span::new(start, i32::max(start, p.last_end())),
+            style,
+        }));
+    }
+    return Result::<HtmlElementNode, ParseError>::Err(ParseError::new(
+        "expected htmlElement",
+        p.peek().span,
+        ["TK_TAG_OPEN", "TK_SCRIPTLET", "TK_SCRIPT_OPEN", "TK_STYLE_OPEN"],
+    ));
 }
 
 pub fn parse(input: &String) -> Result<HtmlDocumentNode, ParseError> {

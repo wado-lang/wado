@@ -3089,6 +3089,48 @@ fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
 /// Greedy `*` / `+` Repeat dispatcher. Splits on `body_shape`:
 /// `TransparentGroup` walks the loop without a list (each iteration
 /// inlines the inner alt); the storable shapes (`LeafRuleCall`,
+/// Emit a K-token-peek "yield to caller" gate at a Repeat's per-iter
+/// dispatch site. When non-empty, `mask[d]` is the set of valid caller
+/// tokens at depth `d`; the variant body breaks the loop when the next
+/// `mask.len()` tokens all match (per-depth set membership), letting
+/// the caller's deterministic K-prefix consume them instead.
+///
+/// Generalises the existing single-token mask subtraction
+/// (`subtract_sets(body_first_set, position_mask)`) to multi-token
+/// continuations — closes the multi-token tail-greedy gap (TODO.md)
+/// without disturbing the K=1 path: a `mask` of `[]` skips emission
+/// entirely, and a single-depth mask reduces to the same `peek_kind`
+/// check the existing subtraction encodes implicitly via `if first`.
+fn emit_k_prefix_yield_gate(w: &mut CodeWriter, mask: &Array<Array<String>>, ctx: &mut GenContext) {
+    if mask.is_empty() {
+        return;
+    }
+    let mut parts: Array<String> = [];
+    for let mut d = 0; d < mask.len(); d += 1 {
+        let depth_set = &mask[d];
+        if depth_set.is_empty() {
+            // An empty depth set means "no constraint at this depth";
+            // skipping it keeps the conjunction sound.
+            continue;
+        }
+        let peek_str = if d == 0 { "p.peek_kind()" } else { `p.peek_at({d})` };
+        parts.push(ctx.kind_check_str(depth_set, &peek_str));
+    }
+    if parts.is_empty() {
+        return;
+    }
+    let mut condition = String::with_capacity(64);
+    let mut first = true;
+    for let p of &parts {
+        if !first {
+            condition.push_str(" && ");
+        }
+        first = false;
+        condition.push_str(*p);
+    }
+    w.line(`if {condition} \{ break; \}`);
+}
+
 /// `LeafOther`, `StorableGroup`) push every iteration's inner
 /// binding into a list field. Match is exhaustive.
 fn gen_op_repeat_star_plus_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
@@ -3196,6 +3238,11 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
         w.line(`let mut {list_field}: Array<{inner_type}> = [];`);
         if rep_op.body_scannable {
             w.begin("loop");
+            // K-prefix yield gate: when the caller's deterministic
+            // K-prefix matches at iter entry, exit the loop so the
+            // caller can consume those tokens. No-op for empty mask
+            // (non-variant body or no K-prefix at this position).
+            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(`if {scan_pos} < 0 \{ break; \}`);
             let mut nc: Array<[String, i32]> = [];
@@ -3204,6 +3251,8 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             w.end();
         } else {
             w.begin(`while {ctx.first_check_str(&loop_first)}`);
+            // Same K-prefix gate for the non-scannable while loop.
+            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let mut nc: Array<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.line(`{list_field}.push({inner_field});`);
@@ -3219,6 +3268,11 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             w.line(`let mut {plus_flag} = true;`);
             w.begin("loop");
             w.begin(`if !{plus_flag}`);
+            // Yield to caller if the next K tokens match the caller's
+            // deterministic K-prefix (multi-token follow-mask path).
+            // No-op when `k_prefix_mask` is empty (non-variant body or
+            // caller without a K-prefix at this position).
+            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(`if {scan_pos} < 0 \{ break; \}`);
             w.end();
@@ -3231,6 +3285,15 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             let plus_flag = dedup_name(&"_plus_first", name_counts);
             w.line(`let mut {plus_flag} = true;`);
             w.begin(`while {plus_flag} || {ctx.first_check_str(&inner_first)}`);
+            // K-prefix yield gate fires AFTER the mandatory first iter:
+            // skip emission while `plus_flag` is still true so the
+            // mandatory iter cannot be suppressed. Empty mask emits
+            // nothing (the if-block is dead-stripped at codegen).
+            if !rep_op.k_prefix_mask.is_empty() {
+                w.begin(`if !{plus_flag}`);
+                emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+                w.end();
+            }
             w.line(`{plus_flag} = false;`);
             let mut nc: Array<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);

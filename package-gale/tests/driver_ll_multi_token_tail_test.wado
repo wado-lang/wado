@@ -16,17 +16,30 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
 }
 
-// GAP: `a`'s `(X Y)+` greedy loop swallows the trailing `X Y` that the
-// caller's `c : X Y Z` needs. ANTLR4 LL's per-decision lookahead sees
-// that consuming a second iter leaves only `Z` for `c` and so picks the
-// shorter `a`. Gale today has no variant for `a`'s tail-greedy because
-// the inner is multi-token — soundness invariant 1 in
-// `antlr4-compatibility.md`. Lift the `#[TODO]` once
-// `tail_greedy_first_of_element` admits multi-token inners (see
-// `TODO.md`'s "Multi-token tail-greedy inner" entry).
-#[TODO]
+// Multi-token tail-greedy gap closed by the K-prefix follow-mask path:
+// at the call to `a`, lower computes the caller's deterministic
+// K-prefix `[{X}, {Y}, {Z}, {EOF}]` from `c X Y Z EOF` (deep-walking
+// through `c`'s single-alt body) and registers a variant of `parse_a`
+// whose `(X Y)+` loop checks `p.peek_kind() == TK_X && p.peek_at(1) ==
+// TK_Y && p.peek_at(2) == TK_Z && p.peek_at(3) == TK_EOF` before each
+// post-mandatory iter. On the canonical "exactly one extra iter for the
+// caller" input below, the gate fires after the first iter and yields
+// the trailing `X Y Z` to `c`.
 test "tree: N X Y X Y Z — multi-token tail-greedy yields to caller" {
     assert_tree(&"N X Y X Y Z", &"
         (r (a N X Y) (c X Y Z))
+    ");
+}
+
+// Multi-iter sanity: two surplus iters before the caller's prefix. The
+// K-prefix gate's per-depth check (peek-4 against `[X, Y, Z, EOF]`)
+// only matches when `Z` actually arrives at depth 2 — earlier in the
+// loop the gate sees `[X, Y, X, Y]` (mismatch at depth 2) and lets the
+// iter fire. ANTLR4 LL's runtime ATN simulator reaches the same
+// answer; the static K-prefix gate matches it for any number of iters
+// because each iter consumes exactly one `[X, Y]` block.
+test "tree: N X Y X Y X Y Z — gate yields on the iter that exposes the caller's prefix" {
+    assert_tree(&"N X Y X Y X Y Z", &"
+        (r (a N X Y X Y) (c X Y Z))
     ");
 }

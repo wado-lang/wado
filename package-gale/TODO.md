@@ -13,29 +13,55 @@ there as well; this file is for what is _not yet done_.
 
 ## LL prediction — remaining gaps
 
-### Multi-token tail-greedy inner
+### Multi-token tail-greedy inner — closed (2026-05-17)
 
-`tail_greedy_first_of_element` only adopts a `Repeat` whose inner
-consumes exactly one token (single TokenRef / Literal / Wildcard /
-Not / single-token RuleRef / single-token Group). The first-exact
-discriminator excludes multi-element groups for the same reason —
-soundness invariant 1 in `antlr4-compatibility.md`. Patterns like
-`(A B)?` where the inner is multi-token therefore get no variant
-emitted today.
+The single-token-mask path (`tail_greedy_first_of_element`,
+`intern_follow_variant` keyed on `Array<String>`) is now joined by a
+parallel **K-prefix mask** path that admits multi-token-inner Repeats
+under the same soundness contract as the 1-token version. The variant
+body's iter-entry gate checks the next K tokens against the caller's
+deterministic K-prefix (`Array<Array<String>>`, indexed by input
+depth), so:
 
-Action items:
+- `a : N (X Y)+ ;` with caller `c : X Y Z` correctly yields the
+  trailing `[X, Y, Z]` to `c` regardless of how many surplus
+  `(X Y)` blocks precede it (the per-depth gate only fires when `Z`
+  actually arrives at depth 2).
+- HTMLParser's `htmlContent` keeps re-entering on `TAG_OPEN` because
+  the closing-tag mask `[TAG_OPEN, '/', TagName]` differs from the
+  iter prefix `[TAG_OPEN, TagName, …]` at depth 1.
 
-- [x] Add a regression fixture (`tests/grammars/ll_multi_token_tail.g4`)
-      and `#[TODO]` driver test that exercises the gap.
-      `r : a c EOF ; a : N (X Y)+ ; c : X Y Z ;` on input
-      `N X Y X Y Z` — `a`'s greedy `(X Y)+` eats the trailing iter that
-      `c` needs. Sourced shape from upstream
-      `runtime-testsuite/.../ParserExec/PredictionMode_LL.txt`.
-- [ ] Decide whether to (a) extend the static analysis to track
-      multi-token-prefix sequences in the follow mask, or (b) emit a
-      2-token-lookahead variant. Option (a) is consistent with the
-      existing one-shot mask suppression; option (b) requires runtime
-      lookahead at the variant entry.
+See:
+
+- `tests/grammars/ll_multi_token_tail.g4` and
+  `tests/driver_ll_multi_token_tail_test.wado` for the regression
+  fixture (shape derived from upstream
+  `runtime-testsuite/.../ParserExec/PredictionMode_LL.txt`).
+- `gen_context::tail_greedy_k_prefix_of_rule`,
+  `gen_context::compute_call_site_k_prefix_mask`,
+  `gen_context::compute_k_prefix_position_mask`,
+  `gen_context::deep_position_first_sets_from` — the analysis
+  surface.
+- `RepeatOp.k_prefix_mask` /
+  `ScanRepeatElem.k_prefix_mask` — IR threading.
+- `parser_gen::emit_k_prefix_yield_gate` — emit-side gate.
+
+Deferred work:
+
+- [ ] Iter-body K-prefix for `Repeat` inner `RuleRef`s. The fixed-
+      point "next iter | exit-to-caller" computation is sound but the
+      gate inside an iter body is not yet plumbed — RuleRefs sitting
+      inside a Repeat fall back to the existing 1-token mask path.
+      Few real grammars need it; revisit when an upstream descriptor
+      surfaces a regression.
+- [ ] Multi-alt `RuleRef` expansion in
+      `deep_position_first_sets_from`. The current implementation
+      halts at a multi-alt rule (per-depth union of multi-alt
+      prefixes would over-yield by matching cross-alt sequences that
+      no real alt admits). A per-alt sequence representation could
+      extend this without losing soundness — useful when a caller's
+      continuation passes through a multi-alt rule like
+      `expr : literal | name`.
 
 ### ATN-class grammars
 

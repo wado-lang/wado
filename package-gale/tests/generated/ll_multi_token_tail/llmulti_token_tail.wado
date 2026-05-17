@@ -733,7 +733,7 @@ impl Parser {
 
 fn scan_r(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_a(tokens, pos, 0);
+    pos = scan_a__follow_0(tokens, pos, 0);
     if pos < 0 { return -1; }
     pos = scan_c(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -787,7 +787,7 @@ fn scan_c(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
     let start = p.peek().span.start;
-    let a = parse_a(p)?;
+    let a = parse_a__follow_0(p)?;
     let c = parse_c(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<RNode, ParseError>::Ok(RNode {
@@ -850,6 +850,81 @@ fn parse_c(p: &mut Parser) -> Result<CNode, ParseError> {
         x,
         y,
         z,
+    });
+}
+
+fn scan_a__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_N { return -1; }
+    pos += 1;
+    sg_3_done: {
+        sg_3: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_X { break sg_3; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_Y { break sg_3; }
+            pos += 1;
+            break sg_3_done;
+        }
+        return -1;
+    }
+    while pos < tokens.len() && tokens[pos].kind == TK_X {
+        let sp = pos;
+        sg_4_done: {
+            sg_4: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_X { break sg_4; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_Y { break sg_4; }
+                pos += 1;
+                break sg_4_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    return pos;
+}
+
+fn parse_a__follow_0(p: &mut Parser) -> Result<ANode, ParseError> {
+    let start = p.peek().span.start;
+    let n = p.expect(TK_N)?;
+    let mut x_y_list: Array<XYItem> = [];
+    let mut _plus_first = true;
+    loop {
+        if !_plus_first {
+            if p.peek_kind() == TK_X && p.peek_at(1) == TK_Y && p.peek_at(2) == TK_Z && p.peek_at(3) == TK_EOF { break; }
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                sg_5_done: {
+                    sg_5: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_X { break sg_5; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos].kind != TK_Y { break sg_5; }
+                        pos += 1;
+                        break sg_5_done;
+                    }
+                    break rep_scan;
+                }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        _plus_first = false;
+        let x = p.expect(TK_X)?;
+        let y = p.expect(TK_Y)?;
+        let x_y = XYItem {
+            x,
+            y,
+        };
+        x_y_list.push(x_y);
+    }
+    return Result::<ANode, ParseError>::Ok(ANode {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        n,
+        x_y_list,
     });
 }
 

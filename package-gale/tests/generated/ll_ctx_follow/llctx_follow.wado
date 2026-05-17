@@ -782,7 +782,7 @@ fn parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
             gd_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                pos = scan_wrapper__follow_0(tokens, pos, 0);
+                pos = scan_wrapper__follow_1(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
                 pos = scan_b(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
@@ -849,28 +849,53 @@ fn parse_b(p: &mut Parser) -> Result<BNode, ParseError> {
 
 fn scan_wrapper__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_a__follow_1(tokens, pos, 0);
+    pos = scan_a__follow_2(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
 fn parse_wrapper__follow_0(p: &mut Parser) -> Result<WrapperNode, ParseError> {
     let start = p.peek().span.start;
-    let a = parse_a__follow_1(p)?;
+    let a = parse_a__follow_2(p)?;
     return Result::<WrapperNode, ParseError>::Ok(WrapperNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         a,
     });
 }
 
-fn scan_a__follow_1(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_wrapper__follow_1(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_a__follow_3(tokens, pos, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_a__follow_2(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_X { return -1; }
     pos += 1;
     return pos;
 }
 
-fn parse_a__follow_1(p: &mut Parser) -> Result<ANode, ParseError> {
+fn parse_a__follow_2(p: &mut Parser) -> Result<ANode, ParseError> {
+    let start = p.peek().span.start;
+    let x = p.expect(TK_X)?;
+    let y: Option<Token> = null;
+    return Result::<ANode, ParseError>::Ok(ANode {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        x,
+        y,
+    });
+}
+
+fn scan_a__follow_3(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_X { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn parse_a__follow_3(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let x = p.expect(TK_X)?;
     let y: Option<Token> = null;
