@@ -195,20 +195,27 @@ impl<'a> PatternLowerer<'a> {
         prepend
     }
 
-    /// True when a top-level `Variant` / `Enum` pattern's payload bindings
-    /// are all flat `Binding` or `Wildcard` leaves — i.e. no nested
-    /// destructuring or refutable sub-patterns. The `IfLet` path lowers
+    /// True when a top-level `Variant` pattern's payload bindings are all
+    /// flat `Binding` or `Wildcard` leaves — i.e. no nested
+    /// destructuring or refutable sub-patterns. The IfLet path lowers
     /// such patterns to an explicit
     /// `Let __scrut + If VariantTest + Let bindings = VariantPayload`
     /// chain so the variant SROA pass can scalarize a freshly
     /// constructed scrutinee value through the consumer (the `for-of`
     /// byte-loop hot path lives here).
+    ///
+    /// Enum patterns intentionally fall through to the two-arm Match
+    /// path: enums are i32 discriminators at WIR level so there is no
+    /// aggregate to scalarize, and the explicit `Binary Eq` comparison
+    /// would need to peel `Ref` / `MutRef` scrutinees the way
+    /// `peel_ref_scrutinee` did pre-9.C.2 — `wir_build::pattern_match`
+    /// already handles `Ref<Enum>` correctly via its existing
+    /// match-arm path.
     fn variant_pattern_uses_only_simple_bindings(pattern: &TirPattern) -> bool {
         match pattern {
             TirPattern::Variant { bindings, .. } => bindings
                 .iter()
                 .all(|b| matches!(b, TirPattern::Binding { .. } | TirPattern::Wildcard)),
-            TirPattern::Enum { .. } => true,
             _ => false,
         }
     }
@@ -238,7 +245,7 @@ impl<'a> PatternLowerer<'a> {
     /// regresses 4-8×.
     fn lower_if_variant_pattern(
         &mut self,
-        scrutinee: TirExpr,
+        mut scrutinee: TirExpr,
         pattern: TirPattern,
         prepend: Vec<TirStmt>,
         then_block: &mut TirBlock,
@@ -247,6 +254,26 @@ impl<'a> PatternLowerer<'a> {
         out: &mut Vec<TirStmt>,
         type_table: &TypeTable,
     ) {
+        // Match ergonomics: peel `Ref`/`MutRef` from the scrutinee so the
+        // resulting `Let __scrut` holds the underlying variant value.
+        // Without this, `VariantTest`/`VariantPayload` on a
+        // `Ref<Option<T>>` would feed wir_build a ref where it expects
+        // the variant — the pre-9.C.2 `peel_ref_scrutinee` did the
+        // same.
+        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
+            type_table.get(scrutinee.type_id)
+        {
+            let inner = *inner;
+            let s_span = scrutinee.span;
+            scrutinee = TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Deref,
+                    expr: Box::new(scrutinee),
+                },
+                inner,
+                s_span,
+            );
+        }
         let scrut_type = scrutinee.type_id;
         let scrut_idx = self.alloc_local(scrut_type);
         let scrut_name = self.next_temp_name();
@@ -275,7 +302,7 @@ impl<'a> PatternLowerer<'a> {
             )
         };
 
-        let condition = match &pattern {
+        let pattern_case_index = match &pattern {
             TirPattern::Variant {
                 enum_type,
                 variant_name,
@@ -286,35 +313,37 @@ impl<'a> PatternLowerer<'a> {
                     ResolvedType::GenericInstance { module_source, .. } => module_source.clone(),
                     _ => ModuleSource::builtin(),
                 };
-                let case_index = self
-                    .get_case_index(
-                        &Self::variant_name_for_type(*enum_type, type_table),
-                        &module_source,
-                        variant_name,
-                    )
-                    .unwrap_or(0);
-                TirExpr::new(
-                    TirExprKind::VariantTest {
-                        expr: Box::new(scrut_ref()),
-                        case_index,
-                        case_name: variant_name.clone(),
-                    },
-                    TypeTable::BOOL,
-                    span,
+                self.get_case_index(
+                    &Self::variant_name_for_type(*enum_type, type_table),
+                    &module_source,
+                    variant_name,
                 )
+                .unwrap_or(0)
             }
-            TirPattern::Enum {
-                case_index,
-                case_name,
-                ..
-            } => TirExpr::new(
+            TirPattern::Enum { case_index, .. } => *case_index,
+            _ => {
+                unreachable!("variant_pattern_uses_only_simple_bindings gates Variant / Enum only")
+            }
+        };
+
+        let condition = match &pattern {
+            TirPattern::Variant { variant_name, .. } => TirExpr::new(
+                TirExprKind::VariantTest {
+                    expr: Box::new(scrut_ref()),
+                    case_index: pattern_case_index,
+                    case_name: variant_name.clone(),
+                },
+                TypeTable::BOOL,
+                span,
+            ),
+            TirPattern::Enum { case_name, .. } => TirExpr::new(
                 TirExprKind::Binary {
                     op: TirBinaryOp::Eq,
                     left: Box::new(scrut_ref()),
                     right: Box::new(TirExpr::new(
                         TirExprKind::EnumConstruct {
                             enum_type: scrut_type,
-                            case_index: *case_index,
+                            case_index: pattern_case_index,
                             case_name: case_name.clone(),
                         },
                         scrut_type,
@@ -324,9 +353,7 @@ impl<'a> PatternLowerer<'a> {
                 TypeTable::BOOL,
                 span,
             ),
-            _ => {
-                unreachable!("variant_pattern_uses_only_simple_bindings gates Variant / Enum only")
-            }
+            _ => unreachable!(),
         };
 
         // Build the then block: extract payload bindings, run hoist
@@ -348,7 +375,7 @@ impl<'a> PatternLowerer<'a> {
                     let payload = TirExpr::new(
                         TirExprKind::VariantPayload {
                             expr: Box::new(scrut_ref()),
-                            case_index: 0,
+                            case_index: pattern_case_index,
                             payload_type: *payload_type,
                         },
                         *payload_type,
