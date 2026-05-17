@@ -2,7 +2,7 @@
 //! state.
 //!
 //! Every `compile_with_options` invocation that targets non-stdlib user
-//! code re-runs the loader → analyze → annotate → lower_tir pipeline
+//! code re-runs the loader → analyze → annotate → `lower_tir` pipeline
 //! over the same stdlib AST closure (`core:prelude` and its transitive
 //! imports plus `core:libm.wat`). Measurements on
 //! `package-gale` (257 compiles, see WEP comments in
@@ -181,9 +181,7 @@ pub(crate) fn stdlib_sources(snap: &Annotated) -> IndexSet<ModuleSource> {
         .filter(|ms| {
             matches!(
                 ms,
-                ModuleSource::Core { .. }
-                    | ModuleSource::Wasi { .. }
-                    | ModuleSource::Wasm { .. }
+                ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
             )
         })
         .cloned()
@@ -287,14 +285,14 @@ mod tests {
         // consumers can rely on the cache hitting for these names.
         let must_have = ["core:prelude", "core:builtin", "core:internal"];
         for name in must_have {
-            let found = snap
-                .tir_modules
-                .keys()
-                .any(|ms| ms.to_string() == name);
+            let found = snap.tir_modules.keys().any(|ms| ms.to_string() == name);
             assert!(
                 found,
                 "snapshot missing stdlib module {name}: have {:?}",
-                snap.tir_modules.keys().map(ToString::to_string).collect::<Vec<_>>()
+                snap.tir_modules
+                    .keys()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
             );
         }
 

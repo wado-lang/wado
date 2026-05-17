@@ -102,7 +102,7 @@ export fn run() with Stdout {
     let call_id = annotated
         .ast_id_at(&entry, 5, 5)
         .expect("position inside `println` call should resolve to an AstId");
-    let call_key = SymbolKey::new(entry.clone(), call_id);
+    let call_key = SymbolKey::new(entry, call_id);
 
     let def_key = annotated
         .referenced_symbol(&call_key)

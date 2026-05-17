@@ -104,7 +104,7 @@ fn well_known_arcs() -> Vec<Arc<str>> {
 /// for the stdlib module set.  Every [`ModuleSourceInterner`] adopts
 /// these, so `ModuleSource` values for stdlib modules compare
 /// pointer-equal across independently constructed interners. This is
-/// the foundation that lets the stdlib TIR cache key its IndexMaps by
+/// the foundation that lets the stdlib TIR cache key its `IndexMaps` by
 /// `ModuleSource`.
 ///
 /// For each variant, the interned payload is the portion of the
