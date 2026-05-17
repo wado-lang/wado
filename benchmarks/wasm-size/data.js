@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778981376255,
+  "lastUpdate": 1778983047798,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22585,6 +22585,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/42e5deaa46cd27282e2660ac30bad5af68d7bc67"
         },
         "date": 1778981375862,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 510826,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1d6434d44359143d8b009b81c5933aeef42d4bc7",
+          "message": "Merge pull request #1095 from wado-lang/gfx/update_skills\n\nchore: tewaks skills",
+          "timestamp": "2026-05-17T10:51:14+09:00",
+          "tree_id": "6de3d34ccef758a6fd1c6e04e3a4303c873fbc24",
+          "url": "https://github.com/wado-lang/wado/commit/1d6434d44359143d8b009b81c5933aeef42d4bc7"
+        },
+        "date": 1778983047449,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
