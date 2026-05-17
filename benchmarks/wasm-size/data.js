@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779000921401,
+  "lastUpdate": 1779008653565,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22893,6 +22893,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/126c84666934a4daaec1a62bcd284f035ecc868b"
         },
         "date": 1779000921059,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 490666,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f66e47ba94bab0c3a1a9ad5feb8ce7c3ac23782c",
+          "message": "Merge pull request #1101 from wado-lang/claude/antlr4-compatibility-tasks-Pp49Z\n\nfeat(gale): close multi-token tail-greedy gap via K-prefix follow mask",
+          "timestamp": "2026-05-17T17:57:56+09:00",
+          "tree_id": "ac97425913346b91e5b4e00b2e35bb83268bbf76",
+          "url": "https://github.com/wado-lang/wado/commit/f66e47ba94bab0c3a1a9ad5feb8ce7c3ac23782c"
+        },
+        "date": 1779008653281,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
