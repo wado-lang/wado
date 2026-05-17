@@ -85,16 +85,17 @@ fn normalize_ast_debug(debug: &str) -> String {
 ///
 /// This catches bugs where the formatter changes program meaning (e.g., dropping
 /// parentheses, reordering operators, losing expressions).
+///
+/// Panics on parse errors in either `source` or the formatter output: the
+/// source passed in is expected to be valid, and a silent skip would let
+/// typos in the test itself report success while testing nothing.
 fn assert_format_preserves_ast(source: &str) {
-    let formatted = match wado_compiler::format(source) {
-        Ok(f) => f,
-        Err(_) => return, // skip sources that don't parse
-    };
+    let formatted = wado_compiler::format(source)
+        .unwrap_or_else(|e| panic!("test source failed to format: {e:?}\n\nSource:\n{source}"));
 
-    let original_ast = match wado_compiler::parse(source) {
-        Ok(r) => r.ast,
-        Err(_) => return,
-    };
+    let original_ast = wado_compiler::parse(source)
+        .unwrap_or_else(|e| panic!("test source failed to parse: {e:?}\n\nSource:\n{source}"))
+        .ast;
     let formatted_ast = match wado_compiler::parse(&formatted) {
         Ok(r) => r.ast,
         Err(e) => panic!(
