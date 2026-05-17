@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779038121482,
+  "lastUpdate": 1779050995851,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23025,6 +23025,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2379a2aa369ea4ee123c9a35a5fe04f66e2fe90a"
         },
         "date": 1779038121092,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 490666,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "32f476c0a2b7a8c7515a3c766b6e08b226da2e28",
+          "message": "Merge pull request #1108 from wado-lang/claude/injective-function-id-VjGFE\n\nrefactor: make `function_id_for` injective by construction",
+          "timestamp": "2026-05-18T05:43:48+09:00",
+          "tree_id": "2841d0301d60a3b530dbf509e1f13b72fb09c45f",
+          "url": "https://github.com/wado-lang/wado/commit/32f476c0a2b7a8c7515a3c766b6e08b226da2e28"
+        },
+        "date": 1779050995508,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
