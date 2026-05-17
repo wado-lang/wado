@@ -223,19 +223,22 @@ fn make_trait_method(
 pub fn synthesize_traits(project: Package) -> Package {
     let mut project = project;
     let trait_env = project.trait_env.clone();
-    // In-pass dedup: each sub-pass records `(type_name, trait_name)` of
-    // every impl it generates so later sub-passes within this same
-    // `synthesize_traits` run can skip emitting a duplicate. The
+    // In-pass dedup: each sub-pass records `(type_name, module, trait_name)`
+    // of every impl it generates so later sub-passes within this same
+    // `synthesize_traits` run can skip emitting a duplicate. The module
+    // component is required because two distinct types from different
+    // modules can share a simple name (e.g. `struct Widget` in module A
+    // and module B), and each needs its own auto-derived impl. The
     // canonical project-wide synthesis layer is rebuilt afterwards by
     // `collect_synthesised_impls` (see `synthesis.rs`), which scans TIR
-    // and captures concrete-ness from the synthesized function itself —
-    // so this accumulator only needs the existence bit, not module or
-    // concrete-ness.
-    let mut pending: IndexSet<(String, String)> = IndexSet::default();
+    // and captures concrete-ness from the synthesized function itself.
+    let mut pending: IndexSet<(String, ModuleSource, String)> = IndexSet::default();
     for module in project.tir_modules.values_mut() {
+        let module_source = module.module_source.clone();
         let mut ctx = SynthesisCtx {
             trait_env: &trait_env,
             pending: &mut pending,
+            module: module_source,
         };
         generate_enum_trait_impls(module, &mut ctx);
         generate_struct_eq_ord_impls(module, &mut ctx);
@@ -258,28 +261,50 @@ pub fn synthesize_traits(project: Package) -> Package {
 /// without re-scanning TIR per call.
 pub(crate) struct SynthesisCtx<'env, 'pend> {
     pub(crate) trait_env: &'env TraitEnv,
-    pub(crate) pending: &'pend mut IndexSet<(String, String)>,
+    /// In-progress dedup of `(type_name, module, trait_name)` triples. Module
+    /// is part of the key so that two same-name structs from different
+    /// modules each get their own auto-derived impl — without the module
+    /// component, the second derivation would be silently skipped and the
+    /// receiver type from the second module would dispatch to the first
+    /// module's impl.
+    pub(crate) pending: &'pend mut IndexSet<(String, ModuleSource, String)>,
+    /// Module currently being synthesised. Auto-derived impls live in this
+    /// module by convention.
+    pub(crate) module: ModuleSource,
 }
 
 impl SynthesisCtx<'_, '_> {
-    /// `true` when an impl of `trait_name` for `type_name` is already known
-    /// (either from the AST or recorded in this synthesis pass).
+    /// `true` when an impl of `trait_name` for `<type_name>` defined in the
+    /// current module is already known (either from the AST/synthesised
+    /// `TraitEnv` layer or recorded earlier in this synthesis pass).
+    /// Module-scoped on purpose — `has_impl` is called to dedup auto-derived
+    /// impls, and an impl in a *different* module is irrelevant because
+    /// auto-derived impls always co-locate with their receiver type.
     pub(crate) fn has_impl(&self, type_name: &str, trait_name: &str) -> bool {
-        self.trait_env
-            .impl_module_for(type_name, trait_name)
-            .is_some()
-            || self
-                .pending
-                .contains(&(type_name.to_string(), trait_name.to_string()))
+        if self
+            .trait_env
+            .impl_module_for(type_name, trait_name, Some(&self.module))
+            .is_some_and(|m| m == &self.module)
+        {
+            return true;
+        }
+        self.pending.contains(&(
+            type_name.to_string(),
+            self.module.clone(),
+            trait_name.to_string(),
+        ))
     }
 
-    /// Note that this synthesis pass added `impl <trait_name> for <type_name>`.
-    /// Used for in-pass dedup only; the canonical synthesis layer is
-    /// rebuilt by `collect_synthesised_impls` after `synthesize_traits`
-    /// returns.
+    /// Note that this synthesis pass added `impl <trait_name> for <type_name>`
+    /// in the current module. Used for in-pass dedup only; the canonical
+    /// synthesis layer is rebuilt by `collect_synthesised_impls` after
+    /// `synthesize_traits` returns.
     pub(crate) fn record_impl(&mut self, type_name: &str, trait_name: &str) {
-        self.pending
-            .insert((type_name.to_string(), trait_name.to_string()));
+        self.pending.insert((
+            type_name.to_string(),
+            self.module.clone(),
+            trait_name.to_string(),
+        ));
     }
 }
 

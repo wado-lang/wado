@@ -1207,11 +1207,13 @@ impl Monomorphizer {
                             if info.is_type_param_receiver {
                                 let mut sorted_entries: Vec<_> = substitution.iter().collect();
                                 sorted_entries.sort_by_key(|(idx, _)| **idx);
-                                let concrete_module =
-                                    self.functions.impl_module(&new_info).or_else(|| {
-                                        let concrete_type_id = sorted_entries[0].1;
-                                        module_source_for_trait_impl(type_table, *concrete_type_id)
-                                    });
+                                let concrete_type_id = *sorted_entries[0].1;
+                                let receiver_module =
+                                    module_source_for_trait_impl(type_table, concrete_type_id);
+                                let concrete_module = self
+                                    .functions
+                                    .impl_module(&new_info, receiver_module.as_ref())
+                                    .or(receiver_module);
                                 let new_monomorph = if new_info.method_type_args.is_empty() {
                                     None
                                 } else {
@@ -2055,7 +2057,7 @@ impl Monomorphizer {
 
         if info.is_type_param_receiver {
             // Type param receiver: redirect to a concrete method (e.g., T^Ord::cmp → i32^Ord::cmp)
-            let concrete_module = self.functions.impl_module(&new_info).or_else(|| {
+            let receiver_module = {
                 let mut inner = receiver_type_id;
                 while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
                     type_table.get(inner).clone()
@@ -2063,7 +2065,11 @@ impl Monomorphizer {
                     inner = t;
                 }
                 module_source_for_trait_impl(type_table, inner)
-            });
+            };
+            let concrete_module = self
+                .functions
+                .impl_module(&new_info, receiver_module.as_ref())
+                .or(receiver_module);
 
             // Determine if this is a blanket impl method.
             // - Direct concrete method: found in trait_method_locations → monomorph_info = None
@@ -3569,11 +3575,13 @@ fn try_lower_comparison(
         // uses `info.struct_name` (the post-substitution full type name)
         // — matches `FuncInstState::impl_module` so the same trait-method
         // call resolves identically here and in receiver-substitution paths.
+        // `type_mod` is also passed to disambiguate same-name receiver
+        // types coming from different modules.
         info.trait_name
             .as_deref()
             .and_then(|tn| {
                 trait_env
-                    .concrete_impl_module_for(&info.struct_name, tn)
+                    .concrete_impl_module_for(&info.struct_name, tn, type_mod.as_ref())
                     .cloned()
             })
             .or(type_mod)

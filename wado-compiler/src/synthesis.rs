@@ -114,7 +114,17 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
     let mut record =
         |type_name: String, trait_name: String, module: &ModuleSource, is_concrete: bool| {
             let key = (type_name, trait_name);
-            if ast_layer.contains_key(&key) {
+            // Skip only when the *same* module is already represented at the
+            // AST layer. Two same-name receiver types from different modules
+            // (e.g. `struct Widget` in module A and module B) each get their
+            // own auto-derived impl and both need to land in the synthesised
+            // layer — a coarser `contains_key` short-circuit would drop the
+            // second one and re-introduce the cross-module mis-dispatch the
+            // multi-valued index is meant to fix.
+            if ast_layer
+                .get(&key)
+                .is_some_and(|modules| modules.contains(module))
+            {
                 return;
             }
             impls.record_impl(key.0, key.1, module.clone(), is_concrete);

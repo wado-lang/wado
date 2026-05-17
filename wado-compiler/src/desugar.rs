@@ -1519,10 +1519,11 @@ fn collect_intermediates(
         Expr::MethodCall(mc) => {
             // The receiver is intentionally NOT recursed into in step 1.
             // Extracting `<recv>` as `let __v = <recv>;` forces auto-derived
-            // `Inspect` on the receiver's type, which surfaces unrelated
-            // synthesis gaps (`Fn<...>` and CM resource handles have no
-            // `Inspect`; same-name struct mangling collides across modules).
-            // Step 2 revisits receiver recursion once those gaps close.
+            // `Inspect` on the receiver's type, which surfaces a separate
+            // name-collision issue (a user struct named `Tuple` shares its
+            // mangled `Tuple^Inspect::inspect` name with `core:prelude/tuple`'s
+            // variadic impl). Step 2 revisits receiver recursion together
+            // with the qualified-mangling fix.
             for arg in &mc.args {
                 collect_call_arg(arg, intermediates, counter);
             }

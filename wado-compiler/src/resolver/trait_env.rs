@@ -16,6 +16,32 @@ use crate::tir::{TypeId, TypeTable};
 use super::Resolver;
 use super::types::TypeError;
 
+/// Pick the right `ModuleSource` out of the AST + synthesised candidate
+/// lists. If `prefer` is supplied and present in either list, return that
+/// one; otherwise fall back to the first AST entry, then the first
+/// synthesised entry. The union prevents an AST-layer entry from masking
+/// a same-keyed synthesised entry (e.g. core's variadic
+/// `impl<..T> Inspect for [..T]` registers `("Tuple", "Inspect")` at the
+/// AST layer; a user `struct Tuple` whose auto-derived `Tuple^Inspect`
+/// lives in the synthesised layer must still be reachable when its module
+/// matches the hint).
+fn pick_module_union<'a>(
+    ast: Option<&'a Vec<ModuleSource>>,
+    syn: Option<&'a Vec<ModuleSource>>,
+    prefer: Option<&ModuleSource>,
+) -> Option<&'a ModuleSource> {
+    let in_list = |list: Option<&'a Vec<ModuleSource>>, hint: &ModuleSource| {
+        list.and_then(|l| l.iter().find(|m| *m == hint))
+    };
+    if let Some(hint) = prefer
+        && let Some(m) = in_list(ast, hint).or_else(|| in_list(syn, hint))
+    {
+        return Some(m);
+    }
+    ast.and_then(|l| l.first())
+        .or_else(|| syn.and_then(|l| l.first()))
+}
+
 /// Pre-built index: type name → list of (`ModuleSource`, item index) for trait impl blocks.
 /// Built once from all loaded modules to avoid O(all items) scans per method call.
 pub(super) type TraitImplIndex = IndexMap<String, Vec<(ModuleSource, usize)>>;
@@ -59,7 +85,19 @@ pub(super) type ResourceStaticMethodIndex =
 /// does the impl live?" without re-scanning AST modules. Blanket impls are
 /// excluded — they apply structurally and don't have a concrete receiver
 /// type name.
-pub(crate) type TraitImplModuleIndex = IndexMap<(String, String), ModuleSource>;
+/// `(type_name, trait_name)` → modules whose `impl <trait_name> for <type_name>`
+/// block exists. Multi-valued because two distinct types can share a simple
+/// name (e.g. two `struct Widget` blocks in different modules, each auto-
+/// derived to `Widget^Inspect`); a single-valued index would first-write-wins
+/// and silently mis-resolve the auto-derived `Inspect` lookup to whichever
+/// module landed first. Mirrors [`TraitImplIndex`]'s multiplicity for
+/// receiver-trait pairs the way the resolver's `find_trait_impl_for_type`
+/// already iterates `impl_index`.
+///
+/// Blanket impls (`impl<T: Trait> Trait for T`) are still represented by
+/// [`BlanketTraitImplIndex`]; they are excluded from this map because they
+/// apply structurally and don't have a concrete receiver type name.
+pub(crate) type TraitImplModuleIndex = IndexMap<(String, String), Vec<ModuleSource>>;
 
 /// Immutable global knowledge base for trait resolution.
 ///
@@ -138,7 +176,9 @@ impl SynthesisedImpls {
     /// Record that `impl <trait_name> for <type_name>` has been synthesized
     /// in `module`. `is_concrete` indicates whether the impl has no
     /// generic type parameters, so it can be added to the concrete-only
-    /// view. First insert wins (matches AST-layer first-write semantics).
+    /// view. Each `module` is recorded at most once per key; iteration
+    /// order matches insertion order so callers can rely on a stable
+    /// "first registered" fallback when no `type_module` hint is supplied.
     pub fn record_impl(
         &mut self,
         type_name: String,
@@ -151,11 +191,18 @@ impl SynthesisedImpls {
             // Concrete impls populate both views; clone once for the
             // duplicated entry. Generic impls only appear in the all-impls
             // view, so they avoid the clone entirely.
-            self.concrete_trait_impl_modules
+            let modules = self
+                .concrete_trait_impl_modules
                 .entry(key.clone())
-                .or_insert_with(|| module.clone());
+                .or_default();
+            if !modules.contains(&module) {
+                modules.push(module.clone());
+            }
         }
-        self.trait_impl_modules.entry(key).or_insert(module);
+        let modules = self.trait_impl_modules.entry(key).or_default();
+        if !modules.contains(&module) {
+            modules.push(module);
+        }
     }
 
     /// `true` if `impl <trait_name> for <type_name>` has already been
@@ -202,17 +249,19 @@ impl TraitEnv {
                         } else if let Some(trait_type) = &impl_block.trait_type {
                             let trait_name = get_type_name_static(trait_type);
                             let key = (type_name.clone(), trait_name);
-                            trait_impl_modules
-                                .entry(key.clone())
-                                .or_insert_with(|| module_source.clone());
+                            let modules = trait_impl_modules.entry(key.clone()).or_default();
+                            if !modules.contains(module_source) {
+                                modules.push(module_source.clone());
+                            }
                             // Track the concrete subset separately: only impl
                             // blocks with no type parameters at all qualify
                             // (e.g. `impl Display for String`, not
                             // `impl<T> Inspect for Array<T>`).
                             if impl_block.type_params.is_empty() {
-                                concrete_trait_impl_modules
-                                    .entry(key)
-                                    .or_insert_with(|| module_source.clone());
+                                let cmodules = concrete_trait_impl_modules.entry(key).or_default();
+                                if !cmodules.contains(module_source) {
+                                    cmodules.push(module_source.clone());
+                                }
                             }
                         }
                         impl_index
@@ -362,17 +411,34 @@ impl TraitEnv {
     /// Returns `None` for blanket impls and types not represented as a
     /// concrete impl (e.g. anonymous function types whose `Inspect` is
     /// auto-derived per-module by the synthesis phase).
+    ///
+    /// When the same simple type name is implemented in multiple modules
+    /// (e.g. two `struct Widget` blocks, each auto-derived to `Widget^Inspect`
+    /// in its own module), `type_module` disambiguates by preferring an
+    /// entry whose module matches the hint. This mirrors how the resolver's
+    /// `find_trait_impl_for_type_with_args` iterates [`TraitImplIndex`] and
+    /// checks each candidate impl individually instead of collapsing on the
+    /// `(name, trait)` key.
     pub(crate) fn impl_module_for(
         &self,
         type_name: &str,
         trait_name: &str,
+        type_module: Option<&ModuleSource>,
     ) -> Option<&ModuleSource> {
         let key = (type_name.to_string(), trait_name.to_string());
-        self.trait_impl_modules.get(&key).or_else(|| {
-            self.synthesised
-                .as_ref()
-                .and_then(|s| s.trait_impl_modules.get(&key))
-        })
+        // Union AST-layer and synthesised-layer candidates: an AST-only
+        // fallthrough would miss auto-derived impls when the AST already
+        // has a *different* same-named entry. E.g. core's variadic
+        // `impl<..T> Inspect for [..T]` registers `("Tuple", "Inspect")` at
+        // the AST layer; a user `struct Tuple` whose auto-derived
+        // `Tuple^Inspect` is recorded in the synthesised layer must still
+        // be reachable when its module is passed as the hint.
+        let ast = self.trait_impl_modules.get(&key);
+        let syn = self
+            .synthesised
+            .as_ref()
+            .and_then(|s| s.trait_impl_modules.get(&key));
+        pick_module_union(ast, syn, type_module)
     }
 
     /// Like [`impl_module_for`] but only returns a hit when the impl block
@@ -387,13 +453,15 @@ impl TraitEnv {
         &self,
         type_name: &str,
         trait_name: &str,
+        type_module: Option<&ModuleSource>,
     ) -> Option<&ModuleSource> {
         let key = (type_name.to_string(), trait_name.to_string());
-        self.concrete_trait_impl_modules.get(&key).or_else(|| {
-            self.synthesised
-                .as_ref()
-                .and_then(|s| s.concrete_trait_impl_modules.get(&key))
-        })
+        let ast = self.concrete_trait_impl_modules.get(&key);
+        let syn = self
+            .synthesised
+            .as_ref()
+            .and_then(|s| s.concrete_trait_impl_modules.get(&key));
+        pick_module_union(ast, syn, type_module)
     }
 
     /// Produce a new `TraitEnv` with the synthesis-layer impls populated.

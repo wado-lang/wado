@@ -987,6 +987,23 @@ fn trait_impl_module(
     type_id: TypeId,
     ctx: &TemplateCtx,
 ) -> ModuleSource {
+    // The receiver's own module is the disambiguation hint: when two
+    // same-named structs from different modules each auto-derive an impl
+    // (e.g. `struct Widget` in module A and module B both get a
+    // `Widget^Inspect`), `TraitEnv::impl_module_for` would otherwise return
+    // whichever module landed first in iteration order. Passing the type's
+    // module lets the lookup pick the candidate that actually corresponds
+    // to this `type_id`.
+    let resolved = ctx.tt.borrow().get(type_id).clone();
+    let type_module = match &resolved {
+        ResolvedType::Struct { module_source, .. }
+        | ResolvedType::Enum { module_source, .. }
+        | ResolvedType::Variant { module_source, .. }
+        | ResolvedType::Newtype { module_source, .. }
+        | ResolvedType::Flags { module_source, .. } => Some(module_source.clone()),
+        _ => None,
+    };
+
     // Preferred path: consult the resolver's `TraitEnv`, which knows where
     // every user-written `impl Trait for Type` block lives. This handles
     // cross-module impls like `impl Display for String` (defined in
@@ -995,9 +1012,11 @@ fn trait_impl_module(
         .base_trait_name
         .as_deref()
         .or(local_name.trait_name.as_deref())
-        && let Some(loc) = ctx
-            .trait_env
-            .impl_module_for(&local_name.base_struct_name, trait_name)
+        && let Some(loc) = ctx.trait_env.impl_module_for(
+            &local_name.base_struct_name,
+            trait_name,
+            type_module.as_ref(),
+        )
     {
         return loc.clone();
     }
@@ -1014,13 +1033,11 @@ fn trait_impl_module(
     //   every function's `module_source` is rewritten to its hosting
     //   module, so the impl callable from this template lives under the
     //   current module's namespace.
-    match ctx.tt.borrow().get(type_id).clone() {
-        ResolvedType::Primitive(_) => ModuleSource::primitive(),
-        ResolvedType::Struct { module_source, .. }
-        | ResolvedType::Enum { module_source, .. }
-        | ResolvedType::Variant { module_source, .. }
-        | ResolvedType::Newtype { module_source, .. }
-        | ResolvedType::Flags { module_source, .. } => module_source,
+    if let Some(m) = type_module {
+        return m;
+    }
+    match resolved {
+        ResolvedType::Primitive(_) | ResolvedType::Unit => ModuleSource::primitive(),
         ResolvedType::Function { .. } => ctx.module_src.clone(),
         _ => ModuleSource::primitive(),
     }
