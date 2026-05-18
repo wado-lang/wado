@@ -999,14 +999,11 @@ impl CompilerItems {
     /// the only legitimate way to hit that is to break the structural
     /// shape of the trait, which the synthesiser does not silently
     /// handle anywhere else either.
-    pub fn trait_assoc_type_by_bound(
-        &self,
-        item: CompilerItem,
-        bound_trait_name: &str,
-    ) -> &str {
-        let assoc = self.trait_assoc_types(item).iter().find(|a| {
-            a.bound_names.iter().any(|b| b == bound_trait_name)
-        });
+    pub fn trait_assoc_type_by_bound(&self, item: CompilerItem, bound_trait_name: &str) -> &str {
+        let assoc = self
+            .trait_assoc_types(item)
+            .iter()
+            .find(|a| a.bound_names.iter().any(|b| b == bound_trait_name));
         match assoc {
             Some(a) => a.name.as_str(),
             None => panic!(
