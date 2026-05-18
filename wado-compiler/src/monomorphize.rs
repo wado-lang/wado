@@ -174,6 +174,13 @@ fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Opti
         | ResolvedType::GenericInstance { module_source, .. }
         | ResolvedType::Enum { module_source, .. }
         | ResolvedType::Variant { module_source, .. } => Some(module_source.clone()),
+        // Newtypes inherit their base type's impls (`type Foo = Array<u8>`
+        // gets Array's methods); the body of the inherited generic
+        // instantiation lives in the base type's module by convention, so
+        // peel through to the base before reading the module source.
+        ResolvedType::Newtype { base_type, .. } => {
+            module_source_for_trait_impl(type_table, *base_type)
+        }
         _ => None,
     }
 }

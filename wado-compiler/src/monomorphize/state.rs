@@ -82,6 +82,38 @@ impl FuncInstState {
         // needed.
         self.impl_module(info, None).is_some()
     }
+
+    /// Module of any non-blanket `impl <trait> for <Type>` block — broader
+    /// than [`Self::impl_module`] in that it also returns generic impls
+    /// (`impl<T> IntoIterator for Array<T>`) which live in the receiver
+    /// type's own module by convention. Used by the type-param dispatch
+    /// path to distinguish "the receiver type has a non-blanket impl,
+    /// fall through to the receiver's module" from "no impl at all, use
+    /// the blanket's module".
+    pub fn generic_or_concrete_impl_module(
+        &self,
+        info: &LocalMethodName,
+        type_module: Option<&ModuleSource>,
+    ) -> Option<ModuleSource> {
+        let trait_name = info
+            .base_trait_name
+            .as_deref()
+            .or(info.trait_name.as_deref())?;
+        if let Some(m) =
+            self.trait_env
+                .impl_module_for(&info.struct_name, trait_name, type_module)
+        {
+            return Some(m.clone());
+        }
+        if info.base_struct_name != info.struct_name
+            && let Some(m) =
+                self.trait_env
+                    .impl_module_for(&info.base_struct_name, trait_name, type_module)
+        {
+            return Some(m.clone());
+        }
+        None
+    }
 }
 
 /// Monomorphizer collects generic instantiations and generates concrete types

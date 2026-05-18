@@ -1438,23 +1438,37 @@ impl Monomorphizer {
                                 // format.wado instead of the ref blanket's, and the
                                 // leading `&` would disappear at codegen.
                                 //
-                                // For blanket-impl dispatch (e.g.
-                                // `impl<I: Iterator> IntoIterator for I`),
-                                // consult the blanket index by trait name
-                                // before falling back to the receiver's own
-                                // module — the body lives in the blanket's
-                                // module, not where the receiver type is
-                                // declared.
+                                // If no concrete impl exists, a generic impl
+                                // on the receiver type lives in that type's
+                                // own module by convention — fall through to
+                                // `receiver_module`. Only when no per-type
+                                // impl exists at all does dispatch run
+                                // through a blanket impl
+                                // (`impl<I: Bound> Trait for I`); those live
+                                // in the blanket's own module.
                                 let trait_name_for_blanket = new_info
                                     .base_trait_name
                                     .as_deref()
                                     .or(new_info.trait_name.as_deref());
-                                let blanket_module = trait_name_for_blanket.and_then(|tn| {
-                                    self.functions
-                                        .trait_env
-                                        .blanket_impl_module_for_trait(tn, receiver_module.as_ref())
-                                        .cloned()
-                                });
+                                let generic_or_concrete = self
+                                    .functions
+                                    .generic_or_concrete_impl_module(
+                                        &new_info,
+                                        receiver_module.as_ref(),
+                                    );
+                                let blanket_module = if generic_or_concrete.is_none() {
+                                    trait_name_for_blanket.and_then(|tn| {
+                                        self.functions
+                                            .trait_env
+                                            .blanket_impl_module_for_trait(
+                                                tn,
+                                                receiver_module.as_ref(),
+                                            )
+                                            .cloned()
+                                    })
+                                } else {
+                                    None
+                                };
                                 let concrete_module = self
                                     .functions
                                     .impl_module(&new_info, receiver_module.as_ref())
@@ -2278,7 +2292,14 @@ impl Monomorphizer {
                 candidate
             } else {
                 let mangled = type_table.mangle_type_name_resolving_newtypes(inner);
-                let base = type_table.base_type_name(inner);
+                // Take the base name from the *resolved* type so newtypes
+                // (`type FieldValue = Array<u8>`) inherit the underlying
+                // type's base ("Array"), not the newtype's own name.
+                // Without this, `base_struct_name` stays "FieldValue" while
+                // `struct_name` becomes "Array<u8>", and the trait_env
+                // candidate lookup misses the per-type impl.
+                let resolved_inner = type_table.resolve_newtype_base(inner);
+                let base = type_table.base_type_name(resolved_inner);
                 info.with_substituted_struct_name(&mangled, &base)
             }
         } else if needs_struct_type_args {
@@ -2327,22 +2348,32 @@ impl Monomorphizer {
             // to Array's generic impl in format.wado instead of the ref
             // blanket's, and the leading `&` would disappear at codegen.
             //
-            // If no concrete impl exists, the dispatch is being satisfied by
-            // a blanket impl (`impl<I: Bound> Trait for I`); its home module
-            // is keyed by trait name in `blanket_trait_impl_modules`. Only
-            // fall back to the receiver type's own module if neither is
-            // available — that is the inherent-method shape, where the impl
-            // block lives with the receiver type.
+            // If no concrete impl exists, a generic impl on the receiver
+            // type (`impl<T> IntoIterator for Array<T>`) still lives in the
+            // receiver type's own module by convention — fall through to
+            // `receiver_module` for that case (covers newtype inheritance:
+            // `FieldValue = Array<u8>` reuses Array's impl). Only when no
+            // per-type impl exists at all does dispatch run through a
+            // blanket impl (`impl<I: Bound> Trait for I`); the body for
+            // those lives in the blanket's module, keyed by trait name in
+            // `blanket_trait_impl_modules`.
             let trait_name_for_blanket = new_info
                 .base_trait_name
                 .as_deref()
                 .or(new_info.trait_name.as_deref());
-            let blanket_module = trait_name_for_blanket.and_then(|tn| {
-                self.functions
-                    .trait_env
-                    .blanket_impl_module_for_trait(tn, receiver_module.as_ref())
-                    .cloned()
-            });
+            let generic_or_concrete = self
+                .functions
+                .generic_or_concrete_impl_module(&new_info, receiver_module.as_ref());
+            let blanket_module = if generic_or_concrete.is_none() {
+                trait_name_for_blanket.and_then(|tn| {
+                    self.functions
+                        .trait_env
+                        .blanket_impl_module_for_trait(tn, receiver_module.as_ref())
+                        .cloned()
+                })
+            } else {
+                None
+            };
             let concrete_module = self
                 .functions
                 .impl_module(&new_info, receiver_module.as_ref())
@@ -2351,7 +2382,7 @@ impl Monomorphizer {
 
             // Determine if this is a blanket impl method.
             // - Direct concrete method: found in trait_method_locations → monomorph_info = None
-            // - Generic impl method: receiver has type_args → handled by receiver scan → None
+            // - Generic impl method: receiver has type_args (peeling newtypes) → handled by receiver scan → None
             // - Blanket impl method: neither → is_blanket = true
             let receiver_has_type_args = {
                 let mut inner = receiver_type_id;
@@ -2360,12 +2391,16 @@ impl Monomorphizer {
                 {
                     inner = t;
                 }
+                // Peel newtypes: `type FieldValue = Array<u8>` inherits
+                // Array's generic-impl dispatch, so the call must not be
+                // marked blanket even though FieldValue itself has no impl.
+                let resolved = type_table.resolve_newtype_base(inner);
                 matches!(
-                    type_table.get(inner),
+                    type_table.get(resolved),
                     ResolvedType::GenericInstance {
                         type_args: args, ..
                     } if !args.is_empty()
-                ) || matches!(type_table.get(inner), ResolvedType::BuiltinArray(_))
+                ) || matches!(type_table.get(resolved), ResolvedType::BuiltinArray(_))
             };
             let monomorph_info = if self.functions.has_impl(&new_info) || receiver_has_type_args {
                 None
