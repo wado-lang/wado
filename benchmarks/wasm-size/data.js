@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779063510748,
+  "lastUpdate": 1779103208485,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23157,6 +23157,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/faa90a80041030e9695b48afba943fca141add1f"
         },
         "date": 1779063510396,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 490666,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "63c4669c58223b41146d770326d365240662b3b8",
+          "message": "Merge pull request #1113 from wado-lang/claude/replace-hardcoded-compiler-item-WAYDV\n\nRoute remaining hard-coded stdlib refs through `CompilerItem` (issue #1091)",
+          "timestamp": "2026-05-18T20:13:35+09:00",
+          "tree_id": "057238caf2f9bc3eede8ff799da3203bba97396b",
+          "url": "https://github.com/wado-lang/wado/commit/63c4669c58223b41146d770326d365240662b3b8"
+        },
+        "date": 1779103208230,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
