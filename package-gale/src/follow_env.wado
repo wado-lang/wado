@@ -184,15 +184,51 @@ pub fn register_follow_variants(parser_rules: &Array<ParserRule>, ctx: &mut GenC
 /// leading self-ref is skipped so the walk mirrors
 /// `lower_lr_alt_suffix` — lower never interns at position 0 of an
 /// LR alt because the suffix lowering starts at index 1.
+///
+/// When the rule has any LR alts, lower's `lower_lr_rule` partitions
+/// the alts into non-LR (atom) and LR (suffix) groups and processes
+/// the non-LR group first (via `lower_lr_atom` → `lower_alt_body` +
+/// `lower_scan_body` per non-LR alt) before walking the LR group
+/// (via `lower_lr_alt` → suffix lowering). Mirror that two-phase
+/// order here so the variant ids the pre-pass mints line up exactly
+/// with the order lower's twin walk would have produced — that
+/// keeps generated parsers byte-identical when the pre-pass replaces
+/// lower's in-walker `intern_follow_variant` calls.
 fn walk_rule_alts(rule: &ParserRule, ctx: &mut GenContext, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) {
+    // Partition alts mirroring `lower::lower_lr_rule` so the walk
+    // order matches lower's. The non-LR group runs first (each alt
+    // walked in source order, full positions), then the LR group
+    // (each alt walked from position 1 to skip the leading
+    // self-ref). If no alt is LR the two iterations collapse into
+    // a single source-order walk — same shape as
+    // `lower_simple_rule` / `lower_multi_alt_rule`.
+    let mut has_lr = false;
     for let alternative of &rule.alternatives {
-        let start = if alt_is_left_recursive(alternative, &rule.name) {
-            1;
-        } else {
-            0;
-        };
-        walk_alt_range_parse(&alternative.elements, start, ctx, variant_mask, variant_k_prefix_mask);
-        walk_alt_range_scan(&alternative.elements, start, ctx, variant_mask, variant_k_prefix_mask);
+        if alt_is_left_recursive(alternative, &rule.name) {
+            has_lr = true;
+            break;
+        }
+    }
+    if !has_lr {
+        for let alternative of &rule.alternatives {
+            walk_alt_range_parse(&alternative.elements, 0, ctx, variant_mask, variant_k_prefix_mask);
+            walk_alt_range_scan(&alternative.elements, 0, ctx, variant_mask, variant_k_prefix_mask);
+        }
+        return;
+    }
+    // LR rule path: non-LR atom alts first.
+    for let alternative of &rule.alternatives {
+        if !alt_is_left_recursive(alternative, &rule.name) {
+            walk_alt_range_parse(&alternative.elements, 0, ctx, variant_mask, variant_k_prefix_mask);
+            walk_alt_range_scan(&alternative.elements, 0, ctx, variant_mask, variant_k_prefix_mask);
+        }
+    }
+    // Then LR alt suffixes (position 0 = leading self-ref, skipped).
+    for let alternative of &rule.alternatives {
+        if alt_is_left_recursive(alternative, &rule.name) {
+            walk_alt_range_parse(&alternative.elements, 1, ctx, variant_mask, variant_k_prefix_mask);
+            walk_alt_range_scan(&alternative.elements, 1, ctx, variant_mask, variant_k_prefix_mask);
+        }
     }
 }
 

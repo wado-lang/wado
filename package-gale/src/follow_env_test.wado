@@ -292,3 +292,89 @@ test "variant pre-pass: walks into Repeat bodies" {
     }
     assert found, `expected variant for 'a' inside the Repeat body, registry has {entries.len()} entries`;
 }
+
+test "variant pre-pass: LR alt leading self-ref is not interned" {
+    // e : e X? | X ;
+    // tail_greedy(e) = first(X) = {TK_X}     (from LR alt's trailing X?)
+    // The leading `e` of the LR alt sits at position 0; its
+    // suffix-derived caller_follow is first(X?) = {TK_X}, which
+    // overlaps tail_greedy(e) = {TK_X}. If `walk_rule_alts` walked
+    // position 0 of an LR alt, that overlap would register an
+    // `(e, mask=[TK_X])` variant.
+    //
+    // Lower never reaches that intern site: `lower_lr_alt_suffix`
+    // lowers `alt.elements[1..]`, skipping the leading self-ref. The
+    // walker must mirror that skip — otherwise the variant lives in
+    // the registry but lower never emits a body for it (registry
+    // length > `lowered.variant_rules.len()`, tripping the
+    // `gen_parser` assertion at parser_gen.wado:122).
+    //
+    // No outside caller of `e` overlaps `tail_greedy(e)` here, so the
+    // registry must be empty when the skip is in effect.
+    let rules: Array<ParserRule> = [mk_rule(
+        "e",
+        [
+            alt([rr("e"), opt(tk("X"))]),
+            alt([tk("X")]),
+        ],
+    )];
+    let mut ctx = mk_ctx(&rules);
+    let start = no_start();
+    let _env = build(&rules, &mut ctx, &start);
+    let entries = ctx.follow_variants();
+    assert entries.is_empty(),
+        `LR alt's leading self-ref must not contribute a variant; registry has {entries.len()} entries`;
+}
+
+test "variant pre-pass: LR rule walks non-LR alts before LR alts" {
+    // Two-alt LR rule with the LR alt FIRST in source order:
+    //   e : e b Y | a X ;
+    //   a : N X? ;     // tail_greedy(a) = {TK_X}
+    //   b : M Y? ;     // tail_greedy(b) = {TK_Y}
+    //
+    // Both alts trigger a variant on different rules:
+    //   * Non-LR alt `a X` — call to `a` at position 0 with
+    //     caller_follow=first(X)={TK_X}; intersection with
+    //     tail_greedy(a)={TK_X} is non-empty, so variant
+    //     `(a, mask=[TK_X])` is registered.
+    //   * LR alt suffix `e b Y` — call to `b` at position 1 with
+    //     caller_follow=first(Y)={TK_Y}; intersection with
+    //     tail_greedy(b)={TK_Y} is non-empty, so variant
+    //     `(b, mask=[TK_Y])` is registered.
+    //
+    // `lower::lower_lr_rule` partitions the alts and processes the
+    // non-LR atom before the LR suffix. The walker mirrors that, so
+    // `(a, mask=[TK_X])` lands at id 0 and `(b, mask=[TK_Y])` at
+    // id 1 — even though the LR alt comes first in source order.
+    //
+    // A source-order walk (LR alt first) would flip the ids
+    // (b → 0, a → 1). The byte-identical generated parser
+    // regression check on `tests/generated/rust/rust.wado` would
+    // catch that flip globally, but this unit test pins the
+    // invariant explicitly on a self-contained two-rule grammar.
+    let rules: Array<ParserRule> = [
+        mk_rule(
+            "e",
+            [
+                alt([rr("e"), rr("b"), tk("Y")]),
+                alt([rr("a"), tk("X")]),
+            ],
+        ),
+        mk_rule("a", [alt([tk("N"), opt(tk("X"))])]),
+        mk_rule("b", [alt([tk("M"), opt(tk("Y"))])]),
+    ];
+    let mut ctx = mk_ctx(&rules);
+    let start = no_start();
+    let _env = build(&rules, &mut ctx, &start);
+    let entries = ctx.follow_variants();
+    assert entries.len() == 2,
+        `expected 2 variants (one for a, one for b), got {entries.len()}`;
+    assert entries[0].rule_name == "a",
+        `expected first variant rule 'a' (non-LR alt processed first), got '{entries[0].rule_name}'`;
+    assert entries[0].mask.len() == 1 && entries[0].mask[0] == "TK_X",
+        `expected first variant mask=[TK_X], got len {entries[0].mask.len()}`;
+    assert entries[1].rule_name == "b",
+        `expected second variant rule 'b' (LR suffix walk after non-LR), got '{entries[1].rule_name}'`;
+    assert entries[1].mask.len() == 1 && entries[1].mask[0] == "TK_Y",
+        `expected second variant mask=[TK_Y], got len {entries[1].mask.len()}`;
+}
