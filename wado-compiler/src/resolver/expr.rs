@@ -1282,8 +1282,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // (statement-position use, branches drop their
                 // values per `translate_stmts`).
                 if expected_type.is_some() && type_id != TypeTable::UNIT {
-                    let chain_type = Self::block_result_type(&chain_block);
-                    self.check_branch_type(chain_type, type_id, if_expr.then_block.span);
+                    // The chain's then-branch is resolved inside
+                    // `resolve_let_chain_stmts` with the same
+                    // `expected_type`, so a then-block that can't
+                    // satisfy `type_id` already surfaces a
+                    // diagnostic from `resolve_expr` /
+                    // `try_coerce` during that walk — no separate
+                    // chain-side check is needed (and using
+                    // `block_result_type(&chain_block)` to check
+                    // here would emit a spurious "expected X,
+                    // found ()" because `block_result_type`
+                    // recurses through the chain's nested
+                    // `TirStmtKind::IfLet` and `agree_branch_types`
+                    // collapses divergent then/else to `Unit`).
+                    //
+                    // The else-block sits outside the chain and is
+                    // resolved independently, so check it
+                    // directly. Missing-else falls back to the
+                    // implicit `else { () }` rule below.
                     if let Some(eb) = &else_block {
                         let else_type = Self::block_result_type(eb);
                         self.check_branch_type(
@@ -1294,18 +1310,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     } else {
                         // Missing `else` with a non-Unit expected
                         // type: the implicit `else { () }` cannot
-                        // produce the expected type. Emit a
-                        // `TypeMismatch` anchored at the if-expression
-                        // span. Without this guard, at `-O0` the WIR
-                        // builder would emit a `(if (result T) ...)`
-                        // with a missing else branch and `wasmparser`
-                        // would reject the module; at `-O1+`
-                        // constant folding can mask the bug by
-                        // collapsing the if when the condition is
-                        // statically known. The resolver-recorded
-                        // diagnostic aborts compilation before WIR
-                        // build runs, so we don't need to mutate
-                        // `type_id` here.
+                        // produce the expected type. See the
+                        // `Condition::Expr` arm for the rationale
+                        // (without this guard the WIR builder
+                        // would produce `(if (result T) ...)`
+                        // without an else and `wasmparser` would
+                        // reject the module at `-O0`).
                         self.check_branch_type(TypeTable::UNIT, type_id, if_expr.span);
                     }
                 }
