@@ -224,7 +224,8 @@ pub(super) fn synthesize_lower_tuple(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) -> Vec<TirStmt> {
-    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
     let layout = cm_abi::layout_tuple(elems);
     let mut stmts = Vec::new();
 
@@ -406,7 +407,8 @@ pub(super) fn synthesize_lower_option_to_memory(
     type_table: &RefCell<TypeTable>,
 ) {
     let value_type_id = value.type_id;
-    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
 
     // Materialize value into a local so we can reference it multiple times
     let value_local = alloc_local(next_local, locals, value_type_id);
@@ -488,7 +490,8 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
-    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
     let resolved = wasi_registry.resolve_type(ty);
     match &resolved {
         // String → cm_lower_string → packed i64 → (ptr, len)
@@ -659,7 +662,8 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
-    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
     let vt = value.type_id;
     let val_local = alloc_local(next_local, locals, vt);
     stmts.push(let_stmt(&format!("{prefix}_optval"), val_local, vt, value));
@@ -764,7 +768,8 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) -> Vec<TirStmt> {
-    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
     let resolved = wasi_registry.resolve_type(ty);
     match &resolved {
         Type::Named(n) => {

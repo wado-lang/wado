@@ -178,10 +178,17 @@ pub(super) fn register_enum_compiler_item<H: CompilerHost>(
 }
 
 /// Register a trait declaration's `#[compiler_item(...)]` annotation, if any.
+///
+/// `methods` is the trait's full method list; the resolver inspects it
+/// to cache the single-method trait's primary method name into the
+/// registry (see [`Resolved::Trait::method_name`]). For multi-method
+/// traits the cache stays `None` and downstream consumers that need a
+/// method name must reach for a dedicated method [`CompilerItem`].
 pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
     name: &str,
+    methods: &[crate::ast::Function],
     module_source: &ModuleSource,
     span: Span,
     logger: &Logger<'_, H>,
@@ -192,9 +199,18 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     if !check_compiler_item_placement(item, CompilerItemKind::Trait, module_source, span, logger) {
         return;
     }
+    // Single-method traits cache the method's name so the synthesiser
+    // can construct `<Trait>::<method>` calls without hard-coding the
+    // source-side spelling. Multi-method traits leave it unset.
+    let method_name = if methods.len() == 1 {
+        Some(methods[0].name.clone())
+    } else {
+        None
+    };
     let resolved = Resolved::Trait {
         module_source: module_source.clone(),
         name: name.to_string(),
+        method_name,
     };
     if let Err(err) = type_table
         .borrow_mut()

@@ -663,6 +663,21 @@ pub enum Resolved {
     Trait {
         module_source: ModuleSource,
         name: String,
+        /// Primary method name for **single-method** traits, captured
+        /// automatically by the resolver when registering the trait's
+        /// `#[compiler_item("...")]` annotation. `None` for
+        /// multi-method traits (`Serializer`, `Deserializer`, …).
+        ///
+        /// The format-family traits (`Display` / `DisplayAlt` /
+        /// `Inspect` / `InspectAlt` / `Binary` / `BinaryAlt` / `Octal`
+        /// / `OctalAlt` / `LowerHex` / `LowerHexAlt` / `UpperHex` /
+        /// `UpperHexAlt` / `LowerExp` / `UpperExp`) all have exactly
+        /// one method by design, so the synthesiser can look up the
+        /// method name from the trait registration alone instead of
+        /// hard-coding `"fmt"` / `"inspect"` at every call site.
+        ///
+        /// Reading: [`CompilerItems::trait_method_name`].
+        method_name: Option<String>,
     },
     Method {
         module_source: ModuleSource,
@@ -888,6 +903,7 @@ impl CompilerItems {
             Resolved::Trait {
                 module_source,
                 name,
+                ..
             } => (module_source, name.as_str()),
             other => kind_mismatch_ice(item, "Trait", other),
         }
@@ -899,6 +915,31 @@ impl CompilerItems {
     /// (e.g. when constructing a synthesised `LocalMethodName`).
     pub fn trait_name(&self, item: CompilerItem) -> &str {
         self.require_trait(item).1
+    }
+
+    /// Resolved method name of a **single-method** trait — `"fmt"` for
+    /// `Display`, `"inspect"` for `Inspect`, and so on across the
+    /// format-family traits. Panics for multi-method traits where
+    /// `method_name` was not captured during registration; callers
+    /// that need such method names must reach for a dedicated method
+    /// `CompilerItem` instead.
+    ///
+    /// Routing the synthesiser's `Display::fmt` / `Inspect::inspect`
+    /// call construction through this method removes the last hard
+    /// dependency on the conventional source-side method spelling.
+    pub fn trait_method_name(&self, item: CompilerItem) -> &str {
+        match self.require(item) {
+            Resolved::Trait {
+                method_name: Some(name),
+                ..
+            } => name.as_str(),
+            Resolved::Trait { name, .. } => panic!(
+                "compiler item `{item}` (trait `{name}`) has no captured \
+                 method name; `trait_method_name` is only valid for \
+                 single-method traits"
+            ),
+            other => kind_mismatch_ice(item, "Trait", other),
+        }
     }
 
     /// Name-only convenience for a [`CompilerItemKind::Struct`] item.
@@ -1158,6 +1199,7 @@ mod tests {
                 Resolved::Trait {
                     module_source: ModuleSource::types(),
                     name: "Option".into(),
+                    method_name: None,
                 },
             )
             .unwrap_err();
@@ -1200,6 +1242,7 @@ mod tests {
             Resolved::Trait {
                 module_source: ModuleSource::traits(),
                 name: "Default".into(),
+                method_name: Some("default".into()),
             },
         )
         .unwrap();

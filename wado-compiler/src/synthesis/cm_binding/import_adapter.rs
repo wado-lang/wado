@@ -371,7 +371,8 @@ pub(super) fn synthesize_adapter(
     owner_module: &ModuleSource,
     entry_source: &ModuleSource,
 ) -> AdapterArtifacts {
-    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
     let name = binding_func_name(&func_info.interface_name, &func_info.method_name);
     let local_name = func_info.local_alias_name();
 

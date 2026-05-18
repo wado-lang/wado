@@ -41,9 +41,17 @@ use super::common::{
 pub(crate) struct TraitsStdlibNames {
     pub formatter: String,
     pub display: String,
+    /// `Display::fmt` method name, resolved via [`Resolved::Trait::method_name`].
+    pub display_method: String,
     pub display_alt: String,
+    /// `DisplayAlt::fmt_alt` method name, resolved via the registry.
+    pub display_alt_method: String,
     pub inspect: String,
+    /// `Inspect::inspect` method name, resolved via the registry.
+    pub inspect_method: String,
     pub inspect_alt: String,
+    /// `InspectAlt::inspect_alt` method name, resolved via the registry.
+    pub inspect_alt_method: String,
     pub less_name: String,
     pub less_index: u32,
     pub equal_name: String,
@@ -61,9 +69,17 @@ impl TraitsStdlibNames {
         Self {
             formatter: items.struct_name(CompilerItem::Formatter).to_string(),
             display: items.trait_name(CompilerItem::Display).to_string(),
+            display_method: items.trait_method_name(CompilerItem::Display).to_string(),
             display_alt: items.trait_name(CompilerItem::DisplayAlt).to_string(),
+            display_alt_method: items
+                .trait_method_name(CompilerItem::DisplayAlt)
+                .to_string(),
             inspect: items.trait_name(CompilerItem::Inspect).to_string(),
+            inspect_method: items.trait_method_name(CompilerItem::Inspect).to_string(),
             inspect_alt: items.trait_name(CompilerItem::InspectAlt).to_string(),
+            inspect_alt_method: items
+                .trait_method_name(CompilerItem::InspectAlt)
+                .to_string(),
             less_name: less_name.to_string(),
             less_index,
             equal_name: equal_name.to_string(),
@@ -78,35 +94,38 @@ impl TraitsStdlibNames {
 /// fallback machinery is parameterised over which trait to emit and which trait
 /// to delegate to.
 ///
-/// Trait names are owned `String`s rather than `&'static str` because the
-/// values come from the [`CompilerItem`] registry — they reflect whatever
-/// the stdlib's `#[compiler_item("...")]` annotation says, not a literal.
+/// Every name in this struct — both trait names and their method names —
+/// flows from the `CompilerItem` registry. The stdlib's
+/// `#[compiler_item("...")]` annotations control the spelling on both
+/// halves, so renaming `Display::fmt` to `Display::display_value` flows
+/// to the synthesised fallback's emitted call without touching this
+/// code.
 struct TraitPair {
     /// e.g. `"Display"` or `"DisplayAlt"`.
     target_trait: String,
     /// e.g. `"fmt"` or `"fmt_alt"`.
-    target_method: &'static str,
+    target_method: String,
     /// Trait the fallback delegates to (`"Inspect"` or `"InspectAlt"`).
     delegate_trait: String,
     /// Method on the delegate trait (`"inspect"` or `"inspect_alt"`).
-    delegate_method: &'static str,
+    delegate_method: String,
 }
 
 impl TraitPair {
     fn display(names: &TraitsStdlibNames) -> Self {
         Self {
             target_trait: names.display.clone(),
-            target_method: "fmt",
+            target_method: names.display_method.clone(),
             delegate_trait: names.inspect.clone(),
-            delegate_method: "inspect",
+            delegate_method: names.inspect_method.clone(),
         }
     }
     fn display_alt(names: &TraitsStdlibNames) -> Self {
         Self {
             target_trait: names.display_alt.clone(),
-            target_method: "fmt_alt",
+            target_method: names.display_alt_method.clone(),
             delegate_trait: names.inspect_alt.clone(),
-            delegate_method: "inspect_alt",
+            delegate_method: names.inspect_alt_method.clone(),
         }
     }
 }
@@ -892,6 +911,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
     let mut generated = Vec::new();
     let formatter_name = ctx.names.formatter.clone();
     let inspect_name = ctx.names.inspect.clone();
+    let inspect_method = ctx.names.inspect_method.clone();
 
     let mut tt = module.type_table.borrow_mut();
     let formatter_type = tt.make_struct(formatter_name.clone(), ModuleSource::format());
@@ -925,6 +945,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             ref_string_type,
             *espan,
             &inspect_name,
+            &inspect_method,
             &formatter_name,
         ))));
         ctx.record_impl(name, &inspect_name);
@@ -960,6 +981,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             &mut tt,
             *sspan,
             &inspect_name,
+            &inspect_method,
             &formatter_name,
         ))));
         ctx.record_impl(name, &inspect_name);
@@ -987,6 +1009,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             &mut tt,
             *sspan,
             &inspect_name,
+            &inspect_method,
             &formatter_name,
         ))));
         ctx.record_impl(name, &inspect_name);
@@ -1012,6 +1035,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             &mut tt,
             *vspan,
             &inspect_name,
+            &inspect_method,
             &formatter_name,
         ))));
         ctx.record_impl(name, &inspect_name);
@@ -1039,6 +1063,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             &mut tt,
             *vspan,
             &inspect_name,
+            &inspect_method,
             &formatter_name,
         ))));
         ctx.record_impl(name, &inspect_name);
@@ -1073,6 +1098,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             ref_string_type,
             fspan,
             &inspect_name,
+            &inspect_method,
             &formatter_name,
         ))));
         ctx.record_impl(name, &inspect_name);
@@ -1104,6 +1130,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             &mut tt,
             synth_span(),
             &inspect_name,
+            &inspect_method,
             &formatter_name,
         ))));
         ctx.record_impl(&nt.name, &inspect_name);
@@ -1141,6 +1168,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
                     ref_string_type,
                     span,
                     &inspect_name,
+                    &inspect_method,
                     &formatter_name,
                 ))));
                 // Intentionally do NOT `ctx.record_impl` — these per-module
@@ -1165,6 +1193,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             fmt_type,
             span,
             &inspect_name,
+            &inspect_method,
         ))));
         // Per-module: do not `ctx.record_impl`.
     }
@@ -1191,9 +1220,10 @@ fn generate_enum_inspect_fn(
     ref_string_type: TypeId,
     span: Span,
     inspect_trait: &str,
+    inspect_method: &str,
     formatter_name: &str,
 ) -> TirFunction {
-    let method_info = trait_method_info(enum_name, inspect_trait, "inspect");
+    let method_info = trait_method_info(enum_name, inspect_trait, inspect_method);
     let qualified_name = method_info.to_mangled_name();
 
     let deref_self = || deref_local(0, "self", ref_enum_type, enum_type, span);
@@ -1278,9 +1308,10 @@ fn generate_struct_inspect_fn(
     tt: &mut TypeTable,
     span: Span,
     inspect_trait: &str,
+    inspect_method: &str,
     formatter_name: &str,
 ) -> TirFunction {
-    let method_info = trait_method_info(struct_name, inspect_trait, "inspect");
+    let method_info = trait_method_info(struct_name, inspect_trait, inspect_method);
     let qualified_name = method_info.to_mangled_name();
 
     let stmts = build_struct_inspect_body(
@@ -1295,6 +1326,7 @@ fn generate_struct_inspect_fn(
         tt,
         span,
         inspect_trait,
+        inspect_method,
         formatter_name,
     );
     let body = TirBlock::new(stmts, span);
@@ -1325,6 +1357,7 @@ fn build_struct_inspect_body(
     tt: &mut TypeTable,
     span: Span,
     inspect_trait: &str,
+    inspect_method: &str,
     formatter_name: &str,
 ) -> Vec<TirStmt> {
     let fmt = || local_expr(1, "f", fmt_type, span);
@@ -1361,6 +1394,7 @@ fn build_struct_inspect_body(
             tt,
             span,
             inspect_trait,
+            inspect_method,
         ));
     }
     if has_hidden {
@@ -1393,9 +1427,10 @@ fn generate_variant_inspect_fn(
     tt: &mut TypeTable,
     span: Span,
     inspect_trait: &str,
+    inspect_method: &str,
     formatter_name: &str,
 ) -> TirFunction {
-    let method_info = trait_method_info(variant_name, inspect_trait, "inspect");
+    let method_info = trait_method_info(variant_name, inspect_trait, inspect_method);
     let qualified_name = method_info.to_mangled_name();
 
     let stmts = build_variant_inspect_body(
@@ -1410,6 +1445,7 @@ fn generate_variant_inspect_fn(
         tt,
         span,
         inspect_trait,
+        inspect_method,
         formatter_name,
     );
     let body = TirBlock::new(stmts, span);
@@ -1440,6 +1476,7 @@ fn build_variant_inspect_body(
     tt: &mut TypeTable,
     span: Span,
     inspect_trait: &str,
+    inspect_method: &str,
     formatter_name: &str,
 ) -> Vec<TirStmt> {
     let deref_self = || deref_local(0, "self", ref_variant_type, variant_type, span);
@@ -1471,6 +1508,7 @@ fn build_variant_inspect_body(
                 tt,
                 span,
                 inspect_trait,
+                inspect_method,
             ));
             then_stmts.push(write(")".to_string()));
         }
@@ -1516,9 +1554,10 @@ fn generate_newtype_inspect_fn(
     tt: &mut TypeTable,
     span: Span,
     inspect_trait: &str,
+    inspect_method: &str,
     formatter_name: &str,
 ) -> TirFunction {
-    let method_info = trait_method_info(newtype_name, inspect_trait, "inspect");
+    let method_info = trait_method_info(newtype_name, inspect_trait, inspect_method);
     let qualified_name = method_info.to_mangled_name();
 
     let deref_self = deref_local(0, "self", ref_newtype_type, newtype_type, span);
@@ -1542,6 +1581,7 @@ fn generate_newtype_inspect_fn(
             tt,
             span,
             inspect_trait,
+            inspect_method,
         ),
         write_str_stmt(
             format!(" as {newtype_name}"),
@@ -1577,9 +1617,10 @@ fn generate_flags_inspect_fn(
     ref_string_type: TypeId,
     span: &Span,
     inspect_trait: &str,
+    inspect_method: &str,
     formatter_name: &str,
 ) -> TirFunction {
-    let method_info = trait_method_info(flags_name, inspect_trait, "inspect");
+    let method_info = trait_method_info(flags_name, inspect_trait, inspect_method);
     let qualified_name = method_info.to_mangled_name();
 
     // Cast deref'd flags value to u32 for bit operations.
@@ -1780,11 +1821,12 @@ fn generate_fn_inspect_fn(
     fmt_type: TypeId,
     span: Span,
     inspect_trait: &str,
+    inspect_method: &str,
 ) -> TirFunction {
     generate_fn_canonical_dispatch_stub(
         FnDispatchTrait::Inspect,
         inspect_trait,
-        "inspect",
+        inspect_method,
         type_arg_names,
         arity,
         return_type,
@@ -1803,11 +1845,12 @@ fn generate_fn_inspect_alt_fn(
     fmt_type: TypeId,
     span: Span,
     inspect_alt_trait: &str,
+    inspect_alt_method: &str,
 ) -> TirFunction {
     generate_fn_canonical_dispatch_stub(
         FnDispatchTrait::InspectAlt,
         inspect_alt_trait,
-        "inspect_alt",
+        inspect_alt_method,
         type_arg_names,
         arity,
         return_type,
@@ -1870,9 +1913,10 @@ fn generate_opaque_inspect_fn(
     ref_string_type: TypeId,
     span: Span,
     inspect_trait: &str,
+    inspect_method: &str,
     formatter_name: &str,
 ) -> TirFunction {
-    let method_info = trait_method_info(base_name, inspect_trait, "inspect")
+    let method_info = trait_method_info(base_name, inspect_trait, inspect_method)
         .with_struct_type_args(type_arg_names);
     let qualified_name = method_info.to_mangled_name();
 
@@ -1908,7 +1952,9 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     let module_source = module.module_source.clone();
     let formatter_name = ctx.names.formatter.clone();
     let inspect_name = ctx.names.inspect.clone();
+    let inspect_method = ctx.names.inspect_method.clone();
     let inspect_alt_name = ctx.names.inspect_alt.clone();
+    let inspect_alt_method = ctx.names.inspect_alt_method.clone();
     let all_fn_names: IndexSet<String> = module
         .functions
         .iter()
@@ -1932,7 +1978,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         if ctx.has_impl(type_name, &inspect_name) {
             return true;
         }
-        let mangled = MethodName::format_local(type_name, Some(&inspect_name), "inspect");
+        let mangled = MethodName::format_local(type_name, Some(&inspect_name), &inspect_method);
         all_fn_names.contains(&mangled)
     };
 
@@ -1949,8 +1995,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         let enum_type = tt.make_enum(name.clone(), module_source.clone());
         let ref_type = tt.make_ref(enum_type);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            trait_method_info(&name, &inspect_alt_name, "inspect_alt"),
-            trait_method_info(&name, &inspect_name, "inspect"),
+            trait_method_info(&name, &inspect_alt_name, &inspect_alt_method),
+            trait_method_info(&name, &inspect_name, &inspect_method),
             ref_type,
             fmt_type,
             &module_source,
@@ -1990,6 +2036,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             &mut tt,
             *sspan,
             &inspect_alt_name,
+            &inspect_alt_method,
             &formatter_name,
         ))));
         ctx.record_impl(name, &inspect_alt_name);
@@ -2017,6 +2064,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             &mut tt,
             *sspan,
             &inspect_alt_name,
+            &inspect_alt_method,
             &formatter_name,
         ))));
         ctx.record_impl(name, &inspect_alt_name);
@@ -2042,6 +2090,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             &mut tt,
             *vspan,
             &inspect_alt_name,
+            &inspect_alt_method,
             &formatter_name,
         ))));
         ctx.record_impl(name, &inspect_alt_name);
@@ -2069,6 +2118,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             &mut tt,
             *vspan,
             &inspect_alt_name,
+            &inspect_alt_method,
             &formatter_name,
         ))));
         ctx.record_impl(name, &inspect_alt_name);
@@ -2087,8 +2137,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         }
         let ref_type = tt.make_ref(*flags_type_id);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            trait_method_info(name, &inspect_alt_name, "inspect_alt"),
-            trait_method_info(name, &inspect_name, "inspect"),
+            trait_method_info(name, &inspect_alt_name, &inspect_alt_method),
+            trait_method_info(name, &inspect_name, &inspect_method),
             ref_type,
             fmt_type,
             &module_source,
@@ -2107,8 +2157,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         }
         let ref_type = tt.make_ref(nt.type_id);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            trait_method_info(&nt.name, &inspect_alt_name, "inspect_alt"),
-            trait_method_info(&nt.name, &inspect_name, "inspect"),
+            trait_method_info(&nt.name, &inspect_alt_name, &inspect_alt_method),
+            trait_method_info(&nt.name, &inspect_name, &inspect_method),
             ref_type,
             fmt_type,
             &module_source,
@@ -2136,9 +2186,9 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         // Opaque resource types (Future, Stream, etc.): delegate to
         // Inspect via the stock `display_fallback`.
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            trait_method_info(&base_name, &inspect_alt_name, "inspect_alt")
+            trait_method_info(&base_name, &inspect_alt_name, &inspect_alt_method)
                 .with_struct_type_args(&type_arg_names),
-            trait_method_info(&base_name, &inspect_name, "inspect")
+            trait_method_info(&base_name, &inspect_name, &inspect_method)
                 .with_struct_type_args(&type_arg_names),
             ref_type,
             fmt_type,
@@ -2169,6 +2219,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             fmt_type,
             span,
             &inspect_alt_name,
+            &inspect_alt_method,
         ))));
         // Per-module: do not `ctx.record_impl`.
     }
@@ -2200,9 +2251,10 @@ fn generate_struct_inspect_alt_fn(
     tt: &mut TypeTable,
     span: Span,
     inspect_alt_trait: &str,
+    inspect_alt_method: &str,
     formatter_name: &str,
 ) -> TirFunction {
-    let method_info = trait_method_info(struct_name, inspect_alt_trait, "inspect_alt");
+    let method_info = trait_method_info(struct_name, inspect_alt_trait, inspect_alt_method);
     let qualified_name = method_info.to_mangled_name();
 
     let stmts = build_struct_inspect_alt_body(
@@ -2218,6 +2270,7 @@ fn generate_struct_inspect_alt_fn(
         span,
         formatter_name,
         inspect_alt_trait,
+        inspect_alt_method,
     );
     let body = TirBlock::new(stmts, span);
 
@@ -2248,6 +2301,7 @@ fn build_struct_inspect_alt_body(
     span: Span,
     formatter_name: &str,
     inspect_alt_trait: &str,
+    inspect_alt_method: &str,
 ) -> Vec<TirStmt> {
     let fmt = || local_expr(1, "f", fmt_type, span);
     let write = |s: &str| {
@@ -2319,6 +2373,7 @@ fn build_struct_inspect_alt_body(
             tt,
             span,
             inspect_alt_trait,
+            inspect_alt_method,
         ));
         stmts.push(write(","));
     }
@@ -2352,9 +2407,10 @@ fn generate_variant_inspect_alt_fn(
     tt: &mut TypeTable,
     span: Span,
     inspect_alt_trait: &str,
+    inspect_alt_method: &str,
     formatter_name: &str,
 ) -> TirFunction {
-    let method_info = trait_method_info(variant_name, inspect_alt_trait, "inspect_alt");
+    let method_info = trait_method_info(variant_name, inspect_alt_trait, inspect_alt_method);
     let qualified_name = method_info.to_mangled_name();
 
     let stmts = build_variant_inspect_alt_body(
@@ -2370,6 +2426,7 @@ fn generate_variant_inspect_alt_fn(
         span,
         formatter_name,
         inspect_alt_trait,
+        inspect_alt_method,
     );
     let body = TirBlock::new(stmts, span);
 
@@ -2399,6 +2456,7 @@ fn build_variant_inspect_alt_body(
     span: Span,
     formatter_name: &str,
     inspect_alt_trait: &str,
+    inspect_alt_method: &str,
 ) -> Vec<TirStmt> {
     let deref_self = || {
         deref_expr(
@@ -2457,6 +2515,7 @@ fn build_variant_inspect_alt_body(
                 tt,
                 span,
                 inspect_alt_trait,
+                inspect_alt_method,
             ));
             then_stmts.push(write_str_stmt(
                 ",",
@@ -2510,12 +2569,13 @@ fn inspect_alt_call(
     tt: &mut TypeTable,
     span: Span,
     inspect_alt_trait: &str,
+    inspect_alt_method: &str,
 ) -> TirStmt {
     let call = trait_call_on_type(
         value,
         value_type,
         inspect_alt_trait,
-        "inspect_alt",
+        inspect_alt_method,
         TypeTable::UNIT,
         vec![fmt],
         true,
@@ -2729,7 +2789,7 @@ fn generate_fallback_impls(
             return true;
         }
         let delegate_key =
-            MethodName::format_local(name, Some(&pair.delegate_trait), pair.delegate_method);
+            MethodName::format_local(name, Some(&pair.delegate_trait), &pair.delegate_method);
         all_fn_names.contains(&delegate_key)
     };
 
@@ -2740,8 +2800,8 @@ fn generate_fallback_impls(
                          ref_type: TypeId,
                          impl_type_params: Vec<TirTypeParam>|
      -> Rc<RefCell<TirFunction>> {
-        let target_info = trait_method_info(name, &pair.target_trait, pair.target_method);
-        let delegate_info = trait_method_info(name, &pair.delegate_trait, pair.delegate_method);
+        let target_info = trait_method_info(name, &pair.target_trait, &pair.target_method);
+        let delegate_info = trait_method_info(name, &pair.delegate_trait, &pair.delegate_method);
         Rc::new(RefCell::new(generate_display_fallback(
             target_info,
             delegate_info,
@@ -2890,10 +2950,10 @@ fn generate_fallback_impls(
             continue;
         }
         let ref_type = tt.make_ref(type_id);
-        let target_info = trait_method_info(&base_name, &pair.target_trait, pair.target_method)
+        let target_info = trait_method_info(&base_name, &pair.target_trait, &pair.target_method)
             .with_struct_type_args(&type_arg_names);
         let delegate_info =
-            trait_method_info(&base_name, &pair.delegate_trait, pair.delegate_method)
+            trait_method_info(&base_name, &pair.delegate_trait, &pair.delegate_method)
                 .with_struct_type_args(&type_arg_names);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
             target_info,
@@ -2927,13 +2987,13 @@ fn generate_fallback_impls(
         let target_info = trait_method_info(
             crate::name::CLOSURE_FN_TRAIT,
             &pair.target_trait,
-            pair.target_method,
+            &pair.target_method,
         )
         .with_struct_type_args(&sig.type_arg_names);
         let delegate_info = trait_method_info(
             crate::name::CLOSURE_FN_TRAIT,
             &pair.delegate_trait,
-            pair.delegate_method,
+            &pair.delegate_method,
         )
         .with_struct_type_args(&sig.type_arg_names);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
@@ -2961,12 +3021,13 @@ fn inspect_call(
     tt: &mut TypeTable,
     span: Span,
     inspect_trait: &str,
+    inspect_method: &str,
 ) -> TirStmt {
     let call = trait_call_on_type(
         value,
         value_type,
         inspect_trait,
-        "inspect",
+        inspect_method,
         TypeTable::UNIT,
         vec![fmt],
         true,

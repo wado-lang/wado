@@ -31,6 +31,12 @@ use crate::token::Span;
 /// through the helpers so stdlib renames flow without touching synthesis
 /// sites — same shape as
 /// [`super::cm_binding::types::CmStdlibNames`].
+///
+/// Every format-family trait is single-method, so each `<trait>` field
+/// is paired with a `<trait>_method` field carrying the trait's
+/// resolved method name (e.g. `"fmt"` for `Display`, `"inspect"` for
+/// `Inspect`). Both values come from
+/// [`CompilerItems::trait_method_name`].
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub(super) struct FormatStdlibNames {
@@ -43,19 +49,33 @@ pub(super) struct FormatStdlibNames {
     pub right_name: String,
     pub right_index: u32,
     pub display: String,
+    pub display_method: String,
     pub display_alt: String,
+    pub display_alt_method: String,
     pub inspect: String,
+    pub inspect_method: String,
     pub inspect_alt: String,
+    pub inspect_alt_method: String,
     pub binary: String,
+    pub binary_method: String,
     pub binary_alt: String,
+    pub binary_alt_method: String,
     pub octal: String,
+    pub octal_method: String,
     pub octal_alt: String,
+    pub octal_alt_method: String,
     pub lower_hex: String,
+    pub lower_hex_method: String,
     pub lower_hex_alt: String,
+    pub lower_hex_alt_method: String,
     pub upper_hex: String,
+    pub upper_hex_method: String,
     pub upper_hex_alt: String,
+    pub upper_hex_alt_method: String,
     pub lower_exp: String,
+    pub lower_exp_method: String,
     pub upper_exp: String,
+    pub upper_exp_method: String,
 }
 
 impl FormatStdlibNames {
@@ -74,19 +94,41 @@ impl FormatStdlibNames {
             right_name: right_name.to_string(),
             right_index,
             display: items.trait_name(CompilerItem::Display).to_string(),
+            display_method: items.trait_method_name(CompilerItem::Display).to_string(),
             display_alt: items.trait_name(CompilerItem::DisplayAlt).to_string(),
+            display_alt_method: items
+                .trait_method_name(CompilerItem::DisplayAlt)
+                .to_string(),
             inspect: items.trait_name(CompilerItem::Inspect).to_string(),
+            inspect_method: items.trait_method_name(CompilerItem::Inspect).to_string(),
             inspect_alt: items.trait_name(CompilerItem::InspectAlt).to_string(),
+            inspect_alt_method: items
+                .trait_method_name(CompilerItem::InspectAlt)
+                .to_string(),
             binary: items.trait_name(CompilerItem::Binary).to_string(),
+            binary_method: items.trait_method_name(CompilerItem::Binary).to_string(),
             binary_alt: items.trait_name(CompilerItem::BinaryAlt).to_string(),
+            binary_alt_method: items.trait_method_name(CompilerItem::BinaryAlt).to_string(),
             octal: items.trait_name(CompilerItem::Octal).to_string(),
+            octal_method: items.trait_method_name(CompilerItem::Octal).to_string(),
             octal_alt: items.trait_name(CompilerItem::OctalAlt).to_string(),
+            octal_alt_method: items.trait_method_name(CompilerItem::OctalAlt).to_string(),
             lower_hex: items.trait_name(CompilerItem::LowerHex).to_string(),
+            lower_hex_method: items.trait_method_name(CompilerItem::LowerHex).to_string(),
             lower_hex_alt: items.trait_name(CompilerItem::LowerHexAlt).to_string(),
+            lower_hex_alt_method: items
+                .trait_method_name(CompilerItem::LowerHexAlt)
+                .to_string(),
             upper_hex: items.trait_name(CompilerItem::UpperHex).to_string(),
+            upper_hex_method: items.trait_method_name(CompilerItem::UpperHex).to_string(),
             upper_hex_alt: items.trait_name(CompilerItem::UpperHexAlt).to_string(),
+            upper_hex_alt_method: items
+                .trait_method_name(CompilerItem::UpperHexAlt)
+                .to_string(),
             lower_exp: items.trait_name(CompilerItem::LowerExp).to_string(),
+            lower_exp_method: items.trait_method_name(CompilerItem::LowerExp).to_string(),
             upper_exp: items.trait_name(CompilerItem::UpperExp).to_string(),
+            upper_exp_method: items.trait_method_name(CompilerItem::UpperExp).to_string(),
         }
     }
 }
@@ -565,20 +607,57 @@ fn build_template_block(
 
                 let (trait_name, method_name): (&str, &str) = match &format_spec {
                     Some(fs) => match (fs.type_char, fs.alternate) {
-                        (Some('b'), true) => (ctx.names.binary_alt.as_str(), "fmt_alt"),
-                        (Some('b'), false) => (ctx.names.binary.as_str(), "fmt"),
-                        (Some('o'), true) => (ctx.names.octal_alt.as_str(), "fmt_alt"),
-                        (Some('o'), false) => (ctx.names.octal.as_str(), "fmt"),
-                        (Some('x'), true) => (ctx.names.lower_hex_alt.as_str(), "fmt_alt"),
-                        (Some('x'), false) => (ctx.names.lower_hex.as_str(), "fmt"),
-                        (Some('X'), true) => (ctx.names.upper_hex_alt.as_str(), "fmt_alt"),
-                        (Some('X'), false) => (ctx.names.upper_hex.as_str(), "fmt"),
-                        (Some('e'), _) => (ctx.names.lower_exp.as_str(), "fmt"),
-                        (Some('E'), _) => (ctx.names.upper_exp.as_str(), "fmt"),
-                        (_, true) => (ctx.names.display_alt.as_str(), "fmt_alt"),
-                        _ => (ctx.names.display.as_str(), "fmt"),
+                        (Some('b'), true) => (
+                            ctx.names.binary_alt.as_str(),
+                            ctx.names.binary_alt_method.as_str(),
+                        ),
+                        (Some('b'), false) => {
+                            (ctx.names.binary.as_str(), ctx.names.binary_method.as_str())
+                        }
+                        (Some('o'), true) => (
+                            ctx.names.octal_alt.as_str(),
+                            ctx.names.octal_alt_method.as_str(),
+                        ),
+                        (Some('o'), false) => {
+                            (ctx.names.octal.as_str(), ctx.names.octal_method.as_str())
+                        }
+                        (Some('x'), true) => (
+                            ctx.names.lower_hex_alt.as_str(),
+                            ctx.names.lower_hex_alt_method.as_str(),
+                        ),
+                        (Some('x'), false) => (
+                            ctx.names.lower_hex.as_str(),
+                            ctx.names.lower_hex_method.as_str(),
+                        ),
+                        (Some('X'), true) => (
+                            ctx.names.upper_hex_alt.as_str(),
+                            ctx.names.upper_hex_alt_method.as_str(),
+                        ),
+                        (Some('X'), false) => (
+                            ctx.names.upper_hex.as_str(),
+                            ctx.names.upper_hex_method.as_str(),
+                        ),
+                        (Some('e'), _) => (
+                            ctx.names.lower_exp.as_str(),
+                            ctx.names.lower_exp_method.as_str(),
+                        ),
+                        (Some('E'), _) => (
+                            ctx.names.upper_exp.as_str(),
+                            ctx.names.upper_exp_method.as_str(),
+                        ),
+                        (_, true) => (
+                            ctx.names.display_alt.as_str(),
+                            ctx.names.display_alt_method.as_str(),
+                        ),
+                        _ => (
+                            ctx.names.display.as_str(),
+                            ctx.names.display_method.as_str(),
+                        ),
                     },
-                    None => (ctx.names.display.as_str(), "fmt"),
+                    None => (
+                        ctx.names.display.as_str(),
+                        ctx.names.display_method.as_str(),
+                    ),
                 };
 
                 // Create or reassign Formatter local
@@ -654,9 +733,15 @@ fn build_template_block(
 
                 if is_inspect {
                     let (it_name, im_name): (&str, &str) = if is_alternate {
-                        (ctx.names.inspect_alt.as_str(), "inspect_alt")
+                        (
+                            ctx.names.inspect_alt.as_str(),
+                            ctx.names.inspect_alt_method.as_str(),
+                        )
                     } else {
-                        (ctx.names.inspect.as_str(), "inspect")
+                        (
+                            ctx.names.inspect.as_str(),
+                            ctx.names.inspect_method.as_str(),
+                        )
                     };
                     let call_stmts = trait_fmt_call(
                         resolved.type_id,

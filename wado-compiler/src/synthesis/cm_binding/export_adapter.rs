@@ -96,7 +96,8 @@ fn lower_to_flat_inner(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     ctx: LiftContext<'_>,
 ) -> Vec<FlatLocal> {
-    let names = super::types::CmStdlibNames::from_type_table(&ctx.type_table.borrow());
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(ctx.type_table.borrow().compiler_items());
     match resolved {
         ResolvedType::Primitive(p) => {
             let (flat_type_id, cm_type) = match p {
@@ -529,7 +530,8 @@ pub(super) fn synthesize_lift_from_flat_params(
     type_table_cell: &RefCell<TypeTable>,
     lift_ctx: LiftContext<'_>,
 ) -> (TirExpr, usize) {
-    let names = super::types::CmStdlibNames::from_type_table(&type_table_cell.borrow());
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table_cell.borrow().compiler_items());
     match ty {
         Type::Named(named) if named.name == names.string => {
             // String flat ABI: (ptr: i32, len: i32) pointing to linear memory

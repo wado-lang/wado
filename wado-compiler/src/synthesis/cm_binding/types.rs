@@ -8,7 +8,7 @@ use std::cell::RefCell;
 
 use crate::ast::{AstId, GenericType, NamedType, Type};
 use crate::cm_abi;
-use crate::compiler_item::CompilerItem;
+use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::component_model::WasiRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -52,12 +52,16 @@ pub struct CmStdlibNames {
 }
 
 impl CmStdlibNames {
-    /// Look up every name through the compiler-item registry attached
-    /// to `tt`. Cheap (a handful of registry hits + clones); callers
-    /// should keep the value around for the duration of a CM-binding
-    /// synthesis pass rather than rebuilding it per match arm.
-    pub fn from_type_table(tt: &TypeTable) -> Self {
-        let items = tt.compiler_items();
+    /// Look up every name through the [`CompilerItems`] registry.
+    /// Cheap (a handful of registry hits + clones); cm_binding's
+    /// multi-entry-point shape (lift / lower / adapter / type_fixup /
+    /// task_return are all called independently from outside paths)
+    /// means each entry rebuilds the snapshot locally rather than
+    /// threading a single one through a single context — mirrors the
+    /// `from_compiler_items` constructor shape used by the other
+    /// synthesis passes (`SerdeStdlibNames`, `FormatStdlibNames`,
+    /// `TraitsStdlibNames`).
+    pub fn from_compiler_items(items: &CompilerItems) -> Self {
         let (_, _, some_name, some_index) = items.require_variant_case(CompilerItem::OptionSome);
         let (_, _, none_name, none_index) = items.require_variant_case(CompilerItem::OptionNone);
         let (_, _, ok_name, ok_index) = items.require_variant_case(CompilerItem::ResultOk);
@@ -620,7 +624,7 @@ pub(super) fn flatten_export_type(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &TypeTable,
 ) {
-    let names = CmStdlibNames::from_type_table(type_table);
+    let names = CmStdlibNames::from_compiler_items(type_table.compiler_items());
     match ty {
         Type::Named(named) if named.name == names.string => {
             out.push(cm_abi::CmValType::I32); // ptr
@@ -734,7 +738,7 @@ pub(super) fn flat_types_from_type_id_into(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &TypeTable,
 ) {
-    let names = CmStdlibNames::from_type_table(type_table);
+    let names = CmStdlibNames::from_compiler_items(type_table.compiler_items());
     match type_table.get(type_id) {
         ResolvedType::Primitive(p) => match p {
             PrimitiveType::I8

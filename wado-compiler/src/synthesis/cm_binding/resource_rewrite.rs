@@ -234,7 +234,8 @@ fn synthesize_stream_read_func(
     interner: &RefCell<ModuleSourceInterner>,
 ) -> TirFunction {
     let array_struct_name =
-        super::types::CmStdlibNames::from_type_table(&type_table.borrow()).array;
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items())
+            .array;
     let func_name = format!("__cm_stream_read_{elem_name}");
     let _tuple_type_id = type_table
         .borrow_mut()

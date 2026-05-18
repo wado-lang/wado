@@ -316,6 +316,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             &type_table,
                             &trait_decl.attrs,
                             &trait_decl.name,
+                            &trait_decl.methods,
                             module_source,
                             trait_decl.span,
                             logger,

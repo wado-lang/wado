@@ -713,8 +713,11 @@ impl ClosureLowerer {
         // Resolve Formatter / Inspect / InspectAlt through the
         // `CompilerItem` registry. The struct name flows into the inner
         // `Formatter::write_str` call below, so capture it once instead
-        // of looking it up per method.
-        let (formatter_name, inspect_trait, inspect_alt_trait) = {
+        // of looking it up per method. Method names come from the
+        // single-method trait's `trait_method_name` so a rename of
+        // `Inspect::inspect` → `Inspect::dump` (or similar) is picked
+        // up here without touching this site.
+        let (formatter_name, inspect_trait, inspect_method, inspect_alt_trait, inspect_alt_method) = {
             let items = type_table.compiler_items();
             (
                 items
@@ -724,7 +727,13 @@ impl ClosureLowerer {
                     .trait_name(crate::compiler_item::CompilerItem::Inspect)
                     .to_string(),
                 items
+                    .trait_method_name(crate::compiler_item::CompilerItem::Inspect)
+                    .to_string(),
+                items
                     .trait_name(crate::compiler_item::CompilerItem::InspectAlt)
+                    .to_string(),
+                items
+                    .trait_method_name(crate::compiler_item::CompilerItem::InspectAlt)
                     .to_string(),
             )
         };
@@ -734,8 +743,12 @@ impl ClosureLowerer {
             type_table.make_compiler_struct(crate::compiler_item::CompilerItem::String);
 
         for (trait_name, method_name, payload) in [
-            (inspect_trait.as_str(), "inspect", signature),
-            (inspect_alt_trait.as_str(), "inspect_alt", source),
+            (inspect_trait.as_str(), inspect_method.as_str(), signature),
+            (
+                inspect_alt_trait.as_str(),
+                inspect_alt_method.as_str(),
+                source,
+            ),
         ] {
             let func = self.build_functor_format_method(
                 struct_name,
@@ -1493,14 +1506,17 @@ impl ClosureCallSiteLowerer<'_> {
         // of any of them does not silently bypass this redirect.
         let items = self.type_table.compiler_items();
         let inspect = items.trait_name(crate::compiler_item::CompilerItem::Inspect);
+        let inspect_method = items.trait_method_name(crate::compiler_item::CompilerItem::Inspect);
         let inspect_alt = items.trait_name(crate::compiler_item::CompilerItem::InspectAlt);
+        let inspect_alt_method =
+            items.trait_method_name(crate::compiler_item::CompilerItem::InspectAlt);
         let display = items.trait_name(crate::compiler_item::CompilerItem::Display);
         let display_alt = items.trait_name(crate::compiler_item::CompilerItem::DisplayAlt);
-        let (target_trait, target_method): (String, &str) =
+        let (target_trait, target_method): (String, String) =
             if base_trait == inspect || base_trait == display {
-                (inspect.to_string(), "inspect")
+                (inspect.to_string(), inspect_method.to_string())
             } else if base_trait == inspect_alt || base_trait == display_alt {
-                (inspect_alt.to_string(), "inspect_alt")
+                (inspect_alt.to_string(), inspect_alt_method.to_string())
             } else {
                 return;
             };
@@ -1531,7 +1547,7 @@ impl ClosureCallSiteLowerer<'_> {
         let new_method_info = LocalMethodName::new(
             functor.struct_name.clone(),
             Some(target_trait),
-            target_method.to_string(),
+            target_method,
         );
         let new_name = new_method_info.to_mangled_name();
 

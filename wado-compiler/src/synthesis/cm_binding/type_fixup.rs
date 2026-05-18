@@ -39,7 +39,8 @@ fn replace_wasi_derived_type_recursive(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
-    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
     let old_type = {
         let mut tt = type_table.borrow_mut();
         wasi_type_to_type_id(wasi_type, &mut tt, wasi_registry, wasi_package)
@@ -886,7 +887,8 @@ fn rewrite_calls_in_expr(
     wasi_registry: &WasiRegistry,
     type_table: &Rc<RefCell<TypeTable>>,
 ) {
-    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
     // Check if this is an effect-like Call that should be rewritten
     let is_effect_call = matches!(&expr.kind, TirExprKind::Call { func, .. }
         if func.module_source.clone().is_effect_like() && func.module_source.clone().interface_name().is_some());
