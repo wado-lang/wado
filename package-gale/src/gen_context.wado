@@ -1125,6 +1125,84 @@ impl GenContext {
         // only remaining gate is the unknown-rule guard (which keeps
         // the registry from referencing rules the emit pass cannot
         // produce).
+        let computed = self.compute_variant_key(rule_name, caller_follow, caller_k_prefix);
+        let [key, canonical, k_prefix_canonical] = if let Some(triple) = computed {
+            triple;
+        } else {
+            return null;
+        };
+        let existing_id: Option<i32> = if let Some(entry) = self.follow_variant_registry.get(key) {
+            Option::<i32>::Some(entry.id);
+        } else {
+            null;
+        };
+        if let Some(id) = existing_id {
+            let mut entry = self.follow_variant_registry[key];
+            if is_scan {
+                entry.scan_used = true;
+            } else {
+                entry.parse_used = true;
+            }
+            self.follow_variant_registry[key] = entry;
+            return Option::<i32>::Some(id);
+        }
+        let id = self.follow_variant_order.len();
+        let entry = FollowVariantEntry {
+            id,
+            rule_name: *rule_name,
+            mask: canonical,
+            k_prefix_mask: k_prefix_canonical,
+            scan_used: is_scan,
+            parse_used: !is_scan,
+        };
+        self.follow_variant_registry[key] = entry;
+        self.follow_variant_order.push(key);
+        return Option::<i32>::Some(id);
+    }
+
+    /// Pure-lookup counterpart to [`intern_follow_variant`]. Returns the
+    /// cached variant id for the `(rule, caller_follow, caller_k_prefix)`
+    /// triple without registering. When the triple does not warrant a
+    /// variant (empty intersection AND empty K-prefix), returns `null` —
+    /// matching `intern`'s behavior so call sites can treat it
+    /// interchangeably.
+    ///
+    /// When the triple WOULD warrant a variant but no matching entry
+    /// exists in the registry, this panics. That is a drift indicator
+    /// — every consumer that uses `lookup_follow_variant_id` must
+    /// ensure the registry is fully populated upstream (today only
+    /// the unit tests in `gen_context_test.wado` exercise this path;
+    /// lower still uses `intern_follow_variant`). The panic surfaces
+    /// the gap immediately rather than letting a dangling
+    /// `parse_<rule>__follow_<id>` reference leak into the generated
+    /// source.
+    pub fn lookup_follow_variant_id(&mut self, rule_name: &String, caller_follow: &Array<String>, caller_k_prefix: &Array<Array<String>>, is_scan: bool) -> Option<i32> {
+        let computed = self.compute_variant_key(rule_name, caller_follow, caller_k_prefix);
+        let [key, _canonical, _k_prefix_canonical] = if let Some(triple) = computed {
+            triple;
+        } else {
+            return null;
+        };
+        if let Some(entry) = self.follow_variant_registry.get(key) {
+            // The pre-pass populates `scan_used` and `parse_used` for
+            // every RuleRef site (it calls intern with `is_scan=true`
+            // AND `is_scan=false`), so a lookup never needs to update
+            // the flags. `is_scan` is accepted for API parity only.
+            let _ = is_scan;
+            return Option::<i32>::Some(entry.id);
+        }
+        panic(
+            `lookup_follow_variant_id: variant for rule '{*rule_name}' (key '{key}') is needed but absent from the registry. FollowEnv::register_follow_variants must pre-populate every triple lookup reaches.`,
+        );
+    }
+
+    /// Shared computation behind `intern_follow_variant` and
+    /// `lookup_follow_variant_id`: derive the canonical registry key
+    /// (and its mask / k_prefix_mask components) from a
+    /// `(rule, caller_follow, caller_k_prefix)` triple. Returns `null`
+    /// when no variant is warranted (unknown rule, or BOTH the 1-token
+    /// intersection AND the K-prefix overlap are empty).
+    fn compute_variant_key(&mut self, rule_name: &String, caller_follow: &Array<String>, caller_k_prefix: &Array<Array<String>>) -> Option<[String, Array<String>, Array<Array<String>>]> {
         let rule_opt = self.find_rule(rule_name);
         if rule_opt matches { None } {
             return null;
@@ -1173,33 +1251,7 @@ impl GenContext {
         }
         let canonical = canonical_kind_set(&intersection);
         let key = `{*rule_name}:{join_pipe(&canonical)}|k:{canonical_k_prefix_key(&k_prefix_canonical)}`;
-        let existing_id: Option<i32> = if let Some(entry) = self.follow_variant_registry.get(key) {
-            Option::<i32>::Some(entry.id);
-        } else {
-            null;
-        };
-        if let Some(id) = existing_id {
-            let mut entry = self.follow_variant_registry[key];
-            if is_scan {
-                entry.scan_used = true;
-            } else {
-                entry.parse_used = true;
-            }
-            self.follow_variant_registry[key] = entry;
-            return Option::<i32>::Some(id);
-        }
-        let id = self.follow_variant_order.len();
-        let entry = FollowVariantEntry {
-            id,
-            rule_name: *rule_name,
-            mask: canonical,
-            k_prefix_mask: k_prefix_canonical,
-            scan_used: is_scan,
-            parse_used: !is_scan,
-        };
-        self.follow_variant_registry[key] = entry;
-        self.follow_variant_order.push(key);
-        return Option::<i32>::Some(id);
+        return Option::<[String, Array<String>, Array<Array<String>>]>::Some([key, canonical, k_prefix_canonical]);
     }
 
     /// All registered follow variants in registration (= id) order.

@@ -310,6 +310,37 @@ test "intern_follow_variant: unknown rule returns null" {
     assert ctx.follow_variants().is_empty(), "no variant should have been registered";
 }
 
+test "lookup_follow_variant_id: returns cached id without mutating registry" {
+    // Pre-register an entry, then call lookup with the same triple.
+    let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]);
+    let mut ctx = mk_ctx_with([a]);
+    let follow: Array<String> = ["TK_Y"];
+    let registered = ctx.intern_follow_variant(&"a", &follow, &empty_k_prefix(), true).unwrap();
+    let before = ctx.follow_variants().len();
+    let looked_up = ctx.lookup_follow_variant_id(&"a", &follow, &empty_k_prefix(), false);
+    let id = if let Some(id) = looked_up {
+        id;
+    } else {
+        panic("expected lookup to return the cached id");
+    };
+    assert id == registered, `expected id {registered}, got {id}`;
+    assert ctx.follow_variants().len() == before, "lookup must not grow the registry";
+}
+
+test "lookup_follow_variant_id: returns null for an empty intersection" {
+    // tail_greedy(a) = {Y}; caller follow {Z}. No variant key — lookup
+    // mirrors intern's None return rather than panicking.
+    let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]);
+    let mut ctx = mk_ctx_with([a]);
+    let follow: Array<String> = ["TK_Z"];
+    let looked_up = ctx.lookup_follow_variant_id(&"a", &follow, &empty_k_prefix(), true);
+    assert if let Some(_) = looked_up {
+        false;
+    } else {
+        true;
+    }, "expected null for empty intersection";
+}
+
 test "intern_follow_variant: multi-alt rule registers (Phase 5 step 5)" {
     // Phase 5 step 5 lifted the single-alt restriction: multi-alt
     // variants now route through `gen_parse_fn_named`'s multi-alt path,

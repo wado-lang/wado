@@ -117,11 +117,16 @@ pub fn build(parser_rules: &Array<ParserRule>, ctx: &mut GenContext, start_rule:
 /// `variant_k_prefix_mask`), to a fixed point — a variant's body
 /// may discover further call sites that need their own variants.
 ///
-/// The pre-pass exists so codegen consumers can do a pure lookup
-/// against the registry without having to register on their own
-/// walk. `intern_follow_variant` is keyed on the canonical triple,
-/// so any subsequent intern call from `lower` returns the cached
-/// id rather than creating a duplicate.
+/// Today this walker is NOT wired into `codegen::generate` — `lower`
+/// still owns the production-time registry population. The function
+/// exists as the Phase-1 foundation for the eventual switch to
+/// pure-lookup at lower's call sites (see `package-gale/TODO.md`).
+/// The drift surface is real: lower's element walks pass
+/// context-specific `outer_follow` values at ~13 distinct call sites
+/// (varying between `iter_follow`, `elem_follow`, `empty_follow`,
+/// pass-through `outer_follow`), and reproducing every site here is
+/// a follow-up effort. Until that lands, the walker is exercised
+/// end-to-end only by `follow_env_test.wado`.
 fn register_follow_variants(parser_rules: &Array<ParserRule>, ctx: &mut GenContext) {
     let empty_mask: Array<String> = [];
     let empty_k_mask: Array<Array<String>> = [];
