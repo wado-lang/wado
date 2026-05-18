@@ -501,8 +501,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Resolve the builder impl's home module — that is where
         // `Builder^Trait::new_literal` is registered, and (post-fix #1110)
         // where the monomorphizer expects to find the template. Fall back to
-        // the receiver type's module, then to the current module if the
-        // builder lacks a defining module.
+        // the receiver type's module for inherent / auto-derived impls; if
+        // neither resolves, panic (no current-module fallback per #1110 (2)).
         let builder_name_for_lookup = self
             .struct_name_for_type(builder_type)
             .unwrap_or_else(|| base_name.clone());

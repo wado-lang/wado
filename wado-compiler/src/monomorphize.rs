@@ -166,7 +166,7 @@ pub fn monomorphize(flat: &mut FlatPackage) {
 fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Option<ModuleSource> {
     match type_table.get(type_id) {
         ResolvedType::Primitive(_) => Some(ModuleSource::primitive()),
-        ResolvedType::BuiltinArray(_) => Some(ModuleSource::prelude()),
+        ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
         ResolvedType::Struct { module_source, .. }
         | ResolvedType::GenericInstance { module_source, .. }
         | ResolvedType::Enum { module_source, .. }
@@ -354,13 +354,6 @@ impl Monomorphizer {
             let mut batch: Vec<TirFunction> = Vec::new();
             while let Some(key) = self.functions.pending.pop() {
                 let concrete = {
-                    // Templates live in the module that hosts the impl block;
-                    // the queueing convention puts the *instantiation* at the
-                    // receiver type's module (per the
-                    // `inspect_ref_array_field.wado` contract). Try the queue
-                    // key's module first, then fall back to `TraitEnv` so
-                    // cross-module impls (e.g. `impl<T> Serialize for Option<T>`
-                    // in `core:serde`) are still discoverable.
                     // Issue #1110 (1)(2): every producer sets
                     // `FunctionRef::module_source` to the body's home
                     // module — `resolver::method_call::resolve_method_call`,
@@ -373,18 +366,13 @@ impl Monomorphizer {
                     // miss is a producer bug, surfaced as the panic below.
                     let lookup_key = (key.module_source.clone(), key.name.clone());
                     let generic_func = generic_functions.get(&lookup_key);
-                    // Generics have a defined home module by convention: a
-                    // template that's queued for instantiation must exist in
-                    // `generic_functions` either at the queue's own
-                    // `module_source` (the common case) or at a module
-                    // reachable through `TraitEnv` / the inherent-method
-                    // scan (newtype-inherits-base and similar). If no
-                    // template is reachable, the call was registered as a
-                    // generic but no provider exists — surface it as a
-                    // compiler bug rather than silently dropping the
-                    // instantiation. A real failure here points at a
-                    // missing prelude definition or a synthesis path that
-                    // queues a key it never registered a template for.
+                    // No fallback: every queue producer above (in
+                    // `func_inst::collect_function_instantiation_sites`)
+                    // reads `module_source` straight off the matched
+                    // template, so the literal lookup is total. A miss
+                    // means a producer skipped the routing rules — a
+                    // compiler bug, not a missing-impl-at-the-call-site
+                    // condition.
                     let gf = generic_func.unwrap_or_else(|| {
                         let available: Vec<&ModuleSource> = generic_functions
                             .keys()
