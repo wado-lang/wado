@@ -82,7 +82,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Stmt::ForOf(for_of) => self.resolve_for_of(for_of, ctx),
             Stmt::Loop(loop_stmt) => vec![self.resolve_loop(loop_stmt, ctx)],
             Stmt::Match(match_expr) => {
-                let tir = self.resolve_match_expr(match_expr, ctx, None);
+                // A `match` in statement position discards its result, so
+                // pin the expected type to `Unit`. With `expected_type =
+                // Some(Unit)`, `resolve_match_expr` sets the match's
+                // overall `type_id` to `Unit` regardless of what the arms
+                // produce. The WIR builder then sees `has_result = false`
+                // in `translate_match` and wraps each non-unit arm body in
+                // `WirInstr::Drop`, so arms whose blocks evaluate to
+                // different non-unit types (a separator `;` is not a
+                // discard marker in Wado, so `{ helper(); }` evaluates to
+                // `helper()`'s return type) do not leave a stray value on
+                // the Wasm stack at the join point.
+                let tir =
+                    self.resolve_match_expr(match_expr, ctx, Some(TypeTable::UNIT));
                 vec![TirStmt::new(TirStmtKind::Expr(tir), match_expr.span)]
             }
             Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt, ctx)],
