@@ -124,7 +124,7 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "cor
 
 type "functype//wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min" = fn(ref "core:prelude//Array<i32>") -> i32;  // TypeId(46)
 
-type "functype//wado-compiler/tests/fixtures/trait_bound_7.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>", ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>") -> bool;  // TypeId(47)
+type "functype//core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>", ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>") -> bool;  // TypeId(47)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -187,7 +187,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_result_eq"() wit
     b = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: 42 };
     c = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fail"), used: 4 } };
     d = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fail"), used: 4 } };
-    if "wado-compiler/tests/fixtures/trait_bound_7.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(a, b) {
+    if "core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(a, b) {
         message_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Ok == Ok"), used: 8 };
         let __pair_temp_1: i64;
         __pair_temp_1 = "wasi/stream-new"();
@@ -200,7 +200,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_result_eq"() wit
         "core:cli/write_to_stream"(tx_6, message_4, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_7);
     }
-    if "wado-compiler/tests/fixtures/trait_bound_7.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(a, c) == 0 {
+    if "core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(a, c) == 0 {
         message_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Ok != Err"), used: 9 };
         let __pair_temp_2: i64;
         __pair_temp_2 = "wasi/stream-new"();
@@ -213,7 +213,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_result_eq"() wit
         "core:cli/write_to_stream"(tx_12, message_10, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_13);
     }
-    if "wado-compiler/tests/fixtures/trait_bound_7.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(c, d) {
+    if "core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(c, d) {
         message_16 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Err == Err"), used: 10 };
         let __pair_temp_3: i64;
         __pair_temp_3 = "wasi/stream-new"();
@@ -763,7 +763,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min"(self) {
     return m;
 }
 
-fn "wado-compiler/tests/fixtures/trait_bound_7.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(self, other) {
+fn "core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(self, other) {
     let a_2: i32;
     let b_3: i32;
     let a_4: ref "core:prelude/string.wado//String";

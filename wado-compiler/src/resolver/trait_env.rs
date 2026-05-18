@@ -256,9 +256,8 @@ impl TraitEnv {
                             blanket_impl_index.push((module_source.clone(), item_idx));
                             if let Some(trait_type) = &impl_block.trait_type {
                                 let trait_name = get_type_name_static(trait_type);
-                                let modules = blanket_trait_impl_modules
-                                    .entry(trait_name)
-                                    .or_default();
+                                let modules =
+                                    blanket_trait_impl_modules.entry(trait_name).or_default();
                                 if !modules.contains(module_source) {
                                     modules.push(module_source.clone());
                                 }

@@ -652,7 +652,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // block's module (cross-module trait impls like `impl Display for
         // String` in `core:prelude/format`), then the receiver type's module
         // (inherent methods live alongside the type).
-        let method_module_source = trait_impl_module_source.unwrap_or_else(|| struct_module.clone());
+        let method_module_source =
+            trait_impl_module_source.unwrap_or_else(|| struct_module.clone());
 
         // Record use->def for jump-to-definition on the method name token.
         if let Some(method_ast_id) = self.find_impl_method_ast_id(

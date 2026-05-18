@@ -90,7 +90,7 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "cor
 
 type "functype//core:prelude/types.wado/Option<i32>^Inspect::inspect" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(34)
 
-type "functype//wado-compiler/tests/fixtures/assert_inspect_variant.wado/Option<i32>^Eq::eq" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/types.wado//Option<i32>") -> bool;  // TypeId(35)
+type "functype//core:prelude/types.wado/Option<i32>^Eq::eq" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/types.wado//Option<i32>") -> bool;  // TypeId(35)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -114,7 +114,7 @@ fn "wado-compiler/tests/fixtures/assert_inspect_variant.wado/run"() with Stdout 
     let f_11: ref "core:prelude/format.wado//Formatter";
     v = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 42 };
     expected = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 99 };
-    __cond = "wado-compiler/tests/fixtures/assert_inspect_variant.wado/Option<i32>^Eq::eq"(v, expected);
+    __cond = "core:prelude/types.wado/Option<i32>^Eq::eq"(v, expected);
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(146), used: 0 };
@@ -576,7 +576,7 @@ fn "core:prelude/types.wado/Option<i32>^Inspect::inspect"(self, f) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/assert_inspect_variant.wado/Option<i32>^Eq::eq"(self, other) {
+fn "core:prelude/types.wado/Option<i32>^Eq::eq"(self, other) {
     let a: i32;
     let b: i32;
     return let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>", __match_scrut_0 = self, (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) -> bool {

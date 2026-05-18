@@ -16970,7 +16970,7 @@ fn __cm_binding__Environment_get_environment() -> Array<[String, String]> with E
     cm_raw_call wasi:cli/Environment::get_environment(__outptr);
     let __base: i32 = core::builtin::i32_load(__outptr);
     let __count: i32 = core::builtin::i32_load((__outptr + 4));
-    let mut __result: Array<[String, String]> = "core::prelude::Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::with_capacity"(__count);
+    let mut __result: Array<[String, String]> = "core::prelude/array.wado::Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::with_capacity"(__count);
     let mut __i: i32 = 0;
     loop {
         if (__i >= __count) {
@@ -16996,7 +16996,7 @@ fn __cm_binding__Environment_get_arguments() -> Array<String> with Environment {
     cm_raw_call wasi:cli/Environment::get_arguments(__outptr);
     let __base: i32 = core::builtin::i32_load(__outptr);
     let __count: i32 = core::builtin::i32_load((__outptr + 4));
-    let mut __result: Array<String> = "core::prelude::Array<core:prelude/string.wado/String>::with_capacity"(__count);
+    let mut __result: Array<String> = "core::prelude/array.wado::Array<core:prelude/string.wado/String>::with_capacity"(__count);
     let mut __i: i32 = 0;
     loop {
         if (__i >= __count) {
@@ -17962,15 +17962,6 @@ pub fn "&mut core:prelude/string.wado/String^Eq::eq"(self: &&mut String, other: 
     return (*self ref.eq *other);
 }
 
-pub fn "Array<core:prelude/string.wado/String>::push"(self: &mut Array<String>, value: String) with stores[value] {
-    let used: i32 = self.used;
-    if core::builtin::unlikely((used >= core::builtin::array_len(self.repr))) {
-        self."Array<core:prelude/string.wado/String>::grow"();
-    }
-    core::builtin::array_set::<String>(self.repr, used, value);
-    self.used = (used + 1);
-}
-
 pub fn "Array<core:prelude/string.wado/String>::with_capacity"(capacity: i32) -> Array<String> {
     return Array<core:prelude/string.wado/String> { repr: core::builtin::array_new::<String>(capacity), used: 0 };
 }
@@ -18281,8 +18272,25 @@ fn "IterMap<core:prelude/string.wado/StrCharIter,char>^IntoIterator::into_iter"(
     return *self;
 }
 
-pub fn "Array<core:prelude/string.wado/String>::with_capacity"(capacity: i32) -> Array<String> {
-    return Array<core:prelude/string.wado/String> { repr: core::builtin::array_new::<String>(capacity), used: 0 };
+pub fn "Array<core:prelude/string.wado/String>::grow"(self: &mut Array<String>) {
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    let new_capacity: i32 = "core::prelude/array.wado::i32_max"((capacity * 2), 4);
+    let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
+    let old_repr: builtin::array<String> = self.repr;
+    let used: i32 = self.used;
+    __for_0: {
+        let mut i: i32 = 0;
+        loop {
+            if !(i < used) {
+                break __for_0;
+            }
+            __for_0_body: {
+                core::builtin::array_set::<String>(new_repr, i, core::builtin::array_get::<String>(old_repr, i));
+            }
+            i = (i + 1);
+        }
+    }
+    self.repr = new_repr;
 }
 
 pub fn "Array<core:prelude/types.wado/Tuple<i32,char>>::with_capacity"(capacity: i32) -> Array<[i32, char]> {
@@ -18324,27 +18332,6 @@ pub fn "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core
             }
             __for_0_body: {
                 core::builtin::array_set::<[String, String]>(new_repr, i, core::builtin::array_get::<[String, String]>(old_repr, i));
-            }
-            i = (i + 1);
-        }
-    }
-    self.repr = new_repr;
-}
-
-pub fn "Array<core:prelude/string.wado/String>::grow"(self: &mut Array<String>) {
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    let new_capacity: i32 = "core::prelude/array.wado::i32_max"((capacity * 2), 4);
-    let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
-    let old_repr: builtin::array<String> = self.repr;
-    let used: i32 = self.used;
-    __for_0: {
-        let mut i: i32 = 0;
-        loop {
-            if !(i < used) {
-                break __for_0;
-            }
-            __for_0_body: {
-                core::builtin::array_set::<String>(new_repr, i, core::builtin::array_get::<String>(old_repr, i));
             }
             i = (i + 1);
         }

@@ -81,7 +81,7 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(31)
 
-type "functype//core:prelude/Array<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(32)
+type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(32)
 
 type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>");  // TypeId(33)
 
@@ -162,7 +162,7 @@ fn "wado-compiler/tests/fixtures/cli_args.wado/__cm_binding__Environment_get_arg
                 break b0;
             }
             __elem_addr = __base + (__i * 8);
-            "core:prelude/Array<core:prelude/string.wado/String>::push"(__result, __inline_memory_to_gc_string_1: block -> ref "core:prelude/string.wado//String" {
+            "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(__result, __inline_memory_to_gc_string_1: block -> ref "core:prelude/string.wado//String" {
                 ptr = builtin::load_i32(__elem_addr);
                 len_8 = builtin::load_i32(__elem_addr + 4);
                 arr = "core:internal/memory_to_gc_array"(ptr, len_8);
@@ -587,7 +587,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/Array<core:prelude/string.wado/String>::push"(self, value) {
+fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {

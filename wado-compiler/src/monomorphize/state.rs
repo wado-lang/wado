@@ -99,9 +99,9 @@ impl FuncInstState {
             .base_trait_name
             .as_deref()
             .or(info.trait_name.as_deref())?;
-        if let Some(m) =
-            self.trait_env
-                .impl_module_for(&info.struct_name, trait_name, type_module)
+        if let Some(m) = self
+            .trait_env
+            .impl_module_for(&info.struct_name, trait_name, type_module)
         {
             return Some(m.clone());
         }

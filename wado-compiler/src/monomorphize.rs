@@ -369,20 +369,15 @@ impl Monomorphizer {
                     if generic_func.is_none()
                         && let Some(info) = key.method_info.as_ref()
                     {
-                        let trait_name = info
-                            .base_trait_name
-                            .as_ref()
-                            .or(info.trait_name.as_ref());
+                        let trait_name = info.base_trait_name.as_ref().or(info.trait_name.as_ref());
                         if let Some(trait_name) = trait_name {
                             for candidate in [&info.base_struct_name, &info.struct_name] {
-                                if let Some(impl_module) =
-                                    self.functions.trait_env.impl_module_for(
-                                        candidate,
-                                        trait_name,
-                                        Some(&key.module_source),
-                                    )
-                                    && let Some(gf) = generic_functions
-                                        .get(&(impl_module.clone(), key.name.clone()))
+                                if let Some(impl_module) = self.functions.trait_env.impl_module_for(
+                                    candidate,
+                                    trait_name,
+                                    Some(&key.module_source),
+                                ) && let Some(gf) =
+                                    generic_functions.get(&(impl_module.clone(), key.name.clone()))
                                 {
                                     generic_func = Some(gf);
                                     break;
@@ -396,7 +391,7 @@ impl Monomorphizer {
                             // template lives in the base type's module
                             // (`Array::len` in `core:prelude/array` invoked via
                             // `type MyArray<T> = Array<T>;` from a user module).
-                            for ((m, n), gf) in generic_functions.iter() {
+                            for ((m, n), gf) in &generic_functions {
                                 if n == &key.name && m != &key.module_source {
                                     generic_func = Some(gf);
                                     break;
@@ -422,10 +417,7 @@ impl Monomorphizer {
                              `{}` at module `{}` (impl_type_args={:?}, \
                              method_type_args={:?}); a generic dispatch \
                              must always have a defined home module",
-                            key.name,
-                            key.module_source,
-                            key.impl_type_args,
-                            key.method_type_args,
+                            key.name, key.module_source, key.impl_type_args, key.method_type_args,
                         )
                     });
                     let gf_borrowed = gf.borrow();

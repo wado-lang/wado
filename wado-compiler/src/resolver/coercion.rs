@@ -739,7 +739,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Self::build_tir_method_call(
                 builder_local_final,
                 FunctionRef {
-                    module_source: impl_module_source.clone(),
+                    module_source: impl_module_source,
                     name: build_mangled_name,
                     monomorph_info: build_monomorph,
                     method_info: Some(build_method_info),

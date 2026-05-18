@@ -1450,9 +1450,8 @@ impl Monomorphizer {
                                     .base_trait_name
                                     .as_deref()
                                     .or(new_info.trait_name.as_deref());
-                                let generic_or_concrete = self
-                                    .functions
-                                    .generic_or_concrete_impl_module(
+                                let generic_or_concrete =
+                                    self.functions.generic_or_concrete_impl_module(
                                         &new_info,
                                         receiver_module.as_ref(),
                                     );
