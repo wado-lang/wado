@@ -141,11 +141,14 @@ pub fn lower(grammar: &Grammar, lit_tokens: &Array<LitToken>) -> LoweredGrammar 
 pub fn lower_with_ctx(grammar: &Grammar, lit_tokens: &Array<LitToken>, ctx: &mut GenContext) -> LoweredGrammar {
     // `ctx` is shared with downstream emit. The follow-variant
     // and kind-set registries lower writes into ctx are the same
-    // ones emit reads from later: id assignments stay consistent
-    // between the pre-pass and emit's intern calls during body
-    // walking. Caches (first / nullable / single-token / scannable
-    // / tail-greedy) survive across the lower-then-emit boundary
-    // and only get computed once.
+    // ones emit reads from later: variant ids are minted once by
+    // [`register_follow_variants`] before any IR build runs, and
+    // every subsequent consumer (lower's `RuleRef` arms via
+    // `lookup_follow_variant_id`, emit's `gen_parser` loop over
+    // `ctx.follow_variants()`) reads them back. Caches (first /
+    // nullable / single-token / scannable / tail-greedy) survive
+    // across the lower-then-emit boundary and only get computed
+    // once.
 
     // Follow-variant pre-pass: populates the registry before any
     // element walk consults it via `lookup_follow_variant_id`.
@@ -160,14 +163,13 @@ pub fn lower_with_ctx(grammar: &Grammar, lit_tokens: &Array<LitToken>, ctx: &mut
     for let rule of &grammar.parser_rules {
         parser_rules.push(lower_rule(rule, ctx, &empty_mask, &empty_k_mask));
     }
-    // Phase 2.6 — follow-variant pre-pass. The first lowering pass
-    // already called `ctx.intern_follow_variant` at every RuleRef
-    // site whose `outer_follow` overlaps the callee's tail-greedy
-    // first set; iterate over the registry to lower one
-    // variant-body per registered entry. Each variant's lowering
-    // may itself register new variants (a variant body re-walks the
-    // rule with its `variant_mask` threaded through), so loop to a
-    // fixed point.
+    // Phase 2.6 — follow-variant body lowering. Every variant the
+    // pre-pass registered above gets a lowered body emitted into
+    // `variant_rules` here. Each body lowering may itself populate
+    // further variants whose own bodies need lowering (the variant's
+    // mask propagates through `compute_call_site_follow` into nested
+    // `RuleRef` lookups, and the pre-pass's fixed-point already
+    // registered those too), so loop until the registry is stable.
     let variant_rules = lower_variant_rules(&grammar.parser_rules, ctx);
     // Phase 2.7 — pre-intern multi-element token-kind sets that
     // surface in dispatch branches and `Op::Excluded` kinds. The

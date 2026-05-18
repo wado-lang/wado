@@ -28,16 +28,14 @@ impl FollowSet {
 /// Pure analysis output: the FOLLOW environment of a grammar.
 ///
 /// Built once from the parser-rule IR via [`build`]. No codegen state,
-/// no `CodeWriter`. Today this is **standalone analysis surface** —
-/// the codegen path still computes the same information on the fly via
-/// `GenContext::tail_greedy_first_of_rule` and
-/// `GenContext::compute_call_site_follow`. `FollowEnv` exists as the
-/// pre-computed snapshot a future refactor (see
-/// `package-gale/TODO.md` "LL prediction — architecture cleanup")
-/// would have codegen consult instead, replacing the in-walker
-/// `intern_follow_variant` registration with a pure lookup. Until
-/// that refactor lands, the analysis is exercised end-to-end only by
-/// `follow_env_test.wado`.
+/// no `CodeWriter`. The pre-computed snapshot is what `lower_with_ctx`
+/// (via [`register_follow_variants`]) populates the follow-variant
+/// registry from before lower's element walks consult it through
+/// `GenContext::lookup_follow_variant_id`. The legacy on-the-fly path
+/// (lower calling `intern_follow_variant` from its `RuleRef` arms) was
+/// retired alongside the Phase 2 switch — the registry is now frozen
+/// before lower's IR build and consumed read-only by everyone
+/// downstream.
 pub struct FollowEnv {
     /// Token kinds the rule may *greedily* consume at tail position
     /// (Optional/Star/Plus elements with no required successor in the
