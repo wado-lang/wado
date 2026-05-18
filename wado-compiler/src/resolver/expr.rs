@@ -15,6 +15,7 @@ use crate::token::Span;
 
 use super::Resolver;
 use super::infer::InferCtx;
+use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, LabeledBlockTarget, TypeError, VarRef};
 use super::util;
 
@@ -50,17 +51,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Expr::Index(index) => self.resolve_index(index, ctx),
             Expr::Block(block) => {
                 let tir_block = self.resolve_block(block, ctx, expected_type);
-                let type_id = tir_block
-                    .stmts
-                    .last()
-                    .and_then(|s| match &s.kind {
-                        TirStmtKind::Expr(e) => Some(e.type_id),
-                        TirStmtKind::Return { .. }
-                        | TirStmtKind::Break { .. }
-                        | TirStmtKind::Continue => Some(TypeTable::NEVER),
-                        _ => None,
-                    })
-                    .unwrap_or(TypeTable::UNIT);
+                // Reuse `block_result_type` so the block expression's
+                // overall type matches the inference rule applied
+                // everywhere else (function body trailing expressions,
+                // `if` / `match` arm bodies, etc.). The previous local
+                // copy of the rule only handled `TirStmtKind::Expr` /
+                // `Return` / `Break` / `Continue` as trailing forms
+                // and fell back to `Unit` for trailing `if` / `if let`
+                // — which mis-typed `{ if cond { a } else { b } }` as
+                // `Unit` and silently miscompiled when such a block
+                // was used as a match-arm body. Routing through the
+                // shared `block_result_type` makes a trailing
+                // `TirStmtKind::If` / `IfLet` with both branches
+                // present propagate its branch-agreed type through.
+                let type_id = Self::block_result_type(&tir_block);
                 TirExpr::new(TirExprKind::Block(tir_block), type_id, block.span)
             }
             Expr::If(if_expr) => self.resolve_if_expr(if_expr, ctx, expected_type),
@@ -1338,6 +1342,31 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 }
 
+                // Same rule as `resolve_match_expr`: an if-expression
+                // whose result is consumed must have branches that
+                // agree on a common type. When `expected_type=None`
+                // the existing inference logic above already
+                // diagnosed the mismatch (line ~1318), but when
+                // `expected_type=Some(X)` the inference was bypassed
+                // (`type_id = X` unconditionally) and a divergent
+                // branch would silently produce a wasm `(if (result
+                // X) ...)` whose other branch pushes the wrong
+                // type. Skip when `type_id == Unit`: that's
+                // statement-position use, where each branch's value
+                // gets dropped at the WIR stmt level.
+                if expected_type.is_some() && type_id != TypeTable::UNIT {
+                    let then_type = Self::block_result_type(&then_block);
+                    self.check_branch_type(then_type, type_id, if_expr.then_block.span);
+                    if let Some(eb) = &else_block {
+                        let else_type = Self::block_result_type(eb);
+                        self.check_branch_type(
+                            else_type,
+                            type_id,
+                            if_expr.else_block.as_ref().unwrap().span,
+                        );
+                    }
+                }
+
                 TirExpr::new(
                     TirExprKind::If {
                         condition: Box::new(condition),
@@ -1348,6 +1377,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     if_expr.span,
                 )
             }
+        }
+    }
+
+    /// Emit a `TypeMismatch` error when a branch's block-result type
+    /// is incompatible with the surrounding context's expected type.
+    /// `never` and `unknown` (and unresolved type-params) defer via
+    /// `check_assignable`'s `Deferred` / `Compatible` rules. Used by
+    /// `resolve_if_expr` (`Condition::Expr` arm) to validate then /
+    /// else branches when an outer type annotation pinned the
+    /// expected result type; the same rule lives inline in
+    /// `resolve_match_expr` for arm bodies.
+    fn check_branch_type(&mut self, actual: TypeId, expected: TypeId, span: Span) {
+        let result = {
+            let tt = self.type_table.borrow();
+            check_assignable(actual, expected, &tt)
+        };
+        if matches!(result, TypeCheckResult::Incompatible) {
+            let expected_name = self.type_table.borrow().type_name(expected);
+            let found_name = self.type_table.borrow().type_name(actual);
+            let _ = self.logger.error(TypeError::TypeMismatch {
+                expected: expected_name,
+                found: found_name,
+                span,
+            });
         }
     }
 
@@ -1403,6 +1456,43 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if !tt.contains_unknown(type_id) {
                 for arm in &mut arms {
                     patch_unresolved_null(&mut arm.body, type_id, &tt);
+                }
+            }
+        }
+
+        // Reject arms whose body type disagrees with the match's overall
+        // result type. Skipped when `type_id == Unit`: that means the
+        // match sits in statement position (see `resolver::resolve_stmt`
+        // for `Stmt::Match`, which pins `expected_type = Some(Unit)`),
+        // and the WIR builder's `translate_match` already drops each
+        // arm body's value via `WirInstr::Drop`. In every other context
+        // (`let x = match {...}`, `f(match {...})`, a match as the
+        // trailing expression of a block whose result is consumed)
+        // divergent arms would silently miscompile — the match's wasm
+        // result type would be picked from one arm, but the other
+        // arm's branch pushes a different type onto the stack, which
+        // either trips wasmparser or produces type-confused output.
+        //
+        // `Unit` here is the match-level type, not the arm-level type:
+        // a unit-typed match can still have `never`-typed arms (e.g.
+        // a `panic`), and those remain compatible. `check_assignable`
+        // already encodes `NEVER` / `UNKNOWN` / type-param deferrals,
+        // so we route through it instead of repeating the rules here.
+        if type_id != TypeTable::UNIT {
+            for arm in &arms {
+                let arm_type = arm.body.type_id;
+                let result = {
+                    let tt = self.type_table.borrow();
+                    check_assignable(arm_type, type_id, &tt)
+                };
+                if matches!(result, TypeCheckResult::Incompatible) {
+                    let expected_name = self.type_table.borrow().type_name(type_id);
+                    let found_name = self.type_table.borrow().type_name(arm_type);
+                    let _ = self.logger.error(TypeError::TypeMismatch {
+                        expected: expected_name,
+                        found: found_name,
+                        span: arm.body.span,
+                    });
                 }
             }
         }

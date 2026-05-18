@@ -25,8 +25,14 @@ export fn run() with Stdout {
         println("empty: none");
     }
 
-    // Match expression with Option<Radians>
-    let result = match angle {
+    // Match expression with Option<Radians>. The type annotation on
+    // `result` pins the expected arm type to `Radians`, so the `0.0`
+    // numeric literal in the `None` arm coerces via newtype literal
+    // coercion (`try_coerce_numeric_literal`). Without the annotation
+    // the arms would resolve independently (`Radians` from `v * 2.0`
+    // vs `f64` from `0.0`) and the new arm-type agreement check in
+    // `resolve_match_expr` would reject the divergence.
+    let result: Radians = match angle {
         Some(v) => v * 2.0,
         None => 0.0,
     };
