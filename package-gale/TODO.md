@@ -48,7 +48,7 @@ Two complementary directions, neither scoped yet:
 
 Reduces coupling between the codegen walk and the analysis layer; no behaviour change.
 
-- **Switch `lower`'s `intern_follow_variant` call sites to lookup-only.** `FollowEnv::build` now pre-populates the registry via `register_follow_variants` (a dedicated walker that mirrors lower's element traversal for the sole purpose of variant interning). Lower's two existing intern calls (`lower_scan_element`, `lower_op`) still run but find every entry already cached, so they're effectively no-ops. The cleanup: change `intern_follow_variant` (or expose a sibling `lookup_follow_variant_id`) to return the cached id without registering, and route the two lower call sites through it. Once that lands, registry mutation is confined to `FollowEnv::build`.
+(no items currently — the previously listed `intern_follow_variant` → `lookup_follow_variant_id` switch in lower has landed. `register_follow_variants` runs as the first step of `lower_with_ctx`, populating the canonical `(rule, mask, k_prefix_mask)` triples for every parse / scan site lower visits. Lower's `RuleRef` arms consume the registry via `lookup_follow_variant_id`, which panics on a missing key so any future walker / lower drift surfaces immediately.)
 
 ## Stage B follow-on — composite descriptors (Stage C dependency)
 

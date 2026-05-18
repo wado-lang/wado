@@ -1,5 +1,6 @@
 use { ParserRule, Alternative, Element, RepeatElement, GroupElement, LabelElement } from "./ir.wado";
 use { GenContext, FOLLOW_VARIANT_MAX_K, union_kind_arrays } from "./gen_context.wado";
+use { is_simple_cst_group, is_token_only_group, is_general_group } from "./gen_util.wado";
 use { TreeMap, TreeSet } from "core:collections";
 
 /// FOLLOW set for a parser rule, in the classical ANTLR4 sense:
@@ -117,25 +118,44 @@ pub fn build(parser_rules: &Array<ParserRule>, ctx: &mut GenContext, start_rule:
 /// `variant_k_prefix_mask`), to a fixed point — a variant's body
 /// may discover further call sites that need their own variants.
 ///
-/// Today this walker is NOT wired into `codegen::generate` — `lower`
-/// still owns the production-time registry population. The function
-/// exists as the Phase-1 foundation for the eventual switch to
-/// pure-lookup at lower's call sites (see `package-gale/TODO.md`).
-/// The drift surface is real: lower's element walks pass
-/// context-specific `outer_follow` values at ~13 distinct call sites
-/// (varying between `iter_follow`, `elem_follow`, `empty_follow`,
-/// pass-through `outer_follow`), and reproducing every site here is
-/// a follow-up effort. Until that lands, the walker is exercised
-/// end-to-end only by `follow_env_test.wado`.
-fn register_follow_variants(parser_rules: &Array<ParserRule>, ctx: &mut GenContext) {
+/// The pre-pass mirrors lower's twin walk (parse-side via `lower_op`
+/// and scan-side via `lower_scan_element`) so that every
+/// `(rule, mask, k_prefix_mask)` triple lower would intern is already
+/// present in the registry by the time lower's element walk runs.
+/// Lower's two `RuleRef` arms consume the registry via
+/// `lookup_follow_variant_id` (which panics on a missing key, so
+/// drift between this walker and lower surfaces immediately).
+///
+/// Wired into `lower_with_ctx` as the very first step, so callers
+/// don't have to remember to populate the registry separately. The
+/// walk is idempotent — repeat invocations with the same parser
+/// rules see the canonical keys already present and return the
+/// cached ids without registering duplicates.
+///
+/// The two walks are intentionally separate. While most shapes
+/// (`SingleAlt`, `General`, `Repeat`, `Label`) propagate identical
+/// follow at corresponding positions, `SimpleCst` and `TokenOnly`
+/// groups diverge:
+/// * Parse side: `lower_simple_cst_alt_call` hardcodes `variant_id =
+///   null` for the inner `RuleRef`, and `lower_token_only_leaf`
+///   never reaches an intern call (leaves only). So neither shape
+///   registers parse-side variants for inner elements.
+/// * Scan side, inline (within `lower_simple_cst_group` /
+///   `lower_token_only_group`): uses `&empty_follow` for the inline
+///   scan body — empty intersection, no variant registered.
+/// * Scan side, standalone (via `lower_simple_cst_scan_group` from
+///   `lower_scan_group`): uses the propagated `outer_follow`, which
+///   may register a variant.
+///
+/// LR alts skip the leading self-ref position to mirror
+/// `lower_lr_alt_suffix` (which lowers `alt.elements[1..]`).
+pub fn register_follow_variants(parser_rules: &Array<ParserRule>, ctx: &mut GenContext) {
     let empty_mask: Array<String> = [];
     let empty_k_mask: Array<Array<String>> = [];
 
-    // Pass 1: walk every parser rule body with no variant mask.
+    // Pass 1: walk every parser rule body, parse-side and scan-side.
     for let rule of parser_rules {
-        for let alternative of &rule.alternatives {
-            walk_alt_for_variants(&alternative.elements, ctx, &empty_mask, &empty_k_mask);
-        }
+        walk_rule_alts(rule, ctx, &empty_mask, &empty_k_mask);
     }
 
     // Pass 2: walk each registered variant's body with the variant's
@@ -155,80 +175,216 @@ fn register_follow_variants(parser_rules: &Array<ParserRule>, ctx: &mut GenConte
             } else {
                 continue;
             };
-            for let alternative of &rule.alternatives {
-                walk_alt_for_variants(&alternative.elements, ctx, &entry.mask, &entry.k_prefix_mask);
-            }
+            walk_rule_alts(rule, ctx, &entry.mask, &entry.k_prefix_mask);
         }
         walked = entries.len();
     }
 }
 
-/// Walk an alt's element list, computing per-position
-/// `(outer_follow, outer_k_prefix)` via the same helpers lower
-/// uses, and recursing into compound shapes. `variant_mask` /
-/// `variant_k_prefix_mask` carry the surrounding variant's mask
-/// (`[]` at top level), which `compute_call_site_*` consumes as
-/// the rule-level follow fallback for deep-nullable suffixes.
-fn walk_alt_for_variants(elements: &Array<Element>, ctx: &mut GenContext, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) {
-    for let mut i = 0; i < elements.len(); i += 1 {
-        let outer_follow = ctx.compute_call_site_follow(elements, i, variant_mask);
-        let outer_k_prefix = ctx.compute_call_site_k_prefix_mask(elements, i, FOLLOW_VARIANT_MAX_K, variant_k_prefix_mask);
-        intern_for_element(&elements[i], ctx, &outer_follow, &outer_k_prefix, variant_mask, variant_k_prefix_mask);
+/// Walk every alt of a rule with LR awareness. For LR alts (those
+/// beginning with a self-reference to the surrounding rule), the
+/// leading self-ref is skipped so the walk mirrors
+/// `lower_lr_alt_suffix` — lower never interns at position 0 of an
+/// LR alt because the suffix lowering starts at index 1.
+fn walk_rule_alts(rule: &ParserRule, ctx: &mut GenContext, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) {
+    for let alternative of &rule.alternatives {
+        let start = if alt_is_left_recursive(alternative, &rule.name) {
+            1;
+        } else {
+            0;
+        };
+        walk_alt_range_parse(&alternative.elements, start, ctx, variant_mask, variant_k_prefix_mask);
+        walk_alt_range_scan(&alternative.elements, start, ctx, variant_mask, variant_k_prefix_mask);
     }
 }
 
-/// Element-shape dispatch for variant interning. `RuleRef` is the
-/// only shape that interns; the rest exist only to descend into
-/// nested element lists so a deeply-buried `RuleRef` still reaches
-/// its call-site context.
-/// Element-shape dispatch. `RuleRef` interns. `Group` / `Repeat` /
-/// `Label` recurse into their inner shape so a deeply-buried `RuleRef`
-/// still gets registered. `Not`, `TokenRef`, `Literal`, and `Wildcard`
-/// are leaves with no `RuleRef` call site.
-///
-/// NOTE: written as an `if let` chain rather than a single `match` to
-/// work around a Wado codegen bug — a `match Element { RuleRef(r) => ...
-/// // recursive call sites in other arms ... TokenRef(_) | Literal(_) |
-/// Wildcard(_) => {} }` shape made the WIR pipeline emit an invalid core
-/// Wasm module ("type mismatch: expected (ref $type) but nothing on
-/// stack"). Tracked separately.
-fn intern_for_element(elem: &Element, ctx: &mut GenContext, outer_follow: &Array<String>, outer_k_prefix: &Array<Array<String>>, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) {
+/// Returns true when the alt's first element is a `RuleRef` (possibly
+/// labelled) to `rule_name` — the same check `lower::alt_is_left_recursive`
+/// uses. Replicated here so the pre-pass doesn't pull lower into the
+/// analysis-layer import graph.
+fn alt_is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
+    if alt.elements.is_empty() {
+        return false;
+    }
+    return element_is_self_ref(&alt.elements[0], rule_name);
+}
+
+fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
     if let RuleRef(r) = elem {
-        // Mirror lower's twin-intern at lines 1399 (scan) and 1891
-        // (parse) — both call sites contribute the same canonical
-        // triple. Pre-populating the registry lets lower's later
-        // intern calls return the cached id rather than register
-        // duplicates.
-        ctx.intern_follow_variant(&r.name, outer_follow, outer_k_prefix, true);
-        ctx.intern_follow_variant(&r.name, outer_follow, outer_k_prefix, false);
+        return r.name == *rule_name;
+    }
+    if let Label(lab) = elem {
+        return element_is_self_ref(&lab.element, rule_name);
+    }
+    return false;
+}
+
+/// Parse-side walk of an alt's element list. Mirrors `lower_alt_body`
+/// (and the inner walkers `lower_single_alt_group` / `lower_general_group`):
+/// for each position `i`, compute `elem_follow` via
+/// `compute_call_site_follow(elements, i, variant_mask)`, then descend
+/// into the element with that follow.
+fn walk_parse_alt(elements: &Array<Element>, ctx: &mut GenContext, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) {
+    walk_alt_range_parse(elements, 0, ctx, variant_mask, variant_k_prefix_mask);
+}
+
+/// Scan-side walk of an alt's element list. Mirrors
+/// `lower_alt_scan_element` (top-level scan body) plus the per-shape
+/// scan-side group lowerings reached from `lower_scan_group`.
+fn walk_scan_alt(elements: &Array<Element>, ctx: &mut GenContext, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) {
+    walk_alt_range_scan(elements, 0, ctx, variant_mask, variant_k_prefix_mask);
+}
+
+/// Parse-side walk starting at element index `start`. The `start`
+/// offset is `1` for LR alts (mirroring `lower_lr_alt_suffix`) and
+/// `0` everywhere else.
+fn walk_alt_range_parse(elements: &Array<Element>, start: i32, ctx: &mut GenContext, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) {
+    for let mut i = start; i < elements.len(); i += 1 {
+        let outer_follow = ctx.compute_call_site_follow(elements, i, variant_mask);
+        let outer_k_prefix = ctx.compute_call_site_k_prefix_mask(elements, i, FOLLOW_VARIANT_MAX_K, variant_k_prefix_mask);
+        intern_parse_for_element(&elements[i], ctx, &outer_follow, &outer_k_prefix, variant_mask, variant_k_prefix_mask);
+    }
+}
+
+/// Scan-side walk starting at element index `start`. The `start`
+/// offset is `1` for LR alts (mirroring `lower_lr_alt_scan_suffix`)
+/// and `0` everywhere else.
+fn walk_alt_range_scan(elements: &Array<Element>, start: i32, ctx: &mut GenContext, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) {
+    for let mut i = start; i < elements.len(); i += 1 {
+        let outer_follow = ctx.compute_call_site_follow(elements, i, variant_mask);
+        let outer_k_prefix = ctx.compute_call_site_k_prefix_mask(elements, i, FOLLOW_VARIANT_MAX_K, variant_k_prefix_mask);
+        intern_scan_for_element(&elements[i], ctx, &outer_follow, &outer_k_prefix, variant_mask, variant_k_prefix_mask);
+    }
+}
+
+/// Parse-side element dispatch. Mirrors `lower_op`'s RuleRef arm and
+/// the parse-side group lowerings (`lower_simple_cst_group`,
+/// `lower_token_only_group`, `lower_single_alt_group`,
+/// `lower_general_group`).
+///
+/// `SimpleCst` groups deliberately skip the inner intern — their
+/// parse op is built by `lower_simple_cst_alt_call` which hardcodes
+/// `variant_id = null`. `TokenOnly` groups have no inner `RuleRef`s.
+fn intern_parse_for_element(elem: &Element, ctx: &mut GenContext, outer_follow: &Array<String>, outer_k_prefix: &Array<Array<String>>, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) {
+    if let RuleRef(r) = elem {
+        // Mirrors `lower_op`'s RuleRef arm (lower.wado line 1891).
+        ctx.intern_follow_variant(&r.name, outer_follow, outer_k_prefix, /*is_scan=*/ false);
         return;
     }
     if let Group(g) = elem {
-        for let inner_alt of &g.alternatives {
-            walk_alt_for_variants(&inner_alt.elements, ctx, variant_mask, variant_k_prefix_mask);
+        let alts = &g.alternatives;
+        if alts.len() == 1 {
+            // SingleAlt path: lower_single_alt_group walks alt
+            // elements with `compute_call_site_follow(_, _, variant_mask)`.
+            walk_parse_alt(&alts[0].elements, ctx, variant_mask, variant_k_prefix_mask);
+            return;
         }
+        if is_token_only_group(alts) || is_simple_cst_group(alts) {
+            // Both shapes skip parse-side intern: token-only has no
+            // RuleRefs at all; simple_cst's `lower_simple_cst_alt_call`
+            // hardcodes `variant_id = null`.
+            return;
+        }
+        if is_general_group(alts) {
+            // General group: lower_general_group walks each inner
+            // alt's elements with the same per-position follow shape
+            // as a top-level alt.
+            for let inner_alt of alts {
+                walk_parse_alt(&inner_alt.elements, ctx, variant_mask, variant_k_prefix_mask);
+            }
+            return;
+        }
+        // Unrecognised group shape — lower would panic too; mirror the
+        // silent skip so analysis stays terminating.
         return;
     }
     if let Repeat(rep) = elem {
-        // The Repeat's inner sits at the iter position. The
-        // iter-follow is `first(inner) ∪ outer_follow` because after
-        // one iter the loop either restarts (consuming a
-        // `first(inner)` token) or exits to the surrounding follow.
-        // Mirrors `lower_scan_repeat` / `lower_repeat_op` at
-        // `iter_follow = union_kind_arrays(&inner_first, outer_follow)`.
-        // K-prefix flips to `[]` — the caller's K-prefix is the
-        // exit-follow, not the iter-follow.
+        // Repeat inner sits at the iter position with
+        // `iter_follow = first(inner) ∪ outer_follow`. K-prefix flips
+        // to `[]`. Mirrors `lower_repeat_op` line ~2583.
         let mut visiting: Array<String> = [];
         let inner_first = ctx.first_of_element(&rep.element, &mut visiting);
         let iter_follow = union_kind_arrays(&inner_first, outer_follow);
         let empty_k_mask: Array<Array<String>> = [];
-        intern_for_element(&rep.element, ctx, &iter_follow, &empty_k_mask, variant_mask, variant_k_prefix_mask);
+        intern_parse_for_element(&rep.element, ctx, &iter_follow, &empty_k_mask, variant_mask, variant_k_prefix_mask);
         return;
     }
     if let Label(lab) = elem {
-        // Labels are positionally identical to their inner — same
-        // follow, same K-prefix.
-        intern_for_element(&lab.element, ctx, outer_follow, outer_k_prefix, variant_mask, variant_k_prefix_mask);
+        intern_parse_for_element(&lab.element, ctx, outer_follow, outer_k_prefix, variant_mask, variant_k_prefix_mask);
+        return;
+    }
+    // `Not`, `TokenRef`, `Literal`, `Wildcard`: leaves with no RuleRef.
+}
+
+/// Scan-side element dispatch. Mirrors `lower_scan_element` and the
+/// scan-side group lowerings reached from `lower_scan_group`.
+///
+/// Unlike the parse side, `SimpleCst` and `TokenOnly` groups DO walk
+/// their inner elements on the scan path — `lower_simple_cst_scan_group`
+/// passes `outer_follow` directly to `lower_scan_element` for each
+/// alt's single `RuleRef`. `TokenOnly` inner elements are leaves so
+/// the walk is a no-op for variant interning.
+fn intern_scan_for_element(elem: &Element, ctx: &mut GenContext, outer_follow: &Array<String>, outer_k_prefix: &Array<Array<String>>, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) {
+    if let RuleRef(r) = elem {
+        // Mirrors `lower_scan_element`'s RuleRef arm (lower.wado line 1399).
+        ctx.intern_follow_variant(&r.name, outer_follow, outer_k_prefix, /*is_scan=*/ true);
+        return;
+    }
+    if let Group(g) = elem {
+        let alts = &g.alternatives;
+        if alts.len() == 1 {
+            let alt = &alts[0];
+            if alt.elements.len() == 1 {
+                // Transparent (scan): lower_scan_group line 1426 —
+                // single element of a single-alt Group inherits the
+                // surrounding `outer_follow` directly.
+                intern_scan_for_element(&alt.elements[0], ctx, outer_follow, outer_k_prefix, variant_mask, variant_k_prefix_mask);
+                return;
+            }
+            // Single-alt with multiple elements (scan): lower_scan_group
+            // walks each position via `lower_alt_scan_element`, which
+            // computes per-position `elem_follow`.
+            walk_scan_alt(&alt.elements, ctx, variant_mask, variant_k_prefix_mask);
+            return;
+        }
+        if is_token_only_group(alts) {
+            // lower_scan_group line 1448: each alt's single element is
+            // TokenRef/Literal — no RuleRef to intern.
+            return;
+        }
+        if is_simple_cst_group(alts) {
+            // lower_simple_cst_scan_group line ~2338: for each alt's
+            // single RuleRef element, intern with `outer_follow` (the
+            // Group's surrounding follow).
+            for let inner_alt of alts {
+                if inner_alt.elements.len() == 1 {
+                    intern_scan_for_element(&inner_alt.elements[0], ctx, outer_follow, outer_k_prefix, variant_mask, variant_k_prefix_mask);
+                }
+            }
+            return;
+        }
+        if is_general_group(alts) {
+            // lower_general_scan_group: walk each inner alt with the
+            // standard per-position follow.
+            for let inner_alt of alts {
+                walk_scan_alt(&inner_alt.elements, ctx, variant_mask, variant_k_prefix_mask);
+            }
+            return;
+        }
+        return;
+    }
+    if let Repeat(rep) = elem {
+        // lower_scan_repeat line 1526-1528: same iter_follow as parse
+        // side.
+        let mut visiting: Array<String> = [];
+        let inner_first = ctx.first_of_element(&rep.element, &mut visiting);
+        let iter_follow = union_kind_arrays(&inner_first, outer_follow);
+        let empty_k_mask: Array<Array<String>> = [];
+        intern_scan_for_element(&rep.element, ctx, &iter_follow, &empty_k_mask, variant_mask, variant_k_prefix_mask);
+        return;
+    }
+    if let Label(lab) = elem {
+        intern_scan_for_element(&lab.element, ctx, outer_follow, outer_k_prefix, variant_mask, variant_k_prefix_mask);
         return;
     }
     // `Not`, `TokenRef`, `Literal`, `Wildcard`: leaves with no RuleRef.

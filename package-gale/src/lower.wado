@@ -67,6 +67,7 @@ use {
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { GenContext, is_nullable, union_kind_arrays, FOLLOW_VARIANT_MAX_K } from "./gen_context.wado";
+use { register_follow_variants } from "./follow_env.wado";
 use { strip_suffix } from "./gen_util.wado";
 use { compute_prefix_self_ref_min_prec } from "./lr_util.wado";
 use { TreeMap } from "core:collections";
@@ -145,6 +146,14 @@ pub fn lower_with_ctx(grammar: &Grammar, lit_tokens: &Array<LitToken>, ctx: &mut
     // walking. Caches (first / nullable / single-token / scannable
     // / tail-greedy) survive across the lower-then-emit boundary
     // and only get computed once.
+
+    // Follow-variant pre-pass: populates the registry before any
+    // element walk consults it via `lookup_follow_variant_id`.
+    // Idempotent on repeat invocation (entries are keyed on the
+    // canonical triple), so callers that pre-populate the registry
+    // are not penalised.
+    register_follow_variants(&grammar.parser_rules, ctx);
+
     let mut parser_rules: Array<Rule> = [];
     let empty_mask: Array<String> = [];
     let empty_k_mask: Array<Array<String>> = [];
@@ -1396,7 +1405,10 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &Array
         }),
         RuleRef(r) => ScanElement::RuleCall(ScanRuleCallElem {
             target_snake: r.snake_name,
-            variant_id: ctx.intern_follow_variant(&r.name, outer_follow, outer_k_prefix, true),
+            // Pure lookup: `FollowEnv::register_follow_variants` runs
+            // before `lower_with_ctx` and pre-populates every variant
+            // triple via the scan-side `walk_scan_alt` walker.
+            variant_id: ctx.lookup_follow_variant_id(&r.name, outer_follow, outer_k_prefix, true),
             min_prec_arg: null,
         }),
         Wildcard(_) => ScanElement::Wildcard,
@@ -1888,7 +1900,10 @@ fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>, rule_name: &
         RuleRef(r) => Op::RuleCall(RuleCallOp {
             target_name: r.name,
             target_snake: r.snake_name,
-            variant_id: ctx.intern_follow_variant(&r.name, outer_follow, outer_k_prefix, false),
+            // Pure lookup: `FollowEnv::register_follow_variants` runs
+            // before `lower_with_ctx` and pre-populates every variant
+            // triple via the parse-side `walk_parse_alt` walker.
+            variant_id: ctx.lookup_follow_variant_id(&r.name, outer_follow, outer_k_prefix, false),
             min_prec_arg: null,
             field: dedup_name(&r.field_name, name_counts),
             dedup_base: r.field_name,
