@@ -361,51 +361,17 @@ impl Monomorphizer {
                     // key's module first, then fall back to `TraitEnv` so
                     // cross-module impls (e.g. `impl<T> Serialize for Option<T>`
                     // in `core:serde`) are still discoverable.
-                    // Deterministic two-step lookup, per issue #1110 (2):
-                    //
-                    // 1. Literal `(module_source, name)` lookup. Hits when
-                    //    the call-site producer already pointed at the
-                    //    template's home module — the common case for
-                    //    user-defined types and well-routed cross-module
-                    //    traits.
-                    //
-                    // 2. `TraitEnv::impl_module_for` fallback. Hits when
-                    //    a producer set `module_source` to the receiver
-                    //    type's module while the impl block actually lives
-                    //    in a third module (e.g. core's variadic
-                    //    `Tuple^InspectAlt::inspect_alt` is implemented in
-                    //    `core:prelude/tuple`, but the tuple type itself
-                    //    is declared in `core:prelude/types`; auto-derived
-                    //    code paths route through the type's module).
-                    //    `TraitEnv` is the single source of truth for
-                    //    where every impl block lives, so consulting it
-                    //    is a deterministic resolution, not a fall-back
-                    //    to the "current" module.
-                    //
-                    // There is no third step: inherent-method calls on
-                    // newtypes are resolved to the *base* type's module
-                    // by `resolver::method_call::resolve_method_call`, so
-                    // the literal lookup already hits.
+                    // Issue #1110 (1)(2): every producer sets
+                    // `FunctionRef::module_source` to the body's home
+                    // module — `resolver::method_call::resolve_method_call`,
+                    // `synthesis::traits` (via `resolve_impl_module_via_env`),
+                    // `synthesis::template::trait_impl_module`, etc.,
+                    // all query `TraitEnv` for the impl block's actual
+                    // module. The literal `(module_source, name)` lookup
+                    // is therefore total: a miss is an unreachable code
+                    // path, surfaced as a panic below.
                     let lookup_key = (key.module_source.clone(), key.name.clone());
-                    let mut generic_func = generic_functions.get(&lookup_key);
-                    if generic_func.is_none()
-                        && let Some(info) = key.method_info.as_ref()
-                        && let Some(trait_name) =
-                            info.base_trait_name.as_ref().or(info.trait_name.as_ref())
-                    {
-                        for candidate in [&info.base_struct_name, &info.struct_name] {
-                            if let Some(impl_module) = self.functions.trait_env.impl_module_for(
-                                candidate,
-                                trait_name,
-                                Some(&key.module_source),
-                            ) && let Some(gf) =
-                                generic_functions.get(&(impl_module.clone(), key.name.clone()))
-                            {
-                                generic_func = Some(gf);
-                                break;
-                            }
-                        }
-                    }
+                    let generic_func = generic_functions.get(&lookup_key);
                     // Generics have a defined home module by convention: a
                     // template that's queued for instantiation must exist in
                     // `generic_functions` either at the queue's own
