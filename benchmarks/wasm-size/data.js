@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779109696447,
+  "lastUpdate": 1779142836410,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23245,6 +23245,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5a78219dd2ae56a5833466f7a63ac47f06655cae"
         },
         "date": 1779109696222,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 490666,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f07f8da5af907003f7f5ea60c30acfab8d71f022",
+          "message": "Merge pull request #1115 from wado-lang/claude/fix-module-source-1tgTt\n\nfix(monomorphize): key generic_functions by (ModuleSource, name) and route every FunctionRef through TraitEnv",
+          "timestamp": "2026-05-19T07:14:27+09:00",
+          "tree_id": "f8024d699b2d3fb540d235e881d8dc86be67d02e",
+          "url": "https://github.com/wado-lang/wado/commit/f07f8da5af907003f7f5ea60c30acfab8d71f022"
+        },
+        "date": 1779142836198,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
