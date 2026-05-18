@@ -498,7 +498,34 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let trait_name = from_literal_info.trait_name.clone();
         let builder_type = from_literal_info.builder_type;
         let use_new_api = trait_name == "KeyValueLiteralBuilder";
-        let impl_module_source = self.current_module_source.clone();
+        // Resolve the builder impl's home module — that is where
+        // `Builder^Trait::new_literal` is registered, and (post-fix #1110)
+        // where the monomorphizer expects to find the template. Fall back to
+        // the receiver type's module, then to the current module if the
+        // builder lacks a defining module.
+        let builder_name_for_lookup = self
+            .struct_name_for_type(builder_type)
+            .unwrap_or_else(|| base_name.clone());
+        let builder_type_module = match self.type_table.borrow().get(builder_type) {
+            ResolvedType::Struct { module_source, .. }
+            | ResolvedType::GenericInstance { module_source, .. }
+            | ResolvedType::Enum { module_source, .. }
+            | ResolvedType::Variant { module_source, .. }
+            | ResolvedType::Newtype { module_source, .. }
+            | ResolvedType::Flags { module_source, .. }
+            | ResolvedType::GenericResource { module_source, .. } => Some(module_source.clone()),
+            _ => None,
+        };
+        let impl_module_source = self
+            .trait_env
+            .impl_module_for(
+                &builder_name_for_lookup,
+                &trait_name,
+                builder_type_module.as_ref(),
+            )
+            .cloned()
+            .or(builder_type_module)
+            .unwrap_or_else(|| self.current_module_source.clone());
 
         let span = expr.span();
         let string_type = self
@@ -568,7 +595,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let new_call = TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
-                    module_source: impl_module_source,
+                    module_source: impl_module_source.clone(),
                     name: new_mangled_name,
                     monomorph_info: if type_arg_ids.is_empty() {
                         None
@@ -665,7 +692,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let insert_call = Self::build_tir_method_call(
                 receiver,
                 FunctionRef {
-                    module_source: self.current_module_source.clone(),
+                    module_source: impl_module_source.clone(),
                     name: insert_mangled_name.clone(),
                     monomorph_info: None,
                     method_info: Some(insert_method_info.clone()),
@@ -712,7 +739,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Self::build_tir_method_call(
                 builder_local_final,
                 FunctionRef {
-                    module_source: self.current_module_source.clone(),
+                    module_source: impl_module_source.clone(),
                     name: build_mangled_name,
                     monomorph_info: build_monomorph,
                     method_info: Some(build_method_info),

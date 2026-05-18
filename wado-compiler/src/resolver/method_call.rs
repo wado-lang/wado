@@ -648,11 +648,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
 
-        // Use trait impl module source if this is a trait method,
-        // otherwise use the struct's module (where inherent methods are defined)
-        let method_module_source = trait_impl_module_source
-            .or(Some(struct_module.clone()))
-            .unwrap_or_else(|| self.current_module_source.clone());
+        // `module_source` is the body's home module: prefer the trait-impl
+        // block's module (cross-module trait impls like `impl Display for
+        // String` in `core:prelude/format`), then the receiver type's module
+        // (inherent methods live alongside the type).
+        let method_module_source = trait_impl_module_source.unwrap_or_else(|| struct_module.clone());
 
         // Record use->def for jump-to-definition on the method name token.
         if let Some(method_ast_id) = self.find_impl_method_ast_id(

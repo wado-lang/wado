@@ -348,6 +348,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 Item::Resource(r) if r.name == struct_name => {
                     return self.current_module_source.clone();
                 }
+                Item::Variant(v) if v.name == struct_name => {
+                    return self.current_module_source.clone();
+                }
+                Item::Enum(e) if e.name == struct_name => {
+                    return self.current_module_source.clone();
+                }
                 _ => {}
             }
         }
@@ -360,6 +366,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         return module_source.clone();
                     }
                     Item::Resource(r) if r.name == struct_name => {
+                        return module_source.clone();
+                    }
+                    Item::Variant(v) if v.name == struct_name => {
+                        return module_source.clone();
+                    }
+                    Item::Enum(e) if e.name == struct_name => {
                         return module_source.clone();
                     }
                     _ => {}

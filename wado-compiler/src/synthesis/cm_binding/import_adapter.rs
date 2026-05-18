@@ -707,7 +707,7 @@ pub(super) fn synthesize_adapter(
                         local_ref(param_local, param_name, array_type_id),
                         &names.array,
                         "len",
-                        ModuleSource::prelude(),
+                        ModuleSource::array(),
                         vec![],
                         TypeTable::I32,
                     ),

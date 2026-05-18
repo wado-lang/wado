@@ -24,17 +24,41 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::FreeFunctionName;
 
-/// Returns the key used to store/look up a generic function in the global function map.
+/// Key used to store/look up a generic function in the global function map.
 ///
-/// Methods use their unqualified name — the struct name already provides namespace.
-/// Free functions are module-qualified to keep same-named generics from different
-/// modules distinct (e.g., `wrap<T>` in `mod_a` vs `mod_b`).
-fn generic_function_key(is_method: bool, module_source: &ModuleSource, name: &str) -> String {
+/// `module_source` is the function body's home module (where it is registered
+/// in `Package::functions` as `(ModuleSource, name)`). Two generic methods
+/// that share a mangled name across different modules — for instance, a
+/// `struct Tuple` in a user module vs. core's variadic-tuple impl in
+/// `core:prelude/tuple` — coexist in this map because their keys differ by
+/// `module_source`. Without this disambiguation, the second insertion silently
+/// overwrites the first and `try_queue_function` picks up the wrong template.
+pub(crate) type GenericFunctionKey = (ModuleSource, String);
+
+/// The bare-string form of the function name used inside `InstantiationKey.name`
+/// (which downstream codegen feeds into `mangle_generic_name`).
+///
+/// Methods stay unqualified — the struct name already provides namespace.
+/// Free functions get a module-qualified `FreeFunctionName` string so the
+/// post-mono mangled name is stable across modules.
+fn generic_function_name(is_method: bool, module_source: &ModuleSource, name: &str) -> String {
     if is_method {
         name.to_string()
     } else {
         FreeFunctionName::from_module_source(module_source, name).to_string()
     }
+}
+
+/// `(module_source, generic_function_name(...))` — the canonical lookup key.
+fn generic_function_key(
+    is_method: bool,
+    module_source: &ModuleSource,
+    name: &str,
+) -> GenericFunctionKey {
+    (
+        module_source.clone(),
+        generic_function_name(is_method, module_source, name),
+    )
 }
 
 use crate::flat_package::FlatPackage;
@@ -56,7 +80,7 @@ pub fn monomorphize(flat: &mut FlatPackage) {
 
     // Collect all generic functions from the flat list.
     // Link has already set module_source on each function.
-    let all_generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> = flat
+    let all_generic_functions: IndexMap<GenericFunctionKey, Rc<RefCell<TirFunction>>> = flat
         .functions
         .iter()
         .filter_map(|func_rc| {
@@ -163,7 +187,7 @@ impl Monomorphizer {
     fn monomorphize_with_externals(
         &mut self,
         mut module: TirModule,
-        external_generic_functions: &IndexMap<String, Rc<RefCell<TirFunction>>>,
+        external_generic_functions: &IndexMap<GenericFunctionKey, Rc<RefCell<TirFunction>>>,
         external_generic_structs: &IndexMap<(String, ModuleSource), TirStruct>,
     ) -> TirModule {
         // Phase 1: Collect all generic struct definitions keyed by (name, module_source).
@@ -230,7 +254,7 @@ impl Monomorphizer {
 
         // Phase 7: Collect all generic function definitions
         // Include both local functions AND external generic functions from other modules
-        let mut generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> =
+        let mut generic_functions: IndexMap<GenericFunctionKey, Rc<RefCell<TirFunction>>> =
             external_generic_functions.clone();
 
         for func_rc in &module.functions {
@@ -254,7 +278,7 @@ impl Monomorphizer {
         //
         // For transitive scanning, exclude bodyless functions (builtins like array_new,
         // array_set, etc.) which are codegen intrinsics and must not be re-monomorphized.
-        let scannable_generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> =
+        let scannable_generic_functions: IndexMap<GenericFunctionKey, Rc<RefCell<TirFunction>>> =
             generic_functions
                 .iter()
                 .filter(|(_, f)| f.borrow().body.is_some())
@@ -326,7 +350,8 @@ impl Monomorphizer {
             let mut batch: Vec<TirFunction> = Vec::new();
             while let Some(key) = self.functions.pending.pop() {
                 let concrete = {
-                    let generic_func = generic_functions.get(&key.name);
+                    let lookup_key = (key.module_source.clone(), key.name.clone());
+                    let generic_func = generic_functions.get(&lookup_key);
                     if let Some(gf) = generic_func {
                         let gf_borrowed = gf.borrow();
                         self.instantiate_function(
