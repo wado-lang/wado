@@ -3676,18 +3676,28 @@ fn try_lower_comparison(
             span,
         );
 
-        let (compare_op, case_name, case_index): (TirBinaryOp, &str, u32) = match op {
-            TirBinaryOp::Lt => (TirBinaryOp::Eq, "Less", 0),
-            TirBinaryOp::Gt => (TirBinaryOp::Eq, "Greater", 2),
-            TirBinaryOp::LtEq => (TirBinaryOp::NotEq, "Greater", 2),
-            TirBinaryOp::GtEq => (TirBinaryOp::NotEq, "Less", 0),
+        // Look up Ordering's `Less` / `Greater` cases through the
+        // `CompilerItem` registry so a stdlib rename of either case
+        // flows through this primitive-ord-dispatch path without touching
+        // the literal-case mapping table.
+        let items = type_table.compiler_items();
+        let (_, _, less_n, less_i) = items.require_enum_case(crate::compiler_item::CompilerItem::OrderingLess);
+        let (_, _, greater_n, greater_i) =
+            items.require_enum_case(crate::compiler_item::CompilerItem::OrderingGreater);
+        let less_n = less_n.to_string();
+        let greater_n = greater_n.to_string();
+        let (compare_op, case_name, case_index): (TirBinaryOp, String, u32) = match op {
+            TirBinaryOp::Lt => (TirBinaryOp::Eq, less_n.clone(), less_i),
+            TirBinaryOp::Gt => (TirBinaryOp::Eq, greater_n.clone(), greater_i),
+            TirBinaryOp::LtEq => (TirBinaryOp::NotEq, greater_n, greater_i),
+            TirBinaryOp::GtEq => (TirBinaryOp::NotEq, less_n, less_i),
             _ => unreachable!(),
         };
 
         let ordering_variant = TirExpr::new(
             TirExprKind::EnumConstruct {
                 enum_type: ordering_type_id,
-                case_name: case_name.to_string(),
+                case_name,
                 case_index,
             },
             ordering_type_id,

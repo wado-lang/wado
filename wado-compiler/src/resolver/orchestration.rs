@@ -247,6 +247,18 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             variant_decl.span,
                             logger,
                         );
+                        for (case_index, case) in variant_decl.cases.iter().enumerate() {
+                            super::item::register_variant_case_compiler_item(
+                                &type_table,
+                                &case.attrs,
+                                &variant_decl.name,
+                                &case.name,
+                                case_index as u32,
+                                module_source,
+                                case.span,
+                                logger,
+                            );
+                        }
                     }
                     Item::Enum(enum_decl) => {
                         // Insert with empty cases first - will be populated in second sub-pass
@@ -269,6 +281,18 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             enum_decl.span,
                             logger,
                         );
+                        for (case_index, case) in enum_decl.cases.iter().enumerate() {
+                            super::item::register_enum_case_compiler_item(
+                                &type_table,
+                                &case.attrs,
+                                &enum_decl.name,
+                                &case.name,
+                                case_index as u32,
+                                module_source,
+                                case.span,
+                                logger,
+                            );
+                        }
                     }
                     Item::Resource(resource_decl) => {
                         all_resource_types

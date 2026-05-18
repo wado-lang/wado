@@ -7,10 +7,13 @@
 #[compiler_item("ordering")]
 pub enum Ordering {
     /// The first value is less than the second.
+    #[compiler_item("ordering_less")]
     Less,
     /// The two values are equal.
+    #[compiler_item("ordering_equal")]
     Equal,
     /// The first value is greater than the second.
+    #[compiler_item("ordering_greater")]
     Greater,
 }
 
@@ -192,6 +195,7 @@ pub trait Shr {
 /// Trait for user-facing display formatting.
 /// Types implementing this trait can be formatted with `{x}` in template strings.
 /// All format traits write to a `Formatter` that wraps `&mut String`.
+#[compiler_item("display")]
 pub trait Display {
     /// Formats the value and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
@@ -204,6 +208,7 @@ pub trait Display {
 /// - Chars are quoted: `'A'`
 /// - Structs show field names: `Point { x: 10, y: 20 }`
 /// - Enums/Variants show type-qualified names: `Color::Red`
+#[compiler_item("inspect")]
 pub trait Inspect {
     /// Formats the value as a debug representation and writes to the given formatter.
     fn inspect(&self, f: &mut Formatter);
@@ -211,6 +216,7 @@ pub trait Inspect {
 
 /// Trait for formatting values as binary integers.
 /// Used with the `{x:b}` format specifier.
+#[compiler_item("binary")]
 pub trait Binary {
     /// Formats the value as binary and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
@@ -218,6 +224,7 @@ pub trait Binary {
 
 /// Trait for formatting values as octal integers.
 /// Used with the `{x:o}` format specifier.
+#[compiler_item("octal")]
 pub trait Octal {
     /// Formats the value as octal and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
@@ -225,6 +232,7 @@ pub trait Octal {
 
 /// Trait for formatting values as lowercase hexadecimal.
 /// Used with the `{x:x}` format specifier.
+#[compiler_item("lower_hex")]
 pub trait LowerHex {
     /// Formats the value as lowercase hex and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
@@ -232,6 +240,7 @@ pub trait LowerHex {
 
 /// Trait for formatting values as uppercase hexadecimal.
 /// Used with the `{x:X}` format specifier.
+#[compiler_item("upper_hex")]
 pub trait UpperHex {
     /// Formats the value as uppercase hex and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
@@ -239,6 +248,7 @@ pub trait UpperHex {
 
 /// Trait for formatting values in lowercase exponential notation.
 /// Used with the `{x:e}` format specifier.
+#[compiler_item("lower_exp")]
 pub trait LowerExp {
     /// Formats the value in lowercase exponential notation and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
@@ -246,6 +256,7 @@ pub trait LowerExp {
 
 /// Trait for formatting values in uppercase exponential notation.
 /// Used with the `{x:E}` format specifier.
+#[compiler_item("upper_exp")]
 pub trait UpperExp {
     /// Formats the value in uppercase exponential notation and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
@@ -255,6 +266,7 @@ pub trait UpperExp {
 /// Used with the `{x:#?}` format specifier.
 /// Produces multi-line indented output for composite types.
 /// Primitive types delegate to `Inspect::inspect`.
+#[compiler_item("inspect_alt")]
 pub trait InspectAlt {
     fn inspect_alt(&self, f: &mut Formatter);
 }
@@ -262,30 +274,35 @@ pub trait InspectAlt {
 /// Trait for alternate display formatting.
 /// Used with the `{x:#}` format specifier.
 /// If not explicitly implemented, auto-generated to delegate to `InspectAlt::inspect_alt`.
+#[compiler_item("display_alt")]
 pub trait DisplayAlt {
     fn fmt_alt(&self, f: &mut Formatter);
 }
 
 /// Trait for alternate binary formatting (with `0b` prefix).
 /// Used with the `{x:#b}` format specifier.
+#[compiler_item("binary_alt")]
 pub trait BinaryAlt {
     fn fmt_alt(&self, f: &mut Formatter);
 }
 
 /// Trait for alternate octal formatting (with `0o` prefix).
 /// Used with the `{x:#o}` format specifier.
+#[compiler_item("octal_alt")]
 pub trait OctalAlt {
     fn fmt_alt(&self, f: &mut Formatter);
 }
 
 /// Trait for alternate lowercase hex formatting (with `0x` prefix).
 /// Used with the `{x:#x}` format specifier.
+#[compiler_item("lower_hex_alt")]
 pub trait LowerHexAlt {
     fn fmt_alt(&self, f: &mut Formatter);
 }
 
 /// Trait for alternate uppercase hex formatting (with `0X` prefix).
 /// Used with the `{x:#X}` format specifier.
+#[compiler_item("upper_hex_alt")]
 pub trait UpperHexAlt {
     fn fmt_alt(&self, f: &mut Formatter);
 }

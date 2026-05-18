@@ -37,20 +37,44 @@ pub struct CmStdlibNames {
     pub array: String,
     pub option: String,
     pub result: String,
+    /// `Option::Some` case name + zero-based index.
+    pub some_name: String,
+    pub some_index: u32,
+    /// `Option::None` case name + zero-based index.
+    pub none_name: String,
+    pub none_index: u32,
+    /// `Result::Ok` case name + zero-based index.
+    pub ok_name: String,
+    pub ok_index: u32,
+    /// `Result::Err` case name + zero-based index.
+    pub err_name: String,
+    pub err_index: u32,
 }
 
 impl CmStdlibNames {
     /// Look up every name through the compiler-item registry attached
-    /// to `tt`. Cheap (four registry hits + four clones); callers
+    /// to `tt`. Cheap (a handful of registry hits + clones); callers
     /// should keep the value around for the duration of a CM-binding
     /// synthesis pass rather than rebuilding it per match arm.
     pub fn from_type_table(tt: &TypeTable) -> Self {
         let items = tt.compiler_items();
+        let (_, _, some_name, some_index) = items.require_variant_case(CompilerItem::OptionSome);
+        let (_, _, none_name, none_index) = items.require_variant_case(CompilerItem::OptionNone);
+        let (_, _, ok_name, ok_index) = items.require_variant_case(CompilerItem::ResultOk);
+        let (_, _, err_name, err_index) = items.require_variant_case(CompilerItem::ResultErr);
         Self {
             string: items.struct_name(CompilerItem::String).to_string(),
             array: items.struct_name(CompilerItem::Array).to_string(),
             option: items.variant_name(CompilerItem::Option).to_string(),
             result: items.variant_name(CompilerItem::Result).to_string(),
+            some_name: some_name.to_string(),
+            some_index,
+            none_name: none_name.to_string(),
+            none_index,
+            ok_name: ok_name.to_string(),
+            ok_index,
+            err_name: err_name.to_string(),
+            err_index,
         }
     }
 
@@ -65,6 +89,14 @@ impl CmStdlibNames {
             array: "Array".to_string(),
             option: "Option".to_string(),
             result: "Result".to_string(),
+            some_name: "Some".to_string(),
+            some_index: 0,
+            none_name: "None".to_string(),
+            none_index: 1,
+            ok_name: "Ok".to_string(),
+            ok_index: 0,
+            err_name: "Err".to_string(),
+            err_index: 1,
         }
     }
 }

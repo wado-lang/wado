@@ -17,14 +17,18 @@ pub struct Box<T> {
 /// Optional value - either Some(T) or None
 #[compiler_item("option")]
 pub variant Option<T> {
+    #[compiler_item("option_some")]
     Some(T),
+    #[compiler_item("option_none")]
     None,
 }
 
 /// Result type - either Ok(T) or Err(E)
 #[compiler_item("result")]
 pub variant Result<T, E> {
+    #[compiler_item("result_ok")]
     Ok(T),
+    #[compiler_item("result_err")]
     Err(E),
 }
 impl<T: Eq> Eq for Option<T> {

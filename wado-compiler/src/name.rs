@@ -52,6 +52,13 @@ pub const CLOSURE_CALL_METHOD: &str = "__call";
 /// convention — there is no Wado-side declaration to anchor it to.
 pub const CLOSURE_STRUCT_PREFIX: &str = "__Closure_";
 
+/// Canonical name of the synthesised closure-trait family (`Fn<N, Ret>`).
+/// Like [`CLOSURE_CALL_METHOD`] / [`CLOSURE_STRUCT_PREFIX`], the trait is
+/// compiler-internal — there is no Wado-side `trait Fn { ... }` declaration
+/// to attach a `#[compiler_item("...")]` to — so a `const` is the right
+/// anchor shape.
+pub const CLOSURE_FN_TRAIT: &str = "Fn";
+
 /// A free function name (not a method on a struct).
 ///
 /// Format: `{module_source}/{name}`

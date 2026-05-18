@@ -14,6 +14,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::resolver::trait_env::TraitEnv;
@@ -23,6 +24,73 @@ use crate::tir::{
     TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
+
+/// Snapshot of every `core:prelude/format` symbol name + case index the
+/// template-expansion synthesiser needs. Resolved once through the
+/// [`CompilerItem`] registry per template-string expansion, then threaded
+/// through the helpers so stdlib renames flow without touching synthesis
+/// sites — same shape as
+/// [`super::cm_binding::types::CmStdlibNames`].
+#[derive(Clone, Debug)]
+#[allow(dead_code)]
+pub(super) struct FormatStdlibNames {
+    pub formatter: String,
+    pub alignment: String,
+    pub left_name: String,
+    pub left_index: u32,
+    pub center_name: String,
+    pub center_index: u32,
+    pub right_name: String,
+    pub right_index: u32,
+    pub display: String,
+    pub display_alt: String,
+    pub inspect: String,
+    pub inspect_alt: String,
+    pub binary: String,
+    pub binary_alt: String,
+    pub octal: String,
+    pub octal_alt: String,
+    pub lower_hex: String,
+    pub lower_hex_alt: String,
+    pub upper_hex: String,
+    pub upper_hex_alt: String,
+    pub lower_exp: String,
+    pub upper_exp: String,
+}
+
+impl FormatStdlibNames {
+    pub fn from_compiler_items(items: &CompilerItems) -> Self {
+        let (_, _, left_name, left_index) = items.require_enum_case(CompilerItem::AlignmentLeft);
+        let (_, _, center_name, center_index) =
+            items.require_enum_case(CompilerItem::AlignmentCenter);
+        let (_, _, right_name, right_index) =
+            items.require_enum_case(CompilerItem::AlignmentRight);
+        Self {
+            formatter: items.struct_name(CompilerItem::Formatter).to_string(),
+            alignment: items.enum_name(CompilerItem::Alignment).to_string(),
+            left_name: left_name.to_string(),
+            left_index,
+            center_name: center_name.to_string(),
+            center_index,
+            right_name: right_name.to_string(),
+            right_index,
+            display: items.trait_name(CompilerItem::Display).to_string(),
+            display_alt: items.trait_name(CompilerItem::DisplayAlt).to_string(),
+            inspect: items.trait_name(CompilerItem::Inspect).to_string(),
+            inspect_alt: items.trait_name(CompilerItem::InspectAlt).to_string(),
+            binary: items.trait_name(CompilerItem::Binary).to_string(),
+            binary_alt: items.trait_name(CompilerItem::BinaryAlt).to_string(),
+            octal: items.trait_name(CompilerItem::Octal).to_string(),
+            octal_alt: items.trait_name(CompilerItem::OctalAlt).to_string(),
+            lower_hex: items.trait_name(CompilerItem::LowerHex).to_string(),
+            lower_hex_alt: items.trait_name(CompilerItem::LowerHexAlt).to_string(),
+            upper_hex: items.trait_name(CompilerItem::UpperHex).to_string(),
+            upper_hex_alt: items.trait_name(CompilerItem::UpperHexAlt).to_string(),
+            lower_exp: items.trait_name(CompilerItem::LowerExp).to_string(),
+            upper_exp: items.trait_name(CompilerItem::UpperExp).to_string(),
+        }
+    }
+}
 
 /// Expand all `TemplateString` nodes in a module.
 ///
@@ -34,10 +102,12 @@ pub fn expand_templates(
     tt: &Rc<RefCell<TypeTable>>,
     trait_env: &Arc<TraitEnv>,
 ) {
+    let names = FormatStdlibNames::from_compiler_items(tt.borrow().compiler_items());
     let ctx = TemplateCtx {
         tt,
         module_src: module.module_source.clone(),
         trait_env,
+        names: &names,
     };
     for func_rc in &module.functions {
         let mut func = func_rc.borrow_mut();
@@ -79,6 +149,7 @@ struct TemplateCtx<'a> {
     tt: &'a Rc<RefCell<TypeTable>>,
     module_src: ModuleSource,
     trait_env: &'a Arc<TraitEnv>,
+    names: &'a FormatStdlibNames,
 }
 
 struct FuncLocalAlloc {
@@ -382,7 +453,7 @@ fn build_template_block(
 
     let formatter_type = tt
         .borrow_mut()
-        .make_struct("Formatter".to_string(), ModuleSource::format());
+        .make_struct(ctx.names.formatter.clone(), ModuleSource::format());
     let mut_ref_formatter = tt.borrow_mut().make_mut_ref(formatter_type);
     let ref_string_type = tt.borrow_mut().make_ref(string_type);
     let mut fmt_local_index: Option<u32> = None;
@@ -493,22 +564,22 @@ fn build_template_block(
                     .is_some_and(|fs| fs.type_char == Some('?'));
                 let is_alternate = format_spec.as_ref().is_some_and(|fs| fs.alternate);
 
-                let (trait_name, method_name) = match &format_spec {
+                let (trait_name, method_name): (&str, &str) = match &format_spec {
                     Some(fs) => match (fs.type_char, fs.alternate) {
-                        (Some('b'), true) => ("BinaryAlt", "fmt_alt"),
-                        (Some('b'), false) => ("Binary", "fmt"),
-                        (Some('o'), true) => ("OctalAlt", "fmt_alt"),
-                        (Some('o'), false) => ("Octal", "fmt"),
-                        (Some('x'), true) => ("LowerHexAlt", "fmt_alt"),
-                        (Some('x'), false) => ("LowerHex", "fmt"),
-                        (Some('X'), true) => ("UpperHexAlt", "fmt_alt"),
-                        (Some('X'), false) => ("UpperHex", "fmt"),
-                        (Some('e'), _) => ("LowerExp", "fmt"),
-                        (Some('E'), _) => ("UpperExp", "fmt"),
-                        (_, true) => ("DisplayAlt", "fmt_alt"),
-                        _ => ("Display", "fmt"),
+                        (Some('b'), true) => (ctx.names.binary_alt.as_str(), "fmt_alt"),
+                        (Some('b'), false) => (ctx.names.binary.as_str(), "fmt"),
+                        (Some('o'), true) => (ctx.names.octal_alt.as_str(), "fmt_alt"),
+                        (Some('o'), false) => (ctx.names.octal.as_str(), "fmt"),
+                        (Some('x'), true) => (ctx.names.lower_hex_alt.as_str(), "fmt_alt"),
+                        (Some('x'), false) => (ctx.names.lower_hex.as_str(), "fmt"),
+                        (Some('X'), true) => (ctx.names.upper_hex_alt.as_str(), "fmt_alt"),
+                        (Some('X'), false) => (ctx.names.upper_hex.as_str(), "fmt"),
+                        (Some('e'), _) => (ctx.names.lower_exp.as_str(), "fmt"),
+                        (Some('E'), _) => (ctx.names.upper_exp.as_str(), "fmt"),
+                        (_, true) => (ctx.names.display_alt.as_str(), "fmt_alt"),
+                        _ => (ctx.names.display.as_str(), "fmt"),
                     },
-                    None => ("Display", "fmt"),
+                    None => (ctx.names.display.as_str(), "fmt"),
                 };
 
                 // Create or reassign Formatter local
@@ -520,6 +591,7 @@ fn build_template_block(
                         &format_spec,
                         span,
                         tt,
+                        ctx.names,
                     );
                     let assign = TirExpr::new(
                         TirExprKind::Assign {
@@ -548,6 +620,7 @@ fn build_template_block(
                         &format_spec,
                         span,
                         tt,
+                        ctx.names,
                     );
                     stmts.push(TirStmt::new(
                         TirStmtKind::Let {
@@ -581,10 +654,10 @@ fn build_template_block(
                 );
 
                 if is_inspect {
-                    let (it_name, im_name) = if is_alternate {
-                        ("InspectAlt", "inspect_alt")
+                    let (it_name, im_name): (&str, &str) = if is_alternate {
+                        (ctx.names.inspect_alt.as_str(), "inspect_alt")
                     } else {
-                        ("Inspect", "inspect")
+                        (ctx.names.inspect.as_str(), "inspect")
                     };
                     let call_stmts = trait_fmt_call(
                         resolved.type_id,
@@ -649,6 +722,7 @@ fn build_formatter_expr(
     parsed: &Option<TemplateFormatSpec>,
     span: Span,
     tt: &Rc<RefCell<TypeTable>>,
+    names: &FormatStdlibNames,
 ) -> TirExpr {
     let mut_ref_string = tt.borrow_mut().make_mut_ref(string_type);
     let buf_mut_ref = TirExpr::new(
@@ -681,10 +755,10 @@ fn build_formatter_expr(
             TirExprKind::Call {
                 func: FunctionRef {
                     module_source: ModuleSource::format(),
-                    name: "Formatter::new".to_string(),
+                    name: format!("{}::new", names.formatter),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        "Formatter".to_string(),
+                        names.formatter.clone(),
                         None,
                         "new".to_string(),
                     )),
@@ -700,23 +774,18 @@ fn build_formatter_expr(
     let pf = parsed.as_ref().unwrap();
     let alignment_type = tt
         .borrow_mut()
-        .make_enum("Alignment".to_string(), ModuleSource::format());
+        .make_enum(names.alignment.clone(), ModuleSource::format());
     let fill_char = pf.fill.unwrap_or(if pf.zero_pad { '0' } else { ' ' });
-    let align_index: u32 = match pf.align {
-        Some('<') => 0,
-        Some('^') => 1,
-        _ => 2,
-    };
-    let align_name = match align_index {
-        0 => "Left",
-        1 => "Center",
-        _ => "Right",
+    let (align_index, align_name): (u32, &str) = match pf.align {
+        Some('<') => (names.left_index, names.left_name.as_str()),
+        Some('^') => (names.center_index, names.center_name.as_str()),
+        _ => (names.right_index, names.right_name.as_str()),
     };
 
     TirExpr::new(
         TirExprKind::StructLiteral {
             struct_type: formatter_type,
-            struct_name: "Formatter".to_string(),
+            struct_name: names.formatter.clone(),
             fields: vec![
                 TirStructField {
                     name: "fill".to_string(),
@@ -987,7 +1056,7 @@ fn method_name_for_type(
             let arity = params.len().to_string();
             let ret_name = tt_ref.mangle_type_name(return_type);
             LocalMethodName::new(
-                "Fn".to_string(),
+                crate::name::CLOSURE_FN_TRAIT.to_string(),
                 Some(trait_name.to_string()),
                 method_name.to_string(),
             )

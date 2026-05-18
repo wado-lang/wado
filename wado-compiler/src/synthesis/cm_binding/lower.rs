@@ -406,6 +406,7 @@ pub(super) fn synthesize_lower_option_to_memory(
     type_table: &RefCell<TypeTable>,
 ) {
     let value_type_id = value.type_id;
+    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
 
     // Materialize value into a local so we can reference it multiple times
     let value_local = alloc_local(next_local, locals, value_type_id);
@@ -420,8 +421,8 @@ pub(super) fn synthesize_lower_option_to_memory(
             addr.clone(),
             variant_test(
                 local_ref(value_local, "__opt_val", value_type_id),
-                0,
-                "Some",
+                names.some_index,
+                &names.some_name,
             ),
         ],
         TypeTable::UNIT,
@@ -444,7 +445,7 @@ pub(super) fn synthesize_lower_option_to_memory(
     };
     let payload_expr = variant_payload(
         local_ref(value_local, "__opt_val", value_type_id),
-        0,
+        names.some_index,
         inner_type_id,
     );
 
@@ -462,8 +463,8 @@ pub(super) fn synthesize_lower_option_to_memory(
     stmts.push(if_stmt(
         variant_test(
             local_ref(value_local, "__opt_val", value_type_id),
-            0,
-            "Some",
+            names.some_index,
+            &names.some_name,
         ),
         block(case_stmts),
         None,
@@ -673,8 +674,8 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
         TypeTable::I32,
         variant_test(
             local_ref(val_local, &format!("{prefix}_optval"), vt),
-            0,
-            "Some",
+            names.some_index,
+            &names.some_name,
         ),
     ));
     flat_args.push(local_ref(
@@ -708,7 +709,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     };
     let payload_expr = variant_payload(
         local_ref(val_local, &format!("{prefix}_optval"), vt),
-        0, // case_index 0 = Some
+        names.some_index,
         inner_type_id,
     );
 
@@ -739,8 +740,8 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     stmts.push(if_stmt(
         variant_test(
             local_ref(val_local, &format!("{prefix}_optval"), vt),
-            0,
-            "Some",
+            names.some_index,
+            &names.some_name,
         ),
         block(some_stmts),
         None,

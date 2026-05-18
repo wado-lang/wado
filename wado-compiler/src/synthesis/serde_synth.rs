@@ -6,6 +6,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::IndexSet;
 
 use crate::module_source::ModuleSource;
@@ -17,6 +18,113 @@ use crate::tir::{
     TirStructField, TirTemplatePart, TirTypeParam, TypeId, TypeTable,
 };
 use crate::token::Span;
+
+/// Snapshot of every `core:serde` symbol name + case index this
+/// synthesiser needs, resolved once through the `CompilerItem`
+/// registry. Mirrors [`super::cm_binding::types::CmStdlibNames`]: built
+/// per-call, cheap (a handful of registry hits + clones), and threaded
+/// through the synthesis helpers so a stdlib rename of any of these
+/// items flows through every call site without touching Rust code.
+///
+/// All trait / struct / enum / case names live here together because
+/// every synthesised `Serialize` / `Deserialize` impl reaches for the
+/// full set; splitting the snapshot per-item would just multiply the
+/// borrow points without making any one site cleaner.
+#[derive(Clone, Debug)]
+#[allow(dead_code)]
+pub(super) struct SerdeStdlibNames {
+    pub serialize: String,
+    pub deserialize: String,
+    pub serializer: String,
+    pub deserializer: String,
+    pub serialize_struct: String,
+    pub serialize_seq: String,
+    pub serialize_variant: String,
+    pub deserialize_struct: String,
+    pub deserialize_seq: String,
+    pub deserialize_variant: String,
+    pub serialize_error: String,
+    pub serialize_error_kind: String,
+    pub deserialize_error: String,
+    pub deserialize_error_kind: String,
+    pub ok_name: String,
+    pub ok_index: u32,
+    pub err_name: String,
+    pub err_index: u32,
+    pub some_name: String,
+    pub some_index: u32,
+    pub none_name: String,
+    pub none_index: u32,
+    pub ser_err_custom_name: String,
+    pub ser_err_custom_index: u32,
+    pub deser_err_missing_field_name: String,
+    pub deser_err_missing_field_index: u32,
+    pub deser_err_unknown_variant_name: String,
+    pub deser_err_unknown_variant_index: u32,
+    pub deser_err_invalid_value_name: String,
+    pub deser_err_invalid_value_index: u32,
+}
+
+impl SerdeStdlibNames {
+    pub fn from_compiler_items(items: &CompilerItems) -> Self {
+        let (_, _, ok_name, ok_index) = items.require_variant_case(CompilerItem::ResultOk);
+        let (_, _, err_name, err_index) = items.require_variant_case(CompilerItem::ResultErr);
+        let (_, _, some_name, some_index) =
+            items.require_variant_case(CompilerItem::OptionSome);
+        let (_, _, none_name, none_index) =
+            items.require_variant_case(CompilerItem::OptionNone);
+        let (_, _, ser_err_custom_name, ser_err_custom_index) =
+            items.require_enum_case(CompilerItem::SerializeErrorKindCustom);
+        let (_, _, deser_err_missing_field_name, deser_err_missing_field_index) =
+            items.require_enum_case(CompilerItem::DeserializeErrorKindMissingField);
+        let (_, _, deser_err_unknown_variant_name, deser_err_unknown_variant_index) =
+            items.require_enum_case(CompilerItem::DeserializeErrorKindUnknownVariant);
+        let (_, _, deser_err_invalid_value_name, deser_err_invalid_value_index) =
+            items.require_enum_case(CompilerItem::DeserializeErrorKindInvalidValue);
+        Self {
+            serialize: items.trait_name(CompilerItem::Serialize).to_string(),
+            deserialize: items.trait_name(CompilerItem::Deserialize).to_string(),
+            serializer: items.trait_name(CompilerItem::Serializer).to_string(),
+            deserializer: items.trait_name(CompilerItem::Deserializer).to_string(),
+            serialize_struct: items.trait_name(CompilerItem::SerializeStruct).to_string(),
+            serialize_seq: items.trait_name(CompilerItem::SerializeSeq).to_string(),
+            serialize_variant: items
+                .trait_name(CompilerItem::SerializeVariant)
+                .to_string(),
+            deserialize_struct: items
+                .trait_name(CompilerItem::DeserializeStruct)
+                .to_string(),
+            deserialize_seq: items.trait_name(CompilerItem::DeserializeSeq).to_string(),
+            deserialize_variant: items
+                .trait_name(CompilerItem::DeserializeVariant)
+                .to_string(),
+            serialize_error: items.struct_name(CompilerItem::SerializeError).to_string(),
+            serialize_error_kind: items.enum_name(CompilerItem::SerializeErrorKind).to_string(),
+            deserialize_error: items
+                .struct_name(CompilerItem::DeserializeError)
+                .to_string(),
+            deserialize_error_kind: items
+                .enum_name(CompilerItem::DeserializeErrorKind)
+                .to_string(),
+            ok_name: ok_name.to_string(),
+            ok_index,
+            err_name: err_name.to_string(),
+            err_index,
+            some_name: some_name.to_string(),
+            some_index,
+            none_name: none_name.to_string(),
+            none_index,
+            ser_err_custom_name: ser_err_custom_name.to_string(),
+            ser_err_custom_index,
+            deser_err_missing_field_name: deser_err_missing_field_name.to_string(),
+            deser_err_missing_field_index,
+            deser_err_unknown_variant_name: deser_err_unknown_variant_name.to_string(),
+            deser_err_unknown_variant_index,
+            deser_err_invalid_value_name: deser_err_invalid_value_name.to_string(),
+            deser_err_invalid_value_index,
+        }
+    }
+}
 
 use super::common::{
     alloc_local, block, break_stmt, cast, deref_expr, expr_stmt, field_access, i32_const, if_stmt,
@@ -76,55 +184,49 @@ pub fn synthesize_serde(project: &mut Package) {
         if requests.is_empty() {
             continue;
         }
-        let (serialize_trait_name, deserialize_trait_name) = {
+        let names = {
             let tt = module.type_table.borrow();
-            let items = tt.compiler_items();
-            (
-                items
-                    .trait_name(crate::compiler_item::CompilerItem::Serialize)
-                    .to_string(),
-                items
-                    .trait_name(crate::compiler_item::CompilerItem::Deserialize)
-                    .to_string(),
-            )
+            SerdeStdlibNames::from_compiler_items(tt.compiler_items())
         };
         let existing = collect_existing_trait_methods(module);
         let mut generated = Vec::new();
 
         for req in &requests {
             let trait_name = req.trait_name.as_str();
-            if trait_name == serialize_trait_name {
+            if trait_name == names.serialize {
                 let key = MethodName::format_local(
                     &req.target_type_name,
-                    Some(&serialize_trait_name),
+                    Some(&names.serialize),
                     "serialize",
                 );
                 if existing.contains(&key) {
                     continue;
                 }
-                let func = generate_struct_serialize(module, req)
-                    .or_else(|| generate_enum_serialize(module, req))
-                    .or_else(|| generate_variant_serialize(module, req))
-                    .or_else(|| generate_flags_serialize(module, req));
+                let func = generate_struct_serialize(module, req, &names)
+                    .or_else(|| generate_enum_serialize(module, req, &names))
+                    .or_else(|| generate_variant_serialize(module, req, &names))
+                    .or_else(|| generate_flags_serialize(module, req, &names));
                 if let Some(f) = func {
                     generated.push(Rc::new(RefCell::new(f)));
                 }
-            } else if trait_name == deserialize_trait_name {
+            } else if trait_name == names.deserialize {
                 let key = MethodName::format_local(
                     &req.target_type_name,
-                    Some(&deserialize_trait_name),
+                    Some(&names.deserialize),
                     "deserialize",
                 );
                 if existing.contains(&key) {
                     continue;
                 }
-                if let Some((lookup_func, deser_func)) = generate_struct_deserialize(module, req) {
+                if let Some((lookup_func, deser_func)) =
+                    generate_struct_deserialize(module, req, &names)
+                {
                     generated.push(Rc::new(RefCell::new(lookup_func)));
                     generated.push(Rc::new(RefCell::new(deser_func)));
                 } else {
-                    let func = generate_enum_deserialize(module, req)
-                        .or_else(|| generate_variant_deserialize(module, req))
-                        .or_else(|| generate_flags_deserialize(module, req));
+                    let func = generate_enum_deserialize(module, req, &names)
+                        .or_else(|| generate_variant_deserialize(module, req, &names))
+                        .or_else(|| generate_flags_deserialize(module, req, &names));
                     if let Some(f) = func {
                         generated.push(Rc::new(RefCell::new(f)));
                     }
@@ -217,11 +319,12 @@ fn propagate_err_block(
     err_type: TypeId,
     outer_result_type: TypeId,
     span: Span,
+    names: &SerdeStdlibNames,
 ) -> TirBlock {
     let extract_err = TirExpr::new(
         TirExprKind::VariantPayload {
             expr: Box::new(local_ref(result_local, result_local_name, result_type)),
-            case_index: 1, // Err
+            case_index: names.err_index,
             payload_type: err_type,
         },
         err_type,
@@ -231,15 +334,16 @@ fn propagate_err_block(
         extract_err,
         outer_result_type,
         span,
+        names,
     )))])
 }
 
-fn variant_ok(value: TirExpr, result_type: TypeId, span: Span) -> TirExpr {
+fn variant_ok(value: TirExpr, result_type: TypeId, span: Span, names: &SerdeStdlibNames) -> TirExpr {
     TirExpr::new(
         TirExprKind::VariantConstruct {
             variant_type: result_type,
-            case_index: 0,
-            case_name: "Ok".to_string(),
+            case_index: names.ok_index,
+            case_name: names.ok_name.clone(),
             payload: Some(Box::new(value)),
         },
         result_type,
@@ -247,12 +351,12 @@ fn variant_ok(value: TirExpr, result_type: TypeId, span: Span) -> TirExpr {
     )
 }
 
-fn variant_err(value: TirExpr, result_type: TypeId, span: Span) -> TirExpr {
+fn variant_err(value: TirExpr, result_type: TypeId, span: Span, names: &SerdeStdlibNames) -> TirExpr {
     TirExpr::new(
         TirExprKind::VariantConstruct {
             variant_type: result_type,
-            case_index: 1,
-            case_name: "Err".to_string(),
+            case_index: names.err_index,
+            case_name: names.err_name.clone(),
             payload: Some(Box::new(value)),
         },
         result_type,
@@ -269,13 +373,14 @@ fn if_let_ok(
     then_block: TirBlock,
     else_block: TirBlock,
     span: Span,
+    names: &SerdeStdlibNames,
 ) -> TirStmt {
     TirStmt::new(
         TirStmtKind::IfLet {
             scrutinee,
             pattern: TirPattern::Variant {
                 enum_type: result_type,
-                variant_name: "Ok".to_string(),
+                variant_name: names.ok_name.clone(),
                 bindings: vec![TirPattern::Binding {
                     name: ok_name.to_string(),
                     local_index: ok_local,
@@ -299,13 +404,14 @@ fn if_let_some(
     then_block: TirBlock,
     else_block: TirBlock,
     span: Span,
+    names: &SerdeStdlibNames,
 ) -> TirStmt {
     TirStmt::new(
         TirStmtKind::IfLet {
             scrutinee,
             pattern: TirPattern::Variant {
                 enum_type: option_type,
-                variant_name: "Some".to_string(),
+                variant_name: names.some_name.clone(),
                 bindings: vec![TirPattern::Binding {
                     name: inner_name.to_string(),
                     local_index: inner_local,
@@ -326,19 +432,20 @@ fn serialize_error_literal(
     message: &str,
     string_type: TypeId,
     span: Span,
+    names: &SerdeStdlibNames,
 ) -> TirExpr {
     TirExpr::new(
         TirExprKind::StructLiteral {
             struct_type: error_type,
-            struct_name: "SerializeError".to_string(),
+            struct_name: names.serialize_error.clone(),
             fields: vec![
                 TirStructField {
                     name: "kind".to_string(),
                     value: TirExpr::new(
                         TirExprKind::EnumConstruct {
                             enum_type: error_kind_type,
-                            case_index: 1,
-                            case_name: "Custom".to_string(),
+                            case_index: names.ser_err_custom_index,
+                            case_name: names.ser_err_custom_name.clone(),
                         },
                         error_kind_type,
                         span,
@@ -365,11 +472,12 @@ fn deserialize_error_literal(
     message: &str,
     string_type: TypeId,
     span: Span,
+    names: &SerdeStdlibNames,
 ) -> TirExpr {
     TirExpr::new(
         TirExprKind::StructLiteral {
             struct_type: error_type,
-            struct_name: "DeserializeError".to_string(),
+            struct_name: names.deserialize_error.clone(),
             fields: vec![
                 TirStructField {
                     name: "kind".to_string(),
@@ -494,6 +602,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
 fn generate_struct_serialize(
     module: &TirModule,
     req: &crate::tir::SynthesisRequest,
+    names: &SerdeStdlibNames,
 ) -> Option<TirFunction> {
     let struct_def = find_struct(module, &req.target_type_name)?;
     let span = synth_span();
@@ -507,12 +616,12 @@ fn generate_struct_serialize(
     let mut_ref_s = tt.make_mut_ref(s_type_param);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
-    let ser_error_type = tt.make_struct("SerializeError".to_string(), serde_module.clone());
+    let ser_error_type = tt.make_struct(names.serialize_error.clone(), serde_module.clone());
     let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
     let struct_ser_type = tt.make_assoc_type_projection(
         s_type_param,
         "StructSerializer".to_string(),
-        vec!["SerializeStruct".to_string()],
+        vec![names.serialize_struct.clone()],
         vec![],
     );
     let result_ss_err = tt.make_result(struct_ser_type, ser_error_type);
@@ -557,7 +666,7 @@ fn generate_struct_serialize(
     let begin_call = type_param_method_call(
         local_ref(1, "s", mut_ref_s),
         "S",
-        "Serializer",
+        &names.serializer,
         "begin_struct",
         serde_module.clone(),
         vec![],
@@ -590,7 +699,7 @@ fn generate_struct_serialize(
         let field_call = type_param_method_call(
             local_ref(st_local, "st", mut_ref_ss),
             "S::StructSerializer",
-            "SerializeStruct",
+            &names.serialize_struct,
             "field",
             serde_module.clone(),
             vec![field_type_names[i].clone()],
@@ -612,7 +721,7 @@ fn generate_struct_serialize(
     let end_call = type_param_method_call(
         local_ref(st_local, "st", mut_ref_ss),
         "S::StructSerializer",
-        "SerializeStruct",
+        &names.serialize_struct,
         "end",
         serde_module,
         vec![],
@@ -630,6 +739,7 @@ fn generate_struct_serialize(
         ser_error_type,
         result_unit_err,
         span,
+        names,
     );
 
     stmts.push(if_let_ok(
@@ -641,15 +751,16 @@ fn generate_struct_serialize(
         block(then_stmts),
         else_block,
         span,
+        names,
     ));
 
     let method_info = LocalMethodName::new(
         req.target_type_name.clone(),
-        Some("Serialize".to_string()),
+        Some(names.serialize.clone()),
         "serialize".to_string(),
     );
     let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some("Serialize"), "serialize");
+        MethodName::format_local(&req.target_type_name, Some(&names.serialize), "serialize");
 
     Some(TirFunction {
         module_source: ModuleSource::default(),
@@ -663,7 +774,7 @@ fn generate_struct_serialize(
             name: "S".to_string(),
             is_effect: false,
             is_pack: false,
-            bounds: vec!["Serializer".to_string()],
+            bounds: vec![names.serializer.clone()],
             default: None,
             index: 0,
         }],
@@ -713,27 +824,22 @@ fn generate_struct_serialize(
 fn generate_struct_deserialize(
     module: &TirModule,
     req: &crate::tir::SynthesisRequest,
+    names: &SerdeStdlibNames,
 ) -> Option<(TirFunction, TirFunction)> {
     let struct_def = find_struct(module, &req.target_type_name)?;
     let span = synth_span();
     let module_source = module.module_source.clone();
     let serde_module = ModuleSource::serde();
 
-    let deserialize_trait_name = module
-        .type_table
-        .borrow()
-        .compiler_items()
-        .trait_name(crate::compiler_item::CompilerItem::Deserialize)
-        .to_string();
     let mut tt = module.type_table.borrow_mut();
 
     let struct_type = req.target_type_id;
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
     let option_i32 = tt.make_option(TypeTable::I32);
-    let deser_error_type = tt.make_struct("DeserializeError".to_string(), serde_module.clone());
+    let deser_error_type = tt.make_struct(names.deserialize_error.clone(), serde_module.clone());
     let deser_error_kind_type = tt
-        .find_enum_type("DeserializeErrorKind", &serde_module)
+        .find_enum_type(&names.deserialize_error_kind, &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_struct_err = tt.make_result(struct_type, deser_error_type);
     let lookup_fn_type = tt.make_function(
@@ -747,7 +853,7 @@ fn generate_struct_deserialize(
     let struct_access_type = tt.make_assoc_type_projection(
         d_type_param,
         "StructAccess".to_string(),
-        vec!["DeserializeStruct".to_string()],
+        vec![names.deserialize_struct.clone()],
         vec![],
     );
     let result_sa_err = tt.make_result(struct_access_type, deser_error_type);
@@ -845,7 +951,7 @@ fn generate_struct_deserialize(
     let begin_call = type_param_method_call(
         local_ref(0, "d", mut_ref_d),
         "D",
-        "Deserializer",
+        &names.deserializer,
         "begin_struct",
         serde_module.clone(),
         vec![],
@@ -916,7 +1022,7 @@ fn generate_struct_deserialize(
     let next_field_call = type_param_method_call(
         local_ref(sd_local, "sd", mut_ref_sa),
         "D::StructAccess",
-        "DeserializeStruct",
+        &names.deserialize_struct,
         "next_field",
         serde_module.clone(),
         vec![],
@@ -939,7 +1045,7 @@ fn generate_struct_deserialize(
         let value_call = type_param_method_call(
             local_ref(sd_local, "sd", mut_ref_sa),
             "D::StructAccess",
-            "DeserializeStruct",
+            &names.deserialize_struct,
             "value",
             serde_module.clone(),
             vec![field_type_names[i].clone()],
@@ -1001,8 +1107,10 @@ fn generate_struct_deserialize(
                     deser_error_type,
                     result_struct_err,
                     span,
+                    names,
                 ),
                 span,
+                names,
             ),
         ];
 
@@ -1017,7 +1125,7 @@ fn generate_struct_deserialize(
     let skip_call = type_param_method_call(
         local_ref(sd_local, "sd", mut_ref_sa),
         "D::StructAccess",
-        "DeserializeStruct",
+        &names.deserialize_struct,
         "skip",
         serde_module.clone(),
         vec![],
@@ -1055,6 +1163,7 @@ fn generate_struct_deserialize(
         block(vec![expr_stmt(match_expr)]),
         block(vec![break_stmt()]),
         span,
+        names,
     );
 
     let if_ok = if_let_ok(
@@ -1071,8 +1180,10 @@ fn generate_struct_deserialize(
             deser_error_type,
             result_struct_err,
             span,
+            names,
         ),
         span,
+        names,
     );
     loop_stmts.push(if_ok);
 
@@ -1121,11 +1232,12 @@ fn generate_struct_deserialize(
             let missing_err = deserialize_error_literal(
                 deser_error_type,
                 deser_error_kind_type,
-                "MissingField",
-                1,
+                &names.deser_err_missing_field_name,
+                names.deser_err_missing_field_index,
                 "required field missing",
                 string_type,
                 span,
+                names,
             );
             then_stmts.push(if_stmt(
                 ne_check,
@@ -1133,6 +1245,7 @@ fn generate_struct_deserialize(
                     missing_err,
                     result_struct_err,
                     span,
+                    names,
                 )))]),
                 None,
             ));
@@ -1143,7 +1256,7 @@ fn generate_struct_deserialize(
     let end_call = type_param_method_call(
         local_ref(sd_local, "sd", mut_ref_sa),
         "D::StructAccess",
-        "DeserializeStruct",
+        &names.deserialize_struct,
         "end",
         serde_module,
         vec![],
@@ -1177,6 +1290,7 @@ fn generate_struct_deserialize(
         struct_lit,
         result_struct_err,
         span,
+        names,
     ))));
 
     let else_block = propagate_err_block(
@@ -1186,6 +1300,7 @@ fn generate_struct_deserialize(
         deser_error_type,
         result_struct_err,
         span,
+        names,
     );
 
     stmts.push(if_let_ok(
@@ -1197,16 +1312,17 @@ fn generate_struct_deserialize(
         block(then_stmts),
         else_block,
         span,
+        names,
     ));
 
     let method_info = LocalMethodName::new(
         req.target_type_name.clone(),
-        Some(deserialize_trait_name.clone()),
+        Some(names.deserialize.clone()),
         "deserialize".to_string(),
     );
     let qualified_name = MethodName::format_local(
         &req.target_type_name,
-        Some(&deserialize_trait_name),
+        Some(&names.deserialize),
         "deserialize",
     );
 
@@ -1222,7 +1338,7 @@ fn generate_struct_deserialize(
             name: "D".to_string(),
             is_effect: false,
             is_pack: false,
-            bounds: vec!["Deserializer".to_string()],
+            bounds: vec![names.deserializer.clone()],
             default: None,
             index: 0,
         }],
@@ -1403,11 +1519,12 @@ fn generate_lookup_function(
             block(vec![return_stmt(Some(option_some(
                 i32_const(i as i32),
                 option_i32,
+                compiler_items,
             )))]),
             None,
         ));
     }
-    stmts.push(return_stmt(Some(option_none(option_i32))));
+    stmts.push(return_stmt(Some(option_none(option_i32, compiler_items))));
 
     TirFunction {
         module_source: ModuleSource::default(),
@@ -1480,6 +1597,7 @@ fn find_variant<'a>(module: &'a TirModule, name: &str) -> Option<&'a crate::tir:
 fn generate_enum_serialize(
     module: &TirModule,
     req: &crate::tir::SynthesisRequest,
+    names: &SerdeStdlibNames,
 ) -> Option<TirFunction> {
     let enum_def = find_enum(module, &req.target_type_name)?;
     let span = synth_span();
@@ -1493,7 +1611,7 @@ fn generate_enum_serialize(
     let mut_ref_s = tt.make_mut_ref(s_type_param);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
-    let ser_error_type = tt.make_struct("SerializeError".to_string(), serde_module.clone());
+    let ser_error_type = tt.make_struct(names.serialize_error.clone(), serde_module.clone());
     let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
 
     let cases: Vec<(String, u32)> = enum_def
@@ -1516,7 +1634,7 @@ fn generate_enum_serialize(
         let call = type_param_method_call(
             local_ref(1, "s", mut_ref_s),
             "S",
-            "Serializer",
+            &names.serializer,
             "serialize_unit_variant",
             serde_module.clone(),
             vec![],
@@ -1563,11 +1681,11 @@ fn generate_enum_serialize(
 
     let method_info = LocalMethodName::new(
         req.target_type_name.clone(),
-        Some("Serialize".to_string()),
+        Some(names.serialize.clone()),
         "serialize".to_string(),
     );
     let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some("Serialize"), "serialize");
+        MethodName::format_local(&req.target_type_name, Some(&names.serialize), "serialize");
 
     Some(TirFunction {
         module_source: ModuleSource::default(),
@@ -1581,7 +1699,7 @@ fn generate_enum_serialize(
             name: "S".to_string(),
             is_effect: false,
             is_pack: false,
-            bounds: vec!["Serializer".to_string()],
+            bounds: vec![names.serializer.clone()],
             default: None,
             index: 0,
         }],
@@ -1631,20 +1749,18 @@ fn generate_enum_serialize(
 fn generate_enum_deserialize(
     module: &TirModule,
     req: &crate::tir::SynthesisRequest,
+    names: &SerdeStdlibNames,
 ) -> Option<TirFunction> {
     let enum_def = find_enum(module, &req.target_type_name)?;
     let span = synth_span();
     let serde_module = ModuleSource::serde();
 
-    let (eq_trait_name, deserialize_trait_name, string_struct_name) = {
+    let (eq_trait_name, string_struct_name) = {
         let tt = module.type_table.borrow();
         let items = tt.compiler_items();
         (
             items
                 .trait_name(crate::compiler_item::CompilerItem::Eq)
-                .to_string(),
-            items
-                .trait_name(crate::compiler_item::CompilerItem::Deserialize)
                 .to_string(),
             items
                 .struct_name(crate::compiler_item::CompilerItem::String)
@@ -1656,9 +1772,9 @@ fn generate_enum_deserialize(
     let enum_type = req.target_type_id;
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
-    let deser_error_type = tt.make_struct("DeserializeError".to_string(), serde_module.clone());
+    let deser_error_type = tt.make_struct(names.deserialize_error.clone(), serde_module.clone());
     let deser_error_kind_type = tt
-        .find_enum_type("DeserializeErrorKind", &serde_module)
+        .find_enum_type(&names.deserialize_error_kind, &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_enum_err = tt.make_result(enum_type, deser_error_type);
     let d_type_param = tt.make_type_param("D".to_string(), 0);
@@ -1666,7 +1782,7 @@ fn generate_enum_deserialize(
     let variant_access_type = tt.make_assoc_type_projection(
         d_type_param,
         "VariantAccess".to_string(),
-        vec!["DeserializeVariant".to_string()],
+        vec![names.deserialize_variant.clone()],
         vec![],
     );
     let result_va_err = tt.make_result(variant_access_type, deser_error_type);
@@ -1703,7 +1819,7 @@ fn generate_enum_deserialize(
     let begin_call = type_param_method_call(
         local_ref(0, "d", mut_ref_d),
         "D",
-        "Deserializer",
+        &names.deserializer,
         "begin_variant",
         serde_module.clone(),
         vec![],
@@ -1734,7 +1850,7 @@ fn generate_enum_deserialize(
     let disc_call = type_param_method_call(
         local_ref(va_local, "va", mut_ref_va),
         "D::VariantAccess",
-        "DeserializeVariant",
+        &names.deserialize_variant,
         "disc",
         serde_module.clone(),
         vec![],
@@ -1766,7 +1882,7 @@ fn generate_enum_deserialize(
         let end_call = type_param_method_call(
             local_ref(va_local, "va", mut_ref_va),
             "D::VariantAccess",
-            "DeserializeVariant",
+            &names.deserialize_variant,
             "end",
             serde_module.clone(),
             vec![],
@@ -1788,7 +1904,7 @@ fn generate_enum_deserialize(
 
         let if_body = block(vec![
             expr_stmt(end_call),
-            return_stmt(Some(variant_ok(enum_construct, result_enum_err, span))),
+            return_stmt(Some(variant_ok(enum_construct, result_enum_err, span, names))),
         ]);
         disc_then_stmts.push(if_stmt(condition, if_body, None));
     }
@@ -1797,16 +1913,18 @@ fn generate_enum_deserialize(
     let disc_unknown_err = deserialize_error_literal(
         deser_error_type,
         deser_error_kind_type,
-        "UnknownVariant",
-        2,
+        &names.deser_err_unknown_variant_name,
+        names.deser_err_unknown_variant_index,
         "unknown variant discriminant",
         string_type,
         span,
+        names,
     );
     disc_then_stmts.push(return_stmt(Some(variant_err(
         disc_unknown_err,
         result_enum_err,
         span,
+        names,
     ))));
 
     // if let Ok(__disc) = __disc_r { disc_matching } else { name fallback }
@@ -1818,7 +1936,7 @@ fn generate_enum_deserialize(
     let name_call = type_param_method_call(
         local_ref(va_local, "va", mut_ref_va),
         "D::VariantAccess",
-        "DeserializeVariant",
+        &names.deserialize_variant,
         "variant_name",
         serde_module.clone(),
         vec![],
@@ -1872,7 +1990,7 @@ fn generate_enum_deserialize(
         let end_call = type_param_method_call(
             local_ref(va_local, "va", mut_ref_va),
             "D::VariantAccess",
-            "DeserializeVariant",
+            &names.deserialize_variant,
             "end",
             serde_module.clone(),
             vec![],
@@ -1894,7 +2012,7 @@ fn generate_enum_deserialize(
 
         let if_body = block(vec![
             expr_stmt(end_call),
-            return_stmt(Some(variant_ok(enum_construct, result_enum_err, span))),
+            return_stmt(Some(variant_ok(enum_construct, result_enum_err, span, names))),
         ]);
         name_then_stmts.push(if_stmt(condition, if_body, None));
     }
@@ -1903,16 +2021,18 @@ fn generate_enum_deserialize(
     let unknown_err = deserialize_error_literal(
         deser_error_type,
         deser_error_kind_type,
-        "UnknownVariant",
-        2,
+        &names.deser_err_unknown_variant_name,
+        names.deser_err_unknown_variant_index,
         "unknown variant",
         string_type,
         span,
+        names,
     );
     name_then_stmts.push(return_stmt(Some(variant_err(
         unknown_err,
         result_enum_err,
         span,
+        names,
     ))));
 
     name_fallback_stmts.push(if_let_ok(
@@ -1929,8 +2049,10 @@ fn generate_enum_deserialize(
             deser_error_type,
             result_enum_err,
             span,
+            names,
         ),
         span,
+        names,
     ));
 
     // Wire up disc path with name fallback in else
@@ -1943,6 +2065,7 @@ fn generate_enum_deserialize(
         block(disc_then_stmts),
         block(name_fallback_stmts),
         span,
+        names,
     ));
 
     // Wire up: if let Ok(mut va) = __va_r { then_stmts } else { propagate err }
@@ -1960,18 +2083,20 @@ fn generate_enum_deserialize(
             deser_error_type,
             result_enum_err,
             span,
+            names,
         ),
         span,
+        names,
     ));
 
     let method_info = LocalMethodName::new(
         req.target_type_name.clone(),
-        Some(deserialize_trait_name.clone()),
+        Some(names.deserialize.clone()),
         "deserialize".to_string(),
     );
     let qualified_name = MethodName::format_local(
         &req.target_type_name,
-        Some(&deserialize_trait_name),
+        Some(&names.deserialize),
         "deserialize",
     );
 
@@ -1987,7 +2112,7 @@ fn generate_enum_deserialize(
             name: "D".to_string(),
             is_effect: false,
             is_pack: false,
-            bounds: vec!["Deserializer".to_string()],
+            bounds: vec![names.deserializer.clone()],
             default: None,
             index: 0,
         }],
@@ -2027,6 +2152,7 @@ fn generate_enum_deserialize(
 fn generate_variant_serialize(
     module: &TirModule,
     req: &crate::tir::SynthesisRequest,
+    names: &SerdeStdlibNames,
 ) -> Option<TirFunction> {
     let variant_def = find_variant(module, &req.target_type_name)?;
     let span = synth_span();
@@ -2040,15 +2166,15 @@ fn generate_variant_serialize(
     let mut_ref_s = tt.make_mut_ref(s_type_param);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
-    let ser_error_type = tt.make_struct("SerializeError".to_string(), serde_module.clone());
+    let ser_error_type = tt.make_struct(names.serialize_error.clone(), serde_module.clone());
     let ser_error_kind_type = tt
-        .find_enum_type("SerializeErrorKind", &serde_module)
+        .find_enum_type(&names.serialize_error_kind, &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
     let variant_ser_type = tt.make_assoc_type_projection(
         s_type_param,
         "VariantSerializer".to_string(),
-        vec!["SerializeVariant".to_string()],
+        vec![names.serialize_variant.clone()],
         vec![],
     );
     let result_vs_err = tt.make_result(variant_ser_type, ser_error_type);
@@ -2086,7 +2212,7 @@ fn generate_variant_serialize(
             let call = type_param_method_call(
                 local_ref(1, "s", mut_ref_s),
                 "S",
-                "Serializer",
+                &names.serializer,
                 "serialize_unit_variant",
                 serde_module.clone(),
                 vec![],
@@ -2132,7 +2258,7 @@ fn generate_variant_serialize(
             let begin_call = type_param_method_call(
                 local_ref(1, "s", mut_ref_s),
                 "S",
-                "Serializer",
+                &names.serializer,
                 "begin_variant",
                 serde_module.clone(),
                 vec![],
@@ -2162,7 +2288,7 @@ fn generate_variant_serialize(
             let payload_call = type_param_method_call(
                 local_ref(vs_local, "__vs", mut_ref_vs),
                 "S::VariantSerializer",
-                "SerializeVariant",
+                &names.serialize_variant,
                 "payload",
                 serde_module.clone(),
                 vec![payload_type_names[i].clone()],
@@ -2175,7 +2301,7 @@ fn generate_variant_serialize(
             let end_call = type_param_method_call(
                 local_ref(vs_local, "__vs", mut_ref_vs),
                 "S::VariantSerializer",
-                "SerializeVariant",
+                &names.serialize_variant,
                 "end",
                 serde_module.clone(),
                 vec![],
@@ -2191,6 +2317,7 @@ fn generate_variant_serialize(
                 "begin_variant failed",
                 string_type,
                 span,
+                names,
             );
 
             let then_block = block(vec![expr_stmt(payload_call), return_stmt(Some(end_call))]);
@@ -2198,6 +2325,7 @@ fn generate_variant_serialize(
                 err_val,
                 result_unit_err,
                 span,
+                names,
             )))]);
 
             let body_stmts = vec![
@@ -2211,6 +2339,7 @@ fn generate_variant_serialize(
                     then_block,
                     else_block,
                     span,
+                    names,
                 ),
             ];
 
@@ -2246,11 +2375,11 @@ fn generate_variant_serialize(
 
     let method_info = LocalMethodName::new(
         req.target_type_name.clone(),
-        Some("Serialize".to_string()),
+        Some(names.serialize.clone()),
         "serialize".to_string(),
     );
     let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some("Serialize"), "serialize");
+        MethodName::format_local(&req.target_type_name, Some(&names.serialize), "serialize");
 
     Some(TirFunction {
         module_source: ModuleSource::default(),
@@ -2264,7 +2393,7 @@ fn generate_variant_serialize(
             name: "S".to_string(),
             is_effect: false,
             is_pack: false,
-            bounds: vec!["Serializer".to_string()],
+            bounds: vec![names.serializer.clone()],
             default: None,
             index: 0,
         }],
@@ -2314,20 +2443,18 @@ fn generate_variant_serialize(
 fn generate_variant_deserialize(
     module: &TirModule,
     req: &crate::tir::SynthesisRequest,
+    names: &SerdeStdlibNames,
 ) -> Option<TirFunction> {
     let variant_def = find_variant(module, &req.target_type_name)?;
     let span = synth_span();
     let serde_module = ModuleSource::serde();
 
-    let (eq_trait_name, deserialize_trait_name, string_struct_name) = {
+    let (eq_trait_name, string_struct_name) = {
         let tt = module.type_table.borrow();
         let items = tt.compiler_items();
         (
             items
                 .trait_name(crate::compiler_item::CompilerItem::Eq)
-                .to_string(),
-            items
-                .trait_name(crate::compiler_item::CompilerItem::Deserialize)
                 .to_string(),
             items
                 .struct_name(crate::compiler_item::CompilerItem::String)
@@ -2339,9 +2466,9 @@ fn generate_variant_deserialize(
     let variant_type = req.target_type_id;
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
-    let deser_error_type = tt.make_struct("DeserializeError".to_string(), serde_module.clone());
+    let deser_error_type = tt.make_struct(names.deserialize_error.clone(), serde_module.clone());
     let deser_error_kind_type = tt
-        .find_enum_type("DeserializeErrorKind", &serde_module)
+        .find_enum_type(&names.deserialize_error_kind, &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_variant_err = tt.make_result(variant_type, deser_error_type);
     let d_type_param = tt.make_type_param("D".to_string(), 0);
@@ -2349,7 +2476,7 @@ fn generate_variant_deserialize(
     let variant_access_type = tt.make_assoc_type_projection(
         d_type_param,
         "VariantAccess".to_string(),
-        vec!["DeserializeVariant".to_string()],
+        vec![names.deserialize_variant.clone()],
         vec![],
     );
     let result_va_err = tt.make_result(variant_access_type, deser_error_type);
@@ -2391,7 +2518,7 @@ fn generate_variant_deserialize(
     let begin_call = type_param_method_call(
         local_ref(0, "d", mut_ref_d),
         "D",
-        "Deserializer",
+        &names.deserializer,
         "begin_variant",
         serde_module.clone(),
         vec![],
@@ -2420,7 +2547,7 @@ fn generate_variant_deserialize(
     let disc_call = type_param_method_call(
         local_ref(va_local, "va", mut_ref_va),
         "D::VariantAccess",
-        "DeserializeVariant",
+        &names.deserialize_variant,
         "disc",
         serde_module.clone(),
         vec![],
@@ -2454,7 +2581,7 @@ fn generate_variant_deserialize(
             let end_call = type_param_method_call(
                 local_ref(va_local, "va", mut_ref_va),
                 "D::VariantAccess",
-                "DeserializeVariant",
+                &names.deserialize_variant,
                 "end",
                 serde_module.clone(),
                 vec![],
@@ -2477,7 +2604,7 @@ fn generate_variant_deserialize(
 
             let if_body = block(vec![
                 expr_stmt(end_call),
-                return_stmt(Some(variant_ok(construct, result_variant_err, span))),
+                return_stmt(Some(variant_ok(construct, result_variant_err, span, names))),
             ]);
             disc_then_stmts.push(if_stmt(condition, if_body, None));
         } else {
@@ -2487,7 +2614,7 @@ fn generate_variant_deserialize(
             let payload_call = type_param_method_call(
                 local_ref(va_local, "va", mut_ref_va),
                 "D::VariantAccess",
-                "DeserializeVariant",
+                &names.deserialize_variant,
                 "payload",
                 serde_module.clone(),
                 vec![payload_type_names[i].clone()],
@@ -2500,7 +2627,7 @@ fn generate_variant_deserialize(
             let end_call = type_param_method_call(
                 local_ref(va_local, "va", mut_ref_va),
                 "D::VariantAccess",
-                "DeserializeVariant",
+                &names.deserialize_variant,
                 "end",
                 serde_module.clone(),
                 vec![],
@@ -2527,7 +2654,7 @@ fn generate_variant_deserialize(
 
             let ok_block = block(vec![
                 expr_stmt(end_call),
-                return_stmt(Some(variant_ok(construct, result_variant_err, span))),
+                return_stmt(Some(variant_ok(construct, result_variant_err, span, names))),
             ]);
 
             let if_body = block(vec![
@@ -2551,8 +2678,10 @@ fn generate_variant_deserialize(
                         deser_error_type,
                         result_variant_err,
                         span,
+                        names,
                     ),
                     span,
+                    names,
                 ),
             ]);
             disc_then_stmts.push(if_stmt(condition, if_body, None));
@@ -2562,16 +2691,18 @@ fn generate_variant_deserialize(
     let disc_unknown_err = deserialize_error_literal(
         deser_error_type,
         deser_error_kind_type,
-        "UnknownVariant",
-        2,
+        &names.deser_err_unknown_variant_name,
+        names.deser_err_unknown_variant_index,
         "unknown variant discriminant",
         string_type,
         span,
+        names,
     );
     disc_then_stmts.push(return_stmt(Some(variant_err(
         disc_unknown_err,
         result_variant_err,
         span,
+        names,
     ))));
 
     // --- name-based fallback ---
@@ -2580,7 +2711,7 @@ fn generate_variant_deserialize(
     let name_call = type_param_method_call(
         local_ref(va_local, "va", mut_ref_va),
         "D::VariantAccess",
-        "DeserializeVariant",
+        &names.deserialize_variant,
         "variant_name",
         serde_module.clone(),
         vec![],
@@ -2636,7 +2767,7 @@ fn generate_variant_deserialize(
             let end_call = type_param_method_call(
                 local_ref(va_local, "va", mut_ref_va),
                 "D::VariantAccess",
-                "DeserializeVariant",
+                &names.deserialize_variant,
                 "end",
                 serde_module.clone(),
                 vec![],
@@ -2659,7 +2790,7 @@ fn generate_variant_deserialize(
 
             let if_body = block(vec![
                 expr_stmt(end_call),
-                return_stmt(Some(variant_ok(construct, result_variant_err, span))),
+                return_stmt(Some(variant_ok(construct, result_variant_err, span, names))),
             ]);
             name_then_stmts.push(if_stmt(condition, if_body, None));
         } else {
@@ -2669,7 +2800,7 @@ fn generate_variant_deserialize(
             let payload_call = type_param_method_call(
                 local_ref(va_local, "va", mut_ref_va),
                 "D::VariantAccess",
-                "DeserializeVariant",
+                &names.deserialize_variant,
                 "payload",
                 serde_module.clone(),
                 vec![payload_type_names[i].clone()],
@@ -2682,7 +2813,7 @@ fn generate_variant_deserialize(
             let end_call = type_param_method_call(
                 local_ref(va_local, "va", mut_ref_va),
                 "D::VariantAccess",
-                "DeserializeVariant",
+                &names.deserialize_variant,
                 "end",
                 serde_module.clone(),
                 vec![],
@@ -2709,7 +2840,7 @@ fn generate_variant_deserialize(
 
             let ok_block = block(vec![
                 expr_stmt(end_call),
-                return_stmt(Some(variant_ok(construct, result_variant_err, span))),
+                return_stmt(Some(variant_ok(construct, result_variant_err, span, names))),
             ]);
 
             let if_body = block(vec![
@@ -2733,8 +2864,10 @@ fn generate_variant_deserialize(
                         deser_error_type,
                         result_variant_err,
                         span,
+                        names,
                     ),
                     span,
+                    names,
                 ),
             ]);
             name_then_stmts.push(if_stmt(condition, if_body, None));
@@ -2745,16 +2878,18 @@ fn generate_variant_deserialize(
     let unknown_err = deserialize_error_literal(
         deser_error_type,
         deser_error_kind_type,
-        "UnknownVariant",
-        2,
+        &names.deser_err_unknown_variant_name,
+        names.deser_err_unknown_variant_index,
         "unknown variant",
         string_type,
         span,
+        names,
     );
     name_then_stmts.push(return_stmt(Some(variant_err(
         unknown_err,
         result_variant_err,
         span,
+        names,
     ))));
 
     name_fallback_stmts.push(if_let_ok(
@@ -2771,8 +2906,10 @@ fn generate_variant_deserialize(
             deser_error_type,
             result_variant_err,
             span,
+            names,
         ),
         span,
+        names,
     ));
 
     // Wire up disc path with name fallback
@@ -2785,6 +2922,7 @@ fn generate_variant_deserialize(
         block(disc_then_stmts),
         block(name_fallback_stmts),
         span,
+        names,
     ));
 
     stmts.push(if_let_ok(
@@ -2801,18 +2939,20 @@ fn generate_variant_deserialize(
             deser_error_type,
             result_variant_err,
             span,
+            names,
         ),
         span,
+        names,
     ));
 
     let method_info = LocalMethodName::new(
         req.target_type_name.clone(),
-        Some(deserialize_trait_name.clone()),
+        Some(names.deserialize.clone()),
         "deserialize".to_string(),
     );
     let qualified_name = MethodName::format_local(
         &req.target_type_name,
-        Some(&deserialize_trait_name),
+        Some(&names.deserialize),
         "deserialize",
     );
 
@@ -2828,7 +2968,7 @@ fn generate_variant_deserialize(
             name: "D".to_string(),
             is_effect: false,
             is_pack: false,
-            bounds: vec!["Deserializer".to_string()],
+            bounds: vec![names.deserializer.clone()],
             default: None,
             index: 0,
         }],
@@ -2911,6 +3051,7 @@ fn flags_bit_check(ref_self_type: TypeId, flags_type: TypeId, bitmask: u32, span
 fn generate_flags_serialize(
     module: &TirModule,
     req: &crate::tir::SynthesisRequest,
+    names: &SerdeStdlibNames,
 ) -> Option<TirFunction> {
     let flags_def = find_flags(module, &req.target_type_name)?;
     let span = synth_span();
@@ -2930,15 +3071,15 @@ fn generate_flags_serialize(
     let mut_ref_s = tt.make_mut_ref(s_type_param);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
-    let ser_error_type = tt.make_struct("SerializeError".to_string(), serde_module.clone());
+    let ser_error_type = tt.make_struct(names.serialize_error.clone(), serde_module.clone());
     let ser_error_kind_type = tt
-        .find_enum_type("SerializeErrorKind", &serde_module)
+        .find_enum_type(&names.serialize_error_kind, &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
     let seq_ser_type = tt.make_assoc_type_projection(
         s_type_param,
         "SeqSerializer".to_string(),
-        vec!["SerializeSeq".to_string()],
+        vec![names.serialize_seq.clone()],
         vec![],
     );
     let result_seq_err = tt.make_result(seq_ser_type, ser_error_type);
@@ -2998,7 +3139,7 @@ fn generate_flags_serialize(
     let begin_call = type_param_method_call(
         local_ref(1, "s", mut_ref_s),
         "S",
-        "Serializer",
+        &names.serializer,
         "begin_seq",
         serde_module.clone(),
         vec![],
@@ -3021,7 +3162,7 @@ fn generate_flags_serialize(
         let element_call = type_param_method_call(
             local_ref(seq_local, "seq", mut_ref_seq),
             "S::SeqSerializer",
-            "SerializeSeq",
+            &names.serialize_seq,
             "element",
             serde_module.clone(),
             vec![string_struct_name.clone()],
@@ -3045,7 +3186,7 @@ fn generate_flags_serialize(
     let end_call = type_param_method_call(
         local_ref(seq_local, "seq", mut_ref_seq),
         "S::SeqSerializer",
-        "SerializeSeq",
+        &names.serialize_seq,
         "end",
         serde_module,
         vec![],
@@ -3063,11 +3204,13 @@ fn generate_flags_serialize(
         "begin_seq failed",
         string_type,
         span,
+        names,
     );
     let else_stmts = vec![return_stmt(Some(variant_err(
         err_val,
         result_unit_err,
         span,
+        names,
     )))];
 
     stmts.push(if_let_ok(
@@ -3079,15 +3222,16 @@ fn generate_flags_serialize(
         block(then_stmts),
         block(else_stmts),
         span,
+        names,
     ));
 
     let method_info = LocalMethodName::new(
         req.target_type_name.clone(),
-        Some("Serialize".to_string()),
+        Some(names.serialize.clone()),
         "serialize".to_string(),
     );
     let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some("Serialize"), "serialize");
+        MethodName::format_local(&req.target_type_name, Some(&names.serialize), "serialize");
 
     Some(TirFunction {
         module_source: ModuleSource::default(),
@@ -3101,7 +3245,7 @@ fn generate_flags_serialize(
             name: "S".to_string(),
             is_effect: false,
             is_pack: false,
-            bounds: vec!["Serializer".to_string()],
+            bounds: vec![names.serializer.clone()],
             default: None,
             index: 0,
         }],
@@ -3152,20 +3296,18 @@ fn generate_flags_serialize(
 fn generate_flags_deserialize(
     module: &TirModule,
     req: &crate::tir::SynthesisRequest,
+    names: &SerdeStdlibNames,
 ) -> Option<TirFunction> {
     let flags_def = find_flags(module, &req.target_type_name)?;
     let span = synth_span();
     let serde_module = ModuleSource::serde();
 
-    let (eq_trait_name, deserialize_trait_name, string_struct_name) = {
+    let (eq_trait_name, string_struct_name) = {
         let tt = module.type_table.borrow();
         let items = tt.compiler_items();
         (
             items
                 .trait_name(crate::compiler_item::CompilerItem::Eq)
-                .to_string(),
-            items
-                .trait_name(crate::compiler_item::CompilerItem::Deserialize)
                 .to_string(),
             items
                 .struct_name(crate::compiler_item::CompilerItem::String)
@@ -3179,16 +3321,16 @@ fn generate_flags_deserialize(
     let mut_ref_d = tt.make_mut_ref(d_type_param);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
-    let deser_error_type = tt.make_struct("DeserializeError".to_string(), serde_module.clone());
+    let deser_error_type = tt.make_struct(names.deserialize_error.clone(), serde_module.clone());
     let deser_error_kind_type = tt
-        .find_enum_type("DeserializeErrorKind", &serde_module)
+        .find_enum_type(&names.deserialize_error_kind, &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_flags_err = tt.make_result(flags_type, deser_error_type);
     let result_unit_err = tt.make_result(TypeTable::UNIT, deser_error_type);
     let seq_access_type = tt.make_assoc_type_projection(
         d_type_param,
         "SeqAccess".to_string(),
-        vec!["DeserializeSeq".to_string()],
+        vec![names.deserialize_seq.clone()],
         vec![],
     );
     let result_seq_err = tt.make_result(seq_access_type, deser_error_type);
@@ -3219,7 +3361,7 @@ fn generate_flags_deserialize(
     let begin_call = type_param_method_call(
         local_ref(0, "d", mut_ref_d),
         "D",
-        "Deserializer",
+        &names.deserializer,
         "begin_seq",
         serde_module.clone(),
         vec![],
@@ -3257,7 +3399,7 @@ fn generate_flags_deserialize(
     let next_call = type_param_method_call(
         local_ref(seq_local, "seq", mut_ref_seq),
         "D::SeqAccess",
-        "DeserializeSeq",
+        &names.deserialize_seq,
         "next_element",
         serde_module.clone(),
         vec![string_struct_name.clone()],
@@ -3364,15 +3506,17 @@ fn generate_flags_deserialize(
     let unknown_err = deserialize_error_literal_with_expr(
         deser_error_type,
         deser_error_kind_type,
-        "InvalidValue",
-        4,
+        &names.deser_err_invalid_value_name,
+        names.deser_err_invalid_value_index,
         unknown_msg,
         span,
+        names,
     );
     name_match_stmts.push(return_stmt(Some(variant_err(
         unknown_err,
         result_flags_err,
         span,
+        names,
     ))));
 
     // if let Some(name) = elem { match... } else { break }
@@ -3387,6 +3531,7 @@ fn generate_flags_deserialize(
         some_then,
         none_else,
         span,
+        names,
     );
 
     // if let Ok(elem) = __elem_r { if let Some... } else { propagate err }
@@ -3398,6 +3543,7 @@ fn generate_flags_deserialize(
         deser_error_type,
         result_flags_err,
         span,
+        names,
     );
     loop_body_stmts.push(if_let_ok(
         local_ref(elem_result_local, "__elem_r", result_option_string_err),
@@ -3408,6 +3554,7 @@ fn generate_flags_deserialize(
         ok_elem_then,
         ok_elem_else,
         span,
+        names,
     ));
 
     ok_stmts.push(loop_stmt(block(loop_body_stmts)));
@@ -3416,7 +3563,7 @@ fn generate_flags_deserialize(
     let end_call = type_param_method_call(
         local_ref(seq_local, "seq", mut_ref_seq),
         "D::SeqAccess",
-        "DeserializeSeq",
+        &names.deserialize_seq,
         "end",
         serde_module,
         vec![],
@@ -3433,6 +3580,7 @@ fn generate_flags_deserialize(
         bits_as_flags,
         result_flags_err,
         span,
+        names,
     ))));
 
     // if let Ok(mut seq) = __seq_r { ... } else { propagate err }
@@ -3450,18 +3598,20 @@ fn generate_flags_deserialize(
             deser_error_type,
             result_flags_err,
             span,
+            names,
         ),
         span,
+        names,
     ));
 
     let method_info = LocalMethodName::new(
         req.target_type_name.clone(),
-        Some(deserialize_trait_name.clone()),
+        Some(names.deserialize.clone()),
         "deserialize".to_string(),
     );
     let qualified_name = MethodName::format_local(
         &req.target_type_name,
-        Some(&deserialize_trait_name),
+        Some(&names.deserialize),
         "deserialize",
     );
 
@@ -3477,7 +3627,7 @@ fn generate_flags_deserialize(
             name: "D".to_string(),
             is_effect: false,
             is_pack: false,
-            bounds: vec!["Deserializer".to_string()],
+            bounds: vec![names.deserializer.clone()],
             default: None,
             index: 0,
         }],
@@ -3522,6 +3672,7 @@ fn deserialize_error_literal_with_expr(
     kind_index: u32,
     message_expr: TirExpr,
     span: Span,
+    names: &SerdeStdlibNames,
 ) -> TirExpr {
     let kind = TirExpr::new(
         TirExprKind::EnumConstruct {
@@ -3543,7 +3694,7 @@ fn deserialize_error_literal_with_expr(
     TirExpr::new(
         TirExprKind::StructLiteral {
             struct_type: deser_error_type,
-            struct_name: "DeserializeError".to_string(),
+            struct_name: names.deserialize_error.clone(),
             fields: vec![
                 TirStructField {
                     name: "kind".to_string(),

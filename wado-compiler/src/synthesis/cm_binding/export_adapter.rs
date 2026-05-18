@@ -368,8 +368,8 @@ fn lower_to_flat_inner(
                 TirExprKind::Cast {
                     expr: Box::new(variant_test(
                         local_ref(opt_local, "__opt_val", type_id),
-                        0,
-                        "Some",
+                        names.some_index,
+                        &names.some_name,
                     )),
                     target_type: TypeTable::I32,
                 },
@@ -723,12 +723,16 @@ pub(super) fn synthesize_lift_from_flat_params(
 
                 // if disc == 0 { None } else { Some(lift(inner_flat)) }
                 let result_local = alloc_local(next_local, locals, target_type_id);
+                let opt_none_expr = {
+                    let tt = type_table_cell.borrow();
+                    option_none(target_type_id, tt.compiler_items())
+                };
                 // Default: None
                 stmts.push(let_mut_stmt(
                     "__opt_result",
                     result_local,
                     target_type_id,
-                    option_none(target_type_id),
+                    opt_none_expr,
                 ));
 
                 // if disc != 0
@@ -736,9 +740,13 @@ pub(super) fn synthesize_lift_from_flat_params(
                 if inner_flat.is_empty() {
                     // Inner is unit — Some(())
                     let unit = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span());
+                    let opt_some_unit = {
+                        let tt = type_table_cell.borrow();
+                        option_some(unit, target_type_id, tt.compiler_items())
+                    };
                     then_stmts.push(expr_stmt(assign(
                         local_ref(result_local, "__opt_result", target_type_id),
-                        option_some(unit, target_type_id),
+                        opt_some_unit,
                     )));
                 } else {
                     let (inner_lifted, _) = synthesize_lift_from_flat_params(
@@ -753,9 +761,13 @@ pub(super) fn synthesize_lift_from_flat_params(
                         type_table_cell,
                         lift_ctx,
                     );
+                    let opt_some_inner = {
+                        let tt = type_table_cell.borrow();
+                        option_some(inner_lifted, target_type_id, tt.compiler_items())
+                    };
                     then_stmts.push(expr_stmt(assign(
                         local_ref(result_local, "__opt_result", target_type_id),
-                        option_some(inner_lifted, target_type_id),
+                        opt_some_inner,
                     )));
                 }
 
@@ -1176,11 +1188,18 @@ pub(super) fn synthesize_result_export_binding(
     err_stmts.push(return_stmt(None));
 
     // === Combine Ok/Err into if-else ===
+    let (ok_name_for_test, ok_index_for_test) = {
+        let tt = type_table.borrow();
+        let (_, _, n, i) = tt
+            .compiler_items()
+            .require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
+        (n.to_string(), i)
+    };
     body_stmts.push(if_stmt(
         variant_test(
             local_ref(result_local, "__result", user_return_type),
-            0,
-            "Ok",
+            ok_index_for_test,
+            &ok_name_for_test,
         ),
         block(ok_stmts),
         Some(block(err_stmts)),

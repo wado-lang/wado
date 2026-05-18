@@ -235,6 +235,89 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
     }
 }
 
+/// Register a single variant case's `#[compiler_item("...")]` annotation.
+///
+/// `parent_type` is the variant the case belongs to (e.g. `"Option"`).
+/// `case_index` is the zero-based position of the case in its declared
+/// order, which downstream consumers (pattern matching, variant
+/// construction) need in addition to the case name.
+pub(super) fn register_variant_case_compiler_item<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    parent_type: &str,
+    case_name: &str,
+    case_index: u32,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) {
+    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+        return;
+    };
+    if !check_compiler_item_placement(
+        item,
+        CompilerItemKind::VariantCase,
+        module_source,
+        span,
+        logger,
+    ) {
+        return;
+    }
+    let resolved = Resolved::VariantCase {
+        module_source: module_source.clone(),
+        parent_type: parent_type.to_string(),
+        name: case_name.to_string(),
+        case_index,
+    };
+    if let Err(err) = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved)
+    {
+        report_register_error(err, span, logger);
+    }
+}
+
+/// Register a single enum case's `#[compiler_item("...")]` annotation.
+/// See [`register_variant_case_compiler_item`] for the shape — same
+/// payload, different parent kind.
+pub(super) fn register_enum_case_compiler_item<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    parent_type: &str,
+    case_name: &str,
+    case_index: u32,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) {
+    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+        return;
+    };
+    if !check_compiler_item_placement(
+        item,
+        CompilerItemKind::EnumCase,
+        module_source,
+        span,
+        logger,
+    ) {
+        return;
+    }
+    let resolved = Resolved::EnumCase {
+        module_source: module_source.clone(),
+        parent_type: parent_type.to_string(),
+        name: case_name.to_string(),
+        case_index,
+    };
+    if let Err(err) = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved)
+    {
+        report_register_error(err, span, logger);
+    }
+}
+
 /// Register a `pub type [..T];` declaration's `#[compiler_item("tuple")]` annotation.
 pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,

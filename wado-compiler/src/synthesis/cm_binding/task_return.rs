@@ -269,6 +269,10 @@ fn generate_inline_task_return(
             }
             _ => panic!("Expected Result<T, E> type"),
         };
+        let items = tt.compiler_items();
+        let (_, _, ok_case_name, ok_case_index) =
+            items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
+        let ok_case_name = ok_case_name.to_string();
         drop(tt);
 
         // Store result in local
@@ -306,7 +310,7 @@ fn generate_inline_task_return(
         )));
         let ok_value = variant_payload(
             local_ref(result_local, "__task_ret", value_type_id),
-            0,
+            ok_case_index,
             ok_type_id,
         );
         let tt = type_table.borrow();
@@ -425,8 +429,8 @@ fn generate_inline_task_return(
         stmts.push(if_stmt(
             variant_test(
                 local_ref(result_local, "__task_ret", value_type_id),
-                0,
-                "Ok",
+                ok_case_index,
+                &ok_case_name,
             ),
             block(ok_stmts),
             Some(block(err_stmts)),

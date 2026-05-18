@@ -218,6 +218,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         scope.logger,
                     );
 
+                    for (case_index, case) in variant_decl.cases.iter().enumerate() {
+                        super::item::register_variant_case_compiler_item(
+                            &scope.type_table,
+                            &case.attrs,
+                            &variant_decl.name,
+                            &case.name,
+                            case_index as u32,
+                            &module_source,
+                            case.span,
+                            scope.logger,
+                        );
+                    }
+
                     drop(scope);
                 }
                 Item::Enum(enum_decl) => {
@@ -254,6 +267,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         enum_decl.span,
                         self.logger,
                     );
+                    for (case_index, case) in enum_decl.cases.iter().enumerate() {
+                        super::item::register_enum_case_compiler_item(
+                            &self.type_table,
+                            &case.attrs,
+                            &enum_decl.name,
+                            &case.name,
+                            case_index as u32,
+                            &self.current_module_source,
+                            case.span,
+                            self.logger,
+                        );
+                    }
                 }
                 Item::Flags(flags_decl) => {
                     // Create a distinct Flags type (not a newtype over u32)

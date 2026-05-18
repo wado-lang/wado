@@ -10,12 +10,16 @@
 
 use { Display, DisplayAlt, Inspect, InspectAlt } from "core:prelude/traits.wado";
 /// Text alignment for padding.
+#[compiler_item("alignment")]
 pub enum Alignment {
     /// Left-aligned: `{x:<5}` -> "42   "
+    #[compiler_item("alignment_left")]
     Left,
     /// Center-aligned: `{x:^5}` -> " 42  "
+    #[compiler_item("alignment_center")]
     Center,
     /// Right-aligned (default for numbers): `{x:>5}` -> "   42"
+    #[compiler_item("alignment_right")]
     Right,
 }
 /// Formatter that writes directly into a referenced output buffer.
@@ -26,6 +30,7 @@ pub enum Alignment {
 /// `[[fill]align][sign][#][0][width][.precision]type`
 ///
 /// Width and precision use -1 as sentinel for "not specified".
+#[compiler_item("formatter")]
 pub struct Formatter {
     /// Fill character for padding (default: ' ')
     pub fill: char,

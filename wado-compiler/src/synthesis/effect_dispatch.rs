@@ -1730,7 +1730,10 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             span,
         );
         let d_ref = ref_expr(d_local_expr, plan.inner_ref_type_id, span);
-        let some_d_ref = option_some(d_ref, plan.nullable_ref_type_id);
+        let some_d_ref = {
+            let tt = env.type_table.borrow();
+            option_some(d_ref, plan.nullable_ref_type_id, tt.compiler_items())
+        };
         prelude.push(TirStmt::new(
             TirStmtKind::Expr(TirExpr::new(
                 TirExprKind::GlobalVarSet {
