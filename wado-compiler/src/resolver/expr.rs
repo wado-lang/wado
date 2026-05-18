@@ -1270,6 +1270,46 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 };
 
+                // Same arm-agreement rule as the `Condition::Expr` arm
+                // below: when `expected_type=Some(X)` pinned `type_id`
+                // to `X` unconditionally, the chain and else blocks
+                // could still produce different types — a divergent
+                // `if let` branch in expression position would
+                // silently miscompile the same way the
+                // `Condition::Expr` arm did before this PR. Mirror
+                // the check here so both `if` shapes share the
+                // soundness guarantee. Skipped for `type_id == Unit`
+                // (statement-position use, branches drop their
+                // values per `translate_stmts`).
+                if expected_type.is_some() && type_id != TypeTable::UNIT {
+                    let chain_type = Self::block_result_type(&chain_block);
+                    self.check_branch_type(chain_type, type_id, if_expr.then_block.span);
+                    if let Some(eb) = &else_block {
+                        let else_type = Self::block_result_type(eb);
+                        self.check_branch_type(
+                            else_type,
+                            type_id,
+                            if_expr.else_block.as_ref().unwrap().span,
+                        );
+                    } else {
+                        // Missing `else` with a non-Unit expected
+                        // type: the implicit `else { () }` cannot
+                        // produce the expected type. Emit a
+                        // `TypeMismatch` anchored at the if-expression
+                        // span. Without this guard, at `-O0` the WIR
+                        // builder would emit a `(if (result T) ...)`
+                        // with a missing else branch and `wasmparser`
+                        // would reject the module; at `-O1+`
+                        // constant folding can mask the bug by
+                        // collapsing the if when the condition is
+                        // statically known. The resolver-recorded
+                        // diagnostic aborts compilation before WIR
+                        // build runs, so we don't need to mutate
+                        // `type_id` here.
+                        self.check_branch_type(TypeTable::UNIT, type_id, if_expr.span);
+                    }
+                }
+
                 TirExpr::new(TirExprKind::Block(chain_block), type_id, if_expr.span)
             }
             Condition::Expr(expr) => {
@@ -1364,6 +1404,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             type_id,
                             if_expr.else_block.as_ref().unwrap().span,
                         );
+                    } else {
+                        // See the `Condition::LetChain` arm for the
+                        // rationale. Without an explicit `else`, the
+                        // implicit branch is `()`, which cannot
+                        // satisfy a non-Unit expected type. Emit the
+                        // diagnostic; the surrounding context (e.g.
+                        // `let x: T = ...`) typically emits a
+                        // redundant secondary mismatch on the same
+                        // span, which the user will see as a single
+                        // grouped error in editor diagnostics. We
+                        // don't downgrade `type_id` here — the
+                        // resolver-recorded diagnostic will abort
+                        // compilation before WIR build runs, so the
+                        // result-typed `if` with no else never
+                        // reaches `wasmparser`.
+                        self.check_branch_type(TypeTable::UNIT, type_id, if_expr.span);
                     }
                 }
 
