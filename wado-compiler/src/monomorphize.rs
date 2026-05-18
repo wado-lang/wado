@@ -397,16 +397,36 @@ impl Monomorphizer {
                             }
                         }
                     }
-                    if let Some(gf) = generic_func {
-                        let gf_borrowed = gf.borrow();
-                        self.instantiate_function(
-                            &gf_borrowed,
-                            &key,
-                            &mut module.type_table.borrow_mut(),
+                    // Generics have a defined home module by convention: a
+                    // template that's queued for instantiation must exist in
+                    // `generic_functions` either at the queue's own
+                    // `module_source` (the common case) or at a module
+                    // reachable through `TraitEnv` / the inherent-method
+                    // scan (newtype-inherits-base and similar). If no
+                    // template is reachable, the call was registered as a
+                    // generic but no provider exists — surface it as a
+                    // compiler bug rather than silently dropping the
+                    // instantiation. A real failure here points at a
+                    // missing prelude definition or a synthesis path that
+                    // queues a key it never registered a template for.
+                    let gf = generic_func.unwrap_or_else(|| {
+                        panic!(
+                            "no generic template for queued instantiation \
+                             `{}` at module `{}` (impl_type_args={:?}, \
+                             method_type_args={:?}); a generic dispatch \
+                             must always have a defined home module",
+                            key.name,
+                            key.module_source,
+                            key.impl_type_args,
+                            key.method_type_args,
                         )
-                    } else {
-                        None
-                    }
+                    });
+                    let gf_borrowed = gf.borrow();
+                    self.instantiate_function(
+                        &gf_borrowed,
+                        &key,
+                        &mut module.type_table.borrow_mut(),
+                    )
                 };
 
                 if let Some(concrete) = concrete {
