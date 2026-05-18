@@ -93,22 +93,26 @@ fn receiver_module_hint(tt: &TypeTable, tid: TypeId) -> Option<ModuleSource> {
     }
 }
 
-/// Look up a generic function template in the global map, allowing the
-/// FunctionRef's `module_source` to be a *hint* rather than the authoritative
-/// home module. Returns `(resolved_module_source, &template)`.
+/// Look up a generic function template in the global map.
 ///
-/// Synthesis (Inspect/Display/Eq auto-derive bodies, serde field-call
-/// generation) often sets `module_source` to the receiver type's own module
-/// rather than the impl block's module. For user-written cross-module impls
-/// like `impl<T: Inspect> Inspect for Array<T>` in `core:prelude/format`,
-/// that hint is wrong and a direct `(module_source, name)` lookup misses.
-/// Fall back to `TraitEnv::impl_module_for` to find the impl block's home;
-/// `struct_candidates` is the ordered list of receiver-type names to try
-/// (e.g. `[info.base_struct_name, base_struct_from_receiver]` so newtype
-/// receivers can route through the underlying type when neither the newtype
-/// nor the literal hint hits). The caller uses the returned `ModuleSource`
-/// when building the `InstantiationKey` so the monomorphized copy lands in
-/// the same module as its template.
+/// `module_hint` is the most-specific guess for the template's home —
+/// usually the call site's `FunctionRef::module_source`. If the literal
+/// `(module_hint, name)` key misses, fall back to `TraitEnv::impl_module_for`
+/// over `struct_candidates` to find a user-written cross-module trait impl
+/// (e.g. `impl<T: Inspect> Inspect for Array<T>` lives in
+/// `core:prelude/format`, not in `Array<T>`'s own module). For inherent
+/// methods (no trait name on the call) also try `type_module_hint` directly
+/// — inherent impls live with their receiver type.
+///
+/// Returns just `&template` (not its module); the caller decides the
+/// `InstantiationKey::module_source`, since *where* the concrete copy
+/// lands is governed by the fixture-pinned contract that pre-substitution
+/// callers (`resolve_method_call_substitution`,
+/// `substitute_types_in_expr`) already encoded into the call's
+/// `FunctionRef::module_source`. Decoupling template location from
+/// instantiation location is what lets the variadic-tuple guard and the
+/// ref-blanket dispatch both keep working under the
+/// `(ModuleSource, String)` template keying.
 fn lookup_template_with_trait_fallback<'a, V>(
     generic_functions: &'a IndexMap<(ModuleSource, String), V>,
     trait_env: &TraitEnv,
@@ -117,9 +121,9 @@ fn lookup_template_with_trait_fallback<'a, V>(
     info: Option<&LocalMethodName>,
     struct_candidates: &[&str],
     type_module_hint: Option<&ModuleSource>,
-) -> Option<(ModuleSource, &'a V)> {
+) -> Option<&'a V> {
     if let Some(v) = generic_functions.get(&(module_hint.clone(), name.to_string())) {
-        return Some((module_hint.clone(), v));
+        return Some(v);
     }
     let trait_name = info.and_then(|i| i.base_trait_name.as_ref().or(i.trait_name.as_ref()));
     if let Some(trait_name) = trait_name {
@@ -129,7 +133,7 @@ fn lookup_template_with_trait_fallback<'a, V>(
                 && let Some(v) =
                     generic_functions.get(&(impl_module.clone(), name.to_string()))
             {
-                return Some((impl_module.clone(), v));
+                return Some(v);
             }
         }
         None
@@ -138,9 +142,7 @@ fn lookup_template_with_trait_fallback<'a, V>(
         // module (`impl<T> Array<T> { fn len ... }`). Newtypes peel through
         // their base via `receiver_module_hint`, so this picks up
         // `Array::len` even when called as `MyArray<i32>::len`.
-        generic_functions
-            .get(&(type_module.clone(), name.to_string()))
-            .map(|v| (type_module.clone(), v))
+        generic_functions.get(&(type_module.clone(), name.to_string()))
     } else {
         None
     }
@@ -289,7 +291,7 @@ impl Monomorphizer {
                         ));
                     }
                     for generic_method_name in names_to_try {
-                        if let Some((resolved_module, generic_func_rc)) =
+                        if let Some(generic_func_rc) =
                             lookup_template_with_trait_fallback(
                                 generic_functions,
                                 &self.functions.trait_env,
@@ -320,7 +322,7 @@ impl Monomorphizer {
                                 let method_info = generic_func.method_info.clone();
                                 let key = InstantiationKey {
                                     name: generic_method_name,
-                                    module_source: resolved_module,
+                                    module_source: func.module_source.clone(),
                                     impl_type_args: impl_type_args.clone(),
                                     method_type_args,
                                     method_info,
@@ -389,7 +391,7 @@ impl Monomorphizer {
                             } else {
                                 vec![&struct_name]
                             };
-                            if let Some((resolved_module, gf)) =
+                            if let Some(gf) =
                                 lookup_template_with_trait_fallback(
                                     generic_functions,
                                     &self.functions.trait_env,
@@ -410,7 +412,7 @@ impl Monomorphizer {
                                     });
                                 let key = InstantiationKey {
                                     name: full_method_name.clone(),
-                                    module_source: resolved_module,
+                                    module_source: method_func.module_source.clone(),
                                     impl_type_args: vec![],
                                     method_type_args: type_args.clone(),
                                     method_info: Some(method_info),
@@ -480,7 +482,7 @@ impl Monomorphizer {
                                     } else {
                                         vec![&base_struct]
                                     };
-                                    if let Some((resolved_module, generic_func_rc)) =
+                                    if let Some(generic_func_rc) =
                                         lookup_template_with_trait_fallback(
                                             generic_functions,
                                             &self.functions.trait_env,
@@ -502,7 +504,7 @@ impl Monomorphizer {
                                             );
                                             let key = InstantiationKey {
                                                 name: generic_method_name.clone(),
-                                                module_source: resolved_module,
+                                                module_source: method_func.module_source.clone(),
                                                 impl_type_args: impl_type_args.clone(),
                                                 method_type_args: type_args.clone(),
                                                 method_info: Some(method_info),
@@ -566,7 +568,7 @@ impl Monomorphizer {
                         } else {
                             vec![&base_struct]
                         };
-                        if let Some((resolved_module, generic_func_rc)) =
+                        if let Some(generic_func_rc) =
                             lookup_template_with_trait_fallback(
                                 generic_functions,
                                 &self.functions.trait_env,
@@ -636,7 +638,7 @@ impl Monomorphizer {
                                 let method_info = generic_func.method_info.clone();
                                 let key = InstantiationKey {
                                     name: generic_method_name.clone(),
-                                    module_source: resolved_module,
+                                    module_source: method_func.module_source.clone(),
                                     impl_type_args: effective_impl_type_args.clone(),
                                     method_type_args: method_type_args_for_key,
                                     method_info,
@@ -692,7 +694,7 @@ impl Monomorphizer {
                         } else {
                             vec![base_struct]
                         };
-                        if let Some((resolved_module, generic_func_rc)) =
+                        if let Some(generic_func_rc) =
                             lookup_template_with_trait_fallback(
                                 generic_functions,
                                 &self.functions.trait_env,
@@ -715,7 +717,7 @@ impl Monomorphizer {
                                 let method_info = generic_func.method_info.clone();
                                 let key = InstantiationKey {
                                     name: generic_method_name.clone(),
-                                    module_source: resolved_module,
+                                    module_source: method_func.module_source.clone(),
                                     impl_type_args: impl_type_args.clone(),
                                     method_type_args: method_type_args_for_key,
                                     method_info,
@@ -757,12 +759,12 @@ impl Monomorphizer {
                         &candidates,
                         receiver_module.as_ref(),
                     )
-                    .map(|(m, rc)| (m, Rc::clone(rc)))
+                    .map(Rc::clone)
                 } else {
                     None
                 };
                 if let (
-                    Some((resolved_module, generic_func_rc)),
+                    Some(generic_func_rc),
                     FunctionRef {
                         monomorph_info: Some(mono),
                         ..
@@ -828,7 +830,7 @@ impl Monomorphizer {
                     };
                     let key = InstantiationKey {
                         name: mono.generic_name.clone(),
-                        module_source: resolved_module,
+                        module_source: method_func.module_source.clone(),
                         impl_type_args: impl_ta,
                         method_type_args: method_ta,
                         method_info,
@@ -905,7 +907,7 @@ impl Monomorphizer {
                         } else {
                             vec![TypeTable::TUPLE_TYPE_NAME]
                         };
-                        if let Some((resolved_module, generic_func_rc)) =
+                        if let Some(generic_func_rc) =
                             lookup_template_with_trait_fallback(
                                 generic_functions,
                                 &self.functions.trait_env,
@@ -924,7 +926,7 @@ impl Monomorphizer {
                             drop(generic_func);
                             let key = InstantiationKey {
                                 name: generic_name,
-                                module_source: resolved_module,
+                                module_source: method_func.module_source.clone(),
                                 impl_type_args,
                                 method_type_args: vec![],
                                 method_info,

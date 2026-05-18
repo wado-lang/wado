@@ -350,8 +350,37 @@ impl Monomorphizer {
             let mut batch: Vec<TirFunction> = Vec::new();
             while let Some(key) = self.functions.pending.pop() {
                 let concrete = {
+                    // Templates live in the module that hosts the impl block;
+                    // the queueing convention puts the *instantiation* at the
+                    // receiver type's module (per the
+                    // `inspect_ref_array_field.wado` contract). Try the queue
+                    // key's module first, then fall back to `TraitEnv` so
+                    // cross-module impls (e.g. `impl<T> Serialize for Option<T>`
+                    // in `core:serde`) are still discoverable.
                     let lookup_key = (key.module_source.clone(), key.name.clone());
-                    let generic_func = generic_functions.get(&lookup_key);
+                    let mut generic_func = generic_functions.get(&lookup_key);
+                    if generic_func.is_none()
+                        && let Some(info) = key.method_info.as_ref()
+                        && let Some(trait_name) = info
+                            .base_trait_name
+                            .as_ref()
+                            .or(info.trait_name.as_ref())
+                    {
+                        for candidate in [&info.base_struct_name, &info.struct_name] {
+                            if let Some(impl_module) = self.functions.trait_env.impl_module_for(
+                                candidate,
+                                trait_name,
+                                Some(&key.module_source),
+                            ) {
+                                if let Some(gf) = generic_functions
+                                    .get(&(impl_module.clone(), key.name.clone()))
+                                {
+                                    generic_func = Some(gf);
+                                    break;
+                                }
+                            }
+                        }
+                    }
                     if let Some(gf) = generic_func {
                         let gf_borrowed = gf.borrow();
                         self.instantiate_function(
