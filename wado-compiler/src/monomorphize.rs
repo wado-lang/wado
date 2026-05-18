@@ -76,8 +76,6 @@ use state::Monomorphizer;
 /// 4. Writes results back to `FlatPackage`
 /// 5. Strips effect params (validated by prior effect checker)
 pub fn monomorphize(flat: &mut FlatPackage) {
-    let entry_module_source = flat.entry_module_source.clone();
-
     // Collect all generic functions from the flat list.
     // Link has already set module_source on each function.
     let all_generic_functions: IndexMap<GenericFunctionKey, Rc<RefCell<TirFunction>>> = flat
@@ -107,15 +105,14 @@ pub fn monomorphize(flat: &mut FlatPackage) {
 
     // Create a temporary TirModule with all flat data for monomorphization.
     // This reuses the existing Monomorphizer infrastructure without rewriting it.
-    let mut temp_module = TirModule::new(entry_module_source.clone());
+    let mut temp_module = TirModule::new(flat.entry_module_source.clone());
     temp_module.type_table = flat.type_table.clone();
     temp_module.functions = std::mem::take(&mut flat.functions);
     temp_module.structs = std::mem::take(&mut flat.structs);
     temp_module.globals = std::mem::take(&mut flat.globals);
 
     // Run monomorphization on the combined module.
-    // Use entry_module_source since all data is merged.
-    let mut monomorph = Monomorphizer::new(entry_module_source, flat.trait_env.clone());
+    let mut monomorph = Monomorphizer::new(flat.trait_env.clone());
     temp_module = monomorph.monomorphize_with_externals(
         temp_module,
         &all_generic_functions,
@@ -366,36 +363,33 @@ impl Monomorphizer {
                     // in `core:serde`) are still discoverable.
                     let lookup_key = (key.module_source.clone(), key.name.clone());
                     let mut generic_func = generic_functions.get(&lookup_key);
+                    // Cross-module trait-impl fallback: the queue's
+                    // `module_source` is the call-site's belief about where
+                    // the body lives, but for traits implemented in a third
+                    // module (e.g. `impl<T> Serialize for Option<T>` in
+                    // `core:serde`) the template lives in that impl block's
+                    // module. Consult `TraitEnv` to find it.
+                    //
+                    // No bare-name "any module" scan: inherent methods on
+                    // newtypes are resolved at the call site (their
+                    // `method_module_source` is the *base* type's module by
+                    // construction in `resolver::method_call`), so the
+                    // literal `(module_source, name)` lookup above hits.
                     if generic_func.is_none()
                         && let Some(info) = key.method_info.as_ref()
+                        && let Some(trait_name) =
+                            info.base_trait_name.as_ref().or(info.trait_name.as_ref())
                     {
-                        let trait_name = info.base_trait_name.as_ref().or(info.trait_name.as_ref());
-                        if let Some(trait_name) = trait_name {
-                            for candidate in [&info.base_struct_name, &info.struct_name] {
-                                if let Some(impl_module) = self.functions.trait_env.impl_module_for(
-                                    candidate,
-                                    trait_name,
-                                    Some(&key.module_source),
-                                ) && let Some(gf) =
-                                    generic_functions.get(&(impl_module.clone(), key.name.clone()))
-                                {
-                                    generic_func = Some(gf);
-                                    break;
-                                }
-                            }
-                        } else {
-                            // Inherent method: scan templates with the same name
-                            // (`Array::len`) in any module. This catches the
-                            // newtype-inherits-base case where the queue's
-                            // `module_source` is the newtype's home but the
-                            // template lives in the base type's module
-                            // (`Array::len` in `core:prelude/array` invoked via
-                            // `type MyArray<T> = Array<T>;` from a user module).
-                            for ((m, n), gf) in &generic_functions {
-                                if n == &key.name && m != &key.module_source {
-                                    generic_func = Some(gf);
-                                    break;
-                                }
+                        for candidate in [&info.base_struct_name, &info.struct_name] {
+                            if let Some(impl_module) = self.functions.trait_env.impl_module_for(
+                                candidate,
+                                trait_name,
+                                Some(&key.module_source),
+                            ) && let Some(gf) =
+                                generic_functions.get(&(impl_module.clone(), key.name.clone()))
+                            {
+                                generic_func = Some(gf);
+                                break;
                             }
                         }
                     }

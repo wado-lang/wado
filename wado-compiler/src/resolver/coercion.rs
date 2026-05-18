@@ -516,6 +516,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             | ResolvedType::GenericResource { module_source, .. } => Some(module_source.clone()),
             _ => None,
         };
+        // The builder's `Trait::new_literal` body lives in the impl-block's
+        // module (`KeyValueLiteralBuilder` impls in `core:prelude/internal`
+        // and the like), falling back to the builder type's own module
+        // for inherent / auto-derived impls. Both producer-side; no
+        // current-module fallback — if neither resolves, the builder
+        // has no callable `new_literal` and that's a synthesis bug.
         let impl_module_source = self
             .trait_env
             .impl_module_for(
@@ -525,7 +531,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             )
             .cloned()
             .or(builder_type_module)
-            .unwrap_or_else(|| self.current_module_source.clone());
+            .unwrap_or_else(|| {
+                panic!(
+                    "KeyValueLiteralBuilder coercion: no home module for \
+                     `{builder_name_for_lookup}^{trait_name}::new_literal` \
+                     (builder type has no defining module and no impl in `TraitEnv`)"
+                )
+            });
 
         let span = expr.span();
         let string_type = self

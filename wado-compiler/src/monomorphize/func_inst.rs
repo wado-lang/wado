@@ -22,11 +22,9 @@ use super::{generic_function_key, module_source_for_trait_impl};
 /// Lower remaining comparison operators on non-primitive types in all module functions.
 pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<TraitEnv>) {
     let type_table_rc = module.type_table.clone();
-    let module_source = module.module_source.clone();
 
     struct ComparisonLowerer<'a> {
         trait_env: &'a Arc<TraitEnv>,
-        current_module_source: &'a ModuleSource,
         type_table: &'a std::rc::Rc<std::cell::RefCell<TypeTable>>,
     }
 
@@ -46,7 +44,6 @@ pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<Trait
                 )
                 && let Some(new_kind) = try_lower_comparison(
                     self.trait_env,
-                    self.current_module_source,
                     expr.span,
                     *op,
                     left,
@@ -61,7 +58,6 @@ pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<Trait
 
     let mut lowerer = ComparisonLowerer {
         trait_env,
-        current_module_source: &module_source,
         type_table: &type_table_rc,
     };
 
@@ -1680,7 +1676,6 @@ impl Monomorphizer {
                         | TirBinaryOp::GtEq
                 ) && let Some(new_kind) = try_lower_comparison(
                     &self.functions.trait_env,
-                    &self.current_module_source,
                     expr.span,
                     *op,
                     left,
@@ -3810,7 +3805,6 @@ impl Monomorphizer {
 /// `Eq::eq` / `Ord::cmp` method calls. Returns `None` for primitives.
 fn try_lower_comparison(
     trait_env: &Arc<TraitEnv>,
-    current_module_source: &ModuleSource,
     span: crate::token::Span,
     op: TirBinaryOp,
     left: &TirExpr,
@@ -3889,6 +3883,12 @@ fn try_lower_comparison(
         // call resolves identically here and in receiver-substitution paths.
         // `type_mod` is also passed to disambiguate same-name receiver
         // types coming from different modules.
+        //
+        // `type_mod` is guaranteed `Some` by the outer match in
+        // `try_lower_comparison`, which returns `None` for any operand
+        // type that wouldn't have a defining module (primitives, function
+        // refs, tuples). Unwrapping below is therefore total under the
+        // calling contract.
         info.trait_name
             .as_deref()
             .and_then(|tn| {
@@ -3897,7 +3897,14 @@ fn try_lower_comparison(
                     .cloned()
             })
             .or(type_mod)
-            .unwrap_or_else(|| current_module_source.clone())
+            .unwrap_or_else(|| {
+                panic!(
+                    "comparison-lowering `resolve_module`: operand type \
+                     for `{}` has no defining module — `try_lower_comparison` \
+                     should have returned None before reaching this point",
+                    info.to_mangled_name()
+                )
+            })
     };
 
     if matches!(op, TirBinaryOp::Eq | TirBinaryOp::NotEq) {

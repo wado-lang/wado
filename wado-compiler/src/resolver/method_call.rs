@@ -648,12 +648,37 @@ impl<H: CompilerHost> Resolver<'_, H> {
         method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
 
-        // `module_source` is the body's home module: prefer the trait-impl
-        // block's module (cross-module trait impls like `impl Display for
-        // String` in `core:prelude/format`), then the receiver type's module
-        // (inherent methods live alongside the type).
-        let method_module_source =
-            trait_impl_module_source.unwrap_or_else(|| struct_module.clone());
+        // `module_source` is the body's home module. The body lives:
+        //   1. In the trait-impl block's module for cross-module trait impls
+        //      (e.g. `impl Display for String` in `core:prelude/format`).
+        //   2. In the *base* type's module when the method was inherited
+        //      through a newtype (`type MyArray<T> = Array<T>`; `arr.len()`
+        //      reaches `Array::len` in `core:prelude/array`, not the
+        //      newtype's module).
+        //   3. In the receiver type's module otherwise — inherent methods
+        //      live alongside the type they're declared on.
+        let method_module_source = trait_impl_module_source
+            .or_else(|| {
+                inherited_from_base.and_then(|base_id| {
+                    match self.type_table.borrow().get(base_id) {
+                        ResolvedType::Struct { module_source, .. }
+                        | ResolvedType::GenericInstance { module_source, .. }
+                        | ResolvedType::Enum { module_source, .. }
+                        | ResolvedType::Variant { module_source, .. }
+                        | ResolvedType::Newtype { module_source, .. }
+                        | ResolvedType::Flags { module_source, .. }
+                        | ResolvedType::GenericResource { module_source, .. } => {
+                            Some(module_source.clone())
+                        }
+                        ResolvedType::Primitive(_) | ResolvedType::Unit => {
+                            Some(ModuleSource::primitive())
+                        }
+                        ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
+                        _ => None,
+                    }
+                })
+            })
+            .unwrap_or_else(|| struct_module.clone());
 
         // Record use->def for jump-to-definition on the method name token.
         if let Some(method_ast_id) = self.find_impl_method_ast_id(

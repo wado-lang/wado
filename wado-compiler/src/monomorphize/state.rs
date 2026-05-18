@@ -116,10 +116,15 @@ impl FuncInstState {
     }
 }
 
-/// Monomorphizer collects generic instantiations and generates concrete types
+/// Monomorphizer collects generic instantiations and generates concrete types.
+///
+/// Per issue #1110 (4): there is no "current module" notion at this layer.
+/// Every `FunctionRef::module_source` is set by its producer to the body's
+/// home module, and the monomorphizer reads that field directly — never the
+/// monomorphizer's own location — to key into `generic_functions` /
+/// `instantiated`. Keeping a `current_module_source` here would invite the
+/// "fall back to the current module" pattern the issue forbids.
 pub(super) struct Monomorphizer {
-    /// The module source where monomorphized entities are being generated
-    pub current_module_source: ModuleSource,
     pub structs: StructInstState,
     pub functions: FuncInstState,
     /// Number of impl-level type params in the function currently being instantiated.
@@ -135,9 +140,8 @@ pub(super) struct Monomorphizer {
 }
 
 impl Monomorphizer {
-    pub fn new(current_module_source: ModuleSource, trait_env: Arc<TraitEnv>) -> Self {
+    pub fn new(trait_env: Arc<TraitEnv>) -> Self {
         Self {
-            current_module_source,
             structs: StructInstState {
                 instantiated: IndexMap::default(),
                 pending: Vec::new(),

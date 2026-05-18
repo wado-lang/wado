@@ -3334,9 +3334,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             &method_call.method,
         );
 
-        // Use trait impl module source if this is a trait method, otherwise current module
+        // `module_source` is the body's home module: trait-impl block for
+        // trait methods, otherwise the output type's defining module
+        // (inherent methods live alongside the type).
         let method_call_module_source =
-            method_trait_impl_source.unwrap_or_else(|| self.current_module_source.clone());
+            method_trait_impl_source.unwrap_or_else(|| output_module_source.clone());
 
         Some(Self::build_tir_method_call(
             receiver_for_method,
