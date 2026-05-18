@@ -310,6 +310,27 @@ test "intern_follow_variant: unknown rule returns null" {
     assert ctx.follow_variants().is_empty(), "no variant should have been registered";
 }
 
+test "intern_follow_variant: idempotent — repeat call returns cached id without growing registry" {
+    // `lower`'s variant-body re-walks can hit the same canonical
+    // triple multiple times during fixed-point iteration; intern
+    // must mint the id once and return it unchanged on every
+    // subsequent call.
+    let a = mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]);
+    let mut ctx = mk_ctx_with([a]);
+    let follow: Array<String> = ["TK_Y"];
+    let first = ctx.intern_follow_variant(&"a", &follow, &empty_k_prefix(), true).unwrap();
+    let before = ctx.follow_variants().len();
+    let second = ctx.intern_follow_variant(&"a", &follow, &empty_k_prefix(), false).unwrap();
+    assert first == second, `expected same id, got {first} and {second}`;
+    assert ctx.follow_variants().len() == before,
+        "second intern of the same triple must not grow the registry";
+    // The second call ran with `is_scan = false`, so the entry
+    // should now report both flags.
+    let entry = ctx.follow_variants()[first];
+    assert entry.scan_used && entry.parse_used,
+        "both is_scan branches must be reflected in the merged flags";
+}
+
 test "intern_follow_variant: multi-alt rule registers (Phase 5 step 5)" {
     // Phase 5 step 5 lifted the single-alt restriction: multi-alt
     // variants now route through `gen_parse_fn_named`'s multi-alt path,

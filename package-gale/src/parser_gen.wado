@@ -97,16 +97,25 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
         gen_parse_fn(w, rule, lowered_rule, ctx);
     }
     // Phase 4 — variant emission consumes `lowered.variant_rules`
-    // as its primary source. Every entry registered in the follow-
-    // variant registry by emit-time `intern_follow_variant` calls
-    // must already exist in `lowered.variant_rules` at the same
-    // index: lower's pre-pass uses `ctx.compute_call_site_follow`,
-    // the same single-source-of-truth helper emit consults, so the
-    // two halves agree on every (rule, mask) tuple they intern. The
-    // assertion below catches any future drift early — a stray
-    // emit-time intern call that lower didn't run would otherwise
-    // leak a dangling `__follow_<id>` function reference into the
-    // generated source.
+    // as its primary source. The follow-variant registry is
+    // populated in lock-step by `lower`'s element walks: every
+    // `RuleRef` arm in `lower::lower_op` / `lower::lower_scan_element`
+    // calls `ctx.intern_follow_variant`, which is idempotent on the
+    // canonical `(rule, mask, k_prefix_mask)` triple — so the same
+    // walk that builds the IR mints the ids, and
+    // `lower::lower_variant_rules` immediately lowers a body for each
+    // registered entry. By the time we get here every registry entry
+    // already has a matching `variant_rules` slot. Nothing in the
+    // emit path registers fresh variants — emit
+    // (`gen_parse_fn_named` / `gen_scan_function_named` / the LR
+    // helpers) only reads ids back through `ctx.follow_variants()`.
+    // The fixed-point loop below is defensive: it iterates the
+    // registry to a stable length so that any future emit-time
+    // registration (or a bug that re-adds one) gets noticed instead
+    // of silently producing a dangling `__follow_<id>` reference.
+    // The assertion captures the invariant explicitly — registry
+    // length must never exceed `variant_rules` length once
+    // `lower_with_ctx` has run.
     let mut emitted_count = 0;
     loop {
         let entries = ctx.follow_variants();
@@ -118,7 +127,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
             let entry = &entries[idx];
             assert idx < lowered.variant_rules.len(), `gen_parser: follow-variant entry #{idx} ({entry.rule_name} mask=[{join_kinds(
                 &entry.mask,
-            )}]) was registered during emit but not by lower's pre-pass — lower and emit must agree via compute_call_site_follow`;
+            )}]) lives in the registry without a matching lowered.variant_rules entry — lower's RuleRef arms (the only path that mints new entries via ctx.intern_follow_variant) and lower::lower_variant_rules (which lowers one body per entry) ran in lock-step before emit, so this assertion firing means a fresh registration leaked into the emit phase`;
             emit_follow_variant_from_gir(w, &lowered.variant_rules[idx], ctx);
         }
         emitted_count = cur;
@@ -1708,7 +1717,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         f.emit_begin(w);
         w.line(&"let start = p.peek().span.start;");
         if has_overlaps {
-            gen_multi_alt_body_bt(w, rule, lowered_rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices);
+            gen_multi_alt_body_bt(w, rule, lowered_rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices, fn_name);
         } else {
             gen_multi_alt_body(w, rule, lowered_rule, &type_name, ctx, &non_lr_indices);
         }
@@ -1748,7 +1757,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         f.emit_begin(w);
         w.line(&"let start = p.peek().span.start;");
         if has_overlaps {
-            gen_multi_alt_body_bt(w, rule, lowered_rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices);
+            gen_multi_alt_body_bt(w, rule, lowered_rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices, fn_name);
         } else {
             gen_multi_alt_body(w, rule, lowered_rule, &type_name, ctx, &non_lr_indices);
         }
@@ -4856,8 +4865,16 @@ fn elements_match(consumed: &Element, expected: &Element) -> bool {
     return false;
 }
 
-fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>) {
-    let fn_name = `parse_{rule.snake_name}`;
+/// Emit the body of a multi-alt rule whose alts have overlapping
+/// FIRST sets — the prediction codepath. `fn_name` is the name of
+/// the surrounding emit function (`parse_<rule>` for the regular
+/// path, `parse_<rule>__follow_<id>` for follow-aware variants);
+/// it's threaded into `gen_prediction_code` so the dispatcher
+/// references the variant's own `_bt_<n>` / `_scan_<n>` helpers
+/// when emitted from the variant pass. Without this threading the
+/// variant body silently delegates to the non-variant helpers and
+/// the variant's per-element mask never runs.
+fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>, fn_name: &String) {
     w.line(&"let kind = p.peek_kind();");
 
     for let mut g = 0; g < groups.len(); g += 1 {
@@ -4896,7 +4913,7 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
                 pred_elements.push(rule.alternatives[real_idx].elements);
             }
             let tree = build_prediction(&pred_indices, &pred_elements, 5, ctx);
-            gen_prediction_code(w, &tree, &fn_name, &rule.alternatives, lowered_rule, type_name, ctx);
+            gen_prediction_code(w, &tree, fn_name, &rule.alternatives, lowered_rule, type_name, ctx);
         }
 
         w.end();

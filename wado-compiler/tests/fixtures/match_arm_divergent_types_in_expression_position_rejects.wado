@@ -1,0 +1,32 @@
+// Match in expression position must have arm bodies that agree on a
+// single result type — the value is consumed (here, bound to `x`),
+// so a divergent arm would otherwise silently miscompile (the
+// match's wasm result type is picked from the first arm, but the
+// other arm's branch pushes a different type onto the stack).
+//
+// Paired with the statement-position `match_arm_discarded_call_*`
+// fixtures: those exercise the silent-drop path (statement context,
+// arms genuinely diverge, result discarded). Here the result is
+// used, so the divergence must be rejected at the resolver.
+
+enum Foo {
+    A,
+    B,
+}
+
+fn helper() -> i32 {
+    return 42;
+}
+
+export fn run() {
+    let x = match Foo::A {
+        A => helper(),
+        _ => "hello",
+    };
+    let _ = x;
+}
+
+__DATA__
+{
+    "compile_error": "expected"
+}

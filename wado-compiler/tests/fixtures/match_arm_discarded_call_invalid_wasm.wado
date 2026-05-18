@@ -1,0 +1,62 @@
+// Regression test: WIR pipeline used to emit invalid core Wasm for a
+// `match` whose arms disagreed on result type (one returns `i32`,
+// another returns unit) when the match itself sat in statement
+// position.
+//
+// Pre-fix validation error: type mismatch: expected i32 but nothing on
+// stack.
+//
+// Trigger:
+//   1. A `match` on an enum (or payload-bearing variant) with multiple
+//      arms — at least one arm whose body ends in a non-unit
+//      expression (`helper()` returning `i32`) and one arm whose body
+//      is `{}` (unit).
+//   2. The match is used in statement position (no surrounding `let`
+//      binding or trailing-expression context), so the result is
+//      discarded.
+//
+// In Wado the `;` is just a statement separator (not a "discard value"
+// marker as in Rust); `{ helper(); }` and `{ helper() }` both
+// evaluate to `helper()`'s return type. So the arms genuinely
+// disagreed on result type, but the resolver previously picked the
+// first non-`never` arm type without checking that the others agreed
+// — and the WIR builder then emitted a `(if (result i32) ...)` whose
+// `_ => {}` branch left nothing on the stack.
+//
+// Fix: `resolver::resolve_stmt` now pins `expected_type = Some(Unit)`
+// when it calls `resolve_match_expr` for a match in statement
+// position. With that hint, the match's overall `type_id` is forced
+// to `Unit`, and `wir_build::translate_match` already wraps each
+// non-unit arm body in `WirInstr::Drop` whenever `result_type` is
+// `Unit` (the existing `has_result = false` branch at
+// `pattern_match.rs:346-363`). The drops absorb the stray values
+// the divergent arms produce, so the join point's stack is empty
+// and `wasmparser` accepts the module.
+//
+// Same root-cause family as `match_arm_struct_field_invalid_wasm.wado`
+// (resolver / WIR-builder coordination on value-drop semantics for
+// `match` arms used in statement position).
+
+enum Foo {
+    A,
+    B,
+}
+
+fn helper() -> i32 {
+    return 42;
+}
+
+export fn run() {
+    let x = Foo::A;
+    match x {
+        A => {
+            helper();
+        },
+        _ => {},
+    }
+}
+
+__DATA__
+{
+    "stdout": ""
+}

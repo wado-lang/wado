@@ -1,0 +1,21 @@
+// `if` without an `else` branch in expression position with a non-Unit
+// expected type must be rejected — the implicit `else { () }` cannot
+// produce the expected non-Unit value, and without the resolver
+// guard the WIR builder would emit a `(if (result T) ...)` with a
+// missing else and `wasmparser` would reject the module at `-O0`
+// (constant folding at `-O1+` was masking the bug entirely by
+// collapsing the if when the condition is statically known).
+//
+// Reported via Copilot review on PR #1114.
+
+export fn run() {
+    let x: i32 = if true {
+        1
+    };
+    let _ = x;
+}
+
+__DATA__
+{
+    "compile_error": "expected 'i32', found '()'"
+}

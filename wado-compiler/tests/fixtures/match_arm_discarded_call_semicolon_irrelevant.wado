@@ -1,0 +1,45 @@
+// Sanity test: in Wado the `;` is just a statement separator, so a
+// `match` in statement position whose arms exercise three semantically
+// equivalent shapes (bare expression / block ending in expression with
+// `;` / block ending in expression without `;`) all type-check and
+// produce the same observable behavior. Pairs with
+// `match_arm_discarded_call_invalid_wasm.wado` — that fixture isolates
+// the i32-vs-unit divergence at the join point; this one confirms the
+// fix doesn't accidentally make `;` significant.
+
+use { println, Stdout } from "core:cli";
+
+enum Foo {
+    A,
+    B,
+    C,
+}
+
+fn helper() -> i32 {
+    return 42;
+}
+
+export fn run() with Stdout {
+    // Bare expression body (no braces): the arm's body type is i32.
+    match Foo::A {
+        A => helper(),
+        _ => {},
+    }
+    // Block body, trailing `;` after the call: still arm type i32 in
+    // Wado because `;` is a statement separator, not a discard marker.
+    match Foo::A {
+        A => { helper(); },
+        _ => {},
+    }
+    // Block body, no trailing `;`: same arm body type as above.
+    match Foo::A {
+        A => { helper() },
+        _ => {},
+    }
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}
