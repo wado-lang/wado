@@ -1842,9 +1842,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             trait_method_info(&name, "InspectAlt", "inspect_alt"),
             trait_method_info(&name, "Inspect", "inspect"),
             ref_type,
+            enum_type,
             fmt_type,
+            ctx.trait_env,
             &module_source,
             vec![],
+            &tt,
             span,
         ))));
         ctx.record_impl(&name, "InspectAlt");
@@ -1976,9 +1979,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             trait_method_info(name, "InspectAlt", "inspect_alt"),
             trait_method_info(name, "Inspect", "inspect"),
             ref_type,
+            *flags_type_id,
             fmt_type,
+            ctx.trait_env,
             &module_source,
             vec![],
+            &tt,
             span,
         ))));
         ctx.record_impl(name, "InspectAlt");
@@ -1996,9 +2002,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             trait_method_info(&nt.name, "InspectAlt", "inspect_alt"),
             trait_method_info(&nt.name, "Inspect", "inspect"),
             ref_type,
+            nt.type_id,
             fmt_type,
+            ctx.trait_env,
             &module_source,
             vec![],
+            &tt,
             span,
         ))));
         ctx.record_impl(&nt.name, "InspectAlt");
@@ -2027,9 +2036,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             trait_method_info(&base_name, "Inspect", "inspect")
                 .with_struct_type_args(&type_arg_names),
             ref_type,
+            type_id,
             fmt_type,
+            ctx.trait_env,
             &module_source,
             vec![],
+            &tt,
             span,
         ))));
         // Per-module: do not `ctx.record_impl`.
@@ -2436,11 +2448,26 @@ fn generate_display_fallback(
     display_info: LocalMethodName,
     inspect_info: LocalMethodName,
     ref_type: TypeId,
+    receiver_type: TypeId,
     fmt_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     impl_type_params: Vec<TirTypeParam>,
+    tt: &TypeTable,
     span: Span,
 ) -> TirFunction {
+    // Resolve the body's home for the delegate target (the receiver
+    // type's `Inspect` / `InspectAlt` impl). For an auto-derived
+    // Inspect on a newtype, that's the newtype's module; for a
+    // parameterized type like `Array<FieldValue>`, Array's
+    // `impl<T: Inspect> Inspect for Array<T>` lives in `core:prelude/format`.
+    let delegate_trait = inspect_info
+        .base_trait_name
+        .as_deref()
+        .or(inspect_info.trait_name.as_deref())
+        .expect("display fallback delegates to a trait method");
+    let delegate_module =
+        resolve_impl_module_via_env(receiver_type, delegate_trait, tt, trait_env, module_source);
     let qualified_name = display_info.to_mangled_name();
 
     let params = vec![
@@ -2483,7 +2510,7 @@ fn generate_display_fallback(
         vec![trait_method_call(
             self_local,
             inspect_info,
-            module_source.clone(),
+            delegate_module,
             vec![fmt_local],
             span,
         )],
@@ -2583,7 +2610,9 @@ fn generate_fallback_impls(
     // the impl into `ctx` after pushing.
     let make_fallback = |name: &str,
                          ref_type: TypeId,
-                         impl_type_params: Vec<TirTypeParam>|
+                         receiver_type: TypeId,
+                         impl_type_params: Vec<TirTypeParam>,
+                         tt: &TypeTable|
      -> Rc<RefCell<TirFunction>> {
         let target_info = trait_method_info(name, pair.target_trait, pair.target_method);
         let delegate_info = trait_method_info(name, pair.delegate_trait, pair.delegate_method);
@@ -2591,9 +2620,12 @@ fn generate_fallback_impls(
             target_info,
             delegate_info,
             ref_type,
+            receiver_type,
             fmt_type,
+            ctx.trait_env,
             &module_source,
             impl_type_params,
+            tt,
             span,
         )))
     };
@@ -2605,7 +2637,7 @@ fn generate_fallback_impls(
         }
         let enum_type = tt.make_enum(name.clone(), module_source.clone());
         let ref_type = tt.make_ref(enum_type);
-        generated.push(make_fallback(name, ref_type, vec![]));
+        generated.push(make_fallback(name, ref_type, enum_type, vec![], &tt));
         ctx.record_impl(name, pair.target_trait);
     }
 
@@ -2624,7 +2656,7 @@ fn generate_fallback_impls(
         }
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
         let ref_type = tt.make_ref(struct_type);
-        generated.push(make_fallback(name, ref_type, vec![]));
+        generated.push(make_fallback(name, ref_type, struct_type, vec![], &tt));
         ctx.record_impl(name, pair.target_trait);
     }
 
@@ -2645,7 +2677,13 @@ fn generate_fallback_impls(
         let struct_type =
             tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
         let ref_type = tt.make_ref(struct_type);
-        generated.push(make_fallback(name, ref_type, type_params.clone()));
+        generated.push(make_fallback(
+            name,
+            ref_type,
+            struct_type,
+            type_params.clone(),
+            &tt,
+        ));
         ctx.record_impl(name, pair.target_trait);
     }
 
@@ -2661,7 +2699,7 @@ fn generate_fallback_impls(
         }
         let variant_type = tt.make_variant(name.clone(), module_source.clone());
         let ref_type = tt.make_ref(variant_type);
-        generated.push(make_fallback(name, ref_type, vec![]));
+        generated.push(make_fallback(name, ref_type, variant_type, vec![], &tt));
         ctx.record_impl(name, pair.target_trait);
     }
 
@@ -2679,7 +2717,13 @@ fn generate_fallback_impls(
         let variant_type =
             tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
         let ref_type = tt.make_ref(variant_type);
-        generated.push(make_fallback(name, ref_type, type_params.clone()));
+        generated.push(make_fallback(
+            name,
+            ref_type,
+            variant_type,
+            type_params.clone(),
+            &tt,
+        ));
         ctx.record_impl(name, pair.target_trait);
     }
 
@@ -2693,7 +2737,7 @@ fn generate_fallback_impls(
             continue;
         }
         let ref_type = tt.make_ref(*flags_type_id);
-        generated.push(make_fallback(name, ref_type, vec![]));
+        generated.push(make_fallback(name, ref_type, *flags_type_id, vec![], &tt));
         ctx.record_impl(name, pair.target_trait);
     }
 
@@ -2705,7 +2749,7 @@ fn generate_fallback_impls(
             continue;
         }
         let ref_type = tt.make_ref(nt.type_id);
-        generated.push(make_fallback(&nt.name, ref_type, vec![]));
+        generated.push(make_fallback(&nt.name, ref_type, nt.type_id, vec![], &tt));
         ctx.record_impl(&nt.name, pair.target_trait);
     }
 
@@ -2744,9 +2788,12 @@ fn generate_fallback_impls(
             target_info,
             delegate_info,
             ref_type,
+            type_id,
             fmt_type,
+            ctx.trait_env,
             &module_source,
             vec![],
+            &tt,
             span,
         ))));
         // Per-module: do not `ctx.record_impl`.
@@ -2777,9 +2824,12 @@ fn generate_fallback_impls(
             target_info,
             delegate_info,
             ref_type,
+            sig.repr_type_id,
             fmt_type,
+            ctx.trait_env,
             &module_source,
             vec![],
+            &tt,
             span,
         ))));
         // Per-module: do not `ctx.record_impl`.
