@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779103208485,
+  "lastUpdate": 1779109696447,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23201,6 +23201,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/63c4669c58223b41146d770326d365240662b3b8"
         },
         "date": 1779103208230,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 490666,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5a78219dd2ae56a5833466f7a63ac47f06655cae",
+          "message": "Merge pull request #1114 from wado-lang/claude/improve-antlr4-compatibility-MKAvD\n\nfix(gale,wado-compiler): LL variant dispatcher + pre-pass architecture + `match` / `if` arm-type soundness",
+          "timestamp": "2026-05-18T22:01:42+09:00",
+          "tree_id": "19d91e79ff96fbc1aefeda5ee5e9ae3b6e7c16c1",
+          "url": "https://github.com/wado-lang/wado/commit/5a78219dd2ae56a5833466f7a63ac47f06655cae"
+        },
+        "date": 1779109696222,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
