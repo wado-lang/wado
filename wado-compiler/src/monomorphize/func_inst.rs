@@ -130,11 +130,20 @@ fn lookup_template_with_trait_fallback<'a, V>(
         for candidate in struct_candidates {
             if let Some(impl_module) =
                 trait_env.impl_module_for(candidate, trait_name, type_module_hint)
-                && let Some(v) =
-                    generic_functions.get(&(impl_module.clone(), name.to_string()))
+                && let Some(v) = generic_functions.get(&(impl_module.clone(), name.to_string()))
             {
                 return Some(v);
             }
+        }
+        // Blanket impls (`impl<I: Bound> Trait for I`) aren't keyed by struct
+        // name — the receiver-type candidates above can't find them. Consult
+        // the blanket index by trait name so `bytes.into_iter()` resolves to
+        // the `IntoIterator` blanket in `core:prelude/traits`.
+        if let Some(impl_module) =
+            trait_env.blanket_impl_module_for_trait(trait_name, type_module_hint)
+            && let Some(v) = generic_functions.get(&(impl_module.clone(), name.to_string()))
+        {
+            return Some(v);
         }
         None
     } else if let Some(type_module) = type_module_hint {
@@ -291,17 +300,15 @@ impl Monomorphizer {
                         ));
                     }
                     for generic_method_name in names_to_try {
-                        if let Some(generic_func_rc) =
-                            lookup_template_with_trait_fallback(
-                                generic_functions,
-                                &self.functions.trait_env,
-                                &func.module_source,
-                                &generic_method_name,
-                                Some(info),
-                                &[&info.base_struct_name, &info.struct_name],
-                                None,
-                            )
-                        {
+                        if let Some(generic_func_rc) = lookup_template_with_trait_fallback(
+                            generic_functions,
+                            &self.functions.trait_env,
+                            &func.module_source,
+                            &generic_method_name,
+                            Some(info),
+                            &[&info.base_struct_name, &info.struct_name],
+                            None,
+                        ) {
                             let generic_func = generic_func_rc.borrow();
                             // impl_type_args and method_type_args are now separate.
                             // For variadic impls, impl_type_args may be empty — extract
@@ -391,17 +398,15 @@ impl Monomorphizer {
                             } else {
                                 vec![&struct_name]
                             };
-                            if let Some(gf) =
-                                lookup_template_with_trait_fallback(
-                                    generic_functions,
-                                    &self.functions.trait_env,
-                                    &method_func.module_source,
-                                    full_method_name,
-                                    info_ref,
-                                    &candidates,
-                                    receiver_module.as_ref(),
-                                )
-                            {
+                            if let Some(gf) = lookup_template_with_trait_fallback(
+                                generic_functions,
+                                &self.functions.trait_env,
+                                &method_func.module_source,
+                                full_method_name,
+                                info_ref,
+                                &candidates,
+                                receiver_module.as_ref(),
+                            ) {
                                 let method_info =
                                     gf.borrow().method_info.clone().unwrap_or_else(|| {
                                         LocalMethodName::new(
@@ -568,17 +573,15 @@ impl Monomorphizer {
                         } else {
                             vec![&base_struct]
                         };
-                        if let Some(generic_func_rc) =
-                            lookup_template_with_trait_fallback(
-                                generic_functions,
-                                &self.functions.trait_env,
-                                &method_func.module_source,
-                                generic_method_name,
-                                info_ref,
-                                &candidates,
-                                receiver_module.as_ref(),
-                            )
-                        {
+                        if let Some(generic_func_rc) = lookup_template_with_trait_fallback(
+                            generic_functions,
+                            &self.functions.trait_env,
+                            &method_func.module_source,
+                            generic_method_name,
+                            info_ref,
+                            &candidates,
+                            receiver_module.as_ref(),
+                        ) {
                             let generic_func = generic_func_rc.borrow();
                             // For true ref blanket impls (e.g., impl<T> Inspect for &T),
                             // the impl_type_args should be the full inner type of the ref,
@@ -694,17 +697,15 @@ impl Monomorphizer {
                         } else {
                             vec![base_struct]
                         };
-                        if let Some(generic_func_rc) =
-                            lookup_template_with_trait_fallback(
-                                generic_functions,
-                                &self.functions.trait_env,
-                                &method_func.module_source,
-                                &generic_method_name,
-                                info_ref,
-                                &candidates,
-                                receiver_module.as_ref(),
-                            )
-                        {
+                        if let Some(generic_func_rc) = lookup_template_with_trait_fallback(
+                            generic_functions,
+                            &self.functions.trait_env,
+                            &method_func.module_source,
+                            &generic_method_name,
+                            info_ref,
+                            &candidates,
+                            receiver_module.as_ref(),
+                        ) {
                             let generic_func = generic_func_rc.borrow();
                             let has_method_type_params = generic_func.has_real_type_params();
                             if impl_type_args.len() >= generic_func.impl_type_params.len() {
@@ -769,7 +770,7 @@ impl Monomorphizer {
                         monomorph_info: Some(mono),
                         ..
                     },
-                ) = (blanket_lookup, &*method_func)
+                ) = (blanket_lookup, method_func)
                 {
                     let generic_func = generic_func_rc.borrow();
                     let method_info = generic_func.method_info.clone();
@@ -907,17 +908,15 @@ impl Monomorphizer {
                         } else {
                             vec![TypeTable::TUPLE_TYPE_NAME]
                         };
-                        if let Some(generic_func_rc) =
-                            lookup_template_with_trait_fallback(
-                                generic_functions,
-                                &self.functions.trait_env,
-                                &method_func.module_source,
-                                &generic_name,
-                                info_ref,
-                                &candidates,
-                                receiver_module.as_ref(),
-                            )
-                        {
+                        if let Some(generic_func_rc) = lookup_template_with_trait_fallback(
+                            generic_functions,
+                            &self.functions.trait_env,
+                            &method_func.module_source,
+                            &generic_name,
+                            info_ref,
+                            &candidates,
+                            receiver_module.as_ref(),
+                        ) {
                             let generic_func = generic_func_rc.borrow();
                             let method_info = generic_func.method_info.clone();
                             let impl_type_params_count = generic_func.impl_type_params.len();
@@ -1438,9 +1437,28 @@ impl Monomorphizer {
                                 // would route `&Array<i32>^Inspect` to Array's impl in
                                 // format.wado instead of the ref blanket's, and the
                                 // leading `&` would disappear at codegen.
+                                //
+                                // For blanket-impl dispatch (e.g.
+                                // `impl<I: Iterator> IntoIterator for I`),
+                                // consult the blanket index by trait name
+                                // before falling back to the receiver's own
+                                // module — the body lives in the blanket's
+                                // module, not where the receiver type is
+                                // declared.
+                                let trait_name_for_blanket = new_info
+                                    .base_trait_name
+                                    .as_deref()
+                                    .or(new_info.trait_name.as_deref());
+                                let blanket_module = trait_name_for_blanket.and_then(|tn| {
+                                    self.functions
+                                        .trait_env
+                                        .blanket_impl_module_for_trait(tn, receiver_module.as_ref())
+                                        .cloned()
+                                });
                                 let concrete_module = self
                                     .functions
                                     .impl_module(&new_info, receiver_module.as_ref())
+                                    .or(blanket_module)
                                     .or(receiver_module);
                                 let new_monomorph = if new_info.method_type_args.is_empty() {
                                     None
@@ -2308,9 +2326,27 @@ impl Monomorphizer {
             // `impl_module_for` fallback would route `&Array<i32>^Inspect`
             // to Array's generic impl in format.wado instead of the ref
             // blanket's, and the leading `&` would disappear at codegen.
+            //
+            // If no concrete impl exists, the dispatch is being satisfied by
+            // a blanket impl (`impl<I: Bound> Trait for I`); its home module
+            // is keyed by trait name in `blanket_trait_impl_modules`. Only
+            // fall back to the receiver type's own module if neither is
+            // available — that is the inherent-method shape, where the impl
+            // block lives with the receiver type.
+            let trait_name_for_blanket = new_info
+                .base_trait_name
+                .as_deref()
+                .or(new_info.trait_name.as_deref());
+            let blanket_module = trait_name_for_blanket.and_then(|tn| {
+                self.functions
+                    .trait_env
+                    .blanket_impl_module_for_trait(tn, receiver_module.as_ref())
+                    .cloned()
+            });
             let concrete_module = self
                 .functions
                 .impl_module(&new_info, receiver_module.as_ref())
+                .or(blanket_module)
                 .or(receiver_module);
 
             // Determine if this is a blanket impl method.

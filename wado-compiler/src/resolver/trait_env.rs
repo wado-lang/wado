@@ -123,6 +123,12 @@ pub struct TraitEnv {
     pub(super) resource_decl_index: ResourceDeclIndex,
     /// Blanket impls (`impl<T: Bound> Trait for T`), checked as fallback.
     pub(super) blanket_impl_index: BlanketTraitImplIndex,
+    /// `trait_name` → modules that host a blanket impl of that trait
+    /// (`impl<T: Bound> Trait for T`). Used by the monomorphizer to find the
+    /// home module of a generic dispatch when the receiver type itself has no
+    /// dedicated `impl Trait for Type` block — the blanket provides the body,
+    /// and the body lives in the blanket's module.
+    pub(crate) blanket_trait_impl_modules: IndexMap<String, Vec<ModuleSource>>,
     /// `type_name` → `[(method_name, ModuleSource, item_idx, method_idx)]` for static methods.
     pub(super) static_method_index: StaticMethodIndex,
     /// `type_name` → `[(method_name, ModuleSource, item_idx, method_idx)]` for resource static methods.
@@ -226,6 +232,8 @@ impl TraitEnv {
         let mut effect_decl_index: EffectDeclIndex = IndexMap::default();
         let mut resource_decl_index: ResourceDeclIndex = IndexMap::default();
         let mut blanket_impl_index: BlanketTraitImplIndex = Vec::new();
+        let mut blanket_trait_impl_modules: IndexMap<String, Vec<ModuleSource>> =
+            IndexMap::default();
         let mut trait_impl_modules: TraitImplModuleIndex = IndexMap::default();
         let mut concrete_trait_impl_modules: TraitImplModuleIndex = IndexMap::default();
         // type name → module source, for orphan rule "is this type local?" checks
@@ -246,6 +254,15 @@ impl TraitEnv {
                             .any(|tp| tp.name == type_name && !tp.bounds.is_empty());
                         if is_blanket {
                             blanket_impl_index.push((module_source.clone(), item_idx));
+                            if let Some(trait_type) = &impl_block.trait_type {
+                                let trait_name = get_type_name_static(trait_type);
+                                let modules = blanket_trait_impl_modules
+                                    .entry(trait_name)
+                                    .or_default();
+                                if !modules.contains(module_source) {
+                                    modules.push(module_source.clone());
+                                }
+                            }
                         } else if let Some(trait_type) = &impl_block.trait_type {
                             let trait_name = get_type_name_static(trait_type);
                             let key = (type_name.clone(), trait_name);
@@ -396,6 +413,7 @@ impl TraitEnv {
                 effect_decl_index,
                 resource_decl_index,
                 blanket_impl_index,
+                blanket_trait_impl_modules,
                 static_method_index,
                 resource_static_method_index,
                 trait_impl_modules,
@@ -439,6 +457,24 @@ impl TraitEnv {
             .as_ref()
             .and_then(|s| s.trait_impl_modules.get(&key));
         pick_module_union(ast, syn, type_module)
+    }
+
+    /// Return the home module of a blanket impl (`impl<T: Bound> Trait for T`)
+    /// for `trait_name`, if one exists. When multiple blanket impls implement
+    /// the same trait, the first registered module is returned, with
+    /// `type_module` preferred when present (used as a stable tie-breaker).
+    pub(crate) fn blanket_impl_module_for_trait(
+        &self,
+        trait_name: &str,
+        type_module: Option<&ModuleSource>,
+    ) -> Option<&ModuleSource> {
+        let modules = self.blanket_trait_impl_modules.get(trait_name)?;
+        if let Some(hint) = type_module
+            && let Some(m) = modules.iter().find(|m| *m == hint)
+        {
+            return Some(m);
+        }
+        modules.first()
     }
 
     /// Like [`impl_module_for`] but only returns a hit when the impl block
