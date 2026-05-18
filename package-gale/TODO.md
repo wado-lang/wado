@@ -21,9 +21,19 @@ The K-prefix follow-mask path closes the multi-token tail-greedy gap at the oute
 
 The K-prefix caller-side mask analysis halts at a multi-alt `RuleRef` because the per-depth union of multi-alt prefixes would over-yield by matching cross-alt sequences that no real alt admits. A per-alt sequence representation (`Array<Array<Array<String>>>`) could extend the walk safely — useful when a caller's continuation passes through a multi-alt rule like `expr : literal | name`.
 
-### Multi-alt variant dispatcher emit
+### Multi-alt variant dispatcher emit — K-prefix cascade relaxation
 
-`parse_<rule>__follow_<id>` for multi-alt rules currently dispatches to the regular `parse_<rule>_bt_<n>` per-alt helpers instead of the variant's `parse_<rule>__follow_<id>_bt_<n>` versions, so the variant per-alt helpers are emitted but unreachable from the dispatcher. This is a pre-existing emit shape that limits the cascade through multi-alt rules — `tail_greedy_k_prefix_of_element`'s `RuleRef` arm stops the K-prefix cascade for the same reason. Fixing the dispatcher would let K-prefix flow through multi-alt rules cleanly; the `RuleRef` recursion gate can then be relaxed.
+The dispatcher in `parse_<rule>__follow_<id>` for multi-alt rules
+with overlapping FIRST sets now routes to the variant's own
+`parse_<rule>__follow_<id>_bt_<n>` / `_scan_<n>` helpers (was
+falsely routing to the non-variant `parse_<rule>_bt_<n>` /
+`_scan_<n>`; covered by `tests/grammars/ll_multi_alt_overlap.g4`).
+The remaining follow-up: `tail_greedy_k_prefix_of_element`'s
+`RuleRef` arm still halts the K-prefix cascade through multi-alt
+rules out of conservatism. With the dispatcher fixed, the
+`RuleRef` recursion gate can now be relaxed so K-prefix flows
+through multi-alt rules cleanly. Requires its own regression
+fixture before the guard is loosened.
 
 ### ATN-class grammars
 
@@ -38,7 +48,7 @@ Two complementary directions, neither scoped yet:
 
 Reduces coupling between the codegen walk and the analysis layer; no behaviour change.
 
-- **Move variant registration to a `FollowEnv` pre-pass.** Today `intern_follow_variant` is called from inside the codegen walk (parse-side `gen_element` and scan-side `gen_scan_element`). Pre-computing every `(rule, mask, k_prefix_mask)` triple as part of `FollowEnv` would let codegen do a pure lookup.
+(no items currently — the previously listed `intern_follow_variant` → `lookup_follow_variant_id` switch in lower has landed. `register_follow_variants` runs as the first step of `lower_with_ctx`, populating the canonical `(rule, mask, k_prefix_mask)` triples for every parse / scan site lower visits. Lower's `RuleRef` arms consume the registry via `lookup_follow_variant_id`, which panics on a missing key so any future walker / lower drift surfaces immediately.)
 
 ## Stage B follow-on — composite descriptors (Stage C dependency)
 

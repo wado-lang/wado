@@ -806,11 +806,15 @@ fn synthesize_lift_option_inner(
     ));
 
     let result_local = alloc_local(next_local, locals, option_type_id);
+    let none_init = {
+        let tt = ctx.type_table.borrow();
+        option_none(option_type_id, tt.compiler_items())
+    };
     stmts.push(let_mut_stmt(
         "__option_result",
         result_local,
         option_type_id,
-        option_none(option_type_id),
+        none_init,
     ));
 
     // if __disc != 0 { __option_result = Some(lift(inner, addr + offset)); }
@@ -824,9 +828,13 @@ fn synthesize_lift_option_inner(
         locals,
         ctx,
     );
+    let some_expr = {
+        let tt = ctx.type_table.borrow();
+        option_some(lifted, option_type_id, tt.compiler_items())
+    };
     then_stmts.push(expr_stmt(assign(
         local_ref(result_local, "__option_result", option_type_id),
-        option_some(lifted, option_type_id),
+        some_expr,
     )));
     then_stmts.extend(synthesize_free_element(
         inner_ty,
@@ -879,11 +887,23 @@ fn synthesize_lift_result_inner(
 
     // Determine the proper variant TypeId for Result<ok_ty, err_ty> so that the
     // mutable local is typed as a GC reference (not i32).
-    let result_type_id = {
+    let (result_type_id, ok_name, ok_index, err_name, err_index) = {
         let mut tt = ctx.type_table.borrow_mut();
         let ok_type_id = wasi_type_to_type_id(ok_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
         let err_type_id = wasi_type_to_type_id(err_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
-        tt.make_result(ok_type_id, err_type_id)
+        let result_type_id = tt.make_result(ok_type_id, err_type_id);
+        let items = tt.compiler_items();
+        let (_, _, ok_n, ok_i) =
+            items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
+        let (_, _, err_n, err_i) =
+            items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+        (
+            result_type_id,
+            ok_n.to_string(),
+            ok_i,
+            err_n.to_string(),
+            err_i,
+        )
     };
 
     let result_local = alloc_local(next_local, locals, result_type_id);
@@ -917,8 +937,8 @@ fn synthesize_lift_result_inner(
         TirExpr::new(
             TirExprKind::VariantConstruct {
                 variant_type: result_type_id,
-                case_index: 0,
-                case_name: "Ok".to_string(),
+                case_index: ok_index,
+                case_name: ok_name,
                 payload: ok_payload,
             },
             result_type_id,
@@ -947,8 +967,8 @@ fn synthesize_lift_result_inner(
         TirExpr::new(
             TirExprKind::VariantConstruct {
                 variant_type: result_type_id,
-                case_index: 1,
-                case_name: "Err".to_string(),
+                case_index: err_index,
+                case_name: err_name,
                 payload: err_payload,
             },
             result_type_id,

@@ -710,15 +710,45 @@ impl ClosureLowerer {
         type_table: &mut TypeTable,
         span: Span,
     ) {
-        let formatter_type =
-            type_table.make_struct("Formatter".to_string(), ModuleSource::format());
+        // Resolve Formatter / Inspect / InspectAlt through the
+        // `CompilerItem` registry. The struct name flows into the inner
+        // `Formatter::write_str` call below, so capture it once instead
+        // of looking it up per method. Method names come from the
+        // single-method trait's `trait_method_name` so a rename of
+        // `Inspect::inspect` → `Inspect::dump` (or similar) is picked
+        // up here without touching this site.
+        let (formatter_name, inspect_trait, inspect_method, inspect_alt_trait, inspect_alt_method) = {
+            let items = type_table.compiler_items();
+            (
+                items
+                    .struct_name(crate::compiler_item::CompilerItem::Formatter)
+                    .to_string(),
+                items
+                    .trait_name(crate::compiler_item::CompilerItem::Inspect)
+                    .to_string(),
+                items
+                    .trait_method_name(crate::compiler_item::CompilerItem::Inspect)
+                    .to_string(),
+                items
+                    .trait_name(crate::compiler_item::CompilerItem::InspectAlt)
+                    .to_string(),
+                items
+                    .trait_method_name(crate::compiler_item::CompilerItem::InspectAlt)
+                    .to_string(),
+            )
+        };
+        let formatter_type = type_table.make_struct(formatter_name.clone(), ModuleSource::format());
         let formatter_mut_ref = type_table.make_mut_ref(formatter_type);
         let string_type =
             type_table.make_compiler_struct(crate::compiler_item::CompilerItem::String);
 
         for (trait_name, method_name, payload) in [
-            ("Inspect", "inspect", signature),
-            ("InspectAlt", "inspect_alt", source),
+            (inspect_trait.as_str(), inspect_method.as_str(), signature),
+            (
+                inspect_alt_trait.as_str(),
+                inspect_alt_method.as_str(),
+                source,
+            ),
         ] {
             let func = self.build_functor_format_method(
                 struct_name,
@@ -728,6 +758,7 @@ impl ClosureLowerer {
                 self_ref_type,
                 formatter_mut_ref,
                 string_type,
+                &formatter_name,
                 span,
             );
             self.generated_functions.push(Rc::new(RefCell::new(func)));
@@ -747,6 +778,7 @@ impl ClosureLowerer {
         self_ref_type: TypeId,
         formatter_mut_ref: TypeId,
         string_type: TypeId,
+        formatter_name: &str,
         span: Span,
     ) -> TirFunction {
         let method_info = LocalMethodName::new(
@@ -769,10 +801,10 @@ impl ClosureLowerer {
                 Box::new(fmt_local),
                 FunctionRef {
                     module_source: ModuleSource::format(),
-                    name: "Formatter::write_str".to_string(),
+                    name: format!("{formatter_name}::write_str"),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        "Formatter".to_string(),
+                        formatter_name.to_string(),
                         None,
                         "write_str".to_string(),
                     )),
@@ -1460,7 +1492,7 @@ impl ClosureCallSiteLowerer<'_> {
             Some(info) => info,
             None => return,
         };
-        if info.base_struct_name != "Fn" {
+        if info.base_struct_name != crate::name::CLOSURE_FN_TRAIT {
             return;
         }
         let Some(base_trait) = info.base_trait_name.as_deref() else {
@@ -1469,12 +1501,25 @@ impl ClosureCallSiteLowerer<'_> {
         // Map each formatting trait to the per-functor impl that
         // produces the right output. `Display`/`DisplayAlt` fall back
         // to `Inspect`/`InspectAlt` so the redirect targets are the
-        // same per-functor method either way.
-        let (target_trait, target_method) = match base_trait {
-            "Inspect" | "Display" => ("Inspect", "inspect"),
-            "InspectAlt" | "DisplayAlt" => ("InspectAlt", "inspect_alt"),
-            _ => return,
-        };
+        // same per-functor method either way. All four trait names
+        // flow through the `CompilerItem` registry so a stdlib rename
+        // of any of them does not silently bypass this redirect.
+        let items = self.type_table.compiler_items();
+        let inspect = items.trait_name(crate::compiler_item::CompilerItem::Inspect);
+        let inspect_method = items.trait_method_name(crate::compiler_item::CompilerItem::Inspect);
+        let inspect_alt = items.trait_name(crate::compiler_item::CompilerItem::InspectAlt);
+        let inspect_alt_method =
+            items.trait_method_name(crate::compiler_item::CompilerItem::InspectAlt);
+        let display = items.trait_name(crate::compiler_item::CompilerItem::Display);
+        let display_alt = items.trait_name(crate::compiler_item::CompilerItem::DisplayAlt);
+        let (target_trait, target_method): (String, String) =
+            if base_trait == inspect || base_trait == display {
+                (inspect.to_string(), inspect_method.to_string())
+            } else if base_trait == inspect_alt || base_trait == display_alt {
+                (inspect_alt.to_string(), inspect_alt_method.to_string())
+            } else {
+                return;
+            };
 
         let local_idx = match peel_ref_to_local(receiver) {
             Some(idx) => idx,
@@ -1501,8 +1546,8 @@ impl ClosureCallSiteLowerer<'_> {
 
         let new_method_info = LocalMethodName::new(
             functor.struct_name.clone(),
-            Some(target_trait.to_string()),
-            target_method.to_string(),
+            Some(target_trait),
+            target_method,
         );
         let new_name = new_method_info.to_mangled_name();
 

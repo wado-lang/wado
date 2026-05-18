@@ -96,7 +96,8 @@ fn lower_to_flat_inner(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     ctx: LiftContext<'_>,
 ) -> Vec<FlatLocal> {
-    let names = super::types::CmStdlibNames::from_type_table(&ctx.type_table.borrow());
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(ctx.type_table.borrow().compiler_items());
     match resolved {
         ResolvedType::Primitive(p) => {
             let (flat_type_id, cm_type) = match p {
@@ -368,8 +369,8 @@ fn lower_to_flat_inner(
                 TirExprKind::Cast {
                     expr: Box::new(variant_test(
                         local_ref(opt_local, "__opt_val", type_id),
-                        0,
-                        "Some",
+                        names.some_index,
+                        &names.some_name,
                     )),
                     target_type: TypeTable::I32,
                 },
@@ -409,8 +410,11 @@ fn lower_to_flat_inner(
 
                 // if disc != 0 { lower(variant_payload(value)) → inner_locals }
                 let mut then_stmts: Vec<TirStmt> = Vec::new();
-                let unwrapped =
-                    variant_payload(local_ref(opt_local, "__opt_val", type_id), 0, inner_type_id);
+                let unwrapped = variant_payload(
+                    local_ref(opt_local, "__opt_val", type_id),
+                    names.some_index,
+                    inner_type_id,
+                );
                 let inner_lowered = synthesize_lower_to_flat(
                     unwrapped,
                     inner_type_id,
@@ -529,7 +533,8 @@ pub(super) fn synthesize_lift_from_flat_params(
     type_table_cell: &RefCell<TypeTable>,
     lift_ctx: LiftContext<'_>,
 ) -> (TirExpr, usize) {
-    let names = super::types::CmStdlibNames::from_type_table(&type_table_cell.borrow());
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table_cell.borrow().compiler_items());
     match ty {
         Type::Named(named) if named.name == names.string => {
             // String flat ABI: (ptr: i32, len: i32) pointing to linear memory
@@ -723,12 +728,16 @@ pub(super) fn synthesize_lift_from_flat_params(
 
                 // if disc == 0 { None } else { Some(lift(inner_flat)) }
                 let result_local = alloc_local(next_local, locals, target_type_id);
+                let opt_none_expr = {
+                    let tt = type_table_cell.borrow();
+                    option_none(target_type_id, tt.compiler_items())
+                };
                 // Default: None
                 stmts.push(let_mut_stmt(
                     "__opt_result",
                     result_local,
                     target_type_id,
-                    option_none(target_type_id),
+                    opt_none_expr,
                 ));
 
                 // if disc != 0
@@ -736,9 +745,13 @@ pub(super) fn synthesize_lift_from_flat_params(
                 if inner_flat.is_empty() {
                     // Inner is unit — Some(())
                     let unit = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span());
+                    let opt_some_unit = {
+                        let tt = type_table_cell.borrow();
+                        option_some(unit, target_type_id, tt.compiler_items())
+                    };
                     then_stmts.push(expr_stmt(assign(
                         local_ref(result_local, "__opt_result", target_type_id),
-                        option_some(unit, target_type_id),
+                        opt_some_unit,
                     )));
                 } else {
                     let (inner_lifted, _) = synthesize_lift_from_flat_params(
@@ -753,9 +766,13 @@ pub(super) fn synthesize_lift_from_flat_params(
                         type_table_cell,
                         lift_ctx,
                     );
+                    let opt_some_inner = {
+                        let tt = type_table_cell.borrow();
+                        option_some(inner_lifted, target_type_id, tt.compiler_items())
+                    };
                     then_stmts.push(expr_stmt(assign(
                         local_ref(result_local, "__opt_result", target_type_id),
-                        option_some(inner_lifted, target_type_id),
+                        opt_some_inner,
                     )));
                 }
 
@@ -992,6 +1009,13 @@ pub(super) fn synthesize_result_export_binding(
             );
         }
     };
+    let (_, _, ok_case_name, ok_case_index) = tt
+        .compiler_items()
+        .require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
+    let ok_case_name = ok_case_name.to_string();
+    let (_, _, _err_case_name, err_case_index) = tt
+        .compiler_items()
+        .require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
     drop(tt);
 
     // Allocate mutable flat value locals (initialized to zero)
@@ -1024,7 +1048,7 @@ pub(super) fn synthesize_result_export_binding(
     // Extract Ok payload
     let ok_value = variant_payload(
         local_ref(result_local, "__result", user_return_type),
-        0, // Ok case index
+        ok_case_index,
         ok_type_id,
     );
 
@@ -1095,7 +1119,7 @@ pub(super) fn synthesize_result_export_binding(
     // Extract Err payload
     let err_value = variant_payload(
         local_ref(result_local, "__result", user_return_type),
-        1, // Err case index
+        err_case_index,
         err_type_id,
     );
     let err_local = alloc_local(&mut next_local, &mut locals, err_type_id);
@@ -1179,8 +1203,8 @@ pub(super) fn synthesize_result_export_binding(
     body_stmts.push(if_stmt(
         variant_test(
             local_ref(result_local, "__result", user_return_type),
-            0,
-            "Ok",
+            ok_case_index,
+            &ok_case_name,
         ),
         block(ok_stmts),
         Some(block(err_stmts)),

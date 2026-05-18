@@ -1,0 +1,25 @@
+// Same rule as `if_branch_divergent_types_in_expression_position_rejects.wado`
+// for the `Condition::LetChain` arm of `resolve_if_expr`: an `if let`
+// whose result is consumed must have then / else branches that agree
+// on a single type. Without this check, the resolver's
+// `expected_type=Some(X)` path was taking `type_id = X` unconditionally
+// and a divergent else branch would silently miscompile (the `if let`
+// wasm result type came from the expected type, but the else branch
+// pushed a different type onto the stack).
+//
+// Reported via Devin Review on PR #1114.
+
+export fn run() {
+    let opt: Option<i32> = Option::<i32>::Some(42);
+    let x: i32 = if let Some(v) = opt {
+        v
+    } else {
+        "hello"
+    };
+    let _ = x;
+}
+
+__DATA__
+{
+    "compile_error": "expected"
+}

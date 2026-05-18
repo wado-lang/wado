@@ -9,25 +9,28 @@
 #
 # Default bump is patch. Override per-PR with labels:
 #   tagpr:patch | tagpr:minor | tagpr:major
+#
+# File format is git-config; entries outside the [tagpr] section are
+# silently ignored by `git config --get tagpr.<key>`.
 
-# tagpr has no native Cargo.toml handler but its generic version-file
-# regex is line-anchored, matching `version = "..."` only at the start
-# of a line. Our root Cargo.toml has exactly one such line — the
-# [workspace.package].version — because every member crate inherits its
-# version from the workspace via `version = { workspace = true }`. The
-# `version = "..."` entries inside [workspace.dependencies] inline tables
-# are not at the start of a line, so the bump is unambiguous.
-versionFile = Cargo.toml
-
-# After tagpr writes the new version, sync Cargo.lock so the release PR
-# is in a buildable state. We don't pass --offline: tagpr.yml runs on a
-# fresh GitHub-hosted runner without a warmed Cargo registry index, and
-# --offline would fail there.
-command = cargo update --workspace
-
-# Default bump kind when no `tagpr:major`/`tagpr:minor` label is present.
-release = patch
 [tagpr]
 	vPrefix = true
 	releaseBranch = main
+
+	# tagpr has no native Cargo.toml handler but its generic version-file
+	# regex is line-anchored, matching `version = "..."` only at the start
+	# of a line. Our root Cargo.toml has exactly one such line — the
+	# [workspace.package].version — because every member crate inherits its
+	# version from the workspace via `version = { workspace = true }`. The
+	# `version = "..."` entries inside [workspace.dependencies] inline tables
+	# are not at the start of a line, so the bump is unambiguous.
 	versionFile = Cargo.toml
+
+	# After tagpr writes the new version, sync Cargo.lock so the release PR
+	# is in a buildable state. Must be `postVersionCommand`, not `command`:
+	# `command` runs *before* the version bump, when Cargo.toml/Cargo.lock
+	# still match, so `cargo update` would be a no-op and Cargo.lock would
+	# stay stale — breaking `cargo --locked` in CI.
+	# We don't pass --offline: tagpr.yml runs on a fresh GitHub-hosted runner
+	# without a warmed Cargo registry index, and --offline would fail there.
+	postVersionCommand = cargo update --workspace

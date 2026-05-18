@@ -66,21 +66,28 @@
 #![stdlib("core:serde")]
 
 
+#[compiler_item("serialize_error_kind")]
 pub enum SerializeErrorKind {
     UnsupportedValue,
+    #[compiler_item("serialize_error_kind_custom")]
     Custom,
 }
 
+#[compiler_item("serialize_error")]
 pub struct SerializeError {
     pub kind: SerializeErrorKind,
     pub message: String,
 }
 
+#[compiler_item("deserialize_error_kind")]
 pub enum DeserializeErrorKind {
     UnexpectedType,
+    #[compiler_item("deserialize_error_kind_missing_field")]
     MissingField,
+    #[compiler_item("deserialize_error_kind_unknown_variant")]
     UnknownVariant,
     DuplicateField,
+    #[compiler_item("deserialize_error_kind_invalid_value")]
     InvalidValue,
     Overflow,
     MalformedInput,
@@ -89,6 +96,7 @@ pub enum DeserializeErrorKind {
     Custom,
 }
 
+#[compiler_item("deserialize_error")]
 pub struct DeserializeError {
     pub kind: DeserializeErrorKind,
     pub message: String,
@@ -129,6 +137,7 @@ impl DeserializeError {
     }
 }
 
+#[compiler_item("serialize_seq")]
 pub trait SerializeSeq {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
     fn end(&mut self) -> Result<(), SerializeError>;
@@ -140,17 +149,20 @@ pub trait SerializeMap {
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
+#[compiler_item("serialize_struct")]
 pub trait SerializeStruct {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError>;
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
+#[compiler_item("serialize_variant")]
 pub trait SerializeVariant {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
 
+#[compiler_item("serializer")]
 pub trait Serializer {
     type SeqSerializer: SerializeSeq;
     type MapSerializer: SerializeMap;
@@ -183,6 +195,7 @@ pub trait Serialize {
 }
 
 
+#[compiler_item("deserialize_seq")]
 pub trait DeserializeSeq {
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>;
     fn end(&mut self) -> Result<(), DeserializeError>;
@@ -194,6 +207,7 @@ pub trait DeserializeMap {
     fn end(&mut self) -> Result<(), DeserializeError>;
 }
 
+#[compiler_item("deserialize_struct")]
 pub trait DeserializeStruct {
     fn next_field(&mut self) -> Result<Option<i32>, DeserializeError>;
     fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>;
@@ -201,6 +215,7 @@ pub trait DeserializeStruct {
     fn end(&mut self) -> Result<(), DeserializeError>;
 }
 
+#[compiler_item("deserialize_variant")]
 pub trait DeserializeVariant {
     fn variant_name(&mut self) -> Result<String, DeserializeError>;
     fn disc(&mut self) -> Result<i32, DeserializeError>;
@@ -221,6 +236,7 @@ pub trait Visitor {
     fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<Self::Value, DeserializeError>;
 }
 
+#[compiler_item("deserializer")]
 pub trait Deserializer {
     type SeqAccess: DeserializeSeq;
     type MapAccess: DeserializeMap;

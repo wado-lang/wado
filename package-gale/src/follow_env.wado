@@ -1,4 +1,4 @@
-use { ParserRule, Alternative, Element, RepeatElement, GroupElement, LabelElement } from "./ir.wado";
+use { ParserRule, Alternative, Element } from "./ir.wado";
 use { GenContext } from "./gen_context.wado";
 use { TreeMap, TreeSet } from "core:collections";
 
@@ -27,16 +27,27 @@ impl FollowSet {
 /// Pure analysis output: the FOLLOW environment of a grammar.
 ///
 /// Built once from the parser-rule IR via [`build`]. No codegen state,
-/// no `CodeWriter`. Today this is **standalone analysis surface** —
-/// the codegen path still computes the same information on the fly via
-/// `GenContext::tail_greedy_first_of_rule` and
-/// `GenContext::compute_call_site_follow`. `FollowEnv` exists as the
-/// pre-computed snapshot a future refactor (see
-/// `package-gale/TODO.md` "LL prediction — architecture cleanup")
-/// would have codegen consult instead, replacing the in-walker
-/// `intern_follow_variant` registration with a pure lookup. Until
-/// that refactor lands, the analysis is exercised end-to-end only by
-/// `follow_env_test.wado`.
+/// no `CodeWriter`. Exposes two read-only views:
+///
+/// * `tail_greedy` — per-rule snapshot of
+///   `GenContext::tail_greedy_first_of_rule`, lifted out of the
+///   codegen cache so callers that only want the analysis (e.g.
+///   LSP / tooling that doesn't run lower) don't have to instantiate
+///   the full lower pipeline.
+/// * `rule_follow` — per-rule classical FOLLOW set, computed by
+///   the worklist fixed point in [`compute_rule_follow`].
+///
+/// The follow-variant registry — the per-`(rule, mask, k_prefix_mask)`
+/// triple table consumed by codegen — is intentionally NOT populated
+/// here. Lower's element walks (the only walker that needs to know
+/// every site's per-call-site `caller_follow`) mint registry entries
+/// directly via `GenContext::intern_follow_variant`, so there is one
+/// authoritative element-walking pass that both builds the IR and
+/// registers variants. Duplicating that walk in `FollowEnv::build` to
+/// pre-populate the registry would only re-derive what lower is
+/// already about to compute — and would have to be kept in lock-step
+/// with lower's per-shape handling, which is the kind of drift
+/// surface this project deliberately avoids.
 pub struct FollowEnv {
     /// Token kinds the rule may *greedily* consume at tail position
     /// (Optional/Star/Plus elements with no required successor in the

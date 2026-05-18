@@ -789,10 +789,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 }
                 // Check if it's a local function (defined in this module) or
-                // a built-in type constructor (Ok, Err, Some, None)
-                else if self.function_return_types.contains_key(&ident.name)
-                    || matches!(ident.name.as_str(), "Ok" | "Err" | "Some" | "None")
-                {
+                // a built-in type constructor (Ok, Err, Some, None).
+                // The four constructor names flow through the
+                // `CompilerItem` registry so a stdlib rename of any of
+                // them is picked up here without re-editing the literal set.
+                else if self.function_return_types.contains_key(&ident.name) || {
+                    let tt = self.type_table.borrow();
+                    let items = tt.compiler_items();
+                    let name = ident.name.as_str();
+                    name == items.variant_case_name(crate::compiler_item::CompilerItem::ResultOk)
+                        || name
+                            == items
+                                .variant_case_name(crate::compiler_item::CompilerItem::ResultErr)
+                        || name
+                            == items
+                                .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
+                        || name
+                            == items
+                                .variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
+                } {
                     self.record_item_reference_by_name(ident.id, &ident.name);
                     (
                         Some(CalleeRef::local(

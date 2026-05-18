@@ -538,10 +538,46 @@ mod tests {
             },
         );
         let _ = tt.compiler_items_mut().register(
+            CompilerItem::OptionSome,
+            Resolved::VariantCase {
+                module_source: ModuleSource::prelude(),
+                parent_type: "Option".to_string(),
+                name: "Some".to_string(),
+                case_index: 0,
+            },
+        );
+        let _ = tt.compiler_items_mut().register(
+            CompilerItem::OptionNone,
+            Resolved::VariantCase {
+                module_source: ModuleSource::prelude(),
+                parent_type: "Option".to_string(),
+                name: "None".to_string(),
+                case_index: 1,
+            },
+        );
+        let _ = tt.compiler_items_mut().register(
             CompilerItem::Result,
             Resolved::Variant {
                 module_source: ModuleSource::prelude(),
                 name: "Result".to_string(),
+            },
+        );
+        let _ = tt.compiler_items_mut().register(
+            CompilerItem::ResultOk,
+            Resolved::VariantCase {
+                module_source: ModuleSource::prelude(),
+                parent_type: "Result".to_string(),
+                name: "Ok".to_string(),
+                case_index: 0,
+            },
+        );
+        let _ = tt.compiler_items_mut().register(
+            CompilerItem::ResultErr,
+            Resolved::VariantCase {
+                module_source: ModuleSource::prelude(),
+                parent_type: "Result".to_string(),
+                name: "Err".to_string(),
+                case_index: 1,
             },
         );
         let _ = tt.compiler_items_mut().register(

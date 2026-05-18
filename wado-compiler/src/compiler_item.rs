@@ -97,6 +97,122 @@ pub enum CompilerItem {
     /// `core:serde::Deserialize` — anchor for `Deserialize` impl
     /// synthesis and for the Kiln CM adapter's options decoding.
     Deserialize,
+    /// `core:serde::Serializer` — supertrait bound on synthesised
+    /// `serialize<S: Serializer>` methods.
+    Serializer,
+    /// `core:serde::Deserializer` — supertrait bound on synthesised
+    /// `deserialize<D: Deserializer>` methods.
+    Deserializer,
+    /// `core:serde::SerializeStruct` — associated-type bound used when
+    /// the synthesised struct serializer projects `S::StructSerializer`.
+    SerializeStruct,
+    /// `core:serde::SerializeSeq` — associated-type bound used when the
+    /// synthesised array / tuple serializer projects `S::SeqSerializer`.
+    SerializeSeq,
+    /// `core:serde::SerializeVariant` — associated-type bound used when
+    /// the synthesised variant serializer projects `S::VariantSerializer`.
+    SerializeVariant,
+    /// `core:serde::DeserializeStruct` — associated-type bound used when
+    /// the synthesised struct deserializer projects `D::StructAccess`.
+    DeserializeStruct,
+    /// `core:serde::DeserializeSeq` — associated-type bound used when
+    /// the synthesised array / tuple deserializer projects `D::SeqAccess`.
+    DeserializeSeq,
+    /// `core:serde::DeserializeVariant` — associated-type bound used when
+    /// the synthesised variant deserializer projects `D::VariantAccess`.
+    DeserializeVariant,
+    /// `core:prelude/traits::Display` — anchor for `{x}` template-string
+    /// dispatch and the auto-derive Display→Inspect fallback.
+    Display,
+    /// `core:prelude/traits::DisplayAlt` — `{x:#}` dispatch.
+    DisplayAlt,
+    /// `core:prelude/traits::Inspect` — `{x:?}` dispatch.
+    Inspect,
+    /// `core:prelude/traits::InspectAlt` — `{x:#?}` dispatch.
+    InspectAlt,
+    /// `core:prelude/traits::Binary` — `{x:b}` dispatch.
+    Binary,
+    /// `core:prelude/traits::BinaryAlt` — `{x:#b}` dispatch.
+    BinaryAlt,
+    /// `core:prelude/traits::Octal` — `{x:o}` dispatch.
+    Octal,
+    /// `core:prelude/traits::OctalAlt` — `{x:#o}` dispatch.
+    OctalAlt,
+    /// `core:prelude/traits::LowerHex` — `{x:x}` dispatch.
+    LowerHex,
+    /// `core:prelude/traits::LowerHexAlt` — `{x:#x}` dispatch.
+    LowerHexAlt,
+    /// `core:prelude/traits::UpperHex` — `{x:X}` dispatch.
+    UpperHex,
+    /// `core:prelude/traits::UpperHexAlt` — `{x:#X}` dispatch.
+    UpperHexAlt,
+    /// `core:prelude/traits::LowerExp` — `{x:e}` dispatch.
+    LowerExp,
+    /// `core:prelude/traits::UpperExp` — `{x:E}` dispatch.
+    UpperExp,
+
+    // ── Format types (structs / enums) ─────────────────────────────────
+    /// `core:prelude/format::Formatter` — the format target struct.
+    Formatter,
+    /// `core:prelude/format::Alignment` — alignment enum used by the
+    /// formatter's pad path.
+    Alignment,
+    /// `core:serde::SerializeError` — error struct returned from every
+    /// synthesised `Serializer` method.
+    SerializeError,
+    /// `core:serde::SerializeErrorKind` — error kind enum used by the
+    /// synthesised error-literal helpers.
+    SerializeErrorKind,
+    /// `core:serde::DeserializeError` — error struct returned from every
+    /// synthesised `Deserializer` method.
+    DeserializeError,
+    /// `core:serde::DeserializeErrorKind` — error kind enum used by the
+    /// synthesised error-literal helpers.
+    DeserializeErrorKind,
+
+    // ── Variant cases ─────────────────────────────────────────────────
+    /// `Option::Some` — anchors the case-name / case-index pair used by
+    /// every site that constructs or matches `Some(_)`.
+    OptionSome,
+    /// `Option::None` — anchors the case-name / case-index pair used by
+    /// every site that constructs or matches `None`.
+    OptionNone,
+    /// `Result::Ok` — anchors the case-name / case-index pair used by
+    /// every site that constructs or matches `Ok(_)`.
+    ResultOk,
+    /// `Result::Err` — anchors the case-name / case-index pair used by
+    /// every site that constructs or matches `Err(_)`.
+    ResultErr,
+    /// `Ordering::Less` — anchors the case-name / case-index pair used
+    /// by operator dispatch lowering for `<` / `<=`.
+    OrderingLess,
+    /// `Ordering::Equal` — anchors the case-name / case-index pair used
+    /// by operator dispatch lowering for `==` / `!=`.
+    OrderingEqual,
+    /// `Ordering::Greater` — anchors the case-name / case-index pair
+    /// used by operator dispatch lowering for `>` / `>=`.
+    OrderingGreater,
+    /// `SerializeErrorKind::Custom` — anchors the case-name / case-index
+    /// pair used by `serialize_error_literal`.
+    SerializeErrorKindCustom,
+    /// `DeserializeErrorKind::MissingField` — anchors the case-name /
+    /// case-index pair used by `deserialize_error_literal`.
+    DeserializeErrorKindMissingField,
+    /// `DeserializeErrorKind::UnknownVariant` — anchors the case-name /
+    /// case-index pair used by `deserialize_error_literal`.
+    DeserializeErrorKindUnknownVariant,
+    /// `DeserializeErrorKind::InvalidValue` — anchors the case-name /
+    /// case-index pair used by `deserialize_error_literal`.
+    DeserializeErrorKindInvalidValue,
+    /// `Alignment::Left` — anchors the case-name / case-index pair used
+    /// by template-string padding lowering.
+    AlignmentLeft,
+    /// `Alignment::Center` — anchors the case-name / case-index pair
+    /// used by template-string padding lowering.
+    AlignmentCenter,
+    /// `Alignment::Right` — anchors the case-name / case-index pair used
+    /// by template-string padding lowering.
+    AlignmentRight,
 
     // ── Methods (impl-block functions) ────────────────────────────────
     /// `Array<T>::push` — recognised by the WIR optimiser to collapse
@@ -155,6 +271,48 @@ impl CompilerItem {
         Self::From,
         Self::Serialize,
         Self::Deserialize,
+        Self::Serializer,
+        Self::Deserializer,
+        Self::SerializeStruct,
+        Self::SerializeSeq,
+        Self::SerializeVariant,
+        Self::DeserializeStruct,
+        Self::DeserializeSeq,
+        Self::DeserializeVariant,
+        Self::Display,
+        Self::DisplayAlt,
+        Self::Inspect,
+        Self::InspectAlt,
+        Self::Binary,
+        Self::BinaryAlt,
+        Self::Octal,
+        Self::OctalAlt,
+        Self::LowerHex,
+        Self::LowerHexAlt,
+        Self::UpperHex,
+        Self::UpperHexAlt,
+        Self::LowerExp,
+        Self::UpperExp,
+        Self::Formatter,
+        Self::Alignment,
+        Self::SerializeError,
+        Self::SerializeErrorKind,
+        Self::DeserializeError,
+        Self::DeserializeErrorKind,
+        Self::OptionSome,
+        Self::OptionNone,
+        Self::ResultOk,
+        Self::ResultErr,
+        Self::OrderingLess,
+        Self::OrderingEqual,
+        Self::OrderingGreater,
+        Self::SerializeErrorKindCustom,
+        Self::DeserializeErrorKindMissingField,
+        Self::DeserializeErrorKindUnknownVariant,
+        Self::DeserializeErrorKindInvalidValue,
+        Self::AlignmentLeft,
+        Self::AlignmentCenter,
+        Self::AlignmentRight,
         Self::ArrayPush,
         Self::StringPushStr,
         Self::StringPushChar,
@@ -194,6 +352,48 @@ impl CompilerItem {
             Self::From => "from",
             Self::Serialize => "serialize",
             Self::Deserialize => "deserialize",
+            Self::Serializer => "serializer",
+            Self::Deserializer => "deserializer",
+            Self::SerializeStruct => "serialize_struct",
+            Self::SerializeSeq => "serialize_seq",
+            Self::SerializeVariant => "serialize_variant",
+            Self::DeserializeStruct => "deserialize_struct",
+            Self::DeserializeSeq => "deserialize_seq",
+            Self::DeserializeVariant => "deserialize_variant",
+            Self::Display => "display",
+            Self::DisplayAlt => "display_alt",
+            Self::Inspect => "inspect",
+            Self::InspectAlt => "inspect_alt",
+            Self::Binary => "binary",
+            Self::BinaryAlt => "binary_alt",
+            Self::Octal => "octal",
+            Self::OctalAlt => "octal_alt",
+            Self::LowerHex => "lower_hex",
+            Self::LowerHexAlt => "lower_hex_alt",
+            Self::UpperHex => "upper_hex",
+            Self::UpperHexAlt => "upper_hex_alt",
+            Self::LowerExp => "lower_exp",
+            Self::UpperExp => "upper_exp",
+            Self::Formatter => "formatter",
+            Self::Alignment => "alignment",
+            Self::SerializeError => "serialize_error",
+            Self::SerializeErrorKind => "serialize_error_kind",
+            Self::DeserializeError => "deserialize_error",
+            Self::DeserializeErrorKind => "deserialize_error_kind",
+            Self::OptionSome => "option_some",
+            Self::OptionNone => "option_none",
+            Self::ResultOk => "result_ok",
+            Self::ResultErr => "result_err",
+            Self::OrderingLess => "ordering_less",
+            Self::OrderingEqual => "ordering_equal",
+            Self::OrderingGreater => "ordering_greater",
+            Self::SerializeErrorKindCustom => "serialize_error_kind_custom",
+            Self::DeserializeErrorKindMissingField => "deserialize_error_kind_missing_field",
+            Self::DeserializeErrorKindUnknownVariant => "deserialize_error_kind_unknown_variant",
+            Self::DeserializeErrorKindInvalidValue => "deserialize_error_kind_invalid_value",
+            Self::AlignmentLeft => "alignment_left",
+            Self::AlignmentCenter => "alignment_center",
+            Self::AlignmentRight => "alignment_right",
             Self::ArrayPush => "array_push",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
@@ -256,7 +456,39 @@ impl CompilerItem {
             | Self::I128FromPair
             | Self::U128FromU64
             | Self::U128FromPair
-            | Self::Tuple => true,
+            | Self::Tuple
+            // Variant cases of always-loaded variants/enums travel with
+            // their parents — Option, Result, and Ordering are all in
+            // the auto-loaded prelude, so their cases are always
+            // required too.
+            | Self::OptionSome
+            | Self::OptionNone
+            | Self::ResultOk
+            | Self::ResultErr
+            | Self::OrderingLess
+            | Self::OrderingEqual
+            | Self::OrderingGreater
+            // The format module is part of `core:prelude` so its
+            // structs / enums / traits / cases are always required.
+            | Self::Formatter
+            | Self::Alignment
+            | Self::AlignmentLeft
+            | Self::AlignmentCenter
+            | Self::AlignmentRight
+            | Self::Display
+            | Self::DisplayAlt
+            | Self::Inspect
+            | Self::InspectAlt
+            | Self::Binary
+            | Self::BinaryAlt
+            | Self::Octal
+            | Self::OctalAlt
+            | Self::LowerHex
+            | Self::LowerHexAlt
+            | Self::UpperHex
+            | Self::UpperHexAlt
+            | Self::LowerExp
+            | Self::UpperExp => true,
             // Kiln generator world only.
             Self::KilnRequest => world == "core:kiln/generator",
             // Loaded only when the user imports `core:serde` (which
@@ -264,7 +496,24 @@ impl CompilerItem {
             // validator skips the check; downstream synthesis ICEs
             // with a clear message if the items are reached for
             // without being registered.
-            Self::Serialize | Self::Deserialize => false,
+            Self::Serialize
+            | Self::Deserialize
+            | Self::Serializer
+            | Self::Deserializer
+            | Self::SerializeStruct
+            | Self::SerializeSeq
+            | Self::SerializeVariant
+            | Self::DeserializeStruct
+            | Self::DeserializeSeq
+            | Self::DeserializeVariant
+            | Self::SerializeError
+            | Self::SerializeErrorKind
+            | Self::DeserializeError
+            | Self::DeserializeErrorKind
+            | Self::SerializeErrorKindCustom
+            | Self::DeserializeErrorKindMissingField
+            | Self::DeserializeErrorKindUnknownVariant
+            | Self::DeserializeErrorKindInvalidValue => false,
         }
     }
 
@@ -282,13 +531,38 @@ impl CompilerItem {
             | Self::KilnRequest
             | Self::String => CompilerItemKind::Struct,
             Self::Option | Self::Result => CompilerItemKind::Variant,
-            Self::Ordering => CompilerItemKind::Enum,
+            Self::Ordering | Self::Alignment => CompilerItemKind::Enum,
+            Self::SerializeError | Self::DeserializeError => CompilerItemKind::Struct,
+            Self::SerializeErrorKind | Self::DeserializeErrorKind => CompilerItemKind::Enum,
+            Self::Formatter => CompilerItemKind::Struct,
             Self::Default
             | Self::Eq
             | Self::Ord
             | Self::From
             | Self::Serialize
-            | Self::Deserialize => CompilerItemKind::Trait,
+            | Self::Deserialize
+            | Self::Serializer
+            | Self::Deserializer
+            | Self::SerializeStruct
+            | Self::SerializeSeq
+            | Self::SerializeVariant
+            | Self::DeserializeStruct
+            | Self::DeserializeSeq
+            | Self::DeserializeVariant
+            | Self::Display
+            | Self::DisplayAlt
+            | Self::Inspect
+            | Self::InspectAlt
+            | Self::Binary
+            | Self::BinaryAlt
+            | Self::Octal
+            | Self::OctalAlt
+            | Self::LowerHex
+            | Self::LowerHexAlt
+            | Self::UpperHex
+            | Self::UpperHexAlt
+            | Self::LowerExp
+            | Self::UpperExp => CompilerItemKind::Trait,
             Self::ArrayPush
             | Self::StringPushStr
             | Self::StringPushChar
@@ -298,6 +572,19 @@ impl CompilerItem {
             | Self::U128FromU64
             | Self::U128FromPair => CompilerItemKind::Method,
             Self::Tuple => CompilerItemKind::TupleFamily,
+            Self::OptionSome | Self::OptionNone | Self::ResultOk | Self::ResultErr => {
+                CompilerItemKind::VariantCase
+            }
+            Self::OrderingLess
+            | Self::OrderingEqual
+            | Self::OrderingGreater
+            | Self::AlignmentLeft
+            | Self::AlignmentCenter
+            | Self::AlignmentRight
+            | Self::SerializeErrorKindCustom
+            | Self::DeserializeErrorKindMissingField
+            | Self::DeserializeErrorKindUnknownVariant
+            | Self::DeserializeErrorKindInvalidValue => CompilerItemKind::EnumCase,
         }
     }
 }
@@ -328,6 +615,10 @@ pub enum CompilerItemKind {
     Method,
     /// The `pub type [..T];` declaration that owns the tuple family.
     TupleFamily,
+    /// One case of a `variant` declaration (e.g. `Option::Some`).
+    VariantCase,
+    /// One case of an `enum` declaration (e.g. `Ordering::Less`).
+    EnumCase,
 }
 
 impl fmt::Display for CompilerItemKind {
@@ -339,11 +630,30 @@ impl fmt::Display for CompilerItemKind {
             Self::Trait => "trait",
             Self::Method => "method",
             Self::TupleFamily => "tuple type family",
+            Self::VariantCase => "variant case",
+            Self::EnumCase => "enum case",
         })
     }
 }
 
 /// The resolved data for a registered [`CompilerItem`].
+/// One associated type declaration captured from a trait registered
+/// via `#[compiler_item("...")]`. Carries the source-side name plus
+/// the source-side names of all trait bounds (e.g.
+/// `type SeqSerializer: SerializeSeq;` →
+/// `{ name: "SeqSerializer", bound_names: ["SerializeSeq"] }`).
+///
+/// The bound list is what makes
+/// [`CompilerItems::trait_assoc_type_by_bound`] stable across stdlib
+/// renames: the synthesiser asks "which assoc type is bound by
+/// `SerializeSeq`?" instead of "is there an assoc type named
+/// `SeqSerializer`?".
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TraitAssocType {
+    pub name: String,
+    pub bound_names: Vec<String>,
+}
+
 ///
 /// One enum with a variant per [`CompilerItemKind`]. Each variant
 /// carries enough information for downstream consumers to reconstruct
@@ -370,6 +680,41 @@ pub enum Resolved {
     Trait {
         module_source: ModuleSource,
         name: String,
+        /// Primary method name for **single-method** traits, captured
+        /// automatically by the resolver when registering the trait's
+        /// `#[compiler_item("...")]` annotation. `None` for
+        /// multi-method traits (`Serializer`, `Deserializer`, …).
+        ///
+        /// The format-family traits (`Display` / `DisplayAlt` /
+        /// `Inspect` / `InspectAlt` / `Binary` / `BinaryAlt` / `Octal`
+        /// / `OctalAlt` / `LowerHex` / `LowerHexAlt` / `UpperHex` /
+        /// `UpperHexAlt` / `LowerExp` / `UpperExp`) all have exactly
+        /// one method by design, so the synthesiser can look up the
+        /// method name from the trait registration alone instead of
+        /// hard-coding `"fmt"` / `"inspect"` at every call site.
+        ///
+        /// Reading: [`CompilerItems::trait_method_name`].
+        method_name: Option<String>,
+        /// Associated types declared on the trait, in source order.
+        /// Each entry pairs the assoc type's source-side name with the
+        /// source-side names of its trait bounds (e.g. for
+        /// `type SeqSerializer: SerializeSeq;` the entry is
+        /// `TraitAssocType { name: "SeqSerializer", bound_names: ["SerializeSeq"] }`).
+        /// Auto-captured by the resolver when registering the trait's
+        /// `#[compiler_item("...")]` annotation; empty for traits
+        /// without associated types.
+        ///
+        /// The serde synthesiser identifies each assoc type by its
+        /// **bound trait** (itself a `#[compiler_item("...")]`-
+        /// registered trait whose current spelling comes from the
+        /// registry), not by its source-side spelling. That makes both
+        /// ends rename-stable: renaming `SeqSerializer` to `SeqWriter`
+        /// or renaming the bound `SerializeSeq` to `SeqWriterTrait`
+        /// both keep flowing through the registry instead of panicking
+        /// on a missing source-side name.
+        ///
+        /// Reading: [`CompilerItems::trait_assoc_type_by_bound`].
+        assoc_types: Vec<TraitAssocType>,
     },
     Method {
         module_source: ModuleSource,
@@ -381,6 +726,31 @@ pub enum Resolved {
     /// user-visible declared name on the Wado side, only an owning
     /// module; the [`ModuleSource`] is therefore the only payload.
     TupleFamily { module_source: ModuleSource },
+    /// One case of a `variant` declaration. Carries the owning
+    /// variant's name (`Option`, `Result`) so downstream consumers can
+    /// reconstruct the `TirPattern::Variant.enum_type` / lookup keys,
+    /// plus the case's own name and zero-based index.
+    VariantCase {
+        module_source: ModuleSource,
+        /// The variant type the case belongs to (e.g. `"Option"`).
+        parent_type: String,
+        /// The case name (e.g. `"Some"`).
+        name: String,
+        /// Zero-based index of the case in declaration order.
+        case_index: u32,
+    },
+    /// One case of an `enum` declaration. Same shape as
+    /// [`Self::VariantCase`] but for payload-less `enum` cases
+    /// (`Ordering::Less`, `Alignment::Right`, …).
+    EnumCase {
+        module_source: ModuleSource,
+        /// The enum type the case belongs to (e.g. `"Ordering"`).
+        parent_type: String,
+        /// The case name (e.g. `"Less"`).
+        name: String,
+        /// Zero-based index of the case in declaration order.
+        case_index: u32,
+    },
 }
 
 impl Resolved {
@@ -394,6 +764,8 @@ impl Resolved {
             Self::Trait { .. } => CompilerItemKind::Trait,
             Self::Method { .. } => CompilerItemKind::Method,
             Self::TupleFamily { .. } => CompilerItemKind::TupleFamily,
+            Self::VariantCase { .. } => CompilerItemKind::VariantCase,
+            Self::EnumCase { .. } => CompilerItemKind::EnumCase,
         }
     }
 
@@ -406,7 +778,9 @@ impl Resolved {
             | Self::Enum { module_source, .. }
             | Self::Trait { module_source, .. }
             | Self::Method { module_source, .. }
-            | Self::TupleFamily { module_source } => module_source,
+            | Self::TupleFamily { module_source }
+            | Self::VariantCase { module_source, .. }
+            | Self::EnumCase { module_source, .. } => module_source,
         }
     }
 }
@@ -566,6 +940,7 @@ impl CompilerItems {
             Resolved::Trait {
                 module_source,
                 name,
+                ..
             } => (module_source, name.as_str()),
             other => kind_mismatch_ice(item, "Trait", other),
         }
@@ -577,6 +952,66 @@ impl CompilerItems {
     /// (e.g. when constructing a synthesised `LocalMethodName`).
     pub fn trait_name(&self, item: CompilerItem) -> &str {
         self.require_trait(item).1
+    }
+
+    /// Resolved method name of a **single-method** trait — `"fmt"` for
+    /// `Display`, `"inspect"` for `Inspect`, and so on across the
+    /// format-family traits. Panics for multi-method traits where
+    /// `method_name` was not captured during registration; callers
+    /// that need such method names must reach for a dedicated method
+    /// `CompilerItem` instead.
+    ///
+    /// Routing the synthesiser's `Display::fmt` / `Inspect::inspect`
+    /// call construction through this method removes the last hard
+    /// dependency on the conventional source-side method spelling.
+    pub fn trait_method_name(&self, item: CompilerItem) -> &str {
+        match self.require(item) {
+            Resolved::Trait {
+                method_name: Some(name),
+                ..
+            } => name.as_str(),
+            Resolved::Trait { name, .. } => panic!(
+                "compiler item `{item}` (trait `{name}`) has no captured \
+                 method name; `trait_method_name` is only valid for \
+                 single-method traits"
+            ),
+            other => kind_mismatch_ice(item, "Trait", other),
+        }
+    }
+
+    /// All associated types declared on a trait, in source order, with
+    /// their names and trait bounds. Auto-captured when the trait's
+    /// `#[compiler_item("...")]` is registered.
+    pub fn trait_assoc_types(&self, item: CompilerItem) -> &[TraitAssocType] {
+        match self.require(item) {
+            Resolved::Trait { assoc_types, .. } => assoc_types.as_slice(),
+            other => kind_mismatch_ice(item, "Trait", other),
+        }
+    }
+
+    /// Single associated type name on a trait, identified by the
+    /// source-side name of its trait bound. Both the bound trait's
+    /// spelling (passed in by the caller) and the associated type's
+    /// spelling (returned) come from the registry, so renaming either
+    /// end in the stdlib flows through without hand-edits.
+    ///
+    /// Panics if no associated type with the given bound is found —
+    /// the only legitimate way to hit that is to break the structural
+    /// shape of the trait, which the synthesiser does not silently
+    /// handle anywhere else either.
+    pub fn trait_assoc_type_by_bound(&self, item: CompilerItem, bound_trait_name: &str) -> &str {
+        let assoc = self
+            .trait_assoc_types(item)
+            .iter()
+            .find(|a| a.bound_names.iter().any(|b| b == bound_trait_name));
+        match assoc {
+            Some(a) => a.name.as_str(),
+            None => panic!(
+                "compiler item `{item}` has no associated type bound by `{bound_trait_name}`; \
+                 declared associated types: {:?}",
+                self.trait_assoc_types(item)
+            ),
+        }
     }
 
     /// Name-only convenience for a [`CompilerItemKind::Struct`] item.
@@ -635,6 +1070,64 @@ impl CompilerItems {
             Resolved::TupleFamily { module_source } => Some(module_source),
             _ => None,
         }
+    }
+
+    /// Module + parent-type name + case name + case index of a
+    /// [`CompilerItemKind::VariantCase`] item.
+    pub fn require_variant_case(&self, item: CompilerItem) -> (&ModuleSource, &str, &str, u32) {
+        match self.require(item) {
+            Resolved::VariantCase {
+                module_source,
+                parent_type,
+                name,
+                case_index,
+            } => (
+                module_source,
+                parent_type.as_str(),
+                name.as_str(),
+                *case_index,
+            ),
+            other => kind_mismatch_ice(item, "VariantCase", other),
+        }
+    }
+
+    /// Module + parent-type name + case name + case index of a
+    /// [`CompilerItemKind::EnumCase`] item.
+    pub fn require_enum_case(&self, item: CompilerItem) -> (&ModuleSource, &str, &str, u32) {
+        match self.require(item) {
+            Resolved::EnumCase {
+                module_source,
+                parent_type,
+                name,
+                case_index,
+            } => (
+                module_source,
+                parent_type.as_str(),
+                name.as_str(),
+                *case_index,
+            ),
+            other => kind_mismatch_ice(item, "EnumCase", other),
+        }
+    }
+
+    /// Case name of a [`CompilerItemKind::VariantCase`] item.
+    pub fn variant_case_name(&self, item: CompilerItem) -> &str {
+        self.require_variant_case(item).2
+    }
+
+    /// Zero-based case index of a [`CompilerItemKind::VariantCase`] item.
+    pub fn variant_case_index(&self, item: CompilerItem) -> u32 {
+        self.require_variant_case(item).3
+    }
+
+    /// Case name of a [`CompilerItemKind::EnumCase`] item.
+    pub fn enum_case_name(&self, item: CompilerItem) -> &str {
+        self.require_enum_case(item).2
+    }
+
+    /// Zero-based case index of a [`CompilerItemKind::EnumCase`] item.
+    pub fn enum_case_index(&self, item: CompilerItem) -> u32 {
+        self.require_enum_case(item).3
     }
 
     /// List every required-but-missing [`CompilerItem`] for the given
@@ -778,6 +1271,8 @@ mod tests {
                 Resolved::Trait {
                     module_source: ModuleSource::types(),
                     name: "Option".into(),
+                    method_name: None,
+                    assoc_types: Vec::new(),
                 },
             )
             .unwrap_err();
@@ -820,6 +1315,8 @@ mod tests {
             Resolved::Trait {
                 module_source: ModuleSource::traits(),
                 name: "Default".into(),
+                method_name: Some("default".into()),
+                assoc_types: Vec::new(),
             },
         )
         .unwrap();
@@ -865,6 +1362,53 @@ mod tests {
         assert_eq!(name, "push_str_v2");
     }
 
+    /// Trait associated type names round-trip through the registry by
+    /// **bound trait**: if the stdlib renamed
+    /// `Serializer::SeqSerializer` to `Serializer::SeqWriter` (bound
+    /// unchanged), or renamed the bound itself from `SerializeSeq` to
+    /// `SeqWriterTrait`, the synthesiser still resolves the correct
+    /// associated type by asking
+    /// [`CompilerItems::trait_assoc_type_by_bound`] with the bound
+    /// trait's current spelling (also looked up from the registry).
+    #[test]
+    fn assoc_types_round_trip_by_bound_even_when_renamed() {
+        let mut reg = CompilerItems::new();
+        reg.register(
+            CompilerItem::Serializer,
+            Resolved::Trait {
+                module_source: ModuleSource::serde(),
+                name: "Serializer".to_string(),
+                method_name: None,
+                assoc_types: vec![
+                    TraitAssocType {
+                        name: "SeqWriter".to_string(),
+                        bound_names: vec!["SerializeSeq".to_string()],
+                    },
+                    TraitAssocType {
+                        name: "StructWriter".to_string(),
+                        bound_names: vec!["SerializeStruct".to_string()],
+                    },
+                    TraitAssocType {
+                        name: "VariantWriter".to_string(),
+                        bound_names: vec!["SerializeVariant".to_string()],
+                    },
+                ],
+            },
+        )
+        .unwrap();
+        // Bound-based lookup finds the renamed assoc type:
+        assert_eq!(
+            reg.trait_assoc_type_by_bound(CompilerItem::Serializer, "SerializeSeq"),
+            "SeqWriter"
+        );
+        assert_eq!(
+            reg.trait_assoc_type_by_bound(CompilerItem::Serializer, "SerializeStruct"),
+            "StructWriter"
+        );
+        // The captured `assoc_types` are also inspectable.
+        assert_eq!(reg.trait_assoc_types(CompilerItem::Serializer).len(), 3);
+    }
+
     /// Counterpart to the rename-rewrite test: omitting the
     /// `#[compiler_item("...")]` annotation entirely leaves the
     /// registry empty for that item, so `get()` returns `None`. The
@@ -887,6 +1431,77 @@ mod tests {
     fn require_panics_on_unregistered() {
         let reg = CompilerItems::new();
         let _ = reg.require_method(CompilerItem::StringPushStr);
+    }
+
+    /// Variant case round-trip: register a `VariantCase` item under a
+    /// non-default case name and confirm the registry hands the same
+    /// `(parent, name, index)` triple back. Pins the contract that
+    /// stdlib renames of variant cases flow through the registry the
+    /// same way method / trait renames already do (issues #1086 /
+    /// #1090 / #1091).
+    #[test]
+    fn variant_case_round_trips_through_registry_even_when_renamed() {
+        let mut reg = CompilerItems::new();
+        reg.register(
+            CompilerItem::OptionSome,
+            Resolved::VariantCase {
+                module_source: ModuleSource::types(),
+                parent_type: "Option".to_string(),
+                name: "SomeV2".to_string(),
+                case_index: 0,
+            },
+        )
+        .unwrap();
+        let (module, parent, name, index) = reg.require_variant_case(CompilerItem::OptionSome);
+        assert_eq!(module, &ModuleSource::types());
+        assert_eq!(parent, "Option");
+        assert_eq!(name, "SomeV2");
+        assert_eq!(index, 0);
+    }
+
+    /// Mirror of [`variant_case_round_trips_through_registry_even_when_renamed`]
+    /// for `EnumCase` items. Locks in that `Ordering::Less` /
+    /// `Alignment::Left` and friends — payload-less enum cases — are
+    /// just as renameable as their variant-with-payload counterparts.
+    #[test]
+    fn enum_case_round_trips_through_registry_even_when_renamed() {
+        let mut reg = CompilerItems::new();
+        reg.register(
+            CompilerItem::OrderingLess,
+            Resolved::EnumCase {
+                module_source: ModuleSource::traits(),
+                parent_type: "Ordering".to_string(),
+                name: "LessV2".to_string(),
+                case_index: 0,
+            },
+        )
+        .unwrap();
+        let (module, parent, name, index) = reg.require_enum_case(CompilerItem::OrderingLess);
+        assert_eq!(module, &ModuleSource::traits());
+        assert_eq!(parent, "Ordering");
+        assert_eq!(name, "LessV2");
+        assert_eq!(index, 0);
+    }
+
+    /// `VariantCase` items must reject being attached to an `EnumCase`
+    /// resolved value — the kind mismatch surface that protected the
+    /// earlier kinds (`Variant` vs `Trait`) needs to extend to the new
+    /// case kinds too.
+    #[test]
+    fn register_rejects_variant_case_with_enum_case_resolved() {
+        let mut reg = CompilerItems::new();
+        let err = reg
+            .register(
+                CompilerItem::OptionSome,
+                Resolved::EnumCase {
+                    module_source: ModuleSource::types(),
+                    parent_type: "Option".to_string(),
+                    name: "Some".to_string(),
+                    case_index: 0,
+                },
+            )
+            .unwrap_err();
+        assert!(matches!(err, RegisterError::KindMismatch { .. }));
     }
 
     /// Validator covers every required item in `ALL`. With an empty

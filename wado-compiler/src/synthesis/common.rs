@@ -5,6 +5,7 @@
 //! - TIR expression and statement builders
 //! - Synthetic function creation
 
+use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::IndexSet;
 
 use crate::module_source::ModuleSource;
@@ -239,12 +240,18 @@ pub fn cm_raw_call(local_name: &str, args: Vec<TirExpr>, return_type: TypeId) ->
 }
 
 /// Create an `Option::Some(value)` expression.
-pub fn option_some(value: TirExpr, option_type_id: TypeId) -> TirExpr {
+///
+/// Looks up the `Some` case name + index through the
+/// [`CompilerItem::OptionSome`] anchor so stdlib renames flow through
+/// without touching synthesis sites. See `compiler_item.rs` for the
+/// design.
+pub fn option_some(value: TirExpr, option_type_id: TypeId, items: &CompilerItems) -> TirExpr {
+    let (_, _, case_name, case_index) = items.require_variant_case(CompilerItem::OptionSome);
     TirExpr::new(
         TirExprKind::VariantConstruct {
             variant_type: option_type_id,
-            case_index: 0,
-            case_name: "Some".to_string(),
+            case_index,
+            case_name: case_name.to_string(),
             payload: Some(Box::new(value)),
         },
         option_type_id,
@@ -252,13 +259,15 @@ pub fn option_some(value: TirExpr, option_type_id: TypeId) -> TirExpr {
     )
 }
 
-/// Create a `null` (`Option::None`) expression.
-pub fn option_none(option_type_id: TypeId) -> TirExpr {
+/// Create a `null` (`Option::None`) expression. See [`option_some`] for
+/// the registry-lookup contract.
+pub fn option_none(option_type_id: TypeId, items: &CompilerItems) -> TirExpr {
+    let (_, _, case_name, case_index) = items.require_variant_case(CompilerItem::OptionNone);
     TirExpr::new(
         TirExprKind::VariantConstruct {
             variant_type: option_type_id,
-            case_index: 1,
-            case_name: "None".to_string(),
+            case_index,
+            case_name: case_name.to_string(),
             payload: None,
         },
         option_type_id,
@@ -461,12 +470,20 @@ pub fn make_synthetic_method(
 /// method. `Formatter::write_str` takes `&String`, so the literal is
 /// wrapped in an explicit `Ref`; `ref_string_type` is the cached `&String`
 /// type id the caller already produced from `string_type`.
+///
+/// `formatter_name` is the resolved [`CompilerItem::Formatter`] struct
+/// name. Every caller already snapshotted it (either via
+/// [`super::traits::TraitsStdlibNames`] on `SynthesisCtx`, or by reading
+/// it directly off `tt.compiler_items()`), so threading it through this
+/// helper avoids a fresh registry lookup per call without re-introducing
+/// the `"Formatter"` literal here.
 pub fn write_str_stmt(
     text: impl Into<String>,
     fmt: TirExpr,
     string_type: TypeId,
     ref_string_type: TypeId,
     span: Span,
+    formatter_name: &str,
 ) -> TirStmt {
     let literal = TirExpr::new(TirExprKind::StringLiteral(text.into()), string_type, span);
     let arg = TirExpr::new(
@@ -482,10 +499,10 @@ pub fn write_str_stmt(
             Box::new(fmt),
             FunctionRef {
                 module_source: ModuleSource::format(),
-                name: "Formatter::write_str".to_string(),
+                name: format!("{formatter_name}::write_str"),
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
-                    "Formatter".to_string(),
+                    formatter_name.to_string(),
                     None,
                     "write_str".to_string(),
                 )),

@@ -8,7 +8,7 @@ use std::cell::RefCell;
 
 use crate::ast::{AstId, GenericType, NamedType, Type};
 use crate::cm_abi;
-use crate::compiler_item::CompilerItem;
+use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::component_model::WasiRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -37,20 +37,48 @@ pub struct CmStdlibNames {
     pub array: String,
     pub option: String,
     pub result: String,
+    /// `Option::Some` case name + zero-based index.
+    pub some_name: String,
+    pub some_index: u32,
+    /// `Option::None` case name + zero-based index.
+    pub none_name: String,
+    pub none_index: u32,
+    /// `Result::Ok` case name + zero-based index.
+    pub ok_name: String,
+    pub ok_index: u32,
+    /// `Result::Err` case name + zero-based index.
+    pub err_name: String,
+    pub err_index: u32,
 }
 
 impl CmStdlibNames {
-    /// Look up every name through the compiler-item registry attached
-    /// to `tt`. Cheap (four registry hits + four clones); callers
-    /// should keep the value around for the duration of a CM-binding
-    /// synthesis pass rather than rebuilding it per match arm.
-    pub fn from_type_table(tt: &TypeTable) -> Self {
-        let items = tt.compiler_items();
+    /// Look up every name through the [`CompilerItems`] registry.
+    /// Cheap (a handful of registry hits + clones); `cm_binding`'s
+    /// multi-entry-point shape (lift / lower / adapter / `type_fixup` /
+    /// `task_return` are all called independently from outside paths)
+    /// means each entry rebuilds the snapshot locally rather than
+    /// threading a single one through a single context — mirrors the
+    /// `from_compiler_items` constructor shape used by the other
+    /// synthesis passes (`SerdeStdlibNames`, `FormatStdlibNames`,
+    /// `TraitsStdlibNames`).
+    pub fn from_compiler_items(items: &CompilerItems) -> Self {
+        let (_, _, some_name, some_index) = items.require_variant_case(CompilerItem::OptionSome);
+        let (_, _, none_name, none_index) = items.require_variant_case(CompilerItem::OptionNone);
+        let (_, _, ok_name, ok_index) = items.require_variant_case(CompilerItem::ResultOk);
+        let (_, _, err_name, err_index) = items.require_variant_case(CompilerItem::ResultErr);
         Self {
             string: items.struct_name(CompilerItem::String).to_string(),
             array: items.struct_name(CompilerItem::Array).to_string(),
             option: items.variant_name(CompilerItem::Option).to_string(),
             result: items.variant_name(CompilerItem::Result).to_string(),
+            some_name: some_name.to_string(),
+            some_index,
+            none_name: none_name.to_string(),
+            none_index,
+            ok_name: ok_name.to_string(),
+            ok_index,
+            err_name: err_name.to_string(),
+            err_index,
         }
     }
 
@@ -65,6 +93,14 @@ impl CmStdlibNames {
             array: "Array".to_string(),
             option: "Option".to_string(),
             result: "Result".to_string(),
+            some_name: "Some".to_string(),
+            some_index: 0,
+            none_name: "None".to_string(),
+            none_index: 1,
+            ok_name: "Ok".to_string(),
+            ok_index: 0,
+            err_name: "Err".to_string(),
+            err_index: 1,
         }
     }
 }
@@ -588,7 +624,7 @@ pub(super) fn flatten_export_type(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &TypeTable,
 ) {
-    let names = CmStdlibNames::from_type_table(type_table);
+    let names = CmStdlibNames::from_compiler_items(type_table.compiler_items());
     match ty {
         Type::Named(named) if named.name == names.string => {
             out.push(cm_abi::CmValType::I32); // ptr
@@ -702,7 +738,7 @@ pub(super) fn flat_types_from_type_id_into(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &TypeTable,
 ) {
-    let names = CmStdlibNames::from_type_table(type_table);
+    let names = CmStdlibNames::from_compiler_items(type_table.compiler_items());
     match type_table.get(type_id) {
         ResolvedType::Primitive(p) => match p {
             PrimitiveType::I8

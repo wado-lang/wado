@@ -1,0 +1,29 @@
+// Same rule as for `match`: an `if` whose result is consumed must
+// have then / else branches that agree on a single type. A
+// divergent branch in expression position would silently
+// miscompile — the `(if (result X) ...)` instruction's other
+// branch would push the wrong type — so the resolver rejects it.
+//
+// In statement position the same code is accepted because each
+// branch's value gets dropped at the WIR stmt level; see
+// `resolver::resolve_if_stmt`, which deliberately resolves the
+// branches with `expected_type=None` and never feeds the value
+// into a wasm result.
+
+fn helper() -> i32 {
+    return 42;
+}
+
+export fn run() {
+    let x: i32 = if true {
+        helper()
+    } else {
+        "hello"
+    };
+    let _ = x;
+}
+
+__DATA__
+{
+    "compile_error": "expected"
+}
