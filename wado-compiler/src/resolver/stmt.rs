@@ -93,8 +93,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // discard marker in Wado, so `{ helper(); }` evaluates to
                 // `helper()`'s return type) do not leave a stray value on
                 // the Wasm stack at the join point.
-                let tir =
-                    self.resolve_match_expr(match_expr, ctx, Some(TypeTable::UNIT));
+                let tir = self.resolve_match_expr(match_expr, ctx, Some(TypeTable::UNIT));
                 vec![TirStmt::new(TirStmtKind::Expr(tir), match_expr.span)]
             }
             Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt, ctx)],
