@@ -65,15 +65,15 @@ pub(super) struct SerdeStdlibNames {
     pub deser_err_unknown_variant_index: u32,
     pub deser_err_invalid_value_name: String,
     pub deser_err_invalid_value_index: u32,
-    /// `Serializer` associated type spellings: `SeqSerializer`,
-    /// `StructSerializer`, `VariantSerializer`. Auto-captured from the
-    /// trait declaration so the synthesiser can build `S::SeqSerializer`
-    /// projections without hard-coding the source-side names.
+    /// `Serializer` / `Deserializer` associated-type spellings,
+    /// resolved by their **trait bound** (also looked up from the
+    /// registry) rather than by source-side name. Renaming
+    /// `Serializer::SeqSerializer` to `SeqWriter` — or renaming the
+    /// bound `SerializeSeq` to `SeqWriterTrait` — both flow through
+    /// the registry without panicking on a stale lookup key.
     pub seq_serializer_assoc: String,
     pub struct_serializer_assoc: String,
     pub variant_serializer_assoc: String,
-    /// `Deserializer` associated type spellings: `SeqAccess`,
-    /// `StructAccess`, `VariantAccess`.
     pub seq_access_assoc: String,
     pub struct_access_assoc: String,
     pub variant_access_assoc: String,
@@ -145,46 +145,82 @@ impl SerdeStdlibNames {
             deser_err_invalid_value_name: deser_err_invalid_value_name.to_string(),
             deser_err_invalid_value_index,
             seq_serializer_assoc: items
-                .trait_assoc_type_name(CompilerItem::Serializer, "SeqSerializer")
+                .trait_assoc_type_by_bound(
+                    CompilerItem::Serializer,
+                    items.trait_name(CompilerItem::SerializeSeq),
+                )
                 .to_string(),
             struct_serializer_assoc: items
-                .trait_assoc_type_name(CompilerItem::Serializer, "StructSerializer")
+                .trait_assoc_type_by_bound(
+                    CompilerItem::Serializer,
+                    items.trait_name(CompilerItem::SerializeStruct),
+                )
                 .to_string(),
             variant_serializer_assoc: items
-                .trait_assoc_type_name(CompilerItem::Serializer, "VariantSerializer")
+                .trait_assoc_type_by_bound(
+                    CompilerItem::Serializer,
+                    items.trait_name(CompilerItem::SerializeVariant),
+                )
                 .to_string(),
             seq_access_assoc: items
-                .trait_assoc_type_name(CompilerItem::Deserializer, "SeqAccess")
+                .trait_assoc_type_by_bound(
+                    CompilerItem::Deserializer,
+                    items.trait_name(CompilerItem::DeserializeSeq),
+                )
                 .to_string(),
             struct_access_assoc: items
-                .trait_assoc_type_name(CompilerItem::Deserializer, "StructAccess")
+                .trait_assoc_type_by_bound(
+                    CompilerItem::Deserializer,
+                    items.trait_name(CompilerItem::DeserializeStruct),
+                )
                 .to_string(),
             variant_access_assoc: items
-                .trait_assoc_type_name(CompilerItem::Deserializer, "VariantAccess")
+                .trait_assoc_type_by_bound(
+                    CompilerItem::Deserializer,
+                    items.trait_name(CompilerItem::DeserializeVariant),
+                )
                 .to_string(),
             s_struct_serializer_proj: format!(
                 "S::{}",
-                items.trait_assoc_type_name(CompilerItem::Serializer, "StructSerializer")
+                items.trait_assoc_type_by_bound(
+                    CompilerItem::Serializer,
+                    items.trait_name(CompilerItem::SerializeStruct),
+                )
             ),
             s_seq_serializer_proj: format!(
                 "S::{}",
-                items.trait_assoc_type_name(CompilerItem::Serializer, "SeqSerializer")
+                items.trait_assoc_type_by_bound(
+                    CompilerItem::Serializer,
+                    items.trait_name(CompilerItem::SerializeSeq),
+                )
             ),
             s_variant_serializer_proj: format!(
                 "S::{}",
-                items.trait_assoc_type_name(CompilerItem::Serializer, "VariantSerializer")
+                items.trait_assoc_type_by_bound(
+                    CompilerItem::Serializer,
+                    items.trait_name(CompilerItem::SerializeVariant),
+                )
             ),
             d_struct_access_proj: format!(
                 "D::{}",
-                items.trait_assoc_type_name(CompilerItem::Deserializer, "StructAccess")
+                items.trait_assoc_type_by_bound(
+                    CompilerItem::Deserializer,
+                    items.trait_name(CompilerItem::DeserializeStruct),
+                )
             ),
             d_seq_access_proj: format!(
                 "D::{}",
-                items.trait_assoc_type_name(CompilerItem::Deserializer, "SeqAccess")
+                items.trait_assoc_type_by_bound(
+                    CompilerItem::Deserializer,
+                    items.trait_name(CompilerItem::DeserializeSeq),
+                )
             ),
             d_variant_access_proj: format!(
                 "D::{}",
-                items.trait_assoc_type_name(CompilerItem::Deserializer, "VariantAccess")
+                items.trait_assoc_type_by_bound(
+                    CompilerItem::Deserializer,
+                    items.trait_name(CompilerItem::DeserializeVariant),
+                )
             ),
         }
     }

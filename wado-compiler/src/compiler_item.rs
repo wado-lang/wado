@@ -637,6 +637,23 @@ impl fmt::Display for CompilerItemKind {
 }
 
 /// The resolved data for a registered [`CompilerItem`].
+/// One associated type declaration captured from a trait registered
+/// via `#[compiler_item("...")]`. Carries the source-side name plus
+/// the source-side names of all trait bounds (e.g.
+/// `type SeqSerializer: SerializeSeq;` →
+/// `{ name: "SeqSerializer", bound_names: ["SerializeSeq"] }`).
+///
+/// The bound list is what makes
+/// [`CompilerItems::trait_assoc_type_by_bound`] stable across stdlib
+/// renames: the synthesiser asks "which assoc type is bound by
+/// `SerializeSeq`?" instead of "is there an assoc type named
+/// `SeqSerializer`?".
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TraitAssocType {
+    pub name: String,
+    pub bound_names: Vec<String>,
+}
+
 ///
 /// One enum with a variant per [`CompilerItemKind`]. Each variant
 /// carries enough information for downstream consumers to reconstruct
@@ -678,17 +695,26 @@ pub enum Resolved {
         ///
         /// Reading: [`CompilerItems::trait_method_name`].
         method_name: Option<String>,
-        /// Associated type names declared on the trait, in source
-        /// order. Auto-captured by the resolver when registering the
-        /// trait's `#[compiler_item("...")]` annotation. Empty for
-        /// traits without associated types.
+        /// Associated types declared on the trait, in source order.
+        /// Each entry pairs the assoc type's source-side name with the
+        /// source-side names of its trait bounds (e.g. for
+        /// `type SeqSerializer: SerializeSeq;` the entry is
+        /// `TraitAssocType { name: "SeqSerializer", bound_names: ["SerializeSeq"] }`).
+        /// Auto-captured by the resolver when registering the trait's
+        /// `#[compiler_item("...")]` annotation; empty for traits
+        /// without associated types.
         ///
-        /// The serde synthesiser uses these to construct `S::SeqSerializer`
-        /// / `D::StructAccess` projections without hard-coding the
-        /// source-side associated type spellings.
+        /// The serde synthesiser identifies each assoc type by its
+        /// **bound trait** (itself a `#[compiler_item("...")]`-
+        /// registered trait whose current spelling comes from the
+        /// registry), not by its source-side spelling. That makes both
+        /// ends rename-stable: renaming `SeqSerializer` to `SeqWriter`
+        /// or renaming the bound `SerializeSeq` to `SeqWriterTrait`
+        /// both keep flowing through the registry instead of panicking
+        /// on a missing source-side name.
         ///
-        /// Reading: [`CompilerItems::trait_assoc_type_names`].
-        assoc_type_names: Vec<String>,
+        /// Reading: [`CompilerItems::trait_assoc_type_by_bound`].
+        assoc_types: Vec<TraitAssocType>,
     },
     Method {
         module_source: ModuleSource,
@@ -953,38 +979,42 @@ impl CompilerItems {
         }
     }
 
-    /// Associated type names declared on a trait, in source order.
-    /// Auto-captured when the trait's `#[compiler_item("...")]` is
-    /// registered, so the synthesiser can build `S::SeqSerializer`-style
-    /// projections without hard-coding the source-side associated type
-    /// spellings.
-    pub fn trait_assoc_type_names(&self, item: CompilerItem) -> &[String] {
+    /// All associated types declared on a trait, in source order, with
+    /// their names and trait bounds. Auto-captured when the trait's
+    /// `#[compiler_item("...")]` is registered.
+    pub fn trait_assoc_types(&self, item: CompilerItem) -> &[TraitAssocType] {
         match self.require(item) {
-            Resolved::Trait {
-                assoc_type_names, ..
-            } => assoc_type_names.as_slice(),
+            Resolved::Trait { assoc_types, .. } => assoc_types.as_slice(),
             other => kind_mismatch_ice(item, "Trait", other),
         }
     }
 
-    /// Single associated type name on a trait, looked up by source-side
-    /// name. Panics if the trait has no such associated type — callers
-    /// must spell the name exactly as it appears in the trait
-    /// declaration. The accessor exists purely as a guard against
-    /// silently typoing the lookup name; the registry edge that catches
-    /// stdlib renames is [`Self::trait_assoc_type_names`].
-    pub fn trait_assoc_type_name(&self, item: CompilerItem, source_name: &str) -> &str {
-        self.trait_assoc_type_names(item)
-            .iter()
-            .find(|n| n.as_str() == source_name)
-            .unwrap_or_else(|| {
-                panic!(
-                    "compiler item `{item}` has no associated type named `{source_name}`; \
-                     declared associated types: {:?}",
-                    self.trait_assoc_type_names(item)
-                )
-            })
-            .as_str()
+    /// Single associated type name on a trait, identified by the
+    /// source-side name of its trait bound. Both the bound trait's
+    /// spelling (passed in by the caller) and the associated type's
+    /// spelling (returned) come from the registry, so renaming either
+    /// end in the stdlib flows through without hand-edits.
+    ///
+    /// Panics if no associated type with the given bound is found —
+    /// the only legitimate way to hit that is to break the structural
+    /// shape of the trait, which the synthesiser does not silently
+    /// handle anywhere else either.
+    pub fn trait_assoc_type_by_bound(
+        &self,
+        item: CompilerItem,
+        bound_trait_name: &str,
+    ) -> &str {
+        let assoc = self.trait_assoc_types(item).iter().find(|a| {
+            a.bound_names.iter().any(|b| b == bound_trait_name)
+        });
+        match assoc {
+            Some(a) => a.name.as_str(),
+            None => panic!(
+                "compiler item `{item}` has no associated type bound by `{bound_trait_name}`; \
+                 declared associated types: {:?}",
+                self.trait_assoc_types(item)
+            ),
+        }
     }
 
     /// Name-only convenience for a [`CompilerItemKind::Struct`] item.
@@ -1245,7 +1275,7 @@ mod tests {
                     module_source: ModuleSource::types(),
                     name: "Option".into(),
                     method_name: None,
-                    assoc_type_names: Vec::new(),
+                    assoc_types: Vec::new(),
                 },
             )
             .unwrap_err();
@@ -1289,7 +1319,7 @@ mod tests {
                 module_source: ModuleSource::traits(),
                 name: "Default".into(),
                 method_name: Some("default".into()),
-                assoc_type_names: Vec::new(),
+                assoc_types: Vec::new(),
             },
         )
         .unwrap();
@@ -1335,14 +1365,16 @@ mod tests {
         assert_eq!(name, "push_str_v2");
     }
 
-    /// Trait associated type names round-trip through the registry —
-    /// if the stdlib renamed `Serializer::SeqSerializer` to
-    /// `Serializer::SeqWriter`, the resolver would auto-capture the
-    /// new name and the synthesiser would pick it up via
-    /// [`CompilerItems::trait_assoc_type_name`] without touching any
-    /// hard-coded string in synthesis code.
+    /// Trait associated type names round-trip through the registry by
+    /// **bound trait**: if the stdlib renamed
+    /// `Serializer::SeqSerializer` to `Serializer::SeqWriter` (bound
+    /// unchanged), or renamed the bound itself from `SerializeSeq` to
+    /// `SeqWriterTrait`, the synthesiser still resolves the correct
+    /// associated type by asking
+    /// [`CompilerItems::trait_assoc_type_by_bound`] with the bound
+    /// trait's current spelling (also looked up from the registry).
     #[test]
-    fn assoc_type_names_round_trip_through_registry_even_when_renamed() {
+    fn assoc_types_round_trip_by_bound_even_when_renamed() {
         let mut reg = CompilerItems::new();
         reg.register(
             CompilerItem::Serializer,
@@ -1350,26 +1382,34 @@ mod tests {
                 module_source: ModuleSource::serde(),
                 name: "Serializer".to_string(),
                 method_name: None,
-                assoc_type_names: vec![
-                    "SeqWriter".to_string(),
-                    "StructWriter".to_string(),
-                    "VariantWriter".to_string(),
+                assoc_types: vec![
+                    TraitAssocType {
+                        name: "SeqWriter".to_string(),
+                        bound_names: vec!["SerializeSeq".to_string()],
+                    },
+                    TraitAssocType {
+                        name: "StructWriter".to_string(),
+                        bound_names: vec!["SerializeStruct".to_string()],
+                    },
+                    TraitAssocType {
+                        name: "VariantWriter".to_string(),
+                        bound_names: vec!["SerializeVariant".to_string()],
+                    },
                 ],
             },
         )
         .unwrap();
+        // Bound-based lookup finds the renamed assoc type:
         assert_eq!(
-            reg.trait_assoc_type_names(CompilerItem::Serializer),
-            &[
-                "SeqWriter".to_string(),
-                "StructWriter".to_string(),
-                "VariantWriter".to_string()
-            ]
+            reg.trait_assoc_type_by_bound(CompilerItem::Serializer, "SerializeSeq"),
+            "SeqWriter"
         );
         assert_eq!(
-            reg.trait_assoc_type_name(CompilerItem::Serializer, "StructWriter"),
+            reg.trait_assoc_type_by_bound(CompilerItem::Serializer, "SerializeStruct"),
             "StructWriter"
         );
+        // The captured `assoc_types` are also inspectable.
+        assert_eq!(reg.trait_assoc_types(CompilerItem::Serializer).len(), 3);
     }
 
     /// Counterpart to the rename-rewrite test: omitting the

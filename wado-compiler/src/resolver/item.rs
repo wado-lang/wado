@@ -208,12 +208,23 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     } else {
         None
     };
-    let assoc_type_names = assoc_types.iter().map(|a| a.name.clone()).collect();
+    // For each associated type, capture both its source-side name and the
+    // source-side names of all its trait bounds. The synthesiser identifies
+    // assoc types by their bound (a `#[compiler_item("...")]`-registered
+    // trait whose current spelling also comes from the registry), so both
+    // ends stay rename-stable.
+    let assoc_types = assoc_types
+        .iter()
+        .map(|a| crate::compiler_item::TraitAssocType {
+            name: a.name.clone(),
+            bound_names: a.bounds.iter().map(|b| b.name.clone()).collect(),
+        })
+        .collect();
     let resolved = Resolved::Trait {
         module_source: module_source.clone(),
         name: name.to_string(),
         method_name,
-        assoc_type_names,
+        assoc_types,
     };
     if let Err(err) = type_table
         .borrow_mut()
