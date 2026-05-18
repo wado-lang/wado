@@ -1,0 +1,66 @@
+#![TODO]
+// Regression test: WIR pipeline emits invalid core Wasm for a `match`
+// arm whose body's last statement is a non-unit function call whose
+// result is discarded by a trailing `;`.
+//
+// Validation error: type mismatch: expected i32 but nothing on stack
+//
+// Minimal trigger:
+//   1. A `match` on an enum (or payload-bearing variant) with multiple
+//      arms — at least one arm that follows the failing arm shape and
+//      one arm typed as unit (e.g. `_ => {}`).
+//   2. The failing arm's block body ends with `helper();` (trailing
+//      `;`), where `helper()` returns a non-unit value.
+//
+// Replacing the call site with `let _ = helper();` avoids the trap
+// (same workaround as `match_arm_struct_field_invalid_wasm.wado`),
+// because `let _ = ...` lowers to `TirStmtKind::LetDestructure {
+// pattern: Wildcard, ... }`, which `block_result_type` ignores. The
+// WIR builder's drop-insertion then runs against the rewritten
+// `TirStmtKind::Expr(value)` and the arms agree on `Unit`.
+//
+// Root cause (same family as `match_arm_struct_field_invalid_wasm.wado`):
+//   * `parser::parse_expr_stmt_in_block` consumes the trailing `;`
+//     but does NOT record its presence on the `ExprStmt` it
+//     constructs — `Stmt::Expr(expr_stmt)` is indistinguishable from
+//     a trailing-position expression (no `;`, must be followed by
+//     `}`).
+//   * `resolver::resolve_block` then emits the last statement as
+//     `TirStmtKind::Expr(...)` regardless of whether the source had
+//     a `;`, so `tir::block_result_type` reads it as the trailing
+//     expression and reports the block's result as `i32`. The
+//     `_ => {}` arm reports unit. The arms disagree, and the WIR
+//     generator emits a `(if (result i32) ...)` whose `_` arm leaves
+//     nothing on the stack.
+//
+// Fix (tracked separately): teach the parser to record whether the
+// `;` was consumed (e.g. a `pub terminated: bool` field on
+// `ExprStmt`) and have `block_result_type` return `Unit` when the
+// last statement is an `Expr` whose source ended with `;`. Once
+// that lands this fixture starts passing and the test runner will
+// flag the `#![TODO]` for removal — at which point the comment
+// header can be trimmed to just the workaround note.
+
+enum Foo {
+    A,
+    B,
+}
+
+fn helper() -> i32 {
+    return 42;
+}
+
+export fn run() {
+    let x = Foo::A;
+    match x {
+        A => {
+            helper();
+        },
+        _ => {},
+    }
+}
+
+__DATA__
+{
+    "stdout": ""
+}
