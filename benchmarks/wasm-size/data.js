@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779056671071,
+  "lastUpdate": 1779063510748,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23113,6 +23113,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b814693a764a4e796d9b3b3b501dd189542fa0d9"
         },
         "date": 1779056670674,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 490666,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "faa90a80041030e9695b48afba943fca141add1f",
+          "message": "Merge pull request #1112 from wado-lang/claude/fix-cargo-locked-error-WZXhZ\n\nfix(tagpr): sync Cargo.lock via postVersionCommand to fix --locked CI",
+          "timestamp": "2026-05-18T09:12:18+09:00",
+          "tree_id": "bdbb0c8bc379ac3c1e2b6adc7d423ab48d2535cf",
+          "url": "https://github.com/wado-lang/wado/commit/faa90a80041030e9695b48afba943fca141add1f"
+        },
+        "date": 1779063510396,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
