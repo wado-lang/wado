@@ -2548,7 +2548,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .to_string();
         let (some_pattern, then_block) = if ref_mode == RefBinding::None {
             let pattern = Pattern::Variant {
-                variant_name: some_case_name.clone(),
+                variant_name: some_case_name,
                 variant_qualifier: None,
                 name_id: None,
                 name_span: span,
@@ -2573,7 +2573,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             };
             let pattern = Pattern::Variant {
-                variant_name: some_case_name.clone(),
+                variant_name: some_case_name,
                 variant_qualifier: None,
                 name_id: None,
                 name_span: span,

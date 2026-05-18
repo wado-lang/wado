@@ -938,7 +938,7 @@ fn synthesize_lift_result_inner(
             TirExprKind::VariantConstruct {
                 variant_type: result_type_id,
                 case_index: ok_index,
-                case_name: ok_name.clone(),
+                case_name: ok_name,
                 payload: ok_payload,
             },
             result_type_id,
@@ -968,7 +968,7 @@ fn synthesize_lift_result_inner(
             TirExprKind::VariantConstruct {
                 variant_type: result_type_id,
                 case_index: err_index,
-                case_name: err_name.clone(),
+                case_name: err_name,
                 payload: err_payload,
             },
             result_type_id,

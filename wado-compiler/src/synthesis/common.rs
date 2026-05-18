@@ -245,13 +245,8 @@ pub fn cm_raw_call(local_name: &str, args: Vec<TirExpr>, return_type: TypeId) ->
 /// [`CompilerItem::OptionSome`] anchor so stdlib renames flow through
 /// without touching synthesis sites. See `compiler_item.rs` for the
 /// design.
-pub fn option_some(
-    value: TirExpr,
-    option_type_id: TypeId,
-    items: &CompilerItems,
-) -> TirExpr {
-    let (_, _, case_name, case_index) =
-        items.require_variant_case(CompilerItem::OptionSome);
+pub fn option_some(value: TirExpr, option_type_id: TypeId, items: &CompilerItems) -> TirExpr {
+    let (_, _, case_name, case_index) = items.require_variant_case(CompilerItem::OptionSome);
     TirExpr::new(
         TirExprKind::VariantConstruct {
             variant_type: option_type_id,
@@ -267,8 +262,7 @@ pub fn option_some(
 /// Create a `null` (`Option::None`) expression. See [`option_some`] for
 /// the registry-lookup contract.
 pub fn option_none(option_type_id: TypeId, items: &CompilerItems) -> TirExpr {
-    let (_, _, case_name, case_index) =
-        items.require_variant_case(CompilerItem::OptionNone);
+    let (_, _, case_name, case_index) = items.require_variant_case(CompilerItem::OptionNone);
     TirExpr::new(
         TirExprKind::VariantConstruct {
             variant_type: option_type_id,

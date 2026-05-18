@@ -3681,14 +3681,15 @@ fn try_lower_comparison(
         // flows through this primitive-ord-dispatch path without touching
         // the literal-case mapping table.
         let items = type_table.compiler_items();
-        let (_, _, less_n, less_i) = items.require_enum_case(crate::compiler_item::CompilerItem::OrderingLess);
+        let (_, _, less_n, less_i) =
+            items.require_enum_case(crate::compiler_item::CompilerItem::OrderingLess);
         let (_, _, greater_n, greater_i) =
             items.require_enum_case(crate::compiler_item::CompilerItem::OrderingGreater);
         let less_n = less_n.to_string();
         let greater_n = greater_n.to_string();
         let (compare_op, case_name, case_index): (TirBinaryOp, String, u32) = match op {
-            TirBinaryOp::Lt => (TirBinaryOp::Eq, less_n.clone(), less_i),
-            TirBinaryOp::Gt => (TirBinaryOp::Eq, greater_n.clone(), greater_i),
+            TirBinaryOp::Lt => (TirBinaryOp::Eq, less_n, less_i),
+            TirBinaryOp::Gt => (TirBinaryOp::Eq, greater_n, greater_i),
             TirBinaryOp::LtEq => (TirBinaryOp::NotEq, greater_n, greater_i),
             TirBinaryOp::GtEq => (TirBinaryOp::NotEq, less_n, less_i),
             _ => unreachable!(),

@@ -572,10 +572,9 @@ impl CompilerItem {
             | Self::U128FromU64
             | Self::U128FromPair => CompilerItemKind::Method,
             Self::Tuple => CompilerItemKind::TupleFamily,
-            Self::OptionSome
-            | Self::OptionNone
-            | Self::ResultOk
-            | Self::ResultErr => CompilerItemKind::VariantCase,
+            Self::OptionSome | Self::OptionNone | Self::ResultOk | Self::ResultErr => {
+                CompilerItemKind::VariantCase
+            }
             Self::OrderingLess
             | Self::OrderingEqual
             | Self::OrderingGreater
@@ -962,17 +961,19 @@ impl CompilerItems {
 
     /// Module + parent-type name + case name + case index of a
     /// [`CompilerItemKind::VariantCase`] item.
-    pub fn require_variant_case(
-        &self,
-        item: CompilerItem,
-    ) -> (&ModuleSource, &str, &str, u32) {
+    pub fn require_variant_case(&self, item: CompilerItem) -> (&ModuleSource, &str, &str, u32) {
         match self.require(item) {
             Resolved::VariantCase {
                 module_source,
                 parent_type,
                 name,
                 case_index,
-            } => (module_source, parent_type.as_str(), name.as_str(), *case_index),
+            } => (
+                module_source,
+                parent_type.as_str(),
+                name.as_str(),
+                *case_index,
+            ),
             other => kind_mismatch_ice(item, "VariantCase", other),
         }
     }
@@ -986,7 +987,12 @@ impl CompilerItems {
                 parent_type,
                 name,
                 case_index,
-            } => (module_source, parent_type.as_str(), name.as_str(), *case_index),
+            } => (
+                module_source,
+                parent_type.as_str(),
+                name.as_str(),
+                *case_index,
+            ),
             other => kind_mismatch_ice(item, "EnumCase", other),
         }
     }

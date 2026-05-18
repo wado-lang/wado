@@ -332,7 +332,7 @@ pub(crate) struct SynthesisCtx<'env, 'pend> {
     /// Snapshot of every `core:prelude/{traits,format}` symbol this pass
     /// touches, resolved once through the [`CompilerItem`] registry.
     /// Threaded through `SynthesisCtx` so every sub-pass (Inspect /
-    /// InspectAlt / Display / DisplayAlt fallbacks, plus the helpers that
+    /// `InspectAlt` / Display / `DisplayAlt` fallbacks, plus the helpers that
     /// build trait method names) reads the registered trait / struct names
     /// instead of hard-coding `"Inspect"` / `"Formatter"` / etc.
     pub(crate) names: &'env TraitsStdlibNames,
@@ -2885,10 +2885,18 @@ fn generate_fallback_impls(
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
-        let target_info = trait_method_info(crate::name::CLOSURE_FN_TRAIT, &pair.target_trait, pair.target_method)
-            .with_struct_type_args(&sig.type_arg_names);
-        let delegate_info = trait_method_info(crate::name::CLOSURE_FN_TRAIT, &pair.delegate_trait, pair.delegate_method)
-            .with_struct_type_args(&sig.type_arg_names);
+        let target_info = trait_method_info(
+            crate::name::CLOSURE_FN_TRAIT,
+            &pair.target_trait,
+            pair.target_method,
+        )
+        .with_struct_type_args(&sig.type_arg_names);
+        let delegate_info = trait_method_info(
+            crate::name::CLOSURE_FN_TRAIT,
+            &pair.delegate_trait,
+            pair.delegate_method,
+        )
+        .with_struct_type_args(&sig.type_arg_names);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
             target_info,
             delegate_info,

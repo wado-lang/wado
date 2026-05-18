@@ -1324,8 +1324,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let (less_name, less_index, greater_name, greater_index) = {
             let tt = self.type_table.borrow();
             let items = tt.compiler_items();
-            let (_, _, less_name, less_index) =
-                items.require_enum_case(CompilerItem::OrderingLess);
+            let (_, _, less_name, less_index) = items.require_enum_case(CompilerItem::OrderingLess);
             let (_, _, greater_name, greater_index) =
                 items.require_enum_case(CompilerItem::OrderingGreater);
             (
@@ -1336,8 +1335,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             )
         };
         let (compare_op, case_name, case_index): (TirBinaryOp, String, u32) = match op {
-            BinaryOp::Lt => (TirBinaryOp::Eq, less_name.clone(), less_index),
-            BinaryOp::Gt => (TirBinaryOp::Eq, greater_name.clone(), greater_index),
+            BinaryOp::Lt => (TirBinaryOp::Eq, less_name, less_index),
+            BinaryOp::Gt => (TirBinaryOp::Eq, greater_name, greater_index),
             BinaryOp::LtEq => (TirBinaryOp::NotEq, greater_name, greater_index),
             BinaryOp::GtEq => (TirBinaryOp::NotEq, less_name, less_index),
             _ => unreachable!(),

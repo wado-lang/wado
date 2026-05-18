@@ -1162,8 +1162,7 @@ fn rewrite_calls_in_expr(
                                     wasi_registry,
                                     &func_info.package,
                                 );
-                                let none_expr =
-                                    option_none(option_type_id, tt.compiler_items());
+                                let none_expr = option_none(option_type_id, tt.compiler_items());
                                 (option_type_id, none_expr)
                             };
                             let _ = option_type_id;
@@ -1314,8 +1313,7 @@ fn rewrite_calls_in_expr(
                                     wasi_registry,
                                     &func_info.package,
                                 );
-                                let none_expr =
-                                    option_none(option_type_id, tt.compiler_items());
+                                let none_expr = option_none(option_type_id, tt.compiler_items());
                                 (option_type_id, none_expr)
                             };
                             let _ = option_type_id;

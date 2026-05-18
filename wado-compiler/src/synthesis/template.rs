@@ -63,8 +63,7 @@ impl FormatStdlibNames {
         let (_, _, left_name, left_index) = items.require_enum_case(CompilerItem::AlignmentLeft);
         let (_, _, center_name, center_index) =
             items.require_enum_case(CompilerItem::AlignmentCenter);
-        let (_, _, right_name, right_index) =
-            items.require_enum_case(CompilerItem::AlignmentRight);
+        let (_, _, right_name, right_index) = items.require_enum_case(CompilerItem::AlignmentRight);
         Self {
             formatter: items.struct_name(CompilerItem::Formatter).to_string(),
             alignment: items.enum_name(CompilerItem::Alignment).to_string(),

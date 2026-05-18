@@ -69,10 +69,8 @@ impl SerdeStdlibNames {
     pub fn from_compiler_items(items: &CompilerItems) -> Self {
         let (_, _, ok_name, ok_index) = items.require_variant_case(CompilerItem::ResultOk);
         let (_, _, err_name, err_index) = items.require_variant_case(CompilerItem::ResultErr);
-        let (_, _, some_name, some_index) =
-            items.require_variant_case(CompilerItem::OptionSome);
-        let (_, _, none_name, none_index) =
-            items.require_variant_case(CompilerItem::OptionNone);
+        let (_, _, some_name, some_index) = items.require_variant_case(CompilerItem::OptionSome);
+        let (_, _, none_name, none_index) = items.require_variant_case(CompilerItem::OptionNone);
         let (_, _, ser_err_custom_name, ser_err_custom_index) =
             items.require_enum_case(CompilerItem::SerializeErrorKindCustom);
         let (_, _, deser_err_missing_field_name, deser_err_missing_field_index) =
@@ -88,9 +86,7 @@ impl SerdeStdlibNames {
             deserializer: items.trait_name(CompilerItem::Deserializer).to_string(),
             serialize_struct: items.trait_name(CompilerItem::SerializeStruct).to_string(),
             serialize_seq: items.trait_name(CompilerItem::SerializeSeq).to_string(),
-            serialize_variant: items
-                .trait_name(CompilerItem::SerializeVariant)
-                .to_string(),
+            serialize_variant: items.trait_name(CompilerItem::SerializeVariant).to_string(),
             deserialize_struct: items
                 .trait_name(CompilerItem::DeserializeStruct)
                 .to_string(),
@@ -99,7 +95,9 @@ impl SerdeStdlibNames {
                 .trait_name(CompilerItem::DeserializeVariant)
                 .to_string(),
             serialize_error: items.struct_name(CompilerItem::SerializeError).to_string(),
-            serialize_error_kind: items.enum_name(CompilerItem::SerializeErrorKind).to_string(),
+            serialize_error_kind: items
+                .enum_name(CompilerItem::SerializeErrorKind)
+                .to_string(),
             deserialize_error: items
                 .struct_name(CompilerItem::DeserializeError)
                 .to_string(),
@@ -338,7 +336,12 @@ fn propagate_err_block(
     )))])
 }
 
-fn variant_ok(value: TirExpr, result_type: TypeId, span: Span, names: &SerdeStdlibNames) -> TirExpr {
+fn variant_ok(
+    value: TirExpr,
+    result_type: TypeId,
+    span: Span,
+    names: &SerdeStdlibNames,
+) -> TirExpr {
     TirExpr::new(
         TirExprKind::VariantConstruct {
             variant_type: result_type,
@@ -351,7 +354,12 @@ fn variant_ok(value: TirExpr, result_type: TypeId, span: Span, names: &SerdeStdl
     )
 }
 
-fn variant_err(value: TirExpr, result_type: TypeId, span: Span, names: &SerdeStdlibNames) -> TirExpr {
+fn variant_err(
+    value: TirExpr,
+    result_type: TypeId,
+    span: Span,
+    names: &SerdeStdlibNames,
+) -> TirExpr {
     TirExpr::new(
         TirExprKind::VariantConstruct {
             variant_type: result_type,
@@ -1904,7 +1912,12 @@ fn generate_enum_deserialize(
 
         let if_body = block(vec![
             expr_stmt(end_call),
-            return_stmt(Some(variant_ok(enum_construct, result_enum_err, span, names))),
+            return_stmt(Some(variant_ok(
+                enum_construct,
+                result_enum_err,
+                span,
+                names,
+            ))),
         ]);
         disc_then_stmts.push(if_stmt(condition, if_body, None));
     }
@@ -2012,7 +2025,12 @@ fn generate_enum_deserialize(
 
         let if_body = block(vec![
             expr_stmt(end_call),
-            return_stmt(Some(variant_ok(enum_construct, result_enum_err, span, names))),
+            return_stmt(Some(variant_ok(
+                enum_construct,
+                result_enum_err,
+                span,
+                names,
+            ))),
         ]);
         name_then_stmts.push(if_stmt(condition, if_body, None));
     }

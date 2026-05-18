@@ -4444,9 +4444,13 @@ fn stream_new() -> i64;
 fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 ```
 
-#### `#[comp_feature("name")]`
+#### `#[compiler_item("name")]`
 
-Marks a function as providing a compiler feature. The compiler uses these flags to enable optimizations and synthesis passes (e.g., `array_append`, `string_append`, `option`, `result`, `default`). Used in `core:prelude` method implementations.
+Marks a stdlib declaration as the resolution for a compiler-recognized item. The compiler uses these annotations to bind specific stdlib symbols (types, traits, methods, variant/enum cases) to the Rust-side enum `CompilerItem` so downstream passes (synthesis, lowering, codegen) can look them up by key instead of by hard-coded name. Renaming a stdlib item on the Wado side stays transparent as long as the `#[compiler_item("...")]` argument is unchanged.
+
+Examples: `#[compiler_item("option")]` on `variant Option`, `#[compiler_item("option_some")]` on the `Some` case, `#[compiler_item("display")]` on the `Display` trait, `#[compiler_item("string_push_str")]` on the `String::push_str` method.
+
+The attribute is only valid inside `core::*` modules; the resolver rejects it on user code.
 
 #### `#[cm("namespace:pkg/interface@version")]` / `#[cm_params(...)]`
 

@@ -110,7 +110,7 @@ fn synthesize_lift_flat_result(
                 TirExprKind::VariantConstruct {
                     variant_type: result_type_id,
                     case_index: ok_index,
-                    case_name: ok_name.clone(),
+                    case_name: ok_name,
                     payload: None,
                 },
                 result_type_id,
@@ -123,7 +123,7 @@ fn synthesize_lift_flat_result(
                 TirExprKind::VariantConstruct {
                     variant_type: result_type_id,
                     case_index: ok_index,
-                    case_name: ok_name.clone(),
+                    case_name: ok_name,
                     payload: None,
                 },
                 result_type_id,
@@ -136,7 +136,7 @@ fn synthesize_lift_flat_result(
                 TirExprKind::VariantConstruct {
                     variant_type: result_type_id,
                     case_index: err_index,
-                    case_name: err_name.clone(),
+                    case_name: err_name,
                     payload: None,
                 },
                 result_type_id,
@@ -167,7 +167,7 @@ fn synthesize_lift_flat_result(
                     TirExprKind::VariantConstruct {
                         variant_type: result_type_id,
                         case_index: err_index,
-                        case_name: err_name.clone(),
+                        case_name: err_name,
                         payload: Some(Box::new(lifted)),
                     },
                     result_type_id,
@@ -178,7 +178,7 @@ fn synthesize_lift_flat_result(
                     TirExprKind::VariantConstruct {
                         variant_type: result_type_id,
                         case_index: err_index,
-                        case_name: err_name.clone(),
+                        case_name: err_name,
                         payload: None,
                     },
                     result_type_id,
