@@ -1,5 +1,5 @@
 use { ParserRule, Alternative, Element, RepeatElement, GroupElement, LabelElement } from "./ir.wado";
-use { GenContext } from "./gen_context.wado";
+use { GenContext, FOLLOW_VARIANT_MAX_K, union_kind_arrays } from "./gen_context.wado";
 use { TreeMap, TreeSet } from "core:collections";
 
 /// FOLLOW set for a parser rule, in the classical ANTLR4 sense:
@@ -99,7 +99,134 @@ pub fn build(parser_rules: &Array<ParserRule>, ctx: &mut GenContext, start_rule:
         tail_greedy[rule.name] = tg;
     }
     let rule_follow = compute_rule_follow(parser_rules, ctx, start_rule);
+    register_follow_variants(parser_rules, ctx);
     return FollowEnv { tail_greedy, rule_follow };
+}
+
+/// Pre-pass: register every `(rule, mask, k_prefix_mask)` follow-variant
+/// triple by walking each parser rule's body and calling
+/// `ctx.intern_follow_variant` at every `RuleRef` call site.
+///
+/// The walk mirrors the lower-time element traversal: at each
+/// element position we derive the call-site `outer_follow` /
+/// `outer_k_prefix` via `compute_call_site_follow_and_mask` /
+/// `compute_call_site_k_prefix_mask`, then recurse into compound
+/// shapes (`Group`, `Repeat`, `Label`) so deeply-nested `RuleRef`s
+/// also get registered. Each registered variant's body is walked
+/// again with the variant's mask threaded (`variant_mask`,
+/// `variant_k_prefix_mask`), to a fixed point — a variant's body
+/// may discover further call sites that need their own variants.
+///
+/// The pre-pass exists so codegen consumers can do a pure lookup
+/// against the registry without having to register on their own
+/// walk. `intern_follow_variant` is keyed on the canonical triple,
+/// so any subsequent intern call from `lower` returns the cached
+/// id rather than creating a duplicate.
+fn register_follow_variants(parser_rules: &Array<ParserRule>, ctx: &mut GenContext) {
+    let empty_mask: Array<String> = [];
+    let empty_k_mask: Array<Array<String>> = [];
+
+    // Pass 1: walk every parser rule body with no variant mask.
+    for let rule of parser_rules {
+        for let alternative of &rule.alternatives {
+            walk_alt_for_variants(&alternative.elements, ctx, &empty_mask, &empty_k_mask);
+        }
+    }
+
+    // Pass 2: walk each registered variant's body with the variant's
+    // mask threaded, to a fixed point — a variant body may register
+    // new variants whose bodies must also be walked.
+    let mut walked = 0;
+    loop {
+        let entries = ctx.follow_variants();
+        if entries.len() == walked {
+            break;
+        }
+        for let mut i = walked; i < entries.len(); i += 1 {
+            let entry = entries[i];
+            let rule_opt = ctx.find_rule(&entry.rule_name);
+            let rule = if let Some(r) = rule_opt {
+                r;
+            } else {
+                continue;
+            };
+            for let alternative of &rule.alternatives {
+                walk_alt_for_variants(&alternative.elements, ctx, &entry.mask, &entry.k_prefix_mask);
+            }
+        }
+        walked = entries.len();
+    }
+}
+
+/// Walk an alt's element list, computing per-position
+/// `(outer_follow, outer_k_prefix)` via the same helpers lower
+/// uses, and recursing into compound shapes. `variant_mask` /
+/// `variant_k_prefix_mask` carry the surrounding variant's mask
+/// (`[]` at top level), which `compute_call_site_*` consumes as
+/// the rule-level follow fallback for deep-nullable suffixes.
+fn walk_alt_for_variants(elements: &Array<Element>, ctx: &mut GenContext, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) {
+    for let mut i = 0; i < elements.len(); i += 1 {
+        let outer_follow = ctx.compute_call_site_follow(elements, i, variant_mask);
+        let outer_k_prefix = ctx.compute_call_site_k_prefix_mask(elements, i, FOLLOW_VARIANT_MAX_K, variant_k_prefix_mask);
+        intern_for_element(&elements[i], ctx, &outer_follow, &outer_k_prefix, variant_mask, variant_k_prefix_mask);
+    }
+}
+
+/// Element-shape dispatch for variant interning. `RuleRef` is the
+/// only shape that interns; the rest exist only to descend into
+/// nested element lists so a deeply-buried `RuleRef` still reaches
+/// its call-site context.
+/// Element-shape dispatch. `RuleRef` interns. `Group` / `Repeat` /
+/// `Label` recurse into their inner shape so a deeply-buried `RuleRef`
+/// still gets registered. `Not`, `TokenRef`, `Literal`, and `Wildcard`
+/// are leaves with no `RuleRef` call site.
+///
+/// NOTE: written as an `if let` chain rather than a single `match` to
+/// work around a Wado codegen bug — a `match Element { RuleRef(r) => ...
+/// // recursive call sites in other arms ... TokenRef(_) | Literal(_) |
+/// Wildcard(_) => {} }` shape made the WIR pipeline emit an invalid core
+/// Wasm module ("type mismatch: expected (ref $type) but nothing on
+/// stack"). Tracked separately.
+fn intern_for_element(elem: &Element, ctx: &mut GenContext, outer_follow: &Array<String>, outer_k_prefix: &Array<Array<String>>, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) {
+    if let RuleRef(r) = elem {
+        // Mirror lower's twin-intern at lines 1399 (scan) and 1891
+        // (parse) — both call sites contribute the same canonical
+        // triple. Pre-populating the registry lets lower's later
+        // intern calls return the cached id rather than register
+        // duplicates.
+        ctx.intern_follow_variant(&r.name, outer_follow, outer_k_prefix, true);
+        ctx.intern_follow_variant(&r.name, outer_follow, outer_k_prefix, false);
+        return;
+    }
+    if let Group(g) = elem {
+        for let inner_alt of &g.alternatives {
+            walk_alt_for_variants(&inner_alt.elements, ctx, variant_mask, variant_k_prefix_mask);
+        }
+        return;
+    }
+    if let Repeat(rep) = elem {
+        // The Repeat's inner sits at the iter position. The
+        // iter-follow is `first(inner) ∪ outer_follow` because after
+        // one iter the loop either restarts (consuming a
+        // `first(inner)` token) or exits to the surrounding follow.
+        // Mirrors `lower_scan_repeat` / `lower_repeat_op` at
+        // `iter_follow = union_kind_arrays(&inner_first, outer_follow)`.
+        // K-prefix flips to `[]` — the caller's K-prefix is the
+        // exit-follow, not the iter-follow.
+        let mut visiting: Array<String> = [];
+        let inner_first = ctx.first_of_element(&rep.element, &mut visiting);
+        let iter_follow = union_kind_arrays(&inner_first, outer_follow);
+        let empty_k_mask: Array<Array<String>> = [];
+        intern_for_element(&rep.element, ctx, &iter_follow, &empty_k_mask, variant_mask, variant_k_prefix_mask);
+        return;
+    }
+    if let Label(lab) = elem {
+        // Labels are positionally identical to their inner — same
+        // follow, same K-prefix.
+        intern_for_element(&lab.element, ctx, outer_follow, outer_k_prefix, variant_mask, variant_k_prefix_mask);
+        return;
+    }
+    // `Not`, `TokenRef`, `Literal`, `Wildcard`: leaves with no RuleRef.
 }
 
 /// Compute the per-rule FOLLOW set as a worklist fixed point.

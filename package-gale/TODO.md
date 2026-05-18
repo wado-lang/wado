@@ -48,7 +48,7 @@ Two complementary directions, neither scoped yet:
 
 Reduces coupling between the codegen walk and the analysis layer; no behaviour change.
 
-- **Move variant registration to a `FollowEnv` pre-pass.** Today `intern_follow_variant` is called from inside the codegen walk (parse-side `gen_element` and scan-side `gen_scan_element`). Pre-computing every `(rule, mask, k_prefix_mask)` triple as part of `FollowEnv` would let codegen do a pure lookup.
+- **Switch `lower`'s `intern_follow_variant` call sites to lookup-only.** `FollowEnv::build` now pre-populates the registry via `register_follow_variants` (a dedicated walker that mirrors lower's element traversal for the sole purpose of variant interning). Lower's two existing intern calls (`lower_scan_element`, `lower_op`) still run but find every entry already cached, so they're effectively no-ops. The cleanup: change `intern_follow_variant` (or expose a sibling `lookup_follow_variant_id`) to return the cached id without registering, and route the two lower call sites through it. Once that lands, registry mutation is confined to `FollowEnv::build`.
 
 ## Stage B follow-on — composite descriptors (Stage C dependency)
 

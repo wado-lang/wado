@@ -66,7 +66,7 @@ use {
     is_storable_group,
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
-use { GenContext, is_nullable, union_kind_arrays } from "./gen_context.wado";
+use { GenContext, is_nullable, union_kind_arrays, FOLLOW_VARIANT_MAX_K } from "./gen_context.wado";
 use { strip_suffix } from "./gen_util.wado";
 use { compute_prefix_self_ref_min_prec } from "./lr_util.wado";
 use { TreeMap } from "core:collections";
@@ -3070,15 +3070,6 @@ fn repeat_inner_is_list_label(elem: &Element) -> bool {
 /// uses the inner base unchanged. Mirrors `parser_gen`'s
 /// `dedup_name(&"<inner>_list", ...)` / `dedup_name(&"<inner>", ...)`
 /// pattern at field-info call sites.
-///
-/// `gc_speculative` is the value `group_counter` will be sitting
-/// at when the inner is lowered. For a General-Group inner, the
-/// Maximum K-prefix depth carried into `intern_follow_variant` for the
-/// multi-token follow-mask path. Bounds the variant body's runtime
-/// peek; deeper continuations are truncated (the deepest tokens are
-/// the cheapest to disambiguate at runtime via the existing 1-token
-/// dispatch, so truncation hurts precision rather than correctness).
-global FOLLOW_VARIANT_MAX_K: i32 = 4;
 
 /// Empty K-prefix mask sentinel for inner lowerings that sit at a
 /// different input depth than the surrounding alt position (Repeat iter

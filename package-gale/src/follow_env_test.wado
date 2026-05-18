@@ -213,3 +213,82 @@ test "rule_follow: terminates on left recursion" {
     assert fs_e.kinds.contains("TK_EOF");
     assert fs_e.kinds.contains("TK_PLUS");
 }
+
+// ────────────────────────────────────────────────────────────────────
+// FollowEnv variant pre-pass tests.
+//
+// `FollowEnv::build` registers follow-variant entries up front by
+// walking every parser rule body and calling `intern_follow_variant`
+// at each `RuleRef` call site. The registration mirrors what `lower`
+// would do later; because `intern_follow_variant` is keyed on the
+// canonical `(rule_name, mask, k_prefix_mask)` triple, lower's
+// subsequent calls return the cached id and no new entries are
+// added. The pre-pass exists so a future refactor can switch lower
+// to lookup-only.
+// ────────────────────────────────────────────────────────────────────
+
+test "variant pre-pass: registers a variant for tail-greedy + follow conflict" {
+    // r : a b ;
+    // a : X Y? ;       // tail_greedy(a) = {TK_Y}
+    // b : Y ;          // first(b)        = {TK_Y}
+    // → FOLLOW(a) ⊇ {TK_Y}, so the (a, mask=[TK_Y]) variant must be
+    //   registered by the pre-pass.
+    let rules: Array<ParserRule> = [
+        mk_rule("r", [alt([rr("a"), rr("b")])]),
+        mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]),
+        mk_rule("b", [alt([tk("Y")])]),
+    ];
+    let mut ctx = mk_ctx(&rules);
+    let start = "r";
+    let _env = build(&rules, &mut ctx, &start);
+    let entries = ctx.follow_variants();
+    let mut found = false;
+    for let e of &entries {
+        if e.rule_name == "a" {
+            assert e.mask.len() == 1 && e.mask[0] == "TK_Y",
+                `expected variant for a with mask=[TK_Y], got mask len {e.mask.len()}`;
+            found = true;
+        }
+    }
+    assert found, `expected variant entry for rule 'a', registry has {entries.len()} entries`;
+}
+
+test "variant pre-pass: no variant when caller follow disjoint from tail-greedy" {
+    // r : a Z ;        // first(Z) = {TK_Z}
+    // a : X Y? ;       // tail_greedy(a) = {TK_Y}
+    // → {TK_Y} ∩ {TK_Z} = ∅, no variant needed.
+    let rules: Array<ParserRule> = [
+        mk_rule("r", [alt([rr("a"), tk("Z")])]),
+        mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]),
+    ];
+    let mut ctx = mk_ctx(&rules);
+    let start = "r";
+    let _env = build(&rules, &mut ctx, &start);
+    let entries = ctx.follow_variants();
+    for let e of &entries {
+        assert e.rule_name != "a",
+            "unexpected variant for rule 'a' (caller follow is {TK_Z}, disjoint from tail-greedy {TK_Y})";
+    }
+}
+
+test "variant pre-pass: walks into Repeat bodies" {
+    // r : (a b)* EOF ; // FOLLOW(a) ⊇ first(b) = {TK_Y}
+    // a : X Y? ;
+    // b : Y ;
+    let rules: Array<ParserRule> = [
+        mk_rule("r", [alt([opt(group([alt([rr("a"), rr("b")])])), tk("EOF")])]),
+        mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]),
+        mk_rule("b", [alt([tk("Y")])]),
+    ];
+    let mut ctx = mk_ctx(&rules);
+    let start = "r";
+    let _env = build(&rules, &mut ctx, &start);
+    let entries = ctx.follow_variants();
+    let mut found = false;
+    for let e of &entries {
+        if e.rule_name == "a" && e.mask.len() == 1 && e.mask[0] == "TK_Y" {
+            found = true;
+        }
+    }
+    assert found, `expected variant for 'a' inside the Repeat body, registry has {entries.len()} entries`;
+}

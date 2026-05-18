@@ -21,6 +21,13 @@ pub struct KindSetEntry {
     pub tokens: Array<String>,
 }
 
+/// Maximum K-prefix depth carried into `intern_follow_variant` for the
+/// multi-token follow-mask path. Bounds the variant body's runtime
+/// peek; deeper continuations are truncated (the deepest tokens are
+/// the cheapest to disambiguate at runtime via the existing 1-token
+/// dispatch, so truncation hurts precision rather than correctness).
+pub global FOLLOW_VARIANT_MAX_K: i32 = 4;
+
 /// A follow-aware variant of a parser rule, registered when a `RuleRef`
 /// call site's caller-local `FOLLOW` set intersects the callee's
 /// `tail_greedy_first` (the tokens its tail-position `Optional` / `Star`
