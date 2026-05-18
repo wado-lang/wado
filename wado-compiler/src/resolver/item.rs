@@ -178,10 +178,18 @@ pub(super) fn register_enum_compiler_item<H: CompilerHost>(
 }
 
 /// Register a trait declaration's `#[compiler_item(...)]` annotation, if any.
+///
+/// `methods` is the trait's full method list; the resolver inspects it
+/// to cache the single-method trait's primary method name into the
+/// registry (see [`Resolved::Trait::method_name`]). For multi-method
+/// traits the cache stays `None` and downstream consumers that need a
+/// method name must reach for a dedicated method [`CompilerItem`].
 pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
     name: &str,
+    methods: &[crate::ast::Function],
+    assoc_types: &[crate::ast::AssociatedTypeDecl],
     module_source: &ModuleSource,
     span: Span,
     logger: &Logger<'_, H>,
@@ -192,9 +200,31 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     if !check_compiler_item_placement(item, CompilerItemKind::Trait, module_source, span, logger) {
         return;
     }
+    // Single-method traits cache the method's name so the synthesiser
+    // can construct `<Trait>::<method>` calls without hard-coding the
+    // source-side spelling. Multi-method traits leave it unset.
+    let method_name = if methods.len() == 1 {
+        Some(methods[0].name.clone())
+    } else {
+        None
+    };
+    // For each associated type, capture both its source-side name and the
+    // source-side names of all its trait bounds. The synthesiser identifies
+    // assoc types by their bound (a `#[compiler_item("...")]`-registered
+    // trait whose current spelling also comes from the registry), so both
+    // ends stay rename-stable.
+    let assoc_types = assoc_types
+        .iter()
+        .map(|a| crate::compiler_item::TraitAssocType {
+            name: a.name.clone(),
+            bound_names: a.bounds.iter().map(|b| b.name.clone()).collect(),
+        })
+        .collect();
     let resolved = Resolved::Trait {
         module_source: module_source.clone(),
         name: name.to_string(),
+        method_name,
+        assoc_types,
     };
     if let Err(err) = type_table
         .borrow_mut()
@@ -225,6 +255,89 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
         module_source: module_source.clone(),
         owner_type: owner_type.to_string(),
         name: method_name.to_string(),
+    };
+    if let Err(err) = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved)
+    {
+        report_register_error(err, span, logger);
+    }
+}
+
+/// Register a single variant case's `#[compiler_item("...")]` annotation.
+///
+/// `parent_type` is the variant the case belongs to (e.g. `"Option"`).
+/// `case_index` is the zero-based position of the case in its declared
+/// order, which downstream consumers (pattern matching, variant
+/// construction) need in addition to the case name.
+pub(super) fn register_variant_case_compiler_item<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    parent_type: &str,
+    case_name: &str,
+    case_index: u32,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) {
+    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+        return;
+    };
+    if !check_compiler_item_placement(
+        item,
+        CompilerItemKind::VariantCase,
+        module_source,
+        span,
+        logger,
+    ) {
+        return;
+    }
+    let resolved = Resolved::VariantCase {
+        module_source: module_source.clone(),
+        parent_type: parent_type.to_string(),
+        name: case_name.to_string(),
+        case_index,
+    };
+    if let Err(err) = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved)
+    {
+        report_register_error(err, span, logger);
+    }
+}
+
+/// Register a single enum case's `#[compiler_item("...")]` annotation.
+/// See [`register_variant_case_compiler_item`] for the shape — same
+/// payload, different parent kind.
+pub(super) fn register_enum_case_compiler_item<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    parent_type: &str,
+    case_name: &str,
+    case_index: u32,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) {
+    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+        return;
+    };
+    if !check_compiler_item_placement(
+        item,
+        CompilerItemKind::EnumCase,
+        module_source,
+        span,
+        logger,
+    ) {
+        return;
+    }
+    let resolved = Resolved::EnumCase {
+        module_source: module_source.clone(),
+        parent_type: parent_type.to_string(),
+        name: case_name.to_string(),
+        case_index,
     };
     if let Err(err) = type_table
         .borrow_mut()

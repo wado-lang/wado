@@ -39,7 +39,8 @@ fn replace_wasi_derived_type_recursive(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
-    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
     let old_type = {
         let mut tt = type_table.borrow_mut();
         wasi_type_to_type_id(wasi_type, &mut tt, wasi_registry, wasi_package)
@@ -684,7 +685,12 @@ fn fixup_expr_type(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) {
 ///
 /// For multi-flat types like `Option<T>`, the Wado-level arg (e.g., `null`)
 /// is expanded into multiple i32 args (discriminant + payload).
-fn flatten_arg_for_call_site(arg: &TirExpr, flat_tys: &[TypeId], flat_args: &mut Vec<TirExpr>) {
+fn flatten_arg_for_call_site(
+    arg: &TirExpr,
+    flat_tys: &[TypeId],
+    flat_args: &mut Vec<TirExpr>,
+    names: &super::types::CmStdlibNames,
+) {
     // Unwrap Cast nodes transparently
     let inner = match &arg.kind {
         TirExprKind::Cast { expr, .. } => expr.as_ref(),
@@ -702,7 +708,7 @@ fn flatten_arg_for_call_site(arg: &TirExpr, flat_tys: &[TypeId], flat_args: &mut
             case_name,
             payload: None,
             ..
-        } if case_name == "None" => {
+        } if case_name == &names.none_name => {
             for _ in flat_tys {
                 flat_args.push(i32_const(0));
             }
@@ -712,12 +718,12 @@ fn flatten_arg_for_call_site(arg: &TirExpr, flat_tys: &[TypeId], flat_args: &mut
             case_name,
             payload: Some(value),
             ..
-        } if case_name == "Some" => {
+        } if case_name == &names.some_name => {
             flat_args.push(i32_const(1));
             let remaining = &flat_tys[1..];
             if remaining.len() == 1 {
                 // Single-value payload: pass through (e.g., enum discriminant)
-                flatten_arg_for_call_site(value, remaining, flat_args);
+                flatten_arg_for_call_site(value, remaining, flat_args, names);
             } else {
                 // Multi-value payload (e.g., String → ptr+len): pass through as-is
                 // The binding will lower it internally
@@ -881,7 +887,8 @@ fn rewrite_calls_in_expr(
     wasi_registry: &WasiRegistry,
     type_table: &Rc<RefCell<TypeTable>>,
 ) {
-    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
     // Check if this is an effect-like Call that should be rewritten
     let is_effect_call = matches!(&expr.kind, TirExprKind::Call { func, .. }
         if func.module_source.clone().is_effect_like() && func.module_source.clone().interface_name().is_some());
@@ -1149,23 +1156,26 @@ fn rewrite_calls_in_expr(
                     }
                     if is_gc_passthrough_param(param_type, wasi_registry, &names) {
                         if matches!(arg.expr.kind, TirExprKind::Null) {
-                            let option_type_id = {
+                            let (option_type_id, none_expr) = {
                                 let mut tt = type_table.borrow_mut();
-                                wasi_type_to_type_id(
+                                let option_type_id = wasi_type_to_type_id(
                                     param_type,
                                     &mut tt,
                                     wasi_registry,
                                     &func_info.package,
-                                )
+                                );
+                                let none_expr = option_none(option_type_id, tt.compiler_items());
+                                (option_type_id, none_expr)
                             };
-                            flat.push(option_none(option_type_id));
+                            let _ = option_type_id;
+                            flat.push(none_expr);
                         } else {
                             flat.push(arg.expr.clone());
                         }
                     } else if flat_tys.len() == 1 {
                         flat.push(arg.expr.clone());
                     } else {
-                        flatten_arg_for_call_site(&arg.expr, &flat_tys, &mut flat);
+                        flatten_arg_for_call_site(&arg.expr, &flat_tys, &mut flat, &names);
                     }
                 }
                 flat
@@ -1297,23 +1307,26 @@ fn rewrite_calls_in_expr(
                         // to get a properly-resolved type_id, since the
                         // source null's type_id may have unknown inner type.
                         if matches!(arg.kind, TirExprKind::Null) {
-                            let option_type_id = {
+                            let (option_type_id, none_expr) = {
                                 let mut tt = type_table.borrow_mut();
-                                wasi_type_to_type_id(
+                                let option_type_id = wasi_type_to_type_id(
                                     param_type,
                                     &mut tt,
                                     wasi_registry,
                                     &func_info.package,
-                                )
+                                );
+                                let none_expr = option_none(option_type_id, tt.compiler_items());
+                                (option_type_id, none_expr)
                             };
-                            flat.push(option_none(option_type_id));
+                            let _ = option_type_id;
+                            flat.push(none_expr);
                         } else {
                             flat.push(arg.clone());
                         }
                     } else if flat_tys.len() == 1 {
                         flat.push(taken_args[i].clone());
                     } else {
-                        flatten_arg_for_call_site(&taken_args[i], &flat_tys, &mut flat);
+                        flatten_arg_for_call_site(&taken_args[i], &flat_tys, &mut flat, &names);
                     }
                 }
                 flat

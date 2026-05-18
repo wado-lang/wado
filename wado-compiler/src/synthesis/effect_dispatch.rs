@@ -829,9 +829,15 @@ fn build_dispatch_wrapper_function(
         nullable_ref_type_id,
         span,
     );
+    let some_case_name = {
+        let tt = type_table.borrow();
+        tt.compiler_items()
+            .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
+            .to_string()
+    };
     let pattern = TirPattern::Variant {
         enum_type: nullable_ref_type_id,
-        variant_name: "Some".to_string(),
+        variant_name: some_case_name,
         bindings: vec![TirPattern::Binding {
             name: "__d".to_string(),
             local_index: d_local,
@@ -1730,7 +1736,10 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             span,
         );
         let d_ref = ref_expr(d_local_expr, plan.inner_ref_type_id, span);
-        let some_d_ref = option_some(d_ref, plan.nullable_ref_type_id);
+        let some_d_ref = {
+            let tt = env.type_table.borrow();
+            option_some(d_ref, plan.nullable_ref_type_id, tt.compiler_items())
+        };
         prelude.push(TirStmt::new(
             TirStmtKind::Expr(TirExpr::new(
                 TirExprKind::GlobalVarSet {

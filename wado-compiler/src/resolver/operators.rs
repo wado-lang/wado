@@ -1318,17 +1318,33 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .type_table
             .borrow_mut()
             .make_compiler_enum(CompilerItem::Ordering);
-        let (compare_op, case_name, case_index): (TirBinaryOp, &str, u32) = match op {
-            BinaryOp::Lt => (TirBinaryOp::Eq, "Less", 0),
-            BinaryOp::Gt => (TirBinaryOp::Eq, "Greater", 2),
-            BinaryOp::LtEq => (TirBinaryOp::NotEq, "Greater", 2),
-            BinaryOp::GtEq => (TirBinaryOp::NotEq, "Less", 0),
+        // Look up Ordering's `Less` / `Greater` cases through the
+        // `CompilerItem` registry so a stdlib rename of either case
+        // flows here without touching the operator-lowering path.
+        let (less_name, less_index, greater_name, greater_index) = {
+            let tt = self.type_table.borrow();
+            let items = tt.compiler_items();
+            let (_, _, less_name, less_index) = items.require_enum_case(CompilerItem::OrderingLess);
+            let (_, _, greater_name, greater_index) =
+                items.require_enum_case(CompilerItem::OrderingGreater);
+            (
+                less_name.to_string(),
+                less_index,
+                greater_name.to_string(),
+                greater_index,
+            )
+        };
+        let (compare_op, case_name, case_index): (TirBinaryOp, String, u32) = match op {
+            BinaryOp::Lt => (TirBinaryOp::Eq, less_name, less_index),
+            BinaryOp::Gt => (TirBinaryOp::Eq, greater_name, greater_index),
+            BinaryOp::LtEq => (TirBinaryOp::NotEq, greater_name, greater_index),
+            BinaryOp::GtEq => (TirBinaryOp::NotEq, less_name, less_index),
             _ => unreachable!(),
         };
         let ordering_variant = TirExpr::new(
             TirExprKind::EnumConstruct {
                 enum_type: ordering_type_id,
-                case_name: case_name.to_string(),
+                case_name,
                 case_index,
             },
             ordering_type_id,

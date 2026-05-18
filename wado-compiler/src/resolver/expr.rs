@@ -2874,6 +2874,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let inner_type = inner.type_id;
         let tt = self.type_table.borrow();
         let some_type = tt.as_option(inner_type).unwrap();
+        // Look up the `Some` / `None` case names through the
+        // `CompilerItem` registry so a stdlib rename of either case
+        // flows through the `?` lowering for `Option` without touching
+        // this site.
+        let items = tt.compiler_items();
+        let some_name = items
+            .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
+            .to_string();
+        let none_name = items
+            .variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
+            .to_string();
         drop(tt);
 
         // Allocate a local for the Some payload binding
@@ -2884,7 +2895,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let some_arm = TirMatchArm {
             pattern: TirPattern::Variant {
                 enum_type: inner_type,
-                variant_name: "Some".to_string(),
+                variant_name: some_name,
                 bindings: vec![TirPattern::Binding {
                     name: "__qm_v".to_string(),
                     local_index: v_local,
@@ -2908,7 +2919,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let none_arm = TirMatchArm {
             pattern: TirPattern::Variant {
                 enum_type: inner_type,
-                variant_name: "None".to_string(),
+                variant_name: none_name,
                 bindings: vec![],
                 payload_type: TypeTable::UNIT,
             },
@@ -2969,11 +2980,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let v_local = ctx.add_local("__qm_v".to_string(), ok_type, false, None);
         let e_local = ctx.add_local("__qm_e".to_string(), inner_err_type, false, None);
 
+        // Look up the `Ok` / `Err` case names + indexes through the
+        // `CompilerItem` registry so a stdlib rename of either case
+        // flows through the `?` lowering path without touching this site.
+        let (ok_name, _ok_index, err_name, err_index) = {
+            let tt = self.type_table.borrow();
+            let items = tt.compiler_items();
+            let (_, _, ok_n, ok_i) =
+                items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
+            let (_, _, err_n, err_i) =
+                items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+            (ok_n.to_string(), ok_i, err_n.to_string(), err_i)
+        };
+
         // Arm 0: Ok(v) => v
         let ok_arm = TirMatchArm {
             pattern: TirPattern::Variant {
                 enum_type: inner_type,
-                variant_name: "Ok".to_string(),
+                variant_name: ok_name,
                 bindings: vec![TirPattern::Binding {
                     name: "__qm_v".to_string(),
                     local_index: v_local,
@@ -3014,8 +3038,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let err_variant = TirExpr::new(
             TirExprKind::VariantConstruct {
                 variant_type: return_type,
-                case_index: 1, // Err is case 1 in Result<T, E>
-                case_name: "Err".to_string(),
+                case_index: err_index,
+                case_name: err_name.clone(),
                 payload: Some(Box::new(converted_err)),
             },
             return_type,
@@ -3026,7 +3050,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let err_arm = TirMatchArm {
             pattern: TirPattern::Variant {
                 enum_type: inner_type,
-                variant_name: "Err".to_string(),
+                variant_name: err_name,
                 bindings: vec![TirPattern::Binding {
                     name: "__qm_e".to_string(),
                     local_index: e_local,

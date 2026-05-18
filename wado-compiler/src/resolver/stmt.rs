@@ -1818,10 +1818,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
             _ => None,
         }?;
         let variant_info = self.lookup_variant_case(&variant_name)?;
-        if variant_info.cases.iter().any(|c| c.name == "None") {
+        let none_case_name = self
+            .type_table
+            .borrow()
+            .compiler_items()
+            .variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
+            .to_string();
+        if variant_info.cases.iter().any(|c| c.name == none_case_name) {
             Some(TirPattern::Variant {
                 enum_type: scrutinee_type,
-                variant_name: "None".to_string(),
+                variant_name: none_case_name,
                 bindings: vec![],
                 payload_type: TypeTable::UNIT,
             })
@@ -2534,9 +2540,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         //   if let Some(__elem_N) = iter.next() { let binding = &__elem_N; body }
         // For value iterables:
         //   if let Some(binding) = iter.next() { body }
+        let some_case_name = self
+            .type_table
+            .borrow()
+            .compiler_items()
+            .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
+            .to_string();
         let (some_pattern, then_block) = if ref_mode == RefBinding::None {
             let pattern = Pattern::Variant {
-                variant_name: "Some".to_string(),
+                variant_name: some_case_name,
                 variant_qualifier: None,
                 name_id: None,
                 name_span: span,
@@ -2561,7 +2573,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             };
             let pattern = Pattern::Variant {
-                variant_name: "Some".to_string(),
+                variant_name: some_case_name,
                 variant_qualifier: None,
                 name_id: None,
                 name_span: span,

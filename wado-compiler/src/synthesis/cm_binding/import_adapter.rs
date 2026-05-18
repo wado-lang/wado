@@ -95,12 +95,22 @@ fn synthesize_lift_flat_result(
         let err_is_unit = matches!(err_ty, Type::Named(n) if n.name == "()")
             || matches!(err_ty, Type::Tuple(elems) if elems.is_empty());
 
+        let (ok_name, ok_index, err_name, err_index) = {
+            let tt = ctx.type_table.borrow();
+            let items = tt.compiler_items();
+            let (_, _, ok_n, ok_i) =
+                items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
+            let (_, _, err_n, err_i) =
+                items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+            (ok_n.to_string(), ok_i, err_n.to_string(), err_i)
+        };
+
         let ok_construct = if ok_is_unit {
             TirExpr::new(
                 TirExprKind::VariantConstruct {
                     variant_type: result_type_id,
-                    case_index: 0,
-                    case_name: "Ok".to_string(),
+                    case_index: ok_index,
+                    case_name: ok_name,
                     payload: None,
                 },
                 result_type_id,
@@ -112,8 +122,8 @@ fn synthesize_lift_flat_result(
             TirExpr::new(
                 TirExprKind::VariantConstruct {
                     variant_type: result_type_id,
-                    case_index: 0,
-                    case_name: "Ok".to_string(),
+                    case_index: ok_index,
+                    case_name: ok_name,
                     payload: None,
                 },
                 result_type_id,
@@ -125,8 +135,8 @@ fn synthesize_lift_flat_result(
             TirExpr::new(
                 TirExprKind::VariantConstruct {
                     variant_type: result_type_id,
-                    case_index: 1,
-                    case_name: "Err".to_string(),
+                    case_index: err_index,
+                    case_name: err_name,
                     payload: None,
                 },
                 result_type_id,
@@ -156,8 +166,8 @@ fn synthesize_lift_flat_result(
                 TirExpr::new(
                     TirExprKind::VariantConstruct {
                         variant_type: result_type_id,
-                        case_index: 1,
-                        case_name: "Err".to_string(),
+                        case_index: err_index,
+                        case_name: err_name,
                         payload: Some(Box::new(lifted)),
                     },
                     result_type_id,
@@ -167,8 +177,8 @@ fn synthesize_lift_flat_result(
                 TirExpr::new(
                     TirExprKind::VariantConstruct {
                         variant_type: result_type_id,
-                        case_index: 1,
-                        case_name: "Err".to_string(),
+                        case_index: err_index,
+                        case_name: err_name,
                         payload: None,
                     },
                     result_type_id,
@@ -361,7 +371,8 @@ pub(super) fn synthesize_adapter(
     owner_module: &ModuleSource,
     entry_source: &ModuleSource,
 ) -> AdapterArtifacts {
-    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
     let name = binding_func_name(&func_info.interface_name, &func_info.method_name);
     let local_name = func_info.local_alias_name();
 
