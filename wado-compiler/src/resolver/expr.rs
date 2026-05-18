@@ -2184,12 +2184,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 Self::find_return_type_in_block(body)
             }
-            TirStmtKind::Expr(expr) => {
-                if expr.type_id == TypeTable::NEVER {
-                    return Some(TypeTable::NEVER);
-                }
-                Self::find_return_type_in_expr(expr)
-            }
+            TirStmtKind::Expr(expr) => Self::find_return_type_in_expr(expr),
             _ => None,
         }
     }

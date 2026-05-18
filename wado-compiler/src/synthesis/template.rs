@@ -351,8 +351,31 @@ fn expand_expr(expr: &mut TirExpr, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx
             }
             return;
         }
-        TirExprKind::Closure { body, .. } => {
-            expand_expr(body, alloc, ctx);
+        TirExprKind::Closure {
+            params,
+            body,
+            body_locals,
+            ..
+        } => {
+            // Closure bodies own an independent local-index namespace
+            // (see `TirExprKind::Closure::body_locals` / `address_taken_locals`).
+            // Template synth locals (`__r`, `__f`, …) must be allocated in
+            // that namespace; otherwise their indices collide with closure
+            // params or body lets and `LocalCollector` in closure planning
+            // merges incompatibly-typed locals into the same Wasm slot,
+            // producing a module that fails core-Wasm validation.
+            //
+            // Mirrors the same closure-scope switch in
+            // `lower::translate::pattern::lower_expr`'s `Closure` arm.
+            let mut closure_alloc = FuncLocalAlloc {
+                next_index: (params.len() + body_locals.len()) as u32,
+                new_locals: Vec::new(),
+            };
+            expand_expr(body, &mut closure_alloc, ctx);
+            // Surface the new synth locals on the closure so later passes
+            // (pattern lowering, closure planning) see a `body_locals`
+            // that matches the body's actual let-index range.
+            body_locals.extend(closure_alloc.new_locals);
             return;
         }
         TirExprKind::IndirectCall { callee, args } => {

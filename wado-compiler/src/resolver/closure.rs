@@ -228,16 +228,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .collect();
 
         // Step 7: Determine the return type.
+        //
+        // When the body is a Block, prefer the type of any explicit `return`
+        // statement; if there is none, fall back to the block's own result
+        // type. Use `body.type_id` (computed by `block_result_type`) so a
+        // diverging-tail block like `{ panic("oops"); }` keeps `Never`
+        // rather than collapsing to `Unit` — otherwise a closure passed to
+        // `fn<T>(f: fn() -> T) -> T` would bind `T = ()` and let the caller
+        // run past the call site.
         let return_type = if let TirExprKind::Block(ref block) = body.kind {
             if let Some(t) = Self::find_return_type_in_block(block) {
                 t
+            } else if body.type_id == TypeTable::UNIT || body.type_id == TypeTable::NEVER {
+                body.type_id
             } else {
-                if body.type_id != TypeTable::UNIT && body.type_id != TypeTable::NEVER {
-                    let _ = self.logger.error(TypeError::MissingReturn {
-                        return_type: self.type_table.borrow().type_name(body.type_id),
-                        span: closure.span,
-                    });
-                }
+                let _ = self.logger.error(TypeError::MissingReturn {
+                    return_type: self.type_table.borrow().type_name(body.type_id),
+                    span: closure.span,
+                });
                 TypeTable::UNIT
             }
         } else {

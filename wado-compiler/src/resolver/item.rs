@@ -1103,10 +1103,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .map(|b| scope.resolve_block(b, &mut ctx, None));
 
         // Validate: non-unit return type requires explicit `return` in the body
+        // (or a divergent tail expression — `{ ...; panic("...") }` — where
+        // the body's result type collapses to `Never` so the function never
+        // reaches a fall-through return).
         if return_type != TypeTable::UNIT
             && return_type != TypeTable::NEVER
             && let Some(ref body) = body
             && Self::find_return_type_in_block(body).is_none()
+            && crate::tir::block_result_type(body) != TypeTable::NEVER
         {
             let _ = scope.logger.error(TypeError::MissingReturn {
                 return_type: scope.type_table.borrow().type_name(return_type),
@@ -1654,10 +1658,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .map(|b| scope.resolve_block(b, &mut ctx, None));
 
         // Validate: non-unit return type requires explicit `return` in the body
+        // (or a divergent tail expression — `{ ...; panic("...") }` — where
+        // the body's result type collapses to `Never` so the function never
+        // reaches a fall-through return).
         if return_type != TypeTable::UNIT
             && return_type != TypeTable::NEVER
             && let Some(ref body) = body
             && Self::find_return_type_in_block(body).is_none()
+            && crate::tir::block_result_type(body) != TypeTable::NEVER
         {
             let _ = scope.logger.error(TypeError::MissingReturn {
                 return_type: scope.type_table.borrow().type_name(return_type),
