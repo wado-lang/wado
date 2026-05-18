@@ -361,20 +361,33 @@ impl Monomorphizer {
                     // key's module first, then fall back to `TraitEnv` so
                     // cross-module impls (e.g. `impl<T> Serialize for Option<T>`
                     // in `core:serde`) are still discoverable.
+                    // Deterministic two-step lookup, per issue #1110 (2):
+                    //
+                    // 1. Literal `(module_source, name)` lookup. Hits when
+                    //    the call-site producer already pointed at the
+                    //    template's home module — the common case for
+                    //    user-defined types and well-routed cross-module
+                    //    traits.
+                    //
+                    // 2. `TraitEnv::impl_module_for` fallback. Hits when
+                    //    a producer set `module_source` to the receiver
+                    //    type's module while the impl block actually lives
+                    //    in a third module (e.g. core's variadic
+                    //    `Tuple^InspectAlt::inspect_alt` is implemented in
+                    //    `core:prelude/tuple`, but the tuple type itself
+                    //    is declared in `core:prelude/types`; auto-derived
+                    //    code paths route through the type's module).
+                    //    `TraitEnv` is the single source of truth for
+                    //    where every impl block lives, so consulting it
+                    //    is a deterministic resolution, not a fall-back
+                    //    to the "current" module.
+                    //
+                    // There is no third step: inherent-method calls on
+                    // newtypes are resolved to the *base* type's module
+                    // by `resolver::method_call::resolve_method_call`, so
+                    // the literal lookup already hits.
                     let lookup_key = (key.module_source.clone(), key.name.clone());
                     let mut generic_func = generic_functions.get(&lookup_key);
-                    // Cross-module trait-impl fallback: the queue's
-                    // `module_source` is the call-site's belief about where
-                    // the body lives, but for traits implemented in a third
-                    // module (e.g. `impl<T> Serialize for Option<T>` in
-                    // `core:serde`) the template lives in that impl block's
-                    // module. Consult `TraitEnv` to find it.
-                    //
-                    // No bare-name "any module" scan: inherent methods on
-                    // newtypes are resolved at the call site (their
-                    // `method_module_source` is the *base* type's module by
-                    // construction in `resolver::method_call`), so the
-                    // literal `(module_source, name)` lookup above hits.
                     if generic_func.is_none()
                         && let Some(info) = key.method_info.as_ref()
                         && let Some(trait_name) =
