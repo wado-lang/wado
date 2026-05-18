@@ -1708,7 +1708,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         f.emit_begin(w);
         w.line(&"let start = p.peek().span.start;");
         if has_overlaps {
-            gen_multi_alt_body_bt(w, rule, lowered_rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices);
+            gen_multi_alt_body_bt(w, rule, lowered_rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices, fn_name);
         } else {
             gen_multi_alt_body(w, rule, lowered_rule, &type_name, ctx, &non_lr_indices);
         }
@@ -1748,7 +1748,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         f.emit_begin(w);
         w.line(&"let start = p.peek().span.start;");
         if has_overlaps {
-            gen_multi_alt_body_bt(w, rule, lowered_rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices);
+            gen_multi_alt_body_bt(w, rule, lowered_rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices, fn_name);
         } else {
             gen_multi_alt_body(w, rule, lowered_rule, &type_name, ctx, &non_lr_indices);
         }
@@ -4856,8 +4856,16 @@ fn elements_match(consumed: &Element, expected: &Element) -> bool {
     return false;
 }
 
-fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>) {
-    let fn_name = `parse_{rule.snake_name}`;
+/// Emit the body of a multi-alt rule whose alts have overlapping
+/// FIRST sets — the prediction codepath. `fn_name` is the name of
+/// the surrounding emit function (`parse_<rule>` for the regular
+/// path, `parse_<rule>__follow_<id>` for follow-aware variants);
+/// it's threaded into `gen_prediction_code` so the dispatcher
+/// references the variant's own `_bt_<n>` / `_scan_<n>` helpers
+/// when emitted from the variant pass. Without this threading the
+/// variant body silently delegates to the non-variant helpers and
+/// the variant's per-element mask never runs.
+fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>, fn_name: &String) {
     w.line(&"let kind = p.peek_kind();");
 
     for let mut g = 0; g < groups.len(); g += 1 {
@@ -4896,7 +4904,7 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
                 pred_elements.push(rule.alternatives[real_idx].elements);
             }
             let tree = build_prediction(&pred_indices, &pred_elements, 5, ctx);
-            gen_prediction_code(w, &tree, &fn_name, &rule.alternatives, lowered_rule, type_name, ctx);
+            gen_prediction_code(w, &tree, fn_name, &rule.alternatives, lowered_rule, type_name, ctx);
         }
 
         w.end();

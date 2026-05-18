@@ -1,0 +1,57 @@
+use g from "./grammars/ll_multi_alt_overlap.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/ll_multi_alt_overlap",
+        },
+    };
+use { normalize_tree } from "./grammars/ll_multi_alt_overlap.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = g::parse(input).unwrap();
+    let tree = g::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+// Bare `a` alone still parses through alt 1 (`X`).
+test "tree: X parses through a's second alt" {
+    assert_tree(&"X", &"
+        (r (a X))
+    ");
+}
+
+// `a` must yield the trailing `Y` to the outer `b`. With the
+// multi-alt variant dispatcher fix (#3), the variant
+// `parse_a__follow_<id>_bt_<n>` is reachable and suppresses the
+// `Y?` tail; without the fix the dispatcher delegates to the
+// greedy `parse_a_bt_<n>` and swallows `Y`.
+test "tree: X Y yields Y to outer b" {
+    assert_tree(&"X Y", &"
+        (r (a X) (b Y))
+    ");
+}
+
+// Recursive nesting through `a`. ANTLR4 first-alt-wins: `r`'s
+// `a b` alt is preferred when reachable, so `a` must yield the
+// trailing `Y` to `b`. The variant's per-alt mask flows through
+// the inner `a` call as well (both sit at tail-greedy positions
+// whose suffix-follow contains `Y`).
+test "tree: X X Y is parsed by alt 0 (a b)" {
+    assert_tree(&"X X Y", &"
+        (r (a X (a X)) (b Y))
+    ");
+}
+
+// When no `Y` follows, the `a` rule must consume input greedily
+// through its own internal `Y?`. With input "X X", `r`'s alt 1
+// (bare `a`) wins because no `b` can match. The outer `a` takes
+// alt 0 (`X a Y?`) with `Y?` skipped; inner `a` falls to alt 1
+// (`X`).
+test "tree: X X with no Y goes through bare a" {
+    assert_tree(&"X X", &"
+        (r (a X (a X)))
+    ");
+}

@@ -21,9 +21,19 @@ The K-prefix follow-mask path closes the multi-token tail-greedy gap at the oute
 
 The K-prefix caller-side mask analysis halts at a multi-alt `RuleRef` because the per-depth union of multi-alt prefixes would over-yield by matching cross-alt sequences that no real alt admits. A per-alt sequence representation (`Array<Array<Array<String>>>`) could extend the walk safely — useful when a caller's continuation passes through a multi-alt rule like `expr : literal | name`.
 
-### Multi-alt variant dispatcher emit
+### Multi-alt variant dispatcher emit — K-prefix cascade relaxation
 
-`parse_<rule>__follow_<id>` for multi-alt rules currently dispatches to the regular `parse_<rule>_bt_<n>` per-alt helpers instead of the variant's `parse_<rule>__follow_<id>_bt_<n>` versions, so the variant per-alt helpers are emitted but unreachable from the dispatcher. This is a pre-existing emit shape that limits the cascade through multi-alt rules — `tail_greedy_k_prefix_of_element`'s `RuleRef` arm stops the K-prefix cascade for the same reason. Fixing the dispatcher would let K-prefix flow through multi-alt rules cleanly; the `RuleRef` recursion gate can then be relaxed.
+The dispatcher in `parse_<rule>__follow_<id>` for multi-alt rules
+with overlapping FIRST sets now routes to the variant's own
+`parse_<rule>__follow_<id>_bt_<n>` / `_scan_<n>` helpers (was
+falsely routing to the non-variant `parse_<rule>_bt_<n>` /
+`_scan_<n>`; covered by `tests/grammars/ll_multi_alt_overlap.g4`).
+The remaining follow-up: `tail_greedy_k_prefix_of_element`'s
+`RuleRef` arm still halts the K-prefix cascade through multi-alt
+rules out of conservatism. With the dispatcher fixed, the
+`RuleRef` recursion gate can now be relaxed so K-prefix flows
+through multi-alt rules cleanly. Requires its own regression
+fixture before the guard is loosened.
 
 ### ATN-class grammars
 
