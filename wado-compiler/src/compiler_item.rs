@@ -678,6 +678,17 @@ pub enum Resolved {
         ///
         /// Reading: [`CompilerItems::trait_method_name`].
         method_name: Option<String>,
+        /// Associated type names declared on the trait, in source
+        /// order. Auto-captured by the resolver when registering the
+        /// trait's `#[compiler_item("...")]` annotation. Empty for
+        /// traits without associated types.
+        ///
+        /// The serde synthesiser uses these to construct `S::SeqSerializer`
+        /// / `D::StructAccess` projections without hard-coding the
+        /// source-side associated type spellings.
+        ///
+        /// Reading: [`CompilerItems::trait_assoc_type_names`].
+        assoc_type_names: Vec<String>,
     },
     Method {
         module_source: ModuleSource,
@@ -942,6 +953,40 @@ impl CompilerItems {
         }
     }
 
+    /// Associated type names declared on a trait, in source order.
+    /// Auto-captured when the trait's `#[compiler_item("...")]` is
+    /// registered, so the synthesiser can build `S::SeqSerializer`-style
+    /// projections without hard-coding the source-side associated type
+    /// spellings.
+    pub fn trait_assoc_type_names(&self, item: CompilerItem) -> &[String] {
+        match self.require(item) {
+            Resolved::Trait {
+                assoc_type_names, ..
+            } => assoc_type_names.as_slice(),
+            other => kind_mismatch_ice(item, "Trait", other),
+        }
+    }
+
+    /// Single associated type name on a trait, looked up by source-side
+    /// name. Panics if the trait has no such associated type — callers
+    /// must spell the name exactly as it appears in the trait
+    /// declaration. The accessor exists purely as a guard against
+    /// silently typoing the lookup name; the registry edge that catches
+    /// stdlib renames is [`Self::trait_assoc_type_names`].
+    pub fn trait_assoc_type_name(&self, item: CompilerItem, source_name: &str) -> &str {
+        self.trait_assoc_type_names(item)
+            .iter()
+            .find(|n| n.as_str() == source_name)
+            .unwrap_or_else(|| {
+                panic!(
+                    "compiler item `{item}` has no associated type named `{source_name}`; \
+                     declared associated types: {:?}",
+                    self.trait_assoc_type_names(item)
+                )
+            })
+            .as_str()
+    }
+
     /// Name-only convenience for a [`CompilerItemKind::Struct`] item.
     pub fn struct_name(&self, item: CompilerItem) -> &str {
         self.require_struct(item).1
@@ -1200,6 +1245,7 @@ mod tests {
                     module_source: ModuleSource::types(),
                     name: "Option".into(),
                     method_name: None,
+                    assoc_type_names: Vec::new(),
                 },
             )
             .unwrap_err();
@@ -1243,6 +1289,7 @@ mod tests {
                 module_source: ModuleSource::traits(),
                 name: "Default".into(),
                 method_name: Some("default".into()),
+                assoc_type_names: Vec::new(),
             },
         )
         .unwrap();
@@ -1286,6 +1333,43 @@ mod tests {
         assert_eq!(module, &ModuleSource::string());
         assert_eq!(owner, "String");
         assert_eq!(name, "push_str_v2");
+    }
+
+    /// Trait associated type names round-trip through the registry —
+    /// if the stdlib renamed `Serializer::SeqSerializer` to
+    /// `Serializer::SeqWriter`, the resolver would auto-capture the
+    /// new name and the synthesiser would pick it up via
+    /// [`CompilerItems::trait_assoc_type_name`] without touching any
+    /// hard-coded string in synthesis code.
+    #[test]
+    fn assoc_type_names_round_trip_through_registry_even_when_renamed() {
+        let mut reg = CompilerItems::new();
+        reg.register(
+            CompilerItem::Serializer,
+            Resolved::Trait {
+                module_source: ModuleSource::serde(),
+                name: "Serializer".to_string(),
+                method_name: None,
+                assoc_type_names: vec![
+                    "SeqWriter".to_string(),
+                    "StructWriter".to_string(),
+                    "VariantWriter".to_string(),
+                ],
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            reg.trait_assoc_type_names(CompilerItem::Serializer),
+            &[
+                "SeqWriter".to_string(),
+                "StructWriter".to_string(),
+                "VariantWriter".to_string()
+            ]
+        );
+        assert_eq!(
+            reg.trait_assoc_type_name(CompilerItem::Serializer, "StructWriter"),
+            "StructWriter"
+        );
     }
 
     /// Counterpart to the rename-rewrite test: omitting the

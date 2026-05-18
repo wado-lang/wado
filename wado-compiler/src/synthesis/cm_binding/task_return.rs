@@ -273,6 +273,8 @@ fn generate_inline_task_return(
         let (_, _, ok_case_name, ok_case_index) =
             items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
         let ok_case_name = ok_case_name.to_string();
+        let (_, _, _err_case_name, err_case_index) =
+            items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
         drop(tt);
 
         // Store result in local
@@ -363,7 +365,7 @@ fn generate_inline_task_return(
         )));
         let err_value = variant_payload(
             local_ref(result_local, "__task_ret", value_type_id),
-            1,
+            err_case_index,
             err_type_id,
         );
         let err_local = alloc_local(next_local, locals, err_type_id);

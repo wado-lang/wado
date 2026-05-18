@@ -315,6 +315,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         &trait_decl.attrs,
                         &trait_decl.name,
                         &trait_decl.methods,
+                        &trait_decl.associated_types,
                         &self.current_module_source,
                         trait_decl.span,
                         self.logger,

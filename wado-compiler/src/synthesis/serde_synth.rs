@@ -65,6 +65,30 @@ pub(super) struct SerdeStdlibNames {
     pub deser_err_unknown_variant_index: u32,
     pub deser_err_invalid_value_name: String,
     pub deser_err_invalid_value_index: u32,
+    /// `Serializer` associated type spellings: `SeqSerializer`,
+    /// `StructSerializer`, `VariantSerializer`. Auto-captured from the
+    /// trait declaration so the synthesiser can build `S::SeqSerializer`
+    /// projections without hard-coding the source-side names.
+    pub seq_serializer_assoc: String,
+    pub struct_serializer_assoc: String,
+    pub variant_serializer_assoc: String,
+    /// `Deserializer` associated type spellings: `SeqAccess`,
+    /// `StructAccess`, `VariantAccess`.
+    pub seq_access_assoc: String,
+    pub struct_access_assoc: String,
+    pub variant_access_assoc: String,
+    /// Pre-formatted `S::<assoc>` / `D::<assoc>` projection labels used
+    /// by `type_param_method_call` as the receiver's struct-name slot
+    /// (`S` is the conventional `Serializer` type parameter; `D`, the
+    /// `Deserializer` one). Reading these from the snapshot keeps all
+    /// associated-type references in this file routed through
+    /// [`CompilerItems::trait_assoc_type_name`].
+    pub s_struct_serializer_proj: String,
+    pub s_seq_serializer_proj: String,
+    pub s_variant_serializer_proj: String,
+    pub d_struct_access_proj: String,
+    pub d_seq_access_proj: String,
+    pub d_variant_access_proj: String,
 }
 
 impl SerdeStdlibNames {
@@ -120,6 +144,48 @@ impl SerdeStdlibNames {
             deser_err_unknown_variant_index,
             deser_err_invalid_value_name: deser_err_invalid_value_name.to_string(),
             deser_err_invalid_value_index,
+            seq_serializer_assoc: items
+                .trait_assoc_type_name(CompilerItem::Serializer, "SeqSerializer")
+                .to_string(),
+            struct_serializer_assoc: items
+                .trait_assoc_type_name(CompilerItem::Serializer, "StructSerializer")
+                .to_string(),
+            variant_serializer_assoc: items
+                .trait_assoc_type_name(CompilerItem::Serializer, "VariantSerializer")
+                .to_string(),
+            seq_access_assoc: items
+                .trait_assoc_type_name(CompilerItem::Deserializer, "SeqAccess")
+                .to_string(),
+            struct_access_assoc: items
+                .trait_assoc_type_name(CompilerItem::Deserializer, "StructAccess")
+                .to_string(),
+            variant_access_assoc: items
+                .trait_assoc_type_name(CompilerItem::Deserializer, "VariantAccess")
+                .to_string(),
+            s_struct_serializer_proj: format!(
+                "S::{}",
+                items.trait_assoc_type_name(CompilerItem::Serializer, "StructSerializer")
+            ),
+            s_seq_serializer_proj: format!(
+                "S::{}",
+                items.trait_assoc_type_name(CompilerItem::Serializer, "SeqSerializer")
+            ),
+            s_variant_serializer_proj: format!(
+                "S::{}",
+                items.trait_assoc_type_name(CompilerItem::Serializer, "VariantSerializer")
+            ),
+            d_struct_access_proj: format!(
+                "D::{}",
+                items.trait_assoc_type_name(CompilerItem::Deserializer, "StructAccess")
+            ),
+            d_seq_access_proj: format!(
+                "D::{}",
+                items.trait_assoc_type_name(CompilerItem::Deserializer, "SeqAccess")
+            ),
+            d_variant_access_proj: format!(
+                "D::{}",
+                items.trait_assoc_type_name(CompilerItem::Deserializer, "VariantAccess")
+            ),
         }
     }
 }
@@ -628,7 +694,7 @@ fn generate_struct_serialize(
     let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
     let struct_ser_type = tt.make_assoc_type_projection(
         s_type_param,
-        "StructSerializer".to_string(),
+        names.struct_serializer_assoc.clone(),
         vec![names.serialize_struct.clone()],
         vec![],
     );
@@ -706,7 +772,7 @@ fn generate_struct_serialize(
 
         let field_call = type_param_method_call(
             local_ref(st_local, "st", mut_ref_ss),
-            "S::StructSerializer",
+            &names.s_struct_serializer_proj,
             &names.serialize_struct,
             "field",
             serde_module.clone(),
@@ -728,7 +794,7 @@ fn generate_struct_serialize(
 
     let end_call = type_param_method_call(
         local_ref(st_local, "st", mut_ref_ss),
-        "S::StructSerializer",
+        &names.s_struct_serializer_proj,
         &names.serialize_struct,
         "end",
         serde_module,
@@ -860,7 +926,7 @@ fn generate_struct_deserialize(
     let mut_ref_d = tt.make_mut_ref(d_type_param);
     let struct_access_type = tt.make_assoc_type_projection(
         d_type_param,
-        "StructAccess".to_string(),
+        names.struct_access_assoc.clone(),
         vec![names.deserialize_struct.clone()],
         vec![],
     );
@@ -1029,7 +1095,7 @@ fn generate_struct_deserialize(
 
     let next_field_call = type_param_method_call(
         local_ref(sd_local, "sd", mut_ref_sa),
-        "D::StructAccess",
+        &names.d_struct_access_proj,
         &names.deserialize_struct,
         "next_field",
         serde_module.clone(),
@@ -1052,7 +1118,7 @@ fn generate_struct_deserialize(
         let bit = 1u32 << i;
         let value_call = type_param_method_call(
             local_ref(sd_local, "sd", mut_ref_sa),
-            "D::StructAccess",
+            &names.d_struct_access_proj,
             &names.deserialize_struct,
             "value",
             serde_module.clone(),
@@ -1132,7 +1198,7 @@ fn generate_struct_deserialize(
 
     let skip_call = type_param_method_call(
         local_ref(sd_local, "sd", mut_ref_sa),
-        "D::StructAccess",
+        &names.d_struct_access_proj,
         &names.deserialize_struct,
         "skip",
         serde_module.clone(),
@@ -1263,7 +1329,7 @@ fn generate_struct_deserialize(
     // sd.end()
     let end_call = type_param_method_call(
         local_ref(sd_local, "sd", mut_ref_sa),
-        "D::StructAccess",
+        &names.d_struct_access_proj,
         &names.deserialize_struct,
         "end",
         serde_module,
@@ -1789,7 +1855,7 @@ fn generate_enum_deserialize(
     let mut_ref_d = tt.make_mut_ref(d_type_param);
     let variant_access_type = tt.make_assoc_type_projection(
         d_type_param,
-        "VariantAccess".to_string(),
+        names.variant_access_assoc.clone(),
         vec![names.deserialize_variant.clone()],
         vec![],
     );
@@ -1857,7 +1923,7 @@ fn generate_enum_deserialize(
     // let __disc_r = va.disc()
     let disc_call = type_param_method_call(
         local_ref(va_local, "va", mut_ref_va),
-        "D::VariantAccess",
+        &names.d_variant_access_proj,
         &names.deserialize_variant,
         "disc",
         serde_module.clone(),
@@ -1889,7 +1955,7 @@ fn generate_enum_deserialize(
 
         let end_call = type_param_method_call(
             local_ref(va_local, "va", mut_ref_va),
-            "D::VariantAccess",
+            &names.d_variant_access_proj,
             &names.deserialize_variant,
             "end",
             serde_module.clone(),
@@ -1948,7 +2014,7 @@ fn generate_enum_deserialize(
     // let __name_r = va.variant_name()
     let name_call = type_param_method_call(
         local_ref(va_local, "va", mut_ref_va),
-        "D::VariantAccess",
+        &names.d_variant_access_proj,
         &names.deserialize_variant,
         "variant_name",
         serde_module.clone(),
@@ -2002,7 +2068,7 @@ fn generate_enum_deserialize(
 
         let end_call = type_param_method_call(
             local_ref(va_local, "va", mut_ref_va),
-            "D::VariantAccess",
+            &names.d_variant_access_proj,
             &names.deserialize_variant,
             "end",
             serde_module.clone(),
@@ -2191,7 +2257,7 @@ fn generate_variant_serialize(
     let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
     let variant_ser_type = tt.make_assoc_type_projection(
         s_type_param,
-        "VariantSerializer".to_string(),
+        names.variant_serializer_assoc.clone(),
         vec![names.serialize_variant.clone()],
         vec![],
     );
@@ -2305,7 +2371,7 @@ fn generate_variant_serialize(
             );
             let payload_call = type_param_method_call(
                 local_ref(vs_local, "__vs", mut_ref_vs),
-                "S::VariantSerializer",
+                &names.s_variant_serializer_proj,
                 &names.serialize_variant,
                 "payload",
                 serde_module.clone(),
@@ -2318,7 +2384,7 @@ fn generate_variant_serialize(
 
             let end_call = type_param_method_call(
                 local_ref(vs_local, "__vs", mut_ref_vs),
-                "S::VariantSerializer",
+                &names.s_variant_serializer_proj,
                 &names.serialize_variant,
                 "end",
                 serde_module.clone(),
@@ -2493,7 +2559,7 @@ fn generate_variant_deserialize(
     let mut_ref_d = tt.make_mut_ref(d_type_param);
     let variant_access_type = tt.make_assoc_type_projection(
         d_type_param,
-        "VariantAccess".to_string(),
+        names.variant_access_assoc.clone(),
         vec![names.deserialize_variant.clone()],
         vec![],
     );
@@ -2564,7 +2630,7 @@ fn generate_variant_deserialize(
     // --- disc-based path (tried first) ---
     let disc_call = type_param_method_call(
         local_ref(va_local, "va", mut_ref_va),
-        "D::VariantAccess",
+        &names.d_variant_access_proj,
         &names.deserialize_variant,
         "disc",
         serde_module.clone(),
@@ -2598,7 +2664,7 @@ fn generate_variant_deserialize(
         if is_unit {
             let end_call = type_param_method_call(
                 local_ref(va_local, "va", mut_ref_va),
-                "D::VariantAccess",
+                &names.d_variant_access_proj,
                 &names.deserialize_variant,
                 "end",
                 serde_module.clone(),
@@ -2631,7 +2697,7 @@ fn generate_variant_deserialize(
 
             let payload_call = type_param_method_call(
                 local_ref(va_local, "va", mut_ref_va),
-                "D::VariantAccess",
+                &names.d_variant_access_proj,
                 &names.deserialize_variant,
                 "payload",
                 serde_module.clone(),
@@ -2644,7 +2710,7 @@ fn generate_variant_deserialize(
 
             let end_call = type_param_method_call(
                 local_ref(va_local, "va", mut_ref_va),
-                "D::VariantAccess",
+                &names.d_variant_access_proj,
                 &names.deserialize_variant,
                 "end",
                 serde_module.clone(),
@@ -2728,7 +2794,7 @@ fn generate_variant_deserialize(
 
     let name_call = type_param_method_call(
         local_ref(va_local, "va", mut_ref_va),
-        "D::VariantAccess",
+        &names.d_variant_access_proj,
         &names.deserialize_variant,
         "variant_name",
         serde_module.clone(),
@@ -2784,7 +2850,7 @@ fn generate_variant_deserialize(
         if is_unit {
             let end_call = type_param_method_call(
                 local_ref(va_local, "va", mut_ref_va),
-                "D::VariantAccess",
+                &names.d_variant_access_proj,
                 &names.deserialize_variant,
                 "end",
                 serde_module.clone(),
@@ -2817,7 +2883,7 @@ fn generate_variant_deserialize(
 
             let payload_call = type_param_method_call(
                 local_ref(va_local, "va", mut_ref_va),
-                "D::VariantAccess",
+                &names.d_variant_access_proj,
                 &names.deserialize_variant,
                 "payload",
                 serde_module.clone(),
@@ -2830,7 +2896,7 @@ fn generate_variant_deserialize(
 
             let end_call = type_param_method_call(
                 local_ref(va_local, "va", mut_ref_va),
-                "D::VariantAccess",
+                &names.d_variant_access_proj,
                 &names.deserialize_variant,
                 "end",
                 serde_module.clone(),
@@ -3096,7 +3162,7 @@ fn generate_flags_serialize(
     let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
     let seq_ser_type = tt.make_assoc_type_projection(
         s_type_param,
-        "SeqSerializer".to_string(),
+        names.seq_serializer_assoc.clone(),
         vec![names.serialize_seq.clone()],
         vec![],
     );
@@ -3179,7 +3245,7 @@ fn generate_flags_serialize(
         let bit_check = flags_bit_check(ref_self_type, flags_type, *bitmask, span);
         let element_call = type_param_method_call(
             local_ref(seq_local, "seq", mut_ref_seq),
-            "S::SeqSerializer",
+            &names.s_seq_serializer_proj,
             &names.serialize_seq,
             "element",
             serde_module.clone(),
@@ -3203,7 +3269,7 @@ fn generate_flags_serialize(
     // return seq.end();
     let end_call = type_param_method_call(
         local_ref(seq_local, "seq", mut_ref_seq),
-        "S::SeqSerializer",
+        &names.s_seq_serializer_proj,
         &names.serialize_seq,
         "end",
         serde_module,
@@ -3347,7 +3413,7 @@ fn generate_flags_deserialize(
     let result_unit_err = tt.make_result(TypeTable::UNIT, deser_error_type);
     let seq_access_type = tt.make_assoc_type_projection(
         d_type_param,
-        "SeqAccess".to_string(),
+        names.seq_access_assoc.clone(),
         vec![names.deserialize_seq.clone()],
         vec![],
     );
@@ -3416,7 +3482,7 @@ fn generate_flags_deserialize(
     // loop { let __elem_r = seq.next_element::<String>(); ... }
     let next_call = type_param_method_call(
         local_ref(seq_local, "seq", mut_ref_seq),
-        "D::SeqAccess",
+        &names.d_seq_access_proj,
         &names.deserialize_seq,
         "next_element",
         serde_module.clone(),
@@ -3580,7 +3646,7 @@ fn generate_flags_deserialize(
     // seq.end()?
     let end_call = type_param_method_call(
         local_ref(seq_local, "seq", mut_ref_seq),
-        "D::SeqAccess",
+        &names.d_seq_access_proj,
         &names.deserialize_seq,
         "end",
         serde_module,

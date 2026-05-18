@@ -410,8 +410,11 @@ fn lower_to_flat_inner(
 
                 // if disc != 0 { lower(variant_payload(value)) → inner_locals }
                 let mut then_stmts: Vec<TirStmt> = Vec::new();
-                let unwrapped =
-                    variant_payload(local_ref(opt_local, "__opt_val", type_id), 0, inner_type_id);
+                let unwrapped = variant_payload(
+                    local_ref(opt_local, "__opt_val", type_id),
+                    names.some_index,
+                    inner_type_id,
+                );
                 let inner_lowered = synthesize_lower_to_flat(
                     unwrapped,
                     inner_type_id,
@@ -1006,6 +1009,13 @@ pub(super) fn synthesize_result_export_binding(
             );
         }
     };
+    let (_, _, ok_case_name, ok_case_index) = tt
+        .compiler_items()
+        .require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
+    let ok_case_name = ok_case_name.to_string();
+    let (_, _, _err_case_name, err_case_index) = tt
+        .compiler_items()
+        .require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
     drop(tt);
 
     // Allocate mutable flat value locals (initialized to zero)
@@ -1038,7 +1048,7 @@ pub(super) fn synthesize_result_export_binding(
     // Extract Ok payload
     let ok_value = variant_payload(
         local_ref(result_local, "__result", user_return_type),
-        0, // Ok case index
+        ok_case_index,
         ok_type_id,
     );
 
@@ -1109,7 +1119,7 @@ pub(super) fn synthesize_result_export_binding(
     // Extract Err payload
     let err_value = variant_payload(
         local_ref(result_local, "__result", user_return_type),
-        1, // Err case index
+        err_case_index,
         err_type_id,
     );
     let err_local = alloc_local(&mut next_local, &mut locals, err_type_id);
@@ -1190,18 +1200,11 @@ pub(super) fn synthesize_result_export_binding(
     err_stmts.push(return_stmt(None));
 
     // === Combine Ok/Err into if-else ===
-    let (ok_name_for_test, ok_index_for_test) = {
-        let tt = type_table.borrow();
-        let (_, _, n, i) = tt
-            .compiler_items()
-            .require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
-        (n.to_string(), i)
-    };
     body_stmts.push(if_stmt(
         variant_test(
             local_ref(result_local, "__result", user_return_type),
-            ok_index_for_test,
-            &ok_name_for_test,
+            ok_case_index,
+            &ok_case_name,
         ),
         block(ok_stmts),
         Some(block(err_stmts)),

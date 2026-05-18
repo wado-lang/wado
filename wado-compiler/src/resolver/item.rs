@@ -189,6 +189,7 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     attrs: &[crate::ast::Attribute],
     name: &str,
     methods: &[crate::ast::Function],
+    assoc_types: &[crate::ast::AssociatedTypeDecl],
     module_source: &ModuleSource,
     span: Span,
     logger: &Logger<'_, H>,
@@ -207,10 +208,12 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     } else {
         None
     };
+    let assoc_type_names = assoc_types.iter().map(|a| a.name.clone()).collect();
     let resolved = Resolved::Trait {
         module_source: module_source.clone(),
         name: name.to_string(),
         method_name,
+        assoc_type_names,
     };
     if let Err(err) = type_table
         .borrow_mut()
