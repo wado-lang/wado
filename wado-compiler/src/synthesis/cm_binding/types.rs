@@ -53,9 +53,9 @@ pub struct CmStdlibNames {
 
 impl CmStdlibNames {
     /// Look up every name through the [`CompilerItems`] registry.
-    /// Cheap (a handful of registry hits + clones); cm_binding's
-    /// multi-entry-point shape (lift / lower / adapter / type_fixup /
-    /// task_return are all called independently from outside paths)
+    /// Cheap (a handful of registry hits + clones); `cm_binding`'s
+    /// multi-entry-point shape (lift / lower / adapter / `type_fixup` /
+    /// `task_return` are all called independently from outside paths)
     /// means each entry rebuilds the snapshot locally rather than
     /// threading a single one through a single context — mirrors the
     /// `from_compiler_items` constructor shape used by the other
