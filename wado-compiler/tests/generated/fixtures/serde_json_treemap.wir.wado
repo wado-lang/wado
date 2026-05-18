@@ -807,7 +807,7 @@ type "functype//core:json/JsonMapSerializer^SerializeMap::value<bool>" = fn(ref 
 
 type "functype//core:json/JsonMapSerializer^SerializeMap::value<i32>" = fn(ref "core:json//JsonMapSerializer", i32) -> ref null "core:serde//SerializeError";  // TypeId(262)
 
-type "functype//core:prelude/array.wado/Array<i32>^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "core:prelude//Array<i32>", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(263)
+type "functype//core:serde/Array<i32>^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "core:prelude//Array<i32>", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(263)
 
 type "functype//core:json/JsonSeqSerializer^SerializeSeq::element<i32>" = fn(ref "core:json//JsonSeqSerializer", i32) -> ref null "core:serde//SerializeError";  // TypeId(264)
 
@@ -5267,7 +5267,7 @@ fn "core:json/JsonMapSerializer^SerializeMap::value<core:prelude/array.wado/Arra
     let ser: ref "core:json//JsonSerializer";
     let r: ref null "core:serde//SerializeError";
     ser = struct.new "core:json//JsonSerializer" { buf: self.buf };
-    r = "core:prelude/array.wado/Array<i32>^Serialize::serialize<core:json/JsonSerializer>"(value, ser.buf);
+    r = "core:serde/Array<i32>^Serialize::serialize<core:json/JsonSerializer>"(value, ser.buf);
     self.buf = ser.buf;
     self.count = self.count + 1;
     self.need_value = 0;
@@ -7131,7 +7131,7 @@ fn "core:prelude/array.wado/ArrayIter<core:collections/TreeMapEntry<core:prelude
     return item;
 }
 
-fn "core:prelude/array.wado/Array<i32>^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
+fn "core:serde/Array<i32>^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
     let __qm_v_2: ref "core:json//JsonSeqSerializer";
     let __qm_e_3: ref "core:serde//SerializeError";
     let seq: ref "core:json//JsonSeqSerializer";

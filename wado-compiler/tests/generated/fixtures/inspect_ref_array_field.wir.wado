@@ -75,7 +75,7 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(28)
 
-type "functype//core:prelude/array.wado/Array<i32>^Inspect::inspect" = fn(ref "core:prelude//Array<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(29)
+type "functype//core:prelude/format.wado/Array<i32>^Inspect::inspect" = fn(ref "core:prelude//Array<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(29)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
 
@@ -373,7 +373,7 @@ fn "wado-compiler/tests/fixtures/inspect_ref_array_field.wado/Wrapper^Inspect::i
     s_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&"), used: 1 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_10);
     inner = self_6;
-    "core:prelude/array.wado/Array<i32>^Inspect::inspect"(inner, f);
+    "core:prelude/format.wado/Array<i32>^Inspect::inspect"(inner, f);
     s_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_12);
 }
@@ -543,7 +543,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<i32>^Inspect::inspect"(self, f) {
+fn "core:prelude/format.wado/Array<i32>^Inspect::inspect"(self, f) {
     let i: i32;
     let s: ref "core:prelude/string.wado//String";
     let _licm_used_16: i32;

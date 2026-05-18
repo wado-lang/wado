@@ -505,7 +505,8 @@ impl Monomorphizer {
                                                 tn.clone(),
                                                 method_name.clone(),
                                             );
-                                            let template_module = generic_func.module_source.clone();
+                                            let template_module =
+                                                generic_func.module_source.clone();
                                             let key = InstantiationKey {
                                                 name: generic_method_name.clone(),
                                                 module_source: template_module,

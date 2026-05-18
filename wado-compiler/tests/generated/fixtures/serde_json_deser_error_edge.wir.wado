@@ -517,9 +517,9 @@ type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core
 
 type "functype//wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/Point^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/Point,core:serde/DeserializeError>";  // TypeId(170)
 
-type "functype//core:prelude/array.wado/Array<i32>^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<core:prelude/array.wado/Array<i32>,core:serde/DeserializeError>";  // TypeId(171)
+type "functype//core:serde/Array<i32>^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<core:prelude/array.wado/Array<i32>,core:serde/DeserializeError>";  // TypeId(171)
 
-type "functype//core:prelude/types.wado/Option<i32>^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:serde/DeserializeError>";  // TypeId(172)
+type "functype//core:serde/Option<i32>^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:serde/DeserializeError>";  // TypeId(172)
 
 type "functype//wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/Color^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/Color,core:serde/DeserializeError>";  // TypeId(173)
 
@@ -2974,7 +2974,7 @@ fn "core:json/core/json/from_string<core:prelude/types.wado/Option<i32>>"(input)
     let offset: i64;
     de = struct.new "core:json//JsonDeserializer" { input: input, pos: 0 };
     let __match_scrut_0: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:serde/DeserializeError>";
-    __match_scrut_0 = "core:prelude/types.wado/Option<i32>^Deserialize::deserialize<core:json/JsonDeserializer>"(de);
+    __match_scrut_0 = "core:serde/Option<i32>^Deserialize::deserialize<core:json/JsonDeserializer>"(de);
     v = (if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> ref "core:prelude/types.wado//Option<i32>" {
         __qm_v = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:serde/DeserializeError>::Ok"(__match_scrut_0).payload_0;
         __qm_v;
@@ -3006,7 +3006,7 @@ fn "core:json/core/json/from_string<core:prelude/array.wado/Array<i32>>"(input) 
     let offset: i64;
     de = struct.new "core:json//JsonDeserializer" { input: input, pos: 0 };
     let __match_scrut_0: ref "core:prelude/types.wado//Result<core:prelude/array.wado/Array<i32>,core:serde/DeserializeError>";
-    __match_scrut_0 = "core:prelude/array.wado/Array<i32>^Deserialize::deserialize<core:json/JsonDeserializer>"(de);
+    __match_scrut_0 = "core:serde/Array<i32>^Deserialize::deserialize<core:json/JsonDeserializer>"(de);
     v = (if ref.test "core:prelude/types.wado//Result<core:prelude/array.wado/Array<i32>,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> ref "core:prelude//Array<i32>" {
         __qm_v = ref.cast "core:prelude/types.wado//Result<core:prelude/array.wado/Array<i32>,core:serde/DeserializeError>::Ok"(__match_scrut_0).payload_0;
         __qm_v;
@@ -6238,7 +6238,7 @@ fn "wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/Point^Deserial
     }
 }
 
-fn "core:prelude/array.wado/Array<i32>^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
+fn "core:serde/Array<i32>^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
     let __qm_v_1: ref "core:json//JsonSeqAccess";
     let __qm_e_2: ref "core:serde//DeserializeError";
     let seq: ref "core:json//JsonSeqAccess";
@@ -6328,7 +6328,7 @@ fn "core:prelude/array.wado/Array<i32>^Deserialize::deserialize<core:json/JsonDe
     }
 }
 
-fn "core:prelude/types.wado/Option<i32>^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
+fn "core:serde/Option<i32>^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
     let __qm_v_1: bool;
     let __qm_e_2: ref "core:serde//DeserializeError";
     let is_null: bool;

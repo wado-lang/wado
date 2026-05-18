@@ -1446,7 +1446,15 @@ fn generate_newtype_inspect_fn(
     );
 
     let stmts = vec![
-        inspect_call(cast_to_base, base_type, fmt(), trait_env, module_source, tt, span),
+        inspect_call(
+            cast_to_base,
+            base_type,
+            fmt(),
+            trait_env,
+            module_source,
+            tt,
+            span,
+        ),
         write_str_stmt(
             format!(" as {newtype_name}"),
             fmt(),
@@ -2927,7 +2935,7 @@ fn decompose_type_for_method_name(
 /// `ref_module` is used for Ref/MutRef types (`traits()` for Eq/Ord, `format()` for Inspect).
 /// `string_module` is used for String (`string()` for Eq/Ord, `format()` for Inspect).
 /// Resolve `module_source` for a `value.<trait>::<method>` call inside an
-/// auto-derived body — issue #1110 (1): the FunctionRef's `module_source`
+/// auto-derived body — issue #1110 (1): the `FunctionRef`'s `module_source`
 /// must be the module that hosts the callee's body.
 ///
 /// Strategy:
@@ -3411,8 +3419,7 @@ fn generate_struct_eq_fn(
     let method_info = trait_method_info(struct_name, eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
 
-    let result =
-        build_struct_eq_chain(fields, ref_struct_type, trait_env, module_source, tt, span);
+    let result = build_struct_eq_chain(fields, ref_struct_type, trait_env, module_source, tt, span);
     let body = TirBlock::new(
         vec![TirStmt::new(
             TirStmtKind::Return {
