@@ -10,7 +10,24 @@ use crate::tir::{
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
 use super::generic_function_key;
+use super::module_source_for_trait_impl;
 use super::state::Monomorphizer;
+
+/// Strip `&`/`&mut` and `Newtype` and return the underlying type's home
+/// module, if any. Used as the disambiguation hint for
+/// `TraitEnv::impl_module_for` and as the candidate module for inherent-
+/// method lookups; newtypes inherit their base type's inherent methods, so
+/// peeling them lines the hint up with where the inherited template lives.
+fn receiver_module_hint(tt: &TypeTable, tid: TypeId) -> Option<ModuleSource> {
+    let mut tid = tid;
+    loop {
+        match tt.get(tid) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => tid = *inner,
+            ResolvedType::Newtype { base_type, .. } => tid = *base_type,
+            _ => return module_source_for_trait_impl(tt, tid),
+        }
+    }
+}
 
 impl Monomorphizer {
     /// Try to find a queued instantiation, allowing `key.module_source` to be
@@ -18,9 +35,11 @@ impl Monomorphizer {
     /// `func_inst.rs`: when the literal `(module_source, name, ...)` key
     /// misses, consult `TraitEnv::impl_module_for` over the listed struct
     /// candidates to find the impl block's home, then retry the lookup with
-    /// that module. Returns `(matched_key, mangled_name)` so the caller can
-    /// rewrite the call site to point at the same module the queued
-    /// instantiation landed in.
+    /// that module. For inherent (non-trait) methods, also try the
+    /// `type_module_hint` directly — inherent impls live with their type.
+    /// Returns `(matched_key, mangled_name)` so the caller can rewrite the
+    /// call site to point at the same module the queued instantiation
+    /// landed in.
     fn lookup_instantiation_with_trait_fallback(
         &self,
         mut key: InstantiationKey,
@@ -34,19 +53,29 @@ impl Monomorphizer {
         let trait_name = key
             .method_info
             .as_ref()
-            .and_then(|i| i.base_trait_name.as_ref().or(i.trait_name.as_ref()))?
-            .clone();
-        for candidate in struct_candidates {
-            if let Some(impl_module) =
-                self.functions
-                    .trait_env
-                    .impl_module_for(candidate, &trait_name, type_module_hint)
-            {
-                key.module_source = impl_module.clone();
-                if let Some(mangled) = self.lookup_function_instantiation(&key) {
-                    let mangled = mangled.clone();
-                    return Some((key, mangled));
+            .and_then(|i| i.base_trait_name.as_ref().or(i.trait_name.as_ref()))
+            .cloned();
+        if let Some(trait_name) = trait_name {
+            for candidate in struct_candidates {
+                if let Some(impl_module) =
+                    self.functions
+                        .trait_env
+                        .impl_module_for(candidate, &trait_name, type_module_hint)
+                {
+                    key.module_source = impl_module.clone();
+                    if let Some(mangled) = self.lookup_function_instantiation(&key) {
+                        let mangled = mangled.clone();
+                        return Some((key, mangled));
+                    }
                 }
+            }
+        } else if let Some(type_module) = type_module_hint {
+            // Inherent methods: the impl block lives in the receiver type's
+            // own module (`impl<T> Array<T> { fn len(&self) -> i32 ... }`).
+            key.module_source = type_module.clone();
+            if let Some(mangled) = self.lookup_function_instantiation(&key) {
+                let mangled = mangled.clone();
+                return Some((key, mangled));
             }
         }
         None
@@ -285,6 +314,7 @@ impl Monomorphizer {
             } else {
                 vec![&struct_name]
             };
+            let receiver_module = receiver_module_hint(type_table, receiver.type_id);
             let mut rewritten = false;
             for (full_method_name, _tn) in &names_to_try {
                 let key = InstantiationKey {
@@ -292,11 +322,13 @@ impl Monomorphizer {
                     module_source: method_func.module_source.clone(),
                     impl_type_args: vec![],
                     method_type_args: type_args.clone(),
-                    method_info: None,
+                    method_info: method_func.method_info.clone(),
                 };
-                if let Some((key, mangled)) =
-                    self.lookup_instantiation_with_trait_fallback(key, &candidates, None)
-                {
+                if let Some((key, mangled)) = self.lookup_instantiation_with_trait_fallback(
+                    key,
+                    &candidates,
+                    receiver_module.as_ref(),
+                ) {
                     let original_method_info = method_func.method_info.clone();
                     *method_func = FunctionRef {
                         module_source: key.module_source.clone(),
@@ -346,19 +378,21 @@ impl Monomorphizer {
                     } else {
                         vec![&base_struct]
                     };
+                    let dg_receiver_module =
+                        receiver_module_hint(type_table, receiver.type_id);
                     for (generic_method_name, _tn) in &dg_names {
                         let combined_key = InstantiationKey {
                             name: generic_method_name.clone(),
                             module_source: method_func.module_source.clone(),
                             impl_type_args: impl_type_args.clone(),
                             method_type_args: type_args.clone(),
-                            method_info: None,
+                            method_info: method_func.method_info.clone(),
                         };
                         if let Some((combined_key, mangled)) =
                             self.lookup_instantiation_with_trait_fallback(
                                 combined_key,
                                 &dg_candidates,
-                                None,
+                                dg_receiver_module.as_ref(),
                             )
                         {
                             let original_method_info = method_func.method_info.clone();
@@ -450,11 +484,19 @@ impl Monomorphizer {
             } else {
                 vec![&base_struct]
             };
-            for key in possible_keys {
+            let pk_receiver_module = receiver_module_hint(type_table, receiver.type_id);
+            for mut key in possible_keys {
+                // Help the trait_env fallback by carrying the call's method_info on
+                // the lookup key. `InstantiationKey` equality ignores `method_info`,
+                // so this only feeds the fallback's trait-name extraction; it does
+                // not perturb the literal hashmap lookup.
+                if key.method_info.is_none() {
+                    key.method_info = method_func.method_info.clone();
+                }
                 if let Some((key, mangled)) = self.lookup_instantiation_with_trait_fallback(
                     key,
                     &pk_candidates,
-                    None,
+                    pk_receiver_module.as_ref(),
                 ) {
                     // Preserve original method_info
                     let original_method_info = method_func.method_info.clone();
@@ -494,7 +536,12 @@ impl Monomorphizer {
                 } else {
                     Vec::new()
                 };
-                self.lookup_instantiation_with_trait_fallback(key, &candidates, None)
+                let blanket_receiver_module = receiver_module_hint(type_table, receiver.type_id);
+                self.lookup_instantiation_with_trait_fallback(
+                    key,
+                    &candidates,
+                    blanket_receiver_module.as_ref(),
+                )
                     .map(|(k, mangled)| {
                         (
                             mangled,
@@ -555,10 +602,11 @@ impl Monomorphizer {
                     method_info: method_func.method_info.clone(),
                 };
                 let candidates: Vec<&str> = vec![TypeTable::TUPLE_TYPE_NAME, &info.base_struct_name];
+                let tuple_receiver_module = receiver_module_hint(type_table, receiver.type_id);
                 if let Some((key, mangled)) = self.lookup_instantiation_with_trait_fallback(
                     key,
                     &candidates,
-                    None,
+                    tuple_receiver_module.as_ref(),
                 ) {
                     let original_method_info = method_func.method_info.clone();
                     *method_func = FunctionRef {

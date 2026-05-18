@@ -78,14 +78,16 @@ pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<Trait
     }
 }
 
-/// Strip `&` / `&mut` from `tid` and return the underlying type's home module
-/// (if it has one). Used to give `TraitEnv::impl_module_for` a disambiguation
-/// hint for receiver-typed lookups.
+/// Strip `&`/`&mut` and `Newtype` from `tid` and return the underlying
+/// type's home module (if it has one). Used to give
+/// `TraitEnv::impl_module_for` a disambiguation hint, and as a candidate
+/// module for inherent-method lookups (newtypes inherit base methods).
 fn receiver_module_hint(tt: &TypeTable, tid: TypeId) -> Option<ModuleSource> {
     let mut tid = tid;
     loop {
         match tt.get(tid) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => tid = *inner,
+            ResolvedType::Newtype { base_type, .. } => tid = *base_type,
             _ => return module_source_for_trait_impl(tt, tid),
         }
     }
@@ -119,18 +121,29 @@ fn lookup_template_with_trait_fallback<'a, V>(
     if let Some(v) = generic_functions.get(&(module_hint.clone(), name.to_string())) {
         return Some((module_hint.clone(), v));
     }
-    let trait_name = info
-        .and_then(|i| i.base_trait_name.as_ref().or(i.trait_name.as_ref()))?;
-    for candidate in struct_candidates {
-        if let Some(impl_module) =
-            trait_env.impl_module_for(candidate, trait_name, type_module_hint)
-            && let Some(v) =
-                generic_functions.get(&(impl_module.clone(), name.to_string()))
-        {
-            return Some((impl_module.clone(), v));
+    let trait_name = info.and_then(|i| i.base_trait_name.as_ref().or(i.trait_name.as_ref()));
+    if let Some(trait_name) = trait_name {
+        for candidate in struct_candidates {
+            if let Some(impl_module) =
+                trait_env.impl_module_for(candidate, trait_name, type_module_hint)
+                && let Some(v) =
+                    generic_functions.get(&(impl_module.clone(), name.to_string()))
+            {
+                return Some((impl_module.clone(), v));
+            }
         }
+        None
+    } else if let Some(type_module) = type_module_hint {
+        // Inherent methods: the impl block lives in the receiver type's own
+        // module (`impl<T> Array<T> { fn len ... }`). Newtypes peel through
+        // their base via `receiver_module_hint`, so this picks up
+        // `Array::len` even when called as `MyArray<i32>::len`.
+        generic_functions
+            .get(&(type_module.clone(), name.to_string()))
+            .map(|v| (type_module.clone(), v))
+    } else {
+        None
     }
-    None
 }
 
 /// Collects function instantiation sites by traversing TIR with `TirRefVisitor`.
