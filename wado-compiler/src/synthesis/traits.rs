@@ -925,6 +925,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             ref_string_type,
             *espan,
             &inspect_name,
+            &formatter_name,
         ))));
         ctx.record_impl(name, &inspect_name);
     }
@@ -959,6 +960,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             &mut tt,
             *sspan,
             &inspect_name,
+            &formatter_name,
         ))));
         ctx.record_impl(name, &inspect_name);
     }
@@ -985,6 +987,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             &mut tt,
             *sspan,
             &inspect_name,
+            &formatter_name,
         ))));
         ctx.record_impl(name, &inspect_name);
     }
@@ -1009,6 +1012,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             &mut tt,
             *vspan,
             &inspect_name,
+            &formatter_name,
         ))));
         ctx.record_impl(name, &inspect_name);
     }
@@ -1035,6 +1039,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             &mut tt,
             *vspan,
             &inspect_name,
+            &formatter_name,
         ))));
         ctx.record_impl(name, &inspect_name);
     }
@@ -1068,6 +1073,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             ref_string_type,
             fspan,
             &inspect_name,
+            &formatter_name,
         ))));
         ctx.record_impl(name, &inspect_name);
     }
@@ -1098,6 +1104,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             &mut tt,
             synth_span(),
             &inspect_name,
+            &formatter_name,
         ))));
         ctx.record_impl(&nt.name, &inspect_name);
     }
@@ -1134,6 +1141,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
                     ref_string_type,
                     span,
                     &inspect_name,
+                    &formatter_name,
                 ))));
                 // Intentionally do NOT `ctx.record_impl` — these per-module
                 // stubs are emitted into every module that uses the shape,
@@ -1183,6 +1191,7 @@ fn generate_enum_inspect_fn(
     ref_string_type: TypeId,
     span: Span,
     inspect_trait: &str,
+    formatter_name: &str,
 ) -> TirFunction {
     let method_info = trait_method_info(enum_name, inspect_trait, "inspect");
     let qualified_name = method_info.to_mangled_name();
@@ -1199,6 +1208,7 @@ fn generate_enum_inspect_fn(
                 string_type,
                 ref_string_type,
                 span,
+                formatter_name,
             )],
             span,
         );
@@ -1268,6 +1278,7 @@ fn generate_struct_inspect_fn(
     tt: &mut TypeTable,
     span: Span,
     inspect_trait: &str,
+    formatter_name: &str,
 ) -> TirFunction {
     let method_info = trait_method_info(struct_name, inspect_trait, "inspect");
     let qualified_name = method_info.to_mangled_name();
@@ -1284,6 +1295,7 @@ fn generate_struct_inspect_fn(
         tt,
         span,
         inspect_trait,
+        formatter_name,
     );
     let body = TirBlock::new(stmts, span);
 
@@ -1313,9 +1325,11 @@ fn build_struct_inspect_body(
     tt: &mut TypeTable,
     span: Span,
     inspect_trait: &str,
+    formatter_name: &str,
 ) -> Vec<TirStmt> {
     let fmt = || local_expr(1, "f", fmt_type, span);
-    let write = |s: String| write_str_stmt(s, fmt(), string_type, ref_string_type, span);
+    let write =
+        |s: String| write_str_stmt(s, fmt(), string_type, ref_string_type, span, formatter_name);
     let mut stmts = Vec::new();
 
     if fields.is_empty() {
@@ -1379,6 +1393,7 @@ fn generate_variant_inspect_fn(
     tt: &mut TypeTable,
     span: Span,
     inspect_trait: &str,
+    formatter_name: &str,
 ) -> TirFunction {
     let method_info = trait_method_info(variant_name, inspect_trait, "inspect");
     let qualified_name = method_info.to_mangled_name();
@@ -1395,6 +1410,7 @@ fn generate_variant_inspect_fn(
         tt,
         span,
         inspect_trait,
+        formatter_name,
     );
     let body = TirBlock::new(stmts, span);
 
@@ -1424,10 +1440,12 @@ fn build_variant_inspect_body(
     tt: &mut TypeTable,
     span: Span,
     inspect_trait: &str,
+    formatter_name: &str,
 ) -> Vec<TirStmt> {
     let deref_self = || deref_local(0, "self", ref_variant_type, variant_type, span);
     let fmt = || local_expr(1, "f", fmt_type, span);
-    let write = |s: String| write_str_stmt(s, fmt(), string_type, ref_string_type, span);
+    let write =
+        |s: String| write_str_stmt(s, fmt(), string_type, ref_string_type, span, formatter_name);
 
     let mut chain: Option<TirExpr> = None;
     for (case_name, case_index, payload_type) in cases.iter().rev() {
@@ -1498,6 +1516,7 @@ fn generate_newtype_inspect_fn(
     tt: &mut TypeTable,
     span: Span,
     inspect_trait: &str,
+    formatter_name: &str,
 ) -> TirFunction {
     let method_info = trait_method_info(newtype_name, inspect_trait, "inspect");
     let qualified_name = method_info.to_mangled_name();
@@ -1530,6 +1549,7 @@ fn generate_newtype_inspect_fn(
             string_type,
             ref_string_type,
             span,
+            formatter_name,
         ),
     ];
 
@@ -1557,6 +1577,7 @@ fn generate_flags_inspect_fn(
     ref_string_type: TypeId,
     span: &Span,
     inspect_trait: &str,
+    formatter_name: &str,
 ) -> TirFunction {
     let method_info = trait_method_info(flags_name, inspect_trait, "inspect");
     let qualified_name = method_info.to_mangled_name();
@@ -1603,6 +1624,7 @@ fn generate_flags_inspect_fn(
                     string_type,
                     ref_string_type,
                     *span,
+                    formatter_name,
                 )],
                 *span,
             ),
@@ -1694,6 +1716,7 @@ fn generate_flags_inspect_fn(
                             string_type,
                             ref_string_type,
                             *span,
+                            formatter_name,
                         )],
                         *span,
                     ),
@@ -1711,6 +1734,7 @@ fn generate_flags_inspect_fn(
             string_type,
             ref_string_type,
             *span,
+            formatter_name,
         ));
 
         let member_if = TirExpr::new(
@@ -1846,6 +1870,7 @@ fn generate_opaque_inspect_fn(
     ref_string_type: TypeId,
     span: Span,
     inspect_trait: &str,
+    formatter_name: &str,
 ) -> TirFunction {
     let method_info = trait_method_info(base_name, inspect_trait, "inspect")
         .with_struct_type_args(type_arg_names);
@@ -1859,6 +1884,7 @@ fn generate_opaque_inspect_fn(
             string_type,
             ref_string_type,
             span,
+            formatter_name,
         )],
         span,
     );
@@ -2224,7 +2250,16 @@ fn build_struct_inspect_alt_body(
     inspect_alt_trait: &str,
 ) -> Vec<TirStmt> {
     let fmt = || local_expr(1, "f", fmt_type, span);
-    let write = |s: &str| write_str_stmt(s.to_string(), fmt(), string_type, ref_string_type, span);
+    let write = |s: &str| {
+        write_str_stmt(
+            s.to_string(),
+            fmt(),
+            string_type,
+            ref_string_type,
+            span,
+            formatter_name,
+        )
+    };
     let newline_indent = || {
         formatter_call(
             "write_newline_indent",
@@ -2245,6 +2280,7 @@ fn build_struct_inspect_alt_body(
             string_type,
             ref_string_type,
             span,
+            formatter_name,
         ));
         return stmts;
     }
@@ -2264,6 +2300,7 @@ fn build_struct_inspect_alt_body(
             string_type,
             ref_string_type,
             span,
+            formatter_name,
         ));
         let field_access = field_access_local(
             0,
@@ -2384,6 +2421,7 @@ fn build_variant_inspect_alt_body(
                 string_type,
                 ref_string_type,
                 span,
+                formatter_name,
             ));
         } else {
             // f.open_brace("VariantName::CaseName(")
@@ -2426,6 +2464,7 @@ fn build_variant_inspect_alt_body(
                 string_type,
                 ref_string_type,
                 span,
+                formatter_name,
             ));
             // f.close_brace(")")
             then_stmts.push(formatter_call(

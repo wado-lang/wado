@@ -26,12 +26,13 @@ use crate::token::Span;
 /// through the synthesis helpers so a stdlib rename of any of these
 /// items flows through every call site without touching Rust code.
 ///
-/// All trait / struct / enum / case names live here together because
-/// every synthesised `Serialize` / `Deserialize` impl reaches for the
-/// full set; splitting the snapshot per-item would just multiply the
-/// borrow points without making any one site cleaner.
+/// Field set is **minimal**: only the symbols this synthesiser actually
+/// reads end up here. `Option::Some`'s case name is needed by
+/// `if_let_some` (the pattern carries the name); `Option::None` is
+/// **not** included because the only place serde constructs `None`
+/// (`generate_lookup_function`) calls `option_none` directly with
+/// `&CompilerItems`, never through this snapshot.
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub(super) struct SerdeStdlibNames {
     pub serialize: String,
     pub deserialize: String,
@@ -51,10 +52,11 @@ pub(super) struct SerdeStdlibNames {
     pub ok_index: u32,
     pub err_name: String,
     pub err_index: u32,
+    /// `Some` case name. The index is intentionally omitted —
+    /// `if_let_some` only needs the name on the pattern; `option_some`
+    /// / `option_none` constructors take `&CompilerItems` and look up
+    /// the index themselves.
     pub some_name: String,
-    pub some_index: u32,
-    pub none_name: String,
-    pub none_index: u32,
     pub ser_err_custom_name: String,
     pub ser_err_custom_index: u32,
     pub deser_err_missing_field_name: String,
@@ -69,8 +71,9 @@ impl SerdeStdlibNames {
     pub fn from_compiler_items(items: &CompilerItems) -> Self {
         let (_, _, ok_name, ok_index) = items.require_variant_case(CompilerItem::ResultOk);
         let (_, _, err_name, err_index) = items.require_variant_case(CompilerItem::ResultErr);
-        let (_, _, some_name, some_index) = items.require_variant_case(CompilerItem::OptionSome);
-        let (_, _, none_name, none_index) = items.require_variant_case(CompilerItem::OptionNone);
+        let some_name = items
+            .variant_case_name(CompilerItem::OptionSome)
+            .to_string();
         let (_, _, ser_err_custom_name, ser_err_custom_index) =
             items.require_enum_case(CompilerItem::SerializeErrorKindCustom);
         let (_, _, deser_err_missing_field_name, deser_err_missing_field_index) =
@@ -108,10 +111,7 @@ impl SerdeStdlibNames {
             ok_index,
             err_name: err_name.to_string(),
             err_index,
-            some_name: some_name.to_string(),
-            some_index,
-            none_name: none_name.to_string(),
-            none_index,
+            some_name,
             ser_err_custom_name: ser_err_custom_name.to_string(),
             ser_err_custom_index,
             deser_err_missing_field_name: deser_err_missing_field_name.to_string(),

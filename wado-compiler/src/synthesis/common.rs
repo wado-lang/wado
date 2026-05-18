@@ -471,19 +471,19 @@ pub fn make_synthetic_method(
 /// wrapped in an explicit `Ref`; `ref_string_type` is the cached `&String`
 /// type id the caller already produced from `string_type`.
 ///
-/// The `Formatter` struct name is **not** taken as a parameter because
-/// `Formatter` is a [`CompilerItem`] anchor — the `LocalMethodName` /
-/// `FunctionRef` use the literal `"Formatter"` only because this helper
-/// is called from many sites and the struct is always referenced under
-/// the canonical name. Migrating the callers to thread a snapshot
-/// through is tracked alongside the rest of the
-/// `CompilerItem::Formatter` flow.
+/// `formatter_name` is the resolved [`CompilerItem::Formatter`] struct
+/// name. Every caller already snapshotted it (either via
+/// [`super::traits::TraitsStdlibNames`] on `SynthesisCtx`, or by reading
+/// it directly off `tt.compiler_items()`), so threading it through this
+/// helper avoids a fresh registry lookup per call without re-introducing
+/// the `"Formatter"` literal here.
 pub fn write_str_stmt(
     text: impl Into<String>,
     fmt: TirExpr,
     string_type: TypeId,
     ref_string_type: TypeId,
     span: Span,
+    formatter_name: &str,
 ) -> TirStmt {
     let literal = TirExpr::new(TirExprKind::StringLiteral(text.into()), string_type, span);
     let arg = TirExpr::new(
@@ -499,10 +499,10 @@ pub fn write_str_stmt(
             Box::new(fmt),
             FunctionRef {
                 module_source: ModuleSource::format(),
-                name: "Formatter::write_str".to_string(),
+                name: format!("{formatter_name}::write_str"),
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
-                    "Formatter".to_string(),
+                    formatter_name.to_string(),
                     None,
                     "write_str".to_string(),
                 )),
