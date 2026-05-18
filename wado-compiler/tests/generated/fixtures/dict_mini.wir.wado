@@ -852,6 +852,16 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
+fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow"(self);
+    }
+    builtin::array_set<ref "tuple//[String, String]">(self.repr, used, value);
+    self.used = used + 1;
+}
+
 fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::has"(self, key) {
     let i: i32;
     let self_6: ref "core:prelude/string.wado//String";
@@ -867,7 +877,7 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
         _licm_repr_11 = _licm_entries_9.repr;
         _licm_used_16 = key.used;
         block {
-            l81: loop {
+            l82: loop {
                 if i >= _licm_used_10 {
                     break __for_2;
                 }
@@ -883,7 +893,7 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
                     return 1;
                 }
                 i = i + 1;
-                continue l81;
+                continue l82;
             };
         };
     };
@@ -905,7 +915,7 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
         _licm_repr_13 = _licm_entries_11.repr;
         _licm_used_18 = key.used;
         block {
-            l86: loop {
+            l87: loop {
                 if i >= _licm_used_12 {
                     break __for_1;
                 }
@@ -921,7 +931,7 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
                     return builtin::array_get<ref "tuple//[String, String]">(_licm_repr_13, i).1;
                 }
                 i = i + 1;
-                continue l86;
+                continue l87;
             };
         };
     };
@@ -945,7 +955,7 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
         _licm_repr_19 = _licm_entries_13.repr;
         _licm_used_20 = key.used;
         block {
-            l91: loop {
+            l92: loop {
                 if i >= _licm_used_18 {
                     break __for_0;
                 }
@@ -964,21 +974,11 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
                     return;
                 }
                 i = i + 1;
-                continue l91;
+                continue l92;
             };
         };
     };
     "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push"(self, struct.new "tuple//[String, String]" { 0: key, 1: value });
-}
-
-fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow"(self);
-    }
-    builtin::array_set<ref "tuple//[String, String]">(self.repr, used, value);
-    self.used = used + 1;
 }
 
 fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow"(self) {

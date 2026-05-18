@@ -662,7 +662,7 @@ fn synthesize_lift_list(
         generic_static_call(
             &array_struct_name,
             "with_capacity",
-            ModuleSource::prelude(),
+            ModuleSource::array(),
             vec![elem_type_id],
             vec![local_ref(count_local, "__count", TypeTable::I32)],
             array_type_id,
@@ -721,7 +721,7 @@ fn synthesize_lift_list(
         local_ref(result_local, "__result", array_type_id),
         &array_struct_name,
         "push",
-        ModuleSource::prelude(),
+        ModuleSource::array(),
         vec![lifted_elem],
         TypeTable::UNIT,
     )));

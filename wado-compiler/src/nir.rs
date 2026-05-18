@@ -1345,8 +1345,8 @@ pub struct NirModule {
     /// Key: (struct name, module source)
     pub generic_structs: IndexMap<(String, ModuleSource), NirStruct>,
     /// Generic function definitions (before monomorphization)
-    /// Key: function name
-    pub generic_functions: IndexMap<String, Rc<RefCell<NirFunction>>>,
+    /// Key: (module source, function name).
+    pub generic_functions: IndexMap<(ModuleSource, String), Rc<RefCell<NirFunction>>>,
     /// Requested instantiations (populated during resolution, processed in lower)
     pub instantiation_requests: IndexSet<InstantiationKey>,
     /// Closure metadata for optimization (populated by lower phase).

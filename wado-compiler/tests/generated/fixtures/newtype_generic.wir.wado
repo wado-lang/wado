@@ -92,7 +92,7 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(35)
 
-type "functype//wado-compiler/tests/fixtures/newtype_generic.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(36)
+type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(36)
 
 type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(37)
 
@@ -223,7 +223,7 @@ fn "wado-compiler/tests/fixtures/newtype_generic.wado/run"() with Stdout {
         break __inline__value_copy_T411_23: struct.new "core:prelude//Array<i32>" { repr: ref.as_non_null(builtin::array_clone<i32>(v_52.repr)), used: 2 };
         unreachable;
     };
-    "wado-compiler/tests/fixtures/newtype_generic.wado/Array<i32>::push"(arr2, 30);
+    "core:prelude/array.wado/Array<i32>::push"(arr2, 30);
     message_60 = __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("after append: "), used: 14 });
@@ -710,7 +710,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "wado-compiler/tests/fixtures/newtype_generic.wado/Array<i32>::push"(self, value) {
+fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {

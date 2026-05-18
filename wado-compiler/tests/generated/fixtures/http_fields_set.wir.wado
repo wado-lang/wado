@@ -327,9 +327,9 @@ type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(80)
 
-type "functype//core:prelude/Array<core:prelude/array.wado/Array<u8>>::push" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>", ref "core:prelude//Array<u8>");  // TypeId(81)
+type "functype//core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::push" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>", ref "core:prelude//Array<u8>");  // TypeId(81)
 
-type "functype//core:prelude/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(82)
+type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(82)
 
 type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(83)
 
@@ -1152,7 +1152,7 @@ fn "wado-compiler/tests/fixtures/http_fields_set.wado/__cm_binding__Fields_get"(
                         break b62;
                     }
                     __elem_addr_13 = __base_9 + (__i_12 * 1);
-                    "core:prelude/Array<u8>::push"(__result_11, builtin::load_u8(__elem_addr_13));
+                    "core:prelude/array.wado/Array<u8>::push"(__result_11, builtin::load_u8(__elem_addr_13));
                     __i_12 = __i_12 + 1;
                     continue l63;
                 };
@@ -1160,7 +1160,7 @@ fn "wado-compiler/tests/fixtures/http_fields_set.wado/__cm_binding__Fields_get"(
             if __count_10 > 0 {
                 drop("mem/realloc"(__base_9, __count_10 * 1, 1, 0));
             }
-            "core:prelude/Array<core:prelude/array.wado/Array<u8>>::push"(__result_6, __result_11);
+            "core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::push"(__result_6, __result_11);
             __i_7 = __i_7 + 1;
             continue l60;
         };
@@ -1732,7 +1732,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/Array<core:prelude/array.wado/Array<u8>>::push"(self, value) {
+fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1742,7 +1742,7 @@ fn "core:prelude/Array<core:prelude/array.wado/Array<u8>>::push"(self, value) {
     self.used = used + 1;
 }
 
-fn "core:prelude/Array<u8>::push"(self, value) {
+fn "core:prelude/array.wado/Array<u8>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {

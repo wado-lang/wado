@@ -640,6 +640,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
                 &[],
                 fields,
                 ref_struct_type,
+                ctx.trait_env,
                 &module_source,
                 &eq_trait_name,
                 &mut tt,
@@ -657,6 +658,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
                 fields,
                 ref_struct_type,
                 ordering_type,
+                ctx.trait_env,
                 &module_source,
                 &ord_trait_name,
                 &mut tt,
@@ -681,6 +683,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
                 type_params,
                 fields,
                 ref_struct_type,
+                ctx.trait_env,
                 &module_source,
                 &eq_trait_name,
                 &mut tt,
@@ -698,6 +701,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
                 fields,
                 ref_struct_type,
                 ordering_type,
+                ctx.trait_env,
                 &module_source,
                 &ord_trait_name,
                 &mut tt,
@@ -864,6 +868,7 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
             cases,
             variant_type,
             ref_variant_type,
+            ctx.trait_env,
             &module_source,
             &mut tt,
             *span,
@@ -887,6 +892,7 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
             cases,
             variant_type,
             ref_variant_type,
+            ctx.trait_env,
             &module_source,
             &mut tt,
             *span,
@@ -977,6 +983,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             fmt_type,
             string_type,
             ref_string_type,
+            ctx.trait_env,
             &module_source,
             &mut tt,
             *sspan,
@@ -1005,6 +1012,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             fmt_type,
             string_type,
             ref_string_type,
+            ctx.trait_env,
             &module_source,
             &mut tt,
             *sspan,
@@ -1031,6 +1039,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             fmt_type,
             string_type,
             ref_string_type,
+            ctx.trait_env,
             &module_source,
             &mut tt,
             *vspan,
@@ -1059,6 +1068,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             fmt_type,
             string_type,
             ref_string_type,
+            ctx.trait_env,
             &module_source,
             &mut tt,
             *vspan,
@@ -1126,6 +1136,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
             fmt_type,
             string_type,
             ref_string_type,
+            ctx.trait_env,
             &module_source,
             &mut tt,
             synth_span(),
@@ -1304,6 +1315,7 @@ fn generate_struct_inspect_fn(
     fmt_type: TypeId,
     string_type: TypeId,
     ref_string_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -1322,6 +1334,7 @@ fn generate_struct_inspect_fn(
         fmt_type,
         string_type,
         ref_string_type,
+        trait_env,
         module_source,
         tt,
         span,
@@ -1353,6 +1366,7 @@ fn build_struct_inspect_body(
     fmt_type: TypeId,
     string_type: TypeId,
     ref_string_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -1390,6 +1404,7 @@ fn build_struct_inspect_body(
             field_access,
             *field_type,
             fmt(),
+            trait_env,
             module_source,
             tt,
             span,
@@ -1423,6 +1438,7 @@ fn generate_variant_inspect_fn(
     fmt_type: TypeId,
     string_type: TypeId,
     ref_string_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -1441,6 +1457,7 @@ fn generate_variant_inspect_fn(
         fmt_type,
         string_type,
         ref_string_type,
+        trait_env,
         module_source,
         tt,
         span,
@@ -1472,6 +1489,7 @@ fn build_variant_inspect_body(
     fmt_type: TypeId,
     string_type: TypeId,
     ref_string_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -1504,6 +1522,7 @@ fn build_variant_inspect_body(
                 payload,
                 *payload_type,
                 fmt(),
+                trait_env,
                 module_source,
                 tt,
                 span,
@@ -1550,6 +1569,7 @@ fn generate_newtype_inspect_fn(
     fmt_type: TypeId,
     string_type: TypeId,
     ref_string_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -1577,6 +1597,7 @@ fn generate_newtype_inspect_fn(
             cast_to_base,
             base_type,
             fmt(),
+            trait_env,
             module_source,
             tt,
             span,
@@ -1998,9 +2019,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             trait_method_info(&name, &inspect_alt_name, &inspect_alt_method),
             trait_method_info(&name, &inspect_name, &inspect_method),
             ref_type,
+            enum_type,
             fmt_type,
+            ctx.trait_env,
             &module_source,
             vec![],
+            &tt,
             span,
         ))));
         ctx.record_impl(&name, &inspect_alt_name);
@@ -2032,6 +2056,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             fmt_type,
             string_type,
             ref_string_type,
+            ctx.trait_env,
             &module_source,
             &mut tt,
             *sspan,
@@ -2060,6 +2085,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             fmt_type,
             string_type,
             ref_string_type,
+            ctx.trait_env,
             &module_source,
             &mut tt,
             *sspan,
@@ -2086,6 +2112,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             fmt_type,
             string_type,
             ref_string_type,
+            ctx.trait_env,
             &module_source,
             &mut tt,
             *vspan,
@@ -2114,6 +2141,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             fmt_type,
             string_type,
             ref_string_type,
+            ctx.trait_env,
             &module_source,
             &mut tt,
             *vspan,
@@ -2140,9 +2168,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             trait_method_info(name, &inspect_alt_name, &inspect_alt_method),
             trait_method_info(name, &inspect_name, &inspect_method),
             ref_type,
+            *flags_type_id,
             fmt_type,
+            ctx.trait_env,
             &module_source,
             vec![],
+            &tt,
             span,
         ))));
         ctx.record_impl(name, &inspect_alt_name);
@@ -2160,9 +2191,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             trait_method_info(&nt.name, &inspect_alt_name, &inspect_alt_method),
             trait_method_info(&nt.name, &inspect_name, &inspect_method),
             ref_type,
+            nt.type_id,
             fmt_type,
+            ctx.trait_env,
             &module_source,
             vec![],
+            &tt,
             span,
         ))));
         ctx.record_impl(&nt.name, &inspect_alt_name);
@@ -2191,9 +2225,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             trait_method_info(&base_name, &inspect_name, &inspect_method)
                 .with_struct_type_args(&type_arg_names),
             ref_type,
+            type_id,
             fmt_type,
+            ctx.trait_env,
             &module_source,
             vec![],
+            &tt,
             span,
         ))));
         // Per-module: do not `ctx.record_impl`.
@@ -2247,6 +2284,7 @@ fn generate_struct_inspect_alt_fn(
     fmt_type: TypeId,
     string_type: TypeId,
     ref_string_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -2265,6 +2303,7 @@ fn generate_struct_inspect_alt_fn(
         fmt_type,
         string_type,
         ref_string_type,
+        trait_env,
         module_source,
         tt,
         span,
@@ -2296,6 +2335,7 @@ fn build_struct_inspect_alt_body(
     fmt_type: TypeId,
     string_type: TypeId,
     ref_string_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -2369,6 +2409,7 @@ fn build_struct_inspect_alt_body(
             field_access,
             *field_type,
             fmt(),
+            trait_env,
             module_source,
             tt,
             span,
@@ -2403,6 +2444,7 @@ fn generate_variant_inspect_alt_fn(
     fmt_type: TypeId,
     string_type: TypeId,
     ref_string_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -2421,6 +2463,7 @@ fn generate_variant_inspect_alt_fn(
         fmt_type,
         string_type,
         ref_string_type,
+        trait_env,
         module_source,
         tt,
         span,
@@ -2451,6 +2494,7 @@ fn build_variant_inspect_alt_body(
     fmt_type: TypeId,
     string_type: TypeId,
     ref_string_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -2511,6 +2555,7 @@ fn build_variant_inspect_alt_body(
                 payload,
                 *payload_type,
                 fmt_local(),
+                trait_env,
                 module_source,
                 tt,
                 span,
@@ -2565,6 +2610,7 @@ fn inspect_alt_call(
     value: TirExpr,
     value_type: TypeId,
     fmt: TirExpr,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -2579,7 +2625,7 @@ fn inspect_alt_call(
         TypeTable::UNIT,
         vec![fmt],
         true,
-        inspect_impl_module,
+        trait_env,
         module_source,
         tt,
         span,
@@ -2644,11 +2690,26 @@ fn generate_display_fallback(
     display_info: LocalMethodName,
     inspect_info: LocalMethodName,
     ref_type: TypeId,
+    receiver_type: TypeId,
     fmt_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     impl_type_params: Vec<TirTypeParam>,
+    tt: &TypeTable,
     span: Span,
 ) -> TirFunction {
+    // Resolve the body's home for the delegate target (the receiver
+    // type's `Inspect` / `InspectAlt` impl). For an auto-derived
+    // Inspect on a newtype, that's the newtype's module; for a
+    // parameterized type like `Array<FieldValue>`, Array's
+    // `impl<T: Inspect> Inspect for Array<T>` lives in `core:prelude/format`.
+    let delegate_trait = inspect_info
+        .base_trait_name
+        .as_deref()
+        .or(inspect_info.trait_name.as_deref())
+        .expect("display fallback delegates to a trait method");
+    let delegate_module =
+        resolve_impl_module_via_env(receiver_type, delegate_trait, tt, trait_env, module_source);
     let qualified_name = display_info.to_mangled_name();
 
     let params = vec![
@@ -2691,7 +2752,7 @@ fn generate_display_fallback(
         vec![trait_method_call(
             self_local,
             inspect_info,
-            module_source.clone(),
+            delegate_module,
             vec![fmt_local],
             span,
         )],
@@ -2798,7 +2859,9 @@ fn generate_fallback_impls(
     // the impl into `ctx` after pushing.
     let make_fallback = |name: &str,
                          ref_type: TypeId,
-                         impl_type_params: Vec<TirTypeParam>|
+                         receiver_type: TypeId,
+                         impl_type_params: Vec<TirTypeParam>,
+                         tt: &TypeTable|
      -> Rc<RefCell<TirFunction>> {
         let target_info = trait_method_info(name, &pair.target_trait, &pair.target_method);
         let delegate_info = trait_method_info(name, &pair.delegate_trait, &pair.delegate_method);
@@ -2806,9 +2869,12 @@ fn generate_fallback_impls(
             target_info,
             delegate_info,
             ref_type,
+            receiver_type,
             fmt_type,
+            ctx.trait_env,
             &module_source,
             impl_type_params,
+            tt,
             span,
         )))
     };
@@ -2820,7 +2886,7 @@ fn generate_fallback_impls(
         }
         let enum_type = tt.make_enum(name.clone(), module_source.clone());
         let ref_type = tt.make_ref(enum_type);
-        generated.push(make_fallback(name, ref_type, vec![]));
+        generated.push(make_fallback(name, ref_type, enum_type, vec![], &tt));
         ctx.record_impl(name, &pair.target_trait);
     }
 
@@ -2839,7 +2905,7 @@ fn generate_fallback_impls(
         }
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
         let ref_type = tt.make_ref(struct_type);
-        generated.push(make_fallback(name, ref_type, vec![]));
+        generated.push(make_fallback(name, ref_type, struct_type, vec![], &tt));
         ctx.record_impl(name, &pair.target_trait);
     }
 
@@ -2860,7 +2926,13 @@ fn generate_fallback_impls(
         let struct_type =
             tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
         let ref_type = tt.make_ref(struct_type);
-        generated.push(make_fallback(name, ref_type, type_params.clone()));
+        generated.push(make_fallback(
+            name,
+            ref_type,
+            struct_type,
+            type_params.clone(),
+            &tt,
+        ));
         ctx.record_impl(name, &pair.target_trait);
     }
 
@@ -2876,7 +2948,7 @@ fn generate_fallback_impls(
         }
         let variant_type = tt.make_variant(name.clone(), module_source.clone());
         let ref_type = tt.make_ref(variant_type);
-        generated.push(make_fallback(name, ref_type, vec![]));
+        generated.push(make_fallback(name, ref_type, variant_type, vec![], &tt));
         ctx.record_impl(name, &pair.target_trait);
     }
 
@@ -2894,7 +2966,13 @@ fn generate_fallback_impls(
         let variant_type =
             tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
         let ref_type = tt.make_ref(variant_type);
-        generated.push(make_fallback(name, ref_type, type_params.clone()));
+        generated.push(make_fallback(
+            name,
+            ref_type,
+            variant_type,
+            type_params.clone(),
+            &tt,
+        ));
         ctx.record_impl(name, &pair.target_trait);
     }
 
@@ -2908,7 +2986,7 @@ fn generate_fallback_impls(
             continue;
         }
         let ref_type = tt.make_ref(*flags_type_id);
-        generated.push(make_fallback(name, ref_type, vec![]));
+        generated.push(make_fallback(name, ref_type, *flags_type_id, vec![], &tt));
         ctx.record_impl(name, &pair.target_trait);
     }
 
@@ -2920,7 +2998,7 @@ fn generate_fallback_impls(
             continue;
         }
         let ref_type = tt.make_ref(nt.type_id);
-        generated.push(make_fallback(&nt.name, ref_type, vec![]));
+        generated.push(make_fallback(&nt.name, ref_type, nt.type_id, vec![], &tt));
         ctx.record_impl(&nt.name, &pair.target_trait);
     }
 
@@ -2959,9 +3037,12 @@ fn generate_fallback_impls(
             target_info,
             delegate_info,
             ref_type,
+            type_id,
             fmt_type,
+            ctx.trait_env,
             &module_source,
             vec![],
+            &tt,
             span,
         ))));
         // Per-module: do not `ctx.record_impl`.
@@ -3000,9 +3081,12 @@ fn generate_fallback_impls(
             target_info,
             delegate_info,
             ref_type,
+            sig.repr_type_id,
             fmt_type,
+            ctx.trait_env,
             &module_source,
             vec![],
+            &tt,
             span,
         ))));
         // Per-module: do not `ctx.record_impl`.
@@ -3017,6 +3101,7 @@ fn inspect_call(
     value: TirExpr,
     value_type: TypeId,
     fmt: TirExpr,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -3031,7 +3116,7 @@ fn inspect_call(
         TypeTable::UNIT,
         vec![fmt],
         true,
-        inspect_impl_module,
+        trait_env,
         module_source,
         tt,
         span,
@@ -3100,45 +3185,74 @@ fn decompose_type_for_method_name(
 ///
 /// `ref_module` is used for Ref/MutRef types (`traits()` for Eq/Ord, `format()` for Inspect).
 /// `string_module` is used for String (`string()` for Eq/Ord, `format()` for Inspect).
-fn trait_impl_module(
+/// Resolve `module_source` for a `value.<trait>::<method>` call inside an
+/// auto-derived body — issue #1110 (1): the `FunctionRef`'s `module_source`
+/// must be the module that hosts the callee's body.
+///
+/// Strategy:
+///   1. Ask `TraitEnv` where `impl <trait> for <receiver-type>` lives.
+///      `TraitEnv` indexes every AST-layer impl block by struct name and
+///      trait name, so this hits for cross-module impls
+///      (`impl Display for String` in `core:prelude/format`,
+///      `impl<..T> Inspect for [..T]` in `core:prelude/tuple`, ref/mutref
+///      blankets, etc.). This is a deterministic resolution, not a
+///      fall-back to whichever module the synthesis pass happens to be
+///      visiting.
+///   2. If `TraitEnv` is silent — the impl is being auto-derived in the
+///      current synthesis pass and hasn't been published to the
+///      synthesised layer yet — fall back to the receiver type's own
+///      module. `synthesis::traits::generate_*_impls` places auto-
+///      derived bodies in the receiver type's module by convention, so
+///      that's where the body will live.
+///   3. For receivers with no defining module (`TypeParam`, unresolved),
+///      use the caller-supplied `fallback` (the current synthesis module).
+///      The fallback only applies to producer outputs that the
+///      monomorphizer immediately overwrites with a concrete-type
+///      module after type-param substitution.
+fn resolve_impl_module_via_env(
     type_id: TypeId,
+    trait_name: &str,
     tt: &TypeTable,
-    default: &ModuleSource,
-    ref_module: ModuleSource,
-    string_module: ModuleSource,
+    trait_env: &TraitEnv,
+    fallback: &ModuleSource,
 ) -> ModuleSource {
-    let string_struct_name = tt
-        .compiler_items()
-        .struct_name(crate::compiler_item::CompilerItem::String)
-        .to_string();
-    match tt.get(type_id).clone() {
-        ResolvedType::Primitive(_) | ResolvedType::Unit => ModuleSource::primitive(),
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => ref_module,
-        ResolvedType::Struct { ref name, .. } if name == &string_struct_name => string_module,
-        ResolvedType::Struct {
-            ref module_source, ..
-        }
-        | ResolvedType::Enum {
-            ref module_source, ..
-        }
-        | ResolvedType::Variant {
-            ref module_source, ..
-        }
-        | ResolvedType::GenericInstance {
-            ref module_source, ..
-        } => module_source.clone(),
-        _ => default.clone(),
-    }
-}
+    let resolved = tt.get(type_id).clone();
 
-fn inspect_impl_module(type_id: TypeId, tt: &TypeTable, default: &ModuleSource) -> ModuleSource {
-    trait_impl_module(
-        type_id,
-        tt,
-        default,
-        ModuleSource::format(),
-        ModuleSource::format(),
-    )
+    let candidate_name: Option<String> = match &resolved {
+        ResolvedType::Ref(_) => Some("&".to_string()),
+        ResolvedType::MutRef(_) => Some("&mut".to_string()),
+        ResolvedType::Primitive(p) => Some(p.as_str().to_string()),
+        ResolvedType::Unit => Some(TypeTable::UNIT_TYPE_NAME.to_string()),
+        ResolvedType::Struct { name, .. }
+        | ResolvedType::Enum { name, .. }
+        | ResolvedType::Variant { name, .. }
+        | ResolvedType::Newtype { name, .. }
+        | ResolvedType::Flags { name, .. }
+        | ResolvedType::GenericInstance { name, .. }
+        | ResolvedType::GenericResource { name, .. } => Some(name.clone()),
+        ResolvedType::BuiltinArray(_) => Some("Array".to_string()),
+        _ => None,
+    };
+
+    let type_module: Option<ModuleSource> = match &resolved {
+        ResolvedType::Struct { module_source, .. }
+        | ResolvedType::Enum { module_source, .. }
+        | ResolvedType::Variant { module_source, .. }
+        | ResolvedType::Newtype { module_source, .. }
+        | ResolvedType::Flags { module_source, .. }
+        | ResolvedType::GenericInstance { module_source, .. }
+        | ResolvedType::GenericResource { module_source, .. } => Some(module_source.clone()),
+        ResolvedType::Primitive(_) | ResolvedType::Unit => Some(ModuleSource::primitive()),
+        ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
+        _ => None,
+    };
+
+    if let Some(name) = candidate_name.as_deref()
+        && let Some(m) = trait_env.impl_module_for(name, trait_name, type_module.as_ref())
+    {
+        return m.clone();
+    }
+    type_module.unwrap_or_else(|| fallback.clone())
 }
 
 /// Collect parameterized types that need Inspect/Display impls — per-`TypeId`
@@ -3417,7 +3531,7 @@ fn trait_call_on_type(
     return_type: TypeId,
     args: Vec<TirExpr>,
     needs_ref_monomorph: bool,
-    resolve_impl_module: fn(TypeId, &TypeTable, &ModuleSource) -> ModuleSource,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -3435,10 +3549,15 @@ fn trait_call_on_type(
     }
     info.is_type_param_receiver = is_type_param;
 
+    // For `T::method` where `T` is a type parameter, the body's home
+    // module isn't known until monomorphization substitutes `T` with a
+    // concrete type. `module_source` (the surrounding synthesis module)
+    // is a placeholder; `resolve_method_call_substitution` rewrites it
+    // to the concrete impl's module once `T` is resolved.
     let impl_module = if is_type_param {
         module_source.clone()
     } else {
-        resolve_impl_module(value_type, tt, module_source)
+        resolve_impl_module_via_env(value_type, trait_name, tt, trait_env, module_source)
     };
 
     let monomorph_info = if needs_ref_monomorph {
@@ -3481,6 +3600,7 @@ fn eq_call_expr(
     self_field: TirExpr,
     other_field: TirExpr,
     field_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -3499,7 +3619,7 @@ fn eq_call_expr(
         TypeTable::BOOL,
         vec![arg],
         true,
-        eq_impl_module,
+        trait_env,
         module_source,
         tt,
         span,
@@ -3512,6 +3632,7 @@ fn cmp_call_expr(
     other_field: TirExpr,
     field_type: TypeId,
     ordering_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -3530,21 +3651,10 @@ fn cmp_call_expr(
         ordering_type,
         vec![arg],
         false,
-        eq_impl_module,
+        trait_env,
         module_source,
         tt,
         span,
-    )
-}
-
-/// Resolve the module source for a type's Eq/Ord implementation.
-fn eq_impl_module(type_id: TypeId, tt: &TypeTable, default: &ModuleSource) -> ModuleSource {
-    trait_impl_module(
-        type_id,
-        tt,
-        default,
-        ModuleSource::traits(),
-        ModuleSource::string(),
     )
 }
 
@@ -3557,6 +3667,7 @@ fn generate_struct_eq_fn(
     impl_type_params: &[TirTypeParam],
     fields: &[(String, TypeId, u32)],
     ref_struct_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     eq_trait_name: &str,
     tt: &mut TypeTable,
@@ -3565,7 +3676,7 @@ fn generate_struct_eq_fn(
     let method_info = trait_method_info(struct_name, eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
 
-    let result = build_struct_eq_chain(fields, ref_struct_type, module_source, tt, span);
+    let result = build_struct_eq_chain(fields, ref_struct_type, trait_env, module_source, tt, span);
     let body = TirBlock::new(
         vec![TirStmt::new(
             TirStmtKind::Return {
@@ -3593,6 +3704,7 @@ fn generate_struct_eq_fn(
 fn build_struct_eq_chain(
     fields: &[(String, TypeId, u32)],
     ref_struct_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -3620,7 +3732,15 @@ fn build_struct_eq_chain(
             field_type,
             span,
         );
-        eq_call_expr(self_field, other_field, field_type, module_source, tt, span)
+        eq_call_expr(
+            self_field,
+            other_field,
+            field_type,
+            trait_env,
+            module_source,
+            tt,
+            span,
+        )
     };
 
     let mut iter = fields.iter();
@@ -3679,6 +3799,7 @@ fn generate_struct_ord_fn(
     fields: &[(String, TypeId, u32)],
     ref_struct_type: TypeId,
     ordering_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     ord_trait_name: &str,
     tt: &mut TypeTable,
@@ -3692,6 +3813,7 @@ fn generate_struct_ord_fn(
         fields,
         ref_struct_type,
         ordering_type,
+        trait_env,
         module_source,
         tt,
         span,
@@ -3722,6 +3844,7 @@ fn build_struct_ord_body(
     fields: &[(String, TypeId, u32)],
     ref_struct_type: TypeId,
     ordering_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -3754,6 +3877,7 @@ fn build_struct_ord_body(
             other_field,
             *field_type,
             ordering_type,
+            trait_env,
             module_source,
             tt,
             span,
@@ -3836,6 +3960,7 @@ fn generate_variant_eq_fn(
     cases: &[(String, u32, TypeId)],
     variant_type: TypeId,
     ref_variant_type: TypeId,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -3850,7 +3975,15 @@ fn generate_variant_eq_fn(
     let deref_self = || deref_local(0, "self", ref_variant_type, variant_type, span);
     let deref_other = || deref_local(1, "other", ref_variant_type, variant_type, span);
 
-    let body_stmts = variant_eq_body(cases, &deref_self, &deref_other, module_source, tt, span);
+    let body_stmts = variant_eq_body(
+        cases,
+        &deref_self,
+        &deref_other,
+        trait_env,
+        module_source,
+        tt,
+        span,
+    );
     let body = TirBlock::new(body_stmts, span);
 
     make_trait_method(
@@ -3875,6 +4008,7 @@ fn variant_eq_body(
     cases: &[(String, u32, TypeId)],
     deref_self: &dyn Fn() -> TirExpr,
     deref_other: &dyn Fn() -> TirExpr,
+    trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
@@ -3947,6 +4081,7 @@ fn variant_eq_body(
                 self_payload,
                 other_payload,
                 *payload_type,
+                trait_env,
                 module_source,
                 tt,
                 span,

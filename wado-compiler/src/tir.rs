@@ -3776,8 +3776,10 @@ pub struct TirModule {
     /// Key: (struct name, module source)
     pub generic_structs: IndexMap<(String, ModuleSource), TirStruct>,
     /// Generic function definitions (before monomorphization)
-    /// Key: function name
-    pub generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>>,
+    /// Key: (module source, function name). `module_source` is the function
+    /// body's home module; two generics that share a mangled name in
+    /// different modules are kept distinct by this pair.
+    pub generic_functions: IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
     /// Requested instantiations (populated during resolution, processed in lower)
     pub instantiation_requests: IndexSet<InstantiationKey>,
 }

@@ -207,7 +207,7 @@ fn lower_to_flat_inner(
                     local_ref(arr_local, "__arr_val", type_id),
                     &names.array,
                     "len",
-                    ModuleSource::prelude(),
+                    ModuleSource::array(),
                     vec![],
                     TypeTable::I32,
                 ),
