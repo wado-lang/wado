@@ -67,7 +67,6 @@ use {
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { GenContext, is_nullable, union_kind_arrays, FOLLOW_VARIANT_MAX_K } from "./gen_context.wado";
-use { register_follow_variants } from "./follow_env.wado";
 use { strip_suffix } from "./gen_util.wado";
 use { compute_prefix_self_ref_min_prec } from "./lr_util.wado";
 use { TreeMap } from "core:collections";
@@ -139,37 +138,29 @@ pub fn lower(grammar: &Grammar, lit_tokens: &Array<LitToken>) -> LoweredGrammar 
 }
 
 pub fn lower_with_ctx(grammar: &Grammar, lit_tokens: &Array<LitToken>, ctx: &mut GenContext) -> LoweredGrammar {
-    // `ctx` is shared with downstream emit. The follow-variant
-    // and kind-set registries lower writes into ctx are the same
-    // ones emit reads from later: variant ids are minted once by
-    // [`register_follow_variants`] before any IR build runs, and
-    // every subsequent consumer (lower's `RuleRef` arms via
-    // `lookup_follow_variant_id`, emit's `gen_parser` loop over
-    // `ctx.follow_variants()`) reads them back. Caches (first /
-    // nullable / single-token / scannable / tail-greedy) survive
-    // across the lower-then-emit boundary and only get computed
-    // once.
-
-    // Follow-variant pre-pass: populates the registry before any
-    // element walk consults it via `lookup_follow_variant_id`.
-    // Idempotent on repeat invocation (entries are keyed on the
-    // canonical triple), so callers that pre-populate the registry
-    // are not penalised.
-    register_follow_variants(&grammar.parser_rules, ctx);
-
+    // `ctx` is shared with downstream emit. The follow-variant and
+    // kind-set registries lower writes into ctx are the same ones
+    // emit reads from later: the per-rule lower walk below interns
+    // variants at every `RuleRef` site through
+    // `ctx.intern_follow_variant` (idempotent on the canonical
+    // `(rule, mask, k_prefix_mask)` triple), and emit's `gen_parser`
+    // loops over `ctx.follow_variants()` to emit the body for each
+    // entry. Caches (first / nullable / single-token / scannable /
+    // tail-greedy) survive across the lower-then-emit boundary and
+    // only get computed once.
     let mut parser_rules: Array<Rule> = [];
     let empty_mask: Array<String> = [];
     let empty_k_mask: Array<Array<String>> = [];
     for let rule of &grammar.parser_rules {
         parser_rules.push(lower_rule(rule, ctx, &empty_mask, &empty_k_mask));
     }
-    // Phase 2.6 — follow-variant body lowering. Every variant the
-    // pre-pass registered above gets a lowered body emitted into
-    // `variant_rules` here. Each body lowering may itself populate
-    // further variants whose own bodies need lowering (the variant's
-    // mask propagates through `compute_call_site_follow` into nested
-    // `RuleRef` lookups, and the pre-pass's fixed-point already
-    // registered those too), so loop until the registry is stable.
+    // Phase 2.6 — follow-variant body lowering. The walk above
+    // registered every variant the rule bodies trigger via
+    // `intern_follow_variant`; iterate the registry to lower one
+    // body per entry. Each variant's body lowering re-walks the
+    // rule with the variant's mask threaded through, which may
+    // register further variants whose own bodies must be lowered —
+    // loop to a fixed point.
     let variant_rules = lower_variant_rules(&grammar.parser_rules, ctx);
     // Phase 2.7 — pre-intern multi-element token-kind sets that
     // surface in dispatch branches and `Op::Excluded` kinds. The
@@ -1407,10 +1398,13 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &Array
         }),
         RuleRef(r) => ScanElement::RuleCall(ScanRuleCallElem {
             target_snake: r.snake_name,
-            // Pure lookup: `FollowEnv::register_follow_variants` runs
-            // before `lower_with_ctx` and pre-populates every variant
-            // triple via the scan-side `walk_scan_alt` walker.
-            variant_id: ctx.lookup_follow_variant_id(&r.name, outer_follow, outer_k_prefix, true),
+            // Single source of truth for follow-variant registration:
+            // `intern_follow_variant` is idempotent (the canonical
+            // `(rule, mask, k_prefix_mask)` key is computed inside) so
+            // the first lower walk to reach this site mints the id and
+            // every subsequent walk (variant body re-lowering, repeat
+            // lookups under the same key) returns the cached id.
+            variant_id: ctx.intern_follow_variant(&r.name, outer_follow, outer_k_prefix, true),
             min_prec_arg: null,
         }),
         Wildcard(_) => ScanElement::Wildcard,
@@ -1902,10 +1896,10 @@ fn lower_op(elem: &Element, name_counts: &mut Array<[String, i32]>, rule_name: &
         RuleRef(r) => Op::RuleCall(RuleCallOp {
             target_name: r.name,
             target_snake: r.snake_name,
-            // Pure lookup: `FollowEnv::register_follow_variants` runs
-            // before `lower_with_ctx` and pre-populates every variant
-            // triple via the parse-side `walk_parse_alt` walker.
-            variant_id: ctx.lookup_follow_variant_id(&r.name, outer_follow, outer_k_prefix, false),
+            // Single source of truth for follow-variant registration —
+            // see the matching note on the scan-side arm in
+            // `lower_scan_element`.
+            variant_id: ctx.intern_follow_variant(&r.name, outer_follow, outer_k_prefix, false),
             min_prec_arg: null,
             field: dedup_name(&r.field_name, name_counts),
             dedup_base: r.field_name,
