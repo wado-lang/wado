@@ -436,9 +436,24 @@ impl Monomorphizer {
         }
         // Also handle case where type_args is empty but receiver is a GenericInstance
         // e.g., nums.index_value(0) where nums: Triple<i32>
+        //
+        // Skip this branch when the call carries a blanket-impl
+        // `monomorph_info` (synthesized refs like `self.data.inspect(f)` for
+        // `data: &Array<i32>`). The impl_type_args derived from the
+        // receiver's GenericInstance (`[i32]`) are NOT what the blanket
+        // instantiation was queued with (`[Array<i32>]`), so any match here
+        // would route the call to the inner-type's impl
+        // (`Array<i32>^Inspect`) and drop the leading `&` produced by the
+        // ref blanket body. Let the dedicated blanket-fallback branch below
+        // handle these — it uses `mono.impl_type_args` which carries the
+        // full ref-inner type.
         else if let Some((base_struct, impl_type_args)) =
             self.get_struct_info_from_type(receiver.type_id, type_table)
             && !impl_type_args.is_empty()
+            && !method_func
+                .monomorph_info
+                .as_ref()
+                .is_some_and(|m| m.is_blanket)
         {
             // Try trait method name format first (e.g., Triple^IndexValue::index_value)
             let mut possible_keys = Vec::new();

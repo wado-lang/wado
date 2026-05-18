@@ -1430,34 +1430,15 @@ impl Monomorphizer {
                                 let concrete_type_id = *sorted_entries[0].1;
                                 let receiver_module =
                                     module_source_for_trait_impl(type_table, concrete_type_id);
-                                // Resolve the impl block's module so the rewritten
-                                // `FunctionRef::module_source` matches the home of the
-                                // template the monomorphizer will instantiate from.
-                                // Prefer concrete impls (`impl Trait for ConcreteType`),
-                                // then any matching impl (`impl<T> Trait for Foo<T>` —
-                                // the body lives in the impl block's module even though
-                                // the historical "convention" placed mono instances in
-                                // the receiver type's module). Last resort is the
-                                // receiver type's own home, which is correct for
-                                // auto-derived impls.
-                                let trait_env_module = new_info
-                                    .base_trait_name
-                                    .as_ref()
-                                    .or(new_info.trait_name.as_ref())
-                                    .and_then(|trait_name| {
-                                        self.functions
-                                            .trait_env
-                                            .impl_module_for(
-                                                &new_info.base_struct_name,
-                                                trait_name,
-                                                receiver_module.as_ref(),
-                                            )
-                                            .cloned()
-                                    });
+                                // Per the inspect_ref_array_field.wado contract, this
+                                // path must consult `concrete_impl_module_for` only —
+                                // letting a generic `impl<T> Trait for Foo<T>` leak in
+                                // would route `&Array<i32>^Inspect` to Array's impl in
+                                // format.wado instead of the ref blanket's, and the
+                                // leading `&` would disappear at codegen.
                                 let concrete_module = self
                                     .functions
                                     .impl_module(&new_info, receiver_module.as_ref())
-                                    .or(trait_env_module)
                                     .or(receiver_module);
                                 let new_monomorph = if new_info.method_type_args.is_empty() {
                                     None
@@ -2320,29 +2301,14 @@ impl Monomorphizer {
                 }
                 module_source_for_trait_impl(type_table, inner)
             };
-            // Resolve the impl block's home module so the rewritten
-            // `FunctionRef::module_source` matches the home of the template
-            // the monomorphizer will instantiate from. Mirror the Call-side
-            // logic: prefer concrete impl, then any matching impl via
-            // `TraitEnv`, then the receiver type's home.
-            let trait_env_module = new_info
-                .base_trait_name
-                .as_ref()
-                .or(new_info.trait_name.as_ref())
-                .and_then(|trait_name| {
-                    self.functions
-                        .trait_env
-                        .impl_module_for(
-                            &new_info.base_struct_name,
-                            trait_name,
-                            receiver_module.as_ref(),
-                        )
-                        .cloned()
-                });
+            // Per the inspect_ref_array_field.wado contract, this path must
+            // consult `concrete_impl_module_for` only — a broader
+            // `impl_module_for` fallback would route `&Array<i32>^Inspect`
+            // to Array's generic impl in format.wado instead of the ref
+            // blanket's, and the leading `&` would disappear at codegen.
             let concrete_module = self
                 .functions
                 .impl_module(&new_info, receiver_module.as_ref())
-                .or(trait_env_module)
                 .or(receiver_module);
 
             // Determine if this is a blanket impl method.
