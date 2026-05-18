@@ -476,6 +476,14 @@ pub fn make_synthetic_method(
 /// method. `Formatter::write_str` takes `&String`, so the literal is
 /// wrapped in an explicit `Ref`; `ref_string_type` is the cached `&String`
 /// type id the caller already produced from `string_type`.
+///
+/// The `Formatter` struct name is **not** taken as a parameter because
+/// `Formatter` is a [`CompilerItem`] anchor — the `LocalMethodName` /
+/// `FunctionRef` use the literal `"Formatter"` only because this helper
+/// is called from many sites and the struct is always referenced under
+/// the canonical name. Migrating the callers to thread a snapshot
+/// through is tracked alongside the rest of the
+/// `CompilerItem::Formatter` flow.
 pub fn write_str_stmt(
     text: impl Into<String>,
     fmt: TirExpr,

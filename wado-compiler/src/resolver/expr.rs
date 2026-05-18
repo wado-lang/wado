@@ -2874,6 +2874,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let inner_type = inner.type_id;
         let tt = self.type_table.borrow();
         let some_type = tt.as_option(inner_type).unwrap();
+        // Look up the `Some` / `None` case names through the
+        // `CompilerItem` registry so a stdlib rename of either case
+        // flows through the `?` lowering for `Option` without touching
+        // this site.
+        let items = tt.compiler_items();
+        let some_name = items
+            .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
+            .to_string();
+        let none_name = items
+            .variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
+            .to_string();
         drop(tt);
 
         // Allocate a local for the Some payload binding
@@ -2884,7 +2895,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let some_arm = TirMatchArm {
             pattern: TirPattern::Variant {
                 enum_type: inner_type,
-                variant_name: "Some".to_string(),
+                variant_name: some_name,
                 bindings: vec![TirPattern::Binding {
                     name: "__qm_v".to_string(),
                     local_index: v_local,
@@ -2908,7 +2919,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let none_arm = TirMatchArm {
             pattern: TirPattern::Variant {
                 enum_type: inner_type,
-                variant_name: "None".to_string(),
+                variant_name: none_name,
                 bindings: vec![],
                 payload_type: TypeTable::UNIT,
             },

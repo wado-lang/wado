@@ -829,9 +829,15 @@ fn build_dispatch_wrapper_function(
         nullable_ref_type_id,
         span,
     );
+    let some_case_name = {
+        let tt = type_table.borrow();
+        tt.compiler_items()
+            .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
+            .to_string()
+    };
     let pattern = TirPattern::Variant {
         enum_type: nullable_ref_type_id,
-        variant_name: "Some".to_string(),
+        variant_name: some_case_name,
         bindings: vec![TirPattern::Binding {
             name: "__d".to_string(),
             local_index: d_local,
