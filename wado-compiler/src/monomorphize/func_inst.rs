@@ -323,9 +323,10 @@ impl Monomorphizer {
                             let total = impl_type_args.len() + method_type_args.len();
                             if total >= generic_func.impl_type_params.len() {
                                 let method_info = generic_func.method_info.clone();
+                                let template_module = generic_func.module_source.clone();
                                 let key = InstantiationKey {
                                     name: generic_method_name,
-                                    module_source: func.module_source.clone(),
+                                    module_source: template_module,
                                     impl_type_args: impl_type_args.clone(),
                                     method_type_args,
                                     method_info,
@@ -411,9 +412,10 @@ impl Monomorphizer {
                                             method_name.clone(),
                                         )
                                     });
+                                let template_module = gf.borrow().module_source.clone();
                                 let key = InstantiationKey {
                                     name: full_method_name.clone(),
-                                    module_source: method_func.module_source.clone(),
+                                    module_source: template_module,
                                     impl_type_args: vec![],
                                     method_type_args: type_args.clone(),
                                     method_info: Some(method_info),
@@ -503,9 +505,10 @@ impl Monomorphizer {
                                                 tn.clone(),
                                                 method_name.clone(),
                                             );
+                                            let template_module = generic_func.module_source.clone();
                                             let key = InstantiationKey {
                                                 name: generic_method_name.clone(),
-                                                module_source: method_func.module_source.clone(),
+                                                module_source: template_module,
                                                 impl_type_args: impl_type_args.clone(),
                                                 method_type_args: type_args.clone(),
                                                 method_info: Some(method_info),
@@ -635,9 +638,10 @@ impl Monomorphizer {
                                         vec![]
                                     };
                                 let method_info = generic_func.method_info.clone();
+                                let template_module = generic_func.module_source.clone();
                                 let key = InstantiationKey {
                                     name: generic_method_name.clone(),
-                                    module_source: method_func.module_source.clone(),
+                                    module_source: template_module,
                                     impl_type_args: effective_impl_type_args.clone(),
                                     method_type_args: method_type_args_for_key,
                                     method_info,
@@ -712,9 +716,15 @@ impl Monomorphizer {
                                         vec![]
                                     };
                                 let method_info = generic_func.method_info.clone();
+                                // The instantiation lives in the template's
+                                // home module — that's what the lookup at
+                                // monomorphize.rs:`generic_functions.get` will
+                                // key by. Keeps issue #1110 (1)(2)'s
+                                // "module_source = body's home" invariant.
+                                let template_module = generic_func.module_source.clone();
                                 let key = InstantiationKey {
                                     name: generic_method_name.clone(),
-                                    module_source: method_func.module_source.clone(),
+                                    module_source: template_module,
                                     impl_type_args: impl_type_args.clone(),
                                     method_type_args: method_type_args_for_key,
                                     method_info,
@@ -825,9 +835,10 @@ impl Monomorphizer {
                     } else {
                         mono.method_type_args.clone()
                     };
+                    let template_module = generic_func.module_source.clone();
                     let key = InstantiationKey {
                         name: mono.generic_name.clone(),
-                        module_source: method_func.module_source.clone(),
+                        module_source: template_module,
                         impl_type_args: impl_ta,
                         method_type_args: method_ta,
                         method_info,
@@ -918,10 +929,11 @@ impl Monomorphizer {
                             let impl_type_params_count = generic_func.impl_type_params.len();
                             let impl_type_params: Vec<crate::tir::TirTypeParam> =
                                 generic_func.impl_type_params.clone();
+                            let template_module = generic_func.module_source.clone();
                             drop(generic_func);
                             let key = InstantiationKey {
                                 name: generic_name,
-                                module_source: method_func.module_source.clone(),
+                                module_source: template_module,
                                 impl_type_args,
                                 method_type_args: vec![],
                                 method_info,
@@ -2306,7 +2318,14 @@ impl Monomorphizer {
                 recv_inner = t;
             }
             let recv_mangled = type_table.mangle_type_name_resolving_newtypes(recv_inner);
-            let recv_base = type_table.base_type_name(recv_inner);
+            // `base_type_name(Newtype)` returns the newtype's own name (e.g.
+            // "MyBytes"), but the post-substitution body actually targets the
+            // base type's impl ("Array"). Peel through the newtype first so
+            // `base_struct_name` lines up with the TraitEnv key for the
+            // template's home module — required by the `(module_source, name)`
+            // lookup in `monomorphize_with_externals` (issue #1110).
+            let resolved_recv = type_table.resolve_newtype_base(recv_inner);
+            let recv_base = type_table.base_type_name(resolved_recv);
             let mut new_info = info.with_substituted_struct_name(&recv_mangled, &recv_base);
             // For ref-type impls (e.g., impl IntoIterator for &Array<T>), preserve
             // the ref base_struct_name ("&" or "&mut") so that the monomorphizer
@@ -2459,8 +2478,24 @@ impl Monomorphizer {
                 method_type_args: final_method_ta,
                 is_blanket: existing_is_blanket,
             });
+            // When substitution peels a newtype on the receiver
+            // (`MyBytes^InspectAlt::inspect_alt` → `Array<u8>^InspectAlt::inspect_alt`),
+            // the original `module_source` (the newtype's module) no longer
+            // points at the body's home. Re-resolve through `TraitEnv` for
+            // the post-substitution struct name so the queue's lookup key
+            // matches where the template actually lives. Issue #1110 (1).
+            //
+            // `generic_or_concrete_impl_module` covers both `impl<T: Foo> Bar for Array<T>`
+            // (registered under bare "Array") and fully concrete impls;
+            // the producer in `synthesis::traits::resolve_impl_module_via_env`
+            // uses the same query, so the post-substitution `module_source`
+            // matches what a freshly-produced FunctionRef would have.
+            let resolved_module = self
+                .functions
+                .generic_or_concrete_impl_module(&new_info, None)
+                .unwrap_or(module_source);
             *method_func = FunctionRef {
-                module_source,
+                module_source: resolved_module,
                 name: new_func_name,
                 monomorph_info,
                 method_info: Some(new_info),

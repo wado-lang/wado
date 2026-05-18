@@ -365,11 +365,12 @@ impl Monomorphizer {
                     // `FunctionRef::module_source` to the body's home
                     // module — `resolver::method_call::resolve_method_call`,
                     // `synthesis::traits` (via `resolve_impl_module_via_env`),
-                    // `synthesis::template::trait_impl_module`, etc.,
-                    // all query `TraitEnv` for the impl block's actual
-                    // module. The literal `(module_source, name)` lookup
-                    // is therefore total: a miss is an unreachable code
-                    // path, surfaced as a panic below.
+                    // `synthesis::template::trait_impl_module`, and
+                    // `monomorphize/func_inst::resolve_method_call_substitution`
+                    // (which re-queries `TraitEnv` after newtype peeling)
+                    // all route through `TraitEnv`. The literal
+                    // `(module_source, name)` lookup is therefore total: a
+                    // miss is a producer bug, surfaced as the panic below.
                     let lookup_key = (key.module_source.clone(), key.name.clone());
                     let generic_func = generic_functions.get(&lookup_key);
                     // Generics have a defined home module by convention: a
@@ -385,12 +386,22 @@ impl Monomorphizer {
                     // missing prelude definition or a synthesis path that
                     // queues a key it never registered a template for.
                     let gf = generic_func.unwrap_or_else(|| {
+                        let available: Vec<&ModuleSource> = generic_functions
+                            .keys()
+                            .filter(|(_, n)| n == &key.name)
+                            .map(|(m, _)| m)
+                            .collect();
                         panic!(
                             "no generic template for queued instantiation \
                              `{}` at module `{}` (impl_type_args={:?}, \
-                             method_type_args={:?}); a generic dispatch \
-                             must always have a defined home module",
-                            key.name, key.module_source, key.impl_type_args, key.method_type_args,
+                             method_type_args={:?}); templates with this name \
+                             exist at: {:?}. Producer set the wrong \
+                             `FunctionRef::module_source` — issue #1110 (1)",
+                            key.name,
+                            key.module_source,
+                            key.impl_type_args,
+                            key.method_type_args,
+                            available,
                         )
                     });
                     let gf_borrowed = gf.borrow();
