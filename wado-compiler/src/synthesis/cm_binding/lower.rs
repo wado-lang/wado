@@ -17,7 +17,10 @@ use std::cell::RefCell;
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
 use crate::component_model::WasiRegistry;
-use crate::tir::{TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirStmt, TypeId, TypeTable};
+use crate::tir::{
+    TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
+    TypeId, TypeTable,
+};
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, builtin_call, cast, expr_stmt, i32_const, i64_const,
@@ -440,16 +443,18 @@ pub(super) fn synthesize_lower_option_to_memory(
         binary_add(addr, i32_const(payload_offset as i32))
     };
 
-    // If Some: lower payload to memory
+    // Lower the Some payload to memory by binding it inside a TIR
+    // `Match` arm — canonical post-Phase 10 shape. The None arm is
+    // empty; the Match's exhaustiveness on `Option<T>` removes the
+    // need for a wildcard else.
     let inner_type_id = {
         let mut tt = type_table.borrow_mut();
         wasi_type_to_type_id(inner_type, &mut tt, wasi_registry, wasi_package)
     };
-    let payload_expr = variant_payload(
-        local_ref(value_local, "__opt_val", value_type_id),
-        names.some_index,
-        inner_type_id,
-    );
+
+    let payload_binding_local = alloc_local(next_local, locals, inner_type_id);
+    let payload_binding_name = format!("__opt_payload_{payload_binding_local}");
+    let payload_expr = local_ref(payload_binding_local, &payload_binding_name, inner_type_id);
 
     let case_stmts = synthesize_lower_wasi_type_to_memory(
         inner_type,
@@ -462,15 +467,50 @@ pub(super) fn synthesize_lower_option_to_memory(
         type_table,
     );
 
-    stmts.push(if_stmt(
-        variant_test(
-            local_ref(value_local, "__opt_val", value_type_id),
-            names.some_index,
-            &names.some_name,
+    let span = synth_span();
+    let some_arm = TirMatchArm {
+        pattern: TirPattern::Variant {
+            enum_type: value_type_id,
+            variant_name: names.some_name.clone(),
+            bindings: vec![TirPattern::Binding {
+                name: payload_binding_name,
+                local_index: payload_binding_local,
+                type_id: inner_type_id,
+            }],
+            payload_type: inner_type_id,
+        },
+        guard: None,
+        body: TirExpr::new(
+            TirExprKind::Block(crate::tir::TirBlock::new(case_stmts, span)),
+            TypeTable::UNIT,
+            span,
         ),
-        block(case_stmts),
-        None,
-    ));
+        span,
+    };
+    let none_arm = TirMatchArm {
+        pattern: TirPattern::Variant {
+            enum_type: value_type_id,
+            variant_name: names.none_name.clone(),
+            bindings: Vec::new(),
+            payload_type: TypeTable::UNIT,
+        },
+        guard: None,
+        body: TirExpr::new(
+            TirExprKind::Block(crate::tir::TirBlock::new(Vec::new(), span)),
+            TypeTable::UNIT,
+            span,
+        ),
+        span,
+    };
+    let match_expr = TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(local_ref(value_local, "__opt_val", value_type_id)),
+            arms: vec![some_arm, none_arm],
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
 }
 
 /// Flatten a WASI type value (GC ref) to flat CM ABI args (i32/i64/f32/f64).
