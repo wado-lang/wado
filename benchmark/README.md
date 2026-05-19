@@ -102,20 +102,41 @@ Parse 81 SQL statements (13 KB) x 100 iterations. Gale-generated parser vs sqlpa
 
 ## Syntax Highlight
 
-Highlight 81 SQL statements (13 KB) x 100 iterations. Gale-generated highlighter vs tree-sitter.
+Highlight 81 SQL statements (13 KB) x 100 iterations. Gale-generated
+highlighter vs four reference SQL highlighters:
+
+- **Prism.js** — regex-based, the speed reference (ultimate goal)
+- **tree-sitter (Rust native)** — same `tree-sitter-sequel` grammar
+  used by the JS row below, run as a Rust binary
+- **Lezer (CodeMirror)** — `@codemirror/lang-sql` + `@lezer/highlight`,
+  pure-JS LR parser
+- **tree-sitter (web-tree-sitter)** — official JS WASM binding, same
+  `@derekstride/tree-sitter-sql` grammar as the Rust row
+- **Shiki (JS engine)** — TextMate grammars, VSCode-quality output
+
+Best of three runs per implementation:
 
 | Implementation            |     Time | vs best |
 | ------------------------- | -------: | ------: |
-| tree-sitter (Rust native) |   446 ms |   1.00x |
-| tree-sitter (Wasm)²       |   677 ms |   1.36x |
-| **Wado** (Gale)           | 1,183 ms |   2.65x |
+| Prism.js                  |   175 ms |   1.00x |
+| tree-sitter (Rust native) |   489 ms |   2.79x |
+| Lezer (CodeMirror)        |   525 ms |   3.00x |
+| tree-sitter (JS / WASM)   |   862 ms |   4.93x |
+| **Wado** (Gale)           | 1,472 ms |   8.41x |
+| Shiki (JS engine)         | 2,093 ms |  11.96x |
 
-² Carried over from the previous report — `wasi-sdk` is currently
-disabled (commented out in `mise.toml`) to avoid GitHub API rate-limit
-failures during artifact install, so the C-zlib-wasm and tree-sitter-wasm
-builds were not re-measured this round. The ratios are still
-representative since they are toolchain- not host-dependent at fixed
-versions.
+Notes:
+
+- Regex-based Prism.js wins on raw speed for a token-poor language
+  like SQL.
+- Pure-JS Lezer is essentially on par with tree-sitter's Rust native
+  parser, and clearly beats the same tree-sitter grammar accessed
+  through its JS WASM binding — V8 optimises plain JS more aggressively
+  than the WASM↔JS boundary crossings cost.
+- Shiki (JS engine) is the slowest but produces the richest output
+  (identifier-level coloring, VSCode-quality themes). The Oniguruma
+  (WASM) engine is omitted because it is ~2.5x slower than the JS
+  engine on this input while producing byte-identical output.
 
 ## Running
 
