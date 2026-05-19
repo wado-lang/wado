@@ -494,6 +494,49 @@ test "generate standalone group as optional field" {
     assert str_contains(&output, &"    pub foo_or_bar: Option<FooOrBarGroup>,");
 }
 
+test "generate scalar-labeled group `t=(a | b)`" {
+    // Regression: Sets/ParserSet.txt — `a : t=('x' | 'y') ;` lowers the
+    // scalar label so that the resulting op is `Op::Group(...)` while
+    // the surface element stays `Label(Group(...))`. The op-driven
+    // walker dispatches on the op shape and used to feed the Label
+    // element straight into `gen_op_group`, which only accepted
+    // `Element::Group`. The walker now peels scalar `Label(...)` once
+    // before dispatching, so the callee sees the inner Group element
+    // and the surface field name survives via the rebound op.
+    let mut grammar = parse_grammar("grammar T; a : t=('x' | 'y') ;", "(test)");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    // The generated parser must reference the hoisted anonymous tokens
+    // and produce a scalar `t` binding for the labeled group.
+    assert str_contains(&output, &"TK_LIT_X");
+    assert str_contains(&output, &"TK_LIT_Y");
+    assert str_contains(&output, &"let t = ");
+}
+
+test "generate scalar-labeled single-alt group `t=(A B)`" {
+    // Variation: the inner Group is a single-alt with multiple
+    // elements. Lower's `lower_op` resolves this to a `SingleAlt`
+    // group shape; `gen_op_group` must still receive the inner
+    // GroupElement (not the outer Label).
+    let mut grammar = parse_grammar(
+        "grammar T; a : t=(A B) ; A : 'a' ; B : 'b' ;",
+        "(test)",
+    );
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, &"p.expect(TK_A)");
+    assert str_contains(&output, &"p.expect(TK_B)");
+}
+
+test "generate scalar-labeled wildcard-in-group `t=(.)*`" {
+    // The outer `*` keeps the Label inside the Repeat
+    // (Repeat(Label(Group(Wildcard)))). The peel applies inside the
+    // Repeat body; the Repeat path itself still pattern-matches on
+    // `Element::Repeat`. This shape is the parser-level mirror of
+    // wildcard-in-set / wildcard-in-group ANTLR4 patterns.
+    let mut grammar = parse_grammar("grammar T; a : t=(.)* ; A : 'a' ;", "(test)");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, &"match_any");
+}
+
 test "generate lexer set_mode" {
     let mut grammar = Grammar {
         name: "Test",

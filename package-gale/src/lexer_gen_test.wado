@@ -1,0 +1,91 @@
+//! Tests for `lexer_gen.wado`. The focus is anonymous-literal hoisting:
+//! parser-rule literals like `'x'` that ANTLR4 auto-promotes to anonymous
+//! lexer tokens must be discovered by `collect_literal_tokens` regardless
+//! of which IR transformer (`Not`, `Label`, `Group`, `Repeat`) wraps them.
+
+use { Grammar } from "./ir.wado";
+use { parse } from "./g4/parser.wado";
+use { collect_literal_tokens, LitToken } from "./lexer_gen.wado";
+
+fn parse_grammar(input: String) -> Grammar {
+    let mut g = parse(input).unwrap();
+    g.source_files.push("(test)");
+    return g;
+}
+
+fn const_names(lits: &Array<LitToken>) -> Array<String> {
+    let mut out: Array<String> = [];
+    for let l of lits {
+        out.push(l.const_name);
+    }
+    out.sort();
+    return out;
+}
+
+test "collect_literal_tokens: plain top-level literals" {
+    let g = parse_grammar("grammar T; a : 'x' 'y' ;");
+    let lits = collect_literal_tokens(&g.parser_rules);
+    let names = const_names(&lits);
+    assert names.len() == 2, `len={names.len()}`;
+    assert names[0] == "TK_LIT_X", names[0];
+    assert names[1] == "TK_LIT_Y", names[1];
+}
+
+test "collect_literal_tokens: literals inside Group alternatives" {
+    // `('x' | 'y')` — Group with two single-literal alts. The walker
+    // already handles this through the `Group` arm.
+    let g = parse_grammar("grammar T; a : ('x' | 'y') 'z' ;");
+    let lits = collect_literal_tokens(&g.parser_rules);
+    let names = const_names(&lits);
+    assert names.len() == 3, `len={names.len()}`;
+    assert names[0] == "TK_LIT_X", names[0];
+    assert names[1] == "TK_LIT_Y", names[1];
+    assert names[2] == "TK_LIT_Z", names[2];
+}
+
+test "collect_literal_tokens: literal inside Not — single token" {
+    // `~'x'` — the canonical complement-of-a-literal shape. Source:
+    // ANTLR4 runtime-testsuite descriptor Sets/ParserNotToken.txt.
+    // The literal `'x'` defines the *exclusion* token, so it still
+    // needs an anonymous TK_LIT_X token in the lexer for the runtime
+    // `match_not([TK_LIT_X])` call to reference.
+    let g = parse_grammar("grammar T; a : ~'x' 'z' ;");
+    let lits = collect_literal_tokens(&g.parser_rules);
+    let names = const_names(&lits);
+    assert names.len() == 2, `expected ['TK_LIT_X', 'TK_LIT_Z'], got len={names.len()}`;
+    assert names[0] == "TK_LIT_X", names[0];
+    assert names[1] == "TK_LIT_Z", names[1];
+}
+
+test "collect_literal_tokens: literals inside Not(Group(...)) — multi-alt set" {
+    // `~('x'|'y')` — Sets/ParserNotSet.txt. The walker must descend
+    // through the Not into the inner Group.
+    let g = parse_grammar("grammar T; a : ~('x' | 'y') 'z' ;");
+    let lits = collect_literal_tokens(&g.parser_rules);
+    let names = const_names(&lits);
+    assert names.len() == 3, `len={names.len()}`;
+    assert names[0] == "TK_LIT_X", names[0];
+    assert names[1] == "TK_LIT_Y", names[1];
+    assert names[2] == "TK_LIT_Z", names[2];
+}
+
+test "collect_literal_tokens: literal inside Label(Not(Literal)) — labeled complement" {
+    // `t=~'x' 'z'` — Sets/ParserNotTokenWithLabel.txt. Label wraps Not
+    // wraps Literal; both transformers must transparently recurse.
+    let g = parse_grammar("grammar T; a : t=~'x' 'z' ;");
+    let lits = collect_literal_tokens(&g.parser_rules);
+    let names = const_names(&lits);
+    assert names.len() == 2, `len={names.len()}`;
+    assert names[0] == "TK_LIT_X", names[0];
+    assert names[1] == "TK_LIT_Z", names[1];
+}
+
+test "collect_literal_tokens: literal inside Wildcard is ignored" {
+    // Wildcard `.` is its own atom and carries no literal. Including
+    // it next to a literal verifies the walker doesn't get confused.
+    let g = parse_grammar("grammar T; a : 'x' . ;");
+    let lits = collect_literal_tokens(&g.parser_rules);
+    let names = const_names(&lits);
+    assert names.len() == 1, `len={names.len()}`;
+    assert names[0] == "TK_LIT_X", names[0];
+}

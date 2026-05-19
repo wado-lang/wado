@@ -54,6 +54,16 @@ Reduces coupling between the codegen walk and the analysis layer; no behaviour c
 
 All 17 `CompositeLexers` / `CompositeParsers` upstream descriptors auto-skip today. The bottleneck is _not_ multi-input plumbing (`extract_antlr4_descriptors.wado`'s `parsed.slave_grammars.len() > 0` short-circuit could be lifted; Kiln already supports multi-input). Every composite descriptor's `[output]` is a host-side artefact — `<writeln(...)>` action-body prints (`S.a`, `M.b`, `T.y`), `Token.toString` dumps (`[@0,0:2='abc',<1>,1:0]`), or empty `[output]`. None survive `normalize_output_for_stage_b`. Re-evaluate this entry once Stage C lands.
 
+## Descriptor importer expansion (no Stage C required)
+
+Stage A2 (parse-accepts-input) landed and covers 206 / 345 descriptors. The remaining importable test modes are:
+
+- **Stage E (parse-must-error)** for `LexerErrors` / `ParserErrors` (46 descriptors): `g::parse(&input)` must return `Err`. Optionally tighten by matching line/col against `[errors]`.
+- **Stage L (token-stream equivalence)** for lexer-only descriptors (`LexerExec` 42, `Performance` 7, `SemPredEvalLexer` 8, lexer half of `Sets`): add a `to_lexer_string(&Array<Token>) -> String` helper that mimics ANTLR4's `Token.toString()` / token-name-per-line dumps, then assert `g::tokenize(&input).to_lexer_string() == expected` (modulo skip-channel filtering).
+- **Sub-tree Stage B** (`<ToStringTree("$X.ctx"):writeln()>` pattern, ~11 descriptors across `ParseTrees` / `FullContextParsing`): teach the extractor to recognise the `@after` print, look up the labeled element in the start rule, and emit a Stage B test that drills into the corresponding subtree.
+
+Each axis gets its own `status.toml` bucket pair (`[stage_e_*]`, `[stage_l_*]`, …). Composite (slave-grammar) descriptors require multi-input plumbing in the emitter on top of those modes, and most of their `[output]`s are still Stage C territory.
+
 ## Stage C — action / predicate execution
 
 Gale currently **recognises** but **silently discards** the contents of `{ ... }` action blocks and `{ ... }?` semantic predicates. The g4 parser accepts them, so grammars that contain them (`ANTLRv4Lexer`, `RustLexer`, `RustParser`, `TypeScriptLexer`, `TypeScriptParser`) load cleanly — but the generated lexer/parser behaves as if every predicate were `true` and every action were a no-op. That is wrong for:
