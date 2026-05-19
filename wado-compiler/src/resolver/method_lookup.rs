@@ -1883,11 +1883,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         &impl_block.ty,
                         Type::Named(named) if !self.is_known_type_name(&named.name)
                     );
+                    // Skip the filter for impls whose receiver is
+                    // intentionally widely-applicable: blanket impls
+                    // (type-param receivers), ref-shape impls (already
+                    // filtered by the inner-name check above), and
+                    // generic impls (`impl X for Bag<V>`) — those
+                    // dispatch through the monomorphizer's substitution
+                    // path, where the impl's `ty` resolves to a
+                    // `TypeParam`-bearing form that can't be compared
+                    // directly against a concrete receiver's `TypeId`.
                     let skip = !impl_block.type_params.is_empty()
                         || is_blanket_tp
                         || matches!(
                             &impl_block.ty,
-                            Type::Reference(_) | Type::MutReference(_)
+                            Type::Reference(_) | Type::MutReference(_) | Type::Generic(_)
                         );
                     (skip, impl_block.ty.clone())
                 };
@@ -1916,7 +1925,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         |s| s.resolve_type(&impl_ty_clone),
                     );
                     let tt = self.type_table.borrow();
-                    if tt.peel_refs(impl_recv_id) != tt.peel_refs(receiver) {
+                    let target = tt.peel_refs(impl_recv_id);
+                    // Walk the receiver's newtype chain so an impl on a
+                    // base struct stays reachable through `type
+                    // Location = Point`: the receiver's `TypeId` for
+                    // `Location` differs from `Point`'s, but the impl
+                    // is supposed to inherit via the newtype.
+                    let mut current = tt.peel_refs(receiver);
+                    let mut matched = false;
+                    loop {
+                        if current == target {
+                            matched = true;
+                            break;
+                        }
+                        match tt.get(current) {
+                            ResolvedType::Newtype { base_type, .. } => {
+                                current = tt.peel_refs(*base_type);
+                            }
+                            _ => break,
+                        }
+                    }
+                    if !matched {
                         continue;
                     }
                 }
