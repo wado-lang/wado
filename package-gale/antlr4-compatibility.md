@@ -172,15 +172,15 @@ to emit Wado source, plus `core:cli` and `wasi:filesystem` for I/O.
 All compat-related artefacts (extracted grammars, generated tests,
 triage state) live under `package-gale/tests/antlr4-compat/`:
 
-| Path                                       | Role                                                                    |
-| ------------------------------------------ | ----------------------------------------------------------------------- |
-| `scripts/extract_antlr4_descriptors.wado`  | Extractor (single-file Wado script)                                     |
-| `scripts/extract-antlr4-descriptors.sh`    | Wrapper resolving the category list and forwarding to `wado run`        |
-| `tests/antlr4-compat/grammars/`            | Generated `.g4` files (committed)                                       |
-| `tests/antlr4-compat/<category>_test.wado` | Generated Stage A claim-(a) tests (committed; `#![generated(by=…)]`)    |
-| `tests/antlr4-compat/stage_a/`             | Per-descriptor Stage A claim-(b) drivers (committed)                    |
-| `tests/antlr4-compat/stage_b/`             | Per-descriptor Stage B drivers (committed)                              |
-| `tests/antlr4-compat/status.toml`          | Manually maintained triage state                                        |
+| Path                                       | Role                                                                 |
+| ------------------------------------------ | -------------------------------------------------------------------- |
+| `scripts/extract_antlr4_descriptors.wado`  | Extractor (single-file Wado script)                                  |
+| `scripts/extract-antlr4-descriptors.sh`    | Wrapper resolving the category list and forwarding to `wado run`     |
+| `tests/antlr4-compat/grammars/`            | Generated `.g4` files (committed)                                    |
+| `tests/antlr4-compat/<category>_test.wado` | Generated Stage A claim-(a) tests (committed; `#![generated(by=…)]`) |
+| `tests/antlr4-compat/stage_a/`             | Per-descriptor Stage A claim-(b) drivers (committed)                 |
+| `tests/antlr4-compat/stage_b/`             | Per-descriptor Stage B drivers (committed)                           |
+| `tests/antlr4-compat/status.toml`          | Manually maintained triage state                                     |
 
 ### Triage states (`status.toml`)
 
@@ -204,15 +204,15 @@ triage state) live under `package-gale/tests/antlr4-compat/`:
 "<Category>/<Name>" = "one-line reason Stage B emission must be skipped"
 ```
 
-| State            | Effect                                                                            | When to use                                                                                                                                 |
-| ---------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| (default)        | Test runs, must pass                                                              | Descriptor is a clean ANTLR4 grammar Gale should accept                                                                                     |
-| `[todo]`         | Per-category claim-(a) test marked `#[TODO]` so failure is expected and recorded  | Descriptor exposes a real Gale gap (parser, lexer, or IR feature). Add a corresponding entry to `TODO.md`                                   |
-| `[skip]`         | Per-category claim-(a) test not emitted at all                                    | Descriptor relies on the upstream test runner's StringTemplate substitution / target-language template, so it is not a self-contained `.g4` |
-| `[stage_a_todo]` | Per-descriptor claim-(b) test emitted with `#[TODO]` so failure is expected       | Generated parser rejects the canonical `[input]` (typically LL prediction, codegen, or a Stage-C-blocked semantic predicate)                |
-| `[stage_a_skip]` | Per-descriptor claim-(b) test not emitted                                         | Gale codegen produces invalid Wado, or `[start]` differs from `parse()`'s entry by design                                                   |
-| `[stage_b_todo]` | Stage B test emitted with `#[TODO]` so divergence is expected                     | Tree-shape comparison fails at runtime (Gale codegen, LR rewriting, or Stage-C-blocked action handling)                                     |
-| `[stage_b_skip]` | Stage B test not emitted                                                          | Gale codegen produces invalid Wado for the descriptor's grammar; a `#[TODO]` marker would have nothing to attach to                         |
+| State            | Effect                                                                           | When to use                                                                                                                                 |
+| ---------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| (default)        | Test runs, must pass                                                             | Descriptor is a clean ANTLR4 grammar Gale should accept                                                                                     |
+| `[todo]`         | Per-category claim-(a) test marked `#[TODO]` so failure is expected and recorded | Descriptor exposes a real Gale gap (parser, lexer, or IR feature). Add a corresponding entry to `TODO.md`                                   |
+| `[skip]`         | Per-category claim-(a) test not emitted at all                                   | Descriptor relies on the upstream test runner's StringTemplate substitution / target-language template, so it is not a self-contained `.g4` |
+| `[stage_a_todo]` | Per-descriptor claim-(b) test emitted with `#[TODO]` so failure is expected      | Generated parser rejects the canonical `[input]` (typically LL prediction, codegen, or a Stage-C-blocked semantic predicate)                |
+| `[stage_a_skip]` | Per-descriptor claim-(b) test not emitted                                        | Gale codegen produces invalid Wado, or `[start]` differs from `parse()`'s entry by design                                                   |
+| `[stage_b_todo]` | Stage B test emitted with `#[TODO]` so divergence is expected                    | Tree-shape comparison fails at runtime (Gale codegen, LR rewriting, or Stage-C-blocked action handling)                                     |
+| `[stage_b_skip]` | Stage B test not emitted                                                         | Gale codegen produces invalid Wado for the descriptor's grammar; a `#[TODO]` marker would have nothing to attach to                         |
 
 The reason text is written verbatim into the generated test as a
 comment. Keep it free of backslashes and double quotes — the script's
