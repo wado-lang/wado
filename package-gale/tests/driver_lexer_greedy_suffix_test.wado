@@ -1,0 +1,67 @@
+use g from "./grammars/lexer_greedy_suffix.g4" with { generator: { module: "../src/generator.wado", options: { highlight: false }, output_dir: "tests/generated/lexer_greedy_suffix" } };
+use { normalize_tree } from "./grammars/lexer_greedy_suffix.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = g::parse(input).unwrap();
+    let tree = g::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+// Hit case: the middle of the input contains characters the inner
+// `~('b')` matches AND the trailing `'c'`. A greedy loop without
+// accept-state tracking would over-consume the trailing 'c' and fail.
+test "greedy suffix: longest match resumes at the last 'c'" {
+    assert_tree(&"a😳😡😝🤓c", &"
+        (text a😳😡😝🤓c)
+    ");
+}
+
+// Hit case: smallest valid match — only one character between 'a'
+// and 'c'.
+test "greedy suffix: minimal viable match a x c" {
+    assert_tree(&"axc", &"
+        (text axc)
+    ");
+}
+
+// Hit case: greedy must pick the LATEST 'c' inside a single token,
+// not the earliest. Within "axcxcxc", the inner `~('b'|' ')+`
+// consumes "xcxcx" (5 chars), then the final 'c' closes the rule —
+// length 7. A non-greedy implementation would stop at the first 'c'
+// (length 3) and leave "xcxc" unconsumable.
+test "greedy suffix: multiple suffix candidates — pick the latest" {
+    assert_tree(&"axcxcxc", &"
+        (text axcxcxc)
+    ");
+}
+
+// Two adjacent LETTERS tokens separated by whitespace. The `~(' ')`
+// in the inner stops the first match at the space, then WS skips
+// it, then the second match runs.
+test "greedy suffix: two adjacent tokens separated by space" {
+    assert_tree(&"axc azc", &"
+        (text axc azc)
+    ");
+}
+
+// Rejection case: when 'b' appears as the first char inside the
+// `~('b')+`, the Plus has zero valid iterations and the rule fails.
+// The lexer falls back to its default error token; `text` then
+// rejects the input.
+test "greedy suffix: 'b' immediately after 'a' is rejected" {
+    let result = g::parse(&"abc");
+    if let Ok(_) = &result {
+        panic("expected parse to fail on 'abc' (Plus has 0 iterations)");
+    }
+}
+
+// Rejection case: no 'c' in the input — `LETTERS` has no valid
+// suffix, so the rule fails to produce a token.
+test "greedy suffix: no 'c' in input is rejected" {
+    let result = g::parse(&"axyz");
+    if let Ok(_) = &result {
+        panic("expected parse to fail on 'axyz' (no suffix 'c')");
+    }
+}

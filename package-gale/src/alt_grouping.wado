@@ -18,6 +18,90 @@
 use { Alternative } from "./ir.wado";
 use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
 
+/// True when `alt` can match any single token at its first input position
+/// — i.e. its first non-nullable element is `Wildcard` (`.`). The static
+/// `first_of_element` returns an empty set for `Wildcard` because we
+/// cannot enumerate "every token kind", but a wildcard alt effectively
+/// overlaps with every other alt that consumes at least one token. We
+/// use this flag to merge wildcard alts into the surrounding overlap
+/// group so the parse-side dispatch routes through scan-based first-
+/// success-wins (which correctly falls back to the wildcard alt when
+/// the more specific alt's scan fails) instead of a kind-check that
+/// commits to the first alt whose FIRST set covers the lookahead.
+pub fn alt_is_wildcard_led(alt: &Alternative) -> bool {
+    for let elem of &alt.elements {
+        if let Wildcard(_) = elem {
+            return true;
+        }
+        if !is_nullable(elem) {
+            return false;
+        }
+    }
+    return false;
+}
+
+/// `compute_overlap_groups` augmented with wildcard awareness. A
+/// wildcard-led alt's effective first set is the universal token set,
+/// so it must overlap with every alt whose first set is non-empty (and
+/// with every other wildcard alt). Without this merge, the parse-side
+/// dispatch emits a chain of `if peek_kind == TK_X ... else { wildcard
+/// }` branches that commit to `TK_X`'s alt whenever the lookahead
+/// matches, even if that alt's deeper structure cannot succeed —
+/// `(assign | .)` over an `ID` not followed by `=` is the canonical
+/// example.
+pub fn compute_overlap_groups_with_wildcard(alts: &Array<Alternative>, first_sets: &Array<Array<String>>) -> Array<Array<i32>> {
+    let n = alts.len();
+    let mut is_wild: Array<bool> = [];
+    let mut any_wild = false;
+    for let alt of alts {
+        let w = alt_is_wildcard_led(alt);
+        is_wild.push(w);
+        if w {
+            any_wild = true;
+        }
+    }
+    let mut groups = compute_overlap_groups(first_sets);
+    if !any_wild {
+        return groups;
+    }
+    let mut merge_set: Array<i32> = [];
+    for let mut i = 0; i < n; i += 1 {
+        if is_wild[i] || !first_sets[i].is_empty() {
+            merge_set.push(i);
+        }
+    }
+    if merge_set.len() < 2 {
+        return groups;
+    }
+    let mut new_groups: Array<Array<i32>> = [];
+    let mut merged: Array<i32> = [];
+    for let g of groups {
+        let mut absorbed = false;
+        for let idx of &g {
+            for let m of &merge_set {
+                if *idx == *m {
+                    absorbed = true;
+                    break;
+                }
+            }
+            if absorbed {
+                break;
+            }
+        }
+        if absorbed {
+            for let idx of g {
+                merged.push(idx);
+            }
+        } else {
+            new_groups.push(g);
+        }
+    }
+    if !merged.is_empty() {
+        new_groups.push(merged);
+    }
+    return new_groups;
+}
+
 pub fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<i32>> {
     let n = first_sets.len();
     let mut group_ids: Array<i32> = [];

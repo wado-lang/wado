@@ -188,6 +188,33 @@ The upstream `runtime-testsuite/` is extracted into per-category Wado tests as a
   that actually arise (e.g. `expr`'s `column_ref` IDENT vs `function_call`
   IDENT '(' … ')').
 
+## Generated Lexer Rules
+
+- **No backtracking in lexer codegen either.** ANTLR4's lexer obtains
+  its longest match via NFA→DFA simulation
+  (`vendor/antlr4/doc/lexer-rules.md`, `vendor/antlr4/doc/wildcard.md`).
+  Gale replicates the same single-pass forward DFA with explicit
+  accept-state tracking — never a try-fail-retry loop over remembered
+  positions. When a greedy `Plus` / `Star` inner can also match the
+  suffix's first character (`'a' ~('b')+ 'c'` is the canonical case from
+  `Sets/UnicodeNegated*`), `gen_lexer_repeat_lookahead_aware` peeks the
+  suffix at every iteration and records the latest position where it
+  could legally start in `accept_<id>`. Once the inner stops matching,
+  the cursor rewinds once to that position and the suffix is consumed
+  normally. Regression fixture: `tests/grammars/lexer_greedy_suffix.g4`.
+- **Trigger window is narrow on purpose.** The lookahead-aware emitter
+  only fires when both the `Plus` / `Star` inner and every suffix
+  element are single-char-consuming (Literal of one char, CharRange,
+  CharClass, AnyChar, Not over any of those, or a Group of
+  single-element alts). For shapes outside that window — a RuleRef
+  inner / suffix, a nested Repeat, a multi-element-alt Group — the
+  emitter falls through to the unchanged greedy loop. That is sound
+  for every grammar in the corpus today because the surrounding inner
+  cannot consume the suffix's first character in those cases. If a
+  future grammar exercises the complex shape AND the inner does compete
+  with the suffix, generalise the peek emitters rather than widening
+  the trigger blindly.
+
 ## LL Prediction
 
 Gale's parser-side prediction is a static FOLLOW-based repair on top
@@ -237,7 +264,7 @@ Implementation references:
 
 ### Soundness invariants
 
-Three invariants must be respected by any future LL-related change.
+Four invariants must be respected by any future LL-related change.
 Violating them broke real grammars in the past, and the corresponding
 guards are present as inline conservatism with explicit comments at
 each site.
@@ -269,6 +296,23 @@ each site.
    `parse_<rule>__follow_<id>` (and analogous helper-name
    templates). No shrunken-duplicate body emitters; whatever shape
    the regular path can emit, the variant path emits as well.
+
+4. **Wildcard alts collapse the overlap group and sort last.**
+   `first_of_element(Wildcard)` returns `[]` because we cannot
+   enumerate every token kind, but a wildcard alt effectively
+   overlaps with every other alt that consumes at least one token.
+   `compute_overlap_groups_with_wildcard` (in `alt_grouping.wado`)
+   therefore merges wildcard alts and every non-empty-FIRST alt into
+   a single overlap group, the parse-side dispatch suppresses the
+   group's outer kind-check gate (so the inner scan-based
+   first-success-wins is reached for any non-EOF lookahead), and the
+   scan-side iteration order puts wildcard alts last (driven by
+   `ScanGroupElem.wildcard_alt_indices`). Without this triple, the
+   parse-side commits to the more specific alt on lookahead match
+   even when its deeper structure cannot succeed — the
+   `ParserExec/Wildcard` descriptor `(assign | .)+ EOF` over
+   `x=10; abc;` is the canonical regression. Regression fixture:
+   `tests/grammars/ll_wildcard_alt.g4`.
 
 Beyond what static FOLLOW + K-prefix can decide, runtime ATN
 simulation is the only complete answer

@@ -1,0 +1,2643 @@
+#![generated(by = "local:src/generator.wado", sources = ["../../grammars/ParserExec/TokenOffset.g4"])]
+#![generated(by = "gale", sources = ["L.g4"])]
+
+/// Span represents a byte range in source text.
+pub struct Span {
+    pub start: i32,
+    pub end: i32,
+}
+
+impl Span {
+    pub fn new(start: i32, end: i32) -> Span {
+        return Span { start, end };
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.end - self.start;
+    }
+
+    pub fn merge(&self, other: &Span) -> Span {
+        let start = if self.start < other.start { self.start } else { other.start };
+        let end = if self.end > other.end { self.end } else { other.end };
+        return Span { start, end };
+    }
+}
+
+impl Eq for Span {
+    fn eq(&self, other: &Self) -> bool {
+        return self.start == other.start && self.end == other.end;
+    }
+}
+
+/// LexerSlice is a lazy reference to a range of characters in the source input.
+/// It avoids allocating a String for every token during tokenization.
+pub struct LexerSlice {
+    pub chars: &Array<char>,
+    pub start: i32,
+    pub end: i32,
+}
+
+impl LexerSlice {
+    pub fn new(chars: &Array<char>, start: i32, end: i32) -> LexerSlice with stores[chars] {
+        return LexerSlice { chars, start, end };
+    }
+
+    pub fn empty(chars: &Array<char>) -> LexerSlice with stores[chars] {
+        return LexerSlice { chars, start: 0, end: 0 };
+    }
+
+    pub fn from_string(s: String) -> LexerSlice {
+        let chars = s.chars().collect();
+        return LexerSlice { chars: &chars, start: 0, end: chars.len() };
+    }
+
+    pub fn is_empty(&self) -> bool {
+        return self.start >= self.end;
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.end - self.start;
+    }
+
+    pub fn push_to(&self, out: &mut String) {
+        for let mut i = self.start; i < self.end; i += 1 {
+            out.push(self.chars[i]);
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut s = String::with_capacity(self.end - self.start);
+        self.push_to(&mut s);
+        return s;
+    }
+
+    pub fn eq_str(a: &String, b: &LexerSlice) -> bool {
+        let a_chars = a.chars();
+        let mut a_iter = a_chars;
+        let mut i = b.start;
+        loop {
+            let a_next = a_iter.next();
+            if i >= b.end {
+                return a_next matches { None };
+            }
+            if let Some(ac) = a_next {
+                if ac != b.chars[i] {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+            i += 1;
+        }
+    }
+}
+
+impl Display for LexerSlice {
+    fn fmt(&self, f: &mut Formatter) {
+        for let mut i = self.start; i < self.end; i += 1 {
+            f.write_char(self.chars[i]);
+        }
+    }
+}
+
+impl Eq for LexerSlice {
+    fn eq(&self, other: &Self) -> bool {
+        let len = self.end - self.start;
+        if len != other.end - other.start {
+            return false;
+        }
+        for let mut i = 0; i < len; i += 1 {
+            if self.chars[self.start + i] != other.chars[other.start + i] {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+/// Token represents a lexed token with its kind, text, and position.
+/// Leading trivia (whitespace, comments) is attached to each token.
+/// `channel` is the ANTLR4 channel id (0 = default, 1 = HIDDEN; named
+/// channels resolve to integer ids declared in the grammar).
+pub struct Token {
+    pub kind: i32,
+    pub text: LexerSlice,
+    pub span: Span,
+    pub leading_trivia: Array<Token>,
+    pub channel: i32,
+}
+
+impl Token {
+    pub fn new(kind: i32, text: LexerSlice, span: Span) -> Token {
+        return Token { kind, text, span, leading_trivia: [], channel: 0 };
+    }
+
+    pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>) -> Token {
+        return Token { kind, text, span, leading_trivia, channel: 0 };
+    }
+
+    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>, channel: i32) -> Token {
+        return Token { kind, text, span, leading_trivia, channel };
+    }
+}
+
+// Note: Token Eq is intentionally omitted. Auto-derived Eq on recursive structs
+// with reference-containing fields triggers a compiler bug
+// (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
+
+/// ParseError represents a parse failure with location and expected tokens.
+pub struct ParseError {
+    pub message: String,
+    pub span: Span,
+    pub expected: Array<String>,
+}
+
+impl ParseError {
+    pub fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
+        return ParseError { message, span, expected };
+    }
+}
+
+/// CstChild is either a terminal token or a non-terminal sub-tree.
+pub variant CstChild {
+    Token(Token),
+    Node(CstNode),
+}
+
+/// CstNode is a generic (untyped) concrete syntax tree node.
+pub struct CstNode {
+    pub name: String,
+    pub span: Span,
+    pub children: Array<CstChild>,
+}
+
+impl CstNode {
+    /// Produce an ANTLR4-style S-expression representation of this tree.
+    /// Rule nodes become `(name child1 child2 ...)`, tokens become their text.
+    /// Tokens with empty text (e.g. EOF) are omitted.
+    pub fn to_string_tree(&self) -> String {
+        let mut out = String::with_capacity(256);
+        cst_to_string_tree_impl(&mut out, self);
+        return out;
+    }
+}
+
+fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
+    out.push_str(&`({node.name}`);
+    for let child of &node.children {
+        if let Token(t) = *child {
+            if !t.text.is_empty() {
+                out.push_str(&` {t.text}`);
+            }
+        } else if let Node(n) = *child {
+            out.push_str(&" ");
+            cst_to_string_tree_impl(out, &n);
+        }
+    }
+    out.push_str(&")");
+}
+
+/// Normalize a multi-line S-expression string for comparison.
+/// Collapses whitespace runs to single spaces and trims, while preserving
+/// whitespace inside double-quoted strings.
+pub fn normalize_tree(s: &String) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_string = false;
+    let mut space_pending = false;
+    for let c of s.chars() {
+        if in_string {
+            out.push(c);
+            if c == '"' {
+                in_string = false;
+            }
+        } else if c == ' ' || c == '\n' || c == '\r' || c == '\t' {
+            if out.len() > 0 {
+                space_pending = true;
+            }
+        } else {
+            if space_pending {
+                out.push(' ');
+                space_pending = false;
+            }
+            if c == '"' {
+                in_string = true;
+            }
+            out.push(c);
+        }
+    }
+    return out;
+}
+
+/// Highlight override: when inside a specific rule, override the capture for a token kind.
+pub struct HighlightOverride {
+    pub rule_name: String,
+    pub token_kind: i32,
+    pub capture: String,
+}
+
+/// Highlight mapping: defaults by token kind + context-aware overrides.
+pub struct HighlightMapping {
+    pub defaults: Array<String>,
+    pub overrides: Array<HighlightOverride>,
+}
+
+/// A single highlight capture: a named range in the source text.
+pub struct HighlightCapture {
+    pub capture: String,
+    pub start: i32,
+    pub end: i32,
+}
+
+/// HighlightVisitor collects highlight captures during a CST walk.
+pub struct HighlightVisitor {
+    mapping: HighlightMapping,
+    rule_stack: Array<String>,
+    pub captures: Array<HighlightCapture>,
+}
+
+impl HighlightVisitor {
+    pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
+        return HighlightVisitor { mapping, rule_stack: [], captures: [] };
+    }
+
+    fn classify(&self, kind: i32) -> String {
+        for let ov of &self.mapping.overrides {
+            if ov.token_kind == kind {
+                for let rule of &self.rule_stack {
+                    if *rule == ov.rule_name {
+                        return ov.capture;
+                    }
+                }
+            }
+        }
+        if kind >= 0 && kind < self.mapping.defaults.len() {
+            return self.mapping.defaults[kind];
+        }
+        return "";
+    }
+}
+
+impl Visitor for HighlightVisitor {
+    fn enter_rule(&mut self, name: &String, span: &Span) {
+        self.rule_stack.push(*name);
+    }
+
+    fn exit_rule(&mut self, name: &String, span: &Span) {
+        if !self.rule_stack.is_empty() {
+            let last = self.rule_stack.len() - 1;
+            let mut new_stack: Array<String> = [];
+            for let mut i = 0; i < last; i += 1 {
+                new_stack.push(self.rule_stack[i]);
+            }
+            self.rule_stack = new_stack;
+        }
+    }
+
+    fn visit_token(&mut self, token: &Token) {
+        for let trivia of &token.leading_trivia {
+            let cap = self.classify(trivia.kind);
+            if !cap.is_empty() {
+                self.captures.push(HighlightCapture { capture: cap, start: trivia.span.start, end: trivia.span.end });
+            }
+        }
+        if token.text.is_empty() {
+            return;
+        }
+        let cap = self.classify(token.kind);
+        if !cap.is_empty() {
+            self.captures.push(HighlightCapture { capture: cap, start: token.span.start, end: token.span.end });
+        }
+    }
+}
+
+fn escape_html(out: &mut String, text: &String) {
+    for let c of text.chars() {
+        if c == '&' {
+            out.push_str(&"&amp;");
+        } else if c == '<' {
+            out.push_str(&"&lt;");
+        } else if c == '>' {
+            out.push_str(&"&gt;");
+        } else if c == '"' {
+            out.push_str(&"&quot;");
+        } else {
+            out.push(c);
+        }
+    }
+}
+
+fn escape_html_char(out: &mut String, c: char) {
+    if c == '&' {
+        out.push_str(&"&amp;");
+    } else if c == '<' {
+        out.push_str(&"&lt;");
+    } else if c == '>' {
+        out.push_str(&"&gt;");
+    } else if c == '"' {
+        out.push_str(&"&quot;");
+    } else {
+        out.push(c);
+    }
+}
+
+fn push_class(out: &mut String, capture: &String) {
+    for let c of capture.chars() {
+        if c == '.' {
+            out.push(' ');
+        } else {
+            out.push(c);
+        }
+    }
+}
+
+/// Produce a highlighted HTML fragment from source text and captures.
+/// Captures must be sorted by start position (as produced by HighlightVisitor).
+pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> String {
+    let mut out = String::with_capacity(source.len() * 5);
+    let mut pos = 0;
+    let mut iter = source.chars();
+    for let cap of captures {
+        while pos < cap.start {
+            if let Some(c) = iter.next() {
+                escape_html_char(&mut out, c);
+            }
+            pos += 1;
+        }
+        out.push_str(&"<span class=\"");
+        push_class(&mut out, &cap.capture);
+        out.push_str(&"\">");
+        let end = cap.end;
+        while pos < end {
+            if let Some(c) = iter.next() {
+                escape_html_char(&mut out, c);
+            }
+            pos += 1;
+        }
+        out.push_str(&"</span>");
+    }
+    while let Some(c) = iter.next() {
+        escape_html_char(&mut out, c);
+    }
+    return out;
+}
+
+fn substr(chars: &Array<char>, start: i32, end: i32) -> String {
+    let mut out = String::with_capacity(end - start);
+    let mut i = start;
+    while i < end && i < chars.len() {
+        out.push(chars[i]);
+        i += 1;
+    }
+    return out;
+}
+
+/// Visitor trait for walking typed CST nodes.
+/// Default methods are no-ops; override to add behavior.
+pub trait Visitor {
+    fn enter_rule(&mut self, name: &String, span: &Span) {
+    }
+    fn exit_rule(&mut self, name: &String, span: &Span) {
+    }
+    fn visit_token(&mut self, token: &Token) {
+    }
+}
+
+/// TreeRecorder is a Visitor that records events for building a CstNode tree.
+pub struct TreeRecorder {
+    events: Array<TreeEvent>,
+}
+
+variant TreeEvent {
+    Enter(TreeEnterInfo),
+    Exit,
+    VisitToken(Token),
+}
+
+struct TreeEnterInfo {
+    name: String,
+    span: Span,
+}
+
+impl TreeRecorder {
+    pub fn new() -> TreeRecorder {
+        return TreeRecorder { events: [] };
+    }
+
+    pub fn build(&self) -> CstNode {
+        let mut pos = 0;
+        return tree_build_node(&self.events, &mut pos);
+    }
+}
+
+impl Visitor for TreeRecorder {
+    fn enter_rule(&mut self, name: &String, span: &Span) {
+        self.events.push(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
+    }
+
+    fn exit_rule(&mut self, name: &String, span: &Span) {
+        self.events.push(TreeEvent::Exit);
+    }
+
+    fn visit_token(&mut self, token: &Token) {
+        self.events.push(TreeEvent::VisitToken(*token));
+    }
+}
+
+fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
+    if let Enter(info) = events[*pos] {
+        *pos += 1;
+        let mut children: Array<CstChild> = [];
+        loop {
+            if *pos >= events.len() {
+                break;
+            }
+            let ev = events[*pos];
+            if let Exit = ev {
+                *pos += 1;
+                break;
+            }
+            if let Enter(_) = ev {
+                children.push(CstChild::Node(tree_build_node(events, pos)));
+            } else if let VisitToken(t) = ev {
+                children.push(CstChild::Token(t));
+                *pos += 1;
+            }
+        }
+        return CstNode { name: info.name, span: info.span, children };
+    }
+    panic("TreeRecorder: expected Enter event");
+    return CstNode { name: "", span: Span::new(0, 0), children: [] };
+}
+
+pub enum TokenKind {
+    WS,
+    Eof,
+    Error,
+}
+
+pub struct ANode {
+    pub span: Span,
+    pub lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66_list: Array<Token>,
+}
+
+global TK_WS: i32 = 0;
+global TK_EOF: i32 = 1;
+global TK_ERROR: i32 = 2;
+global TK_LIT_1: i32 = 3;
+global TK_LIT_2: i32 = 4;
+global TK_LIT_3: i32 = 5;
+global TK_LIT_4: i32 = 6;
+global TK_LIT_5: i32 = 7;
+global TK_LIT_6: i32 = 8;
+global TK_LIT_7: i32 = 9;
+global TK_LIT_8: i32 = 10;
+global TK_LIT_9: i32 = 11;
+global TK_LIT_10: i32 = 12;
+global TK_LIT_11: i32 = 13;
+global TK_LIT_12: i32 = 14;
+global TK_LIT_13: i32 = 15;
+global TK_LIT_14: i32 = 16;
+global TK_LIT_15: i32 = 17;
+global TK_LIT_16: i32 = 18;
+global TK_LIT_17: i32 = 19;
+global TK_LIT_18: i32 = 20;
+global TK_LIT_19: i32 = 21;
+global TK_LIT_20: i32 = 22;
+global TK_LIT_21: i32 = 23;
+global TK_LIT_22: i32 = 24;
+global TK_LIT_23: i32 = 25;
+global TK_LIT_24: i32 = 26;
+global TK_LIT_25: i32 = 27;
+global TK_LIT_26: i32 = 28;
+global TK_LIT_27: i32 = 29;
+global TK_LIT_28: i32 = 30;
+global TK_LIT_29: i32 = 31;
+global TK_LIT_30: i32 = 32;
+global TK_LIT_31: i32 = 33;
+global TK_LIT_32: i32 = 34;
+global TK_LIT_33: i32 = 35;
+global TK_LIT_34: i32 = 36;
+global TK_LIT_35: i32 = 37;
+global TK_LIT_36: i32 = 38;
+global TK_LIT_37: i32 = 39;
+global TK_LIT_38: i32 = 40;
+global TK_LIT_39: i32 = 41;
+global TK_LIT_40: i32 = 42;
+global TK_LIT_41: i32 = 43;
+global TK_LIT_42: i32 = 44;
+global TK_LIT_43: i32 = 45;
+global TK_LIT_44: i32 = 46;
+global TK_LIT_45: i32 = 47;
+global TK_LIT_46: i32 = 48;
+global TK_LIT_47: i32 = 49;
+global TK_LIT_48: i32 = 50;
+global TK_LIT_49: i32 = 51;
+global TK_LIT_50: i32 = 52;
+global TK_LIT_51: i32 = 53;
+global TK_LIT_52: i32 = 54;
+global TK_LIT_53: i32 = 55;
+global TK_LIT_54: i32 = 56;
+global TK_LIT_55: i32 = 57;
+global TK_LIT_56: i32 = 58;
+global TK_LIT_57: i32 = 59;
+global TK_LIT_58: i32 = 60;
+global TK_LIT_59: i32 = 61;
+global TK_LIT_60: i32 = 62;
+global TK_LIT_61: i32 = 63;
+global TK_LIT_62: i32 = 64;
+global TK_LIT_63: i32 = 65;
+global TK_LIT_64: i32 = 66;
+global TK_LIT_65: i32 = 67;
+global TK_LIT_66: i32 = 68;
+
+struct Lexer {
+    chars: Array<char>,
+    pos: i32,
+}
+
+impl Lexer {
+    fn new(input: &String) -> Lexer {
+        return Lexer { chars: input.chars().collect(), pos: 0 };
+    }
+
+    fn at_end(&self) -> bool {
+        return self.pos >= self.chars.len();
+    }
+
+    fn slice(&self, start: i32, end: i32) -> LexerSlice {
+        return LexerSlice::new(&self.chars, start, end);
+    }
+}
+
+fn try_ws(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    let alts_saved_0 = pos;
+    let mut alts_ok_0 = false;
+    alts_0_0: {
+        pos = alts_saved_0;
+        if pos >= chars.len() || chars[pos] != ' ' { break alts_0_0; }
+        pos += 1;
+        alts_ok_0 = true;
+    }
+    if !alts_ok_0 {
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= chars.len() || chars[pos] != '\n' { break alts_0_1; }
+            pos += 1;
+            alts_ok_0 = true;
+        }
+    }
+    if !alts_ok_0 { return -1; }
+    return pos;
+}
+
+fn try_lit_1(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_2(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_3(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_4(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_5(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_6(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '6' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_7(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '7' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_8(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '8' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_9(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '9' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_10(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '0' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_11(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '1' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_12(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '2' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_13(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '3' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_14(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '4' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_15(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '5' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_16(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '6' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_17(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '7' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_18(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '8' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_19(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '9' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_20(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '0' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_21(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '1' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_22(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '2' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_23(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '3' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_24(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '4' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_25(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '5' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_26(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '6' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_27(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '7' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_28(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '8' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_29(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '9' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_30(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '0' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_31(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '1' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_32(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '2' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_33(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '3' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_34(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '4' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_35(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '5' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_36(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '6' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_37(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '7' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_38(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '8' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_39(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '9' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_40(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '0' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_41(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '1' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_42(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '2' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_43(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '3' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_44(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '4' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_45(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '5' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_46(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '6' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_47(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '7' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_48(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '8' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_49(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '9' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_50(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '0' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_51(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '1' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_52(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '2' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_53(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '3' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_54(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '4' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_55(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '5' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_56(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '6' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_57(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '7' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_58(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '8' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_59(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '9' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_60(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '6' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '0' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_61(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '6' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '1' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_62(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '6' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '2' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_63(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '6' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '3' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_64(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '6' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '4' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_65(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '6' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '5' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_66(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '6' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '6' { return -1; }
+    return pos + 2;
+}
+
+pub fn tokenize(input: &String) -> Array<Token> {
+    let mut lexer = Lexer::new(input);
+    let mut tokens: Array<Token> = [];
+    let mut trivia: Array<Token> = [];
+    while !lexer.at_end() {
+        let start = lexer.pos;
+        let mut best_end: i32 = -1;
+        let mut best_kind: i32 = TK_ERROR;
+        let mut end: i32 = -1;
+        let first_char = lexer.chars[start];
+        if first_char == '\n' || first_char == ' ' {
+            end = try_ws(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WS; }
+        } else if first_char == '1' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_1; }
+            end = try_lit_10(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_10; }
+            end = try_lit_11(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_11; }
+            end = try_lit_12(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_12; }
+            end = try_lit_13(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_13; }
+            end = try_lit_14(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_14; }
+            end = try_lit_15(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_15; }
+            end = try_lit_16(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_16; }
+            end = try_lit_17(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_17; }
+            end = try_lit_18(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_18; }
+            end = try_lit_19(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_19; }
+        } else if first_char == '2' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_2; }
+            end = try_lit_20(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_20; }
+            end = try_lit_21(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_21; }
+            end = try_lit_22(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_22; }
+            end = try_lit_23(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_23; }
+            end = try_lit_24(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_24; }
+            end = try_lit_25(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_25; }
+            end = try_lit_26(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_26; }
+            end = try_lit_27(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_27; }
+            end = try_lit_28(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_28; }
+            end = try_lit_29(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_29; }
+        } else if first_char == '3' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_3; }
+            end = try_lit_30(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_30; }
+            end = try_lit_31(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_31; }
+            end = try_lit_32(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_32; }
+            end = try_lit_33(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_33; }
+            end = try_lit_34(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_34; }
+            end = try_lit_35(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_35; }
+            end = try_lit_36(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_36; }
+            end = try_lit_37(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_37; }
+            end = try_lit_38(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_38; }
+            end = try_lit_39(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_39; }
+        } else if first_char == '4' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_4; }
+            end = try_lit_40(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_40; }
+            end = try_lit_41(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_41; }
+            end = try_lit_42(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_42; }
+            end = try_lit_43(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_43; }
+            end = try_lit_44(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_44; }
+            end = try_lit_45(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_45; }
+            end = try_lit_46(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_46; }
+            end = try_lit_47(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_47; }
+            end = try_lit_48(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_48; }
+            end = try_lit_49(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_49; }
+        } else if first_char == '5' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_5; }
+            end = try_lit_50(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_50; }
+            end = try_lit_51(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_51; }
+            end = try_lit_52(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_52; }
+            end = try_lit_53(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_53; }
+            end = try_lit_54(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_54; }
+            end = try_lit_55(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_55; }
+            end = try_lit_56(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_56; }
+            end = try_lit_57(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_57; }
+            end = try_lit_58(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_58; }
+            end = try_lit_59(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_59; }
+        } else if first_char == '6' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_6; }
+            end = try_lit_60(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_60; }
+            end = try_lit_61(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_61; }
+            end = try_lit_62(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_62; }
+            end = try_lit_63(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_63; }
+            end = try_lit_64(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_64; }
+            end = try_lit_65(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_65; }
+            end = try_lit_66(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_66; }
+        } else if first_char == '7' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_7; }
+        } else if first_char == '8' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_8; }
+        } else if first_char == '9' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_9; }
+        }
+        if best_end <= start {
+            let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
+            tokens.push(tok);
+            trivia = [];
+            lexer.pos = start + 1;
+        } else {
+            let tok_start = start;
+            let is_skip = best_kind matches { TK_WS };
+            if is_skip {
+                trivia.push(Token::new(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end)));
+            } else {
+                let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);
+                tokens.push(tok);
+                trivia = [];
+            }
+            lexer.pos = best_end;
+        }
+    }
+    tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));
+    return tokens;
+}
+
+pub fn token_kind_name(kind: i32) -> String {
+    return match kind {
+        TK_WS => "WS",
+        TK_EOF => "Eof",
+        TK_ERROR => "Error",
+        TK_LIT_1 => "TK_LIT_1",
+        TK_LIT_2 => "TK_LIT_2",
+        TK_LIT_3 => "TK_LIT_3",
+        TK_LIT_4 => "TK_LIT_4",
+        TK_LIT_5 => "TK_LIT_5",
+        TK_LIT_6 => "TK_LIT_6",
+        TK_LIT_7 => "TK_LIT_7",
+        TK_LIT_8 => "TK_LIT_8",
+        TK_LIT_9 => "TK_LIT_9",
+        TK_LIT_10 => "TK_LIT_10",
+        TK_LIT_11 => "TK_LIT_11",
+        TK_LIT_12 => "TK_LIT_12",
+        TK_LIT_13 => "TK_LIT_13",
+        TK_LIT_14 => "TK_LIT_14",
+        TK_LIT_15 => "TK_LIT_15",
+        TK_LIT_16 => "TK_LIT_16",
+        TK_LIT_17 => "TK_LIT_17",
+        TK_LIT_18 => "TK_LIT_18",
+        TK_LIT_19 => "TK_LIT_19",
+        TK_LIT_20 => "TK_LIT_20",
+        TK_LIT_21 => "TK_LIT_21",
+        TK_LIT_22 => "TK_LIT_22",
+        TK_LIT_23 => "TK_LIT_23",
+        TK_LIT_24 => "TK_LIT_24",
+        TK_LIT_25 => "TK_LIT_25",
+        TK_LIT_26 => "TK_LIT_26",
+        TK_LIT_27 => "TK_LIT_27",
+        TK_LIT_28 => "TK_LIT_28",
+        TK_LIT_29 => "TK_LIT_29",
+        TK_LIT_30 => "TK_LIT_30",
+        TK_LIT_31 => "TK_LIT_31",
+        TK_LIT_32 => "TK_LIT_32",
+        TK_LIT_33 => "TK_LIT_33",
+        TK_LIT_34 => "TK_LIT_34",
+        TK_LIT_35 => "TK_LIT_35",
+        TK_LIT_36 => "TK_LIT_36",
+        TK_LIT_37 => "TK_LIT_37",
+        TK_LIT_38 => "TK_LIT_38",
+        TK_LIT_39 => "TK_LIT_39",
+        TK_LIT_40 => "TK_LIT_40",
+        TK_LIT_41 => "TK_LIT_41",
+        TK_LIT_42 => "TK_LIT_42",
+        TK_LIT_43 => "TK_LIT_43",
+        TK_LIT_44 => "TK_LIT_44",
+        TK_LIT_45 => "TK_LIT_45",
+        TK_LIT_46 => "TK_LIT_46",
+        TK_LIT_47 => "TK_LIT_47",
+        TK_LIT_48 => "TK_LIT_48",
+        TK_LIT_49 => "TK_LIT_49",
+        TK_LIT_50 => "TK_LIT_50",
+        TK_LIT_51 => "TK_LIT_51",
+        TK_LIT_52 => "TK_LIT_52",
+        TK_LIT_53 => "TK_LIT_53",
+        TK_LIT_54 => "TK_LIT_54",
+        TK_LIT_55 => "TK_LIT_55",
+        TK_LIT_56 => "TK_LIT_56",
+        TK_LIT_57 => "TK_LIT_57",
+        TK_LIT_58 => "TK_LIT_58",
+        TK_LIT_59 => "TK_LIT_59",
+        TK_LIT_60 => "TK_LIT_60",
+        TK_LIT_61 => "TK_LIT_61",
+        TK_LIT_62 => "TK_LIT_62",
+        TK_LIT_63 => "TK_LIT_63",
+        TK_LIT_64 => "TK_LIT_64",
+        TK_LIT_65 => "TK_LIT_65",
+        TK_LIT_66 => "TK_LIT_66",
+        _ => "Unknown",
+    };
+}
+
+struct Parser {
+    tokens: Array<Token>,
+    pos: i32,
+}
+
+impl Parser {
+    fn new(tokens: Array<Token>) -> Parser {
+        return Parser { tokens, pos: 0 };
+    }
+
+    fn peek(&self) -> &Token {
+        return &self.tokens[self.pos];
+    }
+
+    fn peek_kind(&self) -> i32 {
+        return self.tokens[self.pos].kind;
+    }
+
+    fn peek_at(&self, offset: i32) -> i32 {
+        let idx = self.pos + offset;
+        if idx >= self.tokens.len() { return TK_EOF; }
+        return self.tokens[idx].kind;
+    }
+
+    fn advance(&mut self) -> Token {
+        let tok = self.tokens[self.pos];
+        self.pos += 1;
+        return tok;
+    }
+
+    fn last_end(&self) -> i32 {
+        if self.pos == 0 { return 0; }
+        return self.tokens[self.pos - 1].span.end;
+    }
+
+    fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
+        if self.tokens[self.pos].kind == kind {
+            if kind == TK_EOF {
+                return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+            }
+            return Result::<Token, ParseError>::Ok(self.advance());
+        }
+        let tok = &self.tokens[self.pos];
+        let name = token_kind_name(kind);
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected {name}, got "{tok.text}"`,
+            tok.span,
+            [name],
+        ));
+    }
+
+    fn fail(&self, name: String) -> Result<Token, ParseError> {
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected {name}, got "{tok.text}"`,
+            tok.span,
+            [name],
+        ));
+    }
+
+    fn match_any(&mut self) -> Result<Token, ParseError> {
+        if self.tokens[self.pos].kind != TK_EOF {
+            return Result::<Token, ParseError>::Ok(self.advance());
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected any token, got "{tok.text}"`,
+            tok.span,
+            ["any token"],
+        ));
+    }
+
+    fn match_not(&mut self, excluded: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        if k != TK_EOF {
+            let mut blocked = false;
+            for let x of excluded {
+                if x == k {
+                    blocked = true;
+                    break;
+                }
+            }
+            if !blocked {
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["set complement"],
+        ));
+    }
+}
+
+fn scan_a(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    let gp_0 = pos;
+    sg_0: {
+        pos = gp_0;
+        sg_0_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_1 { break sg_0_0; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_2 { break sg_0_1; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_3 { break sg_0_2; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_3: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_4 { break sg_0_3; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_4: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_5 { break sg_0_4; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_5: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_6 { break sg_0_5; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_6: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_7 { break sg_0_6; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_7: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_8 { break sg_0_7; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_8: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_9 { break sg_0_8; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_9: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_10 { break sg_0_9; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_10: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_11 { break sg_0_10; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_11: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_12 { break sg_0_11; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_12: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_13 { break sg_0_12; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_13: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_14 { break sg_0_13; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_14: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_15 { break sg_0_14; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_15: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_16 { break sg_0_15; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_16: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_17 { break sg_0_16; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_17: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_18 { break sg_0_17; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_18: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_19 { break sg_0_18; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_19: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_20 { break sg_0_19; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_20: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_21 { break sg_0_20; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_21: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_22 { break sg_0_21; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_22: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_23 { break sg_0_22; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_23: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_24 { break sg_0_23; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_24: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_25 { break sg_0_24; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_25: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_26 { break sg_0_25; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_26: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_27 { break sg_0_26; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_27: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_28 { break sg_0_27; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_28: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_29 { break sg_0_28; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_29: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_30 { break sg_0_29; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_30: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_31 { break sg_0_30; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_31: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_32 { break sg_0_31; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_32: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_33 { break sg_0_32; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_33: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_34 { break sg_0_33; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_34: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_35 { break sg_0_34; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_35: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_36 { break sg_0_35; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_36: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_37 { break sg_0_36; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_37: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_38 { break sg_0_37; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_38: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_39 { break sg_0_38; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_39: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_40 { break sg_0_39; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_40: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_41 { break sg_0_40; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_41: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_42 { break sg_0_41; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_42: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_43 { break sg_0_42; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_43: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_44 { break sg_0_43; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_44: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_45 { break sg_0_44; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_45: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_46 { break sg_0_45; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_46: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_47 { break sg_0_46; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_47: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_48 { break sg_0_47; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_48: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_49 { break sg_0_48; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_49: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_50 { break sg_0_49; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_50: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_51 { break sg_0_50; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_51: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_52 { break sg_0_51; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_52: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_53 { break sg_0_52; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_53: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_54 { break sg_0_53; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_54: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_55 { break sg_0_54; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_55: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_56 { break sg_0_55; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_56: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_57 { break sg_0_56; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_57: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_58 { break sg_0_57; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_58: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_59 { break sg_0_58; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_59: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_60 { break sg_0_59; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_60: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_61 { break sg_0_60; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_61: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_62 { break sg_0_61; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_62: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_63 { break sg_0_62; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_63: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_64 { break sg_0_63; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_64: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_65 { break sg_0_64; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_65: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_66 { break sg_0_65; }
+            pos += 1;
+            break sg_0;
+        }
+        return -1;
+    }
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+        let sp = pos;
+        let gp_1 = pos;
+        sg_1: {
+            pos = gp_1;
+            sg_1_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_1 { break sg_1_0; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_2 { break sg_1_1; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_2: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_3 { break sg_1_2; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_3: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_4 { break sg_1_3; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_4: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_5 { break sg_1_4; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_5: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_6 { break sg_1_5; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_6: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_7 { break sg_1_6; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_7: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_8 { break sg_1_7; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_8: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_9 { break sg_1_8; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_9: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_10 { break sg_1_9; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_10: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_11 { break sg_1_10; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_11: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_12 { break sg_1_11; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_12: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_13 { break sg_1_12; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_13: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_14 { break sg_1_13; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_14: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_15 { break sg_1_14; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_15: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_16 { break sg_1_15; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_16: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_17 { break sg_1_16; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_17: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_18 { break sg_1_17; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_18: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_19 { break sg_1_18; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_19: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_20 { break sg_1_19; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_20: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_21 { break sg_1_20; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_21: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_22 { break sg_1_21; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_22: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_23 { break sg_1_22; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_23: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_24 { break sg_1_23; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_24: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_25 { break sg_1_24; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_25: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_26 { break sg_1_25; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_26: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_27 { break sg_1_26; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_27: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_28 { break sg_1_27; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_28: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_29 { break sg_1_28; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_29: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_30 { break sg_1_29; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_30: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_31 { break sg_1_30; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_31: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_32 { break sg_1_31; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_32: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_33 { break sg_1_32; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_33: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_34 { break sg_1_33; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_34: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_35 { break sg_1_34; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_35: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_36 { break sg_1_35; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_36: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_37 { break sg_1_36; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_37: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_38 { break sg_1_37; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_38: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_39 { break sg_1_38; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_39: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_40 { break sg_1_39; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_40: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_41 { break sg_1_40; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_41: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_42 { break sg_1_41; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_42: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_43 { break sg_1_42; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_43: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_44 { break sg_1_43; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_44: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_45 { break sg_1_44; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_45: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_46 { break sg_1_45; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_46: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_47 { break sg_1_46; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_47: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_48 { break sg_1_47; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_48: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_49 { break sg_1_48; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_49: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_50 { break sg_1_49; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_50: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_51 { break sg_1_50; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_51: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_52 { break sg_1_51; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_52: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_53 { break sg_1_52; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_53: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_54 { break sg_1_53; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_54: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_55 { break sg_1_54; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_55: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_56 { break sg_1_55; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_56: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_57 { break sg_1_56; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_57: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_58 { break sg_1_57; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_58: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_59 { break sg_1_58; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_59: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_60 { break sg_1_59; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_60: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_61 { break sg_1_60; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_61: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_62 { break sg_1_61; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_62: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_63 { break sg_1_62; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_63: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_64 { break sg_1_63; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_64: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_65 { break sg_1_64; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_65: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_66 { break sg_1_65; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    return pos;
+}
+
+fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
+    let start = p.peek().span.start;
+    let mut lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66_list: Array<Token> = [];
+    let mut _plus_first = true;
+    loop {
+        if !_plus_first {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                let gp_2 = pos;
+                sg_2: {
+                    pos = gp_2;
+                    sg_2_0: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_1 { break sg_2_0; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_1: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_2 { break sg_2_1; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_2: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_3 { break sg_2_2; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_3: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_4 { break sg_2_3; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_4: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_5 { break sg_2_4; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_5: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_6 { break sg_2_5; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_6: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_7 { break sg_2_6; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_7: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_8 { break sg_2_7; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_8: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_9 { break sg_2_8; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_9: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_10 { break sg_2_9; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_10: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_11 { break sg_2_10; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_11: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_12 { break sg_2_11; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_12: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_13 { break sg_2_12; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_13: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_14 { break sg_2_13; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_14: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_15 { break sg_2_14; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_15: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_16 { break sg_2_15; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_16: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_17 { break sg_2_16; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_17: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_18 { break sg_2_17; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_18: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_19 { break sg_2_18; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_19: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_20 { break sg_2_19; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_20: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_21 { break sg_2_20; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_21: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_22 { break sg_2_21; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_22: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_23 { break sg_2_22; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_23: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_24 { break sg_2_23; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_24: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_25 { break sg_2_24; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_25: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_26 { break sg_2_25; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_26: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_27 { break sg_2_26; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_27: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_28 { break sg_2_27; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_28: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_29 { break sg_2_28; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_29: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_30 { break sg_2_29; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_30: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_31 { break sg_2_30; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_31: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_32 { break sg_2_31; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_32: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_33 { break sg_2_32; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_33: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_34 { break sg_2_33; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_34: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_35 { break sg_2_34; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_35: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_36 { break sg_2_35; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_36: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_37 { break sg_2_36; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_37: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_38 { break sg_2_37; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_38: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_39 { break sg_2_38; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_39: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_40 { break sg_2_39; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_40: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_41 { break sg_2_40; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_41: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_42 { break sg_2_41; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_42: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_43 { break sg_2_42; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_43: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_44 { break sg_2_43; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_44: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_45 { break sg_2_44; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_45: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_46 { break sg_2_45; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_46: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_47 { break sg_2_46; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_47: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_48 { break sg_2_47; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_48: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_49 { break sg_2_48; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_49: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_50 { break sg_2_49; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_50: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_51 { break sg_2_50; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_51: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_52 { break sg_2_51; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_52: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_53 { break sg_2_52; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_53: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_54 { break sg_2_53; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_54: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_55 { break sg_2_54; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_55: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_56 { break sg_2_55; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_56: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_57 { break sg_2_56; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_57: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_58 { break sg_2_57; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_58: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_59 { break sg_2_58; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_59: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_60 { break sg_2_59; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_60: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_61 { break sg_2_60; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_61: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_62 { break sg_2_61; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_62: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_63 { break sg_2_62; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_63: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_64 { break sg_2_63; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_64: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_65 { break sg_2_64; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_65: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_66 { break sg_2_65; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    break rep_scan;
+                }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        _plus_first = false;
+        let lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66 = p.advance();
+        lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66_list.push(lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66);
+    }
+    return Result::<ANode, ParseError>::Ok(ANode {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66_list,
+    });
+}
+
+pub fn parse(input: &String) -> Result<ANode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return parse_a(&mut parser);
+}
+
+pub fn walk_a<V: Visitor>(v: &mut V, node: &ANode) {
+    v.enter_rule(&"a", &node.span);
+    for let item of &node.lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66_list {
+        v.visit_token(item);
+    }
+    v.exit_rule(&"a", &node.span);
+}
+
+pub fn to_tree(node: &ANode) -> CstNode {
+    let mut recorder = TreeRecorder::new();
+    walk_a(&mut recorder, node);
+    return recorder.build();
+}
+
+fn _gale_kind_set_0(k: i32) -> bool {
+    return k matches { TK_LIT_1 | TK_LIT_10 | TK_LIT_11 | TK_LIT_12 | TK_LIT_13 | TK_LIT_14 | TK_LIT_15 | TK_LIT_16 | TK_LIT_17 | TK_LIT_18 | TK_LIT_19 | TK_LIT_2 | TK_LIT_20 | TK_LIT_21 | TK_LIT_22 | TK_LIT_23 | TK_LIT_24 | TK_LIT_25 | TK_LIT_26 | TK_LIT_27 | TK_LIT_28 | TK_LIT_29 | TK_LIT_3 | TK_LIT_30 | TK_LIT_31 | TK_LIT_32 | TK_LIT_33 | TK_LIT_34 | TK_LIT_35 | TK_LIT_36 | TK_LIT_37 | TK_LIT_38 | TK_LIT_39 | TK_LIT_4 | TK_LIT_40 | TK_LIT_41 | TK_LIT_42 | TK_LIT_43 | TK_LIT_44 | TK_LIT_45 | TK_LIT_46 | TK_LIT_47 | TK_LIT_48 | TK_LIT_49 | TK_LIT_5 | TK_LIT_50 | TK_LIT_51 | TK_LIT_52 | TK_LIT_53 | TK_LIT_54 | TK_LIT_55 | TK_LIT_56 | TK_LIT_57 | TK_LIT_58 | TK_LIT_59 | TK_LIT_6 | TK_LIT_60 | TK_LIT_61 | TK_LIT_62 | TK_LIT_63 | TK_LIT_64 | TK_LIT_65 | TK_LIT_66 | TK_LIT_7 | TK_LIT_8 | TK_LIT_9 };
+}
+
