@@ -637,8 +637,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if self.function_return_types.contains_key(&ident.name)
             || self.imported_functions.contains(&ident.name)
         {
-            // It's a function reference - return Global
-            // The function type and proper handling will be done later
             let module_source = if self.function_return_types.contains_key(&ident.name) {
                 self.current_module_source.clone()
             } else {
@@ -649,12 +647,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .unwrap_or_else(|| self.current_module_source.clone())
             };
             self.record_item_reference_by_name(ident.id, &ident.name);
+            let type_id = self
+                .compute_func_ref_type(&ident.name)
+                .unwrap_or(TypeTable::UNKNOWN);
             return TirExpr::new(
                 TirExprKind::FuncRef {
                     module_source,
                     name: ident.name.clone(),
                 },
-                TypeTable::UNKNOWN,
+                type_id,
                 ident.span,
             );
         }
@@ -715,12 +716,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     ));
                 }
                 crate::ast::Item::Function(func) if func.name == name => {
+                    let type_id = self
+                        .compute_func_ref_type_from_ast(func, fallback)
+                        .unwrap_or(TypeTable::UNKNOWN);
                     return Some(TirExpr::new(
                         TirExprKind::FuncRef {
                             module_source: fallback.clone(),
                             name: name.to_string(),
                         },
-                        TypeTable::UNKNOWN,
+                        type_id,
                         span,
                     ));
                 }
@@ -728,6 +732,53 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
         None
+    }
+
+    /// Compute the `fn(params) -> ret with effects` type for a top-level
+    /// function reference looked up by bare name in the current module.
+    ///
+    /// Returns `None` when the function is generic, lives in another module
+    /// (cross-module typing requires the definition module's scope and is
+    /// deferred), or otherwise cannot be typed eagerly. Callers fall back
+    /// to `UNKNOWN`, which keeps the existing defer-on-UNKNOWN typecheck
+    /// rule (used at annotated `let`/argument sites).
+    fn compute_func_ref_type(&mut self, name: &str) -> Option<TypeId> {
+        let func = self.lookup_current_func(name).cloned()?;
+        self.compute_func_ref_type_from_ast(&func, &self.current_module_source.clone())
+    }
+
+    /// Build a function type from an [`ast::Function`] declaration that
+    /// lives in `_def_module`. Param/return types resolve in the current
+    /// scope, so this is safe only when callers either point at the
+    /// current module or accept a `None` fallback.
+    pub(super) fn compute_func_ref_type_from_ast(
+        &mut self,
+        func: &ast::Function,
+        _def_module: &ModuleSource,
+    ) -> Option<TypeId> {
+        if !func.type_params.is_empty() {
+            return None;
+        }
+        let param_types: Vec<TypeId> = func
+            .params
+            .iter()
+            .map(|p| self.resolve_type(&p.ty))
+            .collect();
+        let return_type = func
+            .return_type
+            .as_ref()
+            .map(|t| self.resolve_type(t))
+            .unwrap_or(TypeTable::UNIT);
+        let effects = self.resolve_effects(&func.effects, &func.effect_ids);
+        if param_types.contains(&TypeTable::ERROR) || return_type == TypeTable::ERROR {
+            return None;
+        }
+        Some(self.type_table.borrow_mut().make_function(
+            param_types,
+            return_type,
+            effects,
+            Vec::new(),
+        ))
     }
 
     /// Resolve a binary expression

@@ -517,7 +517,7 @@ impl Monomorphizer {
                 // so this only feeds the fallback's trait-name extraction; it does
                 // not perturb the literal hashmap lookup.
                 if key.method_info.is_none() {
-                    key.method_info = method_func.method_info.clone();
+                    key.method_info.clone_from(&method_func.method_info);
                 }
                 if let Some((key, mangled)) = self.lookup_instantiation_with_trait_fallback(
                     key,
