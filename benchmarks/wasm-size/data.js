@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779212156253,
+  "lastUpdate": 1779233227324,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23729,6 +23729,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/44893a711471ba3dbb61e3228a09ae6ac015db44"
         },
         "date": 1779212155799,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1911,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10111,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 487141,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a16966bbf22a94ebbfb7c0dad6fad1040c5b2610",
+          "message": "Merge pull request #1128 from wado-lang/claude/implement-todo-item-8AJuE\n\nfix(analyze): store actual aliased type on Newtype symbol",
+          "timestamp": "2026-05-20T08:21:30+09:00",
+          "tree_id": "cbe6229a7b1e26d47cef82107838d71fd41efdf2",
+          "url": "https://github.com/wado-lang/wado/commit/a16966bbf22a94ebbfb7c0dad6fad1040c5b2610"
+        },
+        "date": 1779233226977,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
