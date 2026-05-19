@@ -280,14 +280,7 @@ impl Visitor for HighlightVisitor {
     }
 
     fn exit_rule(&mut self, name: &String, span: &Span) {
-        if !self.rule_stack.is_empty() {
-            let last = self.rule_stack.len() - 1;
-            let mut new_stack: Array<String> = [];
-            for let mut i = 0; i < last; i += 1 {
-                new_stack.push(self.rule_stack[i]);
-            }
-            self.rule_stack = new_stack;
-        }
+        self.rule_stack.pop();
     }
 
     fn visit_token(&mut self, token: &Token) {
