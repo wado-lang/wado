@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779185893823,
+  "lastUpdate": 1779186131409,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23377,6 +23377,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c5b15b624dd37173b86e2fc87f5a0e79ca043a13"
         },
         "date": 1779185893478,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1911,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10111,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 486702,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3bef13725849d39f8c56885ad8f85520924f4e96",
+          "message": "Merge pull request #1122 from wado-lang/claude/fix-windows-lsp-watcher-GYfwp\n\ntest(vscode): de-flake LSP suite tmpDir cleanup on Windows",
+          "timestamp": "2026-05-19T19:15:25+09:00",
+          "tree_id": "54ee23fa8c19b34dc9b51ac1fb5aaa9e9e93e993",
+          "url": "https://github.com/wado-lang/wado/commit/3bef13725849d39f8c56885ad8f85520924f4e96"
+        },
+        "date": 1779186131019,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
