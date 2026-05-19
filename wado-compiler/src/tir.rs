@@ -2446,6 +2446,12 @@ pub enum TirExprKind {
     FuncRef {
         module_source: ModuleSource,
         name: String,
+        /// Type arguments pinned for a generic function reference (either via
+        /// turbofish `identity::<i32>` or inferred from an expected `fn(...)`
+        /// type at the use site). Empty for non-generic function references.
+        /// Consumed by the monomorphizer, which queues the corresponding
+        /// instantiation and rewrites `name` to the mangled form.
+        type_args: Vec<TypeId>,
     },
     /// Read a global variable
     GlobalVarGet {

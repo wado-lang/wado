@@ -1303,6 +1303,7 @@ pub(super) fn synthesize_adapter(
             TirExprKind::FuncRef {
                 module_source: entry_source.clone(),
                 name: lift_fn_name,
+                type_args: Vec::new(),
             },
             lift_fn_type,
             synth_span(),

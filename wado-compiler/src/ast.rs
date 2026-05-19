@@ -2183,6 +2183,11 @@ pub struct IdentExpr {
     /// path with N segments, this has N entries in left-to-right order; the
     /// last entry's name matches the suffix of `name` after the final `::`.
     pub segments: Vec<PathSegment>,
+    /// Turbofish type arguments attached to this identifier when it appears
+    /// as a bare expression (e.g. `identity::<i32>` in `let f = identity::<i32>;`).
+    /// Call-site turbofish (`identity::<i32>(x)`) is recorded on `CallExpr.type_args`
+    /// instead, so this is empty for identifiers used directly as a call callee.
+    pub type_args: Vec<Type>,
 }
 
 #[derive(Debug, Clone)]

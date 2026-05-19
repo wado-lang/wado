@@ -345,6 +345,36 @@ pub enum TypeError {
     /// on a struct), or used outside a `core::*` module. The
     /// `message` carries the specific problem.
     CompilerItemAttr { message: String, span: Span },
+
+    /// A bare generic function name was used as a value with no expected
+    /// `fn(...)` type to drive inference. The function type depends on
+    /// type arguments that have not been supplied. The fix is to either
+    /// pin them with turbofish (`name::<T, ...>`) or wrap the call in a
+    /// closure (`|x| name(x)`) so the inner call site provides the
+    /// inference context.
+    BareGenericFunctionRef { name: String, span: Span },
+
+    /// Turbofish (`name::<T, ...>`) supplied the wrong number of type
+    /// arguments for a generic function reference. The function declares
+    /// `expected` type parameters; the user supplied `found`.
+    GenericFunctionRefArgCountMismatch {
+        name: String,
+        expected: usize,
+        found: usize,
+        span: Span,
+    },
+
+    /// A bare reference to a generic function was used in a position with
+    /// an expected `fn(...)` type, but the parameter counts disagree —
+    /// the user almost certainly mis-counted arguments rather than mis-
+    /// invoking turbofish. Surfacing the two arities directly is more
+    /// helpful than the generic bare-reference message.
+    GenericFunctionRefArityMismatch {
+        name: String,
+        expected_params: usize,
+        found_params: usize,
+        span: Span,
+    },
 }
 
 impl std::fmt::Display for TypeError {
@@ -661,6 +691,43 @@ impl std::fmt::Display for TypeError {
             TypeError::CompilerItemAttr { message, span } => {
                 write!(f, "{}:{}: {}", span.line, span.column, message)
             }
+            TypeError::BareGenericFunctionRef { name, span } => {
+                write!(
+                    f,
+                    "{}:{}: cannot reference generic function '{}' bare; supply type arguments via turbofish (e.g., `{}::<…>`) or wrap in a closure (e.g., `|x| {}(x)`)",
+                    span.line, span.column, name, name, name
+                )
+            }
+            TypeError::GenericFunctionRefArgCountMismatch {
+                name,
+                expected,
+                found,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: wrong number of type arguments for generic function '{}': expected {}, found {}",
+                    span.line, span.column, name, expected, found
+                )
+            }
+            TypeError::GenericFunctionRefArityMismatch {
+                name,
+                expected_params,
+                found_params,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: cannot reference generic function '{}' here: expected {} parameter{}, but '{}' takes {}",
+                    span.line,
+                    span.column,
+                    name,
+                    expected_params,
+                    if *expected_params == 1 { "" } else { "s" },
+                    name,
+                    found_params,
+                )
+            }
         }
     }
 }
@@ -940,6 +1007,38 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             TypeError::CompilerItemAttr { message, span } => {
                 (Code::CompilerItemAttr, message.clone(), *span)
             }
+            TypeError::BareGenericFunctionRef { name, span } => (
+                Code::GenericFunctionRef,
+                format!(
+                    "cannot reference generic function '{name}' bare; supply type arguments via turbofish (e.g., `{name}::<…>`) or wrap in a closure (e.g., `|x| {name}(x)`)"
+                ),
+                *span,
+            ),
+            TypeError::GenericFunctionRefArgCountMismatch {
+                name,
+                expected,
+                found,
+                span,
+            } => (
+                Code::GenericFunctionRef,
+                format!(
+                    "wrong number of type arguments for generic function '{name}': expected {expected}, found {found}"
+                ),
+                *span,
+            ),
+            TypeError::GenericFunctionRefArityMismatch {
+                name,
+                expected_params,
+                found_params,
+                span,
+            } => (
+                Code::GenericFunctionRef,
+                format!(
+                    "cannot reference generic function '{name}' here: expected {expected_params} parameter{}, but '{name}' takes {found_params}",
+                    if *expected_params == 1 { "" } else { "s" },
+                ),
+                *span,
+            ),
         };
         crate::compiler_host::Diagnostic {
             severity: Severity::Error,

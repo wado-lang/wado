@@ -191,12 +191,14 @@ pub fn inject_kiln_request_adapter(
         name: "bind_request".to_string(),
         span,
         segments: Vec::new(),
+        type_args: Vec::new(),
     });
     let raw_arg = Expr::Ident(IdentExpr {
         id: raw_arg_id,
         name: param_name.clone(),
         span,
         segments: Vec::new(),
+        type_args: Vec::new(),
     });
     let bind_call = Expr::Call(Box::new(CallExpr {
         id: call_id,

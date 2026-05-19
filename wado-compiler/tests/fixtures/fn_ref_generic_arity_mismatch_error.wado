@@ -1,0 +1,19 @@
+// When an expected `fn(...)` type is in scope but its arity does not match
+// the generic function's signature, the compiler emits a dedicated arity
+// diagnostic instead of falling through to the generic "bare reference"
+// message — the user almost certainly intended to call this function but
+// mis-counted its parameters.
+
+fn pair<A, B>(a: A, b: B) -> A {
+    return a;
+}
+
+test "expected fn(i32) but pair takes two args" {
+    let f: fn(i32) -> i32 = pair;
+    assert f(42) == 42;
+}
+
+__DATA__
+{
+    "compile_error": "expected 1 parameter"
+}
