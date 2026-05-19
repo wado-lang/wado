@@ -101,23 +101,23 @@ struct OptConfig {
 /// | Level | DCE | Iterations | Inline Threshold |
 /// |-------|-----|------------|------------------|
 /// | O0    | Yes | 0          | N/A              |
-/// | O1    | Yes | 2          | 5                |
-/// | O2    | Yes | 10         | 14               |
-/// | O3    | Yes | 30         | 40               |
-/// | Os    | Yes | 10         | 14               |
+/// | O1    | Yes | 2          | 4                |
+/// | O2    | Yes | 10         | 13               |
+/// | O3    | Yes | 30         | 32               |
+/// | Os    | Yes | 10         | 13               |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
     /// No optimization passes. DCE only.
     O0,
     /// Development optimizations. All passes with fast iteration count.
-    /// Iterations: 2, Inline threshold: 5.
+    /// Iterations: 2, Inline threshold: 4.
     O1,
     /// Production optimizations. All passes including DCE.
-    /// Iterations: 10, Inline threshold: 12.
+    /// Iterations: 10, Inline threshold: 13.
     #[default]
     O2,
     /// Aggressive production optimizations. All passes including DCE.
-    /// Iterations: 30, Inline threshold: 40.
+    /// Iterations: 30, Inline threshold: 32.
     O3,
     /// Size optimizations. Same as O2 plus name section stripping.
     /// Intended for frontend/browser deployment.
@@ -160,7 +160,7 @@ pub fn optimize(
         OptLevel::O1 => {
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(2),
-                inline_threshold: inline_threshold.unwrap_or(5),
+                inline_threshold: inline_threshold.unwrap_or(4),
             };
             // Early DCE: remove unreachable functions/types before optimization
             // to reduce the working set for subsequent passes
@@ -172,13 +172,13 @@ pub fn optimize(
         OptLevel::O2 | OptLevel::Os => {
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(10),
-                // Threshold 14 is a sweet spot for both -O2 and -Os:
-                //   * json-catalog drops from 48ms to ~45ms (~6%, captures
-                //     >80% of the gain at threshold 20).
-                //   * sqlite_highlight wasm grows by only +0.8% (cf. +29%
-                //     at threshold 18+ where Gale-generated lexer/parser
-                //     action functions chain-inline).
-                inline_threshold: inline_threshold.unwrap_or(14),
+                // Threshold 13 is the sweet spot for -O2/-Os: on
+                // syntax-highlight (Gale-generated SQLite highlighter)
+                // throughput is ~30% better than 14 because at 14 a
+                // specific Gale parser action function chain-inlines
+                // and the resulting code regresses (13.5ms/iter -> 18ms).
+                // Sizes at 13 and 14 differ by only ~4KB.
+                inline_threshold: inline_threshold.unwrap_or(13),
             };
             run_dce(&mut project, profiler);
             run_optimization_passes(&mut project, &config, profiler);
@@ -193,12 +193,17 @@ pub fn optimize(
             // #1009), straight-line constant chains produced by
             // inlined `Array::push` and similar patterns fold in a
             // single iteration rather than one statement per round,
-            // so even threshold-40 Gale parsers reach a true fixed
-            // point in well under 10 iterations. 30 leaves comfortable
-            // headroom for whatever gradient new fixtures expose.
+            // so even Gale parsers reach a true fixed point in well
+            // under 10 iterations. 30 leaves comfortable headroom for
+            // whatever gradient new fixtures expose.
+            //
+            // Threshold 32 sits just under a discrete size cliff at
+            // 33 on syntax-highlight (859KB -> 1049KB, crossing 1MB)
+            // where additional Gale action functions become inline
+            // candidates with no measurable speed payoff.
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(30),
-                inline_threshold: inline_threshold.unwrap_or(40),
+                inline_threshold: inline_threshold.unwrap_or(32),
             };
             run_dce(&mut project, profiler);
             run_optimization_passes(&mut project, &config, profiler);
