@@ -1,0 +1,1067 @@
+#![generated(by = "local:src/generator.wado", sources = ["../../grammars/LeftRecursion/TernaryExpr_7.g4"])]
+#![generated(by = "gale", sources = ["T.g4"])]
+
+/// Span represents a byte range in source text.
+pub struct Span {
+    pub start: i32,
+    pub end: i32,
+}
+
+impl Span {
+    pub fn new(start: i32, end: i32) -> Span {
+        return Span { start, end };
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.end - self.start;
+    }
+
+    pub fn merge(&self, other: &Span) -> Span {
+        let start = if self.start < other.start { self.start } else { other.start };
+        let end = if self.end > other.end { self.end } else { other.end };
+        return Span { start, end };
+    }
+}
+
+impl Eq for Span {
+    fn eq(&self, other: &Self) -> bool {
+        return self.start == other.start && self.end == other.end;
+    }
+}
+
+/// LexerSlice is a lazy reference to a range of characters in the source input.
+/// It avoids allocating a String for every token during tokenization.
+pub struct LexerSlice {
+    pub chars: &Array<char>,
+    pub start: i32,
+    pub end: i32,
+}
+
+impl LexerSlice {
+    pub fn new(chars: &Array<char>, start: i32, end: i32) -> LexerSlice with stores[chars] {
+        return LexerSlice { chars, start, end };
+    }
+
+    pub fn empty(chars: &Array<char>) -> LexerSlice with stores[chars] {
+        return LexerSlice { chars, start: 0, end: 0 };
+    }
+
+    pub fn from_string(s: String) -> LexerSlice {
+        let chars = s.chars().collect();
+        return LexerSlice { chars: &chars, start: 0, end: chars.len() };
+    }
+
+    pub fn is_empty(&self) -> bool {
+        return self.start >= self.end;
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.end - self.start;
+    }
+
+    pub fn push_to(&self, out: &mut String) {
+        for let mut i = self.start; i < self.end; i += 1 {
+            out.push(self.chars[i]);
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut s = String::with_capacity(self.end - self.start);
+        self.push_to(&mut s);
+        return s;
+    }
+
+    pub fn eq_str(a: &String, b: &LexerSlice) -> bool {
+        let a_chars = a.chars();
+        let mut a_iter = a_chars;
+        let mut i = b.start;
+        loop {
+            let a_next = a_iter.next();
+            if i >= b.end {
+                return a_next matches { None };
+            }
+            if let Some(ac) = a_next {
+                if ac != b.chars[i] {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+            i += 1;
+        }
+    }
+}
+
+impl Display for LexerSlice {
+    fn fmt(&self, f: &mut Formatter) {
+        for let mut i = self.start; i < self.end; i += 1 {
+            f.write_char(self.chars[i]);
+        }
+    }
+}
+
+impl Eq for LexerSlice {
+    fn eq(&self, other: &Self) -> bool {
+        let len = self.end - self.start;
+        if len != other.end - other.start {
+            return false;
+        }
+        for let mut i = 0; i < len; i += 1 {
+            if self.chars[self.start + i] != other.chars[other.start + i] {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+/// Token represents a lexed token with its kind, text, and position.
+/// Leading trivia (whitespace, comments) is attached to each token.
+/// `channel` is the ANTLR4 channel id (0 = default, 1 = HIDDEN; named
+/// channels resolve to integer ids declared in the grammar).
+pub struct Token {
+    pub kind: i32,
+    pub text: LexerSlice,
+    pub span: Span,
+    pub leading_trivia: Array<Token>,
+    pub channel: i32,
+}
+
+impl Token {
+    pub fn new(kind: i32, text: LexerSlice, span: Span) -> Token {
+        return Token { kind, text, span, leading_trivia: [], channel: 0 };
+    }
+
+    pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>) -> Token {
+        return Token { kind, text, span, leading_trivia, channel: 0 };
+    }
+
+    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>, channel: i32) -> Token {
+        return Token { kind, text, span, leading_trivia, channel };
+    }
+}
+
+// Note: Token Eq is intentionally omitted. Auto-derived Eq on recursive structs
+// with reference-containing fields triggers a compiler bug
+// (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
+
+/// ParseError represents a parse failure with location and expected tokens.
+pub struct ParseError {
+    pub message: String,
+    pub span: Span,
+    pub expected: Array<String>,
+}
+
+impl ParseError {
+    pub fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
+        return ParseError { message, span, expected };
+    }
+}
+
+/// CstChild is either a terminal token or a non-terminal sub-tree.
+pub variant CstChild {
+    Token(Token),
+    Node(CstNode),
+}
+
+/// CstNode is a generic (untyped) concrete syntax tree node.
+pub struct CstNode {
+    pub name: String,
+    pub span: Span,
+    pub children: Array<CstChild>,
+}
+
+impl CstNode {
+    /// Produce an ANTLR4-style S-expression representation of this tree.
+    /// Rule nodes become `(name child1 child2 ...)`, tokens become their text.
+    /// Tokens with empty text (e.g. EOF) are omitted.
+    pub fn to_string_tree(&self) -> String {
+        let mut out = String::with_capacity(256);
+        cst_to_string_tree_impl(&mut out, self);
+        return out;
+    }
+}
+
+fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
+    out.push_str(&`({node.name}`);
+    for let child of &node.children {
+        if let Token(t) = *child {
+            if !t.text.is_empty() {
+                out.push_str(&` {t.text}`);
+            }
+        } else if let Node(n) = *child {
+            out.push_str(&" ");
+            cst_to_string_tree_impl(out, &n);
+        }
+    }
+    out.push_str(&")");
+}
+
+/// Normalize a multi-line S-expression string for comparison.
+/// Collapses whitespace runs to single spaces and trims, while preserving
+/// whitespace inside double-quoted strings.
+pub fn normalize_tree(s: &String) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_string = false;
+    let mut space_pending = false;
+    for let c of s.chars() {
+        if in_string {
+            out.push(c);
+            if c == '"' {
+                in_string = false;
+            }
+        } else if c == ' ' || c == '\n' || c == '\r' || c == '\t' {
+            if out.len() > 0 {
+                space_pending = true;
+            }
+        } else {
+            if space_pending {
+                out.push(' ');
+                space_pending = false;
+            }
+            if c == '"' {
+                in_string = true;
+            }
+            out.push(c);
+        }
+    }
+    return out;
+}
+
+/// Highlight override: when inside a specific rule, override the capture for a token kind.
+pub struct HighlightOverride {
+    pub rule_name: String,
+    pub token_kind: i32,
+    pub capture: String,
+}
+
+/// Highlight mapping: defaults by token kind + context-aware overrides.
+pub struct HighlightMapping {
+    pub defaults: Array<String>,
+    pub overrides: Array<HighlightOverride>,
+}
+
+/// A single highlight capture: a named range in the source text.
+pub struct HighlightCapture {
+    pub capture: String,
+    pub start: i32,
+    pub end: i32,
+}
+
+/// HighlightVisitor collects highlight captures during a CST walk.
+pub struct HighlightVisitor {
+    mapping: HighlightMapping,
+    rule_stack: Array<String>,
+    pub captures: Array<HighlightCapture>,
+}
+
+impl HighlightVisitor {
+    pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
+        return HighlightVisitor { mapping, rule_stack: [], captures: [] };
+    }
+
+    fn classify(&self, kind: i32) -> String {
+        for let ov of &self.mapping.overrides {
+            if ov.token_kind == kind {
+                for let rule of &self.rule_stack {
+                    if *rule == ov.rule_name {
+                        return ov.capture;
+                    }
+                }
+            }
+        }
+        if kind >= 0 && kind < self.mapping.defaults.len() {
+            return self.mapping.defaults[kind];
+        }
+        return "";
+    }
+}
+
+impl Visitor for HighlightVisitor {
+    fn enter_rule(&mut self, name: &String, span: &Span) {
+        self.rule_stack.push(*name);
+    }
+
+    fn exit_rule(&mut self, name: &String, span: &Span) {
+        if !self.rule_stack.is_empty() {
+            let last = self.rule_stack.len() - 1;
+            let mut new_stack: Array<String> = [];
+            for let mut i = 0; i < last; i += 1 {
+                new_stack.push(self.rule_stack[i]);
+            }
+            self.rule_stack = new_stack;
+        }
+    }
+
+    fn visit_token(&mut self, token: &Token) {
+        for let trivia of &token.leading_trivia {
+            let cap = self.classify(trivia.kind);
+            if !cap.is_empty() {
+                self.captures.push(HighlightCapture { capture: cap, start: trivia.span.start, end: trivia.span.end });
+            }
+        }
+        if token.text.is_empty() {
+            return;
+        }
+        let cap = self.classify(token.kind);
+        if !cap.is_empty() {
+            self.captures.push(HighlightCapture { capture: cap, start: token.span.start, end: token.span.end });
+        }
+    }
+}
+
+fn escape_html(out: &mut String, text: &String) {
+    for let c of text.chars() {
+        if c == '&' {
+            out.push_str(&"&amp;");
+        } else if c == '<' {
+            out.push_str(&"&lt;");
+        } else if c == '>' {
+            out.push_str(&"&gt;");
+        } else if c == '"' {
+            out.push_str(&"&quot;");
+        } else {
+            out.push(c);
+        }
+    }
+}
+
+fn escape_html_char(out: &mut String, c: char) {
+    if c == '&' {
+        out.push_str(&"&amp;");
+    } else if c == '<' {
+        out.push_str(&"&lt;");
+    } else if c == '>' {
+        out.push_str(&"&gt;");
+    } else if c == '"' {
+        out.push_str(&"&quot;");
+    } else {
+        out.push(c);
+    }
+}
+
+fn push_class(out: &mut String, capture: &String) {
+    for let c of capture.chars() {
+        if c == '.' {
+            out.push(' ');
+        } else {
+            out.push(c);
+        }
+    }
+}
+
+/// Produce a highlighted HTML fragment from source text and captures.
+/// Captures must be sorted by start position (as produced by HighlightVisitor).
+pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> String {
+    let mut out = String::with_capacity(source.len() * 5);
+    let mut pos = 0;
+    let mut iter = source.chars();
+    for let cap of captures {
+        while pos < cap.start {
+            if let Some(c) = iter.next() {
+                escape_html_char(&mut out, c);
+            }
+            pos += 1;
+        }
+        out.push_str(&"<span class=\"");
+        push_class(&mut out, &cap.capture);
+        out.push_str(&"\">");
+        let end = cap.end;
+        while pos < end {
+            if let Some(c) = iter.next() {
+                escape_html_char(&mut out, c);
+            }
+            pos += 1;
+        }
+        out.push_str(&"</span>");
+    }
+    while let Some(c) = iter.next() {
+        escape_html_char(&mut out, c);
+    }
+    return out;
+}
+
+fn substr(chars: &Array<char>, start: i32, end: i32) -> String {
+    let mut out = String::with_capacity(end - start);
+    let mut i = start;
+    while i < end && i < chars.len() {
+        out.push(chars[i]);
+        i += 1;
+    }
+    return out;
+}
+
+/// Visitor trait for walking typed CST nodes.
+/// Default methods are no-ops; override to add behavior.
+pub trait Visitor {
+    fn enter_rule(&mut self, name: &String, span: &Span) {
+    }
+    fn exit_rule(&mut self, name: &String, span: &Span) {
+    }
+    fn visit_token(&mut self, token: &Token) {
+    }
+}
+
+/// TreeRecorder is a Visitor that records events for building a CstNode tree.
+pub struct TreeRecorder {
+    events: Array<TreeEvent>,
+}
+
+variant TreeEvent {
+    Enter(TreeEnterInfo),
+    Exit,
+    VisitToken(Token),
+}
+
+struct TreeEnterInfo {
+    name: String,
+    span: Span,
+}
+
+impl TreeRecorder {
+    pub fn new() -> TreeRecorder {
+        return TreeRecorder { events: [] };
+    }
+
+    pub fn build(&self) -> CstNode {
+        let mut pos = 0;
+        return tree_build_node(&self.events, &mut pos);
+    }
+}
+
+impl Visitor for TreeRecorder {
+    fn enter_rule(&mut self, name: &String, span: &Span) {
+        self.events.push(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
+    }
+
+    fn exit_rule(&mut self, name: &String, span: &Span) {
+        self.events.push(TreeEvent::Exit);
+    }
+
+    fn visit_token(&mut self, token: &Token) {
+        self.events.push(TreeEvent::VisitToken(*token));
+    }
+}
+
+fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
+    if let Enter(info) = events[*pos] {
+        *pos += 1;
+        let mut children: Array<CstChild> = [];
+        loop {
+            if *pos >= events.len() {
+                break;
+            }
+            let ev = events[*pos];
+            if let Exit = ev {
+                *pos += 1;
+                break;
+            }
+            if let Enter(_) = ev {
+                children.push(CstChild::Node(tree_build_node(events, pos)));
+            } else if let VisitToken(t) = ev {
+                children.push(CstChild::Token(t));
+                *pos += 1;
+            }
+        }
+        return CstNode { name: info.name, span: info.span, children };
+    }
+    panic("TreeRecorder: expected Enter event");
+    return CstNode { name: "", span: Span::new(0, 0), children: [] };
+}
+
+pub enum TokenKind {
+    ID,
+    WS,
+    Eof,
+    Error,
+}
+
+pub struct SNode {
+    pub span: Span,
+    pub e: ENode,
+    pub eof: Token,
+}
+
+pub variant ENode {
+    Alt0(EAlt0),
+    Alt1(EAlt1),
+    Alt2(EAlt2),
+    Alt3(EAlt3),
+    Alt4(EAlt4),
+}
+
+pub struct EAlt0 {
+    pub span: Span,
+    pub e: ENode,
+    pub star: Token,
+    pub e_2: ENode,
+}
+
+pub struct EAlt1 {
+    pub span: Span,
+    pub e: ENode,
+    pub plus: Token,
+    pub e_2: ENode,
+}
+
+pub struct EAlt2 {
+    pub span: Span,
+    pub e: ENode,
+    pub question: Token,
+    pub e_2: ENode,
+    pub colon: Token,
+    pub e_3: ENode,
+}
+
+pub struct EAlt3 {
+    pub span: Span,
+    pub e: ENode,
+    pub eq: Token,
+    pub e_2: ENode,
+}
+
+pub struct EAlt4 {
+    pub span: Span,
+    pub id: Token,
+}
+
+global TK_ID: i32 = 0;
+global TK_WS: i32 = 1;
+global TK_EOF: i32 = 2;
+global TK_ERROR: i32 = 3;
+global TK_LIT_STAR: i32 = 4;
+global TK_LIT_PLUS: i32 = 5;
+global TK_LIT_QUESTION: i32 = 6;
+global TK_LIT_COLON: i32 = 7;
+global TK_LIT_EQ: i32 = 8;
+
+struct Lexer {
+    chars: Array<char>,
+    pos: i32,
+}
+
+impl Lexer {
+    fn new(input: &String) -> Lexer {
+        return Lexer { chars: input.chars().collect(), pos: 0 };
+    }
+
+    fn at_end(&self) -> bool {
+        return self.pos >= self.chars.len();
+    }
+
+    fn slice(&self, start: i32, end: i32) -> LexerSlice {
+        return LexerSlice::new(&self.chars, start, end);
+    }
+}
+
+fn try_id(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || !('a' <= chars[pos] <= 'z') { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_0 = pos;
+        rep_0: {
+            if pos >= chars.len() || !('a' <= chars[pos] <= 'z') { break rep_0; }
+            pos += 1;
+            continue;
+        }
+        pos = rep_saved_0;
+        break;
+    }
+    return pos;
+}
+
+fn try_ws(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    let alts_saved_1 = pos;
+    let mut alts_ok_1 = false;
+    alts_1_0: {
+        pos = alts_saved_1;
+        if pos >= chars.len() || chars[pos] != ' ' { break alts_1_0; }
+        pos += 1;
+        alts_ok_1 = true;
+    }
+    if !alts_ok_1 {
+        alts_1_1: {
+            pos = alts_saved_1;
+            if pos >= chars.len() || chars[pos] != '\n' { break alts_1_1; }
+            pos += 1;
+            alts_ok_1 = true;
+        }
+    }
+    if !alts_ok_1 { return -1; }
+    return pos;
+}
+
+fn try_lit_star(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '*' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_plus(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '+' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_question(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '?' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_colon(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != ':' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_eq(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '=' { return -1; }
+    return pos + 1;
+}
+
+pub fn tokenize(input: &String) -> Array<Token> {
+    let mut lexer = Lexer::new(input);
+    let mut tokens: Array<Token> = [];
+    let mut trivia: Array<Token> = [];
+    while !lexer.at_end() {
+        let start = lexer.pos;
+        let mut best_end: i32 = -1;
+        let mut best_kind: i32 = TK_ERROR;
+        let mut end: i32 = -1;
+        let first_char = lexer.chars[start];
+        if first_char == '\n' || first_char == ' ' {
+            end = try_ws(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WS; }
+        } else if first_char == '*' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_STAR; }
+        } else if first_char == '+' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_PLUS; }
+        } else if first_char == ':' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_COLON; }
+        } else if first_char == '=' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_EQ; }
+        } else if first_char == '?' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_QUESTION; }
+        } else if 'a' <= first_char <= 'z' {
+            end = try_id(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        } else {
+            end = try_id(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        }
+        if best_end <= start {
+            let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
+            tokens.push(tok);
+            trivia = [];
+            lexer.pos = start + 1;
+        } else {
+            let tok_start = start;
+            let is_skip = best_kind matches { TK_WS };
+            if is_skip {
+                trivia.push(Token::new(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end)));
+            } else {
+                let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);
+                tokens.push(tok);
+                trivia = [];
+            }
+            lexer.pos = best_end;
+        }
+    }
+    tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));
+    return tokens;
+}
+
+pub fn token_kind_name(kind: i32) -> String {
+    return match kind {
+        TK_ID => "ID",
+        TK_WS => "WS",
+        TK_EOF => "Eof",
+        TK_ERROR => "Error",
+        TK_LIT_STAR => "TK_LIT_STAR",
+        TK_LIT_PLUS => "TK_LIT_PLUS",
+        TK_LIT_QUESTION => "TK_LIT_QUESTION",
+        TK_LIT_COLON => "TK_LIT_COLON",
+        TK_LIT_EQ => "TK_LIT_EQ",
+        _ => "Unknown",
+    };
+}
+
+struct Parser {
+    tokens: Array<Token>,
+    pos: i32,
+}
+
+impl Parser {
+    fn new(tokens: Array<Token>) -> Parser {
+        return Parser { tokens, pos: 0 };
+    }
+
+    fn peek(&self) -> &Token {
+        return &self.tokens[self.pos];
+    }
+
+    fn peek_kind(&self) -> i32 {
+        return self.tokens[self.pos].kind;
+    }
+
+    fn peek_at(&self, offset: i32) -> i32 {
+        let idx = self.pos + offset;
+        if idx >= self.tokens.len() { return TK_EOF; }
+        return self.tokens[idx].kind;
+    }
+
+    fn advance(&mut self) -> Token {
+        let tok = self.tokens[self.pos];
+        self.pos += 1;
+        return tok;
+    }
+
+    fn last_end(&self) -> i32 {
+        if self.pos == 0 { return 0; }
+        return self.tokens[self.pos - 1].span.end;
+    }
+
+    fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
+        if self.tokens[self.pos].kind == kind {
+            return Result::<Token, ParseError>::Ok(self.advance());
+        }
+        let tok = &self.tokens[self.pos];
+        let name = token_kind_name(kind);
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected {name}, got "{tok.text}"`,
+            tok.span,
+            [name],
+        ));
+    }
+
+    fn fail(&self, name: String) -> Result<Token, ParseError> {
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected {name}, got "{tok.text}"`,
+            tok.span,
+            [name],
+        ));
+    }
+
+    fn match_any(&mut self) -> Result<Token, ParseError> {
+        if self.tokens[self.pos].kind != TK_EOF {
+            return Result::<Token, ParseError>::Ok(self.advance());
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected any token, got "{tok.text}"`,
+            tok.span,
+            ["any token"],
+        ));
+    }
+
+    fn match_not(&mut self, excluded: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        if k != TK_EOF {
+            let mut blocked = false;
+            for let x of excluded {
+                if x == k {
+                    blocked = true;
+                    break;
+                }
+            }
+            if !blocked {
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["set complement"],
+        ));
+    }
+}
+
+fn scan_s(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_e(tokens, pos, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_e_atom(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_e_lr_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { return -1; }
+    pos += 1;
+    pos = scan_e(tokens, pos, 5);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_e_lr_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUS { return -1; }
+    pos += 1;
+    pos = scan_e(tokens, pos, 4);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_e_lr_2(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_QUESTION { return -1; }
+    pos += 1;
+    pos = scan_e(tokens, pos, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
+    pos += 1;
+    pos = scan_e(tokens, pos, 2);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_e_lr_3(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_EQ { return -1; }
+    pos += 1;
+    pos = scan_e(tokens, pos, 1);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_e(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_e_atom(tokens, pos);
+    if pos < 0 { return -1; }
+    loop {
+        let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+        if suffix_kind == TK_LIT_STAR {
+            if 4 >= min_prec {
+                let lr_saved_pos = pos;
+                pos = scan_e_lr_0(tokens, pos);
+                if pos < 0 { pos = lr_saved_pos; break; }
+            } else {
+                break;
+            }
+        } else if suffix_kind == TK_LIT_PLUS {
+            if 3 >= min_prec {
+                let lr_saved_pos = pos;
+                pos = scan_e_lr_1(tokens, pos);
+                if pos < 0 { pos = lr_saved_pos; break; }
+            } else {
+                break;
+            }
+        } else if suffix_kind == TK_LIT_QUESTION {
+            if 2 >= min_prec {
+                let lr_saved_pos = pos;
+                pos = scan_e_lr_2(tokens, pos);
+                if pos < 0 { pos = lr_saved_pos; break; }
+            } else {
+                break;
+            }
+        } else if suffix_kind == TK_LIT_EQ {
+            if 1 >= min_prec {
+                let lr_saved_pos = pos;
+                pos = scan_e_lr_3(tokens, pos);
+                if pos < 0 { pos = lr_saved_pos; break; }
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    return pos;
+}
+
+fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
+    let start = p.peek().span.start;
+    let e = parse_e(p)?;
+    let eof = p.expect(TK_EOF)?;
+    return Result::<SNode, ParseError>::Ok(SNode {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        e,
+        eof,
+    });
+}
+
+fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
+    let start = p.peek().span.start;
+    let kind = p.peek_kind();
+    if kind == TK_ID {
+        let id = p.expect(TK_ID)?;
+        return Result::<ENode, ParseError>::Ok(ENode::Alt4(EAlt4 {
+            span: Span::new(start, i32::max(start, p.last_end())),
+            id,
+        }));
+    }
+    return Result::<ENode, ParseError>::Err(ParseError::new(
+        "expected e",
+        p.peek().span,
+        ["TK_ID"],
+    ));
+}
+
+fn parse_e_lr_0(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseError> {
+    let star = p.expect(TK_LIT_STAR)?;
+    let e_2 = parse_e(p, 5)?;
+    return Result::<ENode, ParseError>::Ok(ENode::Alt0(EAlt0 {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        e: left,
+        star,
+        e_2,
+    }));
+}
+
+fn parse_e_lr_1(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseError> {
+    let plus = p.expect(TK_LIT_PLUS)?;
+    let e_2 = parse_e(p, 4)?;
+    return Result::<ENode, ParseError>::Ok(ENode::Alt1(EAlt1 {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        e: left,
+        plus,
+        e_2,
+    }));
+}
+
+fn parse_e_lr_2(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseError> {
+    let question = p.expect(TK_LIT_QUESTION)?;
+    let e_2 = parse_e(p, 0)?;
+    let colon = p.expect(TK_LIT_COLON)?;
+    let e_3 = parse_e(p, 2)?;
+    return Result::<ENode, ParseError>::Ok(ENode::Alt2(EAlt2 {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        e: left,
+        question,
+        e_2,
+        colon,
+        e_3,
+    }));
+}
+
+fn parse_e_lr_3(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseError> {
+    let eq = p.expect(TK_LIT_EQ)?;
+    let e_2 = parse_e(p, 1)?;
+    return Result::<ENode, ParseError>::Ok(ENode::Alt3(EAlt3 {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        e: left,
+        eq,
+        e_2,
+    }));
+}
+
+fn parse_e(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
+    let start = p.peek().span.start;
+    let mut result = parse_e_atom(p)?;
+    loop {
+        let suffix_kind = p.peek_kind();
+        if suffix_kind == TK_LIT_STAR {
+            if 4 >= min_prec {
+                if scan_e_lr_0(&p.tokens, p.pos) < 0 {
+                    break;
+                }
+                result = parse_e_lr_0(p, result, start)?;
+            } else {
+                break;
+            }
+        } else if suffix_kind == TK_LIT_PLUS {
+            if 3 >= min_prec {
+                if scan_e_lr_1(&p.tokens, p.pos) < 0 {
+                    break;
+                }
+                result = parse_e_lr_1(p, result, start)?;
+            } else {
+                break;
+            }
+        } else if suffix_kind == TK_LIT_QUESTION {
+            if 2 >= min_prec {
+                if scan_e_lr_2(&p.tokens, p.pos) < 0 {
+                    break;
+                }
+                result = parse_e_lr_2(p, result, start)?;
+            } else {
+                break;
+            }
+        } else if suffix_kind == TK_LIT_EQ {
+            if 1 >= min_prec {
+                if scan_e_lr_3(&p.tokens, p.pos) < 0 {
+                    break;
+                }
+                result = parse_e_lr_3(p, result, start)?;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    return Result::<ENode, ParseError>::Ok(result);
+}
+
+pub fn parse(input: &String) -> Result<SNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return parse_s(&mut parser);
+}
+
+pub fn walk_s<V: Visitor>(v: &mut V, node: &SNode) {
+    v.enter_rule(&"s", &node.span);
+    walk_e(v, &node.e);
+    v.visit_token(&node.eof);
+    v.exit_rule(&"s", &node.span);
+}
+
+pub fn walk_e<V: Visitor>(v: &mut V, node: &ENode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"e", &n.span);
+            walk_e(v, &n.e);
+            v.visit_token(&n.star);
+            walk_e(v, &n.e_2);
+            v.exit_rule(&"e", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"e", &n.span);
+            walk_e(v, &n.e);
+            v.visit_token(&n.plus);
+            walk_e(v, &n.e_2);
+            v.exit_rule(&"e", &n.span);
+        }
+        Alt2(n) => {
+            v.enter_rule(&"e", &n.span);
+            walk_e(v, &n.e);
+            v.visit_token(&n.question);
+            walk_e(v, &n.e_2);
+            v.visit_token(&n.colon);
+            walk_e(v, &n.e_3);
+            v.exit_rule(&"e", &n.span);
+        }
+        Alt3(n) => {
+            v.enter_rule(&"e", &n.span);
+            walk_e(v, &n.e);
+            v.visit_token(&n.eq);
+            walk_e(v, &n.e_2);
+            v.exit_rule(&"e", &n.span);
+        }
+        Alt4(n) => {
+            v.enter_rule(&"e", &n.span);
+            v.visit_token(&n.id);
+            v.exit_rule(&"e", &n.span);
+        }
+    }
+}
+
+pub fn to_tree(node: &SNode) -> CstNode {
+    let mut recorder = TreeRecorder::new();
+    walk_s(&mut recorder, node);
+    return recorder.build();
+}
+
