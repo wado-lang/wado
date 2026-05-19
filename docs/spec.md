@@ -1877,10 +1877,10 @@ let g: fn(i32) -> i32 = double;
 Key points:
 
 - Function values carry no observable identity at the Wado level. The runtime uses a Wasm `ref` under the hood, but the language does not let you distinguish "value vs reference to value" — there is no state to observe (Wado has no `Copy`/`Clone`/identity comparison for `fn`).
-- `&` and `&mut` apply to `fn`-typed values like to any other value:
+- `&` and `&mut` apply to `fn`-typed values like to any other value, with no special-casing:
   - `&f` has type `&fn(...)`; `&mut f` (on a mutable binding) has type `&mut fn(...)`.
   - These references behave per the [Reference Types](#reference-types) rules. `&fn(...)` is _not_ a synonym for `fn(...)`; passing one where the other is expected is a type error.
-  - `&mut fn(...)` parameters are useful as out-parameters: the callee can reassign the referenced slot via `*p = other_fn`.
+  - `&mut fn(...)` parameters are useful as out-parameters: the callee can reassign the referenced slot via `*p = other_fn`, and the caller observes the new value through the same binding.
 - A `&fn(...)` or `&mut fn(...)` value is directly callable; the call expression auto-derefs to invoke the underlying `fn(...)`. `let r = &double; r(21)` works without an explicit `*r`.
 - Generic functions cannot be referenced bare; supply type arguments first (e.g. `identity::<i32>` once generic-name references are supported) or wrap in a closure (`|x| identity(x)`).
 - Functions that appear at the Component Model boundary still cannot carry function-typed values across — see the closure WEP.
