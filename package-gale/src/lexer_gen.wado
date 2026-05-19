@@ -1391,7 +1391,9 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
     f.set_return_type(&"Array<Token>");
     f.emit_begin(w);
     w.line(&"let mut lexer = Lexer::new(input);");
-    w.line(&"let mut tokens: Array<Token> = [];");
+    // Pre-size to roughly one token per 4 input chars to avoid repeated grow().
+    // `trivia` is reset to `[]` after each non-trivia token so pre-sizing is wasted there.
+    w.line(&"let mut tokens: Array<Token> = Array::with_capacity(lexer.chars.len() / 4 + 1);");
     w.line(&"let mut trivia: Array<Token> = [];");
 
     if has_more_rules {
