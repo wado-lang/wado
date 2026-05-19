@@ -1,0 +1,40 @@
+// A function / method / closure whose body diverges through a tail
+// `panic(…)` (semicolon-terminated statement form) must compile
+// without a `MissingReturn` diagnostic even when the declared return
+// type is non-Unit: the body can never reach a fall-through return.
+//
+// Regression guard for the `find_return_type_in_block` cleanup that
+// stopped treating `Expr(Never)` as an explicit `return` — the
+// `MissingReturn` check at `resolver/item.rs` now consults
+// `block_result_type` so a divergent tail keeps the function
+// well-typed.
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+impl Pair {
+    fn fail(&self) -> i32 {
+        panic("method should diverge");
+    }
+}
+
+fn fail() -> i32 {
+    panic("free function should diverge");
+}
+
+export fn run() {
+    if false {
+        let _ = fail();
+        let p = Pair { a: 1, b: 2 };
+        let _ = p.fail();
+        let f: fn(i32) -> i32 = |x: i32| {
+            panic("closure should diverge");
+        };
+        let _ = f(0);
+    }
+}
+
+__DATA__
+{"stdout": ""}

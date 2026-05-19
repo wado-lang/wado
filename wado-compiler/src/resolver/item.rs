@@ -12,8 +12,8 @@ use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
-    FunctionKind, TirEffect, TirEffectOp, TirFunction, TirGlobal, TirParam, TirResource, TirStruct,
-    TirTest, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
+    FunctionKind, TirBlock, TirEffect, TirEffectOp, TirFunction, TirGlobal, TirParam, TirResource,
+    TirStruct, TirTest, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -956,6 +956,36 @@ impl<H: CompilerHost> Resolver<'_, H> {
         declared_return_type
     }
 
+    /// Emit a `MissingReturn` diagnostic when a declared non-Unit return
+    /// type cannot be satisfied by the body. Skipped for `Unit`/`Never`
+    /// declarations, for missing bodies (e.g. declared-only externals),
+    /// for bodies that contain any explicit `return`, and for bodies
+    /// whose tail diverges (`{ …; panic("…") }`) — the divergent tail
+    /// never reaches a fall-through return.
+    fn validate_missing_return(
+        &self,
+        return_type: TypeId,
+        body: Option<&TirBlock>,
+        span: Span,
+    ) {
+        if return_type == TypeTable::UNIT || return_type == TypeTable::NEVER {
+            return;
+        }
+        let Some(body) = body else {
+            return;
+        };
+        if Self::find_return_type_in_block(body).is_some() {
+            return;
+        }
+        if crate::tir::block_result_type(body) == TypeTable::NEVER {
+            return;
+        }
+        let _ = self.logger.error(TypeError::MissingReturn {
+            return_type: self.type_table.borrow().type_name(return_type),
+            span,
+        });
+    }
+
     /// Resolve a function
     pub(super) fn resolve_function(&mut self, func: &Function) -> Option<TirFunction> {
         // Set up type parameters in scope before resolving types. Use an
@@ -1102,21 +1132,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .as_ref()
             .map(|b| scope.resolve_block(b, &mut ctx, None));
 
-        // Validate: non-unit return type requires explicit `return` in the body
-        // (or a divergent tail expression — `{ ...; panic("...") }` — where
-        // the body's result type collapses to `Never` so the function never
-        // reaches a fall-through return).
-        if return_type != TypeTable::UNIT
-            && return_type != TypeTable::NEVER
-            && let Some(ref body) = body
-            && Self::find_return_type_in_block(body).is_none()
-            && crate::tir::block_result_type(body) != TypeTable::NEVER
-        {
-            let _ = scope.logger.error(TypeError::MissingReturn {
-                return_type: scope.type_table.borrow().type_name(return_type),
-                span: func.span,
-            });
-        }
+        scope.validate_missing_return(return_type, body.as_ref(), func.span);
 
         // Convert AST type params to TIR type params (while type params
         // still in scope). `<F: fn(...)>` / `<F: fn mut(...)>` bounds are
@@ -1657,21 +1673,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .as_ref()
             .map(|b| scope.resolve_block(b, &mut ctx, None));
 
-        // Validate: non-unit return type requires explicit `return` in the body
-        // (or a divergent tail expression — `{ ...; panic("...") }` — where
-        // the body's result type collapses to `Never` so the function never
-        // reaches a fall-through return).
-        if return_type != TypeTable::UNIT
-            && return_type != TypeTable::NEVER
-            && let Some(ref body) = body
-            && Self::find_return_type_in_block(body).is_none()
-            && crate::tir::block_result_type(body) != TypeTable::NEVER
-        {
-            let _ = scope.logger.error(TypeError::MissingReturn {
-                return_type: scope.type_table.borrow().type_name(return_type),
-                span: func.span,
-            });
-        }
+        scope.validate_missing_return(return_type, body.as_ref(), func.span);
 
         // Convert AST type params to TIR type params (while type params still
         // in scope). Mirror the free-function path in `resolve_function`:
