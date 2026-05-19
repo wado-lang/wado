@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779197859451,
+  "lastUpdate": 1779198204187,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23597,6 +23597,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/df5502644dfc6ff2455c8b88b671904e6a36a934"
         },
         "date": 1779197859010,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1911,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10111,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 486702,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "73b063060681e24b9a92df2e7802ea72d1c93249",
+          "message": "Merge pull request #1124 from wado-lang/claude/research-js-highlighters-kP9kW\n\nbench(syntax-highlight): add JS highlighter baselines (Prism, Lezer, web-tree-sitter, Shiki)",
+          "timestamp": "2026-05-19T22:35:42+09:00",
+          "tree_id": "298edbd56b2901a6390ce50c42cd335cc09045e8",
+          "url": "https://github.com/wado-lang/wado/commit/73b063060681e24b9a92df2e7802ea72d1c93249"
+        },
+        "date": 1779198203730,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
