@@ -117,6 +117,7 @@ fn "wado-compiler/tests/fixtures/inline_array_append_nested.wado/run"() with Std
     let c: ref "wado-compiler/tests/fixtures/inline_array_append_nested.wado//Container";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
+    let self_12: ref "core:prelude//Array<i32>";
     c = struct.new "wado-compiler/tests/fixtures/inline_array_append_nested.wado//Container" { items: ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<i32>" {
         __b_0 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __b_0;
@@ -131,7 +132,11 @@ fn "wado-compiler/tests/fixtures/inline_array_append_nested.wado/run"() with Std
         "core:prelude/string.wado/String::push"(__local_2, 110);
         "core:prelude/string.wado/String::push"(__local_2, 61);
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(c.items.used, __local_3);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_i32___len_8: block -> i32 {
+            self_12 = c.items;
+            break __inline_Array_i32___len_8: self_12.used;
+            unreachable;
+        }, __local_3);
         break __tmpl: __local_2;
         unreachable;
     });

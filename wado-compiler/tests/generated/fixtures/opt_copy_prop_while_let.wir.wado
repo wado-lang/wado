@@ -119,17 +119,24 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/iter_next"(it) {
     let v: i32;
+    let self_2: ref "core:prelude//Array<i32>";
+    let self_3: ref "core:prelude//Array<i32>";
     let index: i32;
-    if it.pos >= it.items.used {
+    if it.pos >= __inline_Array_i32___len_0: block -> i32 {
+        self_2 = it.items;
+        break __inline_Array_i32___len_0: self_2.used;
+        unreachable;
+    } {
         return 1, 0;
     }
     v = __inline_Array_i32__IndexValue_i32___index_value_1: block -> i32 {
+        self_3 = it.items;
         index = it.pos;
-        if index >= it.items.used {
+        if index >= self_3.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_i32__IndexValue_i32___index_value_1: builtin::array_get<i32>(it.items.repr, index);
+        break __inline_Array_i32__IndexValue_i32___index_value_1: builtin::array_get<i32>(self_3.repr, index);
         unreachable;
     };
     it.pos = it.pos + 1;

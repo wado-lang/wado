@@ -675,15 +675,19 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Eq::eq"(self, other) {
+    let self_2: ref "core:prelude/string.wado//String";
+    let other_3: ref "core:prelude/string.wado//String";
     let len_a: i32;
     let self_5: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner";
     let other_6: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner";
     return (if __inline_String_Eq__eq_0: block -> bool {
-        len_a = self.name.used;
-        if len_a != other.name.used {
+        self_2 = self.name;
+        other_3 = other.name;
+        len_a = self_2.used;
+        if len_a != other_3.used {
             break __inline_String_Eq__eq_0: 0;
         }
-        break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(self.name.repr, other.name.repr, len_a);
+        break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(self_2.repr, other_3.repr, len_a);
         unreachable;
     } -> i32 {
         __inline__wado_compiler_tests_fixtures_ref_equality_struct_with_ref_wado_Inner_Eq__eq_1: block -> bool {

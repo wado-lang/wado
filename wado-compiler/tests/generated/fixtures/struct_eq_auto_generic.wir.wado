@@ -804,22 +804,30 @@ fn "wado-compiler/tests/fixtures/struct_eq_auto_generic.wado/Pair<core:prelude/s
 }
 
 fn "wado-compiler/tests/fixtures/struct_eq_auto_generic.wado/Pair<core:prelude/string.wado/String>^Eq::eq"(self, other) {
+    let self_2: ref "core:prelude/string.wado//String";
+    let other_3: ref "core:prelude/string.wado//String";
     let len_a_4: i32;
+    let self_5: ref "core:prelude/string.wado//String";
+    let other_6: ref "core:prelude/string.wado//String";
     let len_a_7: i32;
     return (if __inline_String_Eq__eq_0: block -> bool {
-        len_a_4 = self.first.used;
-        if len_a_4 != other.first.used {
+        self_2 = self.first;
+        other_3 = other.first;
+        len_a_4 = self_2.used;
+        if len_a_4 != other_3.used {
             break __inline_String_Eq__eq_0: 0;
         }
-        break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(self.first.repr, other.first.repr, len_a_4);
+        break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(self_2.repr, other_3.repr, len_a_4);
         unreachable;
     } -> i32 {
         __inline_String_Eq__eq_1: block -> bool {
-            len_a_7 = self.second.used;
-            if len_a_7 != other.second.used {
+            self_5 = self.second;
+            other_6 = other.second;
+            len_a_7 = self_5.used;
+            if len_a_7 != other_6.used {
                 break __inline_String_Eq__eq_1: 0;
             }
-            break __inline_String_Eq__eq_1: "core:prelude/string.wado/String^Eq::eq_bytes"(self.second.repr, other.second.repr, len_a_7);
+            break __inline_String_Eq__eq_1: "core:prelude/string.wado/String^Eq::eq_bytes"(self_5.repr, other_6.repr, len_a_7);
             unreachable;
         };
     } else {

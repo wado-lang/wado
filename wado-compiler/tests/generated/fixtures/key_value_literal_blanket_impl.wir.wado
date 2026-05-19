@@ -144,8 +144,10 @@ fn "wado-compiler/tests/fixtures/key_value_literal_blanket_impl.wado/run"() with
     let __b_13: ref "core:prelude//Array<i32>";
     let key_21: ref "core:prelude/string.wado//String";
     let key_24: ref "core:prelude/string.wado//String";
+    let self_27: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let f_31: ref "core:prelude/format.wado//Formatter";
     let f_36: ref "core:prelude/format.wado//Formatter";
+    let self_39: ref "core:prelude//Array<i32>";
     let f_44: ref "core:prelude/format.wado//Formatter";
     let f_49: ref "core:prelude/format.wado//Formatter";
     b = struct.new "wado-compiler/tests/fixtures/key_value_literal_blanket_impl.wado//Bag<i32>" { keys: ref.as_non_null(__inline_Bag_i32__KeyValueLiteralBuilder__new_literal_2____seq_lit: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
@@ -164,7 +166,11 @@ fn "wado-compiler/tests/fixtures/key_value_literal_blanket_impl.wado/run"() with
     "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(b.keys, key_24);
     "core:prelude/array.wado/Array<i32>::push"(b.values, 2);
     bag = b;
-    __v0_2 = bag.keys.used;
+    __v0_2 = __inline_Array_core_prelude_string_wado_String___len_12: block -> i32 {
+        self_27 = bag.keys;
+        break __inline_Array_core_prelude_string_wado_String___len_12: self_27.used;
+        unreachable;
+    };
     __cond_3 = __v0_2 == 2;
     if __cond_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -196,11 +202,12 @@ condition: bag.keys.len() == 2
         unreachable;
     }
     __v0_4 = __inline_Array_i32__IndexValue_i32___index_value_20: block -> i32 {
-        if 0 >= bag.values.used {
+        self_39 = bag.values;
+        if 0 >= self_39.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_i32__IndexValue_i32___index_value_20: builtin::array_get<i32>(bag.values.repr, 0);
+        break __inline_Array_i32__IndexValue_i32___index_value_20: builtin::array_get<i32>(self_39.repr, 0);
         unreachable;
     };
     __cond_5 = __v0_4 == 1;

@@ -341,6 +341,7 @@ fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.
     let f_90: ref "core:prelude/format.wado//Formatter";
     let self_94: ref "core:prelude/types.wado//Box<i32>";
     let f_95: ref "core:prelude/format.wado//Formatter";
+    let self_96: ref "core:prelude//Array<u8>";
     base = struct.new "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//BaseStream" { buf: ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<u8>" {
         __b_0 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
         break __seq_lit: __b_0;
@@ -524,7 +525,11 @@ condition: got[1] == 105 as u8
         "core:prelude/primitive.wado/i32::fmt_decimal"(self_89.value, f_90);
         "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" buf_len="), used: 9 });
         __local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
-        self_94 = struct.new "core:prelude/types.wado//Box<i32>" { value: base.buf.used };
+        self_94 = struct.new "core:prelude/types.wado//Box<i32>" { value: __inline_Array_u8___len_43: block -> i32 {
+            self_96 = base.buf;
+            break __inline_Array_u8___len_43: self_96.used;
+            unreachable;
+        } };
         f_95 = __local_21;
         "core:prelude/primitive.wado/i32::fmt_decimal"(self_94.value, f_95);
         break __tmpl: __local_20;

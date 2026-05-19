@@ -190,12 +190,17 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/config_summary"(
     let result: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>";
     let c: ref "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado//Config";
     let base: i32;
+    let self: ref "core:prelude/string.wado//String";
     result = "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/make_config"(n);
     if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Ok"(result) {
         c = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/Config,core:prelude/string.wado/String>::Ok"(result).payload_0;
         base = c.value * 10;
         if c.enabled {
-            return base + c.name.used;
+            return base + __inline_String__len_0: block -> i32 {
+                self = c.name;
+                break __inline_String__len_0: self.used;
+                unreachable;
+            };
         }
         return base;
     } else {

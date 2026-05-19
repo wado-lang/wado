@@ -263,12 +263,16 @@ fn "wado-compiler/tests/fixtures/array_append_collapse.wado/run"() with Stdout {
     let other_313: ref "core:prelude/string.wado//String";
     let len_a_314: i32;
     let f_322: ref "core:prelude/format.wado//Formatter";
+    let self_335: ref "core:prelude//Array<i32>";
     let f_339: ref "core:prelude/format.wado//Formatter";
     let f_344: ref "core:prelude/format.wado//Formatter";
+    let self_347: ref "core:prelude//Array<i32>";
     let f_352: ref "core:prelude/format.wado//Formatter";
     let f_357: ref "core:prelude/format.wado//Formatter";
+    let self_360: ref "core:prelude//Array<i32>";
     let f_365: ref "core:prelude/format.wado//Formatter";
     let f_370: ref "core:prelude/format.wado//Formatter";
+    let self_373: ref "core:prelude//Array<i32>";
     let f_378: ref "core:prelude/format.wado//Formatter";
     let f_383: ref "core:prelude/format.wado//Formatter";
     a = __seq_lit: block -> ref "core:prelude//Array<i32>" {
@@ -875,7 +879,11 @@ condition: f[1] == \"world\"
         break __seq_lit: __b_42;
         unreachable;
     };
-    __v0_44 = g.items.used;
+    __v0_44 = __inline_Array_i32___len_163: block -> i32 {
+        self_335 = g.items;
+        break __inline_Array_i32___len_163: self_335.used;
+        unreachable;
+    };
     __cond_45 = __v0_44 == 3;
     if __cond_45 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -907,11 +915,12 @@ condition: g.items.len() == 3
         unreachable;
     }
     __v0_46 = __inline_Array_i32__IndexValue_i32___index_value_171: block -> i32 {
-        if 0 >= g.items.used {
+        self_347 = g.items;
+        if 0 >= self_347.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_i32__IndexValue_i32___index_value_171: builtin::array_get<i32>(g.items.repr, 0);
+        break __inline_Array_i32__IndexValue_i32___index_value_171: builtin::array_get<i32>(self_347.repr, 0);
         unreachable;
     };
     __cond_47 = __v0_46 == 5;
@@ -945,11 +954,12 @@ condition: g.items[0] == 5
         unreachable;
     }
     __v0_48 = __inline_Array_i32__IndexValue_i32___index_value_179: block -> i32 {
-        if 1 >= g.items.used {
+        self_360 = g.items;
+        if 1 >= self_360.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_i32__IndexValue_i32___index_value_179: builtin::array_get<i32>(g.items.repr, 1);
+        break __inline_Array_i32__IndexValue_i32___index_value_179: builtin::array_get<i32>(self_360.repr, 1);
         unreachable;
     };
     __cond_49 = __v0_48 == 10;
@@ -983,11 +993,12 @@ condition: g.items[1] == 10
         unreachable;
     }
     __v0_50 = __inline_Array_i32__IndexValue_i32___index_value_187: block -> i32 {
-        if 2 >= g.items.used {
+        self_373 = g.items;
+        if 2 >= self_373.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_i32__IndexValue_i32___index_value_187: builtin::array_get<i32>(g.items.repr, 2);
+        break __inline_Array_i32__IndexValue_i32___index_value_187: builtin::array_get<i32>(self_373.repr, 2);
         unreachable;
     };
     __cond_51 = __v0_50 == 15;

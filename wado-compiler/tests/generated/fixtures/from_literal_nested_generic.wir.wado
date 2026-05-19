@@ -140,6 +140,7 @@ fn "wado-compiler/tests/fixtures/from_literal_nested_generic.wado/run"() with St
     let __b_9: ref "core:prelude//Array<i32>";
     let key_11: ref "core:prelude/string.wado//String";
     let key_14: ref "core:prelude/string.wado//String";
+    let self_17: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let f_21: ref "core:prelude/format.wado//Formatter";
     let f_26: ref "core:prelude/format.wado//Formatter";
     m = __kv_lit: block -> ref "wado-compiler/tests/fixtures/from_literal_nested_generic.wado//NestedMap<core:prelude/array.wado/Array<core:prelude/string.wado/String>,i32>" {
@@ -161,7 +162,11 @@ fn "wado-compiler/tests/fixtures/from_literal_nested_generic.wado/run"() with St
         break __kv_lit: __b_0;
         unreachable;
     };
-    __v0 = m.keys.used;
+    __v0 = __inline_Array_core_prelude_string_wado_String___len_7: block -> i32 {
+        self_17 = m.keys;
+        break __inline_Array_core_prelude_string_wado_String___len_7: self_17.used;
+        unreachable;
+    };
     __cond = __v0 == 2;
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {

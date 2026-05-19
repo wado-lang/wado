@@ -143,8 +143,13 @@ fn "wado-compiler/tests/fixtures/from_literal_fn_arg.wado/sum_values"(m) {
     let total: i32;
     let __iter_2: ref "core:prelude/array.wado//ArrayIter<i32>";
     let v: i32;
+    let self: ref "core:prelude//Array<i32>";
     total = 0;
-    __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: m.values.repr, used: m.values.used, index: 0 };
+    __iter_2 = __inline_Array_i32__IntoIterator__into_iter_0: block -> ref "core:prelude/array.wado//ArrayIter<i32>" {
+        self = m.values;
+        break __inline_Array_i32__IntoIterator__into_iter_0: struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: self.repr, used: self.used, index: 0 };
+        unreachable;
+    };
     b0: block {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -187,6 +192,7 @@ fn "wado-compiler/tests/fixtures/from_literal_fn_arg.wado/run"() with Stdout {
     let key_46: ref "core:prelude/string.wado//String";
     let f_52: ref "core:prelude/format.wado//Formatter";
     let f_57: ref "core:prelude/format.wado//Formatter";
+    let self_66: ref "core:prelude//Array<core:prelude/string.wado/String>";
     n = __inline_count_entries_2: block -> i32 {
         m = __kv_lit: block -> ref "wado-compiler/tests/fixtures/from_literal_fn_arg.wado//SimpleMap<i32>" {
             __b_0 = struct.new "wado-compiler/tests/fixtures/from_literal_fn_arg.wado//SimpleMap<i32>" { keys: ref.as_non_null(__inline_SimpleMap_i32___new_4____seq_lit: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
@@ -210,7 +216,12 @@ fn "wado-compiler/tests/fixtures/from_literal_fn_arg.wado/run"() with Stdout {
             break __kv_lit: __b_0;
             unreachable;
         };
-        break __inline_count_entries_2: m.keys.used;
+        __inline_Array_core_prelude_string_wado_String___len_4: block -> i32 {
+            self_66 = m.keys;
+            break __inline_Array_core_prelude_string_wado_String___len_4: self_66.used;
+            unreachable;
+        };
+        break __inline_count_entries_2;
         unreachable;
     };
     __cond_3 = n == 3;
