@@ -1156,17 +1156,15 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
                 .iter()
                 .enumerate()
                 .map(|(i, (orig_name, ty))| {
-                    // Reuse the function's declared parameter name when it's
-                    // a normal identifier so debug/inspect output of the
-                    // synthetic forwarder reads naturally; fall back to
-                    // `__fn_<i>` slots when the source uses placeholders
-                    // (e.g., `_`) or other non-identifier shapes — the
-                    // `__fn_` prefix marks them as compiler-synthesised
-                    // forwarder parameters in WIR dumps.
-                    let name = if orig_name.is_empty()
-                        || orig_name == "_"
-                        || orig_name.starts_with("__")
-                    {
+                    // Reuse the function's declared parameter name so the
+                    // synthetic forwarder's body (`f(name)`) and its
+                    // pretty-printed form keep whatever information the
+                    // source carried — even compiler-synthesised names
+                    // like `__outptr` are useful in WIR dumps. The only
+                    // case that has to rename is a bare `_`, which can't
+                    // appear as an argument expression in the forwarder
+                    // call. Empty names are renamed defensively.
+                    let name = if orig_name.is_empty() || orig_name == "_" {
                         format!("__fn_{i}")
                     } else {
                         orig_name.clone()
