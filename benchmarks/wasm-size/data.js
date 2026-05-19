@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779184581669,
+  "lastUpdate": 1779185893823,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23353,6 +23353,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 490666,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c5b15b624dd37173b86e2fc87f5a0e79ca043a13",
+          "message": "Merge pull request #1117 from wado-lang/claude/benchmark-syntax-highlight-gbayO\n\nperf(compiler): retune inline_threshold defaults for -O1/-O2/-O3",
+          "timestamp": "2026-05-19T19:06:08+09:00",
+          "tree_id": "4b3af61412cf21395320ee5340204d333fb98d95",
+          "url": "https://github.com/wado-lang/wado/commit/c5b15b624dd37173b86e2fc87f5a0e79ca043a13"
+        },
+        "date": 1779185893478,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1911,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10111,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 486702,
             "unit": "bytes"
           }
         ]
