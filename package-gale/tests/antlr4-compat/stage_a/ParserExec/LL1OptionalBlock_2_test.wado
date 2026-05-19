@@ -1,0 +1,25 @@
+#![generated(by = "package-gale/scripts/extract_antlr4_descriptors.wado")]
+// Do not edit by hand — re-run the generator to regenerate.
+//
+// Source descriptor: ParserExec/LL1OptionalBlock_2 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A: the generated parser must accept the descriptor's [input]
+// without returning an error. No parse-tree shape comparison.
+
+use t from "../../grammars/ParserExec/LL1OptionalBlock_2.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/antlr4_compat_a/ParserExec/LL1OptionalBlock_2",
+        },
+    };
+
+test "stage_a: ParserExec/LL1OptionalBlock_2" {
+    let input = "a";
+    let result = t::parse(&input);
+    if let Err(err) = &result {
+        panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);
+    }
+}

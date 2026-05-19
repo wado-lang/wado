@@ -1,0 +1,46 @@
+use g from "./grammars/ll_wildcard_alt.g4" with { generator: { module: "../src/generator.wado", options: { highlight: false }, output_dir: "tests/generated/ll_wildcard_alt" } };
+use { normalize_tree } from "./grammars/ll_wildcard_alt.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = g::parse(input).unwrap();
+    let tree = g::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+// Hit case: ID followed by `=` matches `assign`; ID followed by `;`
+// must fall through to the wildcard alt. Without scan-based
+// first-success-wins dispatch the parser commits to `assign` on the
+// bare ID and traps at the missing `=`.
+//
+// Note: ANTLR4's lexer matches `abc` as a single ID token, so the
+// wildcard alt fires once for the full identifier (not per char).
+test "wildcard alt: assign hits on ID '=' INT ';', wildcard hits on bare ID" {
+    assert_tree(&"x=10; abc;", &"
+        (a (assign x = 10 ;) abc ;)
+    ");
+}
+
+// Rejection case: when the assign scan can match, prediction must
+// commit to `assign` rather than the wildcard. Otherwise the wildcard
+// would consume the leading ID and leave `=10;` unconsumable.
+test "wildcard alt: assign wins when its full pattern is present" {
+    assert_tree(&"y=99;", &"
+        (a (assign y = 99 ;))
+    ");
+}
+
+// Two assigns back to back. Each iteration must pick `assign`.
+test "wildcard alt: two consecutive assigns" {
+    assert_tree(&"p=1; q=2;", &"
+        (a (assign p = 1 ;) (assign q = 2 ;))
+    ");
+}
+
+// Only wildcard alt matches: a single bare ID.
+test "wildcard alt: bare ID falls through to wildcard" {
+    assert_tree(&"foo", &"
+        (a foo)
+    ");
+}

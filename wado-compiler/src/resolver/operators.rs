@@ -737,9 +737,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
         &mut self,
         unary: &ast::UnaryExpr,
         ctx: &mut FunctionContext,
-        _expected_type: Option<TypeId>,
+        expected_type: Option<TypeId>,
     ) -> TirExpr {
-        let expr = self.resolve_expr(&unary.expr, ctx, None);
+        // For `&x` / `&mut x`, peel one layer of the expected type so the
+        // operand sees the underlying expected shape. This lets a generic
+        // function reference taken by `&identity` (expected `&fn(i32) -> i32`)
+        // pin its type arguments from the inner `fn(i32) -> i32` the same
+        // way a bare `identity` to a `fn(...)` parameter would.
+        let inner_expected = if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) {
+            expected_type.and_then(|expected| {
+                let table = self.type_table.borrow();
+                match table.get(expected) {
+                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
+                    _ => None,
+                }
+            })
+        } else {
+            None
+        };
+        let expr = self.resolve_expr(&unary.expr, ctx, inner_expected);
         let op = util::convert_unary_op(unary.op);
 
         // Track address-taken locals for &x and &mut x

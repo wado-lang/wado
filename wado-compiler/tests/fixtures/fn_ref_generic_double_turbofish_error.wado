@@ -1,0 +1,17 @@
+// Stacking turbofish on the same identifier (`name::<A>::<B>`) is a parse
+// error: the type arguments are already bound by the first `::<…>` and the
+// second segment has no meaningful place to live in the AST.
+
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+test "double turbofish is rejected" {
+    let f = identity::<i32>::<bool>;
+    assert f(42) == 42;
+}
+
+__DATA__
+{
+    "compile_error": "turbofish type arguments already specified"
+}

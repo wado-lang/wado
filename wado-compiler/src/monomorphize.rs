@@ -41,7 +41,11 @@ pub(crate) type GenericFunctionKey = (ModuleSource, String);
 /// Methods stay unqualified — the struct name already provides namespace.
 /// Free functions get a module-qualified `FreeFunctionName` string so the
 /// post-mono mangled name is stable across modules.
-fn generic_function_name(is_method: bool, module_source: &ModuleSource, name: &str) -> String {
+pub(crate) fn generic_function_name(
+    is_method: bool,
+    module_source: &ModuleSource,
+    name: &str,
+) -> String {
     if is_method {
         name.to_string()
     } else {

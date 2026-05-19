@@ -1,0 +1,20 @@
+use g from "./grammars/multiple_eof.g4" with { generator: { module: "../src/generator.wado", options: { highlight: false }, output_dir: "tests/generated/multiple_eof" } };
+
+// Two consecutive `EOF` references at the end of a rule must both match
+// without advancing the cursor past the EOF sentinel. The first match
+// observes EOF and stays put; the second match observes the same
+// sentinel and also stays put. Pre-fix Gale advanced after the first
+// match and trapped on the second `expect`.
+test "multiple EOF references: alt 'x'" {
+    let root = g::parse(&"x").unwrap();
+    let tree = g::to_tree(&root);
+    let actual = tree.to_string_tree();
+    assert actual == "(prog x)", `actual: {actual}`;
+}
+
+test "multiple EOF references: alt 'x y'" {
+    let root = g::parse(&"xy").unwrap();
+    let tree = g::to_tree(&root);
+    let actual = tree.to_string_tree();
+    assert actual == "(prog x y)", `actual: {actual}`;
+}

@@ -1,0 +1,28 @@
+// `&fn(...)` parameter types peel to `fn(...)` for the purpose of inferring
+// type arguments on a generic function reference. `&identity` flowing into a
+// `f: &fn(i32) -> i32` parameter pins `T = i32` exactly like the bare
+// `apply_fn(identity, ...)` form does for `fn(...)` parameters.
+
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+fn apply_ref(f: &fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+fn apply_ref_annot(x: i32) -> i32 {
+    let f: &fn(i32) -> i32 = &identity;
+    return f(x);
+}
+
+test "&identity to &fn parameter (generic ref)" {
+    assert apply_ref(&identity, 21) == 21;
+}
+
+test "let with &fn annotation pins T" {
+    assert apply_ref_annot(7) == 7;
+}
+
+__DATA__
+{"test": {}}

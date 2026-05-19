@@ -950,6 +950,31 @@ impl Monomorphizer {
                     }
                 }
             }
+            // Bare function reference with pinned type args (turbofish or
+            // inferred). The resolver already typed the FuncRef as
+            // `fn(...)` after substitution; we only need to queue the
+            // matching instantiation so the call site below the
+            // closure-forwarder lands in a real monomorphized function.
+            TirExprKind::FuncRef {
+                module_source,
+                name,
+                type_args,
+            } => {
+                if !type_args.is_empty() {
+                    let qualified_func_key = generic_function_key(false, module_source, name);
+                    if generic_functions.contains_key(&qualified_func_key) {
+                        let key = InstantiationKey {
+                            name: qualified_func_key.1,
+                            module_source: module_source.clone(),
+                            impl_type_args: vec![],
+                            method_type_args: type_args.clone(),
+                            method_info: None,
+                        };
+                        let mangled = self.function_instantiation_name(&key, type_table);
+                        self.try_queue_function(key, mangled);
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -2182,6 +2207,16 @@ impl Monomorphizer {
                     locals,
                 );
             }
+            // A `FuncRef` carries `type_args` when the reference was pinned
+            // by turbofish or expected-type inference. When the enclosing
+            // function is itself generic, those args may contain `TypeParam`
+            // ids that still need substitution before the monomorph collector
+            // can queue the right instance.
+            TirExprKind::FuncRef { type_args, .. } => {
+                for arg in type_args.iter_mut() {
+                    *arg = self.substitute_type(*arg, substitution, type_table);
+                }
+            }
             // Literals and other simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -2191,7 +2226,6 @@ impl Monomorphizer {
             | TirExprKind::BytesLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Unit
-            | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. }

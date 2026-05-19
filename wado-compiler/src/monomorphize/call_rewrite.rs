@@ -172,6 +172,36 @@ impl Monomorphizer {
         }
         LocalTypeUpdater { locals }.visit_block(block);
     }
+    /// Rewrite a `FuncRef { name, type_args }` whose `type_args` were pinned
+    /// at the resolver (turbofish or expected-type inference) so its `name`
+    /// points at the monomorphized instance and its `type_args` is empty.
+    /// Lower (`lower::plan::closure`) later wraps the typed `FuncRef` into a
+    /// zero-capture closure that forwards into the rewritten instance.
+    fn rewrite_func_ref_expr(&self, expr: &mut TirExpr) {
+        if let TirExprKind::FuncRef {
+            module_source,
+            name,
+            type_args,
+        } = &mut expr.kind
+            && !type_args.is_empty()
+        {
+            // Match the lookup form used by `collect_func_instantiation_sites_in_expr`:
+            // free functions are keyed by their module-qualified name.
+            let qualified_name = super::generic_function_name(false, module_source, name);
+            let key = InstantiationKey {
+                name: qualified_name,
+                module_source: module_source.clone(),
+                impl_type_args: vec![],
+                method_type_args: type_args.clone(),
+                method_info: None,
+            };
+            if let Some(mangled) = self.lookup_function_instantiation(&key) {
+                *name = mangled.clone();
+                type_args.clear();
+            }
+        }
+    }
+
     fn rewrite_call_expr(&self, expr: &mut TirExpr, type_table: &TypeTable) {
         if let TirExprKind::Call {
             func,
@@ -710,6 +740,9 @@ impl TirMutVisitor for CallRewriter<'_> {
             }
             TirExprKind::MethodCall { .. } => {
                 self.mono.rewrite_method_call_expr(expr, self.type_table);
+            }
+            TirExprKind::FuncRef { .. } => {
+                self.mono.rewrite_func_ref_expr(expr);
             }
             _ => {}
         }

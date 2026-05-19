@@ -1139,9 +1139,13 @@ struct FuncRefToClosureRewriter<'a> {
 impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         // Bare `FuncRef` → zero-capture Closure if the function is known.
+        // By the time `lower` runs, the monomorphizer has rewritten any
+        // generic FuncRef so that `name` is the mangled instance and
+        // `type_args` is empty — the lookup below is uniform.
         if let TirExprKind::FuncRef {
             name,
             module_source: func_module,
+            type_args: _,
         } = &expr.kind
         {
             let Some(sig) = self.func_sigs.get(name.as_str()) else {

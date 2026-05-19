@@ -10,13 +10,13 @@
 #            all (use for genuinely target-language-specific tests,
 #            never for things we just haven't fixed yet).
 #
-#   [stage_a2_todo] — Stage A2: the generated parser fails to accept the
+#   [stage_a_todo] — Stage A: the generated parser fails to accept the
 #            descriptor's [input]. The test is emitted with `#[TODO]` so
 #            it is recorded as expected-to-fail. Drop once the gap is
 #            closed (typically LL prediction, codegen, or a [start] /
 #            first-parser-rule mismatch the test wasn't written to
 #            tolerate).
-#   [stage_a2_skip] — Stage A2: emission is skipped entirely. Use when
+#   [stage_a_skip] — Stage A: emission is skipped entirely. Use when
 #            the grammar cannot be compiled by Gale or running through
 #            it would be meaningless (e.g. [start] rule differs from
 #            Gale's `parse()` entry by design).
@@ -53,25 +53,21 @@
 "ParserErrors/SingleSetInsertionConsumption" = "trailing <! ... !> StringTemplate comment outside any rule — testsuite descriptor artifact, not a self-contained .g4"
 "ParserErrors/SingleTokenDeletionConsumption" = "trailing <! ... !> StringTemplate comment outside any rule — testsuite descriptor artifact, not a self-contained .g4"
 
-[stage_a2_todo]
+[stage_a_todo]
 "LeftRecursion/ReturnValueAndActionsList1_2" = "parse stops at the first comma in the input list — LR rule with returns / list-label combination not yet handled by Stage C-free codegen"
 "LeftRecursion/ReturnValueAndActionsList1_4" = "parse stops at the first comma in the input list — LR rule with returns / list-label combination not yet handled by Stage C-free codegen"
-"ParserExec/ListLabelForClosureContext" = "parser rejects the canonical input — LL prediction gap"
-"ParserExec/MultipleEOFHandling" = "grammar uses two consecutive EOF tokens — Gale rejects the second EOF"
-"ParserExec/OpenDeviceStatement_Case1" = "parser rejects the canonical input — LL prediction gap on alt ordering"
-"ParserExec/OpenDeviceStatement_Case2" = "parser rejects the canonical input — LL prediction gap on alt ordering"
 "ParserExec/OrderingPredicates" = "semantic predicate gates an alt — discarded predicate causes wrong alt to be selected (Stage C territory)"
-"ParserExec/Wildcard" = "parser commits to assign on bare ID and cannot fall through to the wildcard alt — LL prediction can't choose between (assign | .)"
 "Performance/DropLoopEntryBranchInLRRule_4" = "LR expression rule with operator precedence — Gale picks the wrong precedence chain for or-then-and"
-"Sets/UnicodeNegatedBMPSetIncludesSMPCodePoints" = "lexer rejects SMP code points inside a negated BMP set — Gale's char-class handling of surrogate-pair code points"
-"Sets/UnicodeNegatedSMPSetIncludesBMPCodePoints" = "lexer rejects BMP code points inside a negated SMP set — Gale's char-class handling of surrogate-pair code points"
 
-[stage_a2_skip]
+[stage_a_skip]
 "LeftRecursion/WhitespaceInfluence_1" = "Gale codegen produces invalid Wado for the all-binary-op LR `expression` rule (operator alt rewrite bug)"
 "LeftRecursion/WhitespaceInfluence_2" = "Gale codegen produces invalid Wado for the all-binary-op LR `expression` rule (operator alt rewrite bug)"
 "ParserExec/IfIfElseNonGreedyBinding1" = "Gale codegen fails on the non-greedy optional `??` operator in a parser rule"
 "ParserExec/Labels" = "Gale codegen fails on parser-rule list-label `b2+=b*` / `b3+=';'` shape"
+"ParserExec/ListLabelForClosureContext" = "descriptor [start] is `expression` but Gale's `parse()` enters at the first parser rule (`ifStatement`)"
 "ParserExec/ListLabelsOnSet" = "Gale codegen fails on `val+=(INT | FLOAT)*` set list-label shape"
+"ParserExec/OpenDeviceStatement_Case1" = "descriptor [start] is `statement` but Gale's `parse()` enters at the first parser rule (`program : statement+ '.'`)"
+"ParserExec/OpenDeviceStatement_Case2" = "descriptor [start] is `statement` but Gale's `parse()` enters at the first parser rule (`program : statement+ '.'`)"
 "ParserExec/ReservedWordsEscaping" = "grammar uses `continue` / `break` / `else` / `if` / `class` / `int` as rule names — Gale codegen emits invalid Wado identifiers"
 "Performance/ExpressionGrammar_1" = "Gale codegen produces invalid Wado for the all-binary-op LR `expr` rule (operator alt rewrite bug)"
 "Performance/ExpressionGrammar_2" = "Gale codegen produces invalid Wado for the all-binary-op LR `expr` rule (operator alt rewrite bug)"

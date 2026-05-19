@@ -1882,7 +1882,10 @@ Key points:
   - These references behave per the [Reference Types](#reference-types) rules. `&fn(...)` is _not_ a synonym for `fn(...)`; passing one where the other is expected is a type error.
   - `&mut fn(...)` parameters are useful as out-parameters: the callee can reassign the referenced slot via `*p = other_fn`, and the caller observes the new value through the same binding.
 - A `&fn(...)` or `&mut fn(...)` value is directly callable; the call expression auto-derefs to invoke the underlying `fn(...)`. `let r = &double; r(21)` works without an explicit `*r`.
-- Generic functions cannot be referenced bare; supply type arguments first (e.g. `identity::<i32>` once generic-name references are supported) or wrap in a closure (`|x| identity(x)`).
+- Generic functions taken as values need their type arguments pinned. Two principled forms are supported:
+  - Turbofish on the name itself: `let f = identity::<i32>;` evaluates to a `fn(i32) -> i32` value, and a non-call use like `apply(identity::<i32>, 7)` works the same way.
+  - An expected `fn(...)` type at the use site: `let f: fn(i32) -> i32 = identity;` and `apply(identity, 7)` (where `apply`'s parameter is `fn(i32) -> i32`) both pin the type arguments through positional inference against the expected signature.
+  - When neither form applies, the compiler emits a dedicated diagnostic suggesting turbofish or a closure wrapper (`|x| identity(x)`). The error replaces the older "unknown function" cascade that used to leak from `UNKNOWN` typing.
 - Functions that appear at the Component Model boundary still cannot carry function-typed values across — see the closure WEP.
 
 ### Default Arguments
