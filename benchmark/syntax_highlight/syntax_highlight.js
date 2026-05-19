@@ -6,9 +6,9 @@
 //   - Prism.js      (regex-based, lightweight; often the fastest of the three)
 //   - Shiki         (TextMate grammars; the "VSCode-quality" reference)
 //
-// For Shiki we run both regex engines:
-//   - Oniguruma (WASM, default)
-//   - JavaScript engine (pure JS, recommended for smaller/faster bundles)
+// For Shiki we use its JavaScript regex engine. The Oniguruma (WASM)
+// engine is omitted because it is roughly 2.5x slower than the JS
+// engine on SQL while producing byte-identical output.
 //
 // How to run:
 //   node syntax_highlight.js
@@ -24,11 +24,7 @@ import hljsSql from "highlight.js/lib/languages/sql";
 import Prism from "prismjs";
 import "prismjs/components/prism-sql.js";
 
-import {
-  createHighlighter,
-  createJavaScriptRegexEngine,
-  createOnigurumaEngine,
-} from "shiki";
+import { createHighlighter, createJavaScriptRegexEngine } from "shiki";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SQL_PATH = join(__dirname, "..", "sqlite_parse", "queries.sql");
@@ -82,19 +78,6 @@ bench("highlight.js", () => hljs.highlight(sql, { language: "sql" }).value);
 
 // ---------- Prism.js ----------
 bench("Prism.js", () => Prism.highlight(sql, Prism.languages.sql, "sql"));
-
-// ---------- Shiki (Oniguruma) ----------
-{
-  const highlighter = await createHighlighter({
-    themes: ["github-dark"],
-    langs: ["sql"],
-    engine: createOnigurumaEngine(import("shiki/wasm")),
-  });
-  bench("Shiki (Oniguruma)", () =>
-    highlighter.codeToHtml(sql, { lang: "sql", theme: "github-dark" }),
-  );
-  highlighter.dispose();
-}
 
 // ---------- Shiki (JS engine) ----------
 {

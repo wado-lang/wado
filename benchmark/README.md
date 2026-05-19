@@ -106,21 +106,24 @@ Highlight 81 SQL statements (13 KB) x 100 iterations. Gale-generated
 highlighter vs tree-sitter (Rust) and three popular JavaScript
 highlighters (run on Node.js).
 
+Best of three runs per implementation:
+
 | Implementation            |     Time | vs best |
 | ------------------------- | -------: | ------: |
-| Prism.js                  |   182 ms |   1.00x |
-| highlight.js              |   274 ms |   1.51x |
-| tree-sitter (Rust native) |   520 ms |   2.86x |
-| tree-sitter (Wasm)²       |   677 ms |   3.72x |
-| **Wado** (Gale)           | 1,498 ms |   8.23x |
-| Shiki (JS regex engine)   | 2,032 ms |  11.16x |
-| Shiki (Oniguruma WASM)    | 5,269 ms |  28.95x |
+| Prism.js                  |   160 ms |   1.00x |
+| highlight.js              |   260 ms |   1.62x |
+| tree-sitter (Rust native) |   487 ms |   3.04x |
+| tree-sitter (Wasm)²       |   677 ms |   4.23x |
+| **Wado** (Gale)           | 1,458 ms |   9.11x |
+| Shiki (JS regex engine)   | 2,032 ms |  12.70x |
 
 The two regex-based JS highlighters (Prism, highlight.js) win on raw
 speed for a token-poor language like SQL. tree-sitter wins among the
 tree-based highlighters. Shiki (TextMate grammars) is the slowest but
 produces the richest output (identifier-level coloring, VSCode-quality
-themes); the two Shiki rows differ only in the regex engine.
+themes). The Oniguruma (WASM) Shiki engine is omitted — it is ~2.5x
+slower than the JS engine on this input while producing byte-identical
+output.
 
 ² Carried over from the previous report — `wasi-sdk` is currently
 disabled (commented out in `mise.toml`) to avoid GitHub API rate-limit
