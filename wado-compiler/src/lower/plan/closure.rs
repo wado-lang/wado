@@ -1163,8 +1163,12 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
                     // like `__outptr` are useful in WIR dumps. The only
                     // case that has to rename is a bare `_`, which can't
                     // appear as an argument expression in the forwarder
-                    // call. Empty names are renamed defensively.
-                    let name = if orig_name.is_empty() || orig_name == "_" {
+                    // call.
+                    assert!(
+                        !orig_name.is_empty(),
+                        "function parameter name should never be empty (function: {func_name}, index: {i})",
+                    );
+                    let name = if orig_name == "_" {
                         format!("__fn_{i}")
                     } else {
                         orig_name.clone()
