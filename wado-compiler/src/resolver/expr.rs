@@ -9,7 +9,8 @@ use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
+    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -2302,6 +2303,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // it diverges, so `find_return_type_in_expr` matches it here
             // for return-type inference; mirror that for definite-exit.
             TirExprKind::Resume { .. } => true,
+            // `with … do { body }` evaluates `body` once and returns
+            // its value (typed `Unit` by default — even when body
+            // always returns from the surrounding function via
+            // `return`). Defer to `body`'s definite-exit instead of
+            // the wrapper's `Unit` type so
+            //   `fn foo() -> i32 { with E => h do { return X; } }`
+            // satisfies the missing-return check.
+            TirExprKind::WithHandler { body, .. } => Self::block_always_exits(body),
             _ => false,
         }
     }
@@ -2387,26 +2396,145 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Step::Skip => return false,
             Step::Descend => {}
         }
+        // Every variant that can carry a sub-expression or block is
+        // recursed into, mirroring `TirRefVisitor::walk_expr` — a
+        // `break` / `return` can be buried inside virtually any
+        // context (`(if cond { break; 0 } else { 0 }) + 1`, struct
+        // literal fields, call args, `with` handler bodies, …) and
+        // missing one variant would let `block_always_exits` skip
+        // `MissingReturn` for a function that can actually fall
+        // through. The lone exception is `Closure`: a closure's body
+        // is its own scope, so breaks / returns there don't touch the
+        // surrounding function.
         match &expr.kind {
+            // Pure leaves — nothing to descend into.
+            TirExprKind::IntLiteral { .. }
+            | TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_)
+            | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
+            | TirExprKind::Null
+            | TirExprKind::Unit
+            | TirExprKind::Local { .. }
+            | TirExprKind::FuncRef { .. }
+            | TirExprKind::GlobalVarGet { .. }
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => false,
+
+            // Block / labeled block — descend straight into the body.
             TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
                 Self::any_in_tree(block, probe)
             }
+
+            // Control-flow expression forms.
             TirExprKind::If {
+                condition,
                 then_branch,
                 else_branch,
-                ..
             } => {
-                Self::any_in_tree(then_branch, probe)
+                Self::any_in_expr(condition, probe)
+                    || Self::any_in_tree(then_branch, probe)
                     || else_branch
                         .as_ref()
                         .is_some_and(|b| Self::any_in_tree(b, probe))
             }
-            TirExprKind::Match { arms, .. } => {
-                arms.iter().any(|a| Self::any_in_expr(&a.body, probe))
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                Self::any_in_expr(scrutinee, probe)
+                    || arms.iter().any(|arm| {
+                        arm.guard
+                            .as_ref()
+                            .is_some_and(|g| Self::any_in_expr(g, probe))
+                            || Self::any_in_expr(&arm.body, probe)
+                    })
             }
+
+            // Single / paired subexpressions.
+            TirExprKind::GlobalVarSet { value, .. } | TirExprKind::Resume { value } => {
+                Self::any_in_expr(value, probe)
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                Self::any_in_expr(left, probe) || Self::any_in_expr(right, probe)
+            }
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            }
+            | TirExprKind::VariantTag { expr: inner }
+            | TirExprKind::VariantTest { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. } => Self::any_in_expr(inner, probe),
+            TirExprKind::Assign { target, value }
+            | TirExprKind::Index {
+                expr: target,
+                index: value,
+            } => Self::any_in_expr(target, probe) || Self::any_in_expr(value, probe),
+
+            // Calls / arg lists.
+            TirExprKind::Call { args, .. } => {
+                args.iter().any(|a| Self::any_in_expr(&a.expr, probe))
+            }
+            TirExprKind::CmRawCall { args, .. } => {
+                args.iter().any(|a| Self::any_in_expr(a, probe))
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                Self::any_in_expr(receiver, probe)
+                    || args.iter().any(|a| Self::any_in_expr(&a.expr, probe))
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                Self::any_in_expr(callee, probe)
+                    || args.iter().any(|a| Self::any_in_expr(a, probe))
+            }
+
+            // Aggregate literals.
+            TirExprKind::StructLiteral { fields, .. } => {
+                fields.iter().any(|f| Self::any_in_expr(&f.value, probe))
+            }
+            TirExprKind::TupleLiteral { elements } => {
+                elements.iter().any(|e| Self::any_in_expr(e, probe))
+            }
+            TirExprKind::VariantConstruct { payload, .. } => payload
+                .as_ref()
+                .is_some_and(|p| Self::any_in_expr(p, probe)),
+
+            // `with … do { body }`: descend into each handler's value
+            // expression (evaluated in the surrounding scope) and the
+            // do-block body.
+            TirExprKind::WithHandler { bindings, body, .. } => {
+                bindings
+                    .iter()
+                    .any(|b| Self::any_in_expr(&b.handler, probe))
+                    || Self::any_in_tree(body, probe)
+            }
+
+            // Template-string interpolations carry resolved sub-expressions.
+            TirExprKind::TemplateString { parts } => parts.iter().any(|part| match part {
+                TirTemplatePart::Interpolation { expr, .. } => Self::any_in_expr(expr, probe),
+                TirTemplatePart::Literal(_) => false,
+            }),
+
+            // `Switch` only appears after `lower::translate::switch` — long
+            // past resolve-time validation — but the walker stays sound for
+            // any future post-resolve reuse.
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                Self::any_in_expr(scrutinee, probe)
+                    || arms.iter().any(|arm| Self::any_in_tree(arm, probe))
+                    || Self::any_in_tree(default, probe)
+            }
+
             // Closures stay in their own scope.
             TirExprKind::Closure { .. } => false,
-            _ => false,
         }
     }
 
