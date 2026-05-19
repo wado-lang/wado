@@ -102,13 +102,25 @@ Parse 81 SQL statements (13 KB) x 100 iterations. Gale-generated parser vs sqlpa
 
 ## Syntax Highlight
 
-Highlight 81 SQL statements (13 KB) x 100 iterations. Gale-generated highlighter vs tree-sitter.
+Highlight 81 SQL statements (13 KB) x 100 iterations. Gale-generated
+highlighter vs tree-sitter (Rust) and three popular JavaScript
+highlighters (run on Node.js).
 
 | Implementation            |     Time | vs best |
 | ------------------------- | -------: | ------: |
-| tree-sitter (Rust native) |   446 ms |   1.00x |
-| tree-sitter (Wasm)²       |   677 ms |   1.36x |
-| **Wado** (Gale)           | 1,183 ms |   2.65x |
+| Prism.js                  |   182 ms |   1.00x |
+| highlight.js              |   274 ms |   1.51x |
+| tree-sitter (Rust native) |   520 ms |   2.86x |
+| tree-sitter (Wasm)²       |   677 ms |   3.72x |
+| **Wado** (Gale)           | 1,498 ms |   8.23x |
+| Shiki (JS regex engine)   | 2,032 ms |  11.16x |
+| Shiki (Oniguruma WASM)    | 5,269 ms |  28.95x |
+
+The two regex-based JS highlighters (Prism, highlight.js) win on raw
+speed for a token-poor language like SQL. tree-sitter wins among the
+tree-based highlighters. Shiki (TextMate grammars) is the slowest but
+produces the richest output (identifier-level coloring, VSCode-quality
+themes); the two Shiki rows differ only in the regex engine.
 
 ² Carried over from the previous report — `wasi-sdk` is currently
 disabled (commented out in `mise.toml`) to avoid GitHub API rate-limit
