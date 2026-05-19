@@ -23,12 +23,12 @@ use crate::tir::{
 };
 
 use crate::synthesis::common::{
-    alloc_local, assign, binary, block, builtin_call, cast, expr_stmt, i32_const, i64_const,
-    if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, synth_span,
+    alloc_local, assign, binary, builtin_call, cast, expr_stmt, i32_const, i64_const,
+    internal_call, let_mut_stmt, let_stmt, local_ref, synth_span,
 };
 
 use super::types::{
-    binary_add, flatten_param_type, kebab_to_pascal, variant_payload, variant_tag, variant_test,
+    binary_add, flatten_param_type, kebab_to_pascal, variant_tag, variant_test,
     wasi_type_to_type_id,
 };
 
@@ -663,25 +663,31 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                     payload_locals.push((local, TypeTable::I32));
                 }
 
-                // For each case with a payload, generate conditional flattening
-                for (case_idx, case) in cases.iter().enumerate() {
+                // Single TIR Match over the materialised variant: one
+                // arm per case. Payload-bearing arms bind the payload
+                // and assign the flattened values to the shared
+                // `payload_locals`; unit-payload arms have empty bodies.
+                // Variant Match is exhaustive at TIR level so no
+                // wildcard arm is needed.
+                let span = synth_span();
+                let mut arms: Vec<TirMatchArm> = Vec::with_capacity(cases.len());
+                for case in cases.iter() {
+                    let case_name = case.wado_name.clone();
                     if let Some(payload_ty) = &case.payload {
                         let payload_type_id = {
                             let mut tt = type_table.borrow_mut();
                             wasi_type_to_type_id(payload_ty, &mut tt, wasi_registry, wasi_package)
                         };
-                        let payload_expr = variant_payload(
-                            local_ref(val_local, &format!("{prefix}_val"), vt),
-                            case_idx as u32,
-                            payload_type_id,
-                        );
+                        let binding_local = alloc_local(next_local, locals, payload_type_id);
+                        let binding_name = format!("__variant_payload_{binding_local}");
+                        let payload_expr = local_ref(binding_local, &binding_name, payload_type_id);
 
                         let mut case_stmts = Vec::new();
                         let mut case_flat = Vec::new();
                         synthesize_flatten_value_to_flat_args(
                             payload_ty,
                             payload_expr,
-                            &format!("{prefix}_c{case_idx}"),
+                            &format!("{prefix}_c{}", case_name.as_str()),
                             next_local,
                             &mut case_stmts,
                             locals,
@@ -690,7 +696,6 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                             wasi_package,
                             type_table,
                         );
-                        // Assign case flat values to shared payload locals
                         for (i, flat_val) in case_flat.into_iter().enumerate() {
                             if i < payload_locals.len() {
                                 let (pl, pt) = payload_locals[i];
@@ -700,16 +705,54 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                                 )));
                             }
                         }
-                        stmts.push(if_stmt(
-                            variant_test(
-                                local_ref(val_local, &format!("{prefix}_val"), vt),
-                                case_idx as u32,
-                                &case.wado_name,
+
+                        arms.push(TirMatchArm {
+                            pattern: TirPattern::Variant {
+                                enum_type: vt,
+                                variant_name: case_name,
+                                bindings: vec![TirPattern::Binding {
+                                    name: binding_name,
+                                    local_index: binding_local,
+                                    type_id: payload_type_id,
+                                }],
+                                payload_type: payload_type_id,
+                            },
+                            guard: None,
+                            body: TirExpr::new(
+                                TirExprKind::Block(crate::tir::TirBlock::new(case_stmts, span)),
+                                TypeTable::UNIT,
+                                span,
                             ),
-                            block(case_stmts),
-                            None,
-                        ));
+                            span,
+                        });
+                    } else {
+                        arms.push(TirMatchArm {
+                            pattern: TirPattern::Variant {
+                                enum_type: vt,
+                                variant_name: case_name,
+                                bindings: Vec::new(),
+                                payload_type: TypeTable::UNIT,
+                            },
+                            guard: None,
+                            body: TirExpr::new(
+                                TirExprKind::Block(crate::tir::TirBlock::new(Vec::new(), span)),
+                                TypeTable::UNIT,
+                                span,
+                            ),
+                            span,
+                        });
                     }
+                }
+                if !arms.is_empty() {
+                    let match_expr = TirExpr::new(
+                        TirExprKind::Match {
+                            expr: Box::new(local_ref(val_local, &format!("{prefix}_val"), vt)),
+                            arms,
+                        },
+                        TypeTable::UNIT,
+                        span,
+                    );
+                    stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
                 }
 
                 // Push all payload locals as flat args
@@ -786,16 +829,16 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
         inner_locals.push((local, ft));
     }
 
-    // If Some: extract payload and flatten it
+    // Flatten the Some payload via a TIR Match that binds the inner
+    // value. The None arm is empty; variant `Match` is exhaustive on
+    // `Option<T>` so no wildcard is required.
     let inner_type_id = {
         let mut tt = type_table.borrow_mut();
         wasi_type_to_type_id(inner_type, &mut tt, wasi_registry, wasi_package)
     };
-    let payload_expr = variant_payload(
-        local_ref(val_local, &format!("{prefix}_optval"), vt),
-        names.some_index,
-        inner_type_id,
-    );
+    let payload_binding_local = alloc_local(next_local, locals, inner_type_id);
+    let payload_binding_name = format!("__opt_payload_{payload_binding_local}");
+    let payload_expr = local_ref(payload_binding_local, &payload_binding_name, inner_type_id);
 
     let mut some_stmts = Vec::new();
     let mut some_flat = Vec::new();
@@ -811,7 +854,6 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
         wasi_package,
         type_table,
     );
-    // Assign flattened values to the mutable locals
     for (i, flat_val) in some_flat.into_iter().enumerate() {
         if i < inner_locals.len() {
             let (il, it) = inner_locals[i];
@@ -821,15 +863,51 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
             )));
         }
     }
-    stmts.push(if_stmt(
-        variant_test(
-            local_ref(val_local, &format!("{prefix}_optval"), vt),
-            names.some_index,
-            &names.some_name,
+
+    let span = synth_span();
+    let some_arm = TirMatchArm {
+        pattern: TirPattern::Variant {
+            enum_type: vt,
+            variant_name: names.some_name.clone(),
+            bindings: vec![TirPattern::Binding {
+                name: payload_binding_name,
+                local_index: payload_binding_local,
+                type_id: inner_type_id,
+            }],
+            payload_type: inner_type_id,
+        },
+        guard: None,
+        body: TirExpr::new(
+            TirExprKind::Block(crate::tir::TirBlock::new(some_stmts, span)),
+            TypeTable::UNIT,
+            span,
         ),
-        block(some_stmts),
-        None,
-    ));
+        span,
+    };
+    let none_arm = TirMatchArm {
+        pattern: TirPattern::Variant {
+            enum_type: vt,
+            variant_name: names.none_name.clone(),
+            bindings: Vec::new(),
+            payload_type: TypeTable::UNIT,
+        },
+        guard: None,
+        body: TirExpr::new(
+            TirExprKind::Block(crate::tir::TirBlock::new(Vec::new(), span)),
+            TypeTable::UNIT,
+            span,
+        ),
+        span,
+    };
+    let match_expr = TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(local_ref(val_local, &format!("{prefix}_optval"), vt)),
+            arms: vec![some_arm, none_arm],
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
 
     // Push inner locals as flat args
     for (i, (il, it)) in inner_locals.iter().enumerate() {
