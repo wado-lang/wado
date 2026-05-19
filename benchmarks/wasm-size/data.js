@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779194881888,
+  "lastUpdate": 1779197859451,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23553,6 +23553,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9d50bdee9cdb4672f17dc0165065f543a6c974f0"
         },
         "date": 1779194881457,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1911,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10111,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 486702,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "df5502644dfc6ff2455c8b88b671904e6a36a934",
+          "message": "Merge pull request #1119 from wado-lang/claude/fix-function-reference-spec-JTMXD\n\nfeat: function references — type bare fn names, box &fn consistently",
+          "timestamp": "2026-05-19T22:31:01+09:00",
+          "tree_id": "e6756c30b056985ec80ab1fffecb9c0f2192c35b",
+          "url": "https://github.com/wado-lang/wado/commit/df5502644dfc6ff2455c8b88b671904e6a36a934"
+        },
+        "date": 1779197859010,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
