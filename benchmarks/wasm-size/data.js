@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779186131409,
+  "lastUpdate": 1779189193380,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23421,6 +23421,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3bef13725849d39f8c56885ad8f85520924f4e96"
         },
         "date": 1779186131019,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1911,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10111,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 486702,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "62fef243d98a1c0986d8dc07545b065187c18fb7",
+          "message": "Merge pull request #1121 from wado-lang/claude/antlr4-setup-compatibility-QUrN6\n\nfeat(gale): ANTLR4 Stage A2 importer + parser-rule set codegen fixes",
+          "timestamp": "2026-05-19T20:03:51+09:00",
+          "tree_id": "3a3a6cbae5647b401a195922817fe0ee221ad9b3",
+          "url": "https://github.com/wado-lang/wado/commit/62fef243d98a1c0986d8dc07545b065187c18fb7"
+        },
+        "date": 1779189193183,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
