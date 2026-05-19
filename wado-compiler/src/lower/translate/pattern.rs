@@ -1288,18 +1288,19 @@ impl<'a> PatternLowerer<'a> {
                     .as_ref()
                     .map_or(TypeTable::UNIT, block_result_type);
                 // Join the two arm types the same way the resolver
-                // does for `if`/`if let` (see
-                // `resolver::expr::resolve_if_expr`): a `Never` arm
-                // is absorbed into the other side; otherwise the
-                // then-branch's type wins (the resolver has already
-                // verified both branches agree at expression
-                // position, and at statement position both branches
-                // are `Unit` so the choice is invariant).
-                let match_type = if then_type == TypeTable::NEVER {
-                    else_type
-                } else {
-                    then_type
-                };
+                // does for `if` / `if let` (see
+                // `tir::agree_branch_types`): equal types agree, a
+                // `Never` arm defers to the other side, and an
+                // outright mismatch — which is exactly what
+                // statement-position `if let` produces when the
+                // user's then-block happens to end in a non-Unit
+                // call — falls back to `Unit`. Falling back to
+                // `Unit` lets wir_build's `translate_match` skip
+                // the value-producing `if … -> T` shape that would
+                // otherwise demand both arms produce `T`; instead
+                // each arm-body's value is dropped after evaluation.
+                let match_type = crate::tir::agree_branch_types(then_type, else_type)
+                    .unwrap_or(TypeTable::UNIT);
                 let then_body = TirExpr::new(TirExprKind::Block(then_block), then_type, then_span);
                 let else_body = match else_block {
                     Some(b) => {
