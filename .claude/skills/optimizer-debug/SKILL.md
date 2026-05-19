@@ -72,7 +72,7 @@ the first iteration and only diverged once the inliner expanded an
 additional function on the second.
 
 When a pass is the only one whose skipping makes the bug go away that
-just narrows the *participants* in the buggy interaction — it does not
+just narrows the _participants_ in the buggy interaction — it does not
 prove the pass is itself buggy. Pair the skip-bisection result with
 `WADO_DUMP_PASS_AFTER` on the same pass to compare its output across
 the working vs. broken configuration before concluding.

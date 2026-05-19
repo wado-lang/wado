@@ -349,7 +349,10 @@ pub mod pass_dump {
         if list.is_empty() {
             return false;
         }
-        let mut counts = COUNTS.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap();
+        let mut counts = COUNTS
+            .get_or_init(|| Mutex::new(HashMap::new()))
+            .lock()
+            .unwrap();
         let n = counts.entry(name.to_string()).or_insert(0);
         *n += 1;
         let scoped = format!("{name}@{n}");

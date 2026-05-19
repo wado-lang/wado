@@ -189,7 +189,9 @@ fn collect_let_indices_in_stmt(
     rebound: &mut IndexSet<u32>,
 ) {
     match &stmt.kind {
-        NirStmtKind::Let { local_index, value, .. } => {
+        NirStmtKind::Let {
+            local_index, value, ..
+        } => {
             if !seen.insert(*local_index) {
                 rebound.insert(*local_index);
             }
