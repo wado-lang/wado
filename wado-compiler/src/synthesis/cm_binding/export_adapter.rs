@@ -27,9 +27,9 @@ use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::LocalMethodName;
 use crate::tir::{
-    CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind,
-    TirFunction, TirLocal, TirModule, TirParam, TirStmt, TirStructField, TirVariantDecl, TypeId,
-    TypeTable,
+    CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
+    TirFunction, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirStructField, TirVariantDecl, TypeId, TypeTable,
 };
 
 use crate::synthesis::common::{
@@ -1270,68 +1270,81 @@ pub(super) fn synthesize_variant_lower_to_flat(
         )));
     }
 
-    // For each non-unit case, generate: if variant_test { extract payload, lower to flat }
+    // Per-case payload flattening as a single TIR `Match` over the
+    // materialised variant local. Payload arms bind the payload to
+    // a fresh local and write the flattened values into the shared
+    // `flat_locals[1..]`. Unit-payload arms carry an empty body. The
+    // Match is exhaustive on the variant so no wildcard arm is added.
+    let span = synth_span();
+    let mut arms: Vec<TirMatchArm> = Vec::with_capacity(variant_decl.cases.len());
     for case in &variant_decl.cases {
         let case_flat = {
             let tt = ctx.type_table.borrow();
             flat_types_from_type_id(case.payload, tir_modules, &tt)
         };
-        if case_flat.is_empty() {
-            continue; // Unit case — no payload to lower
-        }
 
         let mut case_stmts: Vec<TirStmt> = Vec::new();
-
-        // Extract payload
-        let payload = variant_payload(
-            local_ref(value_local, "__err_val", value_type_id),
-            case.index,
-            case.payload,
-        );
-        let payload_local = alloc_local(next_local, locals, case.payload);
-        case_stmts.push(let_stmt(
-            "__case_payload",
-            payload_local,
-            case.payload,
-            payload,
-        ));
-
-        // Lower payload to flat values
-        let lowered = synthesize_lower_to_flat(
-            local_ref(payload_local, "__case_payload", case.payload),
-            case.payload,
-            next_local,
-            &mut case_stmts,
-            locals,
-            tir_modules,
-            ctx,
-        );
-
-        // Assign lowered values to flat locals [1..]
-        for (i, flat_val) in lowered.iter().enumerate() {
-            if 1 + i < flat_locals.len() {
-                let target_type = cm_val_type_to_type_id(flat_types[1 + i]);
-                let source_type = cm_val_type_to_type_id(flat_val.cm_type);
-                let mut val = local_ref(flat_val.index, "__flat", source_type);
-                if flat_val.cm_type != flat_types[1 + i] {
-                    val = cast(val, target_type);
+        let bindings: Vec<TirPattern> = if !case_flat.is_empty() {
+            let payload_local = alloc_local(next_local, locals, case.payload);
+            let payload_name = format!("__case_payload_{payload_local}");
+            let lowered = synthesize_lower_to_flat(
+                local_ref(payload_local, &payload_name, case.payload),
+                case.payload,
+                next_local,
+                &mut case_stmts,
+                locals,
+                tir_modules,
+                ctx,
+            );
+            for (i, flat_val) in lowered.iter().enumerate() {
+                if 1 + i < flat_locals.len() {
+                    let target_type = cm_val_type_to_type_id(flat_types[1 + i]);
+                    let source_type = cm_val_type_to_type_id(flat_val.cm_type);
+                    let mut val = local_ref(flat_val.index, "__flat", source_type);
+                    if flat_val.cm_type != flat_types[1 + i] {
+                        val = cast(val, target_type);
+                    }
+                    case_stmts.push(expr_stmt(assign(
+                        local_ref(flat_locals[1 + i].0, &flat_locals[1 + i].1, target_type),
+                        val,
+                    )));
                 }
-                case_stmts.push(expr_stmt(assign(
-                    local_ref(flat_locals[1 + i].0, &flat_locals[1 + i].1, target_type),
-                    val,
-                )));
             }
-        }
+            vec![TirPattern::Binding {
+                name: payload_name,
+                local_index: payload_local,
+                type_id: case.payload,
+            }]
+        } else {
+            Vec::new()
+        };
 
-        stmts.push(if_stmt(
-            variant_test(
-                local_ref(value_local, "__err_val", value_type_id),
-                case.index,
-                &case.name,
+        arms.push(TirMatchArm {
+            pattern: TirPattern::Variant {
+                enum_type: value_type_id,
+                variant_name: case.name.clone(),
+                bindings,
+                payload_type: case.payload,
+            },
+            guard: None,
+            body: TirExpr::new(
+                TirExprKind::Block(TirBlock::new(case_stmts, span)),
+                TypeTable::UNIT,
+                span,
             ),
-            block(case_stmts),
-            None,
-        ));
+            span,
+        });
+    }
+    if !arms.is_empty() {
+        let match_expr = TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(local_ref(value_local, "__err_val", value_type_id)),
+                arms,
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
     }
 }
 
