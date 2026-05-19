@@ -1159,13 +1159,15 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
                     // Reuse the function's declared parameter name when it's
                     // a normal identifier so debug/inspect output of the
                     // synthetic forwarder reads naturally; fall back to
-                    // anonymous `_i` slots when the source uses placeholders
-                    // (e.g., `_`) or other non-identifier shapes.
+                    // `__fn_<i>` slots when the source uses placeholders
+                    // (e.g., `_`) or other non-identifier shapes — the
+                    // `__fn_` prefix marks them as compiler-synthesised
+                    // forwarder parameters in WIR dumps.
                     let name = if orig_name.is_empty()
                         || orig_name == "_"
                         || orig_name.starts_with("__")
                     {
-                        format!("_{i}")
+                        format!("__fn_{i}")
                     } else {
                         orig_name.clone()
                     };
