@@ -1323,9 +1323,42 @@ impl<'a> PatternLowerer<'a> {
                         span: else_span,
                     },
                 ];
+                // Bind the scrutinee to a temp local before the Match.
+                // The (Let { value: scrutinee }, Match { expr: Local(temp) })
+                // shape is what `labeled_block_fusion` looks for to eliminate
+                // GC allocations produced by inlined `Option<T>`-returning
+                // calls (e.g. `Iterator::next`). With the scrutinee embedded
+                // directly in `Match.expr`, fusion has no Let value to bite
+                // and the optimisation stops firing on iterator-heavy loops.
+                let scrutinee_type = scrutinee.type_id;
+                let scrutinee_span = scrutinee.span;
+                let temp_local = self.alloc_local(scrutinee_type);
+                let temp_name = format!("__iflet_{temp_local}");
+                let mut lowered_scrutinee = scrutinee;
+                self.lower_expr(&mut lowered_scrutinee, type_table);
+                out.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name: temp_name.clone(),
+                        local_index: temp_local,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: scrutinee_type,
+                        value: lowered_scrutinee,
+                        skip_value_copy: false,
+                    },
+                    stmt.span,
+                ));
+                let scrutinee_local = TirExpr::new(
+                    TirExprKind::Local {
+                        index: temp_local,
+                        name: temp_name,
+                    },
+                    scrutinee_type,
+                    scrutinee_span,
+                );
                 let mut match_expr = TirExpr::new(
                     TirExprKind::Match {
-                        expr: Box::new(scrutinee),
+                        expr: Box::new(scrutinee_local),
                         arms,
                     },
                     match_type,
