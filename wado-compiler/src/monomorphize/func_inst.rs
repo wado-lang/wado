@@ -1489,6 +1489,9 @@ impl Monomorphizer {
                                         new_info.base_struct_name.clone(),
                                         new_info.trait_name.clone(),
                                         new_info.method_name.clone(),
+                                    )
+                                    .with_base_trait_module(
+                                        new_info.base_trait_module.clone(),
                                     );
                                     let generic_name = base_info.to_mangled_name();
                                     let method_type_arg_tids: Vec<TypeId> = if let FunctionRef {

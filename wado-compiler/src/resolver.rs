@@ -634,6 +634,81 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         sources
     }
 
+    /// Resolve a bare declaration name (effect / resource / trait / type)
+    /// referenced in the current module to its canonical
+    /// `(declaring module, name)` key. The decl indices on [`TraitEnv`] are
+    /// keyed by this canonical pair so two modules can host same-named
+    /// declarations without colliding; every lookup site must canonicalise
+    /// the name through this helper before consulting the index.
+    ///
+    /// Resolution order, in priority:
+    /// 1. `effect_sources` — built per-module from `use { Logger } from "…"`
+    ///    declarations and local `interface` / `resource` definitions.
+    /// 2. `imported_type_sources` — per-module `use { Foo } from "…"` for any
+    ///    type-like reference (covers traits / structs / variants alongside
+    ///    the type tables).
+    /// 3. The global symbol table — canonicalises prelude / stdlib names
+    ///    even when they were imported transitively.
+    /// 4. The current module — the implicit declaration site for everything
+    ///    declared locally without re-export.
+    ///
+    /// When the canonicalised name had an alias (`use { Foo as Bar }`),
+    /// the returned key uses the *original* declaration name, so the index
+    /// (whose key is `(decl_module, decl_name)`) matches.
+    pub(crate) fn canonical_decl_key(
+        &self,
+        name: &str,
+    ) -> (ModuleSource, String) {
+        if let Some(src) = self.effect_sources.get(name) {
+            // effect_sources never carries an alias mapping, so the local
+            // name is the original declaration name. Canonicalise through
+            // `lookup_in_module` so re-exports (e.g. `wasi:clocks` re-
+            // exporting `MonotonicClock` from `wasi:clocks/monotonic_clock`)
+            // resolve to the *defining* module's key rather than the
+            // re-exporting one. Mirrors `resolve_effects`'s canonicalisation.
+            let canonical = self
+                .symbols
+                .lookup_in_module(src, name)
+                .map(|sym| sym.defined_at.module.clone())
+                .unwrap_or_else(|| src.clone());
+            return (canonical, name.to_string());
+        }
+        if let Some(src) = self.imported_type_sources.get(name) {
+            let original = self
+                .import_original_names
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| name.to_string());
+            let canonical = self
+                .symbols
+                .lookup_in_module(src, &original)
+                .map(|sym| sym.defined_at.module.clone())
+                .unwrap_or_else(|| src.clone());
+            return (canonical, original);
+        }
+        if let Some(sym) = self.symbols.lookup(name) {
+            return (sym.defined_at.module.clone(), name.to_string());
+        }
+        // Last-resort fallback: scan the global decl indices for any
+        // declaration with this bare name. Stdlib code (e.g. `core:json`
+        // calling `f64::from_str`) references prelude traits / resources
+        // that aren't carried in `effect_sources` / `imported_type_sources`
+        // — prelude is implicit, not via `use` — and that may not be
+        // registered in the per-module symbol table for non-user modules.
+        // The lookup picks "first registered" when two modules declare
+        // same-named items; this is the legacy bare-name behaviour and
+        // is fine in practice because the disambiguating cases (user
+        // code with same-named imports) are caught by the import-aware
+        // paths above.
+        if let Some(key) = self.trait_env.find_trait_decl_key(name) {
+            return key;
+        }
+        if let Some(key) = self.trait_env.find_effect_or_resource_decl_key(name) {
+            return key;
+        }
+        (self.current_module_source.clone(), name.to_string())
+    }
+
     /// Resolve AST effect names (strings) to TIR `EffectRefs` with module source information.
     ///
     /// `effect_ids` is a parallel slice with `(AstId, Span)` of each effect-name identifier

@@ -3283,6 +3283,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         base_struct_name: target_name,
                         trait_name: Some(from_trait),
                         base_trait_name: Some(from_trait_name),
+                        // Auto-derived `From` impl (synthesis-side): the
+                        // dispatch builder never needs `From`'s declaring
+                        // module because it's not an effect / resource.
+                        base_trait_module: None,
                         trait_type_args: vec![],
                         method_name: "from".to_string(),
                         method_type_args: vec![],

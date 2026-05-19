@@ -136,16 +136,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     name,
                     module_source,
                 } => {
-                    let is_known_effect = self
-                        .trait_env
-                        .effect_decl_index
-                        .get(name)
-                        .is_some_and(|(decl_module, _)| decl_module == module_source);
-                    let is_known_resource = self
-                        .trait_env
-                        .resource_decl_index
-                        .get(name)
-                        .is_some_and(|(decl_module, _)| decl_module == module_source);
+                    // `EffectRef::Concrete` already carries the canonicalised
+                    // module source resolved in `resolve_effects`; build the
+                    // decl-index key from it directly rather than walking the
+                    // import graph a second time via `canonical_decl_key`.
+                    let key = (module_source.clone(), name.clone());
+                    let is_known_effect = self.trait_env.effect_decl_index.contains_key(&key);
+                    let is_known_resource =
+                        self.trait_env.resource_decl_index.contains_key(&key);
                     if !is_known_effect && !is_known_resource {
                         let _ = self.logger.error(TypeError::NotAnEffect {
                             name: name.clone(),
@@ -384,15 +382,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let base_trait_name = self.get_type_name(trait_type);
             // Accept either an effect or a resource declaration. The
             // dispatch synthesis pass treats both uniformly.
+            //
+            // Canonicalise through the current module's import context
+            // because `trait_type` was just referenced by bare name in an
+            // `impl Foo for T` block we're walking; the decl index is
+            // keyed by `(decl_module, name)` and two modules can declare
+            // a same-named effect / resource.
+            let canonical_key = self.canonical_decl_key(&base_trait_name);
             let decl_module = self
                 .trait_env
                 .effect_decl_index
-                .get(&base_trait_name)
+                .get(&canonical_key)
                 .map(|(m, _)| m.clone())
                 .or_else(|| {
                     self.trait_env
                         .resource_decl_index
-                        .get(&base_trait_name)
+                        .get(&canonical_key)
                         .map(|(m, _)| m.clone())
                 });
             let Some(decl_module) = decl_module else {
