@@ -241,7 +241,7 @@ cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 sq
 """
 
 [tasks.syntax-highlight]
-description = "Run syntax-highlight benchmark (Gale highlighter vs tree-sitter)"
+description = "Run syntax-highlight benchmark (Gale highlighter vs tree-sitter, highlight.js, Prism.js, Shiki)"
 run = """
 #!/usr/bin/env bash
 set -e
@@ -262,6 +262,9 @@ else
     HAVE_TS_WASM=0
 fi
 
+echo "=== Installing JS highlighter dependencies ==="
+npm install --prefix syntax_highlight --silent --no-audit --no-fund
+
 echo "=== tree-sitter (native) ==="
 ./syntax_highlight/target/release/syntax_highlight_bench
 
@@ -269,6 +272,9 @@ if [ "$HAVE_TS_WASM" -eq 1 ]; then
     echo "=== tree-sitter (Wasm/wasmtime) ==="
     wasmtime --dir . syntax_highlight/target/wasm32-wasip1/release/syntax_highlight_bench.wasm
 fi
+
+echo "=== JavaScript highlighters (Node.js) ==="
+node syntax_highlight/syntax_highlight.js
 
 echo "=== Wado (Gale) ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 syntax_highlight/syntax_highlight.wado
@@ -298,4 +304,5 @@ rm -f count_prime/*.wasm mandelbrot/*.wasm sieve/*.wasm zlib/zlib_c.wasm
 rm -f count_prime/count_prime_c mandelbrot/mandelbrot_c sieve/sieve_c
 rm -f fts/fts_c fts/fts_rs fts/fts_zig fts/fts_zig.o
 rm -rf zlib/target json_twitter/target json_canada/target json_catalog/target syntax_highlight/target
+rm -rf syntax_highlight/node_modules syntax_highlight/package-lock.json
 """
