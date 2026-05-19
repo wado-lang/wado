@@ -675,6 +675,9 @@ impl Parser {
 
     fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
         if self.tokens[self.pos].kind == kind {
+            if kind == TK_EOF {
+                return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+            }
             return Result::<Token, ParseError>::Ok(self.advance());
         }
         let tok = &self.tokens[self.pos];

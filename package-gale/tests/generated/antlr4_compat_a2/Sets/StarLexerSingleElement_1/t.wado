@@ -505,18 +505,35 @@ impl Lexer {
 
 fn try_a(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
+    let bt_start_0 = pos;
+    let mut bt_positions_0: Array<i32> = [pos];
     loop {
-        let rep_saved_0 = pos;
-        rep_0: {
-            if pos >= chars.len() || chars[pos] != 'b' { break rep_0; }
+        let bt_saved_0 = pos;
+        bt_rep_0: {
+            if pos >= chars.len() || chars[pos] != 'b' { break bt_rep_0; }
             pos += 1;
+            bt_positions_0.push(pos);
             continue;
         }
-        pos = rep_saved_0;
+        pos = bt_saved_0;
         break;
     }
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
-    pos += 1;
+    bt_positions_0.insert(0, bt_start_0);
+    let mut bt_done_0 = false;
+    bt_done_0_blk: {
+        for let mut bt_k_0 = bt_positions_0.len() - 1; bt_k_0 >= 0; bt_k_0 -= 1 {
+            pos = bt_positions_0[bt_k_0];
+            bt_try_0: {
+                if pos >= chars.len() || chars[pos] != 'c' { break bt_try_0; }
+                pos += 1;
+                bt_done_0 = true;
+                break bt_done_0_blk;
+            }
+        }
+    }
+    if !bt_done_0 {
+        return -1;
+    }
     return pos;
 }
 
@@ -600,6 +617,9 @@ impl Parser {
 
     fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
         if self.tokens[self.pos].kind == kind {
+            if kind == TK_EOF {
+                return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+            }
             return Result::<Token, ParseError>::Ok(self.advance());
         }
         let tok = &self.tokens[self.pos];

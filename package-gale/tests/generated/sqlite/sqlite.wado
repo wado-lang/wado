@@ -3713,10 +3713,12 @@ fn try_identifier(chars: &Array<char>, start: i32) -> i32 {
                 pos = alts_saved_0;
                 if pos >= chars.len() || chars[pos] != '[' { break alts_0_2; }
                 pos += 1;
+                let bt_start_7 = pos;
+                let mut bt_positions_7: Array<i32> = [pos];
                 loop {
-                    let rep_saved_7 = pos;
-                    rep_7: {
-                        if pos >= chars.len() { break rep_7; }
+                    let bt_saved_7 = pos;
+                    bt_rep_7: {
+                        if pos >= chars.len() { break bt_rep_7; }
                         let not_saved_8 = pos;
                         let mut not_matched_8 = false;
                         not_8: {
@@ -3725,15 +3727,30 @@ fn try_identifier(chars: &Array<char>, start: i32) -> i32 {
                             not_matched_8 = true;
                         }
                         pos = not_saved_8;
-                        if not_matched_8 { break rep_7; }
+                        if not_matched_8 { break bt_rep_7; }
                         pos += 1;
+                        bt_positions_7.push(pos);
                         continue;
                     }
-                    pos = rep_saved_7;
+                    pos = bt_saved_7;
                     break;
                 }
-                if pos >= chars.len() || chars[pos] != ']' { break alts_0_2; }
-                pos += 1;
+                bt_positions_7.insert(0, bt_start_7);
+                let mut bt_done_7 = false;
+                bt_done_7_blk: {
+                    for let mut bt_k_7 = bt_positions_7.len() - 1; bt_k_7 >= 0; bt_k_7 -= 1 {
+                        pos = bt_positions_7[bt_k_7];
+                        bt_try_7: {
+                            if pos >= chars.len() || chars[pos] != ']' { break bt_try_7; }
+                            pos += 1;
+                            bt_done_7 = true;
+                            break bt_done_7_blk;
+                        }
+                    }
+                }
+                if !bt_done_7 {
+                    break alts_0_2;
+                }
                 alts_ok_0 = true;
             }
             if !alts_ok_0 {
@@ -4793,6 +4810,9 @@ impl Parser {
 
     fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
         if self.tokens[self.pos].kind == kind {
+            if kind == TK_EOF {
+                return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+            }
             return Result::<Token, ParseError>::Ok(self.advance());
         }
         let tok = &self.tokens[self.pos];

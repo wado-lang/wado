@@ -332,9 +332,127 @@ fn gen_lexer_alt_seq(w: &mut CodeWriter, alt: &LexerAlt, all_rules: &Array<Lexer
                 gen_lexer_non_greedy_repeat(w, rep, &rest_alt, all_rules, fail_action, ci);
                 return;
             }
+            // Greedy Plus/Star followed by remaining elements that the
+            // Plus/Star inner could also consume: a purely greedy loop
+            // would over-shoot and strand the suffix at end-of-input
+            // (`'a' ~('b')+ 'c'` is the canonical ANTLR4 descriptor —
+            // `Sets/UnicodeNegated*`). When the suffix is a single
+            // simple element that consumes one character (Literal of
+            // a single char, CharRange, CharClass, AnyChar, or Not over
+            // any of those), emit a longest-match-with-backtrack form:
+            // record each iter end position, then try the suffix at
+            // each position from longest to shortest. Fragments, rule
+            // refs, groups, and nested Repeats are intentionally out
+            // of scope — their suffix shapes need more analysis and
+            // the descriptor corpus does not exercise them in this
+            // way.
+            if rep.kind matches { Plus | Star }
+                && i + 1 < alt.elements.len()
+                && lexer_suffix_is_simple(&alt.elements, i + 1)
+                && lexer_element_can_consume_simple(&rep.element) {
+                let mut suffix_elems: Array<LexerElement> = [];
+                for let mut j = i + 1; j < alt.elements.len(); j += 1 {
+                    suffix_elems.push(alt.elements[j]);
+                }
+                gen_lexer_repeat_with_backtrack(w, rep, &suffix_elems, all_rules, fail_action, ci);
+                return;
+            }
         }
         gen_lexer_elem(w, elem, all_rules, fail_action, ci);
     }
+}
+
+/// True for lexer elements that consume exactly one char and never
+/// branch into rule references or nested loops. The longest-match
+/// backtracking emitter restricts the suffix to these shapes because
+/// it replays the suffix once per saved iter position; non-simple
+/// suffixes would silently lose state (rule refs) or recurse into
+/// their own backtracking (nested Repeats).
+fn lexer_element_can_consume_simple(elem: &LexerElement) -> bool {
+    return match *elem {
+        Literal(text) => text.chars().count() == 1,
+        CharRange(_) => true,
+        CharClass(_) => true,
+        AnyChar => true,
+        Not(not_inner) => lexer_element_can_consume_simple(&not_inner.element),
+        // `~('b')` parses as `Not(Group([Alt([Literal("b")])]))`: a
+        // single-alt Group wrapping a single simple element. The
+        // runtime emit consumes exactly one char in that case, so
+        // treat it as simple for the longest-match backtracking
+        // suffix replay.
+        Group(alts) => {
+            alts.len() == 1 && alts[0].elements.len() == 1 && lexer_element_can_consume_simple(&alts[0].elements[0]);
+        },
+        _ => false,
+    };
+}
+
+fn lexer_suffix_is_simple(elements: &Array<LexerElement>, start: i32) -> bool {
+    if start >= elements.len() {
+        return false;
+    }
+    for let mut i = start; i < elements.len(); i += 1 {
+        if !lexer_element_can_consume_simple(&elements[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Emit a greedy `Plus` / `Star` whose suffix the inner could also
+/// match. Records each successful iteration's end position in
+/// `rep_positions_<id>`, then walks the saved positions from longest
+/// to shortest, replaying the suffix at each one. The first position
+/// whose suffix replay succeeds wins; if none works the whole
+/// element fires `fail_action`. Caller has already verified via
+/// `lexer_suffix_is_simple` that the suffix is replay-safe.
+fn gen_lexer_repeat_with_backtrack(w: &mut CodeWriter, rep: &LexerRepeatElement, suffix: &Array<LexerElement>, all_rules: &Array<LexerRule>, fail_action: &String, ci: bool) {
+    let id = w.next_id();
+    let start_var = `bt_start_{id}`;
+    let positions_var = `bt_positions_{id}`;
+    let try_label = `bt_try_{id}`;
+    let done_var = `bt_done_{id}`;
+    let done_label = `bt_done_{id}_blk`;
+    let loop_label = `bt_rep_{id}`;
+
+    w.line(&`let {start_var} = pos;`);
+    if let Plus = rep.kind {
+        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci);
+    }
+    w.line(&`let mut {positions_var}: Array<i32> = [pos];`);
+    w.begin(&"loop");
+    w.line(&`let bt_saved_{id} = pos;`);
+    w.begin(&`{loop_label}:`);
+    gen_lexer_elem(w, &rep.element, all_rules, &`break {loop_label}`, ci);
+    w.line(&`{positions_var}.push(pos);`);
+    w.line(&"continue;");
+    w.end();
+    w.line(&`pos = bt_saved_{id};`);
+    w.line(&"break;");
+    w.end();
+    // For Star, the zero-iteration position (`start_var`) is also a
+    // valid resume point. Plus requires >=1 iter, so its shortest
+    // saved position is already the first-iter end.
+    if let Star = rep.kind {
+        w.line(&`{positions_var}.insert(0, {start_var});`);
+    }
+
+    w.line(&`let mut {done_var} = false;`);
+    w.begin(&`{done_label}:`);
+    w.begin(&`for let mut bt_k_{id} = {positions_var}.len() - 1; bt_k_{id} >= 0; bt_k_{id} -= 1`);
+    w.line(&`pos = {positions_var}[bt_k_{id}];`);
+    w.begin(&`{try_label}:`);
+    for let elem of suffix {
+        gen_lexer_elem(w, elem, all_rules, &`break {try_label}`, ci);
+    }
+    w.line(&`{done_var} = true;`);
+    w.line(&`break {done_label};`);
+    w.end();
+    w.end();
+    w.end();
+    w.begin(&`if !{done_var}`);
+    w.line(&`{*fail_action};`);
+    w.end();
 }
 
 fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &Array<LexerRule>, fail_action: &String, ci: bool) {
@@ -1350,7 +1468,9 @@ fn emit_group_calls(w: &mut CodeWriter, calls: &Array<TryCall>, indices: &Array<
         // instead of calling the try_* function.
         if !is_wildcard_group && call.match_length == 1 {
             if needs_extras {
-                w.line(&`if start + 1 > best_end \{ best_end = start + 1; best_kind = {call.token_kind};{call.extra} \}`);
+                w.line(
+                    &`if start + 1 > best_end \{ best_end = start + 1; best_kind = {call.token_kind};{call.extra} \}`,
+                );
             } else {
                 w.line(&`if start + 1 > best_end \{ best_end = start + 1; best_kind = {call.token_kind}; \}`);
             }

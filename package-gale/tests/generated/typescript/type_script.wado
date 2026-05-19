@@ -5039,19 +5039,36 @@ fn try_bigoctalintegerliteral(chars: &Array<char>, start: i32) -> i32 {
     if pos >= chars.len() { return -1; }
     if !(false || '0' <= chars[pos] <= '7') { return -1; }
     pos += 1;
+    let bt_start_36 = pos;
+    let mut bt_positions_36: Array<i32> = [pos];
     loop {
-        let rep_saved_36 = pos;
-        rep_36: {
-            if pos >= chars.len() { break rep_36; }
-            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '7') { break rep_36; }
+        let bt_saved_36 = pos;
+        bt_rep_36: {
+            if pos >= chars.len() { break bt_rep_36; }
+            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '7') { break bt_rep_36; }
             pos += 1;
+            bt_positions_36.push(pos);
             continue;
         }
-        pos = rep_saved_36;
+        pos = bt_saved_36;
         break;
     }
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
+    bt_positions_36.insert(0, bt_start_36);
+    let mut bt_done_36 = false;
+    bt_done_36_blk: {
+        for let mut bt_k_36 = bt_positions_36.len() - 1; bt_k_36 >= 0; bt_k_36 -= 1 {
+            pos = bt_positions_36[bt_k_36];
+            bt_try_36: {
+                if pos >= chars.len() || chars[pos] != 'n' { break bt_try_36; }
+                pos += 1;
+                bt_done_36 = true;
+                break bt_done_36_blk;
+            }
+        }
+    }
+    if !bt_done_36 {
+        return -1;
+    }
     return pos;
 }
 
@@ -5065,19 +5082,36 @@ fn try_bigbinaryintegerliteral(chars: &Array<char>, start: i32) -> i32 {
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == '0' || chars[pos] == '1') { return -1; }
     pos += 1;
+    let bt_start_37 = pos;
+    let mut bt_positions_37: Array<i32> = [pos];
     loop {
-        let rep_saved_37 = pos;
-        rep_37: {
-            if pos >= chars.len() { break rep_37; }
-            if !(false || chars[pos] == '_' || chars[pos] == '0' || chars[pos] == '1') { break rep_37; }
+        let bt_saved_37 = pos;
+        bt_rep_37: {
+            if pos >= chars.len() { break bt_rep_37; }
+            if !(false || chars[pos] == '_' || chars[pos] == '0' || chars[pos] == '1') { break bt_rep_37; }
             pos += 1;
+            bt_positions_37.push(pos);
             continue;
         }
-        pos = rep_saved_37;
+        pos = bt_saved_37;
         break;
     }
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
+    bt_positions_37.insert(0, bt_start_37);
+    let mut bt_done_37 = false;
+    bt_done_37_blk: {
+        for let mut bt_k_37 = bt_positions_37.len() - 1; bt_k_37 >= 0; bt_k_37 -= 1 {
+            pos = bt_positions_37[bt_k_37];
+            bt_try_37: {
+                if pos >= chars.len() || chars[pos] != 'n' { break bt_try_37; }
+                pos += 1;
+                bt_done_37 = true;
+                break bt_done_37_blk;
+            }
+        }
+    }
+    if !bt_done_37 {
+        return -1;
+    }
     return pos;
 }
 
@@ -7895,6 +7929,9 @@ impl Parser {
 
     fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
         if self.tokens[self.pos].kind == kind {
+            if kind == TK_EOF {
+                return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+            }
             return Result::<Token, ParseError>::Ok(self.advance());
         }
         let tok = &self.tokens[self.pos];
