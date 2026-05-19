@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779193717988,
+  "lastUpdate": 1779194881888,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23509,6 +23509,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9e7de3f14cd00c4e9d882c6c85a4f4c33c3918e8"
         },
         "date": 1779193717550,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1911,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10111,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 486702,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9d50bdee9cdb4672f17dc0165065f543a6c974f0",
+          "message": "Merge pull request #1118 from wado-lang/claude/fix-closure-iflet-collision-IGI1E\n\nfix(wado-compiler): closure template synth + definite-exit returns",
+          "timestamp": "2026-05-19T21:34:59+09:00",
+          "tree_id": "21357286aa6bf8cd25155fc0c52b3b769fc3a876",
+          "url": "https://github.com/wado-lang/wado/commit/9d50bdee9cdb4672f17dc0165065f543a6c974f0"
+        },
+        "date": 1779194881457,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
