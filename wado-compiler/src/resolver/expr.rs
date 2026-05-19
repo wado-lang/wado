@@ -762,28 +762,55 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Build a function type from an [`ast::Function`] declaration that
-    /// lives in `_def_module`. Param/return types resolve in the current
-    /// scope, so this is safe only when callers either point at the
-    /// current module or accept a `None` fallback.
+    /// lives in `def_module`. Param/return types resolve in the
+    /// definition module's perspective so type names referencing the
+    /// declaring module's items (newtypes, locally-declared structs,
+    /// re-exported enums, …) bind to the correct entries.
     pub(super) fn compute_func_ref_type_from_ast(
         &mut self,
         func: &ast::Function,
-        _def_module: &ModuleSource,
+        def_module: &ModuleSource,
     ) -> Option<TypeId> {
         if !func.type_params.is_empty() {
             return None;
         }
-        let param_types: Vec<TypeId> = func
-            .params
-            .iter()
-            .map(|p| self.resolve_type(&p.ty))
-            .collect();
-        let return_type = func
-            .return_type
-            .as_ref()
-            .map(|t| self.resolve_type(t))
-            .unwrap_or(TypeTable::UNIT);
-        let effects = self.resolve_effects(&func.effects, &func.effect_ids);
+        // For local functions we're already in the right scope; skip
+        // the `with_module_perspective` shuffle.
+        let same_module = *def_module == self.current_module_source;
+        let resolve = |s: &mut Self| -> (Vec<TypeId>, TypeId, Vec<crate::tir::EffectRef>) {
+            let param_types: Vec<TypeId> =
+                func.params.iter().map(|p| s.resolve_type(&p.ty)).collect();
+            let return_type = func
+                .return_type
+                .as_ref()
+                .map(|t| s.resolve_type(t))
+                .unwrap_or(TypeTable::UNIT);
+            let effects = s.resolve_effects(&func.effects, &func.effect_ids);
+            (param_types, return_type, effects)
+        };
+        let (param_types, return_type, effects) = if same_module {
+            resolve(self)
+        } else {
+            let callee_module = self.loaded_modules.get(def_module);
+            let (imported_type_sources, import_original_names) = if let Some(module) = callee_module
+            {
+                Self::build_imported_type_sources(
+                    &mut self.interner.borrow_mut(),
+                    module,
+                    def_module,
+                    Some(&self.entry_module_source),
+                    &self.invocations,
+                )
+            } else {
+                (IndexMap::default(), IndexMap::default())
+            };
+            self.with_module_perspective(
+                def_module.clone(),
+                imported_type_sources,
+                import_original_names,
+                resolve,
+            )
+        };
         if param_types.contains(&TypeTable::ERROR) || return_type == TypeTable::ERROR {
             return None;
         }

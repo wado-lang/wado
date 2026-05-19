@@ -719,26 +719,13 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 .unwrap_or_else(|| "f".to_string());
             // After the boxing pass, the synthesized self parameter type
             // `&fn(...)` is rewritten to `Box<fn(...)>` (a struct wrapping
-            // a closure ref). Detect that here so the dispatch body can
-            // unwrap `.value` before refcasting.
-            let self_is_boxed = tir_func
+            // a closure ref). When that's happened the dispatch body has
+            // to unwrap `.value` before refcasting; consult the type
+            // table's box-wrapper registry to find out.
+            let self_box_type_id = tir_func
                 .params
                 .first()
-                .map(|p| {
-                    matches!(
-                        type_table.get(p.type_id),
-                        crate::tir::ResolvedType::Struct {
-                            base_name: Some(base),
-                            ..
-                        } if base == "Box"
-                    )
-                })
-                .unwrap_or(false);
-            let self_box_type_id = if self_is_boxed {
-                tir_func.params.first().map(|p| p.type_id)
-            } else {
-                None
-            };
+                .and_then(|p| type_table.box_payload_of(p.type_id).map(|_| p.type_id));
             drop(tir_func);
             let _ = type_table;
             let body = build_fn_canonical_dispatch_body(

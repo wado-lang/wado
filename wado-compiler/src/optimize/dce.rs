@@ -757,11 +757,6 @@ fn collect_inspectable_signatures_from_reachable(
 ) -> InspectableSignatures {
     let mut sigs = InspectableSignatures::default();
     let type_table = &*project.type_table.borrow();
-    // Map from a Box<T>'s TypeId to T's TypeId, populated for the
-    // `Box<fn(...)>` wrappers the boxing pass synthesises. The DCE
-    // call-graph scanner consults this when peeling receiver types of
-    // `Fn^Inspect` method calls.
-    let box_payload_types = collect_box_payload_types(project, type_table);
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let func_id = function_id_for(&func);
@@ -769,7 +764,7 @@ fn collect_inspectable_signatures_from_reachable(
             continue;
         }
         if let Some(body) = &func.body {
-            scan_inspect_signatures_block(body, type_table, &box_payload_types, &mut sigs);
+            scan_inspect_signatures_block(body, type_table, &mut sigs);
         }
     }
     sigs
@@ -813,81 +808,21 @@ fn function_id_for(func: &NirFunction) -> FunctionId {
 fn scan_inspect_signatures_block(
     block: &NirBlock,
     type_table: &TypeTable,
-    box_payload_types: &IndexMap<TypeId, TypeId>,
     sigs: &mut InspectableSignatures,
 ) {
     for stmt in &block.stmts {
-        scan_inspect_signatures_stmt(stmt, type_table, box_payload_types, sigs);
+        scan_inspect_signatures_stmt(stmt, type_table, sigs);
     }
-}
-
-/// Build a map from each `Box<T>` wrapper struct's `TypeId` to `T`'s
-/// `TypeId`, restricted to wrappers whose payload `T` is a function
-/// type. The boxing pass synthesises these wrappers for every `&fn(...)`
-/// / `&mut fn(...)` reference, and downstream DCE / synthesis sites that
-/// peer through reference layers to read fn-arity need to peel the
-/// wrapper. We resolve the payload via the `Box<T>` `NirStruct`'s
-/// `value` field, which gives us a single, unambiguous source of truth.
-fn collect_box_payload_types(
-    project: &NirPackage,
-    type_table: &TypeTable,
-) -> IndexMap<TypeId, TypeId> {
-    let mut map: IndexMap<TypeId, TypeId> = IndexMap::default();
-    for s in &project.structs {
-        let Some(info) = &s.monomorph_info else {
-            continue;
-        };
-        if info.generic_name != "Box" {
-            continue;
-        }
-        let Some(value_field) = s.fields.iter().find(|f| f.name == "value") else {
-            continue;
-        };
-        if !matches!(
-            type_table.get(value_field.type_id),
-            ResolvedType::Function { .. }
-        ) {
-            continue;
-        }
-        // The type table may carry multiple `TypeId`s for the same
-        // `Box<fn(...)>` shape (per-call-site or per-monomorph-context
-        // duplicates). Record every matching `TypeId`, not just the first.
-        for tid in type_table.iter_type_ids() {
-            if let ResolvedType::Struct {
-                name,
-                module_source,
-                is_monomorphized: true,
-                base_name: Some(base),
-                ..
-            } = type_table.get(tid)
-                && base == "Box"
-                && *name == s.name
-                && *module_source == s.module_source
-            {
-                map.insert(tid, value_field.type_id);
-            }
-        }
-    }
-    map
-}
-
-/// If `type_id` is one of the `Box<fn(...)>` wrappers tracked in
-/// `box_payload_types`, return the payload `fn(...)` `TypeId`; otherwise
-/// return the input unchanged.
-fn peel_box_of_fn(box_payload_types: &IndexMap<TypeId, TypeId>, type_id: TypeId) -> TypeId {
-    box_payload_types.get(&type_id).copied().unwrap_or(type_id)
 }
 
 fn scan_inspect_signatures_stmt(
     stmt: &NirStmt,
     type_table: &TypeTable,
-    box_payload_types: &IndexMap<TypeId, TypeId>,
     sigs: &mut InspectableSignatures,
 ) {
     use crate::nir_visitor::NirRefVisitor;
     struct Scanner<'a> {
         type_table: &'a TypeTable,
-        box_payload_types: &'a IndexMap<TypeId, TypeId>,
         sigs: &'a mut InspectableSignatures,
     }
     impl NirRefVisitor for Scanner<'_> {
@@ -897,12 +832,11 @@ fn scan_inspect_signatures_stmt(
                 && info.base_struct_name == "Fn"
                 && let Some(trait_name) = info.base_trait_name.as_deref()
             {
-                // Receiver type is `&Fn(...)` — peel the reference (and the
-                // `Box<fn(...)>` wrapper inserted by the boxing pass) and
+                // Receiver type is `&Fn(...)` — peel the reference and any
+                // `Box<fn(...)>` wrapper introduced by the boxing pass, then
                 // read the function's arity + return type out of the type
                 // table.
-                let recv_type = self.type_table.peel_refs(receiver.type_id);
-                let recv_type = peel_box_of_fn(self.box_payload_types, recv_type);
+                let recv_type = self.type_table.peel_refs_and_box(receiver.type_id);
                 if let ResolvedType::Function {
                     params,
                     return_type,
@@ -924,11 +858,7 @@ fn scan_inspect_signatures_stmt(
             self.walk_expr(expr);
         }
     }
-    let mut s = Scanner {
-        type_table,
-        box_payload_types,
-        sigs,
-    };
+    let mut s = Scanner { type_table, sigs };
     s.visit_stmt(stmt);
 }
 

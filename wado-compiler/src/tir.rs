@@ -488,6 +488,14 @@ pub struct TypeTable {
     /// Maps newtype names to their ultimate base type name.
     /// Populated by `erase_newtypes_and_flags()` and used by `wir_build` for name-based newtype resolution.
     newtype_to_base_name: IndexMap<String, String>,
+    /// Reverse mapping `Box<T>` `TypeId` → `T`'s `TypeId`, populated by the
+    /// boxing pass (`lower/plan/boxing.rs`). The pass rewrites `&T` /
+    /// `&mut T` into `Box<T>` wrapper structs for primitives, variants and
+    /// function types. Sites that read receiver / argument types in
+    /// post-boxing IR (DCE inspect scanning, dispatch synthesis, etc.) use
+    /// [`Self::peel_refs_and_box`] to look through both the reference
+    /// layer and any boxing wrapper in a single step.
+    box_payload_types: IndexMap<TypeId, TypeId>,
     /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
     /// Populated incrementally when Struct types are interned.
     struct_name_index: IndexMap<(String, ModuleSource), TypeId>,
@@ -563,6 +571,7 @@ impl TypeTable {
             generic_assoc_type_defs: IndexMap::default(),
             redirects: IndexMap::default(),
             newtype_to_base_name: IndexMap::default(),
+            box_payload_types: IndexMap::default(),
             struct_name_index: IndexMap::default(),
             type_by_symbol: IndexMap::default(),
             symbol_by_type: IndexMap::default(),
@@ -1288,6 +1297,37 @@ impl TypeTable {
                 _ => return type_id,
             }
         }
+    }
+
+    /// Peel reference layers AND any `Box<T>` wrapper introduced by the
+    /// boxing pass, returning the underlying value type.
+    ///
+    /// The boxing pass rewrites `&T` / `&mut T` into `Box<T>` wrapper
+    /// structs for primitives, variants and function types. Sites that
+    /// inspect receiver / argument types in post-boxing IR — DCE inspect
+    /// scanning, dispatch synthesis, etc. — should reach for this
+    /// helper instead of [`Self::peel_refs`] so a `&fn(...)` parameter
+    /// (now `Box<fn(...)>`) and an unwrapped `fn(...)` value look the
+    /// same. For non-boxed types the result matches `peel_refs`.
+    pub fn peel_refs_and_box(&self, type_id: TypeId) -> TypeId {
+        let peeled = self.peel_refs(type_id);
+        self.box_payload_types
+            .get(&peeled)
+            .copied()
+            .unwrap_or(peeled)
+    }
+
+    /// Register a `Box<T>` wrapper's `TypeId` → payload `T`'s `TypeId`
+    /// mapping. Called by the boxing pass for every wrapper it creates;
+    /// downstream phases consume the mapping via [`Self::peel_refs_and_box`].
+    pub fn register_box_payload(&mut self, wrapper: TypeId, payload: TypeId) {
+        self.box_payload_types.insert(wrapper, payload);
+    }
+
+    /// Direct lookup for the payload of a single `Box<T>` wrapper, or
+    /// `None` if the given `TypeId` is not a registered wrapper.
+    pub fn box_payload_of(&self, wrapper: TypeId) -> Option<TypeId> {
+        self.box_payload_types.get(&wrapper).copied()
     }
 
     pub fn make_ref(&mut self, inner: TypeId) -> TypeId {
