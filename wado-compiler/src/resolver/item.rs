@@ -1314,9 +1314,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Distinct from `trait_name`, which is the full mangled form
         // (`"Stream<u8>"`) used to make per-instantiation method names
         // unique. Effect / resource / trait decl indices are keyed by the
-        // base name, so handler-method gating and dispatch synthesis must
-        // resolve through this form rather than the mangled one.
+        // canonical `(decl_module, base name)` pair, so we also resolve
+        // the trait reference through the current module's import context
+        // so dispatch synthesis can tell two same-named effects /
+        // resources apart.
         let base_trait_name: Option<String> = trait_type.map(|t| scope.get_type_name(t));
+        let base_trait_module: Option<ModuleSource> = base_trait_name
+            .as_deref()
+            .map(|n| scope.canonical_decl_key(n).0);
 
         // First, collect type params from impl block's generic type (e.g., impl Box<T>)
         // Also build impl_type_params for the TirFunction
@@ -1589,11 +1594,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // resources (`impl Stream<u8> for MockCM`) the bare-name form
         // (`Stream`) is what the lookup needs — `trait_name` itself is the
         // full mangled form (`Stream<u8>`) and would miss the index.
-        if let Some(name) = base_trait_name.as_deref()
-            && (scope.trait_env.effect_decl_index.contains_key(name)
-                || scope.trait_env.resource_decl_index.contains_key(name))
-        {
-            ctx.in_handler_method = true;
+        if let Some(name) = base_trait_name.as_deref() {
+            // `trait_type` was referenced by bare name in the surrounding
+            // `impl <Trait> for <Type>` block; canonicalise it against the
+            // current module's import context so two modules with same-
+            // named effects / resources don't get a false negative here.
+            let canonical_key = scope.canonical_decl_key(name);
+            if scope
+                .trait_env
+                .effect_decl_index
+                .contains_key(&canonical_key)
+                || scope
+                    .trait_env
+                    .resource_decl_index
+                    .contains_key(&canonical_key)
+            {
+                ctx.in_handler_method = true;
+            }
         }
 
         // Resolve parameters (including &self). Defaults are resolved in the
@@ -1738,6 +1755,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 base_struct_name: struct_name.to_string(),
                 trait_name: trait_name.map(String::from),
                 base_trait_name,
+                base_trait_module,
                 trait_type_args,
                 method_name: func.name.clone(),
                 method_type_args: vec![],

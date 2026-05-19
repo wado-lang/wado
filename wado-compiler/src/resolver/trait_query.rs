@@ -19,7 +19,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Returns the trait's methods (cloned) if found.
     pub(super) fn find_trait_decl_methods(&self, trait_name: &str) -> Option<Vec<ast::Function>> {
         // Fast O(1) lookup via pre-built index instead of scanning all modules.
-        if let Some((module_src, item_idx)) = self.trait_env.decl_index.get(trait_name) {
+        // `decl_index` is keyed by canonical `(decl_module, name)`; canonicalise
+        // the bare reference through the current module's import context so
+        // two modules with same-named traits never collide at the lookup
+        // step.
+        let canonical_key = self.canonical_decl_key(trait_name);
+        if let Some((module_src, item_idx)) = self.trait_env.decl_index.get(&canonical_key) {
             let module = &self.loaded_modules[module_src];
             if let Item::Trait(trait_decl) = &module.items[*item_idx] {
                 return Some(trait_decl.methods.clone());
@@ -41,7 +46,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         &self,
         trait_name: &str,
     ) -> Option<Vec<ast::GenericParam>> {
-        if let Some((module_src, item_idx)) = self.trait_env.decl_index.get(trait_name) {
+        let canonical_key = self.canonical_decl_key(trait_name);
+        if let Some((module_src, item_idx)) = self.trait_env.decl_index.get(&canonical_key) {
             let module = &self.loaded_modules[module_src];
             if let Item::Trait(trait_decl) = &module.items[*item_idx] {
                 return Some(trait_decl.type_params.clone());

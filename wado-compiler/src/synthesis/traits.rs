@@ -131,6 +131,15 @@ impl TraitPair {
 }
 
 /// Shorthand for `LocalMethodName::new(struct.into(), Some(trait.into()), method.into())`.
+///
+/// Leaves `base_trait_module` as `None`: every synthesis caller is
+/// auto-deriving an impl for a project-globally-unique core trait
+/// (Inspect / Display / Eq / Ord / From / `serde` adapters, …) whose
+/// name dispatch synthesis recognises without needing the disambiguating
+/// module. The resolver path that lifts user-written
+/// `impl <Trait> for <Type>` blocks populates the module via
+/// `Resolver::canonical_decl_key` directly into the [`LocalMethodName`]
+/// struct literal.
 fn trait_method_info(struct_name: &str, trait_name: &str, method: &str) -> LocalMethodName {
     LocalMethodName::new(
         struct_name.to_string(),

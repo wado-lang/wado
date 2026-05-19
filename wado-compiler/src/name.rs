@@ -328,6 +328,23 @@ pub struct LocalMethodName {
     /// against the bare-name decl indices used by trait/effect/resource
     /// dispatch.
     pub base_trait_name: Option<String>,
+    /// Canonical declaring module of the trait this method implements.
+    /// Populated by the resolver via
+    /// [`crate::resolver::Resolver::canonical_decl_key`] when constructing
+    /// the method from an `impl <Trait> for <Type>` block. Left `None` for
+    /// synthesis-derived auto-impls (Inspect / Display / Eq / Ord / From
+    /// / `serde` adapters, …) because those impls target prelude / core
+    /// traits whose name is already project-globally unique — dispatch
+    /// synthesis identifies them by name alone and never needs the
+    /// disambiguating module.
+    ///
+    /// When `Some`, paired with `base_trait_name` it forms the canonical
+    /// `(module, name)` key into [`crate::resolver::trait_env::EffectDeclIndex`]
+    /// and [`crate::resolver::trait_env::ResourceDeclIndex`]. Two modules
+    /// can each declare `pub interface Logger`; without this field the
+    /// dispatch builder would collapse both impls onto whichever Logger
+    /// landed first in the bare-name lookup table.
+    pub base_trait_module: Option<ModuleSource>,
     /// Concrete `TypeId`s of the trait / resource type arguments at this
     /// impl site (e.g. `[u8]` for `impl Stream<u8> for MockCM`). Empty
     /// for non-generic traits / effects, and for the bare base form
@@ -380,9 +397,11 @@ impl LocalMethodName {
     ///
     /// `trait_name` may be either the bare base form (`"Display"`) or a
     /// pre-mangled form (`"Stream<u8>"`); `base_trait_name` is derived by
-    /// truncating at the first `<`. Pass the form your caller already has;
-    /// `with_trait_type_args` is available when type args need to be
-    /// applied separately.
+    /// truncating at the first `<`. `base_trait_module` is left `None` and
+    /// callers that have the canonical declaring module (resolver path)
+    /// should populate it via [`Self::with_base_trait_module`]; synthesis-
+    /// derived auto-impls leave it `None` because dispatch synthesis
+    /// identifies them by name alone.
     #[must_use]
     pub fn new(struct_name: String, trait_name: Option<String>, method_name: String) -> Self {
         debug_assert!(
@@ -396,6 +415,7 @@ impl LocalMethodName {
             base_struct_name: struct_name.clone(),
             struct_name,
             base_trait_name,
+            base_trait_module: None,
             trait_name,
             trait_type_args: Vec::new(),
             method_name,
@@ -429,6 +449,7 @@ impl LocalMethodName {
             base_struct_name: struct_name.clone(),
             struct_name,
             base_trait_name,
+            base_trait_module: None,
             trait_name,
             trait_type_args: Vec::new(),
             method_name,
@@ -439,12 +460,24 @@ impl LocalMethodName {
         }
     }
 
+    /// Attach the canonical declaring module of `base_trait_name`. Used by
+    /// the resolver path that lifts an `impl <Trait> for <Type>` block into
+    /// TIR: the trait reference is canonicalised through
+    /// [`crate::resolver::Resolver::canonical_decl_key`] and then threaded
+    /// into the per-method `LocalMethodName` so dispatch synthesis can
+    /// distinguish two modules' same-named effects / resources.
+    #[must_use]
+    pub fn with_base_trait_module(mut self, module: Option<ModuleSource>) -> Self {
+        self.base_trait_module = module;
+        self
+    }
+
     /// Create a version of this `LocalMethodName` with type args applied.
     ///
     /// `impl_type_args` are applied to the struct name (e.g., "Array" + ["i32"] → "Array<i32>").
     /// `method_type_args` are stored separately (not embedded in `method_name`).
-    /// `base_struct_name` and `base_trait_name` are preserved (not changed
-    /// by type args).
+    /// `base_struct_name`, `base_trait_name`, and `base_trait_module` are
+    /// preserved (not changed by type args).
     #[must_use]
     pub fn with_type_args(&self, impl_type_args: &[String], method_type_args: &[String]) -> Self {
         let mangled_struct = if impl_type_args.is_empty() {
@@ -457,6 +490,7 @@ impl LocalMethodName {
             base_struct_name: self.base_struct_name.clone(),
             trait_name: self.trait_name.clone(),
             base_trait_name: self.base_trait_name.clone(),
+            base_trait_module: self.base_trait_module.clone(),
             trait_type_args: self.trait_type_args.clone(),
             method_name: self.method_name.clone(),
             method_type_args: method_type_args.to_vec(),
@@ -476,9 +510,10 @@ impl LocalMethodName {
     /// Create a version with the trait name mangled with type args.
     ///
     /// `trait_type_args` are applied to the trait name (e.g.,
-    /// `"Stream"` + `["u8"]` → `"Stream<u8>"`). `base_trait_name` is
-    /// preserved so dispatch synthesis / decl-index lookups continue to
-    /// resolve against the bare trait declaration.
+    /// `"Stream"` + `["u8"]` → `"Stream<u8>"`). `base_trait_name` and
+    /// `base_trait_module` are preserved so dispatch synthesis / decl-
+    /// index lookups continue to resolve against the bare trait
+    /// declaration (and its module).
     ///
     /// Panics if `self.trait_name` is `None` — type args on an inherent
     /// method don't have a trait to mangle.
@@ -512,6 +547,7 @@ impl LocalMethodName {
             base_struct_name: base_name.to_string(),
             trait_name: self.trait_name.clone(),
             base_trait_name: self.base_trait_name.clone(),
+            base_trait_module: self.base_trait_module.clone(),
             trait_type_args: self.trait_type_args.clone(),
             method_name: self.method_name.clone(),
             method_type_args: self.method_type_args.clone(),

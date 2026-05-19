@@ -402,6 +402,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
+        // Aliased imports (`use { Counter as CounterA }`) aren't declared
+        // as local Structs anywhere; consult `imported_type_sources` to
+        // recover the canonical declaring module. This intentionally
+        // narrower than the full `canonical_decl_key` fallback chain —
+        // synthesized lookups (e.g. `String^Inspect`) must still resolve
+        // through their well-known modules, which the full chain might
+        // route elsewhere.
+        if let Some(src) = self.imported_type_sources.get(struct_name) {
+            return src.clone();
+        }
         // Default to current module source
         self.current_module_source.clone()
     }
@@ -1847,6 +1857,93 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .is_some_and(|rt| self.type_implements_trait(rt, &bound.name))
                     });
                     if !bounds_ok {
+                        continue;
+                    }
+                }
+            }
+
+            // TypeId-equality disambiguation for concrete `impl Trait for
+            // <NamedType>` impls. The bare-name check at the top of the
+            // loop accepts every such impl with a matching name, so two
+            // `impl Describe for Data` blocks in different modules — each
+            // targeting its own `struct Data` — both land here even
+            // though only one corresponds to the receiver's actual type.
+            //
+            // Resolve the impl's receiver type in the impl's own module
+            // context and compare against the receiver type id; the
+            // resolver intern table guarantees each module's `Data`
+            // resolves to a distinct `TypeId`. Skip the filter for impls
+            // whose receiver is intentionally widely-applicable (blanket
+            // impls, generic impls, ref-shape impls) — those already have
+            // dedicated checks above.
+            if let Some(receiver) = receiver_type_id {
+                let (skip_filter, impl_ty_clone) = {
+                    let impl_block = self.get_impl_block(impl_ref);
+                    let is_blanket_tp = matches!(
+                        &impl_block.ty,
+                        Type::Named(named) if !self.is_known_type_name(&named.name)
+                    );
+                    // Skip the filter for impls whose receiver is
+                    // intentionally widely-applicable: blanket impls
+                    // (type-param receivers), ref-shape impls (already
+                    // filtered by the inner-name check above), and
+                    // generic impls (`impl X for Bag<V>`) — those
+                    // dispatch through the monomorphizer's substitution
+                    // path, where the impl's `ty` resolves to a
+                    // `TypeParam`-bearing form that can't be compared
+                    // directly against a concrete receiver's `TypeId`.
+                    let skip = !impl_block.type_params.is_empty()
+                        || is_blanket_tp
+                        || matches!(
+                            &impl_block.ty,
+                            Type::Reference(_) | Type::MutReference(_) | Type::Generic(_)
+                        );
+                    (skip, impl_block.ty.clone())
+                };
+                if !skip_filter {
+                    let impl_module = match impl_ref {
+                        ImplBlockRef::Loaded(m, _) => m.clone(),
+                        ImplBlockRef::CurrentModule(_) => self.current_module_source.clone(),
+                    };
+                    let (imports, originals) = self
+                        .loaded_modules
+                        .get(&impl_module)
+                        .map(|m| {
+                            Self::build_imported_type_sources(
+                                &mut self.interner.borrow_mut(),
+                                m,
+                                &impl_module,
+                                Some(&self.entry_module_source),
+                                &self.invocations,
+                            )
+                        })
+                        .unwrap_or_default();
+                    let impl_recv_id =
+                        self.with_module_perspective(impl_module, imports, originals, |s| {
+                            s.resolve_type(&impl_ty_clone)
+                        });
+                    let tt = self.type_table.borrow();
+                    let target = tt.peel_refs(impl_recv_id);
+                    // Walk the receiver's newtype chain so an impl on a
+                    // base struct stays reachable through `type
+                    // Location = Point`: the receiver's `TypeId` for
+                    // `Location` differs from `Point`'s, but the impl
+                    // is supposed to inherit via the newtype.
+                    let mut current = tt.peel_refs(receiver);
+                    let mut matched = false;
+                    loop {
+                        if current == target {
+                            matched = true;
+                            break;
+                        }
+                        match tt.get(current) {
+                            ResolvedType::Newtype { base_type, .. } => {
+                                current = tt.peel_refs(*base_type);
+                            }
+                            _ => break,
+                        }
+                    }
+                    if !matched {
                         continue;
                     }
                 }
