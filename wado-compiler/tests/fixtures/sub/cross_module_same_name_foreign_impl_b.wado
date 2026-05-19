@@ -1,0 +1,17 @@
+// Module B declares a DIFFERENT `pub trait Loud` (same bare name,
+// different signature) and `impl Loud for String`. Each module's
+// `Loud` is a distinct trait via the orphan rule's local-trait
+// classification.
+pub trait Loud {
+    fn shout(&self) -> i32;
+}
+
+impl Loud for String {
+    fn shout(&self) -> i32 {
+        return self.len();
+    }
+}
+
+pub fn shout_b(s: &String) -> i32 {
+    return s.shout();
+}

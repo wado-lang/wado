@@ -1,0 +1,20 @@
+// Two modules each declare `pub trait Loud` and `impl Loud for String`.
+// The orphan rule allows each impl because `Loud` is local to its
+// module. The two trait declarations are distinct, so a call to
+// `s.shout()` must be dispatched to the impl whose trait is in scope
+// at the call site.
+//
+// This is a regression guard for the `TraitImplModuleIndex` /
+// `blanket_trait_impl_modules` same-name disambiguation hole.
+
+use { shout_a } from "./sub/cross_module_same_name_foreign_impl_a.wado";
+use { shout_b } from "./sub/cross_module_same_name_foreign_impl_b.wado";
+
+test "cross-module same-name traits with foreign-type impls" {
+    let s = "hello";
+    assert shout_a(&s) == "hello";
+    assert shout_b(&s) == 5;
+}
+
+__DATA__
+{"test": {}}
