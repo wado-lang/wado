@@ -2147,6 +2147,203 @@ impl<H: CompilerHost> Resolver<'_, H> {
         None
     }
 
+    /// Whether every control path through `block` exits before reaching
+    /// the end — either via a `return` statement, a divergent expression
+    /// (`panic("…")`, a `match` whose every arm diverges), an `if` /
+    /// `if let` whose every branch exits, a `loop { … }` with no `break`
+    /// that escapes it, or a labeled block whose body provably exits
+    /// without a `break <label>` returning control to the surrounding
+    /// scope.
+    ///
+    /// Used by the missing-return validator to skip the diagnostic only
+    /// when the body provably never reaches a fall-through return — the
+    /// previous heuristic accepted any nested `return` even when only
+    /// one branch of an `if` had it, which let partial-return bodies
+    /// through and produced invalid core Wasm at codegen ("type
+    /// mismatch: expected i32 but nothing on stack").
+    pub(super) fn block_always_exits(block: &TirBlock) -> bool {
+        block.stmts.iter().any(Self::stmt_always_exits)
+    }
+
+    fn stmt_always_exits(stmt: &TirStmt) -> bool {
+        match &stmt.kind {
+            TirStmtKind::Return { .. } => true,
+            TirStmtKind::Expr(e) => Self::expr_always_exits(e),
+            TirStmtKind::If {
+                then_block,
+                else_block: Some(else_block),
+                ..
+            }
+            | TirStmtKind::IfLet {
+                then_block,
+                else_block: Some(else_block),
+                ..
+            } => Self::block_always_exits(then_block) && Self::block_always_exits(else_block),
+            TirStmtKind::Loop { body } => !Self::loop_body_can_escape(body),
+            TirStmtKind::LabeledBlock { block, label } => {
+                Self::block_always_exits(block) && !Self::block_can_break_to_label(block, label)
+            }
+            _ => false,
+        }
+    }
+
+    fn expr_always_exits(expr: &TirExpr) -> bool {
+        if expr.type_id == TypeTable::NEVER {
+            return true;
+        }
+        match &expr.kind {
+            TirExprKind::Block(block) => Self::block_always_exits(block),
+            TirExprKind::LabeledBlock { block, label, .. } => {
+                Self::block_always_exits(block) && !Self::block_can_break_to_label(block, label)
+            }
+            TirExprKind::If {
+                then_branch,
+                else_branch: Some(else_branch),
+                ..
+            } => Self::block_always_exits(then_branch) && Self::block_always_exits(else_branch),
+            TirExprKind::Match { arms, .. } => {
+                !arms.is_empty() && arms.iter().all(|a| Self::expr_always_exits(&a.body))
+            }
+            // `resume value` transfers control out of the enclosing
+            // handler method — `synthesis::effect_dispatch` lowers it to
+            // `return value`. Its expression type is `Unit` even though
+            // it diverges, so `find_return_type_in_expr` matches it here
+            // for return-type inference; mirror that for definite-exit.
+            TirExprKind::Resume { .. } => true,
+            _ => false,
+        }
+    }
+
+    /// Whether `body` (a `loop`'s body) contains a `break` that would
+    /// either target this loop (unlabeled) or escape it (labeled). Either
+    /// case lets control resume after the loop, so the loop is NOT
+    /// divergent. Recurses through nested control flow except nested
+    /// `loop`s (which catch their own unlabeled breaks) and closure bodies.
+    fn loop_body_can_escape(body: &TirBlock) -> bool {
+        body.stmts.iter().any(Self::stmt_can_escape_loop)
+    }
+
+    fn stmt_can_escape_loop(stmt: &TirStmt) -> bool {
+        match &stmt.kind {
+            TirStmtKind::Break { .. } => true,
+            TirStmtKind::Loop { .. } => false,
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            }
+            | TirStmtKind::IfLet {
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::loop_body_can_escape(then_block)
+                    || else_block.as_ref().is_some_and(Self::loop_body_can_escape)
+            }
+            TirStmtKind::LabeledBlock { block, .. } => Self::loop_body_can_escape(block),
+            TirStmtKind::Expr(e) => Self::expr_can_escape_loop(e),
+            TirStmtKind::Let { value, .. }
+            | TirStmtKind::LetDestructure { value, .. }
+            | TirStmtKind::TaskReturn { value, .. }
+            | TirStmtKind::Return {
+                value: Some(value), ..
+            } => Self::expr_can_escape_loop(value),
+            _ => false,
+        }
+    }
+
+    fn expr_can_escape_loop(expr: &TirExpr) -> bool {
+        match &expr.kind {
+            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+                Self::loop_body_can_escape(block)
+            }
+            TirExprKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                Self::loop_body_can_escape(then_branch)
+                    || else_branch.as_ref().is_some_and(Self::loop_body_can_escape)
+            }
+            TirExprKind::Match { arms, .. } => {
+                arms.iter().any(|a| Self::expr_can_escape_loop(&a.body))
+            }
+            TirExprKind::Closure { .. } => false,
+            _ => false,
+        }
+    }
+
+    /// Whether `block` contains a `break <label>` that would exit a
+    /// labeled block with this label. An inner labeled block that
+    /// reuses `label` shadows it. Closure bodies are not recursed into.
+    fn block_can_break_to_label(block: &TirBlock, label: &str) -> bool {
+        block
+            .stmts
+            .iter()
+            .any(|s| Self::stmt_can_break_to_label(s, label))
+    }
+
+    fn stmt_can_break_to_label(stmt: &TirStmt, label: &str) -> bool {
+        match &stmt.kind {
+            TirStmtKind::Break { label: Some(l), .. } => l == label,
+            TirStmtKind::Break { label: None, .. } => false,
+            TirStmtKind::LabeledBlock {
+                block,
+                label: own_label,
+            } => own_label != label && Self::block_can_break_to_label(block, label),
+            TirStmtKind::Loop { body } => Self::block_can_break_to_label(body, label),
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            }
+            | TirStmtKind::IfLet {
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::block_can_break_to_label(then_block, label)
+                    || else_block
+                        .as_ref()
+                        .is_some_and(|b| Self::block_can_break_to_label(b, label))
+            }
+            TirStmtKind::Expr(e) => Self::expr_can_break_to_label(e, label),
+            TirStmtKind::Let { value, .. }
+            | TirStmtKind::LetDestructure { value, .. }
+            | TirStmtKind::TaskReturn { value, .. }
+            | TirStmtKind::Return {
+                value: Some(value), ..
+            } => Self::expr_can_break_to_label(value, label),
+            _ => false,
+        }
+    }
+
+    fn expr_can_break_to_label(expr: &TirExpr, label: &str) -> bool {
+        match &expr.kind {
+            TirExprKind::Block(block) => Self::block_can_break_to_label(block, label),
+            TirExprKind::LabeledBlock {
+                block,
+                label: own_label,
+                ..
+            } => own_label != label && Self::block_can_break_to_label(block, label),
+            TirExprKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                Self::block_can_break_to_label(then_branch, label)
+                    || else_branch
+                        .as_ref()
+                        .is_some_and(|b| Self::block_can_break_to_label(b, label))
+            }
+            TirExprKind::Match { arms, .. } => arms
+                .iter()
+                .any(|a| Self::expr_can_break_to_label(&a.body, label)),
+            TirExprKind::Closure { .. } => false,
+            _ => false,
+        }
+    }
+
     pub(super) fn find_return_type_in_stmt(stmt: &TirStmt) -> Option<TypeId> {
         match &stmt.kind {
             TirStmtKind::Return { value: Some(expr) } => Some(expr.type_id),

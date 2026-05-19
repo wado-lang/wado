@@ -1,0 +1,23 @@
+// A function whose declared return type is non-Unit must definitely
+// exit before the end of the body. An `if cond { return …; }` with no
+// `else` is NOT a definite exit — control falls through when `cond` is
+// false — so the validator must reject it with `MissingReturn`.
+//
+// Before the fix, the recursive scan in `find_return_type_in_stmt`
+// accepted ANY nested `return` as proof of "the function returns
+// something", which let partial-return bodies through and produced an
+// invalid core Wasm module ("type mismatch: expected i32 but nothing on
+// stack") at codegen.
+
+fn classify(cond: bool) -> i32 {
+    if cond {
+        return 1;
+    }
+}
+
+export fn run() {
+    let _ = classify;
+}
+
+__DATA__
+{"compile_error": "function with return type 'i32' must use explicit `return`"}

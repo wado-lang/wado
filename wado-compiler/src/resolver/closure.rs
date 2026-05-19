@@ -229,24 +229,43 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Step 7: Determine the return type.
         //
-        // When the body is a Block, prefer the type of any explicit `return`
-        // statement; if there is none, fall back to the block's own result
-        // type. Use `body.type_id` (computed by `block_result_type`) so a
-        // diverging-tail block like `{ panic("oops"); }` keeps `Never`
-        // rather than collapsing to `Unit` — otherwise a closure passed to
-        // `fn<T>(f: fn() -> T) -> T` would bind `T = ()` and let the caller
-        // run past the call site.
+        // When the body is a Block, prefer the type of any explicit
+        // `return` statement; if there is none, fall back to the block's
+        // own result type. `body.type_id` (computed by `block_result_type`)
+        // keeps a diverging-tail block like `{ panic("oops"); }` as
+        // `Never` rather than collapsing to `Unit` — otherwise a closure
+        // passed to `fn<T>(f: fn() -> T) -> T` would bind `T = ()` and
+        // let the caller run past the call site.
+        //
+        // If the body contains an explicit `return` but does NOT always
+        // exit (`if cond { return 1; }` with no `else`), the fall-through
+        // path silently yields `body.type_id` while the explicit-return
+        // path yields the returned type — Wasm validation would reject
+        // the generated functor. Treat this as missing-return.
         let return_type = if let TirExprKind::Block(ref block) = body.kind {
-            if let Some(t) = Self::find_return_type_in_block(block) {
-                t
-            } else if body.type_id == TypeTable::UNIT || body.type_id == TypeTable::NEVER {
-                body.type_id
-            } else {
-                let _ = self.logger.error(TypeError::MissingReturn {
-                    return_type: self.type_table.borrow().type_name(body.type_id),
-                    span: closure.span,
-                });
-                TypeTable::UNIT
+            match Self::find_return_type_in_block(block) {
+                Some(t) => {
+                    if !Self::block_always_exits(block)
+                        && body.type_id != t
+                        && body.type_id != TypeTable::NEVER
+                    {
+                        let _ = self.logger.error(TypeError::MissingReturn {
+                            return_type: self.type_table.borrow().type_name(t),
+                            span: closure.span,
+                        });
+                    }
+                    t
+                }
+                None if body.type_id == TypeTable::UNIT || body.type_id == TypeTable::NEVER => {
+                    body.type_id
+                }
+                None => {
+                    let _ = self.logger.error(TypeError::MissingReturn {
+                        return_type: self.type_table.borrow().type_name(body.type_id),
+                        span: closure.span,
+                    });
+                    TypeTable::UNIT
+                }
             }
         } else {
             body.type_id

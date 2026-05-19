@@ -958,26 +958,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Emit a `MissingReturn` diagnostic when a declared non-Unit return
     /// type cannot be satisfied by the body. Skipped for `Unit`/`Never`
-    /// declarations, for missing bodies (e.g. declared-only externals),
-    /// for bodies that contain any explicit `return`, and for bodies
-    /// whose tail diverges (`{ …; panic("…") }`) — the divergent tail
-    /// never reaches a fall-through return.
-    fn validate_missing_return(
-        &self,
-        return_type: TypeId,
-        body: Option<&TirBlock>,
-        span: Span,
-    ) {
+    /// declarations, for missing bodies (declared-only externals), and
+    /// for bodies whose every control path provably exits before the end
+    /// (`block_always_exits`) — either via an explicit `return`, a
+    /// divergent statement like `panic("…")`, or a fully-diverging
+    /// labeled block / `loop`.
+    ///
+    /// The previous heuristic accepted any nested `return` even when only
+    /// one branch of an `if` carried one, which let partial-return
+    /// bodies through and produced an invalid core Wasm module ("type
+    /// mismatch: expected i32 but nothing on stack") for the
+    /// fall-through path.
+    fn validate_missing_return(&self, return_type: TypeId, body: Option<&TirBlock>, span: Span) {
         if return_type == TypeTable::UNIT || return_type == TypeTable::NEVER {
             return;
         }
         let Some(body) = body else {
             return;
         };
-        if Self::find_return_type_in_block(body).is_some() {
-            return;
-        }
-        if crate::tir::block_result_type(body) == TypeTable::NEVER {
+        if Self::block_always_exits(body) {
             return;
         }
         let _ = self.logger.error(TypeError::MissingReturn {
