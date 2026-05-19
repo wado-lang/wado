@@ -1300,8 +1300,7 @@ impl<'a> PatternLowerer<'a> {
                 } else {
                     then_type
                 };
-                let then_body =
-                    TirExpr::new(TirExprKind::Block(then_block), then_type, then_span);
+                let then_body = TirExpr::new(TirExprKind::Block(then_block), then_type, then_span);
                 let else_body = match else_block {
                     Some(b) => {
                         let span = b.span;
