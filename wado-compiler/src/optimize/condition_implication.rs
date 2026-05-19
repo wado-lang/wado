@@ -714,7 +714,33 @@ struct ShortCircuitGuard {
 #[derive(Clone)]
 enum BoundExpr {
     Local(u32),
-    FieldAccess { local: u32, field_index: u32 },
+    /// A chain of field accesses from a root local:
+    /// `root_local.field_indices[0].field_indices[1]...`.
+    /// `FieldChain { root_local, field_indices: [] }` would be equivalent to
+    /// `Local(root_local)`, so an empty chain is never constructed.
+    FieldChain {
+        root_local: u32,
+        field_indices: Vec<u32>,
+    },
+}
+
+/// Decompose `local`, `local.f1`, `local.f1.f2`, ... into a `(root_local,
+/// field_indices)` pair. Returns `None` for anything else (method calls,
+/// arithmetic, etc.) — the caller treats those as opaque bounds and bails.
+fn extract_field_chain(expr: &NirExpr) -> Option<(u32, Vec<u32>)> {
+    match &expr.kind {
+        NirExprKind::Local { index, .. } => Some((*index, Vec::new())),
+        NirExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } => {
+            let (root, mut fields) = extract_field_chain(inner)?;
+            fields.push(*field_index);
+            Some((root, fields))
+        }
+        _ => None,
+    }
 }
 
 impl ShortCircuitGuard {
@@ -729,15 +755,15 @@ impl ShortCircuitGuard {
 
         let bound = match &right.kind {
             NirExprKind::Local { index, .. } => BoundExpr::Local(*index),
-            NirExprKind::FieldAccess {
-                expr, field_index, ..
-            } => {
-                let NirExprKind::Local { index, .. } = &expr.kind else {
-                    return None;
-                };
-                BoundExpr::FieldAccess {
-                    local: *index,
-                    field_index: *field_index,
+            NirExprKind::FieldAccess { .. } => {
+                let (root_local, field_indices) = extract_field_chain(right)?;
+                if field_indices.is_empty() {
+                    BoundExpr::Local(root_local)
+                } else {
+                    BoundExpr::FieldChain {
+                        root_local,
+                        field_indices,
+                    }
                 }
             }
             _ => return None,
@@ -792,28 +818,23 @@ impl ShortCircuitGuard {
     }
 
     fn bound_matches(&self, expr: &NirExpr, defs: &DefMap) -> bool {
-        match (&self.bound, &expr.kind) {
-            (BoundExpr::Local(guard_bound), NirExprKind::Local { index, .. }) => {
-                resolves_to(*index, *guard_bound, defs)
-            }
-            (
-                BoundExpr::FieldAccess {
-                    local: guard_local,
-                    field_index: guard_field,
-                },
-                NirExprKind::FieldAccess {
-                    expr: inner,
-                    field_index,
-                    ..
-                },
-            ) => {
-                if let NirExprKind::Local { index, .. } = &inner.kind {
-                    *field_index == *guard_field && resolves_to(*index, *guard_local, defs)
+        match &self.bound {
+            BoundExpr::Local(guard_bound) => {
+                if let NirExprKind::Local { index, .. } = &expr.kind {
+                    resolves_to(*index, *guard_bound, defs)
                 } else {
                     false
                 }
             }
-            _ => false,
+            BoundExpr::FieldChain {
+                root_local: guard_root,
+                field_indices: guard_fields,
+            } => {
+                let Some((root, fields)) = extract_field_chain(expr) else {
+                    return false;
+                };
+                fields == *guard_fields && resolves_to(root, *guard_root, defs)
+            }
         }
     }
 
