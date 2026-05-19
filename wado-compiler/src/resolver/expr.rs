@@ -2480,16 +2480,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             TirExprKind::Call { args, .. } => {
                 args.iter().any(|a| Self::any_in_expr(&a.expr, probe))
             }
-            TirExprKind::CmRawCall { args, .. } => {
-                args.iter().any(|a| Self::any_in_expr(a, probe))
-            }
+            TirExprKind::CmRawCall { args, .. } => args.iter().any(|a| Self::any_in_expr(a, probe)),
             TirExprKind::MethodCall { receiver, args, .. } => {
                 Self::any_in_expr(receiver, probe)
                     || args.iter().any(|a| Self::any_in_expr(&a.expr, probe))
             }
             TirExprKind::IndirectCall { callee, args } => {
-                Self::any_in_expr(callee, probe)
-                    || args.iter().any(|a| Self::any_in_expr(a, probe))
+                Self::any_in_expr(callee, probe) || args.iter().any(|a| Self::any_in_expr(a, probe))
             }
 
             // Aggregate literals.
