@@ -494,6 +494,24 @@ test "generate standalone group as optional field" {
     assert str_contains(&output, &"    pub foo_or_bar: Option<FooOrBarGroup>,");
 }
 
+test "generate scalar-labeled group `t=(a | b)`" {
+    // Regression: Sets/ParserSet.txt — `a : t=('x' | 'y') ;` lowers the
+    // scalar label so that the resulting op is `Op::Group(...)` while
+    // the surface element stays `Label(Group(...))`. The op-driven
+    // walker dispatches on the op shape and used to feed the Label
+    // element straight into `gen_op_group`, which only accepted
+    // `Element::Group`. The fix unwraps the scalar Label inside
+    // `gen_op_group` (the inner is guaranteed to be a Group by the
+    // matching `Op::Group` op shape). Without the fix this panics with
+    // `gen_op_group: Group op mapped to non-Group element`.
+    let mut grammar = parse_grammar("grammar T; a : t=('x' | 'y') ;", "(test)");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    // The generated parser must reference the hoisted anonymous tokens
+    // and produce a scalar `t` binding for the labeled group.
+    assert str_contains(&output, &"TK_LIT_X");
+    assert str_contains(&output, &"TK_LIT_Y");
+}
+
 test "generate lexer set_mode" {
     let mut grammar = Grammar {
         name: "Test",
