@@ -1,0 +1,23 @@
+// A bare generic function name in a position with an expected `fn(...)` type
+// (annotated `let`, function parameter, etc.) infers its type arguments from
+// that context, yielding a typed function value.
+
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+fn apply_fn(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+test "let with fn annotation pins T" {
+    let f: fn(i32) -> i32 = identity;
+    assert f(42) == 42;
+}
+
+test "fn parameter pins T at call site" {
+    assert apply_fn(identity, 7) == 7;
+}
+
+__DATA__
+{"test": {}}

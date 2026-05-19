@@ -1,8 +1,11 @@
 // A bare generic function name cannot be used as a value: the function type
-// depends on type arguments that haven't been provided. The resolver leaves
-// the FuncRef expression with deferred typing and any downstream call against
-// the resulting binding fails to resolve. Workaround: wrap in a closure such
-// as `|x| identity(x)`, which pins `T` at the use site.
+// depends on type arguments that haven't been provided. The resolver rejects
+// it with a dedicated diagnostic pointing at the two ergonomic workarounds:
+//   - turbofish on the name itself: `identity::<i32>`
+//   - closure wrapper that pins `T` at the use site: `|x| identity(x)`
+// A `fn(...)` type annotation on the binding (or a `fn(...)` parameter type
+// at a call site) also drives inference and is the recommended form when a
+// suitable expected type is in scope.
 
 fn identity<T>(x: T) -> T {
     return x;
@@ -15,5 +18,5 @@ test "bare generic fn-name without type args is not callable" {
 
 __DATA__
 {
-    "compile_error": "unknown function 'f'"
+    "compile_error": "cannot reference generic function 'identity' bare"
 }

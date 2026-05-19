@@ -2898,31 +2898,47 @@ impl Parser {
                     }));
                 }
                 // Turbofish syntax for explicit type arguments: foo::<T>(x)
+                // or as a bare value: `let f = foo::<T>;`.
                 TokenKind::ColonColon => {
                     // Check if this is turbofish (:: followed by <)
                     // Peek at the token after ::
                     let checkpoint = self.pos;
                     self.advance(); // consume ::
                     if self.check(&TokenKind::Lt) {
-                        // This is turbofish syntax: foo::<T>(x)
                         let callee_span = expr.span();
                         let type_args = self.parse_call_type_args()?;
-                        self.expect(&TokenKind::LParen)?;
-                        let saved = self.restrict_struct_literals;
-                        self.restrict_struct_literals = false;
-                        let (args, has_trailing_comma) = self.parse_arg_list()?;
-                        self.restrict_struct_literals = saved;
-                        let rparen_span = self.peek().span;
-                        self.expect(&TokenKind::RParen)?;
-                        let merged_span = callee_span.merge(&rparen_span);
-                        expr = Expr::Call(Box::new(CallExpr {
-                            id: self.alloc_ast_id(),
-                            callee: expr,
-                            type_args,
-                            args,
-                            has_trailing_comma,
-                            span: merged_span,
-                        }));
+                        if self.check(&TokenKind::LParen) {
+                            // Call-site turbofish: foo::<T>(x)
+                            self.advance(); // consume (
+                            let saved = self.restrict_struct_literals;
+                            self.restrict_struct_literals = false;
+                            let (args, has_trailing_comma) = self.parse_arg_list()?;
+                            self.restrict_struct_literals = saved;
+                            let rparen_span = self.peek().span;
+                            self.expect(&TokenKind::RParen)?;
+                            let merged_span = callee_span.merge(&rparen_span);
+                            expr = Expr::Call(Box::new(CallExpr {
+                                id: self.alloc_ast_id(),
+                                callee: expr,
+                                type_args,
+                                args,
+                                has_trailing_comma,
+                                span: merged_span,
+                            }));
+                        } else if let Expr::Ident(ident) = &mut expr {
+                            // Bare turbofish on an identifier: `foo::<T>` as a value.
+                            // Attach the type args to the identifier and let the
+                            // outer postfix loop continue (so `foo::<T>(x)` after a
+                            // method-call chain still parses as a call below).
+                            ident.type_args = type_args;
+                        } else {
+                            // Turbofish on a non-identifier expression with no call
+                            // following — there is no expression form for this yet.
+                            return Err(ParseError {
+                                message: "expected '(' after turbofish type arguments".to_string(),
+                                span: self.peek().span,
+                            });
+                        }
                     } else {
                         // Not turbofish, backtrack
                         self.pos = checkpoint;
@@ -3141,6 +3157,7 @@ impl Parser {
             name,
             span: start_span,
             segments: Vec::new(),
+            type_args: Vec::new(),
         }))
     }
 
@@ -3181,6 +3198,7 @@ impl Parser {
             name: qualified_name,
             span: start_span.merge(&end_span),
             segments,
+            type_args: Vec::new(),
         }))
     }
 
@@ -3232,6 +3250,7 @@ impl Parser {
                 id: self.alloc_ast_id(),
                 name,
                 segments: Vec::new(),
+                type_args: Vec::new(),
                 span: start_span,
             }));
         }
@@ -5180,6 +5199,7 @@ impl Parser {
                             id: self.alloc_ast_id(),
                             name: field_name.clone(),
                             segments: Vec::new(),
+                            type_args: Vec::new(),
                             span: field_name_span,
                         }),
                         true,

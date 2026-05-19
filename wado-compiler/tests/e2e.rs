@@ -1030,4 +1030,6 @@ test "passes unexpectedly" {
 }
 // touched to trigger datatest_mini rediscovery
 // fn-ref fixtures added (cross-module newtype)
+// fn-ref fixtures added (generic turbofish / inferred / closure wrapper)
+// fn-ref fixtures added (generic cross-module / outer)
 // touched

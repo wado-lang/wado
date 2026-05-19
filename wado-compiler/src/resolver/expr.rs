@@ -730,27 +730,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if self.function_return_types.contains_key(&ident.name)
             || self.imported_functions.contains(&ident.name)
         {
-            let module_source = if self.function_return_types.contains_key(&ident.name) {
-                self.current_module_source.clone()
-            } else {
-                // For imported functions, look up the module source from symbols
-                self.symbols
-                    .lookup(&ident.name)
-                    .map(|s| s.module_source().clone())
-                    .unwrap_or_else(|| self.current_module_source.clone())
-            };
-            self.record_item_reference_by_name(ident.id, &ident.name);
-            let type_id = self
-                .compute_func_ref_type(&ident.name)
-                .unwrap_or(TypeTable::UNKNOWN);
-            return TirExpr::new(
-                TirExprKind::FuncRef {
-                    module_source,
-                    name: ident.name.clone(),
-                },
-                type_id,
-                ident.span,
-            );
+            return self.resolve_func_ref_ident(ident, expected_type);
         }
 
         // Check if it's a prelude function (panic, unreachable)
@@ -760,6 +740,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 TirExprKind::FuncRef {
                     module_source: ModuleSource::internal(),
                     name: ident.name.clone(),
+                    type_args: Vec::new(),
                 },
                 TypeTable::UNKNOWN,
                 ident.span,
@@ -816,6 +797,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         TirExprKind::FuncRef {
                             module_source: fallback.clone(),
                             name: name.to_string(),
+                            type_args: Vec::new(),
                         },
                         type_id,
                         span,
@@ -825,33 +807,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
         None
-    }
-
-    /// Compute the `fn(params) -> ret with effects` type for a top-level
-    /// function reference looked up by bare name.
-    ///
-    /// Returns `None` when the function is generic or otherwise cannot be
-    /// typed eagerly. Callers fall back to `UNKNOWN`, which keeps the
-    /// existing defer-on-UNKNOWN typecheck rule (used at annotated
-    /// `let`/argument sites).
-    fn compute_func_ref_type(&mut self, name: &str) -> Option<TypeId> {
-        if let Some(func) = self.lookup_current_func(name).cloned() {
-            return self.compute_func_ref_type_from_ast(&func, &self.current_module_source.clone());
-        }
-        // Imported function — resolve the signature in the defining
-        // module's perspective so type names (newtypes, generics, etc.)
-        // bind correctly.
-        let symbol = self.symbols.lookup(name)?;
-        let src = symbol.module_source().clone();
-        let original = symbol.name.clone();
-        let func = Self::lookup_func_in_loaded_module(
-            self.loaded_modules,
-            &self.loaded_module_func_indices,
-            &src,
-            &original,
-        )
-        .cloned()?;
-        self.compute_func_ref_type_from_ast(&func, &src)
     }
 
     /// Build a function type from an [`ast::Function`] declaration that
@@ -867,21 +822,65 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if !func.type_params.is_empty() {
             return None;
         }
-        // For local functions we're already in the right scope; skip
-        // the `with_module_perspective` shuffle.
+        self.compute_func_ref_type_from_ast_with_args(func, def_module, &[])
+    }
+
+    /// Like [`compute_func_ref_type_from_ast`] but also accepts `type_args`
+    /// to substitute the function's type parameters. Used when a generic
+    /// function reference has been pinned via turbofish (`name::<T>`) or
+    /// inferred from an expected `fn(...)` type. With `type_args` empty,
+    /// the function must be non-generic, mirroring the original behaviour.
+    pub(super) fn compute_func_ref_type_from_ast_with_args(
+        &mut self,
+        func: &ast::Function,
+        def_module: &ModuleSource,
+        type_args: &[TypeId],
+    ) -> Option<TypeId> {
+        // Real (non-effect, non-fn-bound) type-param slots — these are the
+        // ones substituted positionally by `type_args`.
+        let real_type_param_count = func
+            .type_params
+            .iter()
+            .filter(|p| !p.is_effect)
+            .filter(|p| !p.bounds.iter().any(|b| b.fn_signature.is_some()))
+            .count();
+        if type_args.is_empty() && real_type_param_count != 0 {
+            return None;
+        }
+        if !type_args.is_empty() && type_args.len() != real_type_param_count {
+            return None;
+        }
+
         let same_module = *def_module == self.current_module_source;
-        let resolve = |s: &mut Self| -> (Vec<TypeId>, TypeId, Vec<crate::tir::EffectRef>) {
-            let param_types: Vec<TypeId> =
-                func.params.iter().map(|p| s.resolve_type(&p.ty)).collect();
-            let return_type = func
-                .return_type
-                .as_ref()
-                .map(|t| s.resolve_type(t))
-                .unwrap_or(TypeTable::UNIT);
-            let effects = s.resolve_effects(&func.effects, &func.effect_ids);
-            (param_types, return_type, effects)
+        let needs_param_scope = !type_args.is_empty();
+        let type_params_for_scope = func.type_params.clone();
+        let func_params = func.params.clone();
+        let func_return_type = func.return_type.clone();
+        let func_effects = func.effects.clone();
+        let func_effect_ids = func.effect_ids.clone();
+        let resolve = move |s: &mut Self| -> (Vec<TypeId>, TypeId, Vec<crate::tir::EffectRef>) {
+            let inner = |inner_self: &mut Self| {
+                let param_types: Vec<TypeId> = func_params
+                    .iter()
+                    .map(|p| inner_self.resolve_type(&p.ty))
+                    .collect();
+                let return_type = func_return_type
+                    .as_ref()
+                    .map(|t| inner_self.resolve_type(t))
+                    .unwrap_or(TypeTable::UNIT);
+                let effects = inner_self.resolve_effects(&func_effects, &func_effect_ids);
+                (param_types, return_type, effects)
+            };
+            if needs_param_scope {
+                let mut scope = s.enter_inherited_type_param_scope();
+                scope.trait_ctx.type_params.clear();
+                scope.register_generic_params(&type_params_for_scope, 0);
+                inner(&mut scope)
+            } else {
+                inner(s)
+            }
         };
-        let (param_types, return_type, effects) = if same_module {
+        let (mut param_types, mut return_type, effects) = if same_module {
             resolve(self)
         } else {
             let callee_module = self.loaded_modules.get(def_module);
@@ -904,6 +903,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 resolve,
             )
         };
+        if !type_args.is_empty() {
+            for p in &mut param_types {
+                *p = self.substitute_type_params(*p, type_args);
+            }
+            return_type = self.substitute_type_params(return_type, type_args);
+        }
         if param_types.contains(&TypeTable::ERROR) || return_type == TypeTable::ERROR {
             return None;
         }
@@ -913,6 +918,241 @@ impl<H: CompilerHost> Resolver<'_, H> {
             effects,
             Vec::new(),
         ))
+    }
+
+    /// Resolve a bare identifier that names a user-defined function (local or
+    /// imported) as a function reference value. Implements the three policies
+    /// for generic functions referenced as values:
+    ///   (a) `name::<T, ...>` — turbofish pins the type parameters.
+    ///   (b) bare `name` with an expected `fn(...)` type — inferred positionally.
+    ///   (c) bare `name` with no expected type — dedicated diagnostic.
+    fn resolve_func_ref_ident(
+        &mut self,
+        ident: &ast::IdentExpr,
+        expected_type: Option<TypeId>,
+    ) -> TirExpr {
+        let module_source = if self.function_return_types.contains_key(&ident.name) {
+            self.current_module_source.clone()
+        } else {
+            self.symbols
+                .lookup(&ident.name)
+                .map(|s| s.module_source().clone())
+                .unwrap_or_else(|| self.current_module_source.clone())
+        };
+        self.record_item_reference_by_name(ident.id, &ident.name);
+
+        let Some((func_ast, def_module)) = self.lookup_func_ast_for_ref(&ident.name) else {
+            // Fallback: known function but its AST is unreachable (shouldn't
+            // normally happen). Emit a stub FuncRef so downstream stays sane.
+            return TirExpr::new(
+                TirExprKind::FuncRef {
+                    module_source,
+                    name: ident.name.clone(),
+                    type_args: Vec::new(),
+                },
+                TypeTable::UNKNOWN,
+                ident.span,
+            );
+        };
+
+        let real_type_param_count = func_ast
+            .type_params
+            .iter()
+            .filter(|p| !p.is_effect)
+            .filter(|p| !p.bounds.iter().any(|b| b.fn_signature.is_some()))
+            .count();
+
+        // (a) Turbofish on the identifier: `name::<T, ...>`.
+        if !ident.type_args.is_empty() {
+            if ident.type_args.len() != real_type_param_count {
+                let _ = self
+                    .logger
+                    .error(TypeError::GenericFunctionRefArgCountMismatch {
+                        name: ident.name.clone(),
+                        expected: real_type_param_count,
+                        found: ident.type_args.len(),
+                        span: ident.span,
+                    });
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span);
+            }
+            let resolved_args: Vec<TypeId> = ident
+                .type_args
+                .iter()
+                .map(|t| self.resolve_type(t))
+                .collect();
+            let type_id = self
+                .compute_func_ref_type_from_ast_with_args(&func_ast, &def_module, &resolved_args)
+                .unwrap_or(TypeTable::UNKNOWN);
+            return TirExpr::new(
+                TirExprKind::FuncRef {
+                    module_source,
+                    name: ident.name.clone(),
+                    type_args: resolved_args,
+                },
+                type_id,
+                ident.span,
+            );
+        }
+
+        // Non-generic function: keep the original behaviour.
+        if real_type_param_count == 0 {
+            let type_id = self
+                .compute_func_ref_type_from_ast(&func_ast, &def_module)
+                .unwrap_or(TypeTable::UNKNOWN);
+            return TirExpr::new(
+                TirExprKind::FuncRef {
+                    module_source,
+                    name: ident.name.clone(),
+                    type_args: Vec::new(),
+                },
+                type_id,
+                ident.span,
+            );
+        }
+
+        // (b) Generic without turbofish: try to infer from `expected_type`.
+        if let Some(expected) = expected_type {
+            if let Some(inferred) = self.infer_func_ref_type_args(&func_ast, &def_module, expected)
+            {
+                let type_id = self
+                    .compute_func_ref_type_from_ast_with_args(&func_ast, &def_module, &inferred)
+                    .unwrap_or(TypeTable::UNKNOWN);
+                return TirExpr::new(
+                    TirExprKind::FuncRef {
+                        module_source,
+                        name: ident.name.clone(),
+                        type_args: inferred,
+                    },
+                    type_id,
+                    ident.span,
+                );
+            }
+        }
+
+        // (c) Generic, no usable type context: dedicated diagnostic.
+        let _ = self.logger.error(TypeError::BareGenericFunctionRef {
+            name: ident.name.clone(),
+            span: ident.span,
+        });
+        TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span)
+    }
+
+    /// Look up the AST [`ast::Function`] and defining module for a function
+    /// reference name (either a current-module function or an imported one).
+    fn lookup_func_ast_for_ref(&self, name: &str) -> Option<(ast::Function, ModuleSource)> {
+        if let Some(func) = self.lookup_current_func(name) {
+            return Some((func.clone(), self.current_module_source.clone()));
+        }
+        let symbol = self.symbols.lookup(name)?;
+        let src = symbol.module_source().clone();
+        let original = symbol.name.clone();
+        let func = Self::lookup_func_in_loaded_module(
+            self.loaded_modules,
+            &self.loaded_module_func_indices,
+            &src,
+            &original,
+        )?
+        .clone();
+        Some((func, src))
+    }
+
+    /// Try to derive type arguments for a generic function reference from an
+    /// expected `fn(...)` type. Only the simple positional case is handled:
+    /// the expected type must itself be a `Function` whose parameter count
+    /// matches the declaration, and every real (non-effect, non-fn-bound)
+    /// type parameter must end up bound. Returns `None` otherwise — callers
+    /// then fall through to the bare-generic diagnostic.
+    fn infer_func_ref_type_args(
+        &mut self,
+        func: &ast::Function,
+        def_module: &ModuleSource,
+        expected: TypeId,
+    ) -> Option<Vec<TypeId>> {
+        let (expected_params, expected_return) = {
+            let table = self.type_table.borrow();
+            match table.get(expected) {
+                crate::tir::ResolvedType::Function {
+                    params,
+                    return_type,
+                    ..
+                } => (params.clone(), *return_type),
+                _ => return None,
+            }
+        };
+        if expected_params.len()
+            != func
+                .params
+                .iter()
+                .filter(|p| matches!(p.self_kind, crate::ast::SelfKind::None))
+                .count()
+        {
+            return None;
+        }
+
+        // Resolve the function's params and return type with `TypeParam{i}`
+        // entries for its declared type parameters.
+        let same_module = *def_module == self.current_module_source;
+        let type_params_for_scope = func.type_params.clone();
+        let func_params = func.params.clone();
+        let func_return_type = func.return_type.clone();
+        let resolve = move |s: &mut Self| -> (Vec<TypeId>, TypeId, Vec<TypeId>) {
+            let mut scope = s.enter_inherited_type_param_scope();
+            scope.trait_ctx.type_params.clear();
+            scope.register_generic_params(&type_params_for_scope, 0);
+            let type_param_ids: Vec<TypeId> = scope
+                .trait_ctx
+                .type_params
+                .iter()
+                .map(|(_, &(_, id))| id)
+                .collect();
+            let param_types: Vec<TypeId> = func_params
+                .iter()
+                .filter(|p| matches!(p.self_kind, crate::ast::SelfKind::None))
+                .map(|p| scope.resolve_type(&p.ty))
+                .collect();
+            let return_type = func_return_type
+                .as_ref()
+                .map(|t| scope.resolve_type(t))
+                .unwrap_or(TypeTable::UNIT);
+            (param_types, return_type, type_param_ids)
+        };
+        let (decl_params, decl_return, type_param_ids) = if same_module {
+            resolve(self)
+        } else {
+            let callee_module = self.loaded_modules.get(def_module);
+            let (imported_type_sources, import_original_names) = if let Some(module) = callee_module
+            {
+                Self::build_imported_type_sources(
+                    &mut self.interner.borrow_mut(),
+                    module,
+                    def_module,
+                    Some(&self.entry_module_source),
+                    &self.invocations,
+                )
+            } else {
+                (IndexMap::default(), IndexMap::default())
+            };
+            self.with_module_perspective(
+                def_module.clone(),
+                imported_type_sources,
+                import_original_names,
+                resolve,
+            )
+        };
+        if type_param_ids.is_empty() {
+            return None;
+        }
+
+        let mut infer = super::infer::InferCtx::new(&self.type_table, type_param_ids.clone());
+        for (decl, expected) in decl_params.iter().zip(expected_params.iter()) {
+            infer.add(*decl, *expected);
+        }
+        infer.add_expected_return(decl_return, expected_return);
+        let (inferred, bindings) = infer.solve_with_bindings();
+        if !type_param_ids.iter().all(|id| bindings.contains_key(id)) {
+            return None;
+        }
+        Some(inferred)
     }
 
     /// Resolve a binary expression

@@ -1,0 +1,32 @@
+// Referencing a generic function as a value inside another generic function:
+// the inner type-arg expression flows through the outer's monomorphization,
+// and the outer's substitution map fills in the FuncRef's pinned `type_args`.
+
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+fn apply<U>(x: U) -> U {
+    let f: fn(U) -> U = identity;
+    return f(x);
+}
+
+fn apply_turbofish<U>(x: U) -> U {
+    let f = identity::<U>;
+    return f(x);
+}
+
+test "inferred FuncRef inside generic outer (i32)" {
+    assert apply(42) == 42;
+}
+
+test "inferred FuncRef inside generic outer (bool)" {
+    assert apply(true);
+}
+
+test "turbofish FuncRef inside generic outer" {
+    assert apply_turbofish(7) == 7;
+}
+
+__DATA__
+{"test": {}}
