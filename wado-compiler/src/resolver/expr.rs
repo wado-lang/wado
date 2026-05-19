@@ -2608,7 +2608,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 TirTemplatePart::Literal(_) => false,
             }),
 
-            // `Switch` only appears after `lower::translate::switch` — long
+            // `Switch` only appears after `optimize::match_to_switch` — long
             // past resolve-time validation — but the walker stays sound for
             // any future post-resolve reuse.
             TirExprKind::Switch {

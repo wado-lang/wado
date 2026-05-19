@@ -2833,9 +2833,8 @@ impl<'a> PatternLowerer<'a> {
                     }
                 }
 
-                // Switch conversion (dense integer / enum `Match` →
-                // `br_table`) is performed in the TIR → NIR translator
-                // (`lower::translate::switch`).
+                // Dense-int / enum `Match` → `Switch` rewrite is performed
+                // by the optimizer (`optimize::match_to_switch`).
             }
             TirExprKind::Binary { left, right, .. } => {
                 self.lower_expr(left, type_table);
