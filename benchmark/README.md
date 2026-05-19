@@ -99,8 +99,8 @@ Best of three runs per implementation:
 
 | Implementation             |   Time | vs best |
 | -------------------------- | -----: | ------: |
-| sqlparser-rs (Rust native) | 171 ms |   1.00x |
-| **Wado** (Gale)            | 669 ms |   3.91x |
+| sqlparser-rs (Rust native) | 173 ms |   1.00x |
+| **Wado** (Gale)            | 591 ms |   3.42x |
 
 ## Syntax Highlight
 
@@ -120,12 +120,12 @@ Best of three runs per implementation:
 
 | Implementation            |     Time | vs best |
 | ------------------------- | -------: | ------: |
-| Prism.js                  |   171 ms |   1.00x |
-| tree-sitter (Rust native) |   490 ms |   2.87x |
-| Lezer (CodeMirror)        |   510 ms |   2.98x |
-| tree-sitter (JS / WASM)   |   857 ms |   5.01x |
-| **Wado** (Gale)           | 1,056 ms |   6.18x |
-| Shiki (JS engine)         | 2,042 ms |  11.94x |
+| Prism.js                  |   151 ms |   1.00x |
+| Lezer (CodeMirror)        |   447 ms |   2.96x |
+| tree-sitter (Rust native) |   482 ms |   3.19x |
+| tree-sitter (JS / WASM)   |   740 ms |   4.90x |
+| **Wado** (Gale)           |   976 ms |   6.46x |
+| Shiki (JS engine)         | 1,922 ms |  12.73x |
 
 Notes:
 
