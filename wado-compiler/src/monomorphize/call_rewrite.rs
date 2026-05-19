@@ -175,7 +175,7 @@ impl Monomorphizer {
     /// Rewrite a `FuncRef { name, type_args }` whose `type_args` were pinned
     /// at the resolver (turbofish or expected-type inference) so its `name`
     /// points at the monomorphized instance and its `type_args` is empty.
-    /// Lower (`lower::plan::closure`) later wraps the typed FuncRef into a
+    /// Lower (`lower::plan::closure`) later wraps the typed `FuncRef` into a
     /// zero-capture closure that forwards into the rewritten instance.
     fn rewrite_func_ref_expr(&self, expr: &mut TirExpr) {
         if let TirExprKind::FuncRef {

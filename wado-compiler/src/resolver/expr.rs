@@ -1010,7 +1010,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return TirExpr::new(
                 TirExprKind::FuncRef {
                     module_source,
-                    name: defining_name.clone(),
+                    name: defining_name,
                     type_args: resolved_args,
                 },
                 type_id,
@@ -1026,7 +1026,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return TirExpr::new(
                 TirExprKind::FuncRef {
                     module_source,
-                    name: defining_name.clone(),
+                    name: defining_name,
                     type_args: Vec::new(),
                 },
                 type_id,
@@ -1044,7 +1044,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return TirExpr::new(
                         TirExprKind::FuncRef {
                             module_source,
-                            name: defining_name.clone(),
+                            name: defining_name,
                             type_args: inferred,
                         },
                         type_id,
