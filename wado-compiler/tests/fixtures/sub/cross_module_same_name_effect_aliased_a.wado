@@ -1,0 +1,10 @@
+// Module A: declares `pub interface Logger` and a function that uses it.
+// The parent module imports this as `Logger as LoggerA` to verify that the
+// resolver canonicalises the alias through `import_original_names`.
+pub interface Logger {
+    fn log(msg: String);
+}
+
+pub fn greet(name: String) with Logger {
+    let _ = name;
+}

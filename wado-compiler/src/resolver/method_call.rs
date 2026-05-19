@@ -720,13 +720,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Resolve the target type first to get struct name for parameter type lookup
         let target_type_id = self.resolve_type(&static_call.target_type);
 
-        // Extract struct name for parameter type lookup (follow newtypes to base)
-        let struct_name_for_lookup = {
+        // Extract struct name AND canonical decl key for parameter type
+        // lookup (follow newtypes to base). The canonical key disambiguates
+        // two modules' same-named structs whose static methods both live in
+        // the global `StaticMethodIndex`.
+        let struct_key_for_lookup: Option<crate::resolver::trait_env::DeclKey> = {
             let mut current_type = target_type_id;
             loop {
                 match self.type_table.borrow().get(current_type).clone() {
-                    ResolvedType::Struct { name, .. } => break Some(name),
-                    ResolvedType::GenericInstance { name, .. } => break Some(name),
+                    ResolvedType::Struct {
+                        name,
+                        module_source,
+                        ..
+                    }
+                    | ResolvedType::GenericInstance {
+                        name,
+                        module_source,
+                        ..
+                    } => break Some((module_source, name)),
                     ResolvedType::Newtype { base_type, .. } => current_type = base_type,
                     ResolvedType::Flags { .. } => {
                         current_type = TypeTable::U32;
@@ -735,11 +746,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
         };
+        let struct_name_for_lookup = struct_key_for_lookup.as_ref().map(|(_, n)| n.clone());
 
-        // Look up parameter types for coercion
+        // Look up parameter types for coercion. Thread the canonical
+        // receiver key (from the resolved target type) so that two
+        // modules' same-named structs each route to their own impl.
         let mut param_types = struct_name_for_lookup
             .as_ref()
-            .map(|name| self.lookup_static_method_param_types(name, &static_call.method))
+            .map(|name| {
+                self.lookup_static_method_param_types_keyed(
+                    name,
+                    &static_call.method,
+                    struct_key_for_lookup.as_ref(),
+                )
+            })
             .unwrap_or_default();
 
         // For generic variant constructors (e.g., Option::<Array<u8>>::Some([])),
@@ -1612,80 +1632,99 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-        // Search via pre-built index (handles impls defined outside the struct's defining module)
-        if let Some(methods) = self.trait_env.static_method_index.get(struct_name) {
-            for (name, ms, item_idx, method_idx) in methods {
-                if name == method_name
-                    && let Some(module) = self.loaded_modules.get(ms)
-                    && let Item::Impl(impl_block) = &module.items[*item_idx]
-                {
-                    let method = &impl_block.methods[*method_idx];
-
-                    // Inherited scope; only `type_params` is replaced.
-                    let mut scope = self.enter_inherited_type_param_scope();
-                    scope.trait_ctx.type_params.clear();
-
-                    if let ast::Type::Generic(generic) = &impl_block.ty {
-                        for (i, arg) in generic.args.iter().enumerate() {
-                            if let ast::Type::Named(named) = arg {
-                                let name = &named.name;
-                                if !scope.trait_ctx.type_params.contains_key(name) {
-                                    let type_id = scope
-                                        .type_table
-                                        .borrow_mut()
-                                        .make_type_param(name.clone(), i as u32);
-                                    scope
-                                        .trait_ctx
-                                        .type_params
-                                        .insert(name.clone(), (i as u32, type_id));
-                                }
-                            }
-                        }
+        // Search via pre-built index (handles impls defined outside the struct's defining module).
+        // Canonicalise the bare `struct_name` through the call site's import context so the
+        // canonical decl key disambiguates two modules' same-named static methods.
+        let static_key = self.canonical_decl_key(struct_name);
+        // Materialise the impl-block info out of the index borrow before
+        // entering the inherited type-param scope, so the borrow on
+        // `self.trait_env` releases before we touch `self` mutably.
+        let indexed: Option<(ModuleSource, ast::Type, ast::Function)> =
+            if let Some(methods) = self.trait_env.static_method_index.get(&static_key) {
+                methods.iter().find_map(|(name, ms, item_idx, method_idx)| {
+                    if name != method_name {
+                        return None;
                     }
+                    let module = self.loaded_modules.get(ms)?;
+                    let Item::Impl(impl_block) = &module.items[*item_idx] else {
+                        return None;
+                    };
+                    Some((
+                        ms.clone(),
+                        impl_block.ty.clone(),
+                        impl_block.methods[*method_idx].clone(),
+                    ))
+                })
+            } else {
+                None
+            };
+        if let Some((ms, impl_ty, method)) = indexed {
+            // Inherited scope; only `type_params` is replaced.
+            let mut scope = self.enter_inherited_type_param_scope();
+            scope.trait_ctx.type_params.clear();
 
-                    // Method-level type params (e.g. fn make<T>(...) -> T)
-                    let m_offset = scope.trait_ctx.type_params.len();
-                    for (i, tp) in method
-                        .type_params
-                        .iter()
-                        .filter(|p| !p.is_effect)
-                        .enumerate()
-                    {
-                        if scope.trait_ctx.type_params.contains_key(&tp.name) {
-                            continue;
-                        }
-                        let idx = (m_offset + i) as u32;
-                        let type_id = if tp.is_pack {
-                            scope
+            if let ast::Type::Generic(generic) = &impl_ty {
+                for (i, arg) in generic.args.iter().enumerate() {
+                    if let ast::Type::Named(named) = arg {
+                        let name = &named.name;
+                        if !scope.trait_ctx.type_params.contains_key(name) {
+                            let type_id = scope
                                 .type_table
                                 .borrow_mut()
-                                .make_type_pack(tp.name.clone(), idx)
-                        } else {
+                                .make_type_param(name.clone(), i as u32);
                             scope
-                                .type_table
-                                .borrow_mut()
-                                .make_type_param(tp.name.clone(), idx)
-                        };
-                        scope
-                            .trait_ctx
-                            .type_params
-                            .insert(tp.name.clone(), (idx, type_id));
+                                .trait_ctx
+                                .type_params
+                                .insert(name.clone(), (i as u32, type_id));
+                        }
                     }
-
-                    let result = method
-                        .return_type
-                        .as_ref()
-                        .map(|t| scope.resolve_type(t))
-                        .unwrap_or(TypeTable::UNIT);
-
-                    drop(scope);
-                    return result;
                 }
             }
+
+            // Method-level type params (e.g. fn make<T>(...) -> T)
+            let m_offset = scope.trait_ctx.type_params.len();
+            for (i, tp) in method
+                .type_params
+                .iter()
+                .filter(|p| !p.is_effect)
+                .enumerate()
+            {
+                if scope.trait_ctx.type_params.contains_key(&tp.name) {
+                    continue;
+                }
+                let idx = (m_offset + i) as u32;
+                let type_id = if tp.is_pack {
+                    scope
+                        .type_table
+                        .borrow_mut()
+                        .make_type_pack(tp.name.clone(), idx)
+                } else {
+                    scope
+                        .type_table
+                        .borrow_mut()
+                        .make_type_param(tp.name.clone(), idx)
+                };
+                scope
+                    .trait_ctx
+                    .type_params
+                    .insert(tp.name.clone(), (idx, type_id));
+            }
+
+            // Resolve the return type in the impl module's own
+            // perspective: the static method's signature refers to
+            // types imported by that module (`Counter` lives in `ms`,
+            // not in the call site's module). Using the caller's
+            // `resolve_type` would fail to canonicalise a return type
+            // the caller never `use`'d.
+            let result = scope.resolve_return_type_in_module(&ms, method.return_type.as_ref());
+
+            drop(scope);
+            return result;
         }
 
-        // Search resource declarations via pre-built index
-        if let Some(methods) = self.trait_env.resource_static_method_index.get(struct_name) {
+        // Search resource declarations via pre-built index. Same canonical
+        // key disambiguation as the inherent-impl path above.
+        if let Some(methods) = self.trait_env.resource_static_method_index.get(&static_key) {
             for (name, ms, item_idx, method_idx) in methods {
                 if name == method_name
                     && let Some(module) = self.loaded_modules.get(ms)
@@ -1833,6 +1872,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Vec<TypeId> {
+        self.lookup_static_method_param_types_keyed(struct_name, method_name, None)
+    }
+
+    /// Like [`Self::lookup_static_method_param_types`] but takes a pre-
+    /// resolved canonical receiver key. Used by call sites that already
+    /// resolved the target type to a `TypeId` and extracted its
+    /// `(module_source, name)`: when the caller is on a same-name struct
+    /// in another module, the bare-name `struct_name` would canonicalise
+    /// against a global "first matching name" bucket and pick the wrong
+    /// impl. The explicit key bypasses that ambiguity.
+    pub(super) fn lookup_static_method_param_types_keyed(
+        &mut self,
+        struct_name: &str,
+        method_name: &str,
+        static_key_hint: Option<&crate::resolver::trait_env::DeclKey>,
+    ) -> Vec<TypeId> {
         // Check in current module's impl blocks first (highest priority)
         let found: Option<(ast::Type, ast::Function)> =
             self.current_module_items.iter().find_map(|item| {
@@ -1854,29 +1909,44 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
 
         if let Some((impl_ty, method)) = found {
-            return self.resolve_static_method_params_in_scope(&impl_ty, &method);
+            let current_module = self.current_module_source.clone();
+            return self.resolve_static_method_params_in_scope(&current_module, &impl_ty, &method);
         }
 
-        // O(1) lookup via pre-built static method index
-        let indexed: Option<(ast::Type, ast::Function)> =
-            if let Some(methods) = self.trait_env.static_method_index.get(struct_name) {
-                let mut found = None;
-                for (name, module_source, item_idx, method_idx) in methods {
-                    if name == method_name
-                        && let Some(module) = self.loaded_modules.get(module_source)
-                        && let Item::Impl(impl_block) = &module.items[*item_idx]
-                    {
-                        let method = &impl_block.methods[*method_idx];
-                        found = Some((impl_block.ty.clone(), method.clone()));
-                        break;
-                    }
+        // O(1) lookup via pre-built static method index. The index is
+        // keyed by the receiver's canonical decl key so two same-named
+        // structs in different modules each resolve to their own
+        // bucket. Prefer the caller's pre-resolved key when available
+        // (it threads through the `TypeId`'s module source and so
+        // distinguishes `CounterA::make` from `CounterB::make` even
+        // though both alias the same bare name `"Counter"`).
+        let static_key = static_key_hint
+            .cloned()
+            .unwrap_or_else(|| self.canonical_decl_key(struct_name));
+        // Carry the impl's defining module out of the index alongside
+        // the AST so the per-param resolver can swap into its perspective —
+        // a static method's signature references types the impl module
+        // imports, not the caller's.
+        let indexed: Option<(ModuleSource, ast::Type, ast::Function)> = if let Some(methods) =
+            self.trait_env.static_method_index.get(&static_key)
+        {
+            let mut found = None;
+            for (name, module_source, item_idx, method_idx) in methods {
+                if name == method_name
+                    && let Some(module) = self.loaded_modules.get(module_source)
+                    && let Item::Impl(impl_block) = &module.items[*item_idx]
+                {
+                    let method = &impl_block.methods[*method_idx];
+                    found = Some((module_source.clone(), impl_block.ty.clone(), method.clone()));
+                    break;
                 }
-                found
-            } else {
-                None
-            };
-        if let Some((impl_ty, method)) = indexed {
-            return self.resolve_static_method_params_in_scope(&impl_ty, &method);
+            }
+            found
+        } else {
+            None
+        };
+        if let Some((impl_module, impl_ty, method)) = indexed {
+            return self.resolve_static_method_params_in_scope(&impl_module, &impl_ty, &method);
         }
 
         Vec::new()
@@ -1887,9 +1957,29 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// scope before returning.
     fn resolve_static_method_params_in_scope(
         &mut self,
+        impl_module: &ModuleSource,
         impl_ty: &ast::Type,
         method: &ast::Function,
     ) -> Vec<TypeId> {
+        // Build the impl module's own import context so per-param
+        // resolution sees the same `use` declarations the impl block
+        // sees. Without this swap a return type like `Counter` from
+        // module B resolves against the caller's perspective (which only
+        // knows about `CounterA` / `CounterB` aliases) and falls back to
+        // `Unknown`, breaking arg-type coercion at the call site.
+        let (imports, originals) = self
+            .loaded_modules
+            .get(impl_module)
+            .map(|m| {
+                Self::build_imported_type_sources(
+                    &mut self.interner.borrow_mut(),
+                    m,
+                    impl_module,
+                    Some(&self.entry_module_source),
+                    &self.invocations,
+                )
+            })
+            .unwrap_or_default();
         // Inherited scope; only `type_params` is replaced.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.trait_ctx.type_params.clear();
@@ -1941,11 +2031,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .insert(tp.name.clone(), (idx, type_id));
         }
 
-        let result: Vec<TypeId> = method
-            .params
-            .iter()
-            .map(|p| scope.resolve_type(&p.ty))
-            .collect();
+        let params: Vec<ast::Type> = method.params.iter().map(|p| p.ty.clone()).collect();
+        let result = scope.with_module_perspective(impl_module.clone(), imports, originals, |s| {
+            params
+                .iter()
+                .map(|t| s.resolve_type(t))
+                .collect::<Vec<TypeId>>()
+        });
 
         drop(scope);
         result
@@ -1989,8 +2081,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
         }
-        // Check indexed modules
-        if let Some(methods) = self.trait_env.static_method_index.get(struct_name) {
+        // Check indexed modules — index keyed by canonical decl key.
+        let static_key = self.canonical_decl_key(struct_name);
+        if let Some(methods) = self.trait_env.static_method_index.get(&static_key) {
             for (name, module_source, item_idx, method_idx) in methods {
                 if name == method_name
                     && let Some(module) = self.loaded_modules.get(module_source)
@@ -2293,8 +2386,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return true;
         }
 
-        // O(1) lookup via pre-built static method index (impl blocks)
-        if let Some(methods) = self.trait_env.static_method_index.get(struct_name)
+        // O(1) lookup via pre-built static method index (impl blocks).
+        // Canonicalise so a same-named struct in another module doesn't
+        // accidentally claim this name.
+        let static_key = self.canonical_decl_key(struct_name);
+        if let Some(methods) = self.trait_env.static_method_index.get(&static_key)
             && methods.iter().any(|(name, ..)| name == method_name)
         {
             return true;
@@ -2318,8 +2414,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-        // O(1) lookup via pre-built resource static method index
-        if let Some(methods) = self.trait_env.resource_static_method_index.get(struct_name)
+        // O(1) lookup via pre-built resource static method index.
+        // Same canonical-key disambiguation.
+        if let Some(methods) = self.trait_env.resource_static_method_index.get(&static_key)
             && methods.iter().any(|(name, ..)| name == method_name)
         {
             return true;
@@ -2374,6 +2471,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
         span: Span,
         _ctx: &mut FunctionContext,
     ) -> TirExpr {
+        // The call site may refer to the receiver type through a
+        // `use { Counter as CounterA }` alias. Resolve the alias to its
+        // canonical declaration name so the mangled TIR function
+        // (`Counter::make`) can be found at WIR-build time — that name
+        // is keyed by the *original* `Counter`, not the local alias.
+        // The other lookups below still consume `struct_name` as-is and
+        // canonicalise internally via `Resolver::canonical_decl_key`.
+        let canonical_struct_name = self.canonical_decl_key(struct_name).1;
+        let mangled_func_name_owned = if canonical_struct_name == struct_name {
+            mangled_func_name.to_string()
+        } else {
+            MethodName::format_local(&canonical_struct_name, None, method_name)
+        };
+        let mangled_func_name = mangled_func_name_owned.as_str();
         // For newtypes, check if the newtype itself has the method first,
         // then fall back to the base type's static method
         let (actual_struct_name, actual_mangled_name) =

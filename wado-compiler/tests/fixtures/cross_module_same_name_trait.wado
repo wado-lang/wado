@@ -1,5 +1,11 @@
 // Two modules define trait Describe with different method signatures.
 // Each module's Describe trait and Data struct must remain distinct.
+//
+// Each sub-module's `get_*` helper calls `d.describe()` in its own
+// module's scope, where `Describe` is unambiguous. The dispatch
+// indices keyed by canonical `(decl_module, name)` plus
+// `LocalMethodName.base_trait_module` keep the two impls in distinct
+// `HandlerImplKey` buckets even though they share the bare name.
 
 use { Data as DataA, get_description } from "./sub/cross_module_same_name_trait_a.wado";
 use { Data as DataB, get_value } from "./sub/cross_module_same_name_trait_b.wado";
