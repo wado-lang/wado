@@ -1,0 +1,22 @@
+// Two modules each declare `pub struct Counter` with a static
+// `Counter::make` factory. The factories take *different* parameter
+// types (i32 in A, String in B) so a mis-routed static dispatch
+// surfaces as a type-checker error at the call site.
+//
+// Regression guard for `StaticMethodIndex`: the index was keyed by
+// bare receiver type name, so both `Counter::make` entries landed in
+// the same `"Counter"` bucket; the lookup picked whichever was
+// inserted first.
+
+use { Counter as CounterA } from "./sub/cross_module_same_name_static_a.wado";
+use { Counter as CounterB } from "./sub/cross_module_same_name_static_b.wado";
+
+test "cross-module same-name static method dispatch" {
+    let a = CounterA::make(42);
+    let b = CounterB::make("hello");
+    assert a.n == 42;
+    assert b.label == "hello";
+}
+
+__DATA__
+{"test": {}}

@@ -50,6 +50,29 @@ use crate::tir::{
 };
 
 use trait_env::TraitEnv;
+
+/// `true` if `name` denotes a built-in primitive Wado type. Primitives
+/// have inherent impl blocks in `core:prelude/primitive` but no
+/// `Symbol` entry to canonicalise through, so both
+/// [`Resolver::canonical_decl_key`] and `TraitEnv::build` consult this
+/// predicate to map a bare primitive reference to its canonical
+/// declaring module.
+pub(crate) fn is_primitive_type_name(name: &str) -> bool {
+    matches!(
+        name,
+        "i8" | "i16"
+            | "i32"
+            | "i64"
+            | "u8"
+            | "u16"
+            | "u32"
+            | "u64"
+            | "f32"
+            | "f64"
+            | "bool"
+            | "char"
+    )
+}
 pub use types::TypeError;
 use types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, TypeLookup, VariantInfo,
@@ -207,7 +230,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     ) -> Self {
         let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
-        let (trait_env, _) = TraitEnv::build(loaded_modules);
+        let (trait_env, _) = TraitEnv::build(loaded_modules, symbols);
         Self {
             type_table,
             symbols,
@@ -642,33 +665,34 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// the name through this helper before consulting the index.
     ///
     /// Resolution order, in priority:
-    /// 1. `effect_sources` — built per-module from `use { Logger } from "…"`
-    ///    declarations and local `interface` / `resource` definitions.
-    /// 2. `imported_type_sources` — per-module `use { Foo } from "…"` for any
-    ///    type-like reference (covers traits / structs / variants alongside
-    ///    the type tables).
+    /// 1. `imported_type_sources` — per-module `use { Foo as Bar } from "…"`
+    ///    declarations, with `import_original_names` so an aliased import
+    ///    canonicalises to the original declaration name rather than the
+    ///    local alias.
+    /// 2. `effect_sources` — local `interface` / `resource` definitions in
+    ///    the current module (and non-aliased imports). Consulted second so
+    ///    aliased effect/resource imports go through the alias-aware path
+    ///    above.
     /// 3. The global symbol table — canonicalises prelude / stdlib names
     ///    even when they were imported transitively.
-    /// 4. The current module — the implicit declaration site for everything
+    /// 4. The global decl indices on [`TraitEnv`] — last-resort fallback
+    ///    for prelude traits referenced from stdlib code where neither
+    ///    the per-module import context nor the symbol table carries the
+    ///    binding (prelude is implicit, not threaded through `use`).
+    /// 5. The current module — the implicit declaration site for everything
     ///    declared locally without re-export.
     ///
     /// When the canonicalised name had an alias (`use { Foo as Bar }`),
     /// the returned key uses the *original* declaration name, so the index
     /// (whose key is `(decl_module, decl_name)`) matches.
     pub(crate) fn canonical_decl_key(&self, name: &str) -> (ModuleSource, String) {
-        if let Some(src) = self.effect_sources.get(name) {
-            // effect_sources never carries an alias mapping, so the local
-            // name is the original declaration name. Canonicalise through
-            // `lookup_in_module` so re-exports (e.g. `wasi:clocks` re-
-            // exporting `MonotonicClock` from `wasi:clocks/monotonic_clock`)
-            // resolve to the *defining* module's key rather than the
-            // re-exporting one. Mirrors `resolve_effects`'s canonicalisation.
-            let canonical = self
-                .symbols
-                .lookup_in_module(src, name)
-                .map(|sym| sym.defined_at.module.clone())
-                .unwrap_or_else(|| src.clone());
-            return (canonical, name.to_string());
+        // Built-in primitive types have inherent impls in
+        // `core:prelude/primitive`. They aren't declared as Wado items
+        // (so the symbol table can't canonicalise them), but they have
+        // a well-known canonical module the build phase shares with
+        // every lookup site. Recognise them explicitly.
+        if is_primitive_type_name(name) {
+            return (ModuleSource::primitive(), name.to_string());
         }
         if let Some(src) = self.imported_type_sources.get(name) {
             let original = self
@@ -683,6 +707,23 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 .unwrap_or_else(|| src.clone());
             return (canonical, original);
         }
+        if let Some(src) = self.effect_sources.get(name) {
+            // `effect_sources` carries either a local effect / resource
+            // declaration (no alias possible — the local name IS the
+            // declaration name) or a non-aliased import that
+            // `imported_type_sources` above already covered. In both cases
+            // `name` is the original declaration name. Canonicalise through
+            // `lookup_in_module` so re-exports (e.g. `wasi:clocks` re-
+            // exporting `MonotonicClock` from `wasi:clocks/monotonic_clock`)
+            // resolve to the *defining* module's key rather than the
+            // re-exporting one.
+            let canonical = self
+                .symbols
+                .lookup_in_module(src, name)
+                .map(|sym| sym.defined_at.module.clone())
+                .unwrap_or_else(|| src.clone());
+            return (canonical, name.to_string());
+        }
         if let Some(sym) = self.symbols.lookup(name) {
             return (sym.defined_at.module.clone(), name.to_string());
         }
@@ -693,14 +734,22 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // — prelude is implicit, not via `use` — and that may not be
         // registered in the per-module symbol table for non-user modules.
         // The lookup picks "first registered" when two modules declare
-        // same-named items; this is the legacy bare-name behaviour and
-        // is fine in practice because the disambiguating cases (user
-        // code with same-named imports) are caught by the import-aware
-        // paths above.
+        // same-named items; this is the legacy bare-name behaviour and is
+        // reachable only when the prior priorities (which DO disambiguate
+        // user-visible cases) all miss.
         if let Some(key) = self.trait_env.find_trait_decl_key(name) {
             return key;
         }
         if let Some(key) = self.trait_env.find_effect_or_resource_decl_key(name) {
+            return key;
+        }
+        // Final fallback: a receiver type name (often a built-in primitive
+        // such as `char` / `i32` / `f64`) that has no `Symbol` entry to
+        // canonicalise through. The static-method index was keyed at
+        // build time by `(impl_module, type_name)`; scanning its keys for
+        // a matching bare name recovers the receiver's canonical module
+        // so the lookup site sees the same key the build phase wrote.
+        if let Some(key) = self.trait_env.find_static_method_decl_key(name) {
             return key;
         }
         (self.current_module_source.clone(), name.to_string())

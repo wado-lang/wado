@@ -15,6 +15,7 @@ use crate::tir::{TypeId, TypeTable};
 
 use super::Resolver;
 use super::types::TypeError;
+use crate::symbol::SymbolTable;
 
 /// Pick the right `ModuleSource` out of the AST + synthesised candidate
 /// lists. If `prefer` is supplied and present in either list, return that
@@ -50,7 +51,7 @@ fn pick_module_union<'a>(
 /// these kinds — the resolver canonicalises a use-site bare name through
 /// the symbol table ([`crate::resolver::Resolver::canonical_decl_key`])
 /// before consulting the index.
-pub(super) type DeclKey = (ModuleSource, String);
+pub(crate) type DeclKey = (ModuleSource, String);
 
 /// Pre-built index: type name → list of (`ModuleSource`, item index) for trait impl blocks.
 /// Built once from all loaded modules to avoid O(all items) scans per method call.
@@ -90,32 +91,34 @@ pub(super) type ResourceDeclIndex = IndexMap<DeclKey, (ModuleSource, usize)>;
 pub(super) type BlanketTraitImplIndex = Vec<(ModuleSource, usize)>;
 
 /// Pre-built index of static methods (no `self` parameter) from impl blocks.
-/// Key: `(type_name, method_name)` → `(ModuleSource, item_index, method_index)`.
+/// Key: canonical receiver [`DeclKey`] → list of
+/// `(method_name, impl_module_source, item_index, method_index)`.
 /// Enables O(1) lookup of static methods instead of scanning all modules.
-pub(super) type StaticMethodIndex = IndexMap<String, Vec<(String, ModuleSource, usize, usize)>>;
+///
+/// Keyed by canonical declaration key (rather than bare type name) so that
+/// `impl Counter { fn make(...) }` declared in two different modules with
+/// same-named `struct Counter` produces two distinct buckets — the lookup
+/// at `CounterA::make(...)` resolves through the call-site's import context
+/// and dispatches to the right module's impl.
+pub(super) type StaticMethodIndex = IndexMap<DeclKey, Vec<(String, ModuleSource, usize, usize)>>;
 
 /// Pre-built index of static methods from resource declarations.
-/// Key: `type_name` → `[(method_name, ModuleSource, item_index, method_index)]`.
+/// Key: canonical receiver [`DeclKey`] → `[(method_name, ModuleSource,
+/// item_index, method_index)]`. Same disambiguation rationale as
+/// [`StaticMethodIndex`].
 pub(super) type ResourceStaticMethodIndex =
-    IndexMap<String, Vec<(String, ModuleSource, usize, usize)>>;
+    IndexMap<DeclKey, Vec<(String, ModuleSource, usize, usize)>>;
 
-/// Pre-built index of (`type_name`, `trait_name`) → `ModuleSource` for non-blanket
-/// trait impls. Lets downstream phases (template synthesis, etc.) ask "where
-/// does the impl live?" without re-scanning AST modules. Blanket impls are
-/// excluded — they apply structurally and don't have a concrete receiver
-/// type name.
 /// `(type_name, trait_name)` → modules whose `impl <trait_name> for <type_name>`
 /// block exists.
 ///
-/// Keyed by bare names (not [`DeclKey`]) for the same reason as
-/// [`TraitImplIndex`]: the resolver iterates the candidate `Vec` and
-/// disambiguates each entry through the per-impl `module_source` payload
-/// plus the caller's `type_module` / receiver `TypeId` hint. Two distinct
-/// types that share a simple name (e.g. two `struct Widget` blocks in
-/// different modules, each auto-derived to `Widget^Inspect`) coexist in
-/// one bucket and the picker (`pick_module_union`) chooses the right
-/// entry. Likewise two same-named traits coexist because their impl
-/// blocks live in different modules.
+/// Keyed by bare names (not [`DeclKey`]): the multi-value `Vec` plus the
+/// caller's `type_module` hint already lets two modules' same-named
+/// receivers each route to their own impl. Canonical disambiguation of
+/// the receiver type's *declaring* module would require build-time import
+/// resolution that the current `TraitEnv::build` doesn't have plumbed
+/// through; a follow-up could re-key by canonical pair when the
+/// inhabited-by-multiple-declarations case becomes user-visible.
 ///
 /// Blanket impls (`impl<T: Trait> Trait for T`) are still represented by
 /// [`BlanketTraitImplIndex`]; they are excluded from this map because they
@@ -147,15 +150,16 @@ pub struct TraitEnv {
     /// Blanket impls (`impl<T: Bound> Trait for T`), checked as fallback.
     pub(super) blanket_impl_index: BlanketTraitImplIndex,
     /// `trait_name` → modules that host a blanket impl of that trait
-    /// (`impl<T: Bound> Trait for T`). Used by the monomorphizer to find the
-    /// home module of a generic dispatch when the receiver type itself has
-    /// no dedicated `impl Trait for Type` block — the blanket provides the
-    /// body, and the body lives in the blanket's module.
+    /// (`impl<T: Bound> Trait for T`). Used by the monomorphizer to find
+    /// the home module of a generic dispatch when the receiver type
+    /// itself has no dedicated `impl Trait for Type` block — the blanket
+    /// provides the body, and the body lives in the blanket's module.
     ///
-    /// Keyed by the bare trait name (like [`TraitImplModuleIndex`]). When
-    /// two modules host blanket impls of same-named traits the bucket
-    /// contains both modules; [`Self::blanket_impl_module_for_trait`]
-    /// disambiguates via the `type_module` hint.
+    /// Keyed by bare trait name (see [`TraitImplModuleIndex`] for the
+    /// rationale): canonical-key disambiguation would require build-time
+    /// resolution of the trait reference, which isn't plumbed through
+    /// `TraitEnv::build`. The multi-value `Vec<ModuleSource>` plus the
+    /// `type_module` hint at the call site handles the common case.
     pub(crate) blanket_trait_impl_modules: IndexMap<String, Vec<ModuleSource>>,
     /// `type_name` → `[(method_name, ModuleSource, item_idx, method_idx)]` for static methods.
     pub(super) static_method_index: StaticMethodIndex,
@@ -254,7 +258,18 @@ impl TraitEnv {
     /// Called once in `resolve_all_modules` before per-module resolution begins.
     /// The indices enable O(1) trait lookup by type/trait name instead of scanning all modules.
     /// Also performs orphan rule checking for impl blocks in local (user) modules.
-    pub(super) fn build(modules: &IndexMap<ModuleSource, Module>) -> (Arc<Self>, Vec<TypeError>) {
+    ///
+    /// `symbols` is consulted via [`SymbolTable::lookup_in_module`] to
+    /// canonicalise every receiver-type and trait-name reference that
+    /// appears in an `impl` block: bare-name lookups are resolved against
+    /// the impl module's own import context, so two modules with same-
+    /// named traits / structs each produce a distinct [`DeclKey`] in the
+    /// affected indices. The symbol table is built by the `analyze` phase,
+    /// which runs before this routine.
+    pub(super) fn build(
+        modules: &IndexMap<ModuleSource, Module>,
+        symbols: &SymbolTable,
+    ) -> (Arc<Self>, Vec<TypeError>) {
         let mut impl_index: TraitImplIndex = IndexMap::default();
         let mut decl_index: TraitDeclIndex = IndexMap::default();
         let mut effect_decl_index: EffectDeclIndex = IndexMap::default();
@@ -272,70 +287,16 @@ impl TraitEnv {
         let mut static_method_index: StaticMethodIndex = IndexMap::default();
         let mut resource_static_method_index: ResourceStaticMethodIndex = IndexMap::default();
 
+        // Pass 1: walk every module's items to populate the
+        // declaration-side indices (trait / effect / resource / type
+        // decls). We need these populated *before* impl blocks are
+        // canonicalised in pass 2, because the build-time canonical-key
+        // helper falls back to scanning the decl indices when the
+        // per-module symbol table misses (typical for prelude-implicit
+        // names that no `use` declaration explicitly threads).
         for (module_source, module) in modules {
             for (item_idx, item) in module.items.iter().enumerate() {
                 match item {
-                    Item::Impl(impl_block) if impl_block.trait_type.is_some() => {
-                        let type_name = get_type_name_static(&impl_block.ty);
-                        // Detect blanket impls: impl_ty is a type parameter from type_params
-                        let is_blanket = impl_block
-                            .type_params
-                            .iter()
-                            .any(|tp| tp.name == type_name && !tp.bounds.is_empty());
-                        if is_blanket {
-                            blanket_impl_index.push((module_source.clone(), item_idx));
-                            if let Some(trait_type) = &impl_block.trait_type {
-                                let trait_name = get_type_name_static(trait_type);
-                                let modules =
-                                    blanket_trait_impl_modules.entry(trait_name).or_default();
-                                if !modules.contains(module_source) {
-                                    modules.push(module_source.clone());
-                                }
-                            }
-                        } else if let Some(trait_type) = &impl_block.trait_type {
-                            let trait_name = get_type_name_static(trait_type);
-                            let key = (type_name.clone(), trait_name);
-                            let modules = trait_impl_modules.entry(key.clone()).or_default();
-                            if !modules.contains(module_source) {
-                                modules.push(module_source.clone());
-                            }
-                            // Track the concrete subset separately: only impl
-                            // blocks with no type parameters at all qualify
-                            // (e.g. `impl Display for String`, not
-                            // `impl<T> Inspect for Array<T>`).
-                            if impl_block.type_params.is_empty() {
-                                let cmodules = concrete_trait_impl_modules.entry(key).or_default();
-                                if !cmodules.contains(module_source) {
-                                    cmodules.push(module_source.clone());
-                                }
-                            }
-                        }
-                        impl_index
-                            .entry(type_name)
-                            .or_default()
-                            .push((module_source.clone(), item_idx));
-                    }
-                    Item::Impl(impl_block) => {
-                        // Non-trait impl block: index static methods
-                        let type_name = get_type_name_static(&impl_block.ty);
-                        for (method_idx, method) in impl_block.methods.iter().enumerate() {
-                            let has_self = method
-                                .params
-                                .iter()
-                                .any(|p| p.self_kind != ast::SelfKind::None);
-                            if !has_self {
-                                static_method_index
-                                    .entry(type_name.clone())
-                                    .or_default()
-                                    .push((
-                                        method.name.clone(),
-                                        module_source.clone(),
-                                        item_idx,
-                                        method_idx,
-                                    ));
-                            }
-                        }
-                    }
                     Item::Trait(trait_decl) => {
                         // `(module_source, name)` key: two modules can declare
                         // a same-named trait without colliding. The previous
@@ -353,11 +314,15 @@ impl TraitEnv {
                         );
                     }
                     Item::Resource(resource) => {
+                        let resource_key = (module_source.clone(), resource.name.clone());
                         resource_decl_index.insert(
-                            (module_source.clone(), resource.name.clone()),
+                            resource_key.clone(),
                             (module_source.clone(), item_idx),
                         );
-                        // Index static methods from resource declarations
+                        // Index static methods from resource declarations.
+                        // The resource declaration itself is the canonical
+                        // receiver, so key by the declaration's own
+                        // `(module, name)` pair.
                         for (method_idx, method) in resource.methods.iter().enumerate() {
                             let has_self = method.params.iter().any(|p| {
                                 matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
@@ -366,7 +331,7 @@ impl TraitEnv {
                             });
                             if !has_self {
                                 resource_static_method_index
-                                    .entry(resource.name.clone())
+                                    .entry(resource_key.clone())
                                     .or_default()
                                     .push((
                                         method.name.clone(),
@@ -421,13 +386,91 @@ impl TraitEnv {
             }
         }
 
-        // Also index static methods from trait impl blocks (they have trait_type.is_some())
+        // Canonicalise a bare type / trait name referenced in
+        // `module_source` (an impl block's home module). Looks first
+        // through `symbols` (per-module imports + that module's own
+        // declarations), then falls back to scanning the decl indices
+        // built above so that prelude-implicit names (`Eq`, `Ord`,
+        // `Display`, …) resolve to their declaring module even when
+        // the impl's module never `use`'d them. The final fallback —
+        // `(module_source, name)` — applies to blanket type parameters
+        // and to references whose target wasn't registered as a
+        // top-level declaration.
+        let canonical_key = |module_source: &ModuleSource, name: &str| -> DeclKey {
+            // Built-in primitives (`i32`, `f64`, `char`, …) have no
+            // `Symbol` entry and no decl item, but they share a known
+            // canonical module: `core:prelude/primitive`. Lookups via
+            // `Resolver::canonical_decl_key` use the same shortcut, so
+            // every inherent `impl <primitive> { … }` block keys into
+            // the same bucket regardless of which file the impl lives in.
+            if super::is_primitive_type_name(name) {
+                return (ModuleSource::primitive(), name.to_string());
+            }
+            if let Some(sym) = symbols.lookup_in_module(module_source, name) {
+                return (sym.defined_at.module.clone(), sym.name.clone());
+            }
+            if let Some(key) = decl_index.keys().find(|(_, n)| n == name) {
+                return key.clone();
+            }
+            if let Some(key) = effect_decl_index.keys().find(|(_, n)| n == name) {
+                return key.clone();
+            }
+            if let Some(key) = resource_decl_index.keys().find(|(_, n)| n == name) {
+                return key.clone();
+            }
+            if let Some(key) = type_decl_index.keys().find(|(_, n)| n == name) {
+                return key.clone();
+            }
+            (module_source.clone(), name.to_string())
+        };
+
+        // Pass 2: walk impl blocks now that all decl indices are
+        // populated, so the per-impl canonicalisation above can resolve
+        // every PascalCase reference to its declaring module.
         for (module_source, module) in modules {
             for (item_idx, item) in module.items.iter().enumerate() {
-                if let Item::Impl(impl_block) = item
-                    && impl_block.trait_type.is_some()
-                {
-                    let type_name = get_type_name_static(&impl_block.ty);
+                let Item::Impl(impl_block) = item else { continue };
+                let type_name = get_type_name_static(&impl_block.ty);
+                if let Some(trait_type) = &impl_block.trait_type {
+                    let trait_name = get_type_name_static(trait_type);
+                    let is_blanket = impl_block
+                        .type_params
+                        .iter()
+                        .any(|tp| tp.name == type_name && !tp.bounds.is_empty());
+                    if is_blanket {
+                        blanket_impl_index.push((module_source.clone(), item_idx));
+                        let modules =
+                            blanket_trait_impl_modules.entry(trait_name).or_default();
+                        if !modules.contains(module_source) {
+                            modules.push(module_source.clone());
+                        }
+                    } else {
+                        let key = (type_name.clone(), trait_name);
+                        let modules = trait_impl_modules.entry(key.clone()).or_default();
+                        if !modules.contains(module_source) {
+                            modules.push(module_source.clone());
+                        }
+                        // Track the concrete subset separately: only impl
+                        // blocks with no type parameters at all qualify
+                        // (e.g. `impl Display for String`, not
+                        // `impl<T> Inspect for Array<T>`).
+                        if impl_block.type_params.is_empty() {
+                            let cmodules =
+                                concrete_trait_impl_modules.entry(key).or_default();
+                            if !cmodules.contains(module_source) {
+                                cmodules.push(module_source.clone());
+                            }
+                        }
+                    }
+                    impl_index
+                        .entry(type_name.clone())
+                        .or_default()
+                        .push((module_source.clone(), item_idx));
+                    // Static methods on trait impl blocks (no `self`
+                    // parameter) join the same canonical bucket as
+                    // inherent statics. `f64::from_bits` and friends in
+                    // `core:prelude/int128.wado` flow through this path.
+                    let recv_key = canonical_key(module_source, &type_name);
                     for (method_idx, method) in impl_block.methods.iter().enumerate() {
                         let has_self = method
                             .params
@@ -435,7 +478,27 @@ impl TraitEnv {
                             .any(|p| p.self_kind != ast::SelfKind::None);
                         if !has_self {
                             static_method_index
-                                .entry(type_name.clone())
+                                .entry(recv_key.clone())
+                                .or_default()
+                                .push((
+                                    method.name.clone(),
+                                    module_source.clone(),
+                                    item_idx,
+                                    method_idx,
+                                ));
+                        }
+                    }
+                } else {
+                    // Non-trait (inherent) impl block: index static methods.
+                    let recv_key = canonical_key(module_source, &type_name);
+                    for (method_idx, method) in impl_block.methods.iter().enumerate() {
+                        let has_self = method
+                            .params
+                            .iter()
+                            .any(|p| p.self_kind != ast::SelfKind::None);
+                        if !has_self {
+                            static_method_index
+                                .entry(recv_key.clone())
                                 .or_default()
                                 .push((
                                     method.name.clone(),
@@ -489,13 +552,6 @@ impl TraitEnv {
         type_module: Option<&ModuleSource>,
     ) -> Option<&ModuleSource> {
         let key = (type_name.to_string(), trait_name.to_string());
-        // Union AST-layer and synthesised-layer candidates: an AST-only
-        // fallthrough would miss auto-derived impls when the AST already
-        // has a *different* same-named entry. E.g. core's variadic
-        // `impl<..T> Inspect for [..T]` registers `("Tuple", "Inspect")` at
-        // the AST layer; a user `struct Tuple` whose auto-derived
-        // `Tuple^Inspect` is recorded in the synthesised layer must still
-        // be reachable when its module is passed as the hint.
         let ast = self.trait_impl_modules.get(&key);
         let syn = self
             .synthesised
@@ -505,9 +561,10 @@ impl TraitEnv {
     }
 
     /// Return the home module of a blanket impl (`impl<T: Bound> Trait for T`)
-    /// for `trait_name`, if one exists. When multiple blanket impls implement
-    /// the same trait, the first registered module is returned, with
-    /// `type_module` preferred when present (used as a stable tie-breaker).
+    /// for `trait_name`, if one exists. When multiple blanket impls
+    /// implement the same trait, the first registered module is returned,
+    /// with `type_module` preferred when present (used as a stable
+    /// tie-breaker).
     pub(crate) fn blanket_impl_module_for_trait(
         &self,
         trait_name: &str,
@@ -586,6 +643,22 @@ impl TraitEnv {
     pub fn trait_ref_for(&self, trait_name: &str) -> DeclKey {
         self.find_trait_decl_key(trait_name)
             .unwrap_or_else(|| (ModuleSource::prelude(), trait_name.to_string()))
+    }
+
+    /// Find any canonical receiver [`DeclKey`] currently registered in
+    /// the static-method index whose bare name matches `name`. Used as a
+    /// final fallback in [`crate::resolver::Resolver::canonical_decl_key`]
+    /// for receiver names the per-module import context and symbol table
+    /// can't canonicalise — most commonly the built-in primitives
+    /// (`char`, `i32`, `f64`, …) which have `impl <prim> { … }` blocks in
+    /// `core:prelude/primitive` but no `Symbol` entry to consult through
+    /// `lookup_in_module`.
+    pub fn find_static_method_decl_key(&self, name: &str) -> Option<DeclKey> {
+        self.static_method_index
+            .keys()
+            .chain(self.resource_static_method_index.keys())
+            .find(|(_, n)| n == name)
+            .cloned()
     }
 
     /// Produce a new `TraitEnv` with the synthesis-layer impls populated.

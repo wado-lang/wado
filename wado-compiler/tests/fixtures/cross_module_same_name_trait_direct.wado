@@ -1,0 +1,35 @@
+// Two modules each declare `pub trait Describe` (with different
+// signatures) plus `pub struct Data` plus `impl Describe for Data`.
+// The parent module imports both pairs and calls `.describe()` on
+// each receiver *directly from its own scope*.
+//
+// The dispatch must pick A's `impl Describe for Data` for `&DataA`
+// and B's `impl Describe for Data` for `&DataB`. The two traits have
+// different return types (`String` vs `i32`) so a mis-routed lookup
+// surfaces as a type-checker error.
+//
+// Regression guard for `find_trait_method_for_type`: the previous
+// version filtered candidates only by struct/trait *name*; same-name
+// `impl Trait for Data` blocks across modules all matched, and the
+// first one in iteration order won.
+
+use { Data as DataA } from "./sub/cross_module_same_name_trait_a.wado";
+use { Data as DataB } from "./sub/cross_module_same_name_trait_b.wado";
+
+fn use_a(d: &DataA) -> String {
+    return d.describe();
+}
+
+fn use_b(d: &DataB) -> i32 {
+    return d.describe();
+}
+
+test "cross-module same-name traits, direct dispatch" {
+    let a = DataA { x: 7 };
+    let b = DataB { value: 13 };
+    assert use_a(&a) == "x=7";
+    assert use_b(&b) == 13;
+}
+
+__DATA__
+{"test": {}}
