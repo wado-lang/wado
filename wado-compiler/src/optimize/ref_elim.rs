@@ -14,11 +14,6 @@
 //! ... arr.repr ...
 //! ```
 //!
-//! The pass also handles bindings whose source is a field-access chain
-//! (`let r: &T = &v.f1.f2`), substituting the chain at each `r.field` use.
-//! This is what `inline` produces for `&self.tokens.len()`-style calls after
-//! the body's `self.used` is rewritten in terms of the inlined receiver.
-//!
 //! The algorithm uses a two-pass approach that processes ALL ref bindings
 //! simultaneously, avoiding the O(K × N) cost of processing each binding
 //! separately (where K = number of bindings, N = body size).
@@ -35,59 +30,12 @@ use crate::tir::TypeTable;
 
 /// Per-binding analysis state, keyed by the ref local index.
 struct RefInfo {
-    /// The expression `E` from `let r = &E` (or the resolved referent of a
-    /// transitive `let r = s` shadow). Must be a chain of `FieldAccess`
-    /// bottoming out at a `Local`, so it's safe to clone at each use site.
-    referent: NirExpr,
+    /// Local index of the original variable (`local_var` in `let r = &local_var`)
+    target_local: u32,
+    /// Name of the original variable
+    target_name: String,
     /// True until a non-field-access use is found
     eliminable: bool,
-}
-
-/// An expression is a valid referent if it's a pure read of a local — either
-/// a bare `Local` or a chain of `FieldAccess` bottoming out at one. Restricting
-/// to this shape keeps substitution cheap (duplicates only struct.get) and
-/// observably equivalent (no side effects, no method calls).
-fn is_valid_referent(expr: &NirExpr) -> bool {
-    match &expr.kind {
-        NirExprKind::Local { .. } => true,
-        NirExprKind::FieldAccess { expr: inner, .. } => is_valid_referent(inner),
-        _ => false,
-    }
-}
-
-/// Resolve any `Local(idx)` in `expr` whose binding is already tracked, by
-/// splicing in the tracked binding's referent. Eliminable bindings are dropped
-/// in pass 2; without this resolution, a chained pattern like
-/// `let r1 = &v; let r2 = &r1.field; ... r2.x ...` would substitute `r2.x`
-/// to `(Local(r1)).field.x` only to find `r1`'s `let` removed underneath it.
-/// Pre-resolving at registration time keeps Pass 2 a single substitution.
-fn resolve_referent(expr: &NirExpr, refs: &IndexMap<u32, RefInfo>) -> NirExpr {
-    match &expr.kind {
-        NirExprKind::Local { index, .. } => {
-            if let Some(info) = refs.get(index) {
-                info.referent.clone()
-            } else {
-                expr.clone()
-            }
-        }
-        NirExprKind::FieldAccess {
-            expr: inner,
-            field_index,
-            field_name,
-        } => {
-            let resolved_inner = resolve_referent(inner, refs);
-            NirExpr {
-                kind: NirExprKind::FieldAccess {
-                    expr: Box::new(resolved_inner),
-                    field_index: *field_index,
-                    field_name: field_name.clone(),
-                },
-                type_id: expr.type_id,
-                span: expr.span,
-            }
-        }
-        _ => expr.clone(),
-    }
 }
 
 /// Pass 1: Collect all ref bindings and analyze uses in a single traversal.
@@ -95,17 +43,13 @@ fn resolve_referent(expr: &NirExpr, refs: &IndexMap<u32, RefInfo>) -> NirExpr {
 /// Walks the entire function body once, building an `IndexMap<u32, RefInfo>` for
 /// every binding the pass can eliminate when all uses are field-access-only:
 ///
-/// 1. `let r: &T = &E` / `let r: &mut T = &mut E` — fresh reference to a
-///    pure-read referent. `E` must be a `Local` or a chain of `FieldAccess`
-///    bottoming out at a `Local`. Replace `r.field` with `<E>.field` and drop
-///    the binding. For `E = Local`, this is the classic `let r = &v` shape;
-///    for `E = self.tokens`, this is what survives after `inline` expands a
-///    method body like `Array::len(&self.tokens)` into a labeled block.
+/// 1. `let r: &T = &v` / `let r: &mut T = &mut v` — fresh reference to a local.
+///    Replace `r.field` with `v.field` and drop the binding.
 ///
 /// 2. `let r: &mut T = s` (or `&T`) where `s` is itself a reference-typed
 ///    local **already tracked in `refs`** — the inlined shadow pattern,
 ///    e.g. the `let self = self;` that appears at the entry of an inlined
-///    `&mut self` method body. Copy `s`'s referent into `r` so `r.field`
+///    `&mut self` method body. Copy `s`'s `RefInfo` into `r` so `r.field`
 ///    resolves to the same root.
 ///
 ///    If `s` is not tracked yet we leave `r` un-tracked. The pass walks
@@ -124,28 +68,27 @@ fn analyze_refs_in_block(block: &NirBlock, refs: &mut IndexMap<u32, RefInfo>) {
             local_index, value, ..
         } = &stmt.kind
         {
-            // Pattern (1): `let r = &E` / `let r = &mut E` where E is a
-            // pure-read referent (Local or FieldAccess chain). Resolve any
-            // tracked Locals in `E` to their referents up front so chained
-            // shadows survive Pass 2's drop of intermediate bindings.
+            // Pattern (1): `let r = &v` / `let r = &mut v`
             if let NirExprKind::Unary { op, expr } = &value.kind
                 && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                && is_valid_referent(expr)
+                && let NirExprKind::Local { index, name } = &expr.kind
             {
                 refs.insert(
                     *local_index,
                     RefInfo {
-                        referent: resolve_referent(expr, refs),
+                        target_local: *index,
+                        target_name: name.clone(),
                         eliminable: true,
                     },
                 );
             }
             // Pattern (2): `let r = s` where s is itself a tracked ref local
-            // (the inlined shadow). Resolve transitively to s's referent so
+            // (the inlined shadow). Resolve transitively to s's target so
             // `r.field` can be replaced with `<root>.field` directly.
             else if let NirExprKind::Local { index, .. } = &value.kind {
                 let resolved = refs.get(index).map(|info| RefInfo {
-                    referent: info.referent.clone(),
+                    target_local: info.target_local,
+                    target_name: info.target_name.clone(),
                     eliminable: info.eliminable,
                 });
                 if let Some(info) = resolved {
@@ -378,15 +321,14 @@ fn transform_expr(expr: &mut NirExpr, eliminable: &IndexMap<u32, RefInfo>) {
             if let NirExprKind::Local { index, .. } = &inner.kind
                 && let Some(info) = eliminable.get(index)
             {
-                // Replace `r` with the referent expression. For `let r = &v`
-                // the referent is `Local(v)`; for `let r = &v.f` it's
-                // `FieldAccess(Local(v), "f")`. We swap only the `kind` and
-                // keep `inner.type_id`/`inner.span` — the surrounding code
-                // (the outer `FieldAccess.field_index` we're inside, plus
-                // any downstream consumers) was sized to the ref-type tag
-                // that `r` had at this position, and changing it here would
-                // ripple incorrect types into codegen.
-                inner.kind = info.referent.clone().kind;
+                **inner = NirExpr::new(
+                    NirExprKind::Local {
+                        index: info.target_local,
+                        name: info.target_name.clone(),
+                    },
+                    inner.type_id,
+                    inner.span,
+                );
                 return;
             }
             transform_expr(inner, eliminable);
