@@ -19,6 +19,17 @@ use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, LabeledBlockTarget, TypeError, VarRef};
 use super::util;
 
+/// Per-node decision for [`Resolver::any_in_tree`] predicate walks.
+#[derive(Clone, Copy)]
+enum Step {
+    /// Predicate matched — short-circuit and return `true`.
+    Match,
+    /// Not matched here, and do not descend into children.
+    Skip,
+    /// Not matched here; continue descending into children.
+    Descend,
+}
+
 impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn resolve_expr(
         &mut self,
@@ -2215,83 +2226,70 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Whether `body` (a `loop`'s body) contains a `break` that would
-    /// either target this loop (unlabeled) or escape it (labeled). Either
-    /// case lets control resume after the loop, so the loop is NOT
-    /// divergent. Recurses through nested control flow except nested
-    /// `loop`s (which catch their own unlabeled breaks) and closure bodies.
+    /// either target this loop (unlabeled) or escape it (labeled), so
+    /// the loop is NOT divergent. Nested `loop`s catch their own
+    /// unlabeled breaks; closure bodies have their own scope.
     fn loop_body_can_escape(body: &TirBlock) -> bool {
-        body.stmts.iter().any(Self::stmt_can_escape_loop)
-    }
-
-    fn stmt_can_escape_loop(stmt: &TirStmt) -> bool {
-        match &stmt.kind {
-            TirStmtKind::Break { .. } => true,
-            TirStmtKind::Loop { .. } => false,
-            TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            }
-            | TirStmtKind::IfLet {
-                then_block,
-                else_block,
-                ..
-            } => {
-                Self::loop_body_can_escape(then_block)
-                    || else_block.as_ref().is_some_and(Self::loop_body_can_escape)
-            }
-            TirStmtKind::LabeledBlock { block, .. } => Self::loop_body_can_escape(block),
-            TirStmtKind::Expr(e) => Self::expr_can_escape_loop(e),
-            TirStmtKind::Let { value, .. }
-            | TirStmtKind::LetDestructure { value, .. }
-            | TirStmtKind::TaskReturn { value, .. }
-            | TirStmtKind::Return {
-                value: Some(value), ..
-            } => Self::expr_can_escape_loop(value),
-            _ => false,
-        }
-    }
-
-    fn expr_can_escape_loop(expr: &TirExpr) -> bool {
-        match &expr.kind {
-            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-                Self::loop_body_can_escape(block)
-            }
-            TirExprKind::If {
-                then_branch,
-                else_branch,
-                ..
-            } => {
-                Self::loop_body_can_escape(then_branch)
-                    || else_branch.as_ref().is_some_and(Self::loop_body_can_escape)
-            }
-            TirExprKind::Match { arms, .. } => {
-                arms.iter().any(|a| Self::expr_can_escape_loop(&a.body))
-            }
-            TirExprKind::Closure { .. } => false,
-            _ => false,
-        }
+        Self::any_in_tree(
+            body,
+            &mut |s| match &s.kind {
+                TirStmtKind::Break { .. } => Step::Match,
+                TirStmtKind::Loop { .. } => Step::Skip,
+                _ => Step::Descend,
+            },
+            &mut |_| Step::Descend,
+        )
     }
 
     /// Whether `block` contains a `break <label>` that would exit a
     /// labeled block with this label. An inner labeled block that
-    /// reuses `label` shadows it. Closure bodies are not recursed into.
+    /// reuses `label` (in either stmt or expr position) shadows it.
     fn block_can_break_to_label(block: &TirBlock, label: &str) -> bool {
+        Self::any_in_tree(
+            block,
+            &mut |s| match &s.kind {
+                TirStmtKind::Break { label: Some(l), .. } if l == label => Step::Match,
+                TirStmtKind::LabeledBlock { label: own, .. } if own == label => Step::Skip,
+                _ => Step::Descend,
+            },
+            &mut |e| match &e.kind {
+                TirExprKind::LabeledBlock { label: own, .. } if own == label => Step::Skip,
+                _ => Step::Descend,
+            },
+        )
+    }
+
+    /// Generic "exists a node matching the predicate" walker shared by
+    /// `loop_body_can_escape` and `block_can_break_to_label`.
+    /// `check_stmt` runs at every statement, `check_expr` at every
+    /// expression; either may return `Step::Match` to short-circuit
+    /// the search, `Step::Skip` to prune the subtree (e.g. a nested
+    /// `loop` swallows its own breaks, a same-labeled inner block
+    /// shadows an outer label), or `Step::Descend` to keep recursing.
+    /// Closure bodies are never entered — their control flow stays in
+    /// the closure's own scope.
+    fn any_in_tree(
+        block: &TirBlock,
+        check_stmt: &mut dyn FnMut(&TirStmt) -> Step,
+        check_expr: &mut dyn FnMut(&TirExpr) -> Step,
+    ) -> bool {
         block
             .stmts
             .iter()
-            .any(|s| Self::stmt_can_break_to_label(s, label))
+            .any(|s| Self::any_in_stmt(s, check_stmt, check_expr))
     }
 
-    fn stmt_can_break_to_label(stmt: &TirStmt, label: &str) -> bool {
+    fn any_in_stmt(
+        stmt: &TirStmt,
+        check_stmt: &mut dyn FnMut(&TirStmt) -> Step,
+        check_expr: &mut dyn FnMut(&TirExpr) -> Step,
+    ) -> bool {
+        match check_stmt(stmt) {
+            Step::Match => return true,
+            Step::Skip => return false,
+            Step::Descend => {}
+        }
         match &stmt.kind {
-            TirStmtKind::Break { label: Some(l), .. } => l == label,
-            TirStmtKind::Break { label: None, .. } => false,
-            TirStmtKind::LabeledBlock {
-                block,
-                label: own_label,
-            } => own_label != label && Self::block_can_break_to_label(block, label),
-            TirStmtKind::Loop { body } => Self::block_can_break_to_label(body, label),
             TirStmtKind::If {
                 then_block,
                 else_block,
@@ -2302,43 +2300,53 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 else_block,
                 ..
             } => {
-                Self::block_can_break_to_label(then_block, label)
+                Self::any_in_tree(then_block, check_stmt, check_expr)
                     || else_block
                         .as_ref()
-                        .is_some_and(|b| Self::block_can_break_to_label(b, label))
+                        .is_some_and(|b| Self::any_in_tree(b, check_stmt, check_expr))
             }
-            TirStmtKind::Expr(e) => Self::expr_can_break_to_label(e, label),
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+                Self::any_in_tree(body, check_stmt, check_expr)
+            }
+            TirStmtKind::Expr(e) => Self::any_in_expr(e, check_stmt, check_expr),
             TirStmtKind::Let { value, .. }
             | TirStmtKind::LetDestructure { value, .. }
             | TirStmtKind::TaskReturn { value, .. }
             | TirStmtKind::Return {
                 value: Some(value), ..
-            } => Self::expr_can_break_to_label(value, label),
+            } => Self::any_in_expr(value, check_stmt, check_expr),
             _ => false,
         }
     }
 
-    fn expr_can_break_to_label(expr: &TirExpr, label: &str) -> bool {
+    fn any_in_expr(
+        expr: &TirExpr,
+        check_stmt: &mut dyn FnMut(&TirStmt) -> Step,
+        check_expr: &mut dyn FnMut(&TirExpr) -> Step,
+    ) -> bool {
+        match check_expr(expr) {
+            Step::Match => return true,
+            Step::Skip => return false,
+            Step::Descend => {}
+        }
         match &expr.kind {
-            TirExprKind::Block(block) => Self::block_can_break_to_label(block, label),
-            TirExprKind::LabeledBlock {
-                block,
-                label: own_label,
-                ..
-            } => own_label != label && Self::block_can_break_to_label(block, label),
+            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+                Self::any_in_tree(block, check_stmt, check_expr)
+            }
             TirExprKind::If {
                 then_branch,
                 else_branch,
                 ..
             } => {
-                Self::block_can_break_to_label(then_branch, label)
+                Self::any_in_tree(then_branch, check_stmt, check_expr)
                     || else_branch
                         .as_ref()
-                        .is_some_and(|b| Self::block_can_break_to_label(b, label))
+                        .is_some_and(|b| Self::any_in_tree(b, check_stmt, check_expr))
             }
             TirExprKind::Match { arms, .. } => arms
                 .iter()
-                .any(|a| Self::expr_can_break_to_label(&a.body, label)),
+                .any(|a| Self::any_in_expr(&a.body, check_stmt, check_expr)),
+            // Closures stay in their own scope.
             TirExprKind::Closure { .. } => false,
             _ => false,
         }
