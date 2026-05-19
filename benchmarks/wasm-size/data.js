@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779198204187,
+  "lastUpdate": 1779208567831,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23641,6 +23641,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/73b063060681e24b9a92df2e7802ea72d1c93249"
         },
         "date": 1779198203730,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1911,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10111,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 486702,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5d83c12ca8eec5a3c2a4e24147eee85c9fe235d4",
+          "message": "Merge pull request #1125 from wado-lang/claude/generic-func-values-l1RoF\n\nfeat: generic functions as values via turbofish and expected-type inference",
+          "timestamp": "2026-05-20T01:29:43+09:00",
+          "tree_id": "eebdb98033f35a8f800c2b630e7ae9eb12d0f0b6",
+          "url": "https://github.com/wado-lang/wado/commit/5d83c12ca8eec5a3c2a4e24147eee85c9fe235d4"
+        },
+        "date": 1779208567424,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
