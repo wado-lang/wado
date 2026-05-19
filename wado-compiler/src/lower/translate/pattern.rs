@@ -2131,27 +2131,14 @@ impl<'a> PatternLowerer<'a> {
                     }
                 }
 
-                // Lift `mut` variant-payload bindings out of the
-                // Match pattern into a `Let mut` at the start of
-                // the arm body so `value_copy::insert` sees the
-                // binding site and wraps value-semantic payloads in
-                // a defensive `$value_copy$T(...)`. Without this
-                // lift, `wir_build::pattern_match::emit_pattern_bindings`
-                // writes the payload directly via
-                // `local.set s = ref.cast(...).payload_0` and the
-                // `mut` binding shares storage with the original
-                // variant struct's `payload_0` field — see WEP
-                // 2026-05-11 Phase 10 Step 2a known-gap entry.
-                //
-                // The fresh non-mut local that lands in the Match
-                // pattern slot gets the same type as the original
-                // payload binding; the `Let mut original_local =
-                // fresh_local` that goes in the arm body lets
-                // `value_copy::insert` wrap the right-hand `Local`
-                // read in a copy call.
-                for arm in arms.iter_mut() {
-                    self.lift_mut_payload_bindings(arm);
-                }
+                // Lifting `mut` variant-payload bindings into explicit
+                // `Let mut original = fresh_local` statements is now
+                // owned by `lower::plan::lift_mut::lift_mut_match_bindings`,
+                // a stand-alone sub-pass that runs between `closure`
+                // and `value_copy`. Keeping it out of this pre-pass is
+                // the prerequisite for moving pattern lowering itself
+                // into the translator (Phase 10 Step 2b) without making
+                // `value_copy` pattern-aware.
             }
             TirExprKind::Binary { left, right, .. } => {
                 self.lower_expr(left, type_table);
@@ -2308,123 +2295,6 @@ impl TypeTableExt for TypeTable {
     }
 }
 
-impl PatternLowerer<'_> {
-    /// Walk `arm.pattern` looking for `Binding`s whose local is
-    /// declared `mut` in the enclosing function. For each, allocate a
-    /// fresh non-mut local of the same type, swap it into the pattern
-    /// slot, and prepend `let mut original_local = fresh_local` to
-    /// the arm body. Recurses through nested compound patterns
-    /// (`Tuple` / `Struct` / `Variant`) so or-pattern alternatives and
-    /// nested destructures all get the same lift.
-    fn lift_mut_payload_bindings(&mut self, arm: &mut TirMatchArm) {
-        let span = arm.span;
-        let mut prefix_stmts: Vec<TirStmt> = Vec::new();
-        self.lift_mut_in_pattern(&mut arm.pattern, span, &mut prefix_stmts);
-        if prefix_stmts.is_empty() {
-            return;
-        }
-        let body_span = arm.body.span;
-        let original_body = std::mem::replace(
-            &mut arm.body,
-            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, body_span),
-        );
-        let original_type = original_body.type_id;
-        let mut stmts = prefix_stmts;
-        stmts.push(TirStmt::new(TirStmtKind::Expr(original_body), body_span));
-        arm.body = TirExpr::new(
-            TirExprKind::Block(TirBlock {
-                stmts,
-                span: body_span,
-            }),
-            original_type,
-            body_span,
-        );
-    }
-
-    fn lift_mut_in_pattern(
-        &mut self,
-        pattern: &mut TirPattern,
-        span: Span,
-        prefix_stmts: &mut Vec<TirStmt>,
-    ) {
-        match pattern {
-            TirPattern::Binding {
-                name,
-                local_index,
-                type_id,
-            } => {
-                let local_idx = *local_index as usize;
-                let is_mut = self
-                    .locals
-                    .get(local_idx)
-                    .map(|l| l.is_mut)
-                    .unwrap_or(false);
-                if !is_mut {
-                    return;
-                }
-                // Allocate a fresh non-mut local of the same type
-                // for the pattern slot; the original `mut` local is
-                // assigned via a `Let mut` in the arm body so
-                // `value_copy::insert` can wrap the right-hand
-                // `Local` read.
-                let fresh_index = self.alloc_local(*type_id);
-                let original_name = name.clone();
-                let original_index = *local_index;
-                let original_type = *type_id;
-                let fresh_name = format!("__match_mut_lift_{fresh_index}");
-                prefix_stmts.push(TirStmt::new(
-                    TirStmtKind::Let {
-                        name: original_name,
-                        local_index: original_index,
-                        is_mut: true,
-                        is_reactive: false,
-                        type_id: original_type,
-                        value: TirExpr::new(
-                            TirExprKind::Local {
-                                index: fresh_index,
-                                name: fresh_name.clone(),
-                            },
-                            original_type,
-                            span,
-                        ),
-                        skip_value_copy: false,
-                    },
-                    span,
-                ));
-                *pattern = TirPattern::Binding {
-                    name: fresh_name,
-                    local_index: fresh_index,
-                    type_id: original_type,
-                };
-            }
-            TirPattern::Variant { bindings, .. } => {
-                for sub in bindings.iter_mut() {
-                    self.lift_mut_in_pattern(sub, span, prefix_stmts);
-                }
-            }
-            TirPattern::Tuple(sub_patterns, _) => {
-                for sub in sub_patterns.iter_mut() {
-                    self.lift_mut_in_pattern(sub, span, prefix_stmts);
-                }
-            }
-            TirPattern::Struct { fields, .. } => {
-                for field in fields.iter_mut() {
-                    self.lift_mut_in_pattern(&mut field.pattern, span, prefix_stmts);
-                }
-            }
-            TirPattern::Or(alternatives) => {
-                for alt in alternatives.iter_mut() {
-                    self.lift_mut_in_pattern(alt, span, prefix_stmts);
-                }
-            }
-            TirPattern::Wildcard
-            | TirPattern::Literal(_)
-            | TirPattern::Enum { .. }
-            | TirPattern::ConstantValue { .. }
-            | TirPattern::Range { .. } => {}
-        }
-    }
-}
 
 /// Compute the type of a block when used as an expression. Delegates to
 /// `crate::tir::block_result_type` so we share the same statement-shape

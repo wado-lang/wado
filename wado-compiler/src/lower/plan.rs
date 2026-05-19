@@ -39,6 +39,7 @@ use crate::flat_package::FlatPackage;
 pub mod boxing;
 pub mod closure;
 pub mod globals;
+pub mod lift_mut;
 pub mod string;
 pub mod value_copy;
 
@@ -55,6 +56,13 @@ pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
     let closure = closure::plan(flat);
     globals::build_initialize_modules(flat);
     flat.rebuild_variant_indices();
+    // Lift `mut` payload bindings out of Match arm and IfLet patterns
+    // into explicit `Let mut` statements before `value_copy` walks the
+    // body. Phase 10 Step 2b prerequisite: pattern lowering itself can
+    // then move into the translator without value_copy needing pattern
+    // awareness — the lifted `Let mut` is the shape value_copy already
+    // recognises.
+    lift_mut::lift_mut_match_bindings(flat);
     let value_copy = value_copy::plan(flat);
     // Strings are collected after `value_copy` planning so any literals
     // that synthesized `$value_copy$T<id>` helpers introduce are
