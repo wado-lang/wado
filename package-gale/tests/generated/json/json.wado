@@ -236,8 +236,14 @@ pub struct HighlightOverride {
 }
 
 /// Highlight mapping: defaults by token kind + context-aware overrides.
+///
+/// `rule_names` is the canonical name table used to resolve override
+/// `rule_name`s into integer ids that match what the generated walker
+/// passes to `Visitor::enter_rule`. The generator emits the names in
+/// parser-rule declaration order; index = rule id.
 pub struct HighlightMapping {
     pub defaults: Array<String>,
+    pub rule_names: Array<String>,
     pub overrides: Array<HighlightOverride>,
 }
 
@@ -248,49 +254,77 @@ pub struct HighlightCapture {
     pub end: i32,
 }
 
+/// Internal override form with the rule resolved to an integer id so the
+/// per-token classify loop avoids a String compare on every iteration.
+struct ResolvedOverride {
+    rule_id: i32,
+    token_kind: i32,
+    capture: String,
+}
+
 /// HighlightVisitor collects highlight captures during a CST walk.
 pub struct HighlightVisitor {
-    mapping: HighlightMapping,
-    rule_stack: Array<String>,
+    defaults: Array<String>,
+    overrides: Array<ResolvedOverride>,
+    rule_stack: Array<i32>,
     pub captures: Array<HighlightCapture>,
 }
 
 impl HighlightVisitor {
     pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
-        return HighlightVisitor { mapping, rule_stack: [], captures: [] };
+        let mut overrides: Array<ResolvedOverride> = Array::with_capacity(mapping.overrides.len());
+        for let ov of &mapping.overrides {
+            let mut id: i32 = -1;
+            for let mut i = 0; i < mapping.rule_names.len(); i += 1 {
+                if mapping.rule_names[i] == ov.rule_name {
+                    id = i;
+                    break;
+                }
+            }
+            // Skip overrides whose rule_name doesn't match any known rule —
+            // they can never fire (no rule_id on the stack is ever < 0) and
+            // would otherwise waste a comparison on every classify() call.
+            if id < 0 {
+                continue;
+            }
+            overrides.push(ResolvedOverride {
+                rule_id: id,
+                token_kind: ov.token_kind,
+                capture: ov.capture,
+            });
+        }
+        return HighlightVisitor {
+            defaults: mapping.defaults,
+            overrides,
+            rule_stack: [],
+            captures: [],
+        };
     }
 
     fn classify(&self, kind: i32) -> String {
-        for let ov of &self.mapping.overrides {
+        for let ov of &self.overrides {
             if ov.token_kind == kind {
-                for let rule of &self.rule_stack {
-                    if *rule == ov.rule_name {
+                for let rule_id of &self.rule_stack {
+                    if *rule_id == ov.rule_id {
                         return ov.capture;
                     }
                 }
             }
         }
-        if kind >= 0 && kind < self.mapping.defaults.len() {
-            return self.mapping.defaults[kind];
+        if kind >= 0 && kind < self.defaults.len() {
+            return self.defaults[kind];
         }
         return "";
     }
 }
 
 impl Visitor for HighlightVisitor {
-    fn enter_rule(&mut self, name: &String, span: &Span) {
-        self.rule_stack.push(*name);
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.rule_stack.push(rule_id);
     }
 
-    fn exit_rule(&mut self, name: &String, span: &Span) {
-        if !self.rule_stack.is_empty() {
-            let last = self.rule_stack.len() - 1;
-            let mut new_stack: Array<String> = [];
-            for let mut i = 0; i < last; i += 1 {
-                new_stack.push(self.rule_stack[i]);
-            }
-            self.rule_stack = new_stack;
-        }
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.rule_stack.pop();
     }
 
     fn visit_token(&mut self, token: &Token) {
@@ -393,10 +427,16 @@ fn substr(chars: &Array<char>, start: i32, end: i32) -> String {
 
 /// Visitor trait for walking typed CST nodes.
 /// Default methods are no-ops; override to add behavior.
+///
+/// `rule_id` is the parser-rule's index in the grammar's parser_rules array
+/// (0..n in declaration order). It's passed alongside `name` so visitors
+/// that want cheap dispatch (HighlightVisitor's rule stack) can avoid
+/// String compares while visitors that care about the name (TreeRecorder)
+/// can still use it.
 pub trait Visitor {
-    fn enter_rule(&mut self, name: &String, span: &Span) {
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
-    fn exit_rule(&mut self, name: &String, span: &Span) {
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
     fn visit_token(&mut self, token: &Token) {
     }
@@ -430,11 +470,11 @@ impl TreeRecorder {
 }
 
 impl Visitor for TreeRecorder {
-    fn enter_rule(&mut self, name: &String, span: &Span) {
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
         self.events.push(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
     }
 
-    fn exit_rule(&mut self, name: &String, span: &Span) {
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
         self.events.push(TreeEvent::Exit);
     }
 
@@ -863,7 +903,7 @@ fn try_lit_null(chars: &Array<char>, start: i32) -> i32 {
 
 pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
-    let mut tokens: Array<Token> = [];
+    let mut tokens: Array<Token> = Array::with_capacity(lexer.chars.len() / 4 + 1);
     let mut trivia: Array<Token> = [];
     while !lexer.at_end() {
         let start = lexer.pos;
@@ -1624,16 +1664,16 @@ pub fn parse(input: &String) -> Result<JsonNode, ParseError> {
 }
 
 pub fn walk_json<V: Visitor>(v: &mut V, node: &JsonNode) {
-    v.enter_rule(&"json", &node.span);
+    v.enter_rule(0, &"json", &node.span);
     walk_value(v, &node.value);
     v.visit_token(&node.eof);
-    v.exit_rule(&"json", &node.span);
+    v.exit_rule(0, &"json", &node.span);
 }
 
 pub fn walk_obj<V: Visitor>(v: &mut V, node: &ObjNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"obj", &n.span);
+            v.enter_rule(1, &"obj", &n.span);
             v.visit_token(&n.lbrace);
             walk_pair(v, &n.pair);
             for let item of &n.comma_pair_list {
@@ -1641,29 +1681,29 @@ pub fn walk_obj<V: Visitor>(v: &mut V, node: &ObjNode) {
                 walk_pair(v, &item.pair);
             }
             v.visit_token(&n.rbrace);
-            v.exit_rule(&"obj", &n.span);
+            v.exit_rule(1, &"obj", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"obj", &n.span);
+            v.enter_rule(1, &"obj", &n.span);
             v.visit_token(&n.lbrace);
             v.visit_token(&n.rbrace);
-            v.exit_rule(&"obj", &n.span);
+            v.exit_rule(1, &"obj", &n.span);
         }
     }
 }
 
 pub fn walk_pair<V: Visitor>(v: &mut V, node: &PairNode) {
-    v.enter_rule(&"pair", &node.span);
+    v.enter_rule(2, &"pair", &node.span);
     v.visit_token(&node.string);
     v.visit_token(&node.colon);
     walk_value(v, &node.value);
-    v.exit_rule(&"pair", &node.span);
+    v.exit_rule(2, &"pair", &node.span);
 }
 
 pub fn walk_arr<V: Visitor>(v: &mut V, node: &ArrNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"arr", &n.span);
+            v.enter_rule(3, &"arr", &n.span);
             v.visit_token(&n.lbracket);
             walk_value(v, &n.value);
             for let item of &n.comma_value_list {
@@ -1671,13 +1711,13 @@ pub fn walk_arr<V: Visitor>(v: &mut V, node: &ArrNode) {
                 walk_value(v, &item.value);
             }
             v.visit_token(&n.rbracket);
-            v.exit_rule(&"arr", &n.span);
+            v.exit_rule(3, &"arr", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"arr", &n.span);
+            v.enter_rule(3, &"arr", &n.span);
             v.visit_token(&n.lbracket);
             v.visit_token(&n.rbracket);
-            v.exit_rule(&"arr", &n.span);
+            v.exit_rule(3, &"arr", &n.span);
         }
     }
 }
@@ -1685,39 +1725,39 @@ pub fn walk_arr<V: Visitor>(v: &mut V, node: &ArrNode) {
 pub fn walk_value<V: Visitor>(v: &mut V, node: &ValueNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"value", &n.span);
+            v.enter_rule(4, &"value", &n.span);
             v.visit_token(&n.string);
-            v.exit_rule(&"value", &n.span);
+            v.exit_rule(4, &"value", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"value", &n.span);
+            v.enter_rule(4, &"value", &n.span);
             v.visit_token(&n.number);
-            v.exit_rule(&"value", &n.span);
+            v.exit_rule(4, &"value", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"value", &n.span);
+            v.enter_rule(4, &"value", &n.span);
             walk_obj(v, &n.obj);
-            v.exit_rule(&"value", &n.span);
+            v.exit_rule(4, &"value", &n.span);
         }
         Alt3(n) => {
-            v.enter_rule(&"value", &n.span);
+            v.enter_rule(4, &"value", &n.span);
             walk_arr(v, &n.arr);
-            v.exit_rule(&"value", &n.span);
+            v.exit_rule(4, &"value", &n.span);
         }
         Alt4(n) => {
-            v.enter_rule(&"value", &n.span);
+            v.enter_rule(4, &"value", &n.span);
             v.visit_token(&n.lit_true);
-            v.exit_rule(&"value", &n.span);
+            v.exit_rule(4, &"value", &n.span);
         }
         Alt5(n) => {
-            v.enter_rule(&"value", &n.span);
+            v.enter_rule(4, &"value", &n.span);
             v.visit_token(&n.lit_false);
-            v.exit_rule(&"value", &n.span);
+            v.exit_rule(4, &"value", &n.span);
         }
         Alt6(n) => {
-            v.enter_rule(&"value", &n.span);
+            v.enter_rule(4, &"value", &n.span);
             v.visit_token(&n.lit_null);
-            v.exit_rule(&"value", &n.span);
+            v.exit_rule(4, &"value", &n.span);
         }
     }
 }

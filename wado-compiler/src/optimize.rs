@@ -271,6 +271,9 @@ fn run_pass(
     f: impl FnOnce(&mut NirPackage) -> bool,
 ) -> bool {
     pass_dump::list_pass(name);
+    if pass_dump::should_skip_pass(name) {
+        return false;
+    }
     pass_dump::dump_tir(name, project, pass_dump::Phase::Before);
     profiler.span_start(name);
     let changed = f(project);
@@ -324,6 +327,33 @@ pub mod pass_dump {
     fn list_passes_enabled() -> bool {
         static FLAG: OnceLock<bool> = OnceLock::new();
         *FLAG.get_or_init(|| std::env::var("WADO_LIST_PASSES").is_ok())
+    }
+
+    fn skip_list() -> &'static Vec<String> {
+        static LIST: OnceLock<Vec<String>> = OnceLock::new();
+        LIST.get_or_init(|| {
+            crate::trace::parse_env_list(std::env::var("WADO_SKIP_PASS").ok().as_deref())
+        })
+    }
+
+    /// Returns true if `name` matches one of the comma-separated entries in
+    /// the `WADO_SKIP_PASS` env var. Each entry is matched against the bare
+    /// pass name (e.g., `tir/ref_elim`) and against `<pass>@<n>` where `<n>`
+    /// is the 1-based occurrence number — letting bisection target a
+    /// specific iteration (e.g., `tir/ref_elim@2`).
+    pub fn should_skip_pass(name: &str) -> bool {
+        use std::collections::HashMap;
+        use std::sync::Mutex;
+        static COUNTS: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
+        let list = skip_list();
+        if list.is_empty() {
+            return false;
+        }
+        let mut counts = COUNTS.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap();
+        let n = counts.entry(name.to_string()).or_insert(0);
+        *n += 1;
+        let scoped = format!("{name}@{n}");
+        list.iter().any(|s| s == name || s == &scoped)
     }
 
     fn matches(name: &str, phase: Phase) -> bool {
