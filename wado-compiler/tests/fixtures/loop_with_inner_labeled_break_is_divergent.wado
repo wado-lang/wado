@@ -1,0 +1,25 @@
+// A `loop { … }` whose body uses a labeled block + `break <label>` to
+// exit *that* block (rather than the loop itself) still diverges from
+// the outer function's perspective. The flow analyser tracks labels
+// introduced INSIDE the loop body in a shadowing stack so the labeled
+// break is not mistaken for an escape, and the function declared as
+// returning `i32` compiles without `MissingReturn`.
+//
+// Reported by Copilot review on PR #1118 against the original
+// `loop_body_can_escape` implementation, which treated every `break`
+// as an escape.
+
+fn forever_via_inner_break() -> i32 {
+    loop {
+        scope: {
+            break scope: 1;
+        }
+    }
+}
+
+export fn run() {
+    let _ = forever_via_inner_break;
+}
+
+__DATA__
+{"stdout": ""}

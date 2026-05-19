@@ -30,6 +30,87 @@ enum Step {
     Descend,
 }
 
+/// A probe driving [`Resolver::any_in_tree`]. Each visit is consulted
+/// independently for statements and expressions; an implementor can
+/// carry its own mutable state across calls (e.g. an in-scope-labels
+/// stack) so analyses needing more context than a per-node match keep
+/// their state in one place.
+trait TreeProbe {
+    fn check_stmt(&mut self, stmt: &TirStmt) -> Step;
+    fn check_expr(&mut self, _expr: &TirExpr) -> Step {
+        Step::Descend
+    }
+}
+
+/// Searches for `break <label>` whose `label` is NOT defined inside
+/// the walked loop body. Labels declared by `LabeledBlock` nodes we
+/// enter are pushed onto `inner_labels`; a `break label` matches only
+/// when `label` is not on that stack.
+///
+/// `inner_labels` is append-only: once a `LabeledBlock` introduces a
+/// name, that name stays in scope for the rest of the walk. That's
+/// safe because the walk only proceeds forward through the body — a
+/// `break <label>` further along that mentions an earlier inner label
+/// would be a use of an already-defined label, and one that mentions a
+/// later inner label is invalid Wado source rejected by the resolver
+/// before this analysis runs.
+#[derive(Default)]
+struct LoopEscape {
+    inner_labels: Vec<String>,
+}
+
+impl TreeProbe for LoopEscape {
+    fn check_stmt(&mut self, stmt: &TirStmt) -> Step {
+        match &stmt.kind {
+            TirStmtKind::Break { label: None, .. } => Step::Match,
+            TirStmtKind::Break { label: Some(l), .. } => {
+                if self.inner_labels.iter().any(|owned| owned == l) {
+                    Step::Skip
+                } else {
+                    Step::Match
+                }
+            }
+            TirStmtKind::Loop { .. } | TirStmtKind::VariadicForOf { .. } => Step::Skip,
+            TirStmtKind::LabeledBlock { label, .. } => {
+                self.inner_labels.push(label.clone());
+                Step::Descend
+            }
+            _ => Step::Descend,
+        }
+    }
+
+    fn check_expr(&mut self, expr: &TirExpr) -> Step {
+        if let TirExprKind::LabeledBlock { label, .. } = &expr.kind {
+            self.inner_labels.push(label.clone());
+        }
+        Step::Descend
+    }
+}
+
+/// Searches for `break <label>` targeting `label`, treating an inner
+/// labeled block that reuses the same name as a shadowing scope (so
+/// `break <label>` inside it targets the inner block, not us).
+struct BreakToLabel<'a> {
+    label: &'a str,
+}
+
+impl TreeProbe for BreakToLabel<'_> {
+    fn check_stmt(&mut self, stmt: &TirStmt) -> Step {
+        match &stmt.kind {
+            TirStmtKind::Break { label: Some(l), .. } if l == self.label => Step::Match,
+            TirStmtKind::LabeledBlock { label: own, .. } if own == self.label => Step::Skip,
+            _ => Step::Descend,
+        }
+    }
+
+    fn check_expr(&mut self, expr: &TirExpr) -> Step {
+        match &expr.kind {
+            TirExprKind::LabeledBlock { label: own, .. } if own == self.label => Step::Skip,
+            _ => Step::Descend,
+        }
+    }
+}
+
 impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn resolve_expr(
         &mut self,
@@ -2226,65 +2307,43 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Whether `body` (a `loop`'s body) contains a `break` that would
-    /// either target this loop (unlabeled) or escape it (labeled), so
-    /// the loop is NOT divergent. Nested `loop`s catch their own
-    /// unlabeled breaks; closure bodies have their own scope.
+    /// either target this loop (unlabeled) or escape it (labeled). Either
+    /// case lets control resume after the loop, so the loop is NOT
+    /// divergent.
+    ///
+    /// Nested `loop`s and `VariadicForOf`s catch their own unlabeled
+    /// breaks; closure bodies have their own scope. Labeled breaks
+    /// whose target is defined INSIDE this loop body (e.g. a labeled
+    /// block within the loop) stay inside too — the inner-labels stack
+    /// shadows them so a user pattern like `loop { scope: { break
+    /// scope: V; } }` is correctly classified as divergent.
     fn loop_body_can_escape(body: &TirBlock) -> bool {
-        Self::any_in_tree(
-            body,
-            &mut |s| match &s.kind {
-                TirStmtKind::Break { .. } => Step::Match,
-                TirStmtKind::Loop { .. } => Step::Skip,
-                _ => Step::Descend,
-            },
-            &mut |_| Step::Descend,
-        )
+        let mut probe = LoopEscape::default();
+        Self::any_in_tree(body, &mut probe)
     }
 
     /// Whether `block` contains a `break <label>` that would exit a
     /// labeled block with this label. An inner labeled block that
     /// reuses `label` (in either stmt or expr position) shadows it.
     fn block_can_break_to_label(block: &TirBlock, label: &str) -> bool {
-        Self::any_in_tree(
-            block,
-            &mut |s| match &s.kind {
-                TirStmtKind::Break { label: Some(l), .. } if l == label => Step::Match,
-                TirStmtKind::LabeledBlock { label: own, .. } if own == label => Step::Skip,
-                _ => Step::Descend,
-            },
-            &mut |e| match &e.kind {
-                TirExprKind::LabeledBlock { label: own, .. } if own == label => Step::Skip,
-                _ => Step::Descend,
-            },
-        )
+        let mut probe = BreakToLabel { label };
+        Self::any_in_tree(block, &mut probe)
     }
 
     /// Generic "exists a node matching the predicate" walker shared by
-    /// `loop_body_can_escape` and `block_can_break_to_label`.
-    /// `check_stmt` runs at every statement, `check_expr` at every
-    /// expression; either may return `Step::Match` to short-circuit
-    /// the search, `Step::Skip` to prune the subtree (e.g. a nested
-    /// `loop` swallows its own breaks, a same-labeled inner block
-    /// shadows an outer label), or `Step::Descend` to keep recursing.
-    /// Closure bodies are never entered — their control flow stays in
-    /// the closure's own scope.
-    fn any_in_tree(
-        block: &TirBlock,
-        check_stmt: &mut dyn FnMut(&TirStmt) -> Step,
-        check_expr: &mut dyn FnMut(&TirExpr) -> Step,
-    ) -> bool {
-        block
-            .stmts
-            .iter()
-            .any(|s| Self::any_in_stmt(s, check_stmt, check_expr))
+    /// `loop_body_can_escape` and `block_can_break_to_label`. The probe
+    /// is consulted at every statement and expression; either visit
+    /// may return [`Step::Match`] to short-circuit, [`Step::Skip`] to
+    /// prune the subtree (e.g. a nested `loop` swallows its own
+    /// breaks, a same-labeled inner block shadows an outer label), or
+    /// [`Step::Descend`] to keep recursing. Closure bodies are never
+    /// entered — their control flow stays in the closure's own scope.
+    fn any_in_tree<P: TreeProbe>(block: &TirBlock, probe: &mut P) -> bool {
+        block.stmts.iter().any(|s| Self::any_in_stmt(s, probe))
     }
 
-    fn any_in_stmt(
-        stmt: &TirStmt,
-        check_stmt: &mut dyn FnMut(&TirStmt) -> Step,
-        check_expr: &mut dyn FnMut(&TirExpr) -> Step,
-    ) -> bool {
-        match check_stmt(stmt) {
+    fn any_in_stmt<P: TreeProbe>(stmt: &TirStmt, probe: &mut P) -> bool {
+        match probe.check_stmt(stmt) {
             Step::Match => return true,
             Step::Skip => return false,
             Step::Descend => {}
@@ -2300,52 +2359,51 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 else_block,
                 ..
             } => {
-                Self::any_in_tree(then_block, check_stmt, check_expr)
+                Self::any_in_tree(then_block, probe)
                     || else_block
                         .as_ref()
-                        .is_some_and(|b| Self::any_in_tree(b, check_stmt, check_expr))
+                        .is_some_and(|b| Self::any_in_tree(b, probe))
             }
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                Self::any_in_tree(body, check_stmt, check_expr)
+                Self::any_in_tree(body, probe)
             }
-            TirStmtKind::Expr(e) => Self::any_in_expr(e, check_stmt, check_expr),
+            TirStmtKind::VariadicForOf { iterable, body, .. } => {
+                Self::any_in_expr(iterable, probe) || Self::any_in_tree(body, probe)
+            }
+            TirStmtKind::Expr(e) => Self::any_in_expr(e, probe),
             TirStmtKind::Let { value, .. }
             | TirStmtKind::LetDestructure { value, .. }
             | TirStmtKind::TaskReturn { value, .. }
             | TirStmtKind::Return {
                 value: Some(value), ..
-            } => Self::any_in_expr(value, check_stmt, check_expr),
+            } => Self::any_in_expr(value, probe),
             _ => false,
         }
     }
 
-    fn any_in_expr(
-        expr: &TirExpr,
-        check_stmt: &mut dyn FnMut(&TirStmt) -> Step,
-        check_expr: &mut dyn FnMut(&TirExpr) -> Step,
-    ) -> bool {
-        match check_expr(expr) {
+    fn any_in_expr<P: TreeProbe>(expr: &TirExpr, probe: &mut P) -> bool {
+        match probe.check_expr(expr) {
             Step::Match => return true,
             Step::Skip => return false,
             Step::Descend => {}
         }
         match &expr.kind {
             TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-                Self::any_in_tree(block, check_stmt, check_expr)
+                Self::any_in_tree(block, probe)
             }
             TirExprKind::If {
                 then_branch,
                 else_branch,
                 ..
             } => {
-                Self::any_in_tree(then_branch, check_stmt, check_expr)
+                Self::any_in_tree(then_branch, probe)
                     || else_branch
                         .as_ref()
-                        .is_some_and(|b| Self::any_in_tree(b, check_stmt, check_expr))
+                        .is_some_and(|b| Self::any_in_tree(b, probe))
             }
-            TirExprKind::Match { arms, .. } => arms
-                .iter()
-                .any(|a| Self::any_in_expr(&a.body, check_stmt, check_expr)),
+            TirExprKind::Match { arms, .. } => {
+                arms.iter().any(|a| Self::any_in_expr(&a.body, probe))
+            }
             // Closures stay in their own scope.
             TirExprKind::Closure { .. } => false,
             _ => false,
