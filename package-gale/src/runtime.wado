@@ -271,13 +271,18 @@ impl HighlightVisitor {
     pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
         let mut overrides: Array<ResolvedOverride> = Array::with_capacity(mapping.overrides.len());
         for let ov of &mapping.overrides {
-            // -1 = unmatchable rule (no rule_id in the stack ever equals -1).
             let mut id: i32 = -1;
             for let mut i = 0; i < mapping.rule_names.len(); i += 1 {
                 if mapping.rule_names[i] == ov.rule_name {
                     id = i;
                     break;
                 }
+            }
+            // Skip overrides whose rule_name doesn't match any known rule —
+            // they can never fire (no rule_id on the stack is ever < 0) and
+            // would otherwise waste a comparison on every classify() call.
+            if id < 0 {
+                continue;
             }
             overrides.push(ResolvedOverride {
                 rule_id: id,

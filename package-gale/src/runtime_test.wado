@@ -149,9 +149,9 @@ test "TreeRecorder builds CstNode" {
 test "TreeRecorder builds nested tree" {
     let mut rec = TreeRecorder::new();
     rec.enter_rule(0, &"parent", &Span::new(0, 20));
-    rec.enter_rule(0, &"child", &Span::new(0, 5));
+    rec.enter_rule(1, &"child", &Span::new(0, 5));
     rec.visit_token(&Token::new(1, ls("a"), Span::new(0, 1)));
-    rec.exit_rule(0, &"child", &Span::new(0, 5));
+    rec.exit_rule(1, &"child", &Span::new(0, 5));
     rec.visit_token(&Token::new(2, ls("b"), Span::new(10, 11)));
     rec.exit_rule(0, &"parent", &Span::new(0, 20));
     let tree = rec.build();
@@ -177,13 +177,13 @@ test "to_string_tree leaf token" {
 test "to_string_tree nested" {
     let mut rec = TreeRecorder::new();
     rec.enter_rule(0, &"a", &Span::new(0, 10));
-    rec.enter_rule(0, &"b", &Span::new(0, 2));
+    rec.enter_rule(1, &"b", &Span::new(0, 2));
     rec.visit_token(&Token::new(1, ls("x"), Span::new(0, 1)));
-    rec.exit_rule(0, &"b", &Span::new(0, 2));
+    rec.exit_rule(1, &"b", &Span::new(0, 2));
     rec.visit_token(&Token::new(2, ls("+"), Span::new(3, 4)));
-    rec.enter_rule(0, &"b", &Span::new(5, 7));
+    rec.enter_rule(1, &"b", &Span::new(5, 7));
     rec.visit_token(&Token::new(1, ls("y"), Span::new(5, 6)));
-    rec.exit_rule(0, &"b", &Span::new(5, 7));
+    rec.exit_rule(1, &"b", &Span::new(5, 7));
     rec.exit_rule(0, &"a", &Span::new(0, 10));
     let tree = rec.build();
     assert tree.to_string_tree() == "(a (b x) + (b y))", `got: {tree.to_string_tree()}`;

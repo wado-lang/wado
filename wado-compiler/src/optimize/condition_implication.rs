@@ -830,10 +830,29 @@ impl ShortCircuitGuard {
                 root_local: guard_root,
                 field_indices: guard_fields,
             } => {
-                let Some((root, fields)) = extract_field_chain(expr) else {
-                    return false;
-                };
-                fields == *guard_fields && resolves_to(root, *guard_root, defs)
+                // Walk `expr` outermost-first against `guard_fields` in
+                // reverse without materialising a new Vec — `bound_matches`
+                // is a hot per-condition check.
+                let mut current = expr;
+                for &expected_field in guard_fields.iter().rev() {
+                    let NirExprKind::FieldAccess {
+                        expr: inner,
+                        field_index,
+                        ..
+                    } = &current.kind
+                    else {
+                        return false;
+                    };
+                    if *field_index != expected_field {
+                        return false;
+                    }
+                    current = inner;
+                }
+                if let NirExprKind::Local { index, .. } = &current.kind {
+                    resolves_to(*index, *guard_root, defs)
+                } else {
+                    false
+                }
             }
         }
     }

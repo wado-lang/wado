@@ -366,9 +366,13 @@ fn stmt_contains_expr(stmt: &NirStmt, key: &CseKey) -> bool {
                     .as_ref()
                     .is_some_and(|eb| block_contains(eb, key))
         }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            block_contains(body, key)
-        }
+        // Nested Loop: treat as opaque. CSE only proves the expression's
+        // operands aren't modified between the outer guard and this point;
+        // an inner loop iterates and may modify them across its own
+        // iterations, which a pre-computed cache outside the inner loop
+        // can't see (cf. hfs_inline_break_no_writeback.wado).
+        NirStmtKind::Loop { .. } => false,
+        NirStmtKind::LabeledBlock { block: body, .. } => block_contains(body, key),
         NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
             value.as_ref().is_some_and(|v| expr_contains(v, key))
         }
@@ -456,7 +460,11 @@ fn replace_matching_expr(
                 replace_in_block(eb, key, replacement, type_id);
             }
         }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
+        // Nested Loop: do not descend — matches `stmt_contains_expr`'s
+        // opaque treatment, so we never replace an occurrence the matcher
+        // refused to look at.
+        NirStmtKind::Loop { .. } => {}
+        NirStmtKind::LabeledBlock { block: body, .. } => {
             replace_in_block(body, key, replacement, type_id);
         }
         NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
