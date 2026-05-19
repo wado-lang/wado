@@ -1013,9 +1013,10 @@ pub(super) fn synthesize_result_export_binding(
         .compiler_items()
         .require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
     let ok_case_name = ok_case_name.to_string();
-    let (_, _, _err_case_name, err_case_index) = tt
+    let (_, _, err_case_name, err_case_index) = tt
         .compiler_items()
         .require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+    let err_case_name = err_case_name.to_string();
     drop(tt);
 
     // Allocate mutable flat value locals (initialized to zero)
@@ -1032,10 +1033,21 @@ pub(super) fn synthesize_result_export_binding(
         })
         .collect();
 
-    // === Ok case ===
-    let mut ok_stmts: Vec<TirStmt> = Vec::new();
+    // Determine Ok flat-arg count up-front so the arm bodies know
+    // whether to call `synthesize_lower_to_flat` on the payload local.
+    let tt = type_table.borrow();
+    let ok_flat_types = flat_types_from_type_id(ok_type_id, tir_modules, &tt);
+    drop(tt);
 
-    // Set flat[0] = 0 (Ok discriminant)
+    // Allocate the Ok payload binding local unconditionally so the
+    // arm pattern can reference it even when the payload has no flat
+    // slots (`Ok(())`-style); the binding is bound-but-unused in that
+    // case, which wir_build handles cleanly.
+    let ok_payload_local = alloc_local(&mut next_local, &mut locals, ok_type_id);
+    let ok_payload_name = format!("__ok_val_{ok_payload_local}");
+
+    // === Ok arm body ===
+    let mut ok_stmts: Vec<TirStmt> = Vec::new();
     ok_stmts.push(expr_stmt(assign(
         local_ref(
             flat_locals[0].0,
@@ -1044,26 +1056,9 @@ pub(super) fn synthesize_result_export_binding(
         ),
         i32_const(0),
     )));
-
-    // Extract Ok payload
-    let ok_value = variant_payload(
-        local_ref(result_local, "__result", user_return_type),
-        ok_case_index,
-        ok_type_id,
-    );
-
-    // Lower Ok payload to flat values starting at flat[1]
-    let tt = type_table.borrow();
-    let ok_flat_types = flat_types_from_type_id(ok_type_id, tir_modules, &tt);
-    drop(tt);
-
     if !ok_flat_types.is_empty() {
-        // Store Ok payload in a local for reference
-        let ok_local = alloc_local(&mut next_local, &mut locals, ok_type_id);
-        ok_stmts.push(let_stmt("__ok_val", ok_local, ok_type_id, ok_value));
-
         let ok_lowered = synthesize_lower_to_flat(
-            local_ref(ok_local, "__ok_val", ok_type_id),
+            local_ref(ok_payload_local, &ok_payload_name, ok_type_id),
             ok_type_id,
             &mut next_local,
             &mut ok_stmts,
@@ -1071,8 +1066,6 @@ pub(super) fn synthesize_result_export_binding(
             tir_modules,
             lift_ctx,
         );
-
-        // Assign lowered values to flat locals [1..1+ok_flat_count]
         for (i, flat_val) in ok_lowered.iter().enumerate() {
             if 1 + i < flat_locals.len() {
                 let target_type = cm_val_type_to_type_id(flat_return_types[1 + i]);
@@ -1088,8 +1081,6 @@ pub(super) fn synthesize_result_export_binding(
             }
         }
     }
-
-    // Call task-return with flat values
     let task_return_args: Vec<TirExpr> = flat_locals
         .iter()
         .zip(flat_return_types.iter())
@@ -1100,13 +1091,12 @@ pub(super) fn synthesize_result_export_binding(
         task_return_args,
         TypeTable::UNIT,
     )));
-
     ok_stmts.push(return_stmt(None));
 
-    // === Err case ===
+    // === Err arm body ===
+    let err_payload_local = alloc_local(&mut next_local, &mut locals, err_type_id);
+    let err_payload_name = format!("__err_val_{err_payload_local}");
     let mut err_stmts: Vec<TirStmt> = Vec::new();
-
-    // Set flat[0] = 1 (Err discriminant)
     err_stmts.push(expr_stmt(assign(
         local_ref(
             flat_locals[0].0,
@@ -1115,26 +1105,11 @@ pub(super) fn synthesize_result_export_binding(
         ),
         i32_const(1),
     )));
-
-    // Extract Err payload
-    let err_value = variant_payload(
-        local_ref(result_local, "__result", user_return_type),
-        err_case_index,
-        err_type_id,
-    );
-    let err_local = alloc_local(&mut next_local, &mut locals, err_type_id);
-    err_stmts.push(let_stmt("__err_val", err_local, err_type_id, err_value));
-
-    // Lower Err payload to flat values
-    // For variant Err types (like ErrorCode), we need the discriminant and per-case payload
     let err_resolved = type_table.borrow().get(err_type_id).clone();
-
-    // Check if Err type is a variant with payloads
     if let ResolvedType::Variant { name, .. } = &err_resolved {
         if let Some(variant_decl) = find_variant_decl(name, tir_modules) {
-            // Variant lowering: discriminant + per-case payload extraction
             synthesize_variant_lower_to_flat(
-                err_local,
+                err_payload_local,
                 err_type_id,
                 &variant_decl,
                 &flat_locals[1..],
@@ -1145,23 +1120,19 @@ pub(super) fn synthesize_result_export_binding(
                 tir_modules,
                 lift_ctx,
             );
-        } else {
-            // Unknown variant — lower as i32
-            if flat_locals.len() > 1 {
-                err_stmts.push(expr_stmt(assign(
-                    local_ref(
-                        flat_locals[1].0,
-                        &flat_locals[1].1,
-                        cm_val_type_to_type_id(flat_return_types[1]),
-                    ),
-                    local_ref(err_local, "__err_val", err_type_id),
-                )));
-            }
+        } else if flat_locals.len() > 1 {
+            err_stmts.push(expr_stmt(assign(
+                local_ref(
+                    flat_locals[1].0,
+                    &flat_locals[1].1,
+                    cm_val_type_to_type_id(flat_return_types[1]),
+                ),
+                local_ref(err_payload_local, &err_payload_name, err_type_id),
+            )));
         }
     } else {
-        // Non-variant Err type — lower directly
         let err_lowered = synthesize_lower_to_flat(
-            local_ref(err_local, "__err_val", err_type_id),
+            local_ref(err_payload_local, &err_payload_name, err_type_id),
             err_type_id,
             &mut next_local,
             &mut err_stmts,
@@ -1184,8 +1155,6 @@ pub(super) fn synthesize_result_export_binding(
             }
         }
     }
-
-    // Call task-return with flat values
     let task_return_args: Vec<TirExpr> = flat_locals
         .iter()
         .zip(flat_return_types.iter())
@@ -1196,19 +1165,60 @@ pub(super) fn synthesize_result_export_binding(
         task_return_args,
         TypeTable::UNIT,
     )));
-
     err_stmts.push(return_stmt(None));
 
-    // === Combine Ok/Err into if-else ===
-    body_stmts.push(if_stmt(
-        variant_test(
-            local_ref(result_local, "__result", user_return_type),
-            ok_case_index,
-            &ok_case_name,
+    // === Combine Ok/Err arms in a single TIR `Match` ===
+    let span = synth_span();
+    let ok_arm = TirMatchArm {
+        pattern: TirPattern::Variant {
+            enum_type: user_return_type,
+            variant_name: ok_case_name,
+            bindings: vec![TirPattern::Binding {
+                name: ok_payload_name,
+                local_index: ok_payload_local,
+                type_id: ok_type_id,
+            }],
+            payload_type: ok_type_id,
+        },
+        guard: None,
+        body: TirExpr::new(
+            TirExprKind::Block(TirBlock::new(ok_stmts, span)),
+            TypeTable::UNIT,
+            span,
         ),
-        block(ok_stmts),
-        Some(block(err_stmts)),
-    ));
+        span,
+    };
+    let err_arm = TirMatchArm {
+        pattern: TirPattern::Variant {
+            enum_type: user_return_type,
+            variant_name: err_case_name,
+            bindings: vec![TirPattern::Binding {
+                name: err_payload_name,
+                local_index: err_payload_local,
+                type_id: err_type_id,
+            }],
+            payload_type: err_type_id,
+        },
+        guard: None,
+        body: TirExpr::new(
+            TirExprKind::Block(TirBlock::new(err_stmts, span)),
+            TypeTable::UNIT,
+            span,
+        ),
+        span,
+    };
+    let match_expr = TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(local_ref(result_local, "__result", user_return_type)),
+            arms: vec![ok_arm, err_arm],
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    body_stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
+    // Suppress unused-variable warning for the case-index locals: the
+    // canonical Match path encodes the case via the pattern itself.
+    let _ = (ok_case_index, err_case_index);
 
     // Fallthrough (unreachable because both arms return, but emit task-return just in case)
     let fallthrough_args: Vec<TirExpr> = flat_return_types.iter().map(|&vt| cm_zero(vt)).collect();
