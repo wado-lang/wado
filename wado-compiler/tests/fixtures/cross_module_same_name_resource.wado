@@ -1,16 +1,11 @@
-#![TODO]
 // Two modules define `pub resource Counter` with different method
 // sets. Each module's Counter must remain distinct.
 //
-// See also `cross_module_same_name_effect.wado` and
-// `cross_module_same_name_world.wado`. All three exercise the same
-// class of name-collision bug as the WasiRegistry maps
-// (`structs`, `resources`, `flags`, `newtypes`) which currently use
-// the bare name as the key, without the owning module's source path.
-//
-// TODO: currently ICEs because user-defined `pub resource` is
-// unsupported at the user level (see `user_resource_smoke.wado`).
-// Fix that first; then observe the cross-module collision.
+// Regression guard for the bare-name resource-decl-index bug. See
+// `cross_module_same_name_effect.wado` for the parallel effect-side
+// case; the fix is shared (re-key `ResourceDeclIndex` by canonical
+// `(decl_module, name)` and propagate `base_trait_module` through
+// every handler method).
 
 use { tick_a } from "./sub/cross_module_same_name_resource_a.wado";
 use { tick_b } from "./sub/cross_module_same_name_resource_b.wado";

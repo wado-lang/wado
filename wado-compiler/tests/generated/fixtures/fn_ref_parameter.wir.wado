@@ -79,16 +79,47 @@ type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::arr
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(30)
 
+<<<<<<< HEAD
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(31)
+||||||| f07f8da5
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(30)
+=======
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(30)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(32)
+||||||| f07f8da5
+type "functype//wado-compiler/tests/fixtures/fn_ref_parameter.wado/__Closure_2::__call" = fn(i32) -> i32;  // TypeId(31)
+=======
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(31)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
+||||||| f07f8da5
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(32)
+=======
+type "functype//wado-compiler/tests/fixtures/fn_ref_parameter.wado/__Closure_2::__call" = fn(i32) -> i32;  // TypeId(32)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(34)
+||||||| f07f8da5
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(33)
+=======
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(35)
+||||||| f07f8da5
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(34)
+=======
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(34)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
 
 type "functype//wado-compiler/tests/fixtures/fn_ref_parameter.wado/__Closure_3::__call" = fn(i32) -> i32;  // TypeId(37)
@@ -102,6 +133,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(41)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(42)
+||||||| f07f8da5
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
+=======
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(35)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(36)
+>>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -475,6 +513,25 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
+fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
+    let i: i32;
+    let _licm_buf_4: ref "core:prelude/string.wado//String";
+    __for_0: block {
+        i = 0;
+        _licm_buf_4 = self.buf;
+        block {
+            l25: loop {
+                if i >= n {
+                    break __for_0;
+                }
+                "core:prelude/string.wado/String::push"(_licm_buf_4, c);
+                i = i + 1;
+                continue l25;
+            };
+        };
+    };
+}
+
 fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, prefix, digit_count) {
     let sign: ref "core:prelude/string.wado//String";
     let sign_len: i32;
@@ -486,20 +543,6 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
-    let i_19: i32;
-    let c_21: char;
-    let i_23: i32;
-    let c_25: char;
-    let i_27: i32;
-    let c_29: char;
-    let i_31: i32;
-    let c_33: char;
-    let i_35: i32;
-    let _licm_buf_36: ref "core:prelude/string.wado//String";
-    let _licm_buf_37: ref "core:prelude/string.wado//String";
-    let _licm_buf_38: ref "core:prelude/string.wado//String";
-    let _licm_buf_39: ref "core:prelude/string.wado//String";
-    let _licm_buf_40: ref "core:prelude/string.wado//String";
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
@@ -530,6 +573,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         if prefix_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
+<<<<<<< HEAD
         __inline_Formatter__write_char_n_2____for_0: block {
             i_19 = 0;
             _licm_buf_36 = self.buf;
@@ -544,6 +588,24 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
                 };
             };
         };
+||||||| f07f8da5
+        __inline_Formatter__write_char_n_2____for_0: block {
+            i_19 = 0;
+            _licm_buf_36 = self.buf;
+            block {
+                l34: loop {
+                    if i_19 >= padding {
+                        break __inline_Formatter__write_char_n_2____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_36, 48);
+                    i_19 = i_19 + 1;
+                    continue l34;
+                };
+            };
+        };
+=======
+        "core:prelude/format.wado/Formatter::write_char_n"(self, 48, padding);
+>>>>>>> origin/main
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
     align = self.align;
@@ -557,6 +619,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
             "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
         offset_10 = "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
+<<<<<<< HEAD
         c_21 = self.fill;
         __inline_Formatter__write_char_n_3____for_0: block {
             i_23 = 0;
@@ -572,10 +635,30 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
                 };
             };
         };
+||||||| f07f8da5
+        c_21 = self.fill;
+        __inline_Formatter__write_char_n_3____for_0: block {
+            i_23 = 0;
+            _licm_buf_37 = self.buf;
+            block {
+                l40: loop {
+                    if i_23 >= padding {
+                        break __inline_Formatter__write_char_n_3____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_37, c_21);
+                    i_23 = i_23 + 1;
+                    continue l40;
+                };
+            };
+        };
+=======
+        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
+>>>>>>> origin/main
         return offset_10;
     } else if align == 1 {
         left_pad = padding / 2;
         right_pad = padding - left_pad;
+<<<<<<< HEAD
         c_25 = self.fill;
         __inline_Formatter__write_char_n_4____for_0: block {
             i_27 = 0;
@@ -591,6 +674,25 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
                 };
             };
         };
+||||||| f07f8da5
+        c_25 = self.fill;
+        __inline_Formatter__write_char_n_4____for_0: block {
+            i_27 = 0;
+            _licm_buf_38 = self.buf;
+            block {
+                l44: loop {
+                    if i_27 >= left_pad {
+                        break __inline_Formatter__write_char_n_4____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_38, c_25);
+                    i_27 = i_27 + 1;
+                    continue l44;
+                };
+            };
+        };
+=======
+        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, left_pad);
+>>>>>>> origin/main
         if sign_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
@@ -598,6 +700,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
             "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
         offset_13 = "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
+<<<<<<< HEAD
         c_29 = self.fill;
         __inline_Formatter__write_char_n_5____for_0: block {
             i_31 = 0;
@@ -613,8 +716,28 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
                 };
             };
         };
+||||||| f07f8da5
+        c_29 = self.fill;
+        __inline_Formatter__write_char_n_5____for_0: block {
+            i_31 = 0;
+            _licm_buf_39 = self.buf;
+            block {
+                l49: loop {
+                    if i_31 >= right_pad {
+                        break __inline_Formatter__write_char_n_5____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, c_29);
+                    i_31 = i_31 + 1;
+                    continue l49;
+                };
+            };
+        };
+=======
+        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, right_pad);
+>>>>>>> origin/main
         return offset_13;
     } else {
+<<<<<<< HEAD
         c_33 = self.fill;
         __inline_Formatter__write_char_n_6____for_0: block {
             i_35 = 0;
@@ -630,6 +753,25 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
                 };
             };
         };
+||||||| f07f8da5
+        c_33 = self.fill;
+        __inline_Formatter__write_char_n_6____for_0: block {
+            i_35 = 0;
+            _licm_buf_40 = self.buf;
+            block {
+                l52: loop {
+                    if i_35 >= padding {
+                        break __inline_Formatter__write_char_n_6____for_0;
+                    }
+                    "core:prelude/string.wado/String::push"(_licm_buf_40, c_33);
+                    i_35 = i_35 + 1;
+                    continue l52;
+                };
+            };
+        };
+=======
+        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
+>>>>>>> origin/main
         if sign_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }

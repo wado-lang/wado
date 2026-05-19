@@ -1,8 +1,8 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { cleanupTmpDir, createTmpDir } from './tmp-workspace';
 
 const BROKEN_WADO_SOURCE = `fn main() -> i32 {
     let x: i32 = "not an integer";
@@ -92,7 +92,7 @@ suite('Wado LSP (native subprocess)', () => {
     test('publishes diagnostics when using the native subprocess server', async function () {
         this.timeout(60_000);
 
-        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wado-lsp-subproc-'));
+        const tmpDir = createTmpDir('wado-lsp-subproc-');
         const filePath = path.join(tmpDir, 'broken.wado');
         fs.writeFileSync(filePath, BROKEN_WADO_SOURCE, 'utf8');
 
@@ -114,7 +114,7 @@ suite('Wado LSP (native subprocess)', () => {
                 )}`,
             );
         } finally {
-            fs.rmSync(tmpDir, { recursive: true, force: true });
+            await cleanupTmpDir(tmpDir);
         }
     });
 });

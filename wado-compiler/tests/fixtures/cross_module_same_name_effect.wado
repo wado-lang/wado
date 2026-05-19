@@ -1,15 +1,13 @@
-#![TODO]
-// Two modules define `pub effect Logger` with different method sets.
-// Each module's Logger type must remain distinct — a function that
-// requires one must not be unifiable with a function that requires
-// the other.
+// Two modules define `pub interface Logger` with different method sets.
+// Each module's Logger must remain distinct — a function that requires
+// one must not be unifiable with a function that requires the other.
 //
-// TODO: currently ICEs before we can even observe cross-module
-// collision, because user-defined `pub effect` is unsupported at the
-// user level (see `user_effect_smoke.wado`). Fix that first.
-// Separately, the WasiRegistry effect map keys by bare name; once
-// user effects compile, same-name cross-module effects may still
-// collide in the registry — this fixture is the regression guard.
+// Regression guard for the bare-name effect-decl-index bug: dispatch
+// synthesis previously panicked on duplicate effect names across
+// modules because `EffectDeclIndex` keyed entries by bare name. The
+// fix re-keys the index by canonical `(decl_module, name)` and
+// records the canonical declaring module on every handler method via
+// `LocalMethodName.base_trait_module`.
 
 use { greet } from "./sub/cross_module_same_name_effect_a.wado";
 use { raise } from "./sub/cross_module_same_name_effect_b.wado";
