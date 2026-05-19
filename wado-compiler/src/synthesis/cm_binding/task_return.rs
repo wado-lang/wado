@@ -15,19 +15,18 @@ use crate::component_model::WasiRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::tir::{
-    ResolvedType, TirBlock, TirExpr, TirFunction, TirLocal, TirModule, TirStmt, TirStmtKind,
-    TypeTable,
+    ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirModule,
+    TirPattern, TirStmt, TirStmtKind, TypeTable,
 };
 
 use crate::synthesis::common::{
-    alloc_local, assign, block, cast, cm_raw_call, expr_stmt, i32_const, if_stmt, let_mut_stmt,
-    let_stmt, local_ref,
+    alloc_local, assign, cast, cm_raw_call, expr_stmt, i32_const, let_mut_stmt, let_stmt,
+    local_ref, synth_span,
 };
 
 use super::export_adapter::{synthesize_lower_to_flat, synthesize_variant_lower_to_flat};
 use super::types::{
     LiftContext, cm_val_type_to_type_id, cm_zero, find_variant_decl, flat_types_from_type_id,
-    variant_payload, variant_test,
 };
 
 /// Expand `TaskReturn` stmts in an `export async fn` user function into inline CM calls.
@@ -273,8 +272,9 @@ fn generate_inline_task_return(
         let (_, _, ok_case_name, ok_case_index) =
             items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
         let ok_case_name = ok_case_name.to_string();
-        let (_, _, _err_case_name, err_case_index) =
+        let (_, _, err_case_name, err_case_index) =
             items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+        let err_case_name = err_case_name.to_string();
         drop(tt);
 
         // Store result in local
@@ -300,7 +300,19 @@ fn generate_inline_task_return(
             .map(|((local, name), &vt)| local_ref(*local, name, cm_val_type_to_type_id(vt)))
             .collect();
 
-        // === Ok case ===
+        let tt = type_table.borrow();
+        let ok_flat_types = flat_types_from_type_id(ok_type_id, tir_modules, &tt);
+        drop(tt);
+
+        // Allocate the Ok payload binding local unconditionally so the
+        // Match arm pattern can reference it, even when `ok_flat_types`
+        // is empty (no flat slots to populate). When empty, the binding
+        // is bound but never read, which is fine — `wir_build` won't
+        // emit a spurious read.
+        let ok_payload_local = alloc_local(next_local, locals, ok_type_id);
+        let ok_payload_name = format!("__ok_val_{ok_payload_local}");
+
+        // === Ok arm body ===
         let mut ok_stmts: Vec<TirStmt> = Vec::new();
         ok_stmts.push(expr_stmt(assign(
             local_ref(
@@ -310,19 +322,9 @@ fn generate_inline_task_return(
             ),
             i32_const(0),
         )));
-        let ok_value = variant_payload(
-            local_ref(result_local, "__task_ret", value_type_id),
-            ok_case_index,
-            ok_type_id,
-        );
-        let tt = type_table.borrow();
-        let ok_flat_types = flat_types_from_type_id(ok_type_id, tir_modules, &tt);
-        drop(tt);
         if !ok_flat_types.is_empty() {
-            let ok_local = alloc_local(next_local, locals, ok_type_id);
-            ok_stmts.push(let_stmt("__ok_val", ok_local, ok_type_id, ok_value));
             let ok_lowered = synthesize_lower_to_flat(
-                local_ref(ok_local, "__ok_val", ok_type_id),
+                local_ref(ok_payload_local, &ok_payload_name, ok_type_id),
                 ok_type_id,
                 next_local,
                 &mut ok_stmts,
@@ -353,7 +355,9 @@ fn generate_inline_task_return(
         // No return here: task.return is a cooperative yield, not a function exit.
         // Execution continues after task.return so user code after `task return` runs.
 
-        // === Err case ===
+        // === Err arm body ===
+        let err_payload_local = alloc_local(next_local, locals, err_type_id);
+        let err_payload_name = format!("__err_val_{err_payload_local}");
         let mut err_stmts: Vec<TirStmt> = Vec::new();
         err_stmts.push(expr_stmt(assign(
             local_ref(
@@ -363,18 +367,11 @@ fn generate_inline_task_return(
             ),
             i32_const(1),
         )));
-        let err_value = variant_payload(
-            local_ref(result_local, "__task_ret", value_type_id),
-            err_case_index,
-            err_type_id,
-        );
-        let err_local = alloc_local(next_local, locals, err_type_id);
-        err_stmts.push(let_stmt("__err_val", err_local, err_type_id, err_value));
         let err_resolved = type_table.borrow().get(err_type_id).clone();
         if let ResolvedType::Variant { name, .. } = &err_resolved {
             if let Some(variant_decl) = find_variant_decl(name, tir_modules) {
                 synthesize_variant_lower_to_flat(
-                    err_local,
+                    err_payload_local,
                     err_type_id,
                     &variant_decl,
                     &flat_locals[1..],
@@ -392,12 +389,12 @@ fn generate_inline_task_return(
                         &flat_locals[1].1,
                         cm_val_type_to_type_id(flat_return_types[1]),
                     ),
-                    local_ref(err_local, "__err_val", err_type_id),
+                    local_ref(err_payload_local, &err_payload_name, err_type_id),
                 )));
             }
         } else {
             let err_lowered = synthesize_lower_to_flat(
-                local_ref(err_local, "__err_val", err_type_id),
+                local_ref(err_payload_local, &err_payload_name, err_type_id),
                 err_type_id,
                 next_local,
                 &mut err_stmts,
@@ -427,16 +424,63 @@ fn generate_inline_task_return(
         )));
         // No return here: see comment in ok_stmts above.
 
-        // Combine Ok/Err branches
-        stmts.push(if_stmt(
-            variant_test(
-                local_ref(result_local, "__task_ret", value_type_id),
-                ok_case_index,
-                &ok_case_name,
+        // Combine Ok/Err arms in a single TIR `Match` over the
+        // materialised result. Each arm's pattern binds the payload
+        // local that the arm body reads from, replacing the previous
+        // `let __ok_val = variant_payload(result, Ok)` /
+        // `let __err_val = variant_payload(result, Err)` extractions.
+        let span = synth_span();
+        let ok_arm = TirMatchArm {
+            pattern: TirPattern::Variant {
+                enum_type: value_type_id,
+                variant_name: ok_case_name,
+                bindings: vec![TirPattern::Binding {
+                    name: ok_payload_name,
+                    local_index: ok_payload_local,
+                    type_id: ok_type_id,
+                }],
+                payload_type: ok_type_id,
+            },
+            guard: None,
+            body: TirExpr::new(
+                TirExprKind::Block(TirBlock::new(ok_stmts, span)),
+                TypeTable::UNIT,
+                span,
             ),
-            block(ok_stmts),
-            Some(block(err_stmts)),
-        ));
+            span,
+        };
+        let err_arm = TirMatchArm {
+            pattern: TirPattern::Variant {
+                enum_type: value_type_id,
+                variant_name: err_case_name,
+                bindings: vec![TirPattern::Binding {
+                    name: err_payload_name,
+                    local_index: err_payload_local,
+                    type_id: err_type_id,
+                }],
+                payload_type: err_type_id,
+            },
+            guard: None,
+            body: TirExpr::new(
+                TirExprKind::Block(TirBlock::new(err_stmts, span)),
+                TypeTable::UNIT,
+                span,
+            ),
+            span,
+        };
+        let match_expr = TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(local_ref(result_local, "__task_ret", value_type_id)),
+                arms: vec![ok_arm, err_arm],
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
+        // Suppress unused-variable warning for the case names since the
+        // pattern paths now read them directly above (no separate
+        // variant_test argument).
+        let _ = (ok_case_index, err_case_index);
     } else {
         drop(tt);
         // Non-Result task return — flatten the value and forward the flat
