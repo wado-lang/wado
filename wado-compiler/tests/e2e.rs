@@ -1032,4 +1032,6 @@ test "passes unexpectedly" {
 // fn-ref fixtures added (cross-module newtype)
 // fn-ref fixtures added (generic turbofish / inferred / closure wrapper)
 // fn-ref fixtures added (generic cross-module / outer)
+// fn-ref fixtures added (generic ref / alias / arity / cross-module alias)
+// fn-ref fixture added (self-recursive generic)
 // touched

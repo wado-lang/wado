@@ -2930,6 +2930,14 @@ impl Parser {
                             // Attach the type args to the identifier and let the
                             // outer postfix loop continue (so `foo::<T>(x)` after a
                             // method-call chain still parses as a call below).
+                            if !ident.type_args.is_empty() {
+                                return Err(ParseError {
+                                    message:
+                                        "turbofish type arguments already specified on this identifier"
+                                            .to_string(),
+                                    span: callee_span,
+                                });
+                            }
                             ident.type_args = type_args;
                         } else {
                             // Turbofish on a non-identifier expression with no call
@@ -3116,7 +3124,16 @@ impl Parser {
             spec_ok = self.expect_gt().is_ok();
         }
 
-        if spec_ok && self.check(&TokenKind::ColonColon) {
+        // After `Name::<…>`, only `::method(…)` continues the static-method-call
+        // path. A bare `Name::<…>` (used as a value) backtracks below so the
+        // outer postfix loop sees the `::<…>` again and either parses it as a
+        // turbofish-attached identifier or rejects a duplicate turbofish.
+        // `Name::<A>::<B>` falls into the same backtrack: the second `<` is
+        // not a method identifier.
+        if spec_ok
+            && self.check(&TokenKind::ColonColon)
+            && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
+        {
             self.advance(); // consume ::
             let (method, method_span) = self.consume_ident_with_span()?;
 

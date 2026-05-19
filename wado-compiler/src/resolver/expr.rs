@@ -112,6 +112,24 @@ impl TreeProbe for BreakToLabel<'_> {
     }
 }
 
+/// Outcome of trying to derive type arguments for a generic function
+/// reference from an expected `fn(...)` (or `&fn(...)`) type. Distinguishes
+/// the three failure modes the caller treats differently.
+enum FuncRefInference {
+    /// Every real type parameter was bound from the expected signature.
+    Ok(Vec<TypeId>),
+    /// The expected type is a `fn(...)` shape but its parameter count
+    /// disagrees with the declaration. Surfaced as a focused diagnostic.
+    ArityMismatch {
+        expected_params: usize,
+        found_params: usize,
+    },
+    /// The expected type is not a function shape (no `fn(...)` directly
+    /// or via `&`/`&mut`), or some parameters could not be bound. Callers
+    /// fall through to the generic bare-reference diagnostic.
+    NotApplicable,
+}
+
 impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn resolve_expr(
         &mut self,
@@ -809,19 +827,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
         None
     }
 
-    /// Build a function type from an [`ast::Function`] declaration that
-    /// lives in `def_module`. Param/return types resolve in the
+    /// Build a function type from a non-generic [`ast::Function`] declaration
+    /// that lives in `def_module`. Param/return types resolve in the
     /// definition module's perspective so type names referencing the
     /// declaring module's items (newtypes, locally-declared structs,
-    /// re-exported enums, …) bind to the correct entries.
+    /// re-exported enums, …) bind to the correct entries. Returns `None` if
+    /// the function has unsupplied type parameters (effect-only params are
+    /// treated as non-generic and accepted).
     pub(super) fn compute_func_ref_type_from_ast(
         &mut self,
         func: &ast::Function,
         def_module: &ModuleSource,
     ) -> Option<TypeId> {
-        if !func.type_params.is_empty() {
-            return None;
-        }
         self.compute_func_ref_type_from_ast_with_args(func, def_module, &[])
     }
 
@@ -926,24 +943,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ///   (a) `name::<T, ...>` — turbofish pins the type parameters.
     ///   (b) bare `name` with an expected `fn(...)` type — inferred positionally.
     ///   (c) bare `name` with no expected type — dedicated diagnostic.
+    ///
+    /// For imported functions referenced through an alias (`use { foo as bar }`)
+    /// the emitted `FuncRef` carries the defining-module name (`foo`), not the
+    /// alias, so post-monomorphization keys and the closure forwarder's name
+    /// lookup land on the same identity as a direct reference would.
     fn resolve_func_ref_ident(
         &mut self,
         ident: &ast::IdentExpr,
         expected_type: Option<TypeId>,
     ) -> TirExpr {
-        let module_source = if self.function_return_types.contains_key(&ident.name) {
-            self.current_module_source.clone()
-        } else {
-            self.symbols
-                .lookup(&ident.name)
-                .map(|s| s.module_source().clone())
-                .unwrap_or_else(|| self.current_module_source.clone())
-        };
         self.record_item_reference_by_name(ident.id, &ident.name);
 
-        let Some((func_ast, def_module)) = self.lookup_func_ast_for_ref(&ident.name) else {
+        let Some((func_ast, def_module, defining_name)) = self.lookup_func_ast_for_ref(&ident.name)
+        else {
             // Fallback: known function but its AST is unreachable (shouldn't
             // normally happen). Emit a stub FuncRef so downstream stays sane.
+            let module_source = if self.function_return_types.contains_key(&ident.name) {
+                self.current_module_source.clone()
+            } else {
+                self.symbols
+                    .lookup(&ident.name)
+                    .map(|s| s.module_source().clone())
+                    .unwrap_or_else(|| self.current_module_source.clone())
+            };
             return TirExpr::new(
                 TirExprKind::FuncRef {
                     module_source,
@@ -954,6 +977,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ident.span,
             );
         };
+        let module_source = def_module.clone();
 
         let real_type_param_count = func_ast
             .type_params
@@ -986,7 +1010,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return TirExpr::new(
                 TirExprKind::FuncRef {
                     module_source,
-                    name: ident.name.clone(),
+                    name: defining_name.clone(),
                     type_args: resolved_args,
                 },
                 type_id,
@@ -1002,7 +1026,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return TirExpr::new(
                 TirExprKind::FuncRef {
                     module_source,
-                    name: ident.name.clone(),
+                    name: defining_name.clone(),
                     type_args: Vec::new(),
                 },
                 type_id,
@@ -1012,20 +1036,36 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // (b) Generic without turbofish: try to infer from `expected_type`.
         if let Some(expected) = expected_type {
-            if let Some(inferred) = self.infer_func_ref_type_args(&func_ast, &def_module, expected)
-            {
-                let type_id = self
-                    .compute_func_ref_type_from_ast_with_args(&func_ast, &def_module, &inferred)
-                    .unwrap_or(TypeTable::UNKNOWN);
-                return TirExpr::new(
-                    TirExprKind::FuncRef {
-                        module_source,
-                        name: ident.name.clone(),
-                        type_args: inferred,
-                    },
-                    type_id,
-                    ident.span,
-                );
+            match self.infer_func_ref_type_args(&func_ast, &def_module, expected) {
+                FuncRefInference::Ok(inferred) => {
+                    let type_id = self
+                        .compute_func_ref_type_from_ast_with_args(&func_ast, &def_module, &inferred)
+                        .unwrap_or(TypeTable::UNKNOWN);
+                    return TirExpr::new(
+                        TirExprKind::FuncRef {
+                            module_source,
+                            name: defining_name.clone(),
+                            type_args: inferred,
+                        },
+                        type_id,
+                        ident.span,
+                    );
+                }
+                FuncRefInference::ArityMismatch {
+                    expected_params,
+                    found_params,
+                } => {
+                    let _ = self
+                        .logger
+                        .error(TypeError::GenericFunctionRefArityMismatch {
+                            name: ident.name.clone(),
+                            expected_params,
+                            found_params,
+                            span: ident.span,
+                        });
+                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span);
+                }
+                FuncRefInference::NotApplicable => {}
             }
         }
 
@@ -1037,11 +1077,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
         TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span)
     }
 
-    /// Look up the AST [`ast::Function`] and defining module for a function
-    /// reference name (either a current-module function or an imported one).
-    fn lookup_func_ast_for_ref(&self, name: &str) -> Option<(ast::Function, ModuleSource)> {
+    /// Look up the AST [`ast::Function`], defining module, and the name the
+    /// function is registered under in that module for a function-reference
+    /// identifier (either a current-module function or an imported one,
+    /// possibly via an alias). The third tuple element is the *defining*
+    /// name — for `use { foo as bar }` it is `"foo"`, not the alias `"bar"`
+    /// — which downstream code uses to keep the TIR `FuncRef` aligned with
+    /// the post-monomorphization key space.
+    fn lookup_func_ast_for_ref(&self, name: &str) -> Option<(ast::Function, ModuleSource, String)> {
         if let Some(func) = self.lookup_current_func(name) {
-            return Some((func.clone(), self.current_module_source.clone()));
+            return Some((
+                func.clone(),
+                self.current_module_source.clone(),
+                name.to_string(),
+            ));
         }
         let symbol = self.symbols.lookup(name)?;
         let src = symbol.module_source().clone();
@@ -1053,40 +1102,59 @@ impl<H: CompilerHost> Resolver<'_, H> {
             &original,
         )?
         .clone();
-        Some((func, src))
+        Some((func, src, original))
     }
 
     /// Try to derive type arguments for a generic function reference from an
     /// expected `fn(...)` type. Only the simple positional case is handled:
-    /// the expected type must itself be a `Function` whose parameter count
-    /// matches the declaration, and every real (non-effect, non-fn-bound)
-    /// type parameter must end up bound. Returns `None` otherwise — callers
-    /// then fall through to the bare-generic diagnostic.
+    /// the expected type must itself be a `Function` (or a `Ref`/`MutRef`
+    /// thereof) whose parameter count matches the declaration, and every
+    /// real (non-effect, non-fn-bound) type parameter must end up bound.
+    ///
+    /// Returns:
+    ///   * [`FuncRefInference::Ok`] with the inferred args when inference
+    ///     succeeds.
+    ///   * [`FuncRefInference::ArityMismatch`] when the expected type is a
+    ///     `fn(...)` but its parameter count disagrees — callers turn this
+    ///     into a focused diagnostic instead of the generic bare-reference
+    ///     message.
+    ///   * [`FuncRefInference::NotApplicable`] when the expected type is
+    ///     not a function shape at all (or no expected type was supplied).
     fn infer_func_ref_type_args(
         &mut self,
         func: &ast::Function,
         def_module: &ModuleSource,
         expected: TypeId,
-    ) -> Option<Vec<TypeId>> {
+    ) -> FuncRefInference {
         let (expected_params, expected_return) = {
             let table = self.type_table.borrow();
-            match table.get(expected) {
-                crate::tir::ResolvedType::Function {
-                    params,
-                    return_type,
-                    ..
-                } => (params.clone(), *return_type),
-                _ => return None,
+            // Peel `&fn(...)` / `&mut fn(...)` — function values auto-deref
+            // at call sites, so an expected reference-to-fn pins the same
+            // signature for inference purposes as a bare `fn(...)` would.
+            let mut probe = expected;
+            loop {
+                match table.get(probe) {
+                    crate::tir::ResolvedType::Function {
+                        params,
+                        return_type,
+                        ..
+                    } => break (params.clone(), *return_type),
+                    crate::tir::ResolvedType::Ref(inner)
+                    | crate::tir::ResolvedType::MutRef(inner) => probe = *inner,
+                    _ => return FuncRefInference::NotApplicable,
+                }
             }
         };
-        if expected_params.len()
-            != func
-                .params
-                .iter()
-                .filter(|p| matches!(p.self_kind, crate::ast::SelfKind::None))
-                .count()
-        {
-            return None;
+        let decl_param_count = func
+            .params
+            .iter()
+            .filter(|p| matches!(p.self_kind, crate::ast::SelfKind::None))
+            .count();
+        if expected_params.len() != decl_param_count {
+            return FuncRefInference::ArityMismatch {
+                expected_params: expected_params.len(),
+                found_params: decl_param_count,
+            };
         }
 
         // Resolve the function's params and return type with `TypeParam{i}`
@@ -1140,7 +1208,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             )
         };
         if type_param_ids.is_empty() {
-            return None;
+            return FuncRefInference::NotApplicable;
         }
 
         let mut infer = super::infer::InferCtx::new(&self.type_table, type_param_ids.clone());
@@ -1150,9 +1218,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         infer.add_expected_return(decl_return, expected_return);
         let (inferred, bindings) = infer.solve_with_bindings();
         if !type_param_ids.iter().all(|id| bindings.contains_key(id)) {
-            return None;
+            return FuncRefInference::NotApplicable;
         }
-        Some(inferred)
+        FuncRefInference::Ok(inferred)
     }
 
     /// Resolve a binary expression

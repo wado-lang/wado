@@ -365,14 +365,14 @@ pub enum TypeError {
     },
 
     /// A bare reference to a generic function was used in a position with
-    /// an expected `fn(...)` type, but the function's parameter / return
-    /// shape does not match the expected signature closely enough to
-    /// infer the type arguments. Only positional one-to-one inference is
-    /// attempted today (see WEP TBD); the workaround is to write a
-    /// turbofish.
-    GenericFunctionRefInferenceFailed {
+    /// an expected `fn(...)` type, but the parameter counts disagree —
+    /// the user almost certainly mis-counted arguments rather than mis-
+    /// invoking turbofish. Surfacing the two arities directly is more
+    /// helpful than the generic bare-reference message.
+    GenericFunctionRefArityMismatch {
         name: String,
-        expected_type: String,
+        expected_params: usize,
+        found_params: usize,
         span: Span,
     },
 }
@@ -710,15 +710,22 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, name, expected, found
                 )
             }
-            TypeError::GenericFunctionRefInferenceFailed {
+            TypeError::GenericFunctionRefArityMismatch {
                 name,
-                expected_type,
+                expected_params,
+                found_params,
                 span,
             } => {
                 write!(
                     f,
-                    "{}:{}: cannot infer type arguments for generic function '{}' from expected type '{}'; supply them via turbofish (e.g., `{}::<…>`)",
-                    span.line, span.column, name, expected_type, name
+                    "{}:{}: cannot reference generic function '{}' here: expected {} parameter{}, but '{}' takes {}",
+                    span.line,
+                    span.column,
+                    name,
+                    expected_params,
+                    if *expected_params == 1 { "" } else { "s" },
+                    name,
+                    found_params,
                 )
             }
         }
@@ -1001,7 +1008,7 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 (Code::CompilerItemAttr, message.clone(), *span)
             }
             TypeError::BareGenericFunctionRef { name, span } => (
-                Code::TypeMismatch,
+                Code::GenericFunctionRef,
                 format!(
                     "cannot reference generic function '{name}' bare; supply type arguments via turbofish (e.g., `{name}::<…>`) or wrap in a closure (e.g., `|x| {name}(x)`)"
                 ),
@@ -1013,20 +1020,22 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 found,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::GenericFunctionRef,
                 format!(
                     "wrong number of type arguments for generic function '{name}': expected {expected}, found {found}"
                 ),
                 *span,
             ),
-            TypeError::GenericFunctionRefInferenceFailed {
+            TypeError::GenericFunctionRefArityMismatch {
                 name,
-                expected_type,
+                expected_params,
+                found_params,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::GenericFunctionRef,
                 format!(
-                    "cannot infer type arguments for generic function '{name}' from expected type '{expected_type}'; supply them via turbofish (e.g., `{name}::<…>`)"
+                    "cannot reference generic function '{name}' here: expected {expected_params} parameter{}, but '{name}' takes {found_params}",
+                    if *expected_params == 1 { "" } else { "s" },
                 ),
                 *span,
             ),
