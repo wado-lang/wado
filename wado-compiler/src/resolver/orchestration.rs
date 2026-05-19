@@ -643,7 +643,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Also runs orphan rule checking; violations are emitted as errors.
         let (trait_env, orphan_violations) = {
             let _span = logger.span("resolve/trait_env");
-            super::trait_env::TraitEnv::build(modules)
+            super::trait_env::TraitEnv::build(modules, symbols)
         };
         for violation in orphan_violations {
             let _ = logger.error(violation);

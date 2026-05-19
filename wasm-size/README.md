@@ -25,20 +25,20 @@ Compares WebAssembly binary sizes across different languages.
 
 | Language | Size (bytes) |
 | -------- | -----------: |
-| wado     |        1,770 |
-| c        |        2,209 |
+| wado     |        1,911 |
+| c¹       |        2,209 |
 | zig      |        4,449 |
-| moonbit  |       22,884 |
+| moonbit¹ |       22,884 |
 | rust     |       40,115 |
 
 ### pi_approx
 
 | Language | Size (bytes) |
 | -------- | -----------: |
-| wado     |        9,140 |
+| wado     |       10,111 |
 | zig      |       10,608 |
-| c        |       14,315 |
-| moonbit  |       32,940 |
+| c¹       |       14,315 |
+| moonbit¹ |       32,940 |
 | rust     |       59,496 |
 
 ### zlib
@@ -47,10 +47,10 @@ Reads gzip data from stdin and decompresses it.
 
 | Language | Size (bytes) | Notes                                  |
 | -------- | -----------: | -------------------------------------- |
-| wado     |       16,987 | stdin + gzip decompress (core:zlib)    |
+| wado     |       17,156 | stdin + gzip decompress (core:zlib)    |
 | zig      |       20,072 | stdin + gzip decompress (std.compress) |
-| c        |       30,238 | stdin + gzip decompress (zlib 1.3.1)   |
-| rust     |       88,771 | stdin + gzip decompress (zlib-rs)      |
+| c¹       |       30,238 | stdin + gzip decompress (zlib 1.3.1)   |
+| rust     |       88,563 | stdin + gzip decompress (zlib-rs)      |
 
 ### sqlite_highlight
 
@@ -58,8 +58,15 @@ Reads SQL from stdin and writes syntax-highlighted HTML to stdout.
 
 | Language | Size (bytes) | Notes                                       |
 | -------- | -----------: | ------------------------------------------- |
-| wado     |      511,983 | Gale-generated highlighter from `SQLite.g4` |
-| rust     |    3,482,397 | tree-sitter + tree-sitter-sequel            |
+| wado     |      486,702 | Gale-generated highlighter from `SQLite.g4` |
+| rust¹    |    3,482,397 | tree-sitter + tree-sitter-sequel            |
+
+¹ Values carried over from the previous report — these toolchains were
+not re-measured this round (C/moonbit need `wasi-sdk`, which is
+currently disabled to avoid GitHub API rate limits; the Rust
+tree-sitter build also needs `wasi-sdk` for the C parser). Output
+sizes are toolchain-version dependent but not host dependent, so the
+old numbers still characterize the toolchain.
 
 ## Usage
 
@@ -96,9 +103,16 @@ All languages are compiled with size optimization and symbol stripping enabled:
 Run `mise install` to install:
 
 - **Zig** - wasm32-wasi target
-- **wasi-sdk** - clang + wasm-ld + wasi-sysroot for C (`github:WebAssembly/wasi-sdk`)
 
 wasmtime is inherited from the root `mise.toml`.
+
+`wasi-sdk` (clang + wasm-ld + wasi-sysroot, used for C and for the
+tree-sitter C parser of the Rust `sqlite_highlight` build) is currently
+commented out in `mise.toml` to avoid GitHub API rate-limit failures
+during artifact install. To enable C and Rust-tree-sitter outputs,
+uncomment the `github:WebAssembly/wasi-sdk` line in `[tools]` and re-run
+`mise install`, or install a wasi-sysroot by other means (apt on
+Linux, Homebrew on macOS).
 
 ### Manual installation
 

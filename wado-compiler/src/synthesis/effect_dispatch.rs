@@ -2991,35 +2991,21 @@ struct HandlerImplInfo {
     handler_type_name: String,
 }
 
-/// Walk every TIR function tagged with `method_info.trait_name` and
+/// Walk every TIR function tagged with `method_info.base_trait_name` and
 /// build a canonical `HandlerImplKey -> HandlerImplInfo` map.
 ///
-/// `effect_index` provides the canonical `(module, name)` of every
-/// effect declaration; each impl's `trait_name` is resolved by name
-/// against that index. Impl methods whose `trait_name` does not match
-/// any effect declaration belong to a regular (non-effect) trait and
-/// are skipped.
+/// The handler-method's [`crate::name::LocalMethodName`] carries
+/// `base_trait_module` populated by the resolver via
+/// [`crate::resolver::Resolver::canonical_decl_key`] whenever the impl
+/// targets a user-declared trait / effect / resource; the routine
+/// consults `effect_index` for membership using that canonical pair —
+/// impl methods whose trait does not match any effect / resource
+/// declaration belong to a regular user trait or to a synthesis-derived
+/// prelude auto-impl and are skipped.
 fn build_handler_impl_index(
     project: &Package,
     effect_index: &IndexMap<EffectKey, EffectMeta>,
 ) -> IndexMap<HandlerImplKey, HandlerImplInfo> {
-    // Build a name -> defining module lookup so trait_name can be
-    // canonicalised in a single pass. If two effect declarations share
-    // a name across modules, refuse to build the index — the resolver
-    // should already have rejected that case, and silently picking
-    // either canonical entry would be incorrect.
-    let mut effect_module_for_name: IndexMap<String, ModuleSource> = IndexMap::default();
-    for (module_source, name) in effect_index.keys() {
-        if let Some(prev) = effect_module_for_name.insert(name.clone(), module_source.clone())
-            && &prev != module_source
-        {
-            panic!(
-                "duplicate effect name `{name}` across modules {prev:?} and {module_source:?}; \
-                 dispatch synthesis cannot canonicalise impl blocks unambiguously"
-            );
-        }
-    }
-
     let mut out: IndexMap<HandlerImplKey, HandlerImplInfo> = IndexMap::default();
     for (module_source, module) in &project.tir_modules {
         for func_rc in &module.functions {
@@ -3027,10 +3013,9 @@ fn build_handler_impl_index(
             let Some(method_info) = &func.method_info else {
                 continue;
             };
-            // The decl indices are keyed by the bare base trait name, so
-            // generic-resource impls (`impl Stream<u8> for MockCM`) must
-            // resolve through `base_trait_name` rather than the mangled
-            // `trait_name` ("Stream<u8>"). Per-monomorphisation
+            // Decl indices are keyed by canonical `(decl_module, base_name)`,
+            // so generic-resource impls (`impl Stream<u8> for MockCM`)
+            // resolve through the bare base name. Per-monomorphisation
             // distinction lives in the key's `trait_type_args` slot:
             // `impl Stream<u8>` and `impl Stream<i32>` produce two
             // distinct keys so the dispatch synthesis emits one infra
@@ -3038,11 +3023,18 @@ fn build_handler_impl_index(
             let Some(base_trait_name) = &method_info.base_trait_name else {
                 continue;
             };
-            let Some(effect_module) = effect_module_for_name.get(base_trait_name) else {
-                // Not an effect / resource — skip (the trait_name is from
-                // a regular user trait or auto-derived prelude trait).
+            let Some(effect_module) = method_info.base_trait_module.as_ref() else {
+                // Resolver did not record a declaring module — only the
+                // synthesis-derived auto-impl path leaves this `None`,
+                // and those never target effects / resources.
                 continue;
             };
+            let effect_key = (effect_module.clone(), base_trait_name.clone());
+            if !effect_index.contains_key(&effect_key) {
+                // Not an effect / resource — skip (the trait is a regular
+                // user trait whose decl module just happens to match).
+                continue;
+            }
             let key: HandlerImplKey = (
                 method_info.struct_name.clone(),
                 effect_module.clone(),
@@ -3106,7 +3098,7 @@ fn lower_resume_in_handler_methods(project: &mut Package) {
             // `handler_names` is keyed by the bare effect / resource
             // declaration name; generic-resource impls carry the full
             // mangled form in `trait_name` ("Stream<u8>") and resolve
-            // against the index via `base_trait_name` ("Stream").
+            // against the index via the canonical base name.
             let Some(base_trait_name) = &method_info.base_trait_name else {
                 continue;
             };

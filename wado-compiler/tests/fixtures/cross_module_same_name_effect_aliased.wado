@@ -1,0 +1,31 @@
+// Two modules declare `pub interface Logger`; the parent module imports
+// each via a *renaming* `use { Logger as LoggerA }` form. The resolver
+// must canonicalise the alias back to the original declaration name
+// (`Logger`) when computing the decl-index key, otherwise the
+// canonical key becomes `(decl_module, "LoggerA")` which doesn't exist
+// in `EffectDeclIndex` and downstream dispatch refuses the impl.
+//
+// Regression guard for the `canonical_decl_key` alias path:
+// `imported_type_sources` is consulted before `effect_sources` so the
+// `import_original_names` translation kicks in.
+
+use {
+    Logger as LoggerA,
+    greet,
+} from "./sub/cross_module_same_name_effect_aliased_a.wado";
+use {
+    Logger as LoggerB,
+    raise,
+} from "./sub/cross_module_same_name_effect_aliased_b.wado";
+
+test "cross-module same-name aliased effects" {
+    // Both functions are reachable as values, which forces type-level
+    // resolution of `LoggerA` and `LoggerB` aliases through the
+    // resolver's effect path.
+    let _g = greet;
+    let _r = raise;
+    assert true;
+}
+
+__DATA__
+{"test": {}}

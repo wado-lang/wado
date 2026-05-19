@@ -150,6 +150,7 @@ fn build_specialized_method_info(info: &LocalMethodName, functor_suffix: &str) -
         base_struct_name: info.base_struct_name.clone(),
         trait_name: info.trait_name.clone(),
         base_trait_name: info.base_trait_name.clone(),
+        base_trait_module: info.base_trait_module.clone(),
         trait_type_args: info.trait_type_args.clone(),
         method_name: format!("{}{}", info.full_method_name(), functor_suffix),
         method_type_args: Vec::new(),

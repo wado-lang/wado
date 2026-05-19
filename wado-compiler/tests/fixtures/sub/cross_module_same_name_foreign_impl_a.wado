@@ -1,0 +1,17 @@
+// Module A declares `pub trait Loud` and `impl Loud for String`.
+// The orphan rule allows this because `Loud` is local-to-this-module.
+pub trait Loud {
+    fn shout(&self) -> String;
+}
+
+impl Loud for String {
+    fn shout(&self) -> String {
+        let mut s = String::new();
+        s.push_str(self);
+        return s;
+    }
+}
+
+pub fn shout_a(s: &String) -> String {
+    return s.shout();
+}

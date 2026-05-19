@@ -1,8 +1,8 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { cleanupTmpDir, createTmpDir } from './tmp-workspace';
 
 const SOURCE = `fn answer() -> i32 {
     return 42;
@@ -50,7 +50,7 @@ suite('Wado LSP (hover)', () => {
     test('returns hover information for a function reference', async function () {
         this.timeout(60_000);
 
-        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wado-lsp-hover-'));
+        const tmpDir = createTmpDir('wado-lsp-hover-');
         const filePath = path.join(tmpDir, 'hover.wado');
         fs.writeFileSync(filePath, SOURCE, 'utf8');
 
@@ -89,7 +89,7 @@ suite('Wado LSP (hover)', () => {
                 `Hover should reference the symbol or its signature, got: ${rendered}`,
             );
         } finally {
-            fs.rmSync(tmpDir, { recursive: true, force: true });
+            await cleanupTmpDir(tmpDir);
         }
     });
 });
