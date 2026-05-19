@@ -746,9 +746,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
         };
-        let struct_name_for_lookup = struct_key_for_lookup
-            .as_ref()
-            .map(|(_, n)| n.clone());
+        let struct_name_for_lookup = struct_key_for_lookup.as_ref().map(|(_, n)| n.clone());
 
         // Look up parameter types for coercion. Thread the canonical
         // receiver key (from the resolved target type) so that two
@@ -1929,23 +1927,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // the AST so the per-param resolver can swap into its perspective —
         // a static method's signature references types the impl module
         // imports, not the caller's.
-        let indexed: Option<(ModuleSource, ast::Type, ast::Function)> =
-            if let Some(methods) = self.trait_env.static_method_index.get(&static_key) {
-                let mut found = None;
-                for (name, module_source, item_idx, method_idx) in methods {
-                    if name == method_name
-                        && let Some(module) = self.loaded_modules.get(module_source)
-                        && let Item::Impl(impl_block) = &module.items[*item_idx]
-                    {
-                        let method = &impl_block.methods[*method_idx];
-                        found = Some((module_source.clone(), impl_block.ty.clone(), method.clone()));
-                        break;
-                    }
+        let indexed: Option<(ModuleSource, ast::Type, ast::Function)> = if let Some(methods) =
+            self.trait_env.static_method_index.get(&static_key)
+        {
+            let mut found = None;
+            for (name, module_source, item_idx, method_idx) in methods {
+                if name == method_name
+                    && let Some(module) = self.loaded_modules.get(module_source)
+                    && let Item::Impl(impl_block) = &module.items[*item_idx]
+                {
+                    let method = &impl_block.methods[*method_idx];
+                    found = Some((module_source.clone(), impl_block.ty.clone(), method.clone()));
+                    break;
                 }
-                found
-            } else {
-                None
-            };
+            }
+            found
+        } else {
+            None
+        };
         if let Some((impl_module, impl_ty, method)) = indexed {
             return self.resolve_static_method_params_in_scope(&impl_module, &impl_ty, &method);
         }
@@ -2033,12 +2032,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         let params: Vec<ast::Type> = method.params.iter().map(|p| p.ty.clone()).collect();
-        let result = scope.with_module_perspective(
-            impl_module.clone(),
-            imports,
-            originals,
-            |s| params.iter().map(|t| s.resolve_type(t)).collect::<Vec<TypeId>>(),
-        );
+        let result = scope.with_module_perspective(impl_module.clone(), imports, originals, |s| {
+            params
+                .iter()
+                .map(|t| s.resolve_type(t))
+                .collect::<Vec<TypeId>>()
+        });
 
         drop(scope);
         result

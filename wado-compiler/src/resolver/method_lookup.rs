@@ -1918,12 +1918,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             )
                         })
                         .unwrap_or_default();
-                    let impl_recv_id = self.with_module_perspective(
-                        impl_module,
-                        imports,
-                        originals,
-                        |s| s.resolve_type(&impl_ty_clone),
-                    );
+                    let impl_recv_id =
+                        self.with_module_perspective(impl_module, imports, originals, |s| {
+                            s.resolve_type(&impl_ty_clone)
+                        });
                     let tt = self.type_table.borrow();
                     let target = tt.peel_refs(impl_recv_id);
                     // Walk the receiver's newtype chain so an impl on a

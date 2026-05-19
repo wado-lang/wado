@@ -315,10 +315,8 @@ impl TraitEnv {
                     }
                     Item::Resource(resource) => {
                         let resource_key = (module_source.clone(), resource.name.clone());
-                        resource_decl_index.insert(
-                            resource_key.clone(),
-                            (module_source.clone(), item_idx),
-                        );
+                        resource_decl_index
+                            .insert(resource_key.clone(), (module_source.clone(), item_idx));
                         // Index static methods from resource declarations.
                         // The resource declaration itself is the canonical
                         // receiver, so key by the declaration's own
@@ -429,7 +427,9 @@ impl TraitEnv {
         // every PascalCase reference to its declaring module.
         for (module_source, module) in modules {
             for (item_idx, item) in module.items.iter().enumerate() {
-                let Item::Impl(impl_block) = item else { continue };
+                let Item::Impl(impl_block) = item else {
+                    continue;
+                };
                 let type_name = get_type_name_static(&impl_block.ty);
                 if let Some(trait_type) = &impl_block.trait_type {
                     let trait_name = get_type_name_static(trait_type);
@@ -439,8 +439,7 @@ impl TraitEnv {
                         .any(|tp| tp.name == type_name && !tp.bounds.is_empty());
                     if is_blanket {
                         blanket_impl_index.push((module_source.clone(), item_idx));
-                        let modules =
-                            blanket_trait_impl_modules.entry(trait_name).or_default();
+                        let modules = blanket_trait_impl_modules.entry(trait_name).or_default();
                         if !modules.contains(module_source) {
                             modules.push(module_source.clone());
                         }
@@ -455,8 +454,7 @@ impl TraitEnv {
                         // (e.g. `impl Display for String`, not
                         // `impl<T> Inspect for Array<T>`).
                         if impl_block.type_params.is_empty() {
-                            let cmodules =
-                                concrete_trait_impl_modules.entry(key).or_default();
+                            let cmodules = concrete_trait_impl_modules.entry(key).or_default();
                             if !cmodules.contains(module_source) {
                                 cmodules.push(module_source.clone());
                             }
