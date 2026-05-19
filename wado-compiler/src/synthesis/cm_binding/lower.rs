@@ -354,21 +354,24 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
         binary_add(addr, i32_const(payload_offset as i32))
     };
 
-    // For each case with a payload, generate conditional store
-    for (case_idx, case) in cases.iter().enumerate() {
+    // Build a single Match over the materialised value with one arm
+    // per case. Payload-bearing arms bind the payload to a fresh
+    // local and run the recursive memory-lowering helper on it;
+    // unit-payload arms have an empty body. Variant `Match` is
+    // exhaustive at TIR level, so no wildcard arm is needed.
+    let span = synth_span();
+    let mut arms: Vec<TirMatchArm> = Vec::with_capacity(cases.len());
+    for case in &cases {
+        let case_name = kebab_to_pascal(&case.cm_name);
         if let Some(payload_ty) = &case.payload {
             let payload_type_id = {
                 let mut tt = type_table.borrow_mut();
                 wasi_type_to_type_id(payload_ty, &mut tt, wasi_registry, wasi_package)
             };
+            let binding_local = alloc_local(next_local, locals, payload_type_id);
+            let binding_name = format!("__variant_payload_{binding_local}");
+            let payload_expr = local_ref(binding_local, &binding_name, payload_type_id);
 
-            let payload_expr = variant_payload(
-                local_ref(value_local, "__variant_val", value_type_id),
-                case_idx as u32,
-                payload_type_id,
-            );
-
-            let case_name = kebab_to_pascal(&case.cm_name);
             let case_stmts = synthesize_lower_wasi_type_to_memory(
                 payload_ty,
                 payload_expr,
@@ -380,16 +383,53 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
                 type_table,
             );
 
-            stmts.push(if_stmt(
-                variant_test(
-                    local_ref(value_local, "__variant_val", value_type_id),
-                    case_idx as u32,
-                    &case_name,
+            arms.push(TirMatchArm {
+                pattern: TirPattern::Variant {
+                    enum_type: value_type_id,
+                    variant_name: case_name,
+                    bindings: vec![TirPattern::Binding {
+                        name: binding_name,
+                        local_index: binding_local,
+                        type_id: payload_type_id,
+                    }],
+                    payload_type: payload_type_id,
+                },
+                guard: None,
+                body: TirExpr::new(
+                    TirExprKind::Block(crate::tir::TirBlock::new(case_stmts, span)),
+                    TypeTable::UNIT,
+                    span,
                 ),
-                block(case_stmts),
-                None,
-            ));
+                span,
+            });
+        } else {
+            arms.push(TirMatchArm {
+                pattern: TirPattern::Variant {
+                    enum_type: value_type_id,
+                    variant_name: case_name,
+                    bindings: Vec::new(),
+                    payload_type: TypeTable::UNIT,
+                },
+                guard: None,
+                body: TirExpr::new(
+                    TirExprKind::Block(crate::tir::TirBlock::new(Vec::new(), span)),
+                    TypeTable::UNIT,
+                    span,
+                ),
+                span,
+            });
         }
+    }
+    if !arms.is_empty() {
+        let match_expr = TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(local_ref(value_local, "__variant_val", value_type_id)),
+                arms,
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
     }
 }
 
