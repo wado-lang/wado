@@ -564,7 +564,7 @@ fn try_letters(chars: &Array<char>, start: i32) -> i32 {
         return -1;
     }
     pos = accept_0;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
+    if pos >= chars.len() || chars[pos] != 'c' { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
     pos += 1;
     return pos;
 }

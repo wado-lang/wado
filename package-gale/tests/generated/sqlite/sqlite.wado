@@ -3759,7 +3759,7 @@ fn try_identifier(chars: &Array<char>, start: i32) -> i32 {
                     break alts_0_2;
                 }
                 pos = accept_7;
-                if pos >= chars.len() || chars[pos] != ']' { break alts_0_2; }
+                if pos >= chars.len() || chars[pos] != ']' { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
                 pos += 1;
                 alts_ok_0 = true;
             }

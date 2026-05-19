@@ -372,30 +372,38 @@ fn gen_lexer_alt_seq(w: &mut CodeWriter, alt: &LexerAlt, all_rules: &Array<Lexer
     }
 }
 
-/// True for lexer elements that consume exactly one char and never
-/// branch into rule references or nested loops. The lookahead-aware
-/// emitter restricts both inner and suffix to these shapes because
-/// it peeks the suffix at every iteration; non-simple shapes would
-/// either escape into a rule call (rule refs), recurse into their own
-/// loop (nested Repeats), or pick an alternation arm that diverges
-/// between peek and the eventual commit (multi-alt Groups).
-fn lexer_element_can_consume_simple(elem: &LexerElement) -> bool {
+/// True for lexer elements safe to participate in the lookahead-aware
+/// `gen_lexer_repeat_lookahead_aware` emit. `single_char` forces the
+/// element to consume *exactly one char* — the constraint the
+/// lookahead-aware emitter places on the `Plus` / `Star` inner so the
+/// per-iteration peek records the right position. The same predicate
+/// without `single_char` is what the SUFFIX must satisfy: each element
+/// must be deterministic and side-effect-free when replayed inside the
+/// peek block (so the peek's verdict matches the eventual commit).
+/// Multi-char literals are accepted in the suffix because the peek
+/// replays the same byte-wise comparisons the commit will run.
+///
+/// Either way, non-simple shapes (RuleRef, nested Repeat, multi-element
+/// alts inside a Group) escape into a rule call, recurse into their
+/// own loop, or pick an alternation arm that could diverge between
+/// peek and commit, and are rejected.
+fn lexer_element_can_replay(elem: &LexerElement, single_char: bool) -> bool {
     return match *elem {
-        Literal(text) => text.chars().count() == 1,
+        Literal(text) => !single_char || text.chars().count() == 1,
         CharRange(_) => true,
         CharClass(_) => true,
         AnyChar => true,
-        Not(not_inner) => lexer_element_can_consume_simple(&not_inner.element),
+        Not(not_inner) => lexer_element_can_replay(&not_inner.element, single_char),
         // `~('b')` parses as `Not(Group([Alt([Literal("b")])]))`,
         // `~('b' | ' ')` as `Not(Group([Alt(['b']), Alt([' '])]))`.
-        // Either shape consumes exactly one char as long as every
-        // alt body is itself a single simple element.
+        // Either shape consumes exactly one char as long as every alt
+        // body is itself a single replay-safe element.
         Group(alts) => {
             for let alt of alts {
                 if alt.elements.len() != 1 {
                     return false;
                 }
-                if !lexer_element_can_consume_simple(&alt.elements[0]) {
+                if !lexer_element_can_replay(&alt.elements[0], single_char) {
                     return false;
                 }
             }
@@ -405,44 +413,27 @@ fn lexer_element_can_consume_simple(elem: &LexerElement) -> bool {
     };
 }
 
+/// Convenience: the `Plus` / `Star` inner must consume exactly one
+/// char per iteration so the lookahead-aware loop's per-iteration peek
+/// records a position that is one char past the last successful inner.
+fn lexer_element_can_consume_simple(elem: &LexerElement) -> bool {
+    return lexer_element_can_replay(elem, /*single_char=*/ true);
+}
+
 /// True when every element in the suffix can be safely peeked via a
-/// `save-pos / try-elem / restore-pos` block. Required by
-/// `gen_lexer_repeat_lookahead_aware` so the per-iteration peek that
-/// records `last_accept` produces the same answer as the post-loop
-/// commit. Multi-char literals are accepted because the peek replays
-/// the same byte-wise comparisons the commit will run.
+/// `save-pos / try-elem / restore-pos` block. Multi-char literals are
+/// permitted: the peek replays the same byte-wise comparisons the
+/// post-loop commit will run.
 fn lexer_suffix_is_peekable(elements: &Array<LexerElement>) -> bool {
     if elements.is_empty() {
         return false;
     }
     for let elem of elements {
-        if !lexer_element_is_peekable(elem) {
+        if !lexer_element_can_replay(elem, /*single_char=*/ false) {
             return false;
         }
     }
     return true;
-}
-
-fn lexer_element_is_peekable(elem: &LexerElement) -> bool {
-    return match *elem {
-        Literal(_) => true,
-        CharRange(_) => true,
-        CharClass(_) => true,
-        AnyChar => true,
-        Not(not_inner) => lexer_element_is_peekable(&not_inner.element),
-        Group(alts) => {
-            for let alt of alts {
-                if alt.elements.len() != 1 {
-                    return false;
-                }
-                if !lexer_element_is_peekable(&alt.elements[0]) {
-                    return false;
-                }
-            }
-            !alts.is_empty();
-        },
-        _ => false,
-    };
 }
 
 /// Emit a greedy `Plus` / `Star` whose inner can consume the suffix's
@@ -501,11 +492,17 @@ fn gen_lexer_repeat_lookahead_aware(
     w.line(&`pos = {accept_var};`);
 
     // Re-consume the suffix to advance `pos` past it. The peek that
-    // recorded `accept_var` already proved it matches, so the actual
-    // emit cannot fail in well-formed input — the fail_action here is
-    // unreachable but kept for shape symmetry with regular emit.
+    // recorded `accept_var` already proved every suffix element
+    // matches at that position, so divergence here can only mean a
+    // codegen bug in `gen_lexer_suffix_peek` (peek and commit emit
+    // different element shapes). Pass a `panic` fail-action instead
+    // of the caller's `return -1` so such divergence traps loudly at
+    // runtime rather than silently degrading to a "rule rejected"
+    // verdict.
+    let assert_msg = `lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)`;
+    let assert_fail = `panic("{assert_msg}")`;
     for let elem of suffix {
-        gen_lexer_elem(w, elem, all_rules, fail_action, ci);
+        gen_lexer_elem(w, elem, all_rules, &assert_fail, ci);
     }
 }
 
