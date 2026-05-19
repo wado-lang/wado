@@ -1,0 +1,63 @@
+// Positive coverage for every divergence shape `block_always_exits`
+// recognises. Each function declares a non-Unit return type and never
+// falls through — the validator must accept all of them.
+//
+//   * `loop` whose only exit is a `return`
+//   * `loop { break … }` followed by an explicit `return`
+//   * `match` with all arms diverging
+//   * labeled block whose body always returns
+//
+// Without these tests, a regression that re-tightened `block_always_exits`
+// to a less complete walk would silently break stdlib patterns
+// (`IterFilter::next`, `Iterator::for_each`, effect-handler `resume`, …).
+
+use { Stdout, println } from "core:cli";
+
+fn loop_until(n: i32) -> i32 {
+    let mut i = 0;
+    loop {
+        i += 1;
+        if i >= n {
+            return i;
+        }
+    }
+}
+
+fn loop_then_return(n: i32) -> i32 {
+    let mut i = 0;
+    loop {
+        if i >= n {
+            break;
+        }
+        i += 1;
+    }
+    return i;
+}
+
+fn match_all_divergent(tag: i32) -> i32 {
+    match tag {
+        0 => return 100,
+        _ => panic("non-zero"),
+    }
+}
+
+fn labeled_block_returns(n: i32) -> i32 {
+    outer: {
+        inner: {
+            if n > 0 {
+                return n * 2;
+            }
+            return 0;
+        }
+    }
+}
+
+export fn run() with Stdout {
+    println(`{loop_until(3)}`);
+    println(`{loop_then_return(4)}`);
+    println(`{match_all_divergent(0)}`);
+    println(`{labeled_block_returns(7)}`);
+}
+
+__DATA__
+{"stdout": "3\n4\n100\n14\n"}
